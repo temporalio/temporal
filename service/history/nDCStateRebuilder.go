@@ -119,7 +119,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		baseBranchToken,
 	))
 
-	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(targetWorkflowIdentifier.NamespaceID)
+	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(targetWorkflowIdentifier.NamespaceID))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -218,7 +218,7 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 ) error {
 
 	_, err := stateBuilder.ApplyEvents(
-		workflowKey.NamespaceID,
+		namespace.ID(workflowKey.NamespaceID),
 		requestID,
 		commonpb.WorkflowExecution{
 			WorkflowId: workflowKey.WorkflowID,

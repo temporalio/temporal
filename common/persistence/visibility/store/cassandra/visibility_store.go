@@ -264,7 +264,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutions(
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetOpenWorkflowExecutions,
-			request.NamespaceID,
+			request.NamespaceID.String(),
 			namespacePartition,
 			persistence.UnixMilliseconds(request.EarliestStartTime),
 			persistence.UnixMilliseconds(request.LatestStartTime)).
@@ -292,7 +292,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
 	request *manager.ListWorkflowExecutionsByTypeRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetOpenWorkflowExecutionsByType,
-			request.NamespaceID,
+			request.NamespaceID.String(),
 			namespacePartition,
 			persistence.UnixMilliseconds(request.EarliestStartTime),
 			persistence.UnixMilliseconds(request.LatestStartTime),
@@ -321,7 +321,7 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetOpenWorkflowExecutionsByID,
-			request.NamespaceID,
+			request.NamespaceID.String(),
 			namespacePartition,
 			persistence.UnixMilliseconds(request.EarliestStartTime),
 			persistence.UnixMilliseconds(request.LatestStartTime),
@@ -350,7 +350,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutions(
 	request *manager.ListWorkflowExecutionsRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutions,
-			request.NamespaceID,
+			request.NamespaceID.String(),
 			namespacePartition,
 			persistence.UnixMilliseconds(request.EarliestStartTime),
 			persistence.UnixMilliseconds(request.LatestStartTime)).
@@ -378,7 +378,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
 	request *manager.ListWorkflowExecutionsByTypeRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByType,
-			request.NamespaceID,
+			request.NamespaceID.String(),
 			namespacePartition,
 			persistence.UnixMilliseconds(request.EarliestStartTime),
 			persistence.UnixMilliseconds(request.LatestStartTime),
@@ -407,7 +407,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByID,
-			request.NamespaceID,
+			request.NamespaceID.String(),
 			namespacePartition,
 			persistence.UnixMilliseconds(request.EarliestStartTime),
 			persistence.UnixMilliseconds(request.LatestStartTime),
@@ -436,7 +436,7 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByStatus,
-			request.NamespaceID,
+			request.NamespaceID.String(),
 			namespacePartition,
 			persistence.UnixMilliseconds(request.EarliestStartTime),
 			persistence.UnixMilliseconds(request.LatestStartTime),

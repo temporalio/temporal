@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -83,9 +84,9 @@ func newTransferQueueTaskExecutorBase(
 
 func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 	task tasks.Task,
-) (string, commonpb.WorkflowExecution) {
+) (namespace.ID, commonpb.WorkflowExecution) {
 
-	return task.GetNamespaceID(), commonpb.WorkflowExecution{
+	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
 	}
@@ -140,7 +141,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 }
 
 func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -149,9 +150,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	endTime time.Time,
 	status enumspb.WorkflowExecutionStatus,
 	historyLength int64,
-	taskID int64,
 	visibilityMemo *commonpb.Memo,
-	taskQueue string,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
@@ -182,8 +181,8 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
-			NamespaceID:      namespaceID,
-			Namespace:        namespaceEntry.Name(),
+			NamespaceID:      namespaceID.String(),
+			Namespace:        namespaceEntry.Name().String(),
 			WorkflowID:       workflowID,
 			RunID:            runID,
 			WorkflowTypeName: workflowTypeName,

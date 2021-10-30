@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
@@ -126,7 +127,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
-		task.NamespaceID,
+		namespace.ID(task.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
@@ -152,7 +153,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, startVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), startVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -175,7 +176,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	release(nil)
 
 	return t.recordStartExecution(
-		task.GetNamespaceID(),
+		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
 		wfTypeName,
@@ -200,7 +201,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
-		task.NamespaceID,
+		namespace.ID(task.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
@@ -238,7 +239,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	release(nil)
 
 	return t.upsertExecution(
-		task.GetNamespaceID(),
+		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
 		wfTypeName,
@@ -254,7 +255,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) recordStartExecution(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -301,7 +302,7 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) upsertExecution(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -353,7 +354,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
-		task.NamespaceID,
+		namespace.ID(task.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
@@ -377,7 +378,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, task.NamespaceID, lastWriteVersion, task.Version, task)
+	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), lastWriteVersion, task.Version, task)
 	if err != nil || !ok {
 		return err
 	}
@@ -407,7 +408,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.recordCloseExecution(
-		task.GetNamespaceID(),
+		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
 		workflowTypeName,
@@ -425,7 +426,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) recordCloseExecution(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -487,7 +488,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	task *tasks.DeleteExecutionVisibilityTask,
 ) (retError error) {
 	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: task.NamespaceID,
+		NamespaceID: namespace.ID(task.NamespaceID),
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,

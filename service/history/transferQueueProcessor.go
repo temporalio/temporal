@@ -56,7 +56,7 @@ type (
 		FailoverNamespace(namespaceIDs map[string]struct{})
 		NotifyNewTask(clusterName string, transferTasks []tasks.Task)
 		LockTaskProcessing()
-		UnlockTaskPrrocessing()
+		UnlockTaskProcessing()
 	}
 
 	taskFilter func(task tasks.Task) (bool, error)
@@ -252,7 +252,7 @@ func (t *transferQueueProcessorImpl) LockTaskProcessing() {
 	t.taskAllocator.lock()
 }
 
-func (t *transferQueueProcessorImpl) UnlockTaskPrrocessing() {
+func (t *transferQueueProcessorImpl) UnlockTaskProcessing() {
 	t.taskAllocator.unlock()
 }
 

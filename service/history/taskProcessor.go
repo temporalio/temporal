@@ -116,9 +116,9 @@ func newTaskProcessor(
 	logger log.Logger,
 ) *taskProcessor {
 
-	workerNotificationChans := []chan struct{}{}
+	var workerNotificationChs []chan struct{}
 	for index := 0; index < options.workerCount; index++ {
-		workerNotificationChans = append(workerNotificationChans, make(chan struct{}, 1))
+		workerNotificationChs = append(workerNotificationChs, make(chan struct{}, 1))
 	}
 
 	base := &taskProcessor{
@@ -130,7 +130,7 @@ func newTaskProcessor(
 		logger:                  logger,
 		metricsClient:           shard.GetMetricsClient(),
 		timeSource:              shard.GetTimeSource(),
-		workerNotificationChans: workerNotificationChans,
+		workerNotificationChans: workerNotificationChs,
 		retryPolicy:             common.CreatePersistanceRetryPolicy(),
 		numOfWorker:             options.workerCount,
 	}
@@ -270,7 +270,7 @@ func (t *taskProcessor) processTaskOnce(
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
 		task.userLatency += time.Duration(duration)
 	}
-	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(task.GetNamespaceID()))
+	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(namespace.ID(task.GetNamespaceID())))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
@@ -348,11 +348,11 @@ func (t *taskProcessor) ackTaskOnce(
 	}
 }
 
-func (t *taskProcessor) getNamespaceTagByID(namespaceID string) metrics.Tag {
-	namespace, err := t.shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
+func (t *taskProcessor) getNamespaceTagByID(namespaceID namespace.ID) metrics.Tag {
+	namespaceName, err := t.shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
 	if err != nil {
 		t.logger.Error("Unable to get namespace", tag.Error(err))
 		return metrics.NamespaceUnknownTag()
 	}
-	return metrics.NamespaceTag(namespace)
+	return metrics.NamespaceTag(namespaceName.String())
 }

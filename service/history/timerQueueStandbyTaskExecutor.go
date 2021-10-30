@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -290,7 +291,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.NamespaceID, workflowTask.Version, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(timerTask.NamespaceID), workflowTask.Version, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -368,7 +369,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, timerTask.NamespaceID, startVersion, timerTask.Version, timerTask)
+		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(timerTask.NamespaceID), startVersion, timerTask.Version, timerTask)
 		if err != nil || !ok {
 			return nil, err
 		}
@@ -418,7 +419,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 
 	defer cancel()
 	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(timerTask)
-	context, release, err := t.cache.GetOrCreateWorkflowExecution(
+	executionContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
@@ -435,7 +436,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(context, timerTask, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(executionContext, timerTask, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -448,7 +449,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(context, mutableState)
+	historyResendInfo, err := actionFn(executionContext, mutableState)
 	if err != nil {
 		return err
 	}
@@ -461,7 +462,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	taskInfo tasks.Task,
 	postActionInfo interface{},
-	log log.Logger,
+	_ log.Logger,
 ) error {
 
 	if postActionInfo == nil {
@@ -479,7 +480,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		if err := refreshTasks(
 			t.adminClient,
 			t.shard.GetNamespaceRegistry(),
-			taskInfo.GetNamespaceID(),
+			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
 		); err != nil {
@@ -492,7 +493,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		}
 
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			taskInfo.GetNamespaceID(),
+			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
 			resendInfo.lastEventID,

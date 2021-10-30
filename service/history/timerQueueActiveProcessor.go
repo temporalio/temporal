@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -69,7 +70,7 @@ func newTimerQueueActiveProcessor(
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	timerTaskFilter := func(task tasks.Task) (bool, error) {
-		return taskAllocator.verifyActiveTask(task.GetNamespaceID(), task)
+		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -160,7 +161,7 @@ func newTimerQueueFailoverProcessor(
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 	timerTaskFilter := func(task tasks.Task) (bool, error) {
-		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, task.GetNamespaceID(), task)
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, namespace.ID(task.GetNamespaceID()), task)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(

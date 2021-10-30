@@ -33,13 +33,14 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
 type (
 	taskQueueDB struct {
 		sync.Mutex
-		namespaceID   string
+		namespaceID   namespace.ID
 		taskQueueName string
 		taskQueueKind enumspb.TaskQueueKind
 		taskType      enumspb.TaskQueueType
@@ -64,7 +65,7 @@ type (
 // - To provide the guarantee that there is only writer who updates taskQueue in persistence at any given point in time
 //   This guarantee makes some of the other code simpler and there is no impact to perf because updates to taskqueue are
 //   spread out and happen in background routines
-func newTaskQueueDB(store persistence.TaskManager, namespaceID string, name string, taskType enumspb.TaskQueueType, kind enumspb.TaskQueueKind, logger log.Logger) *taskQueueDB {
+func newTaskQueueDB(store persistence.TaskManager, namespaceID namespace.ID, name string, taskType enumspb.TaskQueueType, kind enumspb.TaskQueueKind, logger log.Logger) *taskQueueDB {
 	return &taskQueueDB{
 		namespaceID:   namespaceID,
 		taskQueueName: name,
@@ -88,7 +89,7 @@ func (db *taskQueueDB) RenewLease() (taskQueueState, error) {
 	db.Lock()
 	defer db.Unlock()
 	resp, err := db.store.LeaseTaskQueue(&persistence.LeaseTaskQueueRequest{
-		NamespaceID:   db.namespaceID,
+		NamespaceID:   db.namespaceID.String(),
 		TaskQueue:     db.taskQueueName,
 		TaskType:      db.taskType,
 		TaskQueueKind: db.taskQueueKind,
@@ -108,7 +109,7 @@ func (db *taskQueueDB) UpdateState(ackLevel int64) error {
 	defer db.Unlock()
 	_, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
-			NamespaceId: db.namespaceID,
+			NamespaceId: db.namespaceID.String(),
 			Name:        db.taskQueueName,
 			TaskType:    db.taskType,
 			AckLevel:    ackLevel,
@@ -130,7 +131,7 @@ func (db *taskQueueDB) CreateTasks(tasks []*persistencespb.AllocatedTaskInfo) (*
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
 				Data: &persistencespb.TaskQueueInfo{
-					NamespaceId: db.namespaceID,
+					NamespaceId: db.namespaceID.String(),
 					Name:        db.taskQueueName,
 					TaskType:    db.taskType,
 					AckLevel:    db.ackLevel,
@@ -145,7 +146,7 @@ func (db *taskQueueDB) CreateTasks(tasks []*persistencespb.AllocatedTaskInfo) (*
 // GetTasks returns a batch of tasks between the given range
 func (db *taskQueueDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(&persistence.GetTasksRequest{
-		NamespaceID:  db.namespaceID,
+		NamespaceID:  db.namespaceID.String(),
 		TaskQueue:    db.taskQueueName,
 		TaskType:     db.taskType,
 		BatchSize:    batchSize,
@@ -158,7 +159,7 @@ func (db *taskQueueDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int)
 func (db *taskQueueDB) CompleteTask(taskID int64) error {
 	err := db.store.CompleteTask(&persistence.CompleteTaskRequest{
 		TaskQueue: &persistence.TaskQueueKey{
-			NamespaceID: db.namespaceID,
+			NamespaceID: db.namespaceID.String(),
 			Name:        db.taskQueueName,
 			TaskType:    db.taskType,
 		},
@@ -180,7 +181,7 @@ func (db *taskQueueDB) CompleteTask(taskID int64) error {
 // or may not be honored
 func (db *taskQueueDB) CompleteTasksLessThan(taskID int64, limit int) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:   db.namespaceID,
+		NamespaceID:   db.namespaceID.String(),
 		TaskQueueName: db.taskQueueName,
 		TaskType:      db.taskType,
 		TaskID:        taskID,

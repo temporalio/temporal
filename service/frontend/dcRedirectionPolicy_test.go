@@ -59,8 +59,8 @@ type (
 		mockClusterMetadata *cluster.MockMetadata
 		mockNamespaceCache  *namespace.MockRegistry
 
-		namespace              string
-		namespaceID            string
+		namespace              namespace.Name
+		namespaceID            namespace.ID
 		currentClusterName     string
 		alternativeClusterName string
 		mockConfig             *Config
@@ -93,8 +93,8 @@ func (s *noopDCRedirectionPolicySuite) TearDownTest() {
 }
 
 func (s *noopDCRedirectionPolicySuite) TestWithNamespaceRedirect() {
-	namespace := "some random namespace name"
-	namespaceID := "some random namespace ID"
+	namespaceName := namespace.Name("some random namespace name")
+	namespaceID := namespace.ID("some random namespace ID")
 	apiName := "any random API name"
 	callCount := 0
 	callFn := func(targetCluster string) error {
@@ -106,7 +106,7 @@ func (s *noopDCRedirectionPolicySuite) TestWithNamespaceRedirect() {
 	err := s.policy.WithNamespaceIDRedirect(context.Background(), namespaceID, apiName, callFn)
 	s.Nil(err)
 
-	err = s.policy.WithNamespaceRedirect(context.Background(), namespace, apiName, callFn)
+	err = s.policy.WithNamespaceRedirect(context.Background(), namespaceName, apiName, callFn)
 	s.Nil(err)
 
 	s.Equal(2, callCount)
@@ -336,7 +336,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
+		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		cluster.TestCurrentClusterName,
 	)
@@ -347,7 +347,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
 
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithOneReplicationCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
+		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -369,7 +369,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) setupGlobalNamespaceWithT
 		activeCluster = s.currentClusterName
 	}
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
+		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: activeCluster,

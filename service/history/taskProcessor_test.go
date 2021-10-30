@@ -268,7 +268,7 @@ func (t *taskForTest) GetVisibilityTime() time.Time {
 }
 
 func (t *taskForTest) GetNamespaceID() string {
-	return tests.NamespaceID
+	return tests.NamespaceID.String()
 }
 
 func (t *taskForTest) GetWorkflowID() string {

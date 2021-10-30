@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -93,7 +94,7 @@ func (s *VisibilityPersistenceSuite) TearDownSuite() {
 
 // TestBasicVisibility test
 func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test",
@@ -157,7 +158,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 
 // TestBasicVisibilityTimeSkew test
 func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test-time-skew",
@@ -216,7 +217,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 }
 
 func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test-short-workflow",
@@ -269,7 +270,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityRetention() {
 		return
 	}
 
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: "visibility-workflow-test-visibility-retention",
@@ -332,7 +333,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityRetention() {
 
 // TestVisibilityPagination test
 func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 
 	// Create 2 executions
 	startTime1 := time.Now().UTC()
@@ -410,7 +411,7 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 
 // TestFilteringByType test
 func (s *VisibilityPersistenceSuite) TestFilteringByType() {
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 	startTime := time.Now()
 
 	// Create 2 executions
@@ -498,7 +499,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 
 // TestFilteringByWorkflowID test
 func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 	startTime := time.Now()
 
 	// Create 2 executions
@@ -586,7 +587,7 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 
 // TestFilteringByStatus test
 func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 	startTime := time.Now()
 
 	// Create 2 executions
@@ -667,7 +668,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 		return
 	}
 	nRows := 5
-	testNamespaceUUID := uuid.New()
+	testNamespaceUUID := namespace.ID(uuid.New())
 	startTime := time.Now().UTC().Add(time.Second * -5)
 	for i := 0; i < nRows; i++ {
 		workflowExecution := commonpb.WorkflowExecution{

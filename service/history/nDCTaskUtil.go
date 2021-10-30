@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -45,7 +46,7 @@ const (
 func verifyTaskVersion(
 	shard shard.Context,
 	logger log.Logger,
-	namespaceID string,
+	namespaceID namespace.ID,
 	version int64,
 	taskVersion int64,
 	task interface{},
@@ -58,17 +59,17 @@ func verifyTaskVersion(
 	// the first return value is whether this task is valid for further processing
 	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
-		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceID(namespaceID), tag.Error(err))
+		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceID(namespaceID.String()), tag.Error(err))
 		return false, err
 	}
 	if !namespaceEntry.IsGlobalNamespace() {
-		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceID(namespaceID), tag.Task(task))
+		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task))
 		return true, nil
 	} else if version != taskVersion {
-		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceID(namespaceID), tag.Task(task), tag.TaskVersion(version))
+		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task), tag.TaskVersion(version))
 		return false, nil
 	}
-	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceID(namespaceID), tag.Task(task), tag.TaskVersion(version))
+	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task), tag.TaskVersion(version))
 	return true, nil
 }
 

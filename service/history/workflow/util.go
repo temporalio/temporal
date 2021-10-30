@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/consts"
 )
@@ -79,7 +80,7 @@ func ScheduleWorkflowTask(
 func RetryWorkflow(
 	mutableState MutableState,
 	eventBatchFirstEventID int64,
-	parentNamespace string,
+	parentNamespace namespace.Name,
 	continueAsNewAttributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (MutableState, error) {
 

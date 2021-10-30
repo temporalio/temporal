@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -82,7 +83,7 @@ func newTransferQueueActiveProcessor(
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	transferTaskFilter := func(task tasks.Task) (bool, error) {
-		return taskAllocator.verifyActiveTask(task.GetNamespaceID(), task)
+		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetTransferMaxReadLevel()
@@ -181,7 +182,7 @@ func newTransferQueueFailoverProcessor(
 	)
 
 	transferTaskFilter := func(task tasks.Task) (bool, error) {
-		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, task.GetNamespaceID(), task)
+		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
 		return maxLevel // this is a const

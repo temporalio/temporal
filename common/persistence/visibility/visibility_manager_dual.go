@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -177,8 +178,8 @@ func (v *visibilityManagerDual) writeManagers() ([]manager.VisibilityManager, er
 	}
 }
 
-func (v *visibilityManagerDual) readManager(namespace string) manager.VisibilityManager {
-	if v.enableAdvancedVisibilityRead(namespace) {
+func (v *visibilityManagerDual) readManager(namespace namespace.Name) manager.VisibilityManager {
+	if v.enableAdvancedVisibilityRead(namespace.String()) {
 		return v.advVisibilityManager
 	}
 	return v.stdVisibilityManager

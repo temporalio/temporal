@@ -44,6 +44,7 @@ import (
 
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
@@ -65,8 +66,8 @@ type (
 
 var (
 	testIndex        = "test-index"
-	testNamespace    = "test-namespace"
-	testNamespaceID  = "bfd5c907-f899-4baf-a7b2-2ab85e623ebd"
+	testNamespace    = namespace.Name("test-namespace")
+	testNamespaceID  = namespace.ID("bfd5c907-f899-4baf-a7b2-2ab85e623ebd")
 	testPageSize     = 5
 	testEarliestTime = time.Unix(0, 1547596872371000000).UTC()
 	testLatestTime   = time.Unix(0, 2547596872371000000).UTC()
@@ -283,7 +284,7 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 func (s *ESVisibilitySuite) TestBuildSearchParameters() {
 	request := createTestRequest()
 
-	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID)
+	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
 	runningQuery := elastic.NewTermQuery(searchattribute.ExecutionStatus, int(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	token := &visibilityPageToken{SearchAfter: []interface{}{1528358645123456789, "qwe"}}
@@ -404,7 +405,7 @@ func (s *ESVisibilitySuite) TestBuildSearchParametersV2() {
 		PageSize:    testPageSize,
 	}
 
-	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID)
+	matchNamespaceQuery := elastic.NewTermQuery(searchattribute.NamespaceID, request.NamespaceID.String())
 
 	// test for open
 	request.Query = `WorkflowId="guid-2208"`
@@ -578,7 +579,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 }
 
 func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
-	s.mockSearchAttributesMapper.EXPECT().GetFieldName(gomock.Any(), testNamespace).DoAndReturn(
+	s.mockSearchAttributesMapper.EXPECT().GetFieldName(gomock.Any(), testNamespace.String()).DoAndReturn(
 		func(alias string, namespace string) (string, error) {
 			if strings.HasPrefix(alias, "AliasFor") {
 				return strings.TrimPrefix(alias, "AliasFor"), nil
@@ -640,7 +641,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 }
 
 func (s *ESVisibilitySuite) Test_convertQuery_Mapper_Error() {
-	s.mockSearchAttributesMapper.EXPECT().GetFieldName(gomock.Any(), testNamespace).DoAndReturn(
+	s.mockSearchAttributesMapper.EXPECT().GetFieldName(gomock.Any(), testNamespace.String()).DoAndReturn(
 		func(fieldName string, namespace string) (string, error) {
 			return "", serviceerror.NewInvalidArgument("mapper error")
 		}).AnyTimes()
@@ -907,7 +908,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 	}
 	s.visibilityStore.searchAttributesMapper = s.mockSearchAttributesMapper
 
-	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace).DoAndReturn(
+	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace.String()).DoAndReturn(
 		func(fieldName string, namespace string) (string, error) {
 			return "AliasOf" + fieldName, nil
 		}).Times(6)
@@ -927,7 +928,7 @@ func (s *ESVisibilitySuite) TestParseESDoc_SearchAttributes_WithMapper() {
 	s.NotContains(info.SearchAttributes.GetIndexedFields(), "UnknownField")
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, info.Status)
 
-	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace).DoAndReturn(
+	s.mockSearchAttributesMapper.EXPECT().GetAlias(gomock.Any(), testNamespace.String()).DoAndReturn(
 		func(fieldName string, namespace string) (string, error) {
 			return "", serviceerror.NewUnavailable("error")
 		})
@@ -944,7 +945,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 			s.Equal(testIndex, p.Index)
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID),
+					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
 					elastic.NewBoolQuery().Filter(elastic.NewMatchQuery("ExecutionStatus", "Terminated"))),
 				p.Query,
 			)
@@ -1024,7 +1025,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 			s.Equal(testIndex, p.Index)
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID),
+					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
 					elastic.NewBoolQuery().Filter(elastic.NewMatchQuery("ExecutionStatus", "Terminated"))),
 				p.Query,
 			)
@@ -1088,7 +1089,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 			s.Equal(testIndex, p.Index)
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID),
+					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
 					elastic.NewBoolQuery().Filter(elastic.NewMatchQuery("ExecutionStatus", "Terminated"))),
 				p.Query,
 			)
@@ -1232,7 +1233,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID),
+					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
 					elastic.NewBoolQuery().Filter(elastic.NewMatchQuery("ExecutionStatus", "Terminated"))),
 				query,
 			)
@@ -1253,7 +1254,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 		func(ctx context.Context, index string, query elastic.Query) (int64, error) {
 			s.Equal(
 				elastic.NewBoolQuery().Filter(
-					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID),
+					elastic.NewTermQuery(searchattribute.NamespaceID, testNamespaceID.String()),
 					elastic.NewBoolQuery().Filter(elastic.NewMatchQuery("ExecutionStatus", "Terminated"))),
 				query,
 			)

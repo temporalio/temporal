@@ -83,7 +83,7 @@ func (mr *MockContextMockRecorder) AddTasks(request interface{}) *gomock.Call {
 }
 
 // AppendHistoryEvents mocks base method.
-func (m *MockContext) AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID string, execution v1.WorkflowExecution) (int, error) {
+func (m *MockContext) AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution v1.WorkflowExecution) (int, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AppendHistoryEvents", request, namespaceID, execution)
 	ret0, _ := ret[0].(int)

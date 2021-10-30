@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -64,7 +65,7 @@ type (
 		executionMgr   persistence.ExecutionManager
 		stateRebuilder nDCStateRebuilder
 
-		namespaceID string
+		namespaceID namespace.ID
 		workflowID  string
 		baseRunID   string
 		newContext  workflow.Context
@@ -79,7 +80,7 @@ var _ nDCWorkflowResetter = (*nDCWorkflowResetterImpl)(nil)
 func newNDCWorkflowResetter(
 	shard shard.Context,
 	transactionMgr nDCTransactionMgr,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	baseRunID string,
 	newContext workflow.Context,
@@ -130,7 +131,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 		ctx,
 		now,
 		definition.NewWorkflowKey(
-			r.namespaceID,
+			r.namespaceID.String(),
 			r.workflowID,
 			r.baseRunID,
 		),
@@ -138,7 +139,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 		baseLastEventID,
 		baseLastEventVersion,
 		definition.NewWorkflowKey(
-			r.namespaceID,
+			r.namespaceID.String(),
 			r.workflowID,
 			r.newRunID,
 		),
@@ -186,7 +187,7 @@ func (r *nDCWorkflowResetterImpl) getBaseBranchToken(
 		// the base branch event will eventually arrived
 		return nil, serviceerrors.NewRetryReplication(
 			resendOnResetWorkflowMessage,
-			r.namespaceID,
+			r.namespaceID.String(),
 			r.workflowID,
 			r.newRunID,
 			common.EmptyEventID,
@@ -214,7 +215,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID, r.workflowID, r.newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID.String(), r.workflowID, r.newRunID),
 		ShardID:         shardID,
 	})
 	if err != nil {

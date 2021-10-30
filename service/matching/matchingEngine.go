@@ -74,7 +74,7 @@ type (
 	}
 
 	taskQueueCounterKey struct {
-		namespaceID string
+		namespaceID namespace.ID
 		taskType    enumspb.TaskQueueType
 		queueType   enumspb.TaskQueueKind
 	}
@@ -237,7 +237,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	hCtx *handlerContext,
 	addRequest *matchingservice.AddWorkflowTaskRequest,
 ) (bool, error) {
-	namespaceID := addRequest.GetNamespaceId()
+	namespaceID := namespace.ID(addRequest.GetNamespaceId())
 	taskQueueName := addRequest.TaskQueue.GetName()
 	taskQueueKind := addRequest.TaskQueue.GetKind()
 
@@ -269,7 +269,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
@@ -290,7 +290,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 	hCtx *handlerContext,
 	addRequest *matchingservice.AddActivityTaskRequest,
 ) (bool, error) {
-	namespaceID := addRequest.GetNamespaceId()
+	namespaceID := namespace.ID(addRequest.GetNamespaceId())
 	sourceNamespaceID := addRequest.GetSourceNamespaceId()
 	runID := addRequest.Execution.GetRunId()
 	taskQueueName := addRequest.TaskQueue.GetName()
@@ -342,7 +342,7 @@ func (e *matchingEngineImpl) PollWorkflowTaskQueue(
 	hCtx *handlerContext,
 	req *matchingservice.PollWorkflowTaskQueueRequest,
 ) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
-	namespaceID := req.GetNamespaceId()
+	namespaceID := namespace.ID(req.GetNamespaceId())
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
@@ -435,7 +435,7 @@ func (e *matchingEngineImpl) PollActivityTaskQueue(
 	hCtx *handlerContext,
 	req *matchingservice.PollActivityTaskQueueRequest,
 ) (*matchingservice.PollActivityTaskQueueResponse, error) {
-	namespaceID := req.GetNamespaceId()
+	namespaceID := namespace.ID(req.GetNamespaceId())
 	pollerID := req.GetPollerId()
 	request := req.PollRequest
 	taskQueueName := request.TaskQueue.GetName()
@@ -505,7 +505,7 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	hCtx *handlerContext,
 	queryRequest *matchingservice.QueryWorkflowRequest,
 ) (*matchingservice.QueryWorkflowResponse, error) {
-	namespaceID := queryRequest.GetNamespaceId()
+	namespaceID := namespace.ID(queryRequest.GetNamespaceId())
 	taskQueueName := queryRequest.TaskQueue.GetName()
 	taskQueueKind := queryRequest.TaskQueue.GetKind()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
@@ -576,7 +576,7 @@ func (e *matchingEngineImpl) CancelOutstandingPoll(
 	hCtx *handlerContext,
 	request *matchingservice.CancelOutstandingPollRequest,
 ) error {
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	taskQueueType := request.GetTaskQueueType()
 	taskQueueName := request.TaskQueue.GetName()
 	pollerID := request.GetPollerId()
@@ -599,7 +599,7 @@ func (e *matchingEngineImpl) DescribeTaskQueue(
 	hCtx *handlerContext,
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (*matchingservice.DescribeTaskQueueResponse, error) {
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	taskQueueType := request.DescRequest.GetTaskQueueType()
 	taskQueueName := request.DescRequest.TaskQueue.GetName()
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, taskQueueType)
@@ -636,7 +636,7 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 
 func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
-		request.GetNamespace(),
+		namespace.Name(request.GetNamespace()),
 		*request.TaskQueue,
 		taskQueueType,
 	)
@@ -670,7 +670,7 @@ func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {
 }
 
 func (e *matchingEngineImpl) getAllPartitions(
-	namespace string,
+	namespace namespace.Name,
 	taskQueue taskqueuepb.TaskQueue,
 	taskQueueType enumspb.TaskQueueType,
 ) ([]string, error) {
@@ -685,7 +685,7 @@ func (e *matchingEngineImpl) getAllPartitions(
 	partitionKeys = append(partitionKeys, rootPartition)
 
 	nWritePartitions := e.config.NumTaskqueueWritePartitions
-	n := nWritePartitions(namespace, rootPartition, taskQueueType)
+	n := nWritePartitions(namespace.String(), rootPartition, taskQueueType)
 	if n <= 0 {
 		return partitionKeys, nil
 	}
@@ -731,14 +731,14 @@ func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
 
 func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, taskQueueCount int) {
 	nsEntry, err := e.namespaceRegistry.GetNamespaceByID(countKey.namespaceID)
-	namespace := "unknown"
+	namespace := namespace.Name("unknown")
 	if err == nil {
 		namespace = nsEntry.Name()
 	}
 
 	e.metricsClient.Scope(
 		metrics.MatchingEngineScope,
-		metrics.NamespaceTag(namespace),
+		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
 		metrics.QueueTypeTag(countKey.queueType.String()),
 	).UpdateGauge(metrics.TaskQueueGauge, float64(taskQueueCount))

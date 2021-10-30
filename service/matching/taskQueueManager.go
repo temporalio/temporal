@@ -119,7 +119,7 @@ type (
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 		metricsClient     metrics.Client
-		namespaceValue    atomic.Value
+		namespaceValue    atomic.Value // of namespace.Name
 		metricScopeValue  atomic.Value // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
@@ -178,7 +178,7 @@ func newTaskQueueManager(
 		clusterMeta:         clusterMeta,
 	}
 
-	tlMgr.namespaceValue.Store("")
+	tlMgr.namespaceValue.Store(namespace.EmptyName)
 	if tlMgr.metricScope() == nil { // namespace name lookup failed
 		// metric scope to use when namespace lookup fails
 		tlMgr.metricScopeValue.Store(
@@ -277,7 +277,7 @@ func (c *taskQueueManagerImpl) AddTask(
 	_, err := c.executeWithRetry(func() (interface{}, error) {
 		td := params.taskInfo
 
-		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(td.GetNamespaceId())
+		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(td.GetNamespaceId()))
 		if err != nil {
 			return nil, err
 		}
@@ -564,19 +564,19 @@ func (c *taskQueueManagerImpl) metricScope() metrics.Scope {
 	return c.metricScopeValue.Load().(metrics.Scope)
 }
 
-func (c *taskQueueManagerImpl) namespace() string {
-	name := c.namespaceValue.Load().(string)
-	if len(name) > 0 {
+func (c *taskQueueManagerImpl) namespace() namespace.Name {
+	name := c.namespaceValue.Load().(namespace.Name)
+	if !name.IsEmpty() {
 		return name
 	}
 	c.tryInitNamespaceAndScope()
-	return c.namespaceValue.Load().(string)
+	return c.namespaceValue.Load().(namespace.Name)
 }
 
 // reload from namespaceRegistry in case it got empty result during construction
 func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
-	namespace := c.namespaceValue.Load().(string)
-	if namespace != "" {
+	name := c.namespaceValue.Load().(namespace.Name)
+	if !name.IsEmpty() {
 		return
 	}
 
@@ -585,12 +585,12 @@ func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
 		return
 	}
 
-	namespace = entry.Name()
+	name = entry.Name()
 
-	scope := metrics.GetPerTaskQueueScope(c.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope), namespace, c.taskQueueID.name, c.taskQueueKind)
+	scope := metrics.GetPerTaskQueueScope(c.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope), name.String(), c.taskQueueID.name, c.taskQueueKind)
 
 	c.metricScopeValue.Store(scope)
-	c.namespaceValue.Store(namespace)
+	c.namespaceValue.Store(name)
 }
 
 func (c *taskQueueManagerImpl) QueueID() *taskQueueID {

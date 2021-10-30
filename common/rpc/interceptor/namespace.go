@@ -43,13 +43,13 @@ type (
 func GetNamespace(
 	namespaceRegistry namespace.Registry,
 	req interface{},
-) string {
+) namespace.Name {
 	switch request := req.(type) {
 	case NamespaceNameGetter:
-		return request.GetNamespace()
+		return namespace.Name(request.GetNamespace())
 
 	case NamespaceIDGetter:
-		namespaceID := request.GetNamespaceId()
+		namespaceID := namespace.ID(request.GetNamespaceId())
 		namespaceEntry, err := namespaceRegistry.GetNamespaceByID(namespaceID)
 		if err != nil {
 			return ""

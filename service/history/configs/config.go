@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
 )
 
@@ -445,8 +446,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 }
 
 // GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
-func (config *Config) GetShardID(namespaceID, workflowID string) int32 {
-	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, config.NumberOfShards)
+func (config *Config) GetShardID(namespaceID namespace.ID, workflowID string) int32 {
+	return common.WorkflowIDToHistoryShard(namespaceID.String(), workflowID, config.NumberOfShards)
 }
 
 func NewDynamicConfig() *Config {

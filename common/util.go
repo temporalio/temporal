@@ -41,17 +41,15 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/number"
-
-	workflowspb "go.temporal.io/server/api/workflow/v1"
-	"go.temporal.io/server/common/metrics"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/number"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
@@ -551,7 +549,7 @@ func CheckEventBlobSizeLimit(
 	actualSize int,
 	warnLimit int,
 	errorLimit int,
-	namespaceID string,
+	namespace string,
 	workflowID string,
 	runID string,
 	scope metrics.Scope,
@@ -564,7 +562,7 @@ func CheckEventBlobSizeLimit(
 	if actualSize > warnLimit {
 		if logger != nil {
 			logger.Warn("Blob data size exceeds the warning limit.",
-				tag.WorkflowNamespaceID(namespaceID),
+				tag.WorkflowNamespace(namespace),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),
 				tag.WorkflowSize(int64(actualSize)),

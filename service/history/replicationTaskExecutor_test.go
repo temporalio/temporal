@@ -137,7 +137,7 @@ func (s *replicationTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(namespace.NewGlobalNamespaceForTest(
@@ -155,7 +155,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(namespace.NewGlobalNamespaceForTest(
@@ -170,7 +170,7 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_Error() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, fmt.Errorf("random error"))
@@ -180,21 +180,21 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_Error() {
 }
 
 func (s *replicationTaskExecutorSuite) TestFilterTask_EnforceApply() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	ok, err := s.replicationTaskHandler.filterTask(namespaceID, true)
 	s.NoError(err)
 	s.True(ok)
 }
 
 func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        namespaceID,
+				NamespaceId:        namespaceID.String(),
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            1234,
@@ -210,7 +210,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		},
 	}
 	request := &historyservice.SyncActivityRequest{
-		NamespaceId:        namespaceID,
+		NamespaceId:        namespaceID.String(),
 		WorkflowId:         workflowID,
 		RunId:              runID,
 		Version:            1234,
@@ -230,14 +230,14 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 }
 
 func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Resend() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncActivityTaskAttributes{
 			SyncActivityTaskAttributes: &replicationspb.SyncActivityTaskAttributes{
-				NamespaceId:        namespaceID,
+				NamespaceId:        namespaceID.String(),
 				WorkflowId:         workflowID,
 				RunId:              runID,
 				Version:            1234,
@@ -253,7 +253,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		},
 	}
 	request := &historyservice.SyncActivityRequest{
-		NamespaceId:        namespaceID,
+		NamespaceId:        namespaceID.String(),
 		WorkflowId:         workflowID,
 		RunId:              runID,
 		Version:            1234,
@@ -269,7 +269,7 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 
 	resendErr := serviceerrors.NewRetryReplication(
 		"some random error message",
-		namespaceID,
+		namespaceID.String(),
 		workflowID,
 		runID,
 		123,
@@ -293,14 +293,14 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 }
 
 func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-				NamespaceId:         namespaceID,
+				NamespaceId:         namespaceID.String(),
 				WorkflowId:          workflowID,
 				RunId:               runID,
 				VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
@@ -310,7 +310,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
 		},
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -326,14 +326,14 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
 }
 
 func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
-	namespaceID := uuid.New()
+	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
 	runID := uuid.New()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
 			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-				NamespaceId:         namespaceID,
+				NamespaceId:         namespaceID.String(),
 				WorkflowId:          workflowID,
 				RunId:               runID,
 				VersionHistoryItems: []*historyspb.VersionHistoryItem{{EventId: 233, Version: 2333}},
@@ -343,7 +343,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 		},
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -355,7 +355,7 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 
 	resendErr := serviceerrors.NewRetryReplication(
 		"some random error message",
-		namespaceID,
+		namespaceID.String(),
 		workflowID,
 		runID,
 		123,

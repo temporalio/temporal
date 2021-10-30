@@ -85,7 +85,7 @@ type (
 	) nDCConflictResolver
 
 	nDCWorkflowResetterProvider func(
-		namespaceID string,
+		namespaceID namespace.ID,
 		workflowID string,
 		baseRunID string,
 		newContext workflow.Context,
@@ -157,7 +157,7 @@ func newNDCHistoryReplicator(
 			return newNDCConflictResolver(shard, context, mutableState, logger)
 		},
 		newWorkflowResetter: func(
-			namespaceID string,
+			namespaceID namespace.ID,
 			workflowID string,
 			baseRunID string,
 			newContext workflow.Context,
@@ -257,7 +257,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 			return err
 		}
 
-		if r.shard.GetConfig().ReplicationEventsFromCurrentCluster(namespaceEntry.Name()) {
+		if r.shard.GetConfig().ReplicationEventsFromCurrentCluster(namespaceEntry.Name().String()) {
 			// this branch is used when replicating events (generated from current cluster)from remote cluster to current cluster.
 			// this could happen when the events are lost in current cluster and plan to recover them from remote cluster.
 			mutableState, err = context.LoadWorkflowExecutionForReplication(task.getVersion())
@@ -454,7 +454,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newExecutionState := newMutableState.GetExecutionState()
 		newContext := workflow.NewContext(
-			newExecutionInfo.NamespaceId,
+			namespace.ID(newExecutionInfo.NamespaceId),
 			commonpb.WorkflowExecution{
 				WorkflowId: newExecutionInfo.WorkflowId,
 				RunId:      newExecutionState.RunId,
@@ -557,7 +557,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 			releaseFn,
 		),
 		&persistence.WorkflowEvents{
-			NamespaceID: task.getNamespaceID(),
+			NamespaceID: task.getNamespaceID().String(),
 			WorkflowID:  task.getExecution().GetWorkflowId(),
 			RunID:       task.getExecution().GetRunId(),
 			BranchToken: versionHistory.GetBranchToken(),
@@ -632,7 +632,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsMissingMutableState(
 		firstEvent := task.getFirstEvent()
 		return nil, serviceerrors.NewRetryReplication(
 			mutableStateMissingMessage,
-			task.getNamespaceID(),
+			task.getNamespaceID().String(),
 			task.getWorkflowID(),
 			task.getRunID(),
 			common.EmptyEventID,

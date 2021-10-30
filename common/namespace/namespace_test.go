@@ -31,6 +31,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	namespacepb "go.temporal.io/api/namespace/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
@@ -41,7 +42,7 @@ func base(t *testing.T) *namespace.Namespace {
 	return namespace.FromPersistentState(&persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: t.Name(),
 				Data: make(map[string]string),
 			},

@@ -37,20 +37,20 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/consts"
-	"go.temporal.io/server/service/history/tests"
-	"go.temporal.io/server/service/history/workflow"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -66,7 +66,7 @@ type (
 		mockTransaction  *workflow.MockTransaction
 
 		logger       log.Logger
-		namespaceID  string
+		namespaceID  namespace.ID
 		workflowID   string
 		baseRunID    string
 		currentRunID string
@@ -144,7 +144,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
 	}
 	currentEventsSeq := []*persistence.WorkflowEvents{{
-		NamespaceID: s.namespaceID,
+		NamespaceID: s.namespaceID.String(),
 		WorkflowID:  s.workflowID,
 		RunID:       s.currentRunID,
 		BranchToken: []byte("some random current branch token"),
@@ -170,7 +170,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
 	}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
-		NamespaceID: s.namespaceID,
+		NamespaceID: s.namespaceID.String(),
 		WorkflowID:  s.workflowID,
 		RunID:       s.resetRunID,
 		BranchToken: []byte("some random reset branch token"),
@@ -230,7 +230,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{},
 	}
 	resetEventsSeq := []*persistence.WorkflowEvents{{
-		NamespaceID: s.namespaceID,
+		NamespaceID: s.namespaceID.String(),
 		WorkflowID:  s.workflowID,
 		RunID:       s.resetRunID,
 		BranchToken: []byte("some random reset branch token"),
@@ -276,7 +276,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseNodeID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		ShardID:         shardID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
@@ -284,7 +284,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		ctx,
 		gomock.Any(),
 		definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			s.workflowID,
 			s.baseRunID,
 		),
@@ -292,7 +292,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		baseRebuildLastEventID,
 		baseRebuildLastEventVersion,
 		definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			s.workflowID,
 			s.resetRunID,
 		),
@@ -485,7 +485,7 @@ func (s *workflowResetterSuite) TestGenerateBranchToken() {
 	s.mockExecutionMgr.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseNodeID,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.resetRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.resetRunID),
 		ShardID:         shardID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: resetBranchToken}, nil)
 
@@ -683,7 +683,7 @@ func (s *workflowResetterSuite) TestReapplyContinueAsNewWorkflowEvents_WithConti
 	resetContext.EXPECT().LoadWorkflowExecution().Return(resetMutableState, nil)
 	resetMutableState.EXPECT().GetNextEventID().Return(newNextEventID).AnyTimes()
 	resetMutableState.EXPECT().GetCurrentBranchToken().Return(newBranchToken, nil).AnyTimes()
-	resetContextCacheKey := definition.NewWorkflowKey(s.namespaceID, s.workflowID, newRunID)
+	resetContextCacheKey := definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, newRunID)
 	_, _ = s.workflowResetter.historyCache.(*workflow.CacheImpl).PutIfNotExist(resetContextCacheKey, resetContext)
 
 	mutableState := workflow.NewMockMutableState(s.controller)

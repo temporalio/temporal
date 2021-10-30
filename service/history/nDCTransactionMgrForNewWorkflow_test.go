@@ -36,6 +36,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -74,7 +75,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
@@ -83,7 +84,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Dup() 
 	newWorkflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -100,7 +101,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
@@ -121,7 +122,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		}},
 	}}
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -154,7 +155,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	runID := "some random run ID"
 
@@ -175,7 +176,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 		}},
 	}}
 	mutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	mutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -208,7 +209,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -238,7 +239,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		}},
 	}}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -254,7 +255,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -282,7 +283,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -312,7 +313,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		}},
 	}}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -328,7 +329,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().happensAfter(currentWorkflow).Return(true, nil)
 	currentMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	currentMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -356,7 +357,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -378,7 +379,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId: namespaceID,
+			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 		},
 	}
@@ -388,7 +389,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		}},
 	}}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -425,7 +426,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -447,7 +448,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId: namespaceID,
+			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 		},
 	}
@@ -457,7 +458,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		}},
 	}}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -494,7 +495,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -516,7 +517,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId: namespaceID,
+			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 		},
 	}
@@ -526,7 +527,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		}},
 	}}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -563,7 +564,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -585,7 +586,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 
 	targetWorkflowSnapshot := &persistence.WorkflowSnapshot{
 		ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
-			NamespaceId: namespaceID,
+			NamespaceId: namespaceID.String(),
 			WorkflowId:  workflowID,
 		},
 	}
@@ -595,7 +596,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 		}},
 	}}
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -632,7 +633,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -657,7 +658,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{

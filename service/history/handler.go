@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -189,7 +190,7 @@ func (h *Handler) CreateEngine(
 	)
 }
 
-// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+// Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
 func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	h.GetLogger().Debug("History service health check endpoint (gRPC) reached.")
 
@@ -215,7 +216,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -250,7 +251,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	if request.GetNamespaceId() == "" {
@@ -275,7 +276,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	workflowExecution := request.WorkflowExecution
 	workflowID := workflowExecution.GetWorkflowId()
 	if namespaceID == "" {
@@ -310,7 +311,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -345,7 +346,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -380,7 +381,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -415,7 +416,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -456,7 +457,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -497,7 +498,7 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -604,7 +605,7 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -628,7 +629,7 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -652,7 +653,7 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -676,7 +677,7 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -704,7 +705,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" || request.CancelRequest.GetNamespace() == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -740,7 +741,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -773,7 +774,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -826,7 +827,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -856,7 +857,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -886,7 +887,7 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -915,7 +916,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -954,7 +955,7 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -988,7 +989,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -1025,7 +1026,7 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -1053,7 +1054,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -1117,7 +1118,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
 		return nil, h.convertError(errNamespaceNotSet)
 	}
@@ -1209,7 +1210,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 	// do batch based on workflow ID and run ID
 	for _, taskInfo := range request.GetTaskInfos() {
 		shardID := h.config.GetShardID(
-			taskInfo.GetNamespaceId(),
+			namespace.ID(taskInfo.GetNamespaceId()),
 			taskInfo.GetWorkflowId(),
 		)
 		if _, ok := taskInfoPerShard[shardID]; !ok {
@@ -1228,7 +1229,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 		}
 
 		engine, err := h.controller.GetEngine(
-			taskInfos[0].GetNamespaceId(),
+			namespace.ID(taskInfos[0].GetNamespaceId()),
 			taskInfos[0].GetWorkflowId(),
 		)
 		if err != nil {
@@ -1274,7 +1275,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	workflowID := request.GetRequest().GetWorkflowExecution().GetWorkflowId()
 	engine, err := h.controller.GetEngine(namespaceID, workflowID)
 	if err != nil {
@@ -1292,7 +1293,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 	execution := request.GetRequest().GetWorkflowExecution()
 	if err := engine.ReapplyEvents(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		execution.GetWorkflowId(),
 		execution.GetRunId(),
 		historyEvents,
@@ -1378,7 +1379,7 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 		return nil, errShuttingDown
 	}
 
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	execution := request.GetRequest().GetExecution()
 	workflowID := execution.GetWorkflowId()
 	engine, err := h.controller.GetEngine(namespaceID, workflowID)

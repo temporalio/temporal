@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -634,7 +635,7 @@ func (b *HistoryBuilder) AddRequestCancelExternalWorkflowExecutionInitiatedEvent
 func (b *HistoryBuilder) AddRequestCancelExternalWorkflowExecutionFailedEvent(
 	workflowTaskCompletedEventID int64,
 	initiatedEventID int64,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	runID string,
 	cause enumspb.CancelExternalWorkflowExecutionFailedCause,
@@ -644,7 +645,7 @@ func (b *HistoryBuilder) AddRequestCancelExternalWorkflowExecutionFailedEvent(
 		RequestCancelExternalWorkflowExecutionFailedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			InitiatedEventId:             initiatedEventID,
-			Namespace:                    namespace,
+			Namespace:                    namespace.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -659,7 +660,7 @@ func (b *HistoryBuilder) AddRequestCancelExternalWorkflowExecutionFailedEvent(
 
 func (b *HistoryBuilder) AddExternalWorkflowExecutionCancelRequested(
 	initiatedEventID int64,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	runID string,
 ) *historypb.HistoryEvent {
@@ -667,7 +668,7 @@ func (b *HistoryBuilder) AddExternalWorkflowExecutionCancelRequested(
 	event.Attributes = &historypb.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{
 		ExternalWorkflowExecutionCancelRequestedEventAttributes: &historypb.ExternalWorkflowExecutionCancelRequestedEventAttributes{
 			InitiatedEventId: initiatedEventID,
-			Namespace:        namespace,
+			Namespace:        namespace.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -719,7 +720,7 @@ func (b *HistoryBuilder) AddUpsertWorkflowSearchAttributesEvent(
 func (b *HistoryBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 	workflowTaskCompletedEventID int64,
 	initiatedEventID int64,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	runID string,
 	control string,
@@ -730,7 +731,7 @@ func (b *HistoryBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 		SignalExternalWorkflowExecutionFailedEventAttributes: &historypb.SignalExternalWorkflowExecutionFailedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			InitiatedEventId:             initiatedEventID,
-			Namespace:                    namespace,
+			Namespace:                    namespace.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -745,7 +746,7 @@ func (b *HistoryBuilder) AddSignalExternalWorkflowExecutionFailedEvent(
 
 func (b *HistoryBuilder) AddExternalWorkflowExecutionSignaled(
 	initiatedEventID int64,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	runID string,
 	control string,
@@ -754,7 +755,7 @@ func (b *HistoryBuilder) AddExternalWorkflowExecutionSignaled(
 	event.Attributes = &historypb.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{
 		ExternalWorkflowExecutionSignaledEventAttributes: &historypb.ExternalWorkflowExecutionSignaledEventAttributes{
 			InitiatedEventId: initiatedEventID,
-			Namespace:        namespace,
+			Namespace:        namespace.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -833,7 +834,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionInitiatedEvent(
 
 func (b *HistoryBuilder) AddChildWorkflowExecutionStartedEvent(
 	initiatedID int64,
-	namespace string,
+	namespace namespace.Name,
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 	header *commonpb.Header,
@@ -842,7 +843,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionStartedEvent(
 	event.Attributes = &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{
 		ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{
 			InitiatedEventId:  initiatedID,
-			Namespace:         namespace,
+			Namespace:         namespace.String(),
 			WorkflowExecution: execution,
 			WorkflowType:      workflowType,
 			Header:            header,
@@ -856,7 +857,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionFailedEvent(
 	workflowTaskCompletedEventID int64,
 	initiatedID int64,
 	cause enumspb.StartChildWorkflowExecutionFailedCause,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	workflowType *commonpb.WorkflowType,
 	control string,
@@ -866,7 +867,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionFailedEvent(
 		StartChildWorkflowExecutionFailedEventAttributes: &historypb.StartChildWorkflowExecutionFailedEventAttributes{
 			WorkflowTaskCompletedEventId: workflowTaskCompletedEventID,
 			InitiatedEventId:             initiatedID,
-			Namespace:                    namespace,
+			Namespace:                    namespace.String(),
 			WorkflowId:                   workflowID,
 			WorkflowType:                 workflowType,
 			Control:                      control,
@@ -880,7 +881,7 @@ func (b *HistoryBuilder) AddStartChildWorkflowExecutionFailedEvent(
 func (b *HistoryBuilder) AddChildWorkflowExecutionCompletedEvent(
 	initiatedID int64,
 	startedID int64,
-	namespace string,
+	namespace namespace.Name,
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 	result *commonpb.Payloads,
@@ -890,7 +891,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionCompletedEvent(
 		ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{
 			InitiatedEventId:  initiatedID,
 			StartedEventId:    startedID,
-			Namespace:         namespace,
+			Namespace:         namespace.String(),
 			WorkflowExecution: execution,
 			WorkflowType:      workflowType,
 			Result:            result,
@@ -903,7 +904,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionCompletedEvent(
 func (b *HistoryBuilder) AddChildWorkflowExecutionFailedEvent(
 	initiatedID int64,
 	startedID int64,
-	namespace string,
+	namespace namespace.Name,
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 	failure *failurepb.Failure,
@@ -914,7 +915,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionFailedEvent(
 		ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{
 			InitiatedEventId:  initiatedID,
 			StartedEventId:    startedID,
-			Namespace:         namespace,
+			Namespace:         namespace.String(),
 			WorkflowExecution: execution,
 			WorkflowType:      workflowType,
 			Failure:           failure,
@@ -928,7 +929,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionFailedEvent(
 func (b *HistoryBuilder) AddChildWorkflowExecutionCanceledEvent(
 	initiatedID int64,
 	startedID int64,
-	namespace string,
+	namespace namespace.Name,
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 	details *commonpb.Payloads,
@@ -938,7 +939,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionCanceledEvent(
 		ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{
 			InitiatedEventId:  initiatedID,
 			StartedEventId:    startedID,
-			Namespace:         namespace,
+			Namespace:         namespace.String(),
 			WorkflowExecution: execution,
 			WorkflowType:      workflowType,
 			Details:           details,
@@ -951,7 +952,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionCanceledEvent(
 func (b *HistoryBuilder) AddChildWorkflowExecutionTerminatedEvent(
 	initiatedID int64,
 	startedID int64,
-	namespace string,
+	namespace namespace.Name,
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 ) *historypb.HistoryEvent {
@@ -960,7 +961,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTerminatedEvent(
 		ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{
 			InitiatedEventId:  initiatedID,
 			StartedEventId:    startedID,
-			Namespace:         namespace,
+			Namespace:         namespace.String(),
 			WorkflowExecution: execution,
 			WorkflowType:      workflowType,
 		},
@@ -972,7 +973,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTerminatedEvent(
 func (b *HistoryBuilder) AddChildWorkflowExecutionTimedOutEvent(
 	initiatedID int64,
 	startedID int64,
-	namespace string,
+	namespace namespace.Name,
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 	retryState enumspb.RetryState,
@@ -982,7 +983,7 @@ func (b *HistoryBuilder) AddChildWorkflowExecutionTimedOutEvent(
 		ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{
 			InitiatedEventId:  initiatedID,
 			StartedEventId:    startedID,
-			Namespace:         namespace,
+			Namespace:         namespace.String(),
 			WorkflowExecution: execution,
 			WorkflowType:      workflowType,
 			RetryState:        retryState,

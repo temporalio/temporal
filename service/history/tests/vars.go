@@ -30,6 +30,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	namespacepb "go.temporal.io/api/namespace/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -42,19 +43,19 @@ import (
 var (
 	Version = int64(1234)
 
-	NamespaceID       = "deadbeef-0123-4567-890a-bcdef0123456"
-	Namespace         = "some random namespace name"
-	ParentNamespaceID = "deadbeef-0123-4567-890a-bcdef0123457"
-	ParentNamespace   = "some random parent namespace name"
-	TargetNamespaceID = "deadbeef-0123-4567-890a-bcdef0123458"
-	TargetNamespace   = "some random target namespace name"
-	ChildNamespaceID  = "deadbeef-0123-4567-890a-bcdef0123459"
-	ChildNamespace    = "some random child namespace name"
+	NamespaceID       = namespace.ID("deadbeef-0123-4567-890a-bcdef0123456")
+	Namespace         = namespace.Name("some random namespace name")
+	ParentNamespaceID = namespace.ID("deadbeef-0123-4567-890a-bcdef0123457")
+	ParentNamespace   = namespace.Name("some random parent namespace name")
+	TargetNamespaceID = namespace.ID("deadbeef-0123-4567-890a-bcdef0123458")
+	TargetNamespace   = namespace.Name("some random target namespace name")
+	ChildNamespaceID  = namespace.ID("deadbeef-0123-4567-890a-bcdef0123459")
+	ChildNamespace    = namespace.Name("some random child namespace name")
 	WorkflowID        = "random-workflow-id"
 	RunID             = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
 	LocalNamespaceEntry = namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: NamespaceID, Name: Namespace},
+		&persistencespb.NamespaceInfo{Id: NamespaceID.String(), Name: Namespace.String()},
 		&persistencespb.NamespaceConfig{
 			Retention: timestamp.DurationFromDays(1),
 			BadBinaries: &namespacepb.BadBinaries{
@@ -65,7 +66,7 @@ var (
 	)
 
 	GlobalNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: NamespaceID, Name: Namespace},
+		&persistencespb.NamespaceInfo{Id: NamespaceID.String(), Name: Namespace.String()},
 		&persistencespb.NamespaceConfig{
 			Retention:               timestamp.DurationFromDays(1),
 			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_ENABLED,
@@ -82,7 +83,7 @@ var (
 	)
 
 	GlobalParentNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: ParentNamespaceID, Name: ParentNamespace},
+		&persistencespb.NamespaceInfo{Id: ParentNamespaceID.String(), Name: ParentNamespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -95,7 +96,7 @@ var (
 	)
 
 	GlobalTargetNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: TargetNamespaceID, Name: TargetNamespace},
+		&persistencespb.NamespaceInfo{Id: TargetNamespaceID.String(), Name: TargetNamespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -108,7 +109,7 @@ var (
 	)
 
 	GlobalChildNamespaceEntry = namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: ChildNamespaceID, Name: ChildNamespace},
+		&persistencespb.NamespaceInfo{Id: ChildNamespaceID.String(), Name: ChildNamespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,

@@ -56,8 +56,8 @@ const (
 type (
 	// DCRedirectionPolicy is a DC redirection policy interface
 	DCRedirectionPolicy interface {
-		WithNamespaceIDRedirect(ctx context.Context, namespaceID string, apiName string, call func(string) error) error
-		WithNamespaceRedirect(ctx context.Context, namespace string, apiName string, call func(string) error) error
+		WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, call func(string) error) error
+		WithNamespaceRedirect(ctx context.Context, namespace namespace.Name, apiName string, call func(string) error) error
 	}
 
 	// NoopRedirectionPolicy is DC redirection policy which does nothing
@@ -109,12 +109,12 @@ func NewNoopRedirectionPolicy(currentClusterName string) *NoopRedirectionPolicy 
 }
 
 // WithNamespaceIDRedirect redirect the API call based on namespace ID
-func (policy *NoopRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID string, apiName string, call func(string) error) error {
+func (policy *NoopRedirectionPolicy) WithNamespaceIDRedirect(_ context.Context, _ namespace.ID, _ string, call func(string) error) error {
 	return call(policy.currentClusterName)
 }
 
 // WithNamespaceRedirect redirect the API call based on namespace name
-func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace string, apiName string, call func(string) error) error {
+func (policy *NoopRedirectionPolicy) WithNamespaceRedirect(_ context.Context, _ namespace.Name, _ string, call func(string) error) error {
 	return call(policy.currentClusterName)
 }
 
@@ -128,7 +128,7 @@ func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, 
 }
 
 // WithNamespaceIDRedirect redirect the API call based on namespace ID
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID string, apiName string, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(ctx context.Context, namespaceID namespace.ID, apiName string, call func(string) error) error {
 	namespaceEntry, err := policy.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -137,7 +137,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceIDRedirect(c
 }
 
 // WithNamespaceRedirect redirect the API call based on namespace name
-func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace string, apiName string, call func(string) error) error {
+func (policy *SelectedAPIsForwardingRedirectionPolicy) WithNamespaceRedirect(ctx context.Context, namespace namespace.Name, apiName string, call func(string) error) error {
 	namespaceEntry, err := policy.namespaceRegistry.GetNamespace(namespace)
 	if err != nil {
 		return err
@@ -175,7 +175,7 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 		return policy.currentClusterName, false
 	}
 
-	if !policy.config.EnableNamespaceNotActiveAutoForwarding(namespaceEntry.Name()) {
+	if !policy.config.EnableNamespaceNotActiveAutoForwarding(namespaceEntry.Name().String()) {
 		// do not do dc redirection if auto-forwarding dynamic config flag is not enabled
 		return policy.currentClusterName, false
 	}

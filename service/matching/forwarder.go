@@ -158,7 +158,7 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-			NamespaceId:       fwdr.taskQueueID.namespaceID,
+			NamespaceId:       fwdr.taskQueueID.namespaceID.String(),
 			SourceNamespaceId: task.event.Data.GetNamespaceId(),
 			Execution:         task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
@@ -222,7 +222,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 	switch fwdr.taskQueueID.taskType {
 	case enumspb.TASK_QUEUE_TYPE_WORKFLOW:
 		resp, err := fwdr.client.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
-			NamespaceId: fwdr.taskQueueID.namespaceID,
+			NamespaceId: fwdr.taskQueueID.namespaceID.String(),
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
@@ -239,7 +239,7 @@ func (fwdr *Forwarder) ForwardPoll(ctx context.Context) (*internalTask, error) {
 		return newInternalStartedTask(&startedTaskInfo{workflowTaskInfo: resp}), nil
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		resp, err := fwdr.client.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
-			NamespaceId: fwdr.taskQueueID.namespaceID,
+			NamespaceId: fwdr.taskQueueID.namespaceID.String(),
 			PollerId:    pollerID,
 			PollRequest: &workflowservice.PollActivityTaskQueueRequest{
 				TaskQueue: &taskqueuepb.TaskQueue{
