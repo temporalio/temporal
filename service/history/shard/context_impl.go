@@ -50,6 +50,8 @@ import (
 
 var (
 	defaultTime = time.Unix(0, 0)
+
+	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
 )
 
 const (
@@ -681,6 +683,32 @@ func (s *ContextImpl) AppendHistoryEvents(
 		size = resp.Size
 	}
 	return size, err0
+}
+
+func (s *ContextImpl) DeleteWorkflowExecution(
+	curRequest *persistence.DeleteCurrentWorkflowExecutionRequest,
+	delRequest *persistence.DeleteWorkflowExecutionRequest,
+) error {
+	if err := s.errorByState(); err != nil {
+		return err
+	}
+
+	s.wLock()
+	defer s.wUnlock()
+
+	op := func() error {
+		return s.GetExecutionManager().DeleteCurrentWorkflowExecution(curRequest)
+	}
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return err
+	}
+
+	op = func() error {
+		return s.GetExecutionManager().DeleteWorkflowExecution(delRequest)
+	}
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return err
 }
 
 func (s *ContextImpl) GetConfig() *configs.Config {

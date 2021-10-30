@@ -107,5 +107,6 @@ type (
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error)
 		AddTasks(request *persistence.AddTasksRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
+		DeleteWorkflowExecution(curRequest *persistence.DeleteCurrentWorkflowExecutionRequest, delRequest *persistence.DeleteWorkflowExecutionRequest) error
 	}
 )

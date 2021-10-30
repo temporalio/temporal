@@ -138,11 +138,20 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	msBuilder workflow.MutableState,
 ) error {
 
-	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
-		return err
-	}
-
-	if err := t.deleteWorkflowExecution(task); err != nil {
+	if err := t.shard.DeleteWorkflowExecution(
+		&persistence.DeleteCurrentWorkflowExecutionRequest{
+			ShardID:     t.shard.GetShardID(),
+			NamespaceID: task.GetNamespaceId(),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       task.GetRunId(),
+		},
+		&persistence.DeleteWorkflowExecutionRequest{
+			ShardID:     t.shard.GetShardID(),
+			NamespaceID: task.GetNamespaceId(),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       task.GetRunId(),
+		},
+	); err != nil {
 		return err
 	}
 
@@ -217,11 +226,20 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 		return err
 	}
 
-	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
-		return err
-	}
-
-	if err := t.deleteWorkflowExecution(task); err != nil {
+	if err := t.shard.DeleteWorkflowExecution(
+		&persistence.DeleteCurrentWorkflowExecutionRequest{
+			ShardID:     t.shard.GetShardID(),
+			NamespaceID: task.GetNamespaceId(),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       task.GetRunId(),
+		},
+		&persistence.DeleteWorkflowExecutionRequest{
+			ShardID:     t.shard.GetShardID(),
+			NamespaceID: task.GetNamespaceId(),
+			WorkflowID:  task.GetWorkflowId(),
+			RunID:       task.GetRunId(),
+		},
+	); err != nil {
 		return err
 	}
 
@@ -236,36 +254,6 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	// if this is not called then callers will get mutable state even though its been removed from database
 	workflowContext.Clear()
 	return nil
-}
-
-func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
-	task *tasks.DeleteHistoryEventTask,
-) error {
-
-	op := func() error {
-		return t.shard.GetExecutionManager().DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.NamespaceID,
-			WorkflowID:  task.WorkflowID,
-			RunID:       task.RunID,
-		})
-	}
-	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
-	task *tasks.DeleteHistoryEventTask,
-) error {
-
-	op := func() error {
-		return t.shard.GetExecutionManager().DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.NamespaceID,
-			WorkflowID:  task.WorkflowID,
-			RunID:       task.RunID,
-		})
-	}
-	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 }
 
 func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
