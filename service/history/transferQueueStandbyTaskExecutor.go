@@ -279,7 +279,6 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			workflowCloseTime,
 			workflowStatus,
 			workflowHistoryLength,
-			transferTask.TaskID,
 			visibilityMemo,
 			searchAttr,
 		)

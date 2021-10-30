@@ -201,7 +201,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	defer cancel()
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
-		task.NamespaceID,
+		namespace.ID(task.NamespaceID),
 		commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,

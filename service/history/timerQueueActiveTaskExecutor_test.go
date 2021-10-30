@@ -977,7 +977,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Fire() {
 
 	timerTask := &tasks.WorkflowBackoffTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),
@@ -1033,7 +1033,7 @@ func (s *timerQueueActiveTaskExecutorSuite) TestWorkflowBackoffTimer_Noop() {
 
 	timerTask := &tasks.WorkflowBackoffTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			execution.GetWorkflowId(),
 			execution.GetRunId(),
 		),

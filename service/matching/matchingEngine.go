@@ -74,7 +74,7 @@ type (
 	}
 
 	taskQueueCounterKey struct {
-		namespaceID string
+		namespaceID namespace.ID
 		taskType    enumspb.TaskQueueType
 		queueType   enumspb.TaskQueueKind
 	}
@@ -731,14 +731,14 @@ func (e *matchingEngineImpl) unloadTaskQueue(unloadTQM taskQueueManager) {
 
 func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, taskQueueCount int) {
 	nsEntry, err := e.namespaceRegistry.GetNamespaceByID(countKey.namespaceID)
-	namespace := "unknown"
+	namespace := namespace.Name("unknown")
 	if err == nil {
 		namespace = nsEntry.Name()
 	}
 
 	e.metricsClient.Scope(
 		metrics.MatchingEngineScope,
-		metrics.NamespaceTag(namespace),
+		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
 		metrics.QueueTypeTag(countKey.queueType.String()),
 	).UpdateGauge(metrics.TaskQueueGauge, float64(taskQueueCount))

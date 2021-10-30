@@ -38,7 +38,6 @@ import (
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
 	namespace "go.temporal.io/server/common/namespace"
-	tasks "go.temporal.io/server/common/tasks"
 	events "go.temporal.io/server/service/history/events"
 	tasks "go.temporal.io/server/service/history/tasks"
 )

@@ -303,7 +303,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	err = t.recordWorkflowClosed(
-		namespace.ID(task.NamespaceID,)
+		namespace.ID(task.NamespaceID),
 		task.WorkflowID,
 		task.RunID,
 		workflowTypeName,
@@ -312,7 +312,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		workflowCloseTime,
 		workflowStatus,
 		workflowHistoryLength,
-		task.TaskID,
 		visibilityMemo,
 		searchAttr,
 	)
@@ -581,7 +580,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return err
 		}
 		// it is possible that the namespace got deleted. Use namespaceID instead as this is only needed for the history event
-		namespace = namespace.Name(task.NamespaceID)
+		parentNamespaceName = namespace.Name(task.NamespaceID)
 	} else {
 		parentNamespaceName = namespaceEntry.Name()
 	}
@@ -593,7 +592,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return err
 		}
 		// it is possible that the namespace got deleted. Use namespaceID instead as this is only needed for the history event
-		targetNamespace = namespace.Name(task.TargetNamespaceID)
+		targetNamespaceName = namespace.Name(task.TargetNamespaceID)
 	} else {
 		targetNamespaceName = namespaceEntry.Name()
 	}

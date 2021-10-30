@@ -135,7 +135,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TearDownTest() {
 func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	task := &tasks.DeleteHistoryEventTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			tests.NamespaceID,
+			tests.NamespaceID.String(),
 			tests.WorkflowID,
 			tests.RunID,
 		),
@@ -166,7 +166,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
 	task := &tasks.DeleteHistoryEventTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			tests.NamespaceID,
+			tests.NamespaceID.String(),
 			tests.WorkflowID,
 			tests.RunID,
 		),
@@ -209,7 +209,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_SendSignalErr() {
 	task := &tasks.DeleteHistoryEventTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			tests.NamespaceID,
+			tests.NamespaceID.String(),
 			tests.WorkflowID,
 			tests.RunID,
 		),
