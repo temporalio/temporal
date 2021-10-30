@@ -218,14 +218,15 @@ func (p *processorImpl) bulkBeforeAction(_ int64, requests []elastic.BulkableReq
 func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequest, response *elastic.BulkResponse, err error) {
 	if err != nil {
 		const logFirstNRequests = 5
-		isRetryable := client.IsRetryableError(err)
+		httpStatus := client.HttpStatus(err)
+		isRetryable := client.IsRetryableStatus(httpStatus)
 		var logRequests strings.Builder
 		for i, request := range requests {
 			if i < logFirstNRequests {
 				logRequests.WriteString(request.String())
 				logRequests.WriteRune('\n')
 			}
-			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorFailures)
+			p.metricsClient.Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(httpStatus)).IncCounter(metrics.ElasticsearchBulkProcessorFailures)
 
 			if !isRetryable {
 				visibilityTaskKey := p.extractVisibilityTaskKey(request)
@@ -269,7 +270,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorFailures)
+			p.metricsClient.Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(responseItem.Status)).IncCounter(metrics.ElasticsearchBulkProcessorFailures)
 			p.sendToAckChan(visibilityTaskKey, false)
 		default: // bulk processor will retry
 			p.logger.Warn("ES request retried.",
@@ -278,7 +279,7 @@ func (p *processorImpl) bulkAfterAction(_ int64, requests []elastic.BulkableRequ
 				tag.Key(visibilityTaskKey),
 				tag.ESDocID(docID),
 				tag.ESRequest(request.String()))
-			p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRetries)
+			p.metricsClient.Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(responseItem.Status)).IncCounter(metrics.ElasticsearchBulkProcessorRetries)
 		}
 	}
 }

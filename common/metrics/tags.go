@@ -24,6 +24,10 @@
 
 package metrics
 
+import (
+	"strconv"
+)
+
 const (
 	gitRevisionTag   = "git_revision"
 	gitBranchTag     = "git_branch"
@@ -108,6 +112,10 @@ type (
 	}
 
 	visibilityTypeTag struct {
+		value string
+	}
+
+	httpStatusTag struct {
 		value string
 	}
 )
@@ -377,4 +385,19 @@ func (d queueTypeTag) Key() string {
 
 func (d queueTypeTag) Value() string {
 	return d.value
+}
+
+// HttpStatusTag returns a new httpStatusTag.
+func HttpStatusTag(value int) Tag {
+	return httpStatusTag{value: strconv.Itoa(value)}
+}
+
+// Key returns the key of the stats type tag
+func (t httpStatusTag) Key() string {
+	return httpStatusTagName
+}
+
+// Value returns the value of the stats type tag
+func (t httpStatusTag) Value() string {
+	return t.value
 }
