@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/golang/mock/gomock"
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	namespacepb "go.temporal.io/api/namespace/v1"
@@ -86,8 +85,9 @@ func (s *registrySuite) TestListNamespace() {
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
-				Name: "some random namespace name", Data: make(map[string]string)},
+				Id:   namespace.NewID().String(),
+				Name: "some random namespace name",
+				Data: make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -110,7 +110,7 @@ func (s *registrySuite) TestListNamespace() {
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
 				Data: make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
@@ -135,7 +135,7 @@ func (s *registrySuite) TestListNamespace() {
 	namespaceRecord3 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: "yet another random namespace name",
 				Data: make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
@@ -206,7 +206,7 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
 				Data: make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
@@ -233,7 +233,7 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
 				Data: make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
@@ -304,7 +304,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	namespaceRecord1Old := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: "some random namespace name",
 				Data: make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
@@ -331,7 +331,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	namespaceRecord2Old := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: "another random namespace name",
 				Data: make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
@@ -465,7 +465,7 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
-	id := namespace.ID(uuid.NewString())
+	id := namespace.NewID()
 	namespaceRecordOld := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{Id: id.String(), Name: "some random namespace name", Data: make(map[string]string)},
@@ -533,7 +533,7 @@ func TestCacheByName(t *testing.T) {
 	nsrec := persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: "foo",
 			},
 			Config:            &persistencespb.NamespaceConfig{},

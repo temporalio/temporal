@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	namespacepb "go.temporal.io/api/namespace/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -79,10 +80,14 @@ type (
 	}
 )
 
-var (
-	EmptyName Name
-	EmptyID   ID
+const (
+	EmptyName Name = ""
+	EmptyID   ID   = ""
 )
+
+func NewID() ID {
+	return ID(uuid.NewString())
+}
 
 func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
 	return &Namespace{

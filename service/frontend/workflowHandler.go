@@ -360,12 +360,12 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errRequestNotSet
 	}
 
-	namespaceEntry := namespace.Name(request.GetNamespace())
-	if namespaceEntry.IsEmpty() {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if namespaceName.IsEmpty() {
 		return nil, errNamespaceNotSet
 	}
 
-	if len(namespaceEntry) > wh.config.MaxIDLengthLimit() {
+	if len(namespaceName) > wh.config.MaxIDLengthLimit() {
 		return nil, errNamespaceTooLong
 	}
 
@@ -415,8 +415,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 
-	wh.GetLogger().Debug("Start workflow execution request namespace", tag.WorkflowNamespace(namespaceEntry.String()))
-	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespaceEntry)
+	wh.GetLogger().Debug("Start workflow execution request namespace", tag.WorkflowNamespace(namespaceName.String()))
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
@@ -1988,12 +1988,12 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
-	namespaceEntry := namespace.Name(request.GetNamespace())
-	if namespaceEntry.IsEmpty() {
+	namespaceName := namespace.Name(request.GetNamespace())
+	if namespaceName.IsEmpty() {
 		return nil, errNamespaceNotSet
 	}
 
-	if len(namespaceEntry) > wh.config.MaxIDLengthLimit() {
+	if len(namespaceName) > wh.config.MaxIDLengthLimit() {
 		return nil, errNamespaceTooLong
 	}
 
@@ -2043,7 +2043,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
 
-	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespaceEntry)
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespaceName)
 	if err != nil {
 		return nil, err
 	}
