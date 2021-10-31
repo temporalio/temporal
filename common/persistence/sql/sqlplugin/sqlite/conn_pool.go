@@ -25,12 +25,16 @@
 package sqlite
 
 import (
+	"sync"
+
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
-	"sync"
 )
 
+// This pool properly enabled the support for SQLite in the temporal server.
+// Internal Temporal services are highly isolated, each will create at least a single connection to the database violating
+// the SQLite concept of safety only within a single thread.
 type connPool struct {
 	mu   sync.Mutex
 	pool map[string]entry
