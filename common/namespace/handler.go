@@ -394,7 +394,8 @@ func (d *HandlerImpl) UpdateNamespace(
 	configVersion := getResponse.Namespace.ConfigVersion
 	failoverVersion := getResponse.Namespace.FailoverVersion
 	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
-	isGlobalNamespace := getResponse.IsGlobalNamespace
+	isGlobalNamespace := getResponse.IsGlobalNamespace || updateRequest.PromoteNamespace
+	needsNamespacePromotion := !getResponse.IsGlobalNamespace && updateRequest.PromoteNamespace
 
 	currentHistoryArchivalState := &ArchivalState{
 		State: config.HistoryArchivalState,
@@ -529,6 +530,10 @@ func (d *HandlerImpl) UpdateNamespace(
 		); err != nil {
 			return nil, err
 		}
+		if !d.clusterMetadata.IsGlobalNamespaceEnabled() {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("global namespace is not enabled on this "+
+				"cluster, cannot update global namespace or promote local namespace: %v", updateRequest.Namespace))
+		}
 	} else {
 		if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigForLocalNamespace(
 			replicationConfig,
@@ -539,7 +544,7 @@ func (d *HandlerImpl) UpdateNamespace(
 
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
-	} else if configurationChanged || activeClusterChanged {
+	} else if configurationChanged || activeClusterChanged || needsNamespacePromotion {
 		if configurationChanged && isGlobalNamespace && !d.clusterMetadata.IsMasterCluster() {
 			return nil, errNotMasterCluster
 		}
@@ -565,6 +570,7 @@ func (d *HandlerImpl) UpdateNamespace(
 				FailoverVersion:             failoverVersion,
 				FailoverNotificationVersion: failoverNotificationVersion,
 			},
+			IsGlobalNamespace:   isGlobalNamespace,
 			NotificationVersion: notificationVersion,
 		}
 		err = d.metadataMgr.UpdateNamespace(updateReq)
@@ -636,6 +642,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 			FailoverNotificationVersion: getResponse.Namespace.FailoverNotificationVersion,
 		},
 		NotificationVersion: notificationVersion,
+		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
 	}
 	err = d.metadataMgr.UpdateNamespace(updateReq)
 	if err != nil {
