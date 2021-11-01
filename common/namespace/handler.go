@@ -531,7 +531,7 @@ func (d *HandlerImpl) UpdateNamespace(
 			return nil, err
 		}
 		if !d.clusterMetadata.IsGlobalNamespaceEnabled() {
-			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("global namespace is not enabled on this " +
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("global namespace is not enabled on this "+
 				"cluster, cannot update global namespace or promote local namespace: %v", updateRequest.Namespace))
 		}
 	} else {
@@ -570,7 +570,7 @@ func (d *HandlerImpl) UpdateNamespace(
 				FailoverVersion:             failoverVersion,
 				FailoverNotificationVersion: failoverNotificationVersion,
 			},
-			IsGlobalNamespace: isGlobalNamespace,
+			IsGlobalNamespace:   isGlobalNamespace,
 			NotificationVersion: notificationVersion,
 		}
 		err = d.metadataMgr.UpdateNamespace(updateReq)
