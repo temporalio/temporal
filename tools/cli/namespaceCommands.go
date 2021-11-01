@@ -167,7 +167,14 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	if c.IsSet(FlagActiveClusterName) {
+	if c.IsSet(FlagPromoteNamespace) && c.Bool(FlagPromoteNamespace) {
+		fmt.Printf("Will promote local namespace to global namespace for:%s, other flag will be omitted. " +
+			"If it is already global namespace, this will be no-op.\n", namespace)
+		updateRequest = &workflowservice.UpdateNamespaceRequest{
+			Namespace:         namespace,
+			PromoteNamespace:  true,
+		}
+	} else if c.IsSet(FlagActiveClusterName) {
 		activeCluster := c.String(FlagActiveClusterName)
 		fmt.Printf("Will set active cluster name to: %s, other flag will be omitted.\n", activeCluster)
 		replicationConfig := &replicationpb.NamespaceReplicationConfig{

@@ -40,7 +40,7 @@ const (
  VALUES(?, ?, ?, ?, ?, ?, ?)`
 
 	updateNamespaceQuery = `UPDATE namespaces 
- SET name = ?, data = ?, data_encoding = ?, notification_version = ?
+ SET name = ?, data = ?, data_encoding = ?, is_global = ?, notification_version = ?
  WHERE partition_id=54321 AND id = ?`
 
 	getNamespacePart = `SELECT id, name, is_global, data, data_encoding, notification_version FROM namespaces`
@@ -92,6 +92,7 @@ func (mdb *db) UpdateNamespace(
 		row.Name,
 		row.Data,
 		row.DataEncoding,
+		row.IsGlobal,
 		row.NotificationVersion,
 		row.ID,
 	)

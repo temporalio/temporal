@@ -174,6 +174,7 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 			Data:                request.Namespace.Data,
 			DataEncoding:        request.Namespace.EncodingType.String(),
 			NotificationVersion: request.NotificationVersion,
+			IsGlobal:            request.IsGlobal,
 		})
 		if err != nil {
 			return err

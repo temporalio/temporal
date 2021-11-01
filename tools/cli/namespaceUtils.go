@@ -158,6 +158,10 @@ var (
 			Name:  FlagReason,
 			Usage: "Reason for the operation",
 		},
+		cli.BoolFlag{
+			Name:  FlagPromoteNamespaceWithAlias,
+			Usage: "Promote local namespace to global namespace",
+		},
 	}
 
 	describeNamespaceFlags = []cli.Flag{
