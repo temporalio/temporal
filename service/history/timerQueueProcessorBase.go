@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -70,7 +71,7 @@ type (
 		timerFiredCount  uint64
 		timerProcessor   timerProcessor
 		timerQueueAckMgr timerQueueAckMgr
-		timerGate        TimerGate
+		timerGate        timer.Gate
 		timeSource       clock.TimeSource
 		rateLimiter      quotas.RateLimiter
 		retryPolicy      backoff.RetryPolicy
@@ -90,7 +91,7 @@ func newTimerQueueProcessorBase(
 	historyService *historyEngineImpl,
 	timerProcessor timerProcessor,
 	timerQueueAckMgr timerQueueAckMgr,
-	timerGate TimerGate,
+	timerGate timer.Gate,
 	maxPollRPS dynamicconfig.IntPropertyFn,
 	logger log.Logger,
 	metricsScope metrics.Scope,

@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -47,7 +48,7 @@ type (
 		timerTaskFilter         taskFilter
 		logger                  log.Logger
 		metricsClient           metrics.Client
-		timerGate               RemoteTimerGate
+		timerGate               timer.RemoteGate
 		timerQueueProcessorBase *timerQueueProcessorBase
 		taskExecutor            queueTaskExecutor
 	}
@@ -73,7 +74,7 @@ func newTimerQueueStandbyProcessor(
 		return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
 	}
 
-	timerGate := NewRemoteTimerGate()
+	timerGate := timer.NewRemoteGate()
 	timerGate.SetCurrentTime(shard.GetCurrentTime(clusterName))
 	timerQueueAckMgr := newTimerQueueAckMgr(
 		metrics.TimerStandbyQueueProcessorScope,
