@@ -642,6 +642,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 			FailoverNotificationVersion: getResponse.Namespace.FailoverNotificationVersion,
 		},
 		NotificationVersion: notificationVersion,
+		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
 	}
 	err = d.metadataMgr.UpdateNamespace(updateReq)
 	if err != nil {

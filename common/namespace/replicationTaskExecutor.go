@@ -220,6 +220,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 	request := &persistence.UpdateNamespaceRequest{
 		Namespace:           resp.Namespace,
 		NotificationVersion: notificationVersion,
+		IsGlobalNamespace:   resp.IsGlobalNamespace,
 	}
 
 	if resp.Namespace.ConfigVersion < task.GetConfigVersion() {

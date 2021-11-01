@@ -508,6 +508,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 				resp2.Namespace.FailoverNotificationVersion,
 				&time.Time{},
 				notificationVersion,
+				isGlobalNamespace,
 			)
 			if err3 == nil {
 				atomic.AddInt32(&successCount, 1)
@@ -660,6 +661,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		updateFailoverNotificationVersion,
 		&failoverEndTime,
 		notificationVersion,
+		isGlobalNamespace,
 	)
 	m.NoError(err3)
 
@@ -743,6 +745,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 		updateFailoverNotificationVersion,
 		&time.Time{},
 		notificationVersion,
+		isGlobalNamespace,
 	)
 	m.NoError(err6)
 
@@ -1037,6 +1040,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateNamespace(
 	failoverNotificationVersion int64,
 	failoverEndTime *time.Time,
 	notificationVersion int64,
+	isGlobalNamespace bool,
 ) error {
 	return m.MetadataManager.UpdateNamespace(&p.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
@@ -1049,6 +1053,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateNamespace(
 			FailoverNotificationVersion: failoverNotificationVersion,
 		},
 		NotificationVersion: notificationVersion,
+		IsGlobalNamespace:   isGlobalNamespace,
 	})
 }
 
