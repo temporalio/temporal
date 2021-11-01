@@ -29,7 +29,7 @@ RUN mkdir /etc/temporal/config
 RUN chown -R temporal:temporal /etc/temporal/config
 
 USER temporal
-ENTRYPOINT ["./entrypoint.sh"]
+ENTRYPOINT ["/etc/temporal/entrypoint.sh"]
 
 COPY config/dynamicconfig /etc/temporal/config/dynamicconfig
 COPY docker/config_template.yaml /etc/temporal/config/config_template.yaml
