@@ -270,11 +270,12 @@ func (mr *MockContextMockRecorder) GetCurrentTime(cluster interface{}) *gomock.C
 }
 
 // GetEngine mocks base method.
-func (m *MockContext) GetEngine() Engine {
+func (m *MockContext) GetEngine() (Engine, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetEngine")
 	ret0, _ := ret[0].(Engine)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetEngine indicates an expected call of GetEngine.
