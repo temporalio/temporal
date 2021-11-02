@@ -193,19 +193,6 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	}
 	c.RUnlock()
 
-	c.Lock()
-	defer c.Unlock()
-
-	if shard, ok := c.historyShards[shardID]; ok {
-		if shard.isValid() {
-			return shard, nil
-		}
-		// if shard not valid then proceed to create a new one
-	}
-
-	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
-		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", c.GetHostInfo().Identity())
-	}
 	info, err := c.GetHistoryServiceResolver().Lookup(convert.Int32ToString(shardID))
 	if err != nil {
 		return nil, err
@@ -213,6 +200,20 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 
 	if info.Identity() != c.GetHostInfo().Identity() {
 		return nil, serviceerrors.NewShardOwnershipLost(c.GetHostInfo().Identity(), info.GetAddress())
+	}
+
+	c.Lock()
+	defer c.Unlock()
+
+	// Check again with exclusive lock
+	if shard, ok := c.historyShards[shardID]; ok {
+		if shard.isValid() {
+			return shard, nil
+		}
+	}
+
+	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {
+		return nil, fmt.Errorf("ControllerImpl for host '%v' shutting down", c.GetHostInfo().Identity())
 	}
 
 	shard, err := newContext(
