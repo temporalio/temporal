@@ -91,7 +91,6 @@ type (
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                    sync.RWMutex
 		state                     contextState
-		stateGeneration           int
 		engine                    Engine
 		lastUpdated               time.Time
 		shardInfo                 *persistence.ShardInfoWithFailover
@@ -115,8 +114,8 @@ var (
 	// during short windows at initialization and if we've lost the connection to the database.
 	ErrShardStatusUnknown = errors.New("shard status unknown")
 
-	// errOldGeneration is an internal error used to scope acquireShard to a single state transition.
-	errOldGeneration = errors.New("old generation")
+	// errStoppingContext is an internal error used to abort acquireShard
+	errStoppingContext = errors.New("stopping context")
 )
 
 const (
@@ -1146,15 +1145,16 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	stop the engine. If it's triggered externally, we'll skip over Stopping and go straight to Stopped.
 
 	If we want to stop, and the acquireShard goroutine is still running, we can't kill it, but we need a
-	mechanism to make sure it doesn't make any persistence calls or state transitions. That's the state
-	generation number: if acquireShard sees that the generation number has changed, it exits quietly.
+	mechanism to make sure it doesn't make any persistence calls or state transitions. We make acquireShard
+	check the state each time it acquires the lock, and do nothing if the state has changed to Stopping (or
+	Stopped).
 
 	Invariants:
-	- Any time state is changed, stateGeneration is incremented.
 	- Once state is Stopping, it can only go to Stopped.
 	- Once state is Stopped, it can't go anywhere else.
 	- At the start of acquireShard, state must be Acquiring.
-	- By the end of acquireShard, it must have set state to something else (unless generation changed).
+	- By the end of acquireShard, state must not be Acquiring: either acquireShard set it to Acquired, or the
+	  controller set it to Stopped.
 	- If state is Acquiring, acquireShard should be running in the background.
 	- Only acquireShard can use contextRequestAcquired (i.e. transition from Acquiring to Acquired).
 	- Once state has reached Acquired at least once, and not reached Stopped, engine must be non-nil.
@@ -1163,18 +1163,13 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 
 	*/
 
-	setState := func(newState contextState) {
-		s.stateGeneration++
-		s.state = newState
-	}
-
 	setStateAcquiring := func() {
-		setState(contextStateAcquiring)
-		go s.acquireShard(s.stateGeneration)
+		s.state = contextStateAcquiring
+		go s.acquireShard()
 	}
 
 	setStateStopping := func() {
-		setState(contextStateStopping)
+		s.state = contextStateStopping
 		// The change in state should cause all write methods to fail, but just in case, set this also,
 		// which will cause failures at the persistence level
 		s.shardInfo.RangeId = -1
@@ -1183,7 +1178,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	}
 
 	setStateStopped := func() {
-		setState(contextStateStopped)
+		s.state = contextStateStopped
 	}
 
 	switch s.state {
@@ -1204,7 +1199,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 		case contextRequestAcquire:
 			return // nothing to do, already acquiring
 		case contextRequestAcquired:
-			setState(contextStateAcquired)
+			s.state = contextStateAcquired
 			return
 		case contextRequestLost:
 			return // nothing to do, already acquiring
@@ -1271,13 +1266,12 @@ func (s *ContextImpl) loadOrCreateShardMetadata() (*persistence.ShardInfoWithFai
 	return &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}, nil
 }
 
-func (s *ContextImpl) loadShardMetadata(ownershipChanged bool, generation int) (bool, error) {
+func (s *ContextImpl) loadShardMetadata(ownershipChanged bool) (bool, error) {
 	// Only have to do this once, we can just re-acquire the rangeid lock after that
 	s.rLock()
 
-	if generation != s.stateGeneration {
-		s.rUnlock()
-		return false, errOldGeneration
+	if s.state >= contextStateStopping {
+		return false, errStoppingContext
 	}
 
 	if s.shardInfo != nil {
@@ -1325,8 +1319,8 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged bool, generation int) (
 	s.wLock()
 	defer s.wUnlock()
 
-	if generation != s.stateGeneration {
-		return false, errOldGeneration
+	if s.state >= contextStateStopping {
+		return false, errStoppingContext
 	}
 
 	s.shardInfo = updatedShardInfo
@@ -1336,7 +1330,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged bool, generation int) (
 	return ownershipChanged, nil
 }
 
-func (s *ContextImpl) acquireShard(generation int) {
+func (s *ContextImpl) acquireShard() {
 	// Retry for 5m, with interval up to 10s (default)
 	// QUESTION: should the 5m limit go in dynamic config?
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
@@ -1359,7 +1353,7 @@ func (s *ContextImpl) acquireShard(generation int) {
 	try := func() error {
 		// Initial load of shard metadata
 		var err error
-		ownershipChanged, err = s.loadShardMetadata(ownershipChanged, generation)
+		ownershipChanged, err = s.loadShardMetadata(ownershipChanged)
 		if err != nil {
 			return err
 		}
@@ -1367,9 +1361,9 @@ func (s *ContextImpl) acquireShard(generation int) {
 		s.wLock()
 		defer s.wUnlock()
 
-		// Check that generation still matches
-		if generation != s.stateGeneration {
-			return errOldGeneration
+		// Check that we should still be running
+		if s.state >= contextStateStopping {
+			return errStoppingContext
 		}
 
 		// Try to acquire RangeID lock. If this gets a persistence error, it may call:
@@ -1396,9 +1390,9 @@ func (s *ContextImpl) acquireShard(generation int) {
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
 			engine := s.createEngine()
 			s.wLock()
-			if generation != s.stateGeneration {
+			if s.state >= contextStateStopping {
 				engine.Stop()
-				return errOldGeneration
+				return errStoppingContext
 			}
 			s.engine = engine
 		}
@@ -1407,7 +1401,7 @@ func (s *ContextImpl) acquireShard(generation int) {
 	}
 
 	err := backoff.Retry(try, policy, isRetryable)
-	if err == errOldGeneration {
+	if err == errStoppingContext {
 		// State changed since this goroutine started, exit silently.
 		return
 	} else if err != nil {
@@ -1418,9 +1412,10 @@ func (s *ContextImpl) acquireShard(generation int) {
 		// here. But if not (i.e. timed out or error), initiate shutting down the shard.
 		s.wLock()
 		defer s.wUnlock()
-		if generation == s.stateGeneration {
-			s.transitionLocked(contextRequestStop)
+		if s.state >= contextStateStopping {
+			return
 		}
+		s.transitionLocked(contextRequestStop)
 	}
 }
 
