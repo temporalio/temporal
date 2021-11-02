@@ -317,7 +317,7 @@ func (c *ControllerImpl) acquireShards() {
 								c.logger.Error("Unable to create history shard engine", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 							}
 						}
-						// QUESTION: do we want to proactively unload shards here?
+						// TODO: If we're _not_ the owner for this shard, and we have it loaded, we should unload it.
 					}
 				}
 			}
