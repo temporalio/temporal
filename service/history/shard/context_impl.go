@@ -26,7 +26,6 @@ package shard
 
 import (
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
@@ -1116,11 +1115,6 @@ func (s *ContextImpl) rUnlock() {
 	s.rwLock.RUnlock()
 }
 
-func (s *ContextImpl) String() string {
-	// use memory address as shard context identity
-	return fmt.Sprintf("%p", s)
-}
-
 func (s *ContextImpl) transitionLocked(request contextRequest) {
 	/* State transitions:
 
@@ -1439,8 +1433,6 @@ func newContext(
 ) (*ContextImpl, error) {
 
 	hostIdentity := resource.GetHostInfo().Identity()
-	logger := log.With(resource.GetLogger(), tag.ShardID(shardID), tag.Address(hostIdentity))
-	throttledLogger := log.With(resource.GetThrottledLogger(), tag.ShardID(shardID), tag.Address(hostIdentity))
 
 	shardContext := &ContextImpl{
 		Resource:         resource,
@@ -1450,8 +1442,8 @@ func newContext(
 		metricsClient:    resource.GetMetricsClient(),
 		closeCallback:    closeCallback,
 		config:           config,
-		logger:           logger,
-		throttledLogger:  throttledLogger,
+		logger:           log.With(resource.GetLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
+		throttledLogger:  log.With(resource.GetThrottledLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:    factory,
 	}
 	shardContext.eventsCache = events.NewEventsCache(
@@ -1464,9 +1456,6 @@ func newContext(
 		shardContext.GetLogger(),
 		shardContext.GetMetricsClient(),
 	)
-	// Add tag for context itself to loggers
-	shardContext.logger = log.With(shardContext.logger, tag.ShardContext(shardContext))
-	shardContext.throttledLogger = log.With(shardContext.throttledLogger, tag.ShardContext(shardContext))
 
 	return shardContext, nil
 }
