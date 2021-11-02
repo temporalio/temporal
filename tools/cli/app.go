@@ -60,52 +60,52 @@ func NewCliApp() *cli.App {
 		cli.IntFlag{
 			Name:   FlagContextTimeoutWithAlias,
 			Value:  defaultContextTimeoutInSeconds,
-			Usage:  "optional timeout for context of RPC call in seconds",
+			Usage:  "Optional timeout for context of RPC call in seconds",
 			EnvVar: "TEMPORAL_CONTEXT_TIMEOUT",
 		},
 		cli.BoolFlag{
 			Name:  FlagAutoConfirm,
-			Usage: "automatically confirm all prompts",
+			Usage: "Automatically confirm all prompts",
 		},
 		cli.StringFlag{
 			Name:   FlagTLSCertPath,
 			Value:  "",
-			Usage:  "path to x509 certificate",
+			Usage:  "Path to x509 certificate",
 			EnvVar: "TEMPORAL_CLI_TLS_CERT",
 		},
 		cli.StringFlag{
 			Name:   FlagTLSKeyPath,
 			Value:  "",
-			Usage:  "path to private key",
+			Usage:  "Path to private key",
 			EnvVar: "TEMPORAL_CLI_TLS_KEY",
 		},
 		cli.StringFlag{
 			Name:   FlagTLSCaPath,
 			Value:  "",
-			Usage:  "path to server CA certificate",
+			Usage:  "Path to server CA certificate",
 			EnvVar: "TEMPORAL_CLI_TLS_CA",
 		},
 		cli.BoolFlag{
 			Name:   FlagTLSDisableHostVerification,
-			Usage:  "disable tls host name verification (tls must be enabled)",
+			Usage:  "Disable tls host name verification (tls must be enabled)",
 			EnvVar: "TEMPORAL_CLI_TLS_DISABLE_HOST_VERIFICATION",
 		},
 		cli.StringFlag{
 			Name:   FlagTLSServerName,
 			Value:  "",
-			Usage:  "override for target server name",
+			Usage:  "Override for target server name",
 			EnvVar: "TEMPORAL_CLI_TLS_SERVER_NAME",
 		},
 		cli.StringFlag{
 			Name:   FlagHeadersProviderPluginWithAlias,
 			Value:  "",
-			Usage:  "headers provider plugin executable name",
+			Usage:  "Headers provider plugin executable name",
 			EnvVar: "TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER",
 		},
 		cli.StringFlag{
 			Name:   FlagDataConverterPluginWithAlias,
 			Value:  "",
-			Usage:  "data converter plugin executable name",
+			Usage:  "Data converter plugin executable name",
 			EnvVar: "TEMPORAL_CLI_PLUGIN_DATA_CONVERTER",
 		},
 	}
@@ -125,7 +125,7 @@ func NewCliApp() *cli.App {
 		{
 			Name:        "activity",
 			Aliases:     []string{"act"},
-			Usage:       "operate activities of workflow",
+			Usage:       "Operate activities of workflow",
 			Subcommands: newActivityCommands(),
 		},
 		{
@@ -136,7 +136,7 @@ func NewCliApp() *cli.App {
 		},
 		{
 			Name:        "batch",
-			Usage:       "batch operation on a list of workflows from query.",
+			Usage:       "Batch operation on a list of workflows from query.",
 			Subcommands: newBatchCommands(),
 		},
 		{
