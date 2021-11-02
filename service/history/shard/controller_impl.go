@@ -157,7 +157,7 @@ func (c *ControllerImpl) CloseShardByID(shardID int32) {
 	sw := c.metricsScope.StartTimer(metrics.RemoveEngineForShardLatency)
 	defer sw.Stop()
 
-	shard, newNumShards, _ := c.removeShard(shardID, nil)
+	shard, newNumShards := c.removeShard(shardID, nil)
 	// Stop the current shard, if it exists.
 	if shard != nil {
 		shard.logger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shardID))
@@ -173,7 +173,7 @@ func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
 
 	c.metricsScope.IncCounter(metrics.ShardContextClosedCounter)
 
-	_, newNumShards, _ := c.removeShard(shard.shardID, shard)
+	_, newNumShards := c.removeShard(shard.shardID, shard)
 
 	// Whether shard was in the shards map or not, in both cases we should stop it.
 	shard.logger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shard.shardID))
@@ -234,24 +234,24 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	return shard, nil
 }
 
-func (c *ControllerImpl) removeShard(shardID int32, expected *ContextImpl) (*ContextImpl, int64, error) {
+func (c *ControllerImpl) removeShard(shardID int32, expected *ContextImpl) (*ContextImpl, int64) {
 	c.Lock()
 	defer c.Unlock()
 
 	nShards := int64(len(c.historyShards))
 	current, ok := c.historyShards[shardID]
 	if !ok {
-		return nil, nShards, fmt.Errorf("No shard found to remove for shard: %v", shardID)
+		return nil, nShards
 	}
 	if expected != nil && current != expected {
 		// the shard comparison is a defensive check to make sure we are deleting
 		// what we intend to delete.
-		return nil, nShards, fmt.Errorf("Current shard doesn't match the one we intend to delete for shard: %v", shardID)
+		return nil, nShards
 	}
 
 	delete(c.historyShards, shardID)
 
-	return current, nShards - 1, nil
+	return current, nShards - 1
 }
 
 // shardManagementPump is the main event loop for
