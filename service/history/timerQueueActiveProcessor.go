@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -84,7 +85,7 @@ func newTimerQueueActiveProcessor(
 		currentClusterName,
 	)
 
-	timerGate := NewLocalTimerGate(shard.GetTimeSource())
+	timerGate := timer.NewLocalGate(shard.GetTimeSource())
 
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
@@ -175,7 +176,7 @@ func newTimerQueueFailoverProcessor(
 		logger,
 	)
 
-	timerGate := NewLocalTimerGate(shard.GetTimeSource())
+	timerGate := timer.NewLocalGate(shard.GetTimeSource())
 
 	processor := &timerQueueActiveProcessorImpl{
 		shard:              shard,
