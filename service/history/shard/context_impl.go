@@ -1041,7 +1041,7 @@ func (s *ContextImpl) getOrCreateEngine() (engine Engine, retErr error) {
 
 	isRetryable := func(err error) bool { return err == ErrShardStatusUnknown }
 
-	try := func() error {
+	op := func() error {
 		s.rLock()
 		defer s.rUnlock()
 		err := s.errorByStateLocked()
@@ -1051,7 +1051,7 @@ func (s *ContextImpl) getOrCreateEngine() (engine Engine, retErr error) {
 		return err
 	}
 
-	retErr = backoff.Retry(try, policy, isRetryable)
+	retErr = backoff.Retry(op, policy, isRetryable)
 	if retErr == nil && engine == nil {
 		// This shouldn't ever happen, but don't let it return nil error.
 		retErr = ErrShardStatusUnknown
@@ -1350,7 +1350,7 @@ func (s *ContextImpl) acquireShard() {
 	// Remember this value across attempts
 	ownershipChanged := false
 
-	try := func() error {
+	op := func() error {
 		// Initial load of shard metadata
 		var err error
 		ownershipChanged, err = s.loadShardMetadata(ownershipChanged)
@@ -1400,7 +1400,7 @@ func (s *ContextImpl) acquireShard() {
 		return nil
 	}
 
-	err := backoff.Retry(try, policy, isRetryable)
+	err := backoff.Retry(op, policy, isRetryable)
 	if err == errStoppingContext {
 		// State changed since this goroutine started, exit silently.
 		return
