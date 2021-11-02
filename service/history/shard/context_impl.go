@@ -139,11 +139,15 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	return s.executionManager
 }
 
-func (s *ContextImpl) GetEngine() Engine {
+func (s *ContextImpl) GetEngine() (Engine, error) {
 	s.rLock()
 	defer s.rUnlock()
 
-	return s.engine
+	if err := s.errorByStateLocked(); err != nil {
+		return nil, err
+	}
+
+	return s.engine, nil
 }
 
 func (s *ContextImpl) GenerateTransferTaskID() (int64, error) {

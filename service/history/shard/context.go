@@ -57,7 +57,7 @@ type (
 		GetMetricsClient() metrics.Client
 		GetTimeSource() clock.TimeSource
 
-		GetEngine() Engine
+		GetEngine() (Engine, error)
 
 		GenerateTransferTaskID() (int64, error)
 		GenerateTransferTaskIDs(number int) ([]int64, error)
