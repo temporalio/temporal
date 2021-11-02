@@ -1266,17 +1266,17 @@ func (s *ContextImpl) loadOrCreateShardMetadata() (*persistence.ShardInfoWithFai
 	return &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}, nil
 }
 
-func (s *ContextImpl) loadShardMetadata(ownershipChanged bool) (bool, error) {
+func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// Only have to do this once, we can just re-acquire the rangeid lock after that
 	s.rLock()
 
 	if s.state >= contextStateStopping {
-		return false, errStoppingContext
+		return errStoppingContext
 	}
 
 	if s.shardInfo != nil {
 		s.rUnlock()
-		return ownershipChanged, nil
+		return nil
 	}
 
 	s.rUnlock()
@@ -1286,11 +1286,11 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged bool) (bool, error) {
 	shardInfo, err := s.loadOrCreateShardMetadata()
 	if err != nil {
 		s.logger.Error("Failed to load shard", tag.Error(err))
-		return false, err
+		return err
 	}
 
 	updatedShardInfo := copyShardInfo(shardInfo)
-	ownershipChanged = shardInfo.Owner != s.GetHostInfo().Identity()
+	*ownershipChanged = shardInfo.Owner != s.GetHostInfo().Identity()
 	updatedShardInfo.Owner = s.GetHostInfo().Identity()
 
 	// initialize the cluster current time to be the same as ack level
@@ -1320,14 +1320,14 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged bool) (bool, error) {
 	defer s.wUnlock()
 
 	if s.state >= contextStateStopping {
-		return false, errStoppingContext
+		return errStoppingContext
 	}
 
 	s.shardInfo = updatedShardInfo
 	s.remoteClusterCurrentTime = remoteClusterCurrentTime
 	s.timerMaxReadLevelMap = timerMaxReadLevelMap
 
-	return ownershipChanged, nil
+	return nil
 }
 
 func (s *ContextImpl) acquireShard() {
@@ -1352,8 +1352,7 @@ func (s *ContextImpl) acquireShard() {
 
 	op := func() error {
 		// Initial load of shard metadata
-		var err error
-		ownershipChanged, err = s.loadShardMetadata(ownershipChanged)
+		err := s.loadShardMetadata(&ownershipChanged)
 		if err != nil {
 			return err
 		}
