@@ -140,6 +140,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DescribeWorkflowExecution(ctx, i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DescribeWorkflowExecution), varargs...)
 }
 
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockHistoryServiceClient) GenerateLastHistoryReplicationTasks(ctx context.Context, in *historyservice.GenerateLastHistoryReplicationTasksRequest, opts ...grpc.CallOption) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", varargs...)
+	ret0, _ := ret[0].(*historyservice.GenerateLastHistoryReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockHistoryServiceClientMockRecorder) GenerateLastHistoryReplicationTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockHistoryServiceClient)(nil).GenerateLastHistoryReplicationTasks), varargs...)
+}
+
 // GetDLQMessages mocks base method.
 func (m *MockHistoryServiceClient) GetDLQMessages(ctx context.Context, in *historyservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*historyservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -881,6 +901,21 @@ func (m *MockHistoryServiceServer) DescribeWorkflowExecution(arg0 context.Contex
 func (mr *MockHistoryServiceServerMockRecorder) DescribeWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DescribeWorkflowExecution), arg0, arg1)
+}
+
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockHistoryServiceServer) GenerateLastHistoryReplicationTasks(arg0 context.Context, arg1 *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GenerateLastHistoryReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockHistoryServiceServerMockRecorder) GenerateLastHistoryReplicationTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockHistoryServiceServer)(nil).GenerateLastHistoryReplicationTasks), arg0, arg1)
 }
 
 // GetDLQMessages mocks base method.

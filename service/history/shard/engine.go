@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
@@ -78,6 +77,7 @@ type (
 		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution commonpb.WorkflowExecution) error
+		GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTransferTasks(tasks []tasks.Task)

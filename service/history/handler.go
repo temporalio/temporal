@@ -1405,6 +1405,34 @@ func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyserv
 	return &historyservice.RefreshWorkflowTasksResponse{}, nil
 }
 
+func (h *Handler) GenerateLastHistoryReplicationTasks(
+	ctx context.Context,
+	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
+) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	engine, err := h.controller.GetEngine(namespaceID, request.GetExecution().GetWorkflowId())
+	if err != nil {
+		err = h.convertError(err)
+		return nil, err
+	}
+
+	resp, err := engine.GenerateLastHistoryReplicationTasks(ctx, request)
+
+	if err != nil {
+		err = h.convertError(err)
+		return nil, err
+	}
+
+	return resp, nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

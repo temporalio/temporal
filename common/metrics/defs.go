@@ -379,6 +379,8 @@ const (
 	HistoryClientMergeDLQMessagesScope
 	// HistoryClientRefreshWorkflowTasksScope tracks RPC calls to history service
 	HistoryClientRefreshWorkflowTasksScope
+	// HistoryClientGenerateLastHistoryReplicationTasksScope tracks RPC calls to history service
+	HistoryClientGenerateLastHistoryReplicationTasksScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
@@ -1234,6 +1236,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientPurgeDLQMessagesScope:                    {operation: "HistoryClientPurgeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientMergeDLQMessagesScope:                    {operation: "HistoryClientMergeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRefreshWorkflowTasksScope:                {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGenerateLastHistoryReplicationTasksScope: {operation: "HistoryClientGenerateLastHistoryReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollWorkflowTaskQueueScope:              {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollActivityTaskQueueScope:              {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                    {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},

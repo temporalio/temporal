@@ -95,6 +95,21 @@ func (mr *MockEngineMockRecorder) DescribeWorkflowExecution(ctx, request interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).DescribeWorkflowExecution), ctx, request)
 }
 
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockEngine) GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", ctx, request)
+	ret0, _ := ret[0].(*historyservice.GenerateLastHistoryReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockEngineMockRecorder) GenerateLastHistoryReplicationTasks(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockEngine)(nil).GenerateLastHistoryReplicationTasks), ctx, request)
+}
+
 // GetDLQMessages mocks base method.
 func (m *MockEngine) GetDLQMessages(ctx context.Context, messagesRequest *historyservice.GetDLQMessagesRequest) (*historyservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
