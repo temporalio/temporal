@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
@@ -90,6 +91,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
+			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
 		}},
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -102,6 +104,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 		attr.GetSignalName(),
 		attr.GetInput(),
 		attr.GetIdentity(),
+		attr.GetHeader(),
 	).Return(event, nil)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
@@ -151,6 +154,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
+			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
 		}},
 	}
 	event2 := &historypb.HistoryEvent{
@@ -160,6 +164,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
+			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
 		}},
 	}
 	attr1 := event1.GetWorkflowExecutionSignaledEventAttributes()
@@ -172,6 +177,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		attr1.GetSignalName(),
 		attr1.GetInput(),
 		attr1.GetIdentity(),
+		attr1.GetHeader(),
 	).Return(event1, nil)
 	dedupResource1 := definition.NewEventReappliedID(runID, event1.GetEventId(), event1.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource1).Return(false)
@@ -200,6 +206,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 			Identity:   "test",
 			SignalName: "signal",
 			Input:      payloads.EncodeBytes([]byte{}),
+			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
 		}},
 	}
 	attr := event.GetWorkflowExecutionSignaledEventAttributes()
@@ -212,6 +219,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_Error() {
 		attr.GetSignalName(),
 		attr.GetInput(),
 		attr.GetIdentity(),
+		attr.GetHeader(),
 	).Return(nil, fmt.Errorf("test"))
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)

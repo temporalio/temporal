@@ -122,3 +122,6 @@ require (
 // at that tag it no longer provides github.com/cactus/go-statsd-client/statsd
 // thereby removing the import.
 replace github.com/cactus/go-statsd-client => github.com/cactus/go-statsd-client v3.2.1+incompatible
+
+// TODO(cretz): Temporary, remove and update tag in require section before merge
+replace go.temporal.io/api => ../temporal-api-go

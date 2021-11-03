@@ -304,6 +304,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSignaled() {
 		signalName,
 		testPayloads,
 		testIdentity,
+		testHeader,
 	)
 	s.Equal(event, s.flush())
 	s.Equal(&historypb.HistoryEvent{
@@ -317,6 +318,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionSignaled() {
 				SignalName: signalName,
 				Input:      testPayloads,
 				Identity:   testIdentity,
+				Header:     testHeader,
 			},
 		},
 	}, event)
@@ -1134,6 +1136,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 		Input:             testPayloads,
 		Control:           control,
 		ChildWorkflowOnly: childWorkflowOnly,
+		Header:            testHeader,
 	}
 	event := s.historyBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(
 		workflowTaskCompletionEventID,
@@ -1158,6 +1161,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 				Input:             testPayloads,
 				Control:           control,
 				ChildWorkflowOnly: childWorkflowOnly,
+				Header:            testHeader,
 			},
 		},
 	}, event)

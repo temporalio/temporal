@@ -5073,7 +5073,8 @@ func addCancelRequestedEvent(builder workflow.MutableState, initiatedID int64, n
 }
 
 func addRequestSignalInitiatedEvent(builder workflow.MutableState, workflowTaskCompletedEventID int64,
-	signalRequestID string, namespace namespace.Name, workflowID, runID, signalName string, input *commonpb.Payloads, control string) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
+	signalRequestID string, namespace namespace.Name, workflowID, runID, signalName string, input *commonpb.Payloads,
+	control string, header *commonpb.Header) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
 	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, signalRequestID,
 		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
 			Namespace: namespace.String(),
@@ -5084,6 +5085,7 @@ func addRequestSignalInitiatedEvent(builder workflow.MutableState, workflowTaskC
 			SignalName: signalName,
 			Input:      input,
 			Control:    control,
+			Header:     header,
 		})
 
 	return event, si

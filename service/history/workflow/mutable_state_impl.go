@@ -2622,6 +2622,7 @@ func (e *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEven
 		Name:                  attributes.GetSignalName(),
 		Input:                 attributes.Input,
 		Control:               attributes.Control,
+		Header:                attributes.Header,
 	}
 
 	e.pendingSignalInfoIDs[si.InitiatedId] = si
@@ -2971,6 +2972,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionSignaled(
 	signalName string,
 	input *commonpb.Payloads,
 	identity string,
+	header *commonpb.Header,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowSignaled
@@ -2978,7 +2980,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionSignaled(
 		return nil, err
 	}
 
-	event := e.hBuilder.AddWorkflowExecutionSignaledEvent(signalName, input, identity)
+	event := e.hBuilder.AddWorkflowExecutionSignaledEvent(signalName, input, identity, header)
 	if err := e.ReplicateWorkflowExecutionSignaled(event); err != nil {
 		return nil, err
 	}

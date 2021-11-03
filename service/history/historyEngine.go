@@ -1836,7 +1836,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				request.GetSignalName(),
 				request.GetInput(),
-				request.GetIdentity()); err != nil {
+				request.GetIdentity(),
+				request.GetHeader()); err != nil {
 				return nil, err
 			}
 
@@ -1905,7 +1906,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				sRequest.GetSignalName(),
 				sRequest.GetSignalInput(),
-				sRequest.GetIdentity()); err != nil {
+				sRequest.GetIdentity(),
+				sRequest.GetHeader()); err != nil {
 				return nil, err
 			}
 
@@ -2020,7 +2022,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if _, err := mutableState.AddWorkflowExecutionSignaled(
 		sRequest.GetSignalName(),
 		sRequest.GetSignalInput(),
-		sRequest.GetIdentity()); err != nil {
+		sRequest.GetIdentity(),
+		sRequest.GetHeader()); err != nil {
 		return nil, err
 	}
 

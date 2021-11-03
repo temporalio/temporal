@@ -27,6 +27,7 @@ package cassandra
 import (
 	"os"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -194,6 +195,7 @@ func getTemporalPackageDir() (string, error) {
 		if err != nil {
 			panic(err)
 		}
+		temporalPackageDir = filepath.ToSlash(temporalPackageDir)
 		temporalIndex := strings.LastIndex(temporalPackageDir, "/temporal/")
 		if temporalIndex == -1 {
 			panic("Unable to find repo path. Use env var TEMPORAL_ROOT or clone the repo into folder named 'temporal'")

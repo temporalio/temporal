@@ -1114,6 +1114,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 			// Use same request ID to deduplicate SignalWorkflowExecution calls
 			RequestId: signalInfo.GetRequestId(),
 			Control:   signalInfo.Control,
+			Header:    signalInfo.Header,
 		},
 		ExternalWorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
