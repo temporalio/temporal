@@ -125,6 +125,7 @@ var (
 	ComponentArchiver                 = component("archiver")
 	ComponentBatcher                  = component("batcher")
 	ComponentWorker                   = component("worker")
+	ComponentWorkerManager            = component("worker-manager")
 	ComponentServiceResolver          = component("service-resolver")
 	ComponentMetadataInitializer      = component("metadata-initializer")
 	ComponentAddSearchAttributes      = component("add-search-attributes")

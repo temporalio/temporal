@@ -32,7 +32,6 @@ import (
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -93,6 +92,8 @@ type (
 		sdkClient sdkclient.Client
 		esClient  esclient.Client
 		config    *Config
+
+		manager *workerManager
 	}
 
 	// Config contains all the service config for worker
@@ -129,6 +130,7 @@ func NewService(
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
+	manager *workerManager,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
 	if err != nil {
@@ -159,6 +161,8 @@ func NewService(
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
+
+		manager: manager,
 	}, nil
 }
 
@@ -348,6 +352,8 @@ func (s *Service) Start() {
 
 	s.startAddSearchAttributes()
 
+	s.manager.Start()
+
 	s.logger.Info(
 		"worker service started",
 		tag.ComponentWorker,
@@ -368,6 +374,7 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
+	s.manager.Stop()
 	s.namespaceRegistry.Stop()
 	s.membershipMonitor.Stop()
 	s.persistenceBean.Close()
