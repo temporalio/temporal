@@ -3599,7 +3599,7 @@ func (e *MutableStateImpl) AddReplicationTasks(
 	replicationTasks ...tasks.Task,
 ) {
 
-	e.InsertVisibilityTasks = append(e.InsertReplicationTasks, replicationTasks...)
+	e.InsertReplicationTasks = append(e.InsertReplicationTasks, replicationTasks...)
 }
 
 // AddVisibilityTasks append visibility tasks
