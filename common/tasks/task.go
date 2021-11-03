@@ -48,8 +48,8 @@ type (
 		Execute() error
 		// HandleErr handle the error returned by Execute
 		HandleErr(err error) error
-		// RetryErr check whether to retry after HandleErr(Execute())
-		RetryErr(err error) bool
+		// IsRetryableError check whether to retry after HandleErr(Execute())
+		IsRetryableError(err error) bool
 		// RetryPolicy returns the retry policy for task processing
 		RetryPolicy() backoff.RetryPolicy
 		// Ack marks the task as successful completed

@@ -249,7 +249,7 @@ func (mr *MockTaskMockRecorder) Nack() *gomock.Call {
 // RetryErr mocks base method.
 func (m *MockTask) RetryErr(err error) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetryErr", err)
+	ret := m.ctrl.Call(m, "IsRetryableError", err)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
@@ -257,7 +257,7 @@ func (m *MockTask) RetryErr(err error) bool {
 // RetryErr indicates an expected call of RetryErr.
 func (mr *MockTaskMockRecorder) RetryErr(err interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryErr", reflect.TypeOf((*MockTask)(nil).RetryErr), err)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockTask)(nil).RetryErr), err)
 }
 
 // State mocks base method.
@@ -366,7 +366,7 @@ func (mr *MockPriorityTaskMockRecorder) Priority() *gomock.Call {
 // RetryErr mocks base method.
 func (m *MockPriorityTask) RetryErr(err error) bool {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RetryErr", err)
+	ret := m.ctrl.Call(m, "IsRetryableError", err)
 	ret0, _ := ret[0].(bool)
 	return ret0
 }
@@ -374,7 +374,7 @@ func (m *MockPriorityTask) RetryErr(err error) bool {
 // RetryErr indicates an expected call of RetryErr.
 func (mr *MockPriorityTaskMockRecorder) RetryErr(err interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryErr", reflect.TypeOf((*MockPriorityTask)(nil).RetryErr), err)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockPriorityTask)(nil).RetryErr), err)
 }
 
 // SetPriority mocks base method.

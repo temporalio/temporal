@@ -105,7 +105,7 @@ func (p *ParallelProcessor) Stop() {
 
 	go func() {
 		if success := common.AwaitWaitGroup(&p.workerWG, time.Minute); !success {
-			p.logger.Warn("parallel processor timed waiting for workers")
+			p.logger.Warn("parallel processor timed out waiting for workers")
 		}
 	}()
 	p.logger.Info("parallel processor stopped")
@@ -148,7 +148,7 @@ func (p *ParallelProcessor) executeTask(
 	}
 
 	isRetryable := func(err error) bool {
-		return !p.isStopped() && task.RetryErr(err)
+		return !p.isStopped() && task.IsRetryableError(err)
 	}
 
 	if err := backoff.Retry(operation, task.RetryPolicy(), isRetryable); err != nil {
