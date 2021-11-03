@@ -32,7 +32,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-
 	backoff "go.temporal.io/server/common/backoff"
 )
 
@@ -99,6 +98,20 @@ func (mr *MockTaskMockRecorder) HandleErr(err interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleErr", reflect.TypeOf((*MockTask)(nil).HandleErr), err)
 }
 
+// IsRetryableError mocks base method.
+func (m *MockTask) IsRetryableError(err error) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsRetryableError", err)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsRetryableError indicates an expected call of IsRetryableError.
+func (mr *MockTaskMockRecorder) IsRetryableError(err interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockTask)(nil).IsRetryableError), err)
+}
+
 // Nack mocks base method.
 func (m *MockTask) Nack() {
 	m.ctrl.T.Helper()
@@ -121,20 +134,6 @@ func (m *MockTask) Reschedule() {
 func (mr *MockTaskMockRecorder) Reschedule() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reschedule", reflect.TypeOf((*MockTask)(nil).Reschedule))
-}
-
-// RetryErr mocks base method.
-func (m *MockTask) IsRetryableError(err error) bool {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "IsRetryableError", err)
-	ret0, _ := ret[0].(bool)
-	return ret0
-}
-
-// RetryErr indicates an expected call of RetryErr.
-func (mr *MockTaskMockRecorder) RetryErr(err interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockTask)(nil).IsRetryableError), err)
 }
 
 // RetryPolicy mocks base method.

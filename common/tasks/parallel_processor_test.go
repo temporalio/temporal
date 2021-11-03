@@ -102,7 +102,7 @@ func (s *parallelProcessorSuite) TestSubmitProcess_Running_FailExecution() {
 	executionErr := errors.New("random error")
 	mockTask.EXPECT().Execute().Return(executionErr).Times(1)
 	mockTask.EXPECT().HandleErr(executionErr).Return(executionErr).Times(1)
-	mockTask.EXPECT().RetryErr(executionErr).Return(false).MaxTimes(1)
+	mockTask.EXPECT().IsRetryableError(executionErr).Return(false).MaxTimes(1)
 	mockTask.EXPECT().Nack().Do(func() { testWaitGroup.Done() }).Times(1)
 
 	s.processor.Submit(mockTask)
@@ -137,7 +137,7 @@ func (s *parallelProcessorSuite) TestSubmitProcess_Stopped_FailExecution() {
 		s.processor.Stop()
 		return err
 	}).Times(1)
-	mockTask.EXPECT().RetryErr(executionErr).Return(true).MaxTimes(1)
+	mockTask.EXPECT().IsRetryableError(executionErr).Return(true).MaxTimes(1)
 	mockTask.EXPECT().Reschedule().Do(func() { testWaitGroup.Done() }).Times(1)
 
 	s.processor.Submit(mockTask)
@@ -173,7 +173,7 @@ func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
 				executionErr := errors.New("random error")
 				mockTask.EXPECT().Execute().Return(executionErr).Times(1)
 				mockTask.EXPECT().HandleErr(executionErr).Return(executionErr).Times(1)
-				mockTask.EXPECT().RetryErr(executionErr).Return(false).Times(1)
+				mockTask.EXPECT().IsRetryableError(executionErr).Return(false).Times(1)
 				mockTask.EXPECT().Nack().Do(func() { testWaitGroup.Done() }).Times(1)
 
 			default:
