@@ -152,10 +152,10 @@ func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
 	testWaitGroup := sync.WaitGroup{}
 	testWaitGroup.Add(numSubmitter * numTasks)
 
-	startWaitGroud := sync.WaitGroup{}
-	endWaitGroud := sync.WaitGroup{}
+	startWaitGroup := sync.WaitGroup{}
+	endWaitGroup := sync.WaitGroup{}
 
-	startWaitGroud.Add(numSubmitter)
+	startWaitGroup.Add(numSubmitter)
 
 	for i := 0; i < numSubmitter; i++ {
 		channel := make(chan Task, numTasks)
@@ -183,19 +183,19 @@ func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
 		}
 		close(channel)
 
-		endWaitGroud.Add(1)
+		endWaitGroup.Add(1)
 		go func() {
-			startWaitGroud.Wait()
+			startWaitGroup.Wait()
 
 			for mockTask := range channel {
 				s.processor.Submit(mockTask)
 			}
 
-			endWaitGroud.Done()
+			endWaitGroup.Done()
 		}()
-		startWaitGroud.Done()
+		startWaitGroup.Done()
 	}
-	endWaitGroud.Wait()
+	endWaitGroup.Wait()
 
 	testWaitGroup.Wait()
 }
