@@ -34,6 +34,10 @@ type (
 	// Processor is the generic coroutine pool for task processing
 	Processor interface {
 		common.Daemon
+		// Submit schedule a task to be executed
+		// * if processor is not stopped, then task will be executed,
+		//  one of Ack(), Nack() or Reschedule() will be invoked once task is considered done for this attempt
+		// * if processor is stopped, then Reschedule() will be invoked
 		Submit(task Task)
 	}
 )
