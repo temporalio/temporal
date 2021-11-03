@@ -408,10 +408,9 @@ func (s *Service) startParentClosePolicyProcessor() {
 func (s *Service) startBatcher() {
 	params := &batcher.BootstrapParams{
 		Config:        *s.config.BatcherCfg,
-		ServiceClient: s.sdkClient,
+		SdkClient:     s.sdkClient,
 		MetricsClient: s.metricsClient,
 		Logger:        s.logger,
-		ClientBean:    s.clientBean,
 	}
 	if err := batcher.New(params, s.sdkClientFactory).Start(); err != nil {
 		s.logger.Fatal(
