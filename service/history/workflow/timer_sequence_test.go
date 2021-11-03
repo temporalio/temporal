@@ -81,7 +81,7 @@ func (s *timerSequenceSuite) SetupTest() {
 		tests.WorkflowID,
 		tests.RunID,
 	)
-	s.mockMutableState.EXPECT().GetWorkflowIdentifier().Return(s.workflowKey).AnyTimes()
+	s.mockMutableState.EXPECT().GetWorkflowKey().Return(s.workflowKey).AnyTimes()
 	s.timerSequence = NewTimerSequence(s.mockEventTimeSource, s.mockMutableState)
 }
 
