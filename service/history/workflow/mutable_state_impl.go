@@ -383,7 +383,7 @@ func (e *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
 }
 
-func (e *MutableStateImpl) GetWorkflowIdentifier() definition.WorkflowKey {
+func (e *MutableStateImpl) GetWorkflowKey() definition.WorkflowKey {
 	return definition.NewWorkflowKey(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
@@ -3594,6 +3594,14 @@ func (e *MutableStateImpl) AddTimerTasks(
 	e.InsertTimerTasks = append(e.InsertTimerTasks, timerTasks...)
 }
 
+// AddReplicationTasks append visibility tasks
+func (e *MutableStateImpl) AddReplicationTasks(
+	replicationTasks ...tasks.Task,
+) {
+
+	e.InsertVisibilityTasks = append(e.InsertReplicationTasks, replicationTasks...)
+}
+
 // AddVisibilityTasks append visibility tasks
 func (e *MutableStateImpl) AddVisibilityTasks(
 	visibilityTasks ...tasks.Task,
@@ -3965,14 +3973,9 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 	}
 
 	for _, workflowEvents := range workflowEventsSeq {
-		replicationTasks, err := e.eventsToReplicationTask(transactionPolicy, workflowEvents.Events)
-		if err != nil {
+		if err := e.eventsToReplicationTask(transactionPolicy, workflowEvents.Events); err != nil {
 			return nil, nil, false, err
 		}
-		e.InsertReplicationTasks = append(
-			e.InsertReplicationTasks,
-			replicationTasks...,
-		)
 	}
 
 	e.InsertReplicationTasks = append(
@@ -3990,44 +3993,23 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 func (e *MutableStateImpl) eventsToReplicationTask(
 	transactionPolicy TransactionPolicy,
 	events []*historypb.HistoryEvent,
-) ([]tasks.Task, error) {
+) error {
 
 	if transactionPolicy == TransactionPolicyPassive ||
 		!e.canReplicateEvents() ||
 		len(events) == 0 {
-		return emptyTasks, nil
-	}
-
-	firstEvent := events[0]
-	lastEvent := events[len(events)-1]
-	version := firstEvent.GetVersion()
-
-	sourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(version)
-	currentCluster := e.clusterMetadata.GetCurrentClusterName()
-
-	if currentCluster != sourceCluster {
-		return nil, serviceerror.NewInternal("MutableStateImpl encounter contradicting version & transaction policy")
+		return nil
 	}
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	replicationTask := &tasks.HistoryReplicationTask{
-		WorkflowKey:       e.GetWorkflowIdentifier(),
-		FirstEventID:      firstEvent.GetEventId(),
-		NextEventID:       lastEvent.GetEventId() + 1,
-		Version:           firstEvent.GetVersion(),
-		BranchToken:       currentBranchToken,
-		NewRunBranchToken: nil,
-	}
-
-	if e.executionInfo.GetVersionHistories() == nil {
-		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
-	}
-
-	return []tasks.Task{replicationTask}, nil
+	return e.taskGenerator.GenerateHistoryReplicationTasks(
+		e.timeSource.Now(),
+		currentBranchToken,
+		events,
+	)
 }
 
 func (e *MutableStateImpl) syncActivityToReplicationTask(
