@@ -31,7 +31,7 @@ import (
 )
 
 type (
-	// Processor is the generic coroutine pool for task processing
+	// Processor is the generic goroutine pool for task processing
 	Processor interface {
 		common.Daemon
 		// Submit schedule a task to be executed
