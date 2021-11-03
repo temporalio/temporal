@@ -22,43 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
+
 package tasks
 
 import (
-	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common"
 )
 
-// State represents the current state of a task
-type State int
-
-const (
-	// TaskStatePending is the state for a task when it's waiting to be processed or currently being processed
-	TaskStatePending State = iota + 1
-	// TaskStateAcked is the state for a task if it has been successfully completed
-	TaskStateAcked
-	// TaskStateNacked is the state for a task if it can not be processed
-	TaskStateNacked
-)
-
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_mock.go
 type (
-	// Task is the interface for tasks which should be executed sequentially
-	Task interface {
-		// Execute process this task
-		Execute() error
-		// HandleErr handle the error returned by Execute
-		HandleErr(err error) error
-		// IsRetryableError check whether to retry after HandleErr(Execute())
-		IsRetryableError(err error) bool
-		// RetryPolicy returns the retry policy for task processing
-		RetryPolicy() backoff.RetryPolicy
-		// Ack marks the task as successful completed
-		Ack()
-		// Nack marks the task as unsuccessful completed
-		Nack()
-		// Reschedule marks the task for retry
-		Reschedule()
-		// State returns the current task state
-		State() State
+	// Processor is the generic goroutine pool for task processing
+	Processor interface {
+		common.Daemon
+		// Submit schedule a task to be executed
+		// * if processor is not stopped, then task will be executed,
+		//  one of Ack(), Nack() or Reschedule() will be invoked once task is considered done for this attempt
+		// * if processor is stopped, then Reschedule() will be invoked
+		Submit(task Task)
 	}
 )
