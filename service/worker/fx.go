@@ -72,6 +72,7 @@ var Module = fx.Options(
 	fx.Provide(HistoryServiceClientProvider),
 	fx.Provide(cluster.NewMetadataFromConfig),
 	fx.Provide(NewService),
+	fx.Provide(NewWorkerManager),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
