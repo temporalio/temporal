@@ -27,6 +27,7 @@ package worker
 import (
 	"context"
 
+	"go.temporal.io/server/service/worker/scanner/replication"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -44,6 +45,7 @@ import (
 
 var Module = fx.Options(
 	persistenceClient.Module,
+	replication.Module,
 	fx.Provide(ParamsExpandProvider),
 	fx.Provide(resource.PersistenceConfigProvider),
 	fx.Provide(dynamicconfig.NewCollection),
