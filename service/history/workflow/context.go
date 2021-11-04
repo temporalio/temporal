@@ -431,7 +431,11 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	}
 	c.SetHistorySize(int64(resp.NewMutableStateStats.HistoryStatistics.SizeDiff))
 
-	NotifyWorkflowSnapshotTasks(c.shard.GetEngine(), newWorkflow)
+	engine, err := c.shard.GetEngine()
+	if err != nil {
+		return err
+	}
+	NotifyWorkflowSnapshotTasks(engine, newWorkflow)
 	emitStateTransitionCount(c.metricsClient, newMutableState)
 
 	return nil
@@ -843,7 +847,11 @@ func (c *ContextImpl) ReapplyEvents(
 
 	activeCluster := namespaceEntry.ActiveClusterName()
 	if activeCluster == c.shard.GetClusterMetadata().GetCurrentClusterName() {
-		return c.shard.GetEngine().ReapplyEvents(
+		engine, err := c.shard.GetEngine()
+		if err != nil {
+			return err
+		}
+		return engine.ReapplyEvents(
 			ctx,
 			namespaceID,
 			workflowID,

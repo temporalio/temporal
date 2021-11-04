@@ -119,6 +119,7 @@ func (s *taskProcessorSuite) SetupTest() {
 
 func (s *taskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {

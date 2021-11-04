@@ -153,6 +153,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 func (s *activityReplicatorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *activityReplicatorSuite) TestRefreshTask_DiffCluster() {

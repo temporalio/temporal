@@ -171,7 +171,7 @@ func NewEngineWithShardContext(
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
 			shard,
-			historyEngImpl.historyCache,
+			historyCache,
 			executionManager,
 			logger,
 		)

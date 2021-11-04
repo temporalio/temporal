@@ -477,11 +477,6 @@ func ShardID(shardID int32) ZapTag {
 	return NewInt32("shard-id", shardID)
 }
 
-// ShardItem returns tag for ShardItem
-func ShardItem(shardItem interface{}) ZapTag {
-	return NewAnyTag("shard-item", shardItem)
-}
-
 // ShardTime returns tag for ShardTime
 func ShardTime(shardTime interface{}) ZapTag {
 	return NewAnyTag("shard-time", shardTime)
@@ -500,6 +495,16 @@ func PreviousShardRangeID(id int64) ZapTag {
 // ShardRangeID returns tag for ShardRangeID
 func ShardRangeID(id int64) ZapTag {
 	return NewInt64("shard-range-id", id)
+}
+
+// ShardContextState returns tag for ShardContextState
+func ShardContextState(state int) ZapTag {
+	return NewInt("shard-context-state", state)
+}
+
+// ShardContextStateRequest returns tag for ShardContextStateRequest
+func ShardContextStateRequest(r int) ZapTag {
+	return NewInt("shard-context-state-request", r)
 }
 
 // ReadLevel returns tag for ReadLevel

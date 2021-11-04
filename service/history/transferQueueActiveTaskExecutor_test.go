@@ -233,6 +233,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 
 func (s *transferQueueActiveTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success() {

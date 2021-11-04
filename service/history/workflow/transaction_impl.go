@@ -83,7 +83,10 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		return 0, err
 	}
 
-	engine := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine()
+	if err != nil {
+		return 0, err
+	}
 	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 	if err := NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
@@ -117,7 +120,10 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		return 0, 0, 0, err
 	}
 
-	engine := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine()
+	if err != nil {
+		return 0, 0, 0, err
+	}
 	NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
 	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
@@ -163,7 +169,10 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		return 0, 0, err
 	}
 
-	engine := t.shard.GetEngine()
+	engine, err := t.shard.GetEngine()
+	if err != nil {
+		return 0, 0, err
+	}
 	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
 	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
 	if err := NotifyNewHistoryMutationEvent(engine, currentWorkflowMutation); err != nil {
