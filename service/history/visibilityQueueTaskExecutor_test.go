@@ -176,6 +176,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 
 func (s *visibilityQueueTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {

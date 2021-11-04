@@ -136,7 +136,7 @@ type (
 		DeleteWorkflowTask()
 		DeleteSignalRequested(requestID string)
 		FlushBufferedEvents()
-		GetWorkflowIdentifier() definition.WorkflowKey
+		GetWorkflowKey() definition.WorkflowKey
 		GetActivityByActivityID(string) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfoWithTimerHeartbeat(scheduleEventID int64) (*persistencespb.ActivityInfo, time.Time, bool)
@@ -239,6 +239,7 @@ type (
 
 		AddTransferTasks(transferTasks ...tasks.Task)
 		AddTimerTasks(timerTasks ...tasks.Task)
+		AddReplicationTasks(replicationTasks ...tasks.Task)
 		AddVisibilityTasks(visibilityTasks ...tasks.Task)
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
@@ -247,5 +248,6 @@ type (
 		StartTransactionSkipWorkflowTaskFail(entry *namespace.Namespace) error
 		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
+		GenerateLastHistoryReplicationTasks(now time.Time) error
 	}
 )

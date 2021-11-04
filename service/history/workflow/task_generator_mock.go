@@ -129,6 +129,34 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDelayedWorkflowTasks(now, start
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDelayedWorkflowTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDelayedWorkflowTasks), now, startEvent)
 }
 
+// GenerateHistoryReplicationTasks mocks base method.
+func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(now time.Time, branchToken []byte, events []*history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateHistoryReplicationTasks", now, branchToken, events)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateHistoryReplicationTasks indicates an expected call of GenerateHistoryReplicationTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(now, branchToken, events interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateHistoryReplicationTasks), now, branchToken, events)
+}
+
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockTaskGenerator) GenerateLastHistoryReplicationTasks(now time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", now)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateLastHistoryReplicationTasks(now interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateLastHistoryReplicationTasks), now)
+}
+
 // GenerateRecordWorkflowStartedTasks mocks base method.
 func (m *MockTaskGenerator) GenerateRecordWorkflowStartedTasks(now time.Time, startEvent *history.HistoryEvent) error {
 	m.ctrl.T.Helper()

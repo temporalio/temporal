@@ -122,6 +122,7 @@ func (s *nDCStateRebuilderSuite) SetupTest() {
 
 func (s *nDCStateRebuilderSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *nDCStateRebuilderSuite) TestInitializeBuilders() {

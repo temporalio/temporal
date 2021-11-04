@@ -124,7 +124,7 @@ func TestThrottleLogger(t *testing.T) {
 	logger := NewThrottledLogger(NewZapLogger(zap.NewExample()),
 		func() float64 { return 1 })
 	preCaller := caller(1)
-	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShard).Info("test info", tag.WorkflowActionWorkflowStarted)
+	With(With(logger, tag.Error(fmt.Errorf("test error"))), tag.ComponentShardContext).Info("test info", tag.WorkflowActionWorkflowStarted)
 
 	// back to normal state
 	w.Close()
@@ -135,7 +135,7 @@ func TestThrottleLogger(t *testing.T) {
 	assert.Nil(t, err)
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
-	assert.Equal(t, `{"level":"info","msg":"test info","error":"test error","component":"shard","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
+	assert.Equal(t, `{"level":"info","msg":"test info","error":"test error","component":"shard-context","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
 }
 
 func TestEmptyMsg(t *testing.T) {

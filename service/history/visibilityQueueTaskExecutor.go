@@ -274,11 +274,6 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 		return err
 	}
 
-	// if sampled for longer retention is enabled, only record those sampled events
-	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) && !namespaceEntry.IsSampledForLongerRetention(workflowID) {
-		return nil
-	}
-
 	request := &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
@@ -449,12 +444,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 
 	recordWorkflowClose := true
 
-	retention := namespaceEntry.Retention(workflowID)
-	// if sampled for longer retention is enabled, only record those sampled events
-	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-		!namespaceEntry.IsSampledForLongerRetention(workflowID) {
-		recordWorkflowClose = false
-	}
+	retention := namespaceEntry.Retention()
 
 	if recordWorkflowClose {
 		return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{

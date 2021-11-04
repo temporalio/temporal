@@ -190,6 +190,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 
 func (s *timerQueueStandbyTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending() {

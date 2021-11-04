@@ -127,6 +127,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 
 func (s *nDCWorkflowResetterSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
