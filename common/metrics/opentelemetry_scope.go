@@ -186,32 +186,6 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	}
 }
 
-// Deprecated: not used
-func (m *opentelemetryScope) RecordHistogramDuration(id int, value time.Duration) {
-	def := m.defs[id]
-	ctx := context.Background()
-	m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(ctx, value.Nanoseconds(), m.labels...)
-
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
-			ctx, value.Nanoseconds(), m.rootScope.labels...,
-		)
-	}
-}
-
-// Deprecated: not used
-func (m *opentelemetryScope) RecordHistogramValue(id int, value float64) {
-	def := m.defs[id]
-	ctx := context.Background()
-	m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()).Record(ctx, value, m.labels...)
-
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricRollupName.String()).Record(
-			ctx, value, m.rootScope.labels...,
-		)
-	}
-}
-
 func (m *opentelemetryScope) taggedString(tags map[string]string) *opentelemetryScope {
 	namespaceTagged := m.isNamespaceTagged
 	tagMap := make(map[string]string, len(tags)+len(m.labels))
