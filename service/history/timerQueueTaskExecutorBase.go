@@ -141,15 +141,15 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	if err := t.shard.DeleteWorkflowExecution(
 		&persistence.DeleteCurrentWorkflowExecutionRequest{
 			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
+			NamespaceID: task.NamespaceID,
+			WorkflowID:  task.WorkflowID,
+			RunID:       task.RunID,
 		},
 		&persistence.DeleteWorkflowExecutionRequest{
 			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
+			NamespaceID: task.NamespaceID,
+			WorkflowID:  task.WorkflowID,
+			RunID:       task.RunID,
 		},
 	); err != nil {
 		return err
@@ -229,15 +229,15 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 	if err := t.shard.DeleteWorkflowExecution(
 		&persistence.DeleteCurrentWorkflowExecutionRequest{
 			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
+			NamespaceID: task.NamespaceID,
+			WorkflowID:  task.WorkflowID,
+			RunID:       task.RunID,
 		},
 		&persistence.DeleteWorkflowExecutionRequest{
 			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.GetNamespaceId(),
-			WorkflowID:  task.GetWorkflowId(),
-			RunID:       task.GetRunId(),
+			NamespaceID: task.NamespaceID,
+			WorkflowID:  task.WorkflowID,
+			RunID:       task.RunID,
 		},
 	); err != nil {
 		return err
