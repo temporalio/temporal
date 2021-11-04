@@ -30,13 +30,8 @@ import (
 
 type (
 	TagFilteringScope struct {
-		TagsToFilter map[string]map[string]struct{}
-		Impl         internalScope
-	}
-
-	TemporalScope struct {
-		Impl      internalScope
-		RootScope internalScope
+		tagsToFilter map[string]map[string]struct{}
+		impl         internalScope
 	}
 
 	TagFilteringScopeConfig struct {
@@ -60,33 +55,33 @@ func NewTagFilteringScopeConfig(exclusions map[string][]string) TagFilteringScop
 
 func NewTagFilteringScope(config TagFilteringScopeConfig, impl internalScope) internalScope {
 	return &TagFilteringScope{
-		TagsToFilter: config.TagsToFilter,
-		Impl:         impl,
+		tagsToFilter: config.TagsToFilter,
+		impl:         impl,
 	}
 }
 
 func (tfs *TagFilteringScope) IncCounter(counter int) {
-	tfs.Impl.IncCounter(counter)
+	tfs.impl.IncCounter(counter)
 }
 
 func (tfs *TagFilteringScope) AddCounter(counter int, delta int64) {
-	tfs.Impl.AddCounter(counter, delta)
+	tfs.impl.AddCounter(counter, delta)
 }
 
 func (tfs *TagFilteringScope) StartTimer(timer int) Stopwatch {
-	return tfs.Impl.StartTimer(timer)
+	return tfs.impl.StartTimer(timer)
 }
 
 func (tfs *TagFilteringScope) RecordTimer(timer int, d time.Duration) {
-	tfs.Impl.RecordTimer(timer, d)
+	tfs.impl.RecordTimer(timer, d)
 }
 
 func (tfs *TagFilteringScope) RecordDistribution(id int, d int) {
-	tfs.Impl.RecordDistribution(id, d)
+	tfs.impl.RecordDistribution(id, d)
 }
 
 func (tfs *TagFilteringScope) UpdateGauge(id int, value float64) {
-	tfs.Impl.UpdateGauge(id, value)
+	tfs.impl.UpdateGauge(id, value)
 }
 
 func (tfs *TagFilteringScope) Tagged(tags ...Tag) Scope {
@@ -98,24 +93,24 @@ func (tfs *TagFilteringScope) TaggedInternal(tags ...Tag) internalScope {
 	for i, tag := range tags {
 		newTags[i] = tag
 
-		if val, ok := tfs.TagsToFilter[tag.Key()]; ok {
+		if val, ok := tfs.tagsToFilter[tag.Key()]; ok {
 			if _, ok := val[tag.Value()]; !ok {
 				newTags[i] = newValueOverrideTag(tag.Key())
 			}
 		}
 	}
 	return &TagFilteringScope{
-		TagsToFilter: tfs.TagsToFilter,
-		Impl:         tfs.Impl.TaggedInternal(newTags...),
+		tagsToFilter: tfs.tagsToFilter,
+		impl:         tfs.impl.TaggedInternal(newTags...),
 	}
 }
 
 func (tfs *TagFilteringScope) AddCounterInternal(name string, delta int64) {
-	tfs.Impl.AddCounterInternal(name, delta)
+	tfs.impl.AddCounterInternal(name, delta)
 }
 
 func (tfs *TagFilteringScope) StartTimerInternal(timer string) Stopwatch {
-	return tfs.Impl.StartTimerInternal(timer)
+	return tfs.impl.StartTimerInternal(timer)
 }
 
 func (tfs *TagFilteringScope) RecordTimerInternal(timer string, d time.Duration) {
