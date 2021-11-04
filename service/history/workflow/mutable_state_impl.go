@@ -3847,6 +3847,11 @@ func (e *MutableStateImpl) UpdateDuplicatedResource(
 	e.appliedEvents[id] = struct{}{}
 }
 
+func (e *MutableStateImpl) GenerateLastHistoryReplicationTasks(now time.Time) error {
+	e.taskGenerator.GenerateLastHistoryReplicationTasks(now)
+	return nil
+}
+
 func (e *MutableStateImpl) prepareCloseTransaction(
 	now time.Time,
 	transactionPolicy TransactionPolicy,

@@ -939,6 +939,20 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).FlushBufferedEvents))
 }
 
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockMutableState) GenerateLastHistoryReplicationTasks(now time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", now)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockMutableStateMockRecorder) GenerateLastHistoryReplicationTasks(now interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateLastHistoryReplicationTasks), now)
+}
+
 // GetActivityByActivityID mocks base method.
 func (m *MockMutableState) GetActivityByActivityID(arg0 string) (*v19.ActivityInfo, bool) {
 	m.ctrl.T.Helper()
