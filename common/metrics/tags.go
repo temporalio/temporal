@@ -48,6 +48,7 @@ const (
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
 	totalMetricSuffix = "_total"
+	tagExcludedValue  = "_tag_excluded_"
 )
 
 // Tag is an interface to define metrics tags
@@ -65,10 +66,10 @@ type (
 	}
 )
 
-func newValueOverrideTag(key string) Tag {
+func newExcludedTag(key string) Tag {
 	return &tagImpl{
 		key:   key,
-		value: "__tag_excluded__",
+		value: tagExcludedValue,
 	}
 }
 

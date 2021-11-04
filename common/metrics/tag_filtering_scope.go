@@ -95,7 +95,7 @@ func (tfs *TagFilteringScope) TaggedInternal(tags ...Tag) internalScope {
 
 		if val, ok := tfs.tagsToFilter[tag.Key()]; ok {
 			if _, ok := val[tag.Value()]; !ok {
-				newTags[i] = newValueOverrideTag(tag.Key())
+				newTags[i] = newExcludedTag(tag.Key())
 			}
 		}
 	}
