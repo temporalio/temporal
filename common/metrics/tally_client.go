@@ -33,7 +33,7 @@ import (
 // TallyClient is used for reporting metrics by various Temporal services
 type TallyClient struct {
 	// parentReporter is the parent scope for the metrics
-	parentScope tally.Scope
+	parentScope  tally.Scope
 	childScopes  map[int]tally.Scope
 	metricDefs   map[int]metricDefinition
 	serviceIdx   ServiceIdx
