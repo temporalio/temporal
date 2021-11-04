@@ -25,8 +25,6 @@
 package namespace
 
 import (
-	"hash/fnv"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -34,15 +32,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
-)
-
-const (
-	// SampleRetentionKey is key to specify sample retention
-	SampleRetentionKey = "sample_retention_days"
-
-	// SampleRateKey is key to specify sample rate
-	SampleRateKey = "sample_retention_rate"
 )
 
 type (
@@ -241,54 +230,13 @@ func (t Namespaces) Less(i, j int) bool {
 	return t[i].notificationVersion < t[j].notificationVersion
 }
 
-// Retention returns retention in days for given workflow
-func (ns *Namespace) Retention(workflowID string) time.Duration {
+// Retention returns retention duration for this namespace.
+func (ns *Namespace) Retention() time.Duration {
 	if ns.config.Retention == nil {
 		return 0
 	}
 
-	if ns.IsSampledForLongerRetention(workflowID) {
-		if sampledRetentionValue, ok := ns.info.Data[SampleRetentionKey]; ok {
-			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
-			sampledRetention := *timestamp.DurationFromDays(int32(sampledRetentionDays))
-			if err != nil || sampledRetention < *ns.config.Retention {
-				return *ns.config.Retention
-			}
-			return sampledRetention
-		}
-	}
-
 	return *ns.config.Retention
-}
-
-// IsSampledForLongerRetentionEnabled return whether sample for longer retention
-// is enabled or not
-func (ns *Namespace) IsSampledForLongerRetentionEnabled(string) bool {
-	_, ok := ns.info.Data[SampleRateKey]
-	return ok
-}
-
-// IsSampledForLongerRetention return should given workflow been sampled or not
-func (ns *Namespace) IsSampledForLongerRetention(workflowID string) bool {
-	sampledRateValue, ok := ns.info.Data[SampleRateKey]
-	if !ok {
-		return false
-	}
-	sampledRate, err := strconv.ParseFloat(sampledRateValue, 64)
-	if err != nil {
-		return false
-	}
-
-	h := fnv.New32a()
-	_, err = h.Write([]byte(workflowID))
-	if err != nil {
-		return false
-	}
-	hash := h.Sum32()
-
-	// use 1000 so we support one decimal rate like 1.5%.
-	r := float64(hash%1000) / float64(1000)
-	return r < sampledRate
 }
 
 // Error returns the reason associated with this bad binary.
