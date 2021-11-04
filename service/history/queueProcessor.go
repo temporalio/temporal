@@ -26,10 +26,11 @@ package history
 
 import (
 	"context"
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -84,7 +85,7 @@ type (
 )
 
 var (
-	errUnexpectedQueueTask = errors.New("unexpected queue task")
+	errUnexpectedQueueTask = serviceerror.NewInternal("unexpected queue task")
 
 	loadQueueTaskThrottleRetryDelay = 5 * time.Second
 )

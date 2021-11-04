@@ -28,10 +28,11 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -47,7 +48,7 @@ import (
 )
 
 var (
-	errUnknownTransferTask = errors.New("Unknown transfer task")
+	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
 )
 
 type (

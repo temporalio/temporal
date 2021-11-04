@@ -25,7 +25,6 @@
 package shard
 
 import (
-	"errors"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -89,7 +88,7 @@ type (
 var _ Context = (*ContextImpl)(nil)
 
 // ErrShardClosed is returned when shard is closed and a req cannot be processed
-var ErrShardClosed = errors.New("shard closed")
+var ErrShardClosed = serviceerror.NewUnavailable("shard closed")
 
 const (
 	logWarnTransferLevelDiff = 3000000 // 3 million
