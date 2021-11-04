@@ -43,6 +43,26 @@ type (
 	}
 )
 
+func (m *opentelemetryScope) AddCounterInternal(name string, delta int64) {
+	panic("implement me")
+}
+
+func (m *opentelemetryScope) StartTimerInternal(timer string) Stopwatch {
+	panic("implement me")
+}
+
+func (m *opentelemetryScope) RecordTimerInternal(timer string, d time.Duration) {
+	panic("implement me")
+}
+
+func (m *opentelemetryScope) RecordDistributionInternal(id string, d int) {
+	panic("implement me")
+}
+
+func (m *opentelemetryScope) TaggedInternal(tags ...Tag) internalScope {
+	panic("implement me")
+}
+
 func newOpentelemetryScope(
 	serviceIdx ServiceIdx,
 	reporter *OpentelemetryReporter,

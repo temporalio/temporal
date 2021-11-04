@@ -33,25 +33,32 @@ import (
 // opentelemetryClient is used for reporting metrics by various Temporal services
 type (
 	opentelemetryClient struct {
-		//parentReporter is the parent scope for the metrics
-		rootScope   *opentelemetryScope
-		childScopes map[int]Scope
-		metricDefs  map[int]metricDefinition
-		serviceIdx  ServiceIdx
+		// parentReporter is the parent scope for the metrics
+		rootScope    *opentelemetryScope
+		childScopes  map[int]Scope
+		metricDefs   map[int]metricDefinition
+		serviceIdx   ServiceIdx
+		scopeWrapper func(impl internalScope) internalScope
 	}
 )
 
 // NewOpentelemeteryClientByReporter creates and returns a new instance of Client implementation
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func newOpentelemeteryClient(tags map[string]string, serviceIdx ServiceIdx, reporter *OpentelemetryReporter, logger log.Logger) (Client, error) {
-	rootScope := newOpentelemetryScope(serviceIdx, reporter, nil, tags, getMetricDefs(serviceIdx), false)
+func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter *OpentelemetryReporter, logger log.Logger) (Client, error) {
+	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
+	scopeWrapper := func(impl internalScope) internalScope {
+		return NewTagFilteringScope(tagsFilterConfig, impl)
+	}
+
+	rootScope := newOpentelemetryScope(serviceIdx, reporter, nil, clientConfig.Tags, getMetricDefs(serviceIdx), false)
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &opentelemetryClient{
-		rootScope:   rootScope,
-		childScopes: make(map[int]Scope, totalScopes),
-		metricDefs:  getMetricDefs(serviceIdx),
-		serviceIdx:  serviceIdx,
+		rootScope:    rootScope,
+		childScopes:  make(map[int]Scope, totalScopes),
+		metricDefs:   getMetricDefs(serviceIdx),
+		serviceIdx:   serviceIdx,
+		scopeWrapper: scopeWrapper,
 	}
 
 	for idx, def := range ScopeDefs[Common] {
@@ -60,7 +67,7 @@ func newOpentelemeteryClient(tags map[string]string, serviceIdx ServiceIdx, repo
 			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
-		metricsClient.childScopes[idx] = rootScope.taggedString(scopeTags)
+		metricsClient.childScopes[idx] = scopeWrapper(rootScope.taggedString(scopeTags))
 	}
 
 	for idx, def := range ScopeDefs[serviceIdx] {
@@ -69,7 +76,7 @@ func newOpentelemeteryClient(tags map[string]string, serviceIdx ServiceIdx, repo
 			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
-		metricsClient.childScopes[idx] = rootScope.taggedString(scopeTags)
+		metricsClient.childScopes[idx] = scopeWrapper(rootScope.taggedString(scopeTags))
 	}
 
 	return metricsClient, nil

@@ -34,6 +34,7 @@ import (
 	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
 	tallystatsdreporter "github.com/uber-go/tally/v4/statsd"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
@@ -42,6 +43,8 @@ import (
 type (
 	// Config contains the config items for metrics subsystem
 	Config struct {
+		ClientConfig `yaml:"clientConfig,inline""`
+
 		// M3 is the configuration for m3 metrics reporter
 		M3 *m3.Configuration `yaml:"m3"`
 		// Statsd is the configuration for statsd reporter
@@ -50,8 +53,15 @@ type (
 		Prometheus *PrometheusConfig `yaml:"prometheus"`
 		// {optional} Config for Prometheus metrics reporter for SDK reported metrics.
 		PrometheusSDK *PrometheusConfig `yaml:"prometheusSDK"`
+	}
+
+	ClientConfig struct {
 		// Tags is the set of key-value pairs to be reported as part of every metric
 		Tags map[string]string `yaml:"tags"`
+		// IgnoreTags is a map from tag name string to tag values string list.
+		// Each present in keys will have its value replaced with "__disabled__"
+		// Each tag value in values list will white-list tags to be reported as usual.
+		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
 		Prefix string `yaml:"prefix"`
 	}
@@ -193,20 +203,22 @@ var (
 //
 // returns SeverReporter, SDKReporter, error
 func (c *Config) InitMetricReporters(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
+	// init from config only
 	if customReporter == nil {
 		if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
 			return c.initReportersFromPrometheusConfig(logger, customReporter)
 		}
 
 		scope := c.NewScope(logger)
-		reporter := newTallyReporter(scope)
+		reporter := newTallyReporter(scope, &c.ClientConfig)
 		return reporter, reporter, nil
 	}
 
+	// handle custom reporter from ServerOptions
 	switch cReporter := customReporter.(type) {
 	case tally.BaseStatsReporter:
 		scope := c.NewCustomReporterScope(logger, cReporter)
-		reporter := newTallyReporter(scope)
+		reporter := newTallyReporter(scope, &c.ClientConfig)
 		return reporter, reporter, nil
 	case Reporter:
 		return cReporter, cReporter, nil
@@ -217,13 +229,13 @@ func (c *Config) InitMetricReporters(logger log.Logger, customReporter interface
 }
 
 func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, customReporter interface{}) (Reporter, Reporter, error) {
-	serverReporter, err := c.initReporterFromPrometheusConfig(logger, c.Prometheus)
+	serverReporter, err := c.initReporterFromPrometheusConfig(logger, c.Prometheus, &c.ClientConfig)
 	if err != nil {
 		return nil, nil, err
 	}
 	sdkReporter := serverReporter
 	if c.PrometheusSDK != nil {
-		sdkReporter, err = c.initReporterFromPrometheusConfig(logger, c.PrometheusSDK)
+		sdkReporter, err = c.initReporterFromPrometheusConfig(logger, c.PrometheusSDK, &c.ClientConfig)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -231,12 +243,12 @@ func (c *Config) initReportersFromPrometheusConfig(logger log.Logger, customRepo
 	return serverReporter, sdkReporter, nil
 }
 
-func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig) (Reporter, error) {
+func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfig, clientConfig *ClientConfig) (Reporter, error) {
 	switch config.Framework {
 	case FrameworkTally:
 		return c.newTallyReporterByPrometheusConfig(logger, config), nil
 	case FrameworkOpentelemetry:
-		return newOpentelemeteryReporter(logger, c.Tags, c.Prefix, config)
+		return newOpentelemeteryReporter(logger, config, clientConfig)
 	default:
 		err := fmt.Errorf("unsupported framework type specified in config: %q", config.Framework)
 		logger.Error(err.Error())
@@ -247,7 +259,7 @@ func (c *Config) initReporterFromPrometheusConfig(logger log.Logger, config *Pro
 func (c *Config) newTallyReporterByPrometheusConfig(logger log.Logger, config *PrometheusConfig) Reporter {
 	tallyConfig := c.convertPrometheusConfigToTally(config)
 	tallyScope := c.newPrometheusScope(logger, tallyConfig)
-	return newTallyReporter(tallyScope)
+	return newTallyReporter(tallyScope, &c.ClientConfig)
 }
 
 // NewScope builds a new tally scope for this metrics configuration

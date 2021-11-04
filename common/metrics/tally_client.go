@@ -32,24 +32,31 @@ import (
 
 // TallyClient is used for reporting metrics by various Temporal services
 type TallyClient struct {
-	//parentReporter is the parent scope for the metrics
+	// parentReporter is the parent scope for the metrics
 	parentScope tally.Scope
-	childScopes map[int]tally.Scope
-	metricDefs  map[int]metricDefinition
-	serviceIdx  ServiceIdx
+	childScopes  map[int]tally.Scope
+	metricDefs   map[int]metricDefinition
+	serviceIdx   ServiceIdx
+	scopeWrapper func(impl internalScope) internalScope
 }
 
 // NewClient creates and returns a new instance of
 // Client implementation
 // reporter holds the common tags for the service
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func NewClient(scope tally.Scope, serviceIdx ServiceIdx) Client {
+func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx ServiceIdx) Client {
+	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
+	scopeWrapper := func(impl internalScope) internalScope {
+		return NewTagFilteringScope(tagsFilterConfig, impl)
+	}
+
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &TallyClient{
-		parentScope: scope,
-		childScopes: make(map[int]tally.Scope, totalScopes),
-		metricDefs:  getMetricDefs(serviceIdx),
-		serviceIdx:  serviceIdx,
+		parentScope:  scope,
+		childScopes:  make(map[int]tally.Scope, totalScopes),
+		metricDefs:   getMetricDefs(serviceIdx),
+		serviceIdx:   serviceIdx,
+		scopeWrapper: scopeWrapper,
 	}
 
 	for idx, def := range ScopeDefs[Common] {
@@ -120,7 +127,7 @@ func (m *TallyClient) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
 // information to the metrics emitted
 func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	scope := m.childScopes[scopeIdx]
-	return newTallyScope(scope, scope, m.metricDefs, false).Tagged(tags...)
+	return m.scopeWrapper(newTallyScopeInternal(NoopScope(0), scope, m.metricDefs, false)).Tagged(tags...)
 }
 
 // UserScope returns a new metrics scope that can be used to add additional

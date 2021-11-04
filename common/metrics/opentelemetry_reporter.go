@@ -40,13 +40,12 @@ import (
 type (
 	// OpentelemetryReporter is a base class for reporting metrics to opentelemetry.
 	OpentelemetryReporter struct {
-		exporter  *prometheus.Exporter
-		meter     metric.Meter
-		meterMust metric.MeterMust
-		tags      map[string]string
-		prefix    string
-		config    *PrometheusConfig
-		server    *http.Server
+		exporter     *prometheus.Exporter
+		meter        metric.Meter
+		meterMust    metric.MeterMust
+		config       *PrometheusConfig
+		server       *http.Server
+		clientConfig *ClientConfig
 	}
 
 	OpentelemetryListener struct {
@@ -55,9 +54,8 @@ type (
 
 func newOpentelemeteryReporter(
 	logger log.Logger,
-	tags map[string]string,
-	prefix string,
 	prometheusConfig *PrometheusConfig,
+	clientConfig *ClientConfig,
 ) (*OpentelemetryReporter, error) {
 	histogramBoundaries := prometheusConfig.DefaultHistogramBoundaries
 	if len(histogramBoundaries) == 0 {
@@ -79,13 +77,12 @@ func newOpentelemeteryReporter(
 
 	meter := otel.Meter("temporal")
 	reporter := &OpentelemetryReporter{
-		exporter:  exporter,
-		meter:     meter,
-		meterMust: metric.Must(meter),
-		tags:      tags,
-		prefix:    prefix,
-		config:    prometheusConfig,
-		server:    metricServer,
+		exporter:     exporter,
+		meter:        meter,
+		meterMust:    metric.Must(meter),
+		config:       prometheusConfig,
+		server:       metricServer,
+		clientConfig: clientConfig,
 	}
 	return reporter, nil
 }
@@ -123,7 +120,7 @@ func (r *OpentelemetryReporter) GetMeterMust() metric.MeterMust {
 }
 
 func (r *OpentelemetryReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	return newOpentelemeteryClient(r.tags, serviceIdx, r, logger)
+	return newOpentelemeteryClient(r.clientConfig, serviceIdx, r, logger)
 }
 
 func (r *OpentelemetryReporter) Stop(logger log.Logger) {

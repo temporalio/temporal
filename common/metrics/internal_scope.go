@@ -16,7 +16,7 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
@@ -25,35 +25,33 @@
 package metrics
 
 import (
-	"github.com/uber-go/tally/v4"
-
-	"go.temporal.io/server/common/log"
+	"time"
 )
 
-// TallyReporter is a base class for reporting metrics to Tally.
-type TallyReporter struct {
-	scope        tally.Scope
-	clientConfig *ClientConfig
-}
-
-func newTallyReporter(
-	scope tally.Scope,
-	clientConfig *ClientConfig,
-) *TallyReporter {
-	return &TallyReporter{
-		scope:        scope,
-		clientConfig: clientConfig,
+type (
+	// Scope is an interface for metric.
+	internalScope interface {
+		// IncCounter increments a counter metric
+		IncCounter(counter int)
+		// AddCounter adds delta to the counter metric
+		AddCounter(counter int, delta int64)
+		AddCounterInternal(name string, delta int64)
+		// StartTimer starts a timer for the given metric name.
+		// Time will be recorded when stopwatch is stopped.
+		StartTimer(timer int) Stopwatch
+		StartTimerInternal(timer string) Stopwatch
+		// RecordTimer records a timer for the given metric name
+		RecordTimer(timer int, d time.Duration)
+		RecordTimerInternal(timer string, d time.Duration)
+		// RecordDistribution records a distribution (wrapper on top of timer) for the given
+		// metric name
+		RecordDistribution(id int, d int)
+		RecordDistributionInternal(id string, d int)
+		// UpdateGauge reports Gauge type absolute value metric
+		UpdateGauge(gauge int, value float64)
+		// Tagged returns an internal scope that can be used to add additional
+		// information to metrics
+		Tagged(tags ...Tag) Scope
+		TaggedInternal(tags ...Tag) internalScope
 	}
-}
-
-func (tr *TallyReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	return NewClient(tr.clientConfig, tr.scope, serviceIdx), nil
-}
-
-func (tr *TallyReporter) GetScope() tally.Scope {
-	return tr.scope
-}
-
-func (tr *TallyReporter) Stop(logger log.Logger) {
-	// noop
-}
+)
