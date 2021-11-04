@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	history "go.temporal.io/api/history/v1"
+	tasks "go.temporal.io/server/service/history/tasks"
 )
 
 // MockTaskGenerator is a mock of TaskGenerator interface.
@@ -144,11 +145,12 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(now, br
 }
 
 // GenerateLastHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateLastHistoryReplicationTasks(now time.Time) error {
+func (m *MockTaskGenerator) GenerateLastHistoryReplicationTasks(now time.Time) (*tasks.HistoryReplicationTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", now)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*tasks.HistoryReplicationTask)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
