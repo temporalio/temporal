@@ -32,7 +32,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -118,7 +117,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	metricsClient := metrics.NewClient(tally.NoopScope, metrics.History)
+	metricsClient := metrics.NewNoopMetricsClient()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.replicationTaskHandler = newReplicationTaskExecutor(

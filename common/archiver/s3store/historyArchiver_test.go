@@ -104,7 +104,7 @@ func (s *historyArchiverSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.container = &archiver.HistoryBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NewClient(scope, metrics.HistoryArchiverScope),
+		MetricsClient: metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.HistoryArchiverScope),
 	}
 
 	s.controller = gomock.NewController(s.T())

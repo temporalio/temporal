@@ -33,8 +33,8 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -56,7 +56,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.container = &archiver.VisibilityBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
+		MetricsClient: metrics.NewNoopMetricsClient(),
 	}
 	s.expectedVisibilityRecords = []*archiverspb.VisibilityRecord{
 		{

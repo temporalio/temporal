@@ -33,7 +33,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -68,7 +67,7 @@ func (h *historyArchiverSuite) SetupTest() {
 	h.controller = gomock.NewController(h.T())
 	h.container = &archiver.HistoryBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
+		MetricsClient: metrics.NewNoopMetricsClient(),
 	}
 	h.testArchivalURI, _ = archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 }
