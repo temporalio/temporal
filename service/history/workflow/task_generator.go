@@ -112,7 +112,7 @@ type (
 		) error
 		GenerateLastHistoryReplicationTasks(
 			now time.Time,
-		) error
+		) (*tasks.HistoryReplicationTask, error)
 	}
 
 	TaskGeneratorImpl struct {
@@ -548,18 +548,18 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 
 func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
 	now time.Time,
-) error {
+) (*tasks.HistoryReplicationTask, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
 	if err != nil {
-		return err
+		return nil, err
 	}
 	lastItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	r.mutableState.AddReplicationTasks(&tasks.HistoryReplicationTask{
+	return &tasks.HistoryReplicationTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -568,9 +568,7 @@ func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
 		Version:             lastItem.GetVersion(),
 		BranchToken:         versionHistory.BranchToken,
 		NewRunBranchToken:   nil,
-	})
-
-	return nil
+	}, nil
 }
 
 func (r *TaskGeneratorImpl) getTimerSequence(now time.Time) TimerSequence {

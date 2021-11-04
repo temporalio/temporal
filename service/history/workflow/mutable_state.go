@@ -248,6 +248,6 @@ type (
 		StartTransactionSkipWorkflowTaskFail(entry *namespace.Namespace) error
 		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
-		GenerateLastHistoryReplicationTasks(now time.Time) error
+		GenerateLastHistoryReplicationTasks(now time.Time) (*tasks.HistoryReplicationTask, error)
 	}
 )

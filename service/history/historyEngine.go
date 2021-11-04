@@ -3199,11 +3199,19 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	}
 
 	now := e.shard.GetTimeSource().Now()
-	err = mutableState.GenerateLastHistoryReplicationTasks(now)
+	task, err := mutableState.GenerateLastHistoryReplicationTasks(now)
 	if err != nil {
 		return nil, err
 	}
-	err = context.UpdateWorkflowExecutionAsActive(now)
+
+	err = e.shard.AddTasks(&persistence.AddTasksRequest{
+		ShardID: e.shard.GetShardID(),
+		// RangeID is set by shard
+		NamespaceID:      string(namespaceID),
+		WorkflowID:       request.Execution.WorkflowId,
+		RunID:            request.Execution.RunId,
+		ReplicationTasks: []tasks.Task{task},
+	})
 	if err != nil {
 		return nil, err
 	}
