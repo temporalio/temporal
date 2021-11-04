@@ -693,6 +693,9 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		return err
 	}
 
+	curRequest.ShardID = s.shardID
+	delRequest.ShardID = s.shardID
+
 	s.wLock()
 	defer s.wUnlock()
 

@@ -140,13 +140,11 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 
 	if err := t.shard.DeleteWorkflowExecution(
 		&persistence.DeleteCurrentWorkflowExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,
 			RunID:       task.RunID,
 		},
 		&persistence.DeleteWorkflowExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,
 			RunID:       task.RunID,
@@ -228,13 +226,11 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 
 	if err := t.shard.DeleteWorkflowExecution(
 		&persistence.DeleteCurrentWorkflowExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,
 			RunID:       task.RunID,
 		},
 		&persistence.DeleteWorkflowExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,
 			RunID:       task.RunID,
