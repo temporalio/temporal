@@ -1518,7 +1518,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 		event.GetPrevAutoResetPoints(),
 		event.GetContinuedExecutionRunId(),
 		timestamp.TimeValue(startEvent.GetEventTime()),
-		e.namespaceEntry.Retention(e.executionInfo.WorkflowId),
+		e.namespaceEntry.Retention(),
 	)
 
 	if event.Memo != nil {
