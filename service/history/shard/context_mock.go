@@ -155,6 +155,20 @@ func (mr *MockContextMockRecorder) DeleteTransferFailoverLevel(failoverID interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTransferFailoverLevel", reflect.TypeOf((*MockContext)(nil).DeleteTransferFailoverLevel), failoverID)
 }
 
+// DeleteWorkflowExecution mocks base method.
+func (m *MockContext) DeleteWorkflowExecution(curRequest *persistence.DeleteCurrentWorkflowExecutionRequest, delRequest *persistence.DeleteWorkflowExecutionRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", curRequest, delRequest)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
+func (mr *MockContextMockRecorder) DeleteWorkflowExecution(curRequest, delRequest interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), curRequest, delRequest)
+}
+
 // GenerateTransferTaskID mocks base method.
 func (m *MockContext) GenerateTransferTaskID() (int64, error) {
 	m.ctrl.T.Helper()
