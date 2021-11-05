@@ -59,8 +59,8 @@ type (
 		// Tags is the set of key-value pairs to be reported as part of every metric
 		Tags map[string]string `yaml:"tags"`
 		// IgnoreTags is a map from tag name string to tag values string list.
-		// Each present in keys will have its value replaced with "__disabled__"
-		// Each tag value in values list will white-list tags to be reported as usual.
+		// Each value present in keys will have relevant tag value replaced with "__disabled__"
+		// Each value in values list will white-list tag values to be reported as usual.
 		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
 		Prefix string `yaml:"prefix"`
