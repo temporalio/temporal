@@ -218,4 +218,3 @@ func (m *opentelemetryScope) RecordDistributionInternal(id string, d int) {
 func (m *opentelemetryScope) TaggedInternal(tags ...Tag) internalScope {
 	panic("should not be used")
 }
-
