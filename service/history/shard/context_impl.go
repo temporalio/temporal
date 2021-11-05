@@ -25,7 +25,6 @@
 package shard
 
 import (
-	"errors"
 	"sync"
 	"time"
 
@@ -108,14 +107,14 @@ var _ Context = (*ContextImpl)(nil)
 
 var (
 	// ErrShardClosed is returned when shard is closed and a req cannot be processed
-	ErrShardClosed = errors.New("shard closed")
+	ErrShardClosed = serviceerror.NewUnavailable("shard closed")
 
 	// ErrShardStatusUnknown means we're not sure if we have the shard lock or not. This may be returned
 	// during short windows at initialization and if we've lost the connection to the database.
 	ErrShardStatusUnknown = serviceerror.NewUnavailable("shard status unknown")
 
 	// errStoppingContext is an internal error used to abort acquireShard
-	errStoppingContext = errors.New("stopping context")
+	errStoppingContext = serviceerror.NewUnavailable("stopping context")
 )
 
 const (

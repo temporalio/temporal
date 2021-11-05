@@ -28,11 +28,12 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -48,7 +49,7 @@ import (
 )
 
 var (
-	errUnknownTimerTask = errors.New("unknown timer task")
+	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
 )
 
 type (
