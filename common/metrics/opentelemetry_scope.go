@@ -43,26 +43,6 @@ type (
 	}
 )
 
-func (m *opentelemetryScope) AddCounterInternal(name string, delta int64) {
-	panic("implement me")
-}
-
-func (m *opentelemetryScope) StartTimerInternal(timer string) Stopwatch {
-	panic("implement me")
-}
-
-func (m *opentelemetryScope) RecordTimerInternal(timer string, d time.Duration) {
-	panic("implement me")
-}
-
-func (m *opentelemetryScope) RecordDistributionInternal(id string, d int) {
-	panic("implement me")
-}
-
-func (m *opentelemetryScope) TaggedInternal(tags ...Tag) internalScope {
-	panic("implement me")
-}
-
 func newOpentelemetryScope(
 	serviceIdx ServiceIdx,
 	reporter *OpentelemetryReporter,
@@ -218,3 +198,24 @@ func (m *opentelemetryScope) namespaceTagged(key string, value string) bool {
 func (m *opentelemetryScope) userScope() UserScope {
 	return newOpentelemetryUserScope(m.reporter, m.tags)
 }
+
+func (m *opentelemetryScope) AddCounterInternal(name string, delta int64) {
+	panic("should not be used")
+}
+
+func (m *opentelemetryScope) StartTimerInternal(timer string) Stopwatch {
+	panic("should not be used")
+}
+
+func (m *opentelemetryScope) RecordTimerInternal(timer string, d time.Duration) {
+	panic("should not be used")
+}
+
+func (m *opentelemetryScope) RecordDistributionInternal(id string, d int) {
+	panic("should not be used")
+}
+
+func (m *opentelemetryScope) TaggedInternal(tags ...Tag) internalScope {
+	panic("should not be used")
+}
+
