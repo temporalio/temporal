@@ -40,6 +40,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commandpb "go.temporal.io/api/command/v1"
@@ -1690,7 +1691,13 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	_, err = poller1.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
-	err = poller1.PollAndProcessActivityTask(false)
+	for i := 0; i < 3; i++ {
+		err = poller1.PollAndProcessActivityTask(false)
+		if !assert.ObjectsAreEqual(&serviceerror.NotFound{}, err) {
+			continue
+		}
+		time.Sleep(time.Second * time.Duration(i))
+	}
 	s.IsType(&serviceerror.NotFound{}, err)
 
 	s.failover(namespace, clusterName[1], int64(2), client1)
