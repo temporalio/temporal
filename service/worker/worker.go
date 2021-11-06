@@ -32,40 +32,27 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	workercommon "go.temporal.io/server/service/worker/common"
 	"go.uber.org/fx"
 )
 
 const DefaultWorkerTaskQueue = "default-worker-tq"
 
 type (
-	// WorkerComponent represent a type of work needed for worker role
-	WorkerComponent interface {
-		// Register registers Workflow and Activity types provided by this worker component
-		Register(sdkworker.Worker)
-		// DedicatedWorkerOptions returns a DedicatedWorkerOptions for this worker component. Return nil to use
-		// default worker instance.
-		DedicatedWorkerOptions() *DedicatedWorkerOptions
-	}
-
-	DedicatedWorkerOptions struct {
-		TaskQueue string
-		Options   sdkworker.Options
-	}
-
 	// workerManager maintains list of SDK workers.
 	workerManager struct {
 		status           int32
 		logger           log.Logger
 		sdkClient        sdkclient.Client
 		workers          []sdkworker.Worker
-		workerComponents []WorkerComponent
+		workerComponents []workercommon.WorkerComponent
 	}
 
 	initParams struct {
 		fx.In
 		Logger           log.Logger
 		SdkClient        sdkclient.Client
-		WorkerComponents []WorkerComponent `group:"workerComponent"`
+		WorkerComponents []workercommon.WorkerComponent `group:"workerComponent"`
 	}
 )
 
@@ -87,7 +74,7 @@ func (wm *workerManager) Start() {
 	}
 
 	defaultWorkerOptions := sdkworker.Options{
-		// TODO: add dynamic config for this
+		// TODO: add dynamic config for worker options
 	}
 	defaultWorker := sdkworker.New(wm.sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
@@ -103,6 +90,10 @@ func (wm *workerManager) Start() {
 			wc.Register(dedicatedWorker)
 			wm.workers = append(wm.workers, dedicatedWorker)
 		}
+	}
+
+	for _, w := range wm.workers {
+		w.Start()
 	}
 
 	wm.logger.Info("", tag.ComponentWorkerManager, tag.LifeCycleStarted)
