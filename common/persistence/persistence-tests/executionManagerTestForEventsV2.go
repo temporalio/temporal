@@ -142,7 +142,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				&tasks.WorkflowTask{
 					WorkflowKey:         workflowKey,
 					TaskID:              s.GetNextSequenceNumber(),
-					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
 					ScheduleID:          2,
 					VisibilityTimestamp: time.Now().UTC(),
@@ -248,7 +247,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 						workflowExecution.RunId,
 					),
 					TaskID:              s.GetNextSequenceNumber(),
-					NamespaceID:         namespaceID,
 					TaskQueue:           "taskQueue",
 					ScheduleID:          2,
 					VisibilityTimestamp: time.Now().UTC(),
@@ -335,7 +333,6 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	newworkflowTask := &tasks.WorkflowTask{
 		WorkflowKey: workflowKey,
 		TaskID:      s.GetNextSequenceNumber(),
-		NamespaceID: updatedInfo.NamespaceId,
 		TaskQueue:   updatedInfo.TaskQueue,
 		ScheduleID:  int64(2),
 	}

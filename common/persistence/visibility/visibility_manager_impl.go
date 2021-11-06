@@ -214,7 +214,7 @@ func (p *visibilityManagerImpl) newInternalVisibilityRequestBase(request *manage
 	}
 
 	return &store.InternalVisibilityRequestBase{
-		NamespaceID:          request.NamespaceID,
+		NamespaceID:          request.NamespaceID.String(),
 		WorkflowID:           request.Execution.GetWorkflowId(),
 		RunID:                request.Execution.GetRunId(),
 		WorkflowTypeName:     request.WorkflowTypeName,

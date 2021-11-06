@@ -37,12 +37,13 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
 type (
 	EventKey struct {
-		NamespaceID string
+		NamespaceID namespace.ID
 		WorkflowID  string
 		RunID       string
 		EventID     int64
@@ -101,7 +102,7 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 		e.logger.Warn("one or more ids is invalid in event cache",
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID),
-			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.WorkflowNamespaceID(key.NamespaceID.String()),
 			tag.WorkflowEventID(key.EventID))
 		return false
 	}
@@ -131,7 +132,7 @@ func (e *CacheImpl) GetEvent(key EventKey, firstEventID int64, branchToken []byt
 			tag.Error(err),
 			tag.WorkflowID(key.WorkflowID),
 			tag.WorkflowRunID(key.RunID),
-			tag.WorkflowNamespaceID(key.NamespaceID),
+			tag.WorkflowNamespaceID(key.NamespaceID.String()),
 			tag.WorkflowEventID(key.EventID))
 		return nil, err
 	}
@@ -186,7 +187,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 		// noop
 	case *serviceerror.DataLoss:
 		// log event
-		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(key.NamespaceID), tag.WorkflowID(key.WorkflowID), tag.WorkflowRunID(key.RunID))
+		e.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(key.NamespaceID.String()), tag.WorkflowID(key.WorkflowID), tag.WorkflowRunID(key.RunID))
 		e.metricsClient.IncCounter(metrics.EventsCacheGetFromStoreScope, metrics.CacheFailures)
 		return nil, err
 	default:

@@ -28,12 +28,12 @@ import (
 	"github.com/olivere/elastic/v7"
 )
 
-func IsRetryableError(err error) bool {
+func HttpStatus(err error) int {
 	switch e := err.(type) {
 	case *elastic.Error:
-		return IsRetryableStatus(e.Status)
+		return e.Status
 	default:
-		return false
+		return 0
 	}
 }
 
@@ -44,10 +44,14 @@ func IsRetryableError(err error) bool {
 // 500 - Node not connected
 // 503 - Service Unavailable
 // 507 - Insufficient Storage
-func IsRetryableStatus(status int) bool {
-	switch status {
+func IsRetryableStatus(httpStatus int) bool {
+	switch httpStatus {
 	case 408, 429, 500, 503, 507:
 		return true
 	}
 	return false
+}
+
+func IsRetryableError(err error) bool {
+	return IsRetryableStatus(HttpStatus(err))
 }

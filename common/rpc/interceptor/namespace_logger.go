@@ -29,11 +29,12 @@ import (
 	"crypto/md5"
 	"fmt"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"google.golang.org/grpc"
 )
 
 type (
@@ -75,7 +76,7 @@ func (nli *NamespaceLogInterceptor) Intercept(
 		}
 		nli.logger.Debug(
 			"Frontend method invoked.",
-			tag.WorkflowNamespace(namespace),
+			tag.WorkflowNamespace(namespace.String()),
 			tag.Operation(methodName),
 			tag.ServerName(serverName),
 			tag.CertThumbprint(certThumbprint))

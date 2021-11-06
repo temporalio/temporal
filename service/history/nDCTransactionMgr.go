@@ -136,18 +136,18 @@ type (
 
 		checkWorkflowExists(
 			ctx context.Context,
-			namespaceID string,
+			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
 		) (bool, error)
 		getCurrentWorkflowRunID(
 			ctx context.Context,
-			namespaceID string,
+			namespaceID namespace.ID,
 			workflowID string,
 		) (string, error)
 		loadNDCWorkflow(
 			ctx context.Context,
-			namespaceID string,
+			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
 		) (nDCWorkflow, error)
@@ -317,7 +317,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		// need to reset target workflow (which is also the current workflow)
 		// to accept events to be reapplied
 		baseMutableState := targetWorkflow.getMutableState()
-		namespaceID := baseMutableState.GetExecutionInfo().NamespaceId
+		namespaceID := namespace.ID(baseMutableState.GetExecutionInfo().NamespaceId)
 		workflowID := baseMutableState.GetExecutionInfo().WorkflowId
 		baseRunID := baseMutableState.GetExecutionState().GetRunId()
 		resetRunID := uuid.New()
@@ -327,7 +327,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		//  since cannot reapply event to a finished workflow which had no workflow task started
 		if baseRebuildLastEventID == common.EmptyEventID {
 			r.logger.Warn("cannot reapply event to a finished workflow",
-				tag.WorkflowNamespaceID(namespaceID),
+				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),
 			)
 			r.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
@@ -385,7 +385,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 
 func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	_ context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) (bool, error) {
@@ -393,7 +393,7 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
 		&persistence.GetWorkflowExecutionRequest{
 			ShardID:     r.shard.GetShardID(),
-			NamespaceID: namespaceID,
+			NamespaceID: namespaceID.String(),
 			Execution: commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -413,14 +413,14 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 
 func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
 	_ context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 ) (string, error) {
 
 	resp, err := r.shard.GetExecutionManager().GetCurrentExecution(
 		&persistence.GetCurrentExecutionRequest{
 			ShardID:     r.shard.GetShardID(),
-			NamespaceID: namespaceID,
+			NamespaceID: namespaceID.String(),
 			WorkflowID:  workflowID,
 		},
 	)
@@ -437,7 +437,7 @@ func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
 
 func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) (nDCWorkflow, error) {
@@ -479,7 +479,7 @@ func (r *nDCTransactionMgrImpl) isWorkflowCurrent(
 	// target workflow is not guaranteed to be current workflow, do additional check
 	executionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
 	executionState := targetWorkflow.getMutableState().GetExecutionState()
-	namespaceID := executionInfo.NamespaceId
+	namespaceID := namespace.ID(executionInfo.NamespaceId)
 	workflowID := executionInfo.WorkflowId
 	runID := executionState.RunId
 

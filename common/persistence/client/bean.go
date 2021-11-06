@@ -58,6 +58,7 @@ type (
 		faultInjection *FaultInjectionDataStoreFactory
 
 		sync.RWMutex
+		isClosed bool
 	}
 )
 
@@ -126,6 +127,7 @@ func NewBean(
 		namespaceReplicationQueue: namespaceReplicationQueue,
 		shardManager:              shardManager,
 		executionManager:          executionManager,
+		isClosed:                  false,
 	}
 }
 
@@ -157,7 +159,6 @@ func (s *BeanImpl) GetTaskManager() persistence.TaskManager {
 
 // GetNamespaceReplicationQueue get NamespaceReplicationQueue
 func (s *BeanImpl) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
-
 	s.RLock()
 	defer s.RUnlock()
 
@@ -183,9 +184,12 @@ func (s *BeanImpl) GetExecutionManager() persistence.ExecutionManager {
 
 // Close cleanup connections
 func (s *BeanImpl) Close() {
-
 	s.Lock()
 	defer s.Unlock()
+
+	if s.isClosed {
+		return
+	}
 
 	s.clusterMetadataManager.Close()
 	s.metadataManager.Close()
@@ -195,4 +199,5 @@ func (s *BeanImpl) Close() {
 	s.executionManager.Close()
 
 	s.factory.Close()
+	s.isClosed = true
 }

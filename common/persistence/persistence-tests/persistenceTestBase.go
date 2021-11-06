@@ -35,7 +35,7 @@ import (
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
+	"github.com/uber-go/tally/v4"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -186,7 +186,7 @@ func NewTestBaseForCluster(testCluster PersistenceTestCluster, logger log.Logger
 }
 
 // Setup sets up the test base, must be called as part of SetupSuite
-func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
+func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	var err error
 	shardID := int32(10)
 	if clusterMetadataConfig == nil {
@@ -208,7 +208,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *config.ClusterMetadata) {
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
-	s.ClusterMetadata = cluster.NewTestClusterMetadata(clusterMetadataConfig)
+	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig)
 	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
 
 	s.MetadataManager, err = factory.NewMetadataManager()
@@ -321,7 +321,6 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 						workflowExecution.RunId,
 					),
 					TaskID:              s.GetNextSequenceNumber(),
-					NamespaceID:         namespaceID,
 					TaskQueue:           taskQueue,
 					ScheduleID:          workflowTaskScheduleID,
 					VisibilityTimestamp: time.Now().UTC(),
@@ -358,7 +357,6 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 			&tasks.WorkflowTask{
 				WorkflowKey: workflowKey,
 				TaskID:      s.GetNextSequenceNumber(),
-				NamespaceID: namespaceID,
 				TaskQueue:   taskQueue,
 				ScheduleID:  workflowTaskScheduleID,
 			})
@@ -447,10 +445,9 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 						workflowExecution.WorkflowId,
 						workflowExecution.RunId,
 					),
-					TaskID:      s.GetNextSequenceNumber(),
-					NamespaceID: namespaceID,
-					TaskQueue:   taskQueue,
-					ScheduleID:  workflowTaskScheduleID,
+					TaskID:     s.GetNextSequenceNumber(),
+					TaskQueue:  taskQueue,
+					ScheduleID: workflowTaskScheduleID,
 				},
 			},
 			TimerTasks: timerTasks,
@@ -500,10 +497,9 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 			updatedInfo.WorkflowId,
 			updatedState.RunId,
 		),
-		TaskID:      s.GetNextSequenceNumber(),
-		NamespaceID: updatedInfo.NamespaceId,
-		TaskQueue:   updatedInfo.TaskQueue,
-		ScheduleID:  workflowTaskScheduleID,
+		TaskID:     s.GetNextSequenceNumber(),
+		TaskQueue:  updatedInfo.TaskQueue,
+		ScheduleID: workflowTaskScheduleID,
 	}
 
 	req := &persistence.UpdateWorkflowExecutionRequest{
@@ -731,7 +727,6 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 		transferTasks = append(transferTasks, &tasks.WorkflowTask{
 			WorkflowKey: workflowKey,
 			TaskID:      s.GetNextSequenceNumber(),
-			NamespaceID: updatedInfo.NamespaceId,
 			TaskQueue:   updatedInfo.TaskQueue,
 			ScheduleID:  workflowTaskScheduleID})
 	}

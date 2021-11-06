@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 const (
@@ -72,7 +73,7 @@ type (
 	}
 
 	// NamespaceIDToNameFunc maps a namespaceID to namespace name. Returns error when mapping is not possible.
-	NamespaceIDToNameFunc func(string) (string, error)
+	NamespaceIDToNameFunc func(id namespace.ID) (namespace.Name, error)
 
 	rpcClientFactory struct {
 		rpcFactory            common.RPCFactory

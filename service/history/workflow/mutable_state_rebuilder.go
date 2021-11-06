@@ -49,7 +49,7 @@ type (
 
 	MutableStateRebuilder interface {
 		ApplyEvents(
-			namespaceID string,
+			namespaceID namespace.ID,
 			requestID string,
 			execution commonpb.WorkflowExecution,
 			history []*historypb.HistoryEvent,
@@ -93,7 +93,7 @@ func NewMutableStateRebuilder(
 }
 
 func (b *MutableStateRebuilderImpl) ApplyEvents(
-	namespaceID string,
+	namespaceID namespace.ID,
 	requestID string,
 	execution commonpb.WorkflowExecution,
 	history []*historypb.HistoryEvent,
@@ -135,10 +135,10 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 		switch event.GetEventType() {
 		case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED:
 			attributes := event.GetWorkflowExecutionStartedEventAttributes()
-			var parentNamespaceID string
+			var parentNamespaceID namespace.ID
 			if attributes.GetParentWorkflowNamespace() != "" {
 				parentNamespaceEntry, err := b.namespaceRegistry.GetNamespace(
-					attributes.GetParentWorkflowNamespace(),
+					namespace.Name(attributes.GetParentWorkflowNamespace()),
 				)
 				if err != nil {
 					return nil, err

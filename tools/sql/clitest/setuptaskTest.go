@@ -96,6 +96,36 @@ func (s *SetupSchemaTestSuite) TestCreateDatabase() {
 	s.NoError(err)
 }
 
+func (s *SetupSchemaTestSuite) TestCreateDatabaseIdempotent() {
+	testDatabase := testCLIDatabasePrefix + shuffle.String(testCLIDatabaseSuffix)
+	err := sql.RunTool([]string{
+		"./tool",
+		"--ep", s.host,
+		"--p", s.port,
+		"-u", testUser,
+		"--pw", testPassword,
+		"--pl", s.pluginName,
+		"create",
+		"--db", testDatabase,
+	})
+	s.NoError(err)
+
+	err = sql.RunTool([]string{
+		"./tool",
+		"--ep", s.host,
+		"--p", s.port,
+		"-u", testUser,
+		"--pw", testPassword,
+		"--pl", s.pluginName,
+		"create",
+		"--db", testDatabase,
+	})
+	s.NoError(err)
+
+	err = s.conn.DropDatabase(testDatabase)
+	s.NoError(err)
+}
+
 // TestSetupSchema test
 func (s *SetupSchemaTestSuite) TestSetupSchema() {
 	conn, err := newTestConn(s.DBName, s.host, s.port, s.pluginName)

@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -92,7 +93,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 
 	targetExecutionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
 	targetExecutionState := targetWorkflow.getMutableState().GetExecutionState()
-	namespaceID := targetExecutionInfo.NamespaceId
+	namespaceID := namespace.ID(targetExecutionInfo.NamespaceId)
 	workflowID := targetExecutionInfo.WorkflowId
 	targetRunID := targetExecutionState.RunId
 
@@ -226,7 +227,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchWorkflowUpdateAsZombi
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsCurrent(
-	ctx context.Context,
+	_ context.Context,
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 	newWorkflow nDCWorkflow,
@@ -281,7 +282,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		newExecutionState := newWorkflow.getMutableState().GetExecutionState()
 		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
 			ctx,
-			newExecutionInfo.NamespaceId,
+			namespace.ID(newExecutionInfo.NamespaceId),
 			newExecutionInfo.WorkflowId,
 			newExecutionState.RunId,
 		)
@@ -317,7 +318,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCurrent(
-	ctx context.Context,
+	_ context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -362,7 +363,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) suppressCurrentAndUpdateAsCur
 }
 
 func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsCurrent(
-	ctx context.Context,
+	_ context.Context,
 	now time.Time,
 	targetWorkflow nDCWorkflow,
 	newWorkflow nDCWorkflow,
@@ -424,7 +425,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		newExecutionState := newWorkflow.getMutableState().GetExecutionState()
 		newWorkflowExists, err := r.transactionMgr.checkWorkflowExists(
 			ctx,
-			newExecutionInfo.NamespaceId,
+			namespace.ID(newExecutionInfo.NamespaceId),
 			newExecutionInfo.WorkflowId,
 			newExecutionState.RunId,
 		)
@@ -436,7 +437,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 			newContext = nil
 			newMutableState = nil
 		} else {
-			// new workflow does not exists, continue
+			// new workflow does not exist, continue
 			newContext = newWorkflow.getContext()
 			newMutableState = newWorkflow.getMutableState()
 		}

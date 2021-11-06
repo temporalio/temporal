@@ -180,7 +180,7 @@ func (mr *MockRegistryMockRecorder) GetCacheSize() *gomock.Call {
 }
 
 // GetNamespace mocks base method.
-func (m *MockRegistry) GetNamespace(name string) (*Namespace, error) {
+func (m *MockRegistry) GetNamespace(name Name) (*Namespace, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespace", name)
 	ret0, _ := ret[0].(*Namespace)
@@ -195,7 +195,7 @@ func (mr *MockRegistryMockRecorder) GetNamespace(name interface{}) *gomock.Call 
 }
 
 // GetNamespaceByID mocks base method.
-func (m *MockRegistry) GetNamespaceByID(id string) (*Namespace, error) {
+func (m *MockRegistry) GetNamespaceByID(id ID) (*Namespace, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceByID", id)
 	ret0, _ := ret[0].(*Namespace)
@@ -210,10 +210,10 @@ func (mr *MockRegistryMockRecorder) GetNamespaceByID(id interface{}) *gomock.Cal
 }
 
 // GetNamespaceID mocks base method.
-func (m *MockRegistry) GetNamespaceID(name string) (string, error) {
+func (m *MockRegistry) GetNamespaceID(name Name) (ID, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceID", name)
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(ID)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -225,10 +225,10 @@ func (mr *MockRegistryMockRecorder) GetNamespaceID(name interface{}) *gomock.Cal
 }
 
 // GetNamespaceName mocks base method.
-func (m *MockRegistry) GetNamespaceName(id string) (string, error) {
+func (m *MockRegistry) GetNamespaceName(id ID) (Name, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceName", id)
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(Name)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

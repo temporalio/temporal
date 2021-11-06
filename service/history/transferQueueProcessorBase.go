@@ -25,14 +25,9 @@
 package history
 
 import (
-	"fmt"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -76,7 +71,7 @@ func newTransferQueueProcessorBase(
 
 func (t *transferQueueProcessorBase) readTasks(
 	readLevel int64,
-) ([]queueTaskInfo, bool, error) {
+) ([]tasks.Task, bool, error) {
 
 	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
 		ShardID:      t.shard.GetShardID(),
@@ -89,7 +84,7 @@ func (t *transferQueueProcessorBase) readTasks(
 		return nil, false, err
 	}
 
-	return t.convert(response.Tasks), len(response.NextPageToken) != 0, nil
+	return response.Tasks, len(response.NextPageToken) != 0, nil
 }
 
 func (t *transferQueueProcessorBase) updateAckLevel(
@@ -104,41 +99,41 @@ func (t *transferQueueProcessorBase) queueShutdown() error {
 }
 
 func getTransferTaskMetricsScope(
-	taskType enumsspb.TaskType,
+	task tasks.Task,
 	isActive bool,
 ) int {
-	switch taskType {
-	case enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK:
+	switch task.(type) {
+	case *tasks.ActivityTask:
 		if isActive {
 			return metrics.TransferActiveTaskActivityScope
 		}
 		return metrics.TransferStandbyTaskActivityScope
-	case enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK:
+	case *tasks.WorkflowTask:
 		if isActive {
 			return metrics.TransferActiveTaskWorkflowTaskScope
 		}
 		return metrics.TransferStandbyTaskWorkflowTaskScope
-	case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION:
+	case *tasks.CloseExecutionTask:
 		if isActive {
 			return metrics.TransferActiveTaskCloseExecutionScope
 		}
 		return metrics.TransferStandbyTaskCloseExecutionScope
-	case enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION:
+	case *tasks.CancelExecutionTask:
 		if isActive {
 			return metrics.TransferActiveTaskCancelExecutionScope
 		}
 		return metrics.TransferStandbyTaskCancelExecutionScope
-	case enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION:
+	case *tasks.SignalExecutionTask:
 		if isActive {
 			return metrics.TransferActiveTaskSignalExecutionScope
 		}
 		return metrics.TransferStandbyTaskSignalExecutionScope
-	case enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION:
+	case *tasks.StartChildExecutionTask:
 		if isActive {
 			return metrics.TransferActiveTaskStartChildExecutionScope
 		}
 		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
+	case *tasks.ResetWorkflowTask:
 		if isActive {
 			return metrics.TransferActiveTaskResetWorkflowScope
 		}
@@ -149,36 +144,4 @@ func getTransferTaskMetricsScope(
 		}
 		return metrics.TransferStandbyQueueProcessorScope
 	}
-}
-
-// TODO @wxing1292 deprecate this additional conversion before 1.14
-func (t *transferQueueProcessorBase) convert(
-	genericTasks []tasks.Task,
-) []queueTaskInfo {
-	queueTasks := make([]queueTaskInfo, len(genericTasks))
-	serializer := serialization.TaskSerializer{}
-
-	for index, task := range genericTasks {
-		var transferTask *persistencespb.TransferTaskInfo
-		switch task := task.(type) {
-		case *tasks.WorkflowTask:
-			transferTask = serializer.TransferWorkflowTaskToProto(task)
-		case *tasks.ActivityTask:
-			transferTask = serializer.TransferActivityTaskToProto(task)
-		case *tasks.CancelExecutionTask:
-			transferTask = serializer.TransferRequestCancelTaskToProto(task)
-		case *tasks.SignalExecutionTask:
-			transferTask = serializer.TransferSignalTaskToProto(task)
-		case *tasks.StartChildExecutionTask:
-			transferTask = serializer.TransferChildWorkflowTaskToProto(task)
-		case *tasks.CloseExecutionTask:
-			transferTask = serializer.TransferCloseTaskToProto(task)
-		case *tasks.ResetWorkflowTask:
-			transferTask = serializer.TransferResetTaskToProto(task)
-		default:
-			panic(fmt.Sprintf("Unknown transfer task type: %v", task))
-		}
-		queueTasks[index] = transferTask
-	}
-	return queueTasks
 }

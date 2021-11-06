@@ -40,8 +40,8 @@ const (
  VALUES($1, $2, $3, $4, $5, $6, $7)`
 
 	updateNamespaceQuery = `UPDATE namespaces 
- SET name = $1, data = $2, data_encoding = $3, notification_version = $4
- WHERE partition_id=54321 AND id = $5`
+ SET name = $1, data = $2, data_encoding = $3, is_global = $4, notification_version = $5
+ WHERE partition_id=54321 AND id = $6`
 
 	getNamespacePart = `SELECT id, name, is_global, data, data_encoding, notification_version FROM namespaces`
 
@@ -78,7 +78,7 @@ func (pdb *db) UpdateNamespace(
 	ctx context.Context,
 	row *sqlplugin.NamespaceRow,
 ) (sql.Result, error) {
-	return pdb.conn.ExecContext(ctx, updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.NotificationVersion, row.ID)
+	return pdb.conn.ExecContext(ctx, updateNamespaceQuery, row.Name, row.Data, row.DataEncoding, row.IsGlobal, row.NotificationVersion, row.ID)
 }
 
 // SelectFromNamespace reads one or more rows from namespaces table

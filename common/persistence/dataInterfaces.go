@@ -722,6 +722,7 @@ type (
 	// UpdateNamespaceRequest is used to update namespace
 	UpdateNamespaceRequest struct {
 		Namespace           *persistencespb.NamespaceDetail
+		IsGlobalNamespace   bool
 		NotificationVersion int64
 	}
 

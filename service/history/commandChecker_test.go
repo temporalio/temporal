@@ -82,8 +82,8 @@ type (
 
 		validator *commandAttrValidator
 
-		testNamespaceID       string
-		testTargetNamespaceID string
+		testNamespaceID       namespace.ID
+		testTargetNamespaceID namespace.ID
 	}
 )
 
@@ -132,12 +132,12 @@ func (s *commandAttrValidatorSuite) TearDownTest() {
 
 func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionAttributes() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -174,7 +174,7 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 }
 
 func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes() {
-	namespace := "tests.Namespace"
+	namespace := namespace.Name("tests.Namespace")
 	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
 	err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
@@ -199,12 +199,12 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -218,12 +218,12 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToLocal(
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -241,12 +241,12 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffectiveLocal_DiffCluster() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -264,12 +264,12 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToEffect
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -290,7 +290,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_LocalToGlobal
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_SameCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -299,7 +299,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -313,7 +313,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToLocal_DiffCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -322,7 +322,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -336,7 +336,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_SameCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -345,7 +345,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -363,7 +363,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToEffectiveLocal_DiffCluster() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -372,7 +372,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestAlternativeClusterName,
@@ -390,7 +390,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLocalToGlobal() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -401,7 +401,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 		5678,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -422,7 +422,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_EffectiveLoca
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -434,7 +434,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewLocalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		cluster.TestCurrentClusterName,
 	)
@@ -448,7 +448,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToLocal
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffectiveLocal() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -460,7 +460,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffec
 		5678,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -480,7 +480,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToEffec
 
 func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGlobal_DiffNamespace() {
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -492,7 +492,7 @@ func (s *commandAttrValidatorSuite) TestValidateCrossNamespaceCall_GlobalToGloba
 		1234,
 	)
 	targetNamespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID},
+		&persistencespb.NamespaceInfo{Name: s.testTargetNamespaceID.String()},
 		nil,
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,

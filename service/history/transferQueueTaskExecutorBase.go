@@ -31,17 +31,17 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
+
 	"go.temporal.io/server/api/matchingservice/v1"
 	m "go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -83,39 +83,35 @@ func newTransferQueueTaskExecutorBase(
 }
 
 func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
-	task *persistencespb.TransferTaskInfo,
-) (string, commonpb.WorkflowExecution) {
+	task tasks.Task,
+) (namespace.ID, commonpb.WorkflowExecution) {
 
-	return task.GetNamespaceId(), commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowId(),
-		RunId:      task.GetRunId(),
+	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
+		WorkflowId: task.GetWorkflowID(),
+		RunId:      task.GetRunID(),
 	}
 }
 
 func (t *transferQueueTaskExecutorBase) pushActivity(
-	task *persistencespb.TransferTaskInfo,
+	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout *time.Duration,
 ) error {
 
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK {
-		t.logger.Fatal("Cannot process non activity task", tag.TaskType(task.GetTaskType()))
-	}
-
 	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
-		NamespaceId:       task.GetTargetNamespaceId(),
-		SourceNamespaceId: task.GetNamespaceId(),
+		NamespaceId:       task.TargetNamespaceID,
+		SourceNamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: task.GetWorkflowId(),
-			RunId:      task.GetRunId(),
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
 		},
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: task.TaskQueue,
 			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		},
-		ScheduleId:             task.GetScheduleId(),
+		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 	})
 
@@ -123,7 +119,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 }
 
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
-	task *persistencespb.TransferTaskInfo,
+	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout *time.Duration,
 ) error {
@@ -131,25 +127,21 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	if task.TaskType != enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK {
-		t.logger.Fatal("Cannot process non workflow task", tag.TaskType(task.GetTaskType()))
-	}
-
 	_, err := t.matchingClient.AddWorkflowTask(ctx, &m.AddWorkflowTaskRequest{
-		NamespaceId: task.GetNamespaceId(),
+		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: task.GetWorkflowId(),
-			RunId:      task.GetRunId(),
+			WorkflowId: task.WorkflowID,
+			RunId:      task.RunID,
 		},
 		TaskQueue:              taskqueue,
-		ScheduleId:             task.GetScheduleId(),
+		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 	})
 	return err
 }
 
 func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	workflowTypeName string,
@@ -158,9 +150,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	endTime time.Time,
 	status enumspb.WorkflowExecutionStatus,
 	historyLength int64,
-	taskID int64,
 	visibilityMemo *commonpb.Memo,
-	taskQueue string,
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
@@ -191,8 +181,8 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
-			NamespaceID:      namespaceID,
-			Namespace:        namespaceEntry.Name(),
+			NamespaceID:      namespaceID.String(),
+			Namespace:        namespaceEntry.Name().String(),
 			WorkflowID:       workflowID,
 			RunID:            runID,
 			WorkflowTypeName: workflowTypeName,

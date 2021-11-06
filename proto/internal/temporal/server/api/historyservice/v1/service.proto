@@ -232,4 +232,8 @@ service HistoryService {
     // RefreshWorkflowTasks refreshes all tasks of a workflow.
     rpc RefreshWorkflowTasks(RefreshWorkflowTasksRequest) returns (RefreshWorkflowTasksResponse) {
     }
+
+    // GenerateLastHistoryReplicationTasks generate a replication task for last history event for requested workflow execution
+    rpc GenerateLastHistoryReplicationTasks(GenerateLastHistoryReplicationTasksRequest) returns (GenerateLastHistoryReplicationTasksResponse) {
+    }
 }

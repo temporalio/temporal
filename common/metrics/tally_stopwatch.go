@@ -27,7 +27,7 @@ package metrics
 import (
 	"time"
 
-	"github.com/uber-go/tally"
+	"github.com/uber-go/tally/v4"
 )
 
 // TallyStopwatch is a helper for simpler tracking of elapsed time, use the

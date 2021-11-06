@@ -383,7 +383,7 @@ func (e *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 	return proto.Clone(ms).(*persistencespb.WorkflowMutableState)
 }
 
-func (e *MutableStateImpl) GetWorkflowIdentifier() definition.WorkflowKey {
+func (e *MutableStateImpl) GetWorkflowKey() definition.WorkflowKey {
 	return definition.NewWorkflowKey(
 		e.executionInfo.NamespaceId,
 		e.executionInfo.WorkflowId,
@@ -602,7 +602,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 	}
 	scheduledEvent, err := e.eventsCache.GetEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     ai.ScheduleId,
@@ -677,7 +677,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 	}
 	initiatedEvent, err := e.eventsCache.GetEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     ci.InitiatedId,
@@ -760,7 +760,7 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 
 	completionEvent, err := e.eventsCache.GetEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     completionEventID,
@@ -793,7 +793,7 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 
 	startEvent, err := e.eventsCache.GetEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     common.FirstEventID,
@@ -898,7 +898,7 @@ func (e *MutableStateImpl) writeEventToCache(
 	// during the processing of DeleteTransferTask without loading this event from database
 	e.eventsCache.PutEvent(
 		events.EventKey{
-			NamespaceID: e.executionInfo.NamespaceId,
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
 			RunID:       e.executionState.RunId,
 			EventID:     event.GetEventId(),
@@ -1308,7 +1308,7 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 
 	createRequest := &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:                uuid.New(),
-		Namespace:                e.namespaceEntry.Name(),
+		Namespace:                e.namespaceEntry.Name().String(),
 		WorkflowId:               execution.WorkflowId,
 		TaskQueue:                tq,
 		WorkflowType:             wType,
@@ -1326,7 +1326,7 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	enums.SetDefaultContinueAsNewInitiator(&command.Initiator)
 
 	req := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId:              e.namespaceEntry.ID(),
+		NamespaceId:              e.namespaceEntry.ID().String(),
 		StartRequest:             createRequest,
 		ParentExecutionInfo:      parentExecutionInfo,
 		LastCompletionResult:     command.LastCompletionResult,
@@ -1347,7 +1347,7 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	event, err := e.AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		req,
-		parentExecutionInfo.GetNamespaceId(),
+		namespace.ID(parentExecutionInfo.GetNamespaceId()),
 		previousExecutionInfo.AutoResetPoints,
 		previousExecutionState.GetExecutionState().GetRunId(),
 		firstRunID,
@@ -1370,7 +1370,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 	return e.AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		startRequest,
-		startRequest.ParentExecutionInfo.GetNamespaceId(),
+		namespace.ID(startRequest.ParentExecutionInfo.GetNamespaceId()),
 		nil, // resetPoints
 		"",  // prevRunID
 		execution.GetRunId(),
@@ -1380,7 +1380,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	execution commonpb.WorkflowExecution,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
-	parentNamespaceID string,
+	parentNamespaceID namespace.ID,
 	resetPoints *workflowpb.ResetPoints,
 	prevRunID string,
 	firstRunID string,
@@ -1433,7 +1433,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
-	parentNamespaceID string,
+	parentNamespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
@@ -1442,7 +1442,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	event := startEvent.GetWorkflowExecutionStartedEventAttributes()
 	e.executionState.CreateRequestId = requestID
 	e.executionState.RunId = execution.GetRunId()
-	e.executionInfo.NamespaceId = e.namespaceEntry.ID()
+	e.executionInfo.NamespaceId = e.namespaceEntry.ID().String()
 	e.executionInfo.WorkflowId = execution.GetWorkflowId()
 	e.executionInfo.FirstExecutionRunId = event.GetFirstExecutionRunId()
 	e.executionInfo.TaskQueue = event.TaskQueue.GetName()
@@ -1467,7 +1467,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTaskTimeout = timestamp.DurationFromSeconds(0)
 
 	e.executionInfo.CronSchedule = event.GetCronSchedule()
-	e.executionInfo.ParentNamespaceId = parentNamespaceID
+	e.executionInfo.ParentNamespaceId = parentNamespaceID.String()
 
 	if event.ParentWorkflowExecution != nil {
 		e.executionInfo.ParentWorkflowId = event.ParentWorkflowExecution.GetWorkflowId()
@@ -1518,7 +1518,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 		event.GetPrevAutoResetPoints(),
 		event.GetContinuedExecutionRunId(),
 		timestamp.TimeValue(startEvent.GetEventTime()),
-		e.namespaceEntry.Retention(e.executionInfo.WorkflowId),
+		e.namespaceEntry.Retention(),
 	)
 
 	if event.Memo != nil {
@@ -1812,9 +1812,9 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 ) (*persistencespb.ActivityInfo, error) {
 
 	attributes := event.GetActivityTaskScheduledEventAttributes()
-	targetNamespaceID := e.executionInfo.NamespaceId
+	targetNamespaceID := namespace.ID(e.executionInfo.NamespaceId)
 	if attributes.GetNamespace() != "" {
-		targetNamespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespace(attributes.GetNamespace())
+		targetNamespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespace(namespace.Name(attributes.GetNamespace()))
 		if err != nil {
 			return nil, err
 		}
@@ -1832,7 +1832,7 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		StartedId:               common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),
 		ActivityId:              attributes.ActivityId,
-		NamespaceId:             targetNamespaceID,
+		NamespaceId:             targetNamespaceID.String(),
 		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
 		ScheduleToCloseTimeout:  scheduleToCloseTimeout,
 		StartToCloseTimeout:     attributes.GetStartToCloseTimeout(),
@@ -2494,7 +2494,7 @@ func (e *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionInitia
 
 func (e *MutableStateImpl) AddExternalWorkflowExecutionCancelRequested(
 	initiatedID int64,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	runID string,
 ) (*historypb.HistoryEvent, error) {
@@ -2536,7 +2536,7 @@ func (e *MutableStateImpl) ReplicateExternalWorkflowExecutionCancelRequested(
 
 func (e *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionFailedEvent(
 	initiatedID int64,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	runID string,
 	cause enumspb.CancelExternalWorkflowExecutionFailedCause,
@@ -2676,7 +2676,7 @@ func mergeMapOfPayload(
 
 func (e *MutableStateImpl) AddExternalWorkflowExecutionSignaled(
 	initiatedID int64,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	runID string,
 	control string, // TODO this field is probably deprecated
@@ -2720,7 +2720,7 @@ func (e *MutableStateImpl) ReplicateExternalWorkflowExecutionSignaled(
 
 func (e *MutableStateImpl) AddSignalExternalWorkflowExecutionFailedEvent(
 	initiatedID int64,
-	namespace string,
+	namespace namespace.Name,
 	workflowID string,
 	runID string,
 	control string, // TODO this field is probably deprecated
@@ -2997,7 +2997,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionSignaled(
 func (e *MutableStateImpl) AddContinueAsNewEvent(
 	firstEventID int64,
 	workflowTaskCompletedEventID int64,
-	parentNamespace string,
+	parentNamespace namespace.Name,
 	command *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) (*historypb.HistoryEvent, MutableState, error) {
 
@@ -3018,7 +3018,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 	if e.HasParentExecution() {
 		parentInfo = &workflowspb.ParentExecutionInfo{
 			NamespaceId: e.executionInfo.ParentNamespaceId,
-			Namespace:   parentNamespace,
+			Namespace:   parentNamespace.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: e.executionInfo.ParentWorkflowId,
 				RunId:      e.executionInfo.ParentRunId,
@@ -3173,7 +3173,7 @@ func (e *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 }
 
 func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
-	namespace string,
+	namespace namespace.Name,
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 	initiatedID int64,
@@ -3248,7 +3248,7 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionFailedEvent(
 		common.EmptyEventID, // TODO this field is not used at all
 		initiatedID,
 		cause,
-		initiatedEventAttributes.Namespace,
+		namespace.Name(initiatedEventAttributes.Namespace),
 		initiatedEventAttributes.WorkflowId,
 		initiatedEventAttributes.WorkflowType,
 		initiatedEventAttributes.Control, // TODO this field is probably deprecated
@@ -3297,7 +3297,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCompletedEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionCompletedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 		attributes.Result,
@@ -3346,7 +3346,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionFailedEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionFailedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 		attributes.Failure,
@@ -3396,7 +3396,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCanceledEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionCanceledEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 		attributes.Details,
@@ -3445,7 +3445,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionTerminatedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 	)
@@ -3493,7 +3493,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTimedOutEvent(
 	event := e.hBuilder.AddChildWorkflowExecutionTimedOutEvent(
 		ci.InitiatedId,
 		ci.StartedId,
-		ci.Namespace,
+		namespace.Name(ci.Namespace),
 		childExecution,
 		workflowType,
 		attributes.RetryState,
@@ -3592,6 +3592,14 @@ func (e *MutableStateImpl) AddTimerTasks(
 ) {
 
 	e.InsertTimerTasks = append(e.InsertTimerTasks, timerTasks...)
+}
+
+// AddReplicationTasks append visibility tasks
+func (e *MutableStateImpl) AddReplicationTasks(
+	replicationTasks ...tasks.Task,
+) {
+
+	e.InsertReplicationTasks = append(e.InsertReplicationTasks, replicationTasks...)
 }
 
 // AddVisibilityTasks append visibility tasks
@@ -3839,6 +3847,10 @@ func (e *MutableStateImpl) UpdateDuplicatedResource(
 	e.appliedEvents[id] = struct{}{}
 }
 
+func (e *MutableStateImpl) GenerateLastHistoryReplicationTasks(now time.Time) (*tasks.HistoryReplicationTask, error) {
+	return e.taskGenerator.GenerateLastHistoryReplicationTasks(now)
+}
+
 func (e *MutableStateImpl) prepareCloseTransaction(
 	now time.Time,
 	transactionPolicy TransactionPolicy,
@@ -3965,14 +3977,9 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 	}
 
 	for _, workflowEvents := range workflowEventsSeq {
-		replicationTasks, err := e.eventsToReplicationTask(transactionPolicy, workflowEvents.Events)
-		if err != nil {
+		if err := e.eventsToReplicationTask(transactionPolicy, workflowEvents.Events); err != nil {
 			return nil, nil, false, err
 		}
-		e.InsertReplicationTasks = append(
-			e.InsertReplicationTasks,
-			replicationTasks...,
-		)
 	}
 
 	e.InsertReplicationTasks = append(
@@ -3990,44 +3997,23 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 func (e *MutableStateImpl) eventsToReplicationTask(
 	transactionPolicy TransactionPolicy,
 	events []*historypb.HistoryEvent,
-) ([]tasks.Task, error) {
+) error {
 
 	if transactionPolicy == TransactionPolicyPassive ||
 		!e.canReplicateEvents() ||
 		len(events) == 0 {
-		return emptyTasks, nil
-	}
-
-	firstEvent := events[0]
-	lastEvent := events[len(events)-1]
-	version := firstEvent.GetVersion()
-
-	sourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(version)
-	currentCluster := e.clusterMetadata.GetCurrentClusterName()
-
-	if currentCluster != sourceCluster {
-		return nil, serviceerror.NewInternal("MutableStateImpl encounter contradicting version & transaction policy")
+		return nil
 	}
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
 	if err != nil {
-		return nil, err
+		return err
 	}
-
-	replicationTask := &tasks.HistoryReplicationTask{
-		WorkflowKey:       e.GetWorkflowIdentifier(),
-		FirstEventID:      firstEvent.GetEventId(),
-		NextEventID:       lastEvent.GetEventId() + 1,
-		Version:           firstEvent.GetVersion(),
-		BranchToken:       currentBranchToken,
-		NewRunBranchToken: nil,
-	}
-
-	if e.executionInfo.GetVersionHistories() == nil {
-		return nil, serviceerror.NewInternal("should not generate replication task when missing replication state & version history")
-	}
-
-	return []tasks.Task{replicationTask}, nil
+	return e.taskGenerator.GenerateHistoryReplicationTasks(
+		e.timeSource.Now(),
+		currentBranchToken,
+		events,
+	)
 }
 
 func (e *MutableStateImpl) syncActivityToReplicationTask(
@@ -4145,7 +4131,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
 		return
 	}
 
-	ttl := e.config.StickyTTL(e.GetNamespaceEntry().Name())
+	ttl := e.config.StickyTTL(e.GetNamespaceEntry().Name().String())
 	expired := e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdateTime).Add(ttl))
 	if expired && !e.HasPendingWorkflowTask() {
 		e.ClearStickyness()
@@ -4312,7 +4298,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 		return nil
 	}
 
-	namespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(e.executionInfo.NamespaceId)
+	namespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(e.executionInfo.NamespaceId))
 	if err != nil {
 		return err
 	}
@@ -4327,7 +4313,7 @@ func (e *MutableStateImpl) closeTransactionHandleWorkflowReset(
 			return err
 		}
 		e.logInfo("Auto-Reset task is scheduled",
-			tag.WorkflowNamespace(namespaceEntry.Name()),
+			tag.WorkflowNamespace(namespaceEntry.Name().String()),
 			tag.WorkflowID(e.executionInfo.WorkflowId),
 			tag.WorkflowRunID(e.executionState.RunId),
 			tag.WorkflowResetBaseRunID(pt.GetRunId()),
@@ -4392,14 +4378,14 @@ func (e *MutableStateImpl) shouldGenerateChecksum() bool {
 	if e.namespaceEntry == nil {
 		return false
 	}
-	return rand.Intn(100) < e.config.MutableStateChecksumGenProbability(e.namespaceEntry.Name())
+	return rand.Intn(100) < e.config.MutableStateChecksumGenProbability(e.namespaceEntry.Name().String())
 }
 
 func (e *MutableStateImpl) shouldVerifyChecksum() bool {
 	if e.namespaceEntry == nil {
 		return false
 	}
-	return rand.Intn(100) < e.config.MutableStateChecksumVerifyProbability(e.namespaceEntry.Name())
+	return rand.Intn(100) < e.config.MutableStateChecksumVerifyProbability(e.namespaceEntry.Name().String())
 }
 
 func (e *MutableStateImpl) shouldInvalidateCheckum() bool {

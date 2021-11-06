@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
@@ -102,8 +103,8 @@ type (
 
 		tokenSerializer common.TaskTokenSerializer
 
-		testNamespace   string
-		testNamespaceID string
+		testNamespace   namespace.Name
+		testNamespaceID namespace.ID
 	}
 )
 
@@ -159,8 +160,8 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
-	testNamespace := "test-namespace"
-	namespaceID := uuid.New()
+	testNamespace := namespace.Name("test-namespace")
+	namespaceID := namespace.ID(uuid.New())
 	config := s.newConfig()
 	config.DisableListVisibilityByFilter = dc.GetBoolPropertyFnFilteredByNamespace(true)
 
@@ -170,7 +171,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 
 	// test list open by wid
 	listRequest := &workflowservice.ListOpenWorkflowExecutionsRequest{
-		Namespace: testNamespace,
+		Namespace: testNamespace.String(),
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: timestamp.TimePtr(time.Time{}),
 			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
@@ -193,7 +194,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
-		Namespace: testNamespace,
+		Namespace: testNamespace.String(),
 		StartTimeFilter: &filterpb.StartTimeFilter{
 			EarliestTime: timestamp.TimePtr(time.Time{}),
 			LatestTime:   timestamp.TimePtr(time.Now().UTC()),
@@ -1053,8 +1054,8 @@ func (s *workflowHandlerSuite) TestGetArchivedHistory_Success_GetFirstPage() {
 }
 
 func (s *workflowHandlerSuite) TestGetHistory() {
-	namespaceID := uuid.New()
-	namespace := "namespace"
+	namespaceID := namespace.ID(uuid.New())
+	namespace := namespace.Name("namespace")
 	firstEventID := int64(100)
 	nextEventID := int64(102)
 	branchToken := []byte{1}
@@ -1062,7 +1063,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		WorkflowId: "wid",
 		RunId:      "rid",
 	}
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, we.WorkflowId, numHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
 	req := &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -1097,7 +1098,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	}, nil)
 
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil)
-	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace).Return("AliasOfCustomKeyword", nil)
+	s.mockSearchAttributesMapper.EXPECT().GetAlias("CustomKeywordField", namespace.String()).Return("AliasOfCustomKeyword", nil)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -1122,13 +1123,13 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 }
 
 func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
-	namespaceID := uuid.New()
-	namespace := "namespace"
+	namespaceID := namespace.ID(uuid.New())
+	namespace := namespace.Name("namespace")
 	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
 	newRunID := uuid.New()
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace:              namespace,
+		Namespace:              namespace.String(),
 		Execution:              &we,
 		MaximumPageSize:        10,
 		NextPageToken:          nil,
@@ -1139,11 +1140,11 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 
 	// set up mocks to simulate a failed workflow with a retry policy. the failure event is id 5.
 	branchToken := []byte{1, 2, 3}
-	shardID := common.WorkflowIDToHistoryShard(namespaceID, we.WorkflowId, numHistoryShards)
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
 	s.mockHistoryClient.EXPECT().PollMutableState(gomock.Any(), &historyservice.PollMutableStateRequest{
-		NamespaceId:         namespaceID,
+		NamespaceId:         namespaceID.String(),
 		Execution:           &we,
 		ExpectedNextEventId: common.EndEventID,
 		CurrentBranchToken:  nil,
@@ -1327,7 +1328,7 @@ func (s *workflowHandlerSuite) TestListWorkflowExecutions() {
 	s.mockVisibilityMgr.EXPECT().ListWorkflowExecutions(gomock.Any()).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		PageSize:  int32(config.ESIndexMaxResultWindow()),
 	}
 	ctx := context.Background()
@@ -1352,7 +1353,7 @@ func (s *workflowHandlerSuite) TestScanWorkflowExecutions() {
 	s.mockVisibilityMgr.EXPECT().ScanWorkflowExecutions(gomock.Any()).Return(&manager.ListWorkflowExecutionsResponse{}, nil)
 
 	scanRequest := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		PageSize:  int32(config.ESIndexMaxResultWindow()),
 	}
 	ctx := context.Background()
@@ -1364,7 +1365,7 @@ func (s *workflowHandlerSuite) TestScanWorkflowExecutions() {
 	s.Equal(query, scanRequest.GetQuery())
 
 	listRequest := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		PageSize:  int32(config.ESIndexMaxResultWindow() + 1),
 		Query:     query,
 	}
@@ -1381,7 +1382,7 @@ func (s *workflowHandlerSuite) TestCountWorkflowExecutions() {
 	s.mockVisibilityMgr.EXPECT().CountWorkflowExecutions(gomock.Any()).Return(&manager.CountWorkflowExecutionsResponse{Count: 5}, nil)
 
 	countRequest := &workflowservice.CountWorkflowExecutionsRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 	}
 	ctx := context.Background()
 
@@ -1459,7 +1460,7 @@ func (s *workflowHandlerSuite) TestTokenNamespaceEnforcementEnabledMatch() {
 	s.executeTokenTestCases(s.testNamespace, true, false, false)
 }
 
-func (s *workflowHandlerSuite) executeTokenTestCases(tokenNamespace string, enforceNamespaceMatch bool,
+func (s *workflowHandlerSuite) executeTokenTestCases(tokenNamespace namespace.Name, enforceNamespaceMatch bool,
 	isErrorExpected bool, isNilExpected bool) {
 	ctx := context.Background()
 	wh := s.setupTokenNamespaceTest(tokenNamespace, enforceNamespaceMatch)
@@ -1509,42 +1510,42 @@ func (s *workflowHandlerSuite) newConfig() *Config {
 
 func (s *workflowHandlerSuite) newRespondActivityTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskCompletedRequest {
 	return &workflowservice.RespondActivityTaskCompletedRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		TaskToken: s.newSerializedToken(tokenNamespaceId),
 	}
 }
 
 func (s *workflowHandlerSuite) newRespondActivityTaskFailedRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskFailedRequest {
 	return &workflowservice.RespondActivityTaskFailedRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		TaskToken: s.newSerializedToken(tokenNamespaceId),
 	}
 }
 
 func (s *workflowHandlerSuite) newRespondActivityTaskCanceledRequest(tokenNamespaceId string) *workflowservice.RespondActivityTaskCanceledRequest {
 	return &workflowservice.RespondActivityTaskCanceledRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		TaskToken: s.newSerializedToken(tokenNamespaceId),
 	}
 }
 
 func (s *workflowHandlerSuite) newRespondWorkflowTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondWorkflowTaskCompletedRequest {
 	return &workflowservice.RespondWorkflowTaskCompletedRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		TaskToken: s.newSerializedToken(tokenNamespaceId),
 	}
 }
 
 func (s *workflowHandlerSuite) newRespondWorkflowTaskFailedRequest(tokenNamespaceId string) *workflowservice.RespondWorkflowTaskFailedRequest {
 	return &workflowservice.RespondWorkflowTaskFailedRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		TaskToken: s.newSerializedToken(tokenNamespaceId),
 	}
 }
 
 func (s *workflowHandlerSuite) newRespondQueryTaskCompletedRequest(tokenNamespaceId string) *workflowservice.RespondQueryTaskCompletedRequest {
 	return &workflowservice.RespondQueryTaskCompletedRequest{
-		Namespace: s.testNamespace,
+		Namespace: s.testNamespace.String(),
 		TaskToken: s.newSerializedQueryTaskToken(tokenNamespaceId),
 	}
 }
@@ -1565,14 +1566,14 @@ func (s *workflowHandlerSuite) newSerializedQueryTaskToken(namespaceId string) [
 	return token
 }
 
-func newNamespaceCacheEntry(namespaceName string) *namespace.Namespace {
+func newNamespaceCacheEntry(namespaceName namespace.Name) *namespace.Namespace {
 	info := &persistencespb.NamespaceInfo{
-		Name: namespaceName,
+		Name: namespaceName.String(),
 	}
 	return namespace.NewLocalNamespaceForTest(info, nil, "")
 }
 
-func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace string, enforce bool) *WorkflowHandler {
+func (s *workflowHandlerSuite) setupTokenNamespaceTest(tokenNamespace namespace.Name, enforce bool) *WorkflowHandler {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(newNamespaceCacheEntry(tokenNamespace), nil).AnyTimes()
 	ctx := context.Background()
 	s.mockHistoryClient.EXPECT().RespondActivityTaskCompleted(ctx, gomock.Any()).Return(nil, nil).AnyTimes()

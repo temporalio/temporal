@@ -28,18 +28,19 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
 func emitWorkflowHistoryStats(
 	metricsClient metrics.Client,
-	namespace string,
+	namespace namespace.Name,
 	historySize int,
 	historyCount int,
 ) {
 
-	sizeScope := metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespace))
-	countScope := metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespace))
+	sizeScope := metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespace.String()))
+	countScope := metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespace.String()))
 
 	sizeScope.RecordDistribution(metrics.HistorySize, historySize)
 	countScope.RecordDistribution(metrics.HistoryCount, historyCount)
@@ -84,13 +85,13 @@ func emitMutableStateStatus(
 
 func emitWorkflowCompletionStats(
 	metricsClient metrics.Client,
-	namespace string,
+	namespace namespace.Name,
 	taskQueue string,
 	status enumspb.WorkflowExecutionStatus,
 ) {
 	scope := metricsClient.Scope(
 		metrics.WorkflowCompletionStatsScope,
-		metrics.NamespaceTag(namespace),
+		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskQueueTag(taskQueue),
 	)
 

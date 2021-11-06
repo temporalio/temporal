@@ -32,6 +32,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	namespace "go.temporal.io/server/common/namespace"
 )
 
 // MockNDCHistoryResender is a mock of NDCHistoryResender interface.
@@ -58,7 +59,7 @@ func (m *MockNDCHistoryResender) EXPECT() *MockNDCHistoryResenderMockRecorder {
 }
 
 // SendSingleWorkflowHistory mocks base method.
-func (m *MockNDCHistoryResender) SendSingleWorkflowHistory(namespaceID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) error {
+func (m *MockNDCHistoryResender) SendSingleWorkflowHistory(namespaceID namespace.ID, workflowID, runID string, startEventID, startEventVersion, endEventID, endEventVersion int64) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "SendSingleWorkflowHistory", namespaceID, workflowID, runID, startEventID, startEventVersion, endEventID, endEventVersion)
 	ret0, _ := ret[0].(error)

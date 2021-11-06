@@ -144,64 +144,64 @@ func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceRegistry names
 	taskType := id.taskType
 
 	writePartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueWritePartitions(namespace, taskQueueName, taskType))
+		return common.MaxInt(1, config.NumTaskqueueWritePartitions(namespace.String(), taskQueueName, taskType))
 	}
 	readPartition := func() int {
-		return common.MaxInt(1, config.NumTaskqueueReadPartitions(namespace, taskQueueName, taskType))
+		return common.MaxInt(1, config.NumTaskqueueReadPartitions(namespace.String(), taskQueueName, taskType))
 	}
 
 	return &taskQueueConfig{
 		RangeSize: config.RangeSize,
 		GetTasksBatchSize: func() int {
-			return config.GetTasksBatchSize(namespace, taskQueueName, taskType)
+			return config.GetTasksBatchSize(namespace.String(), taskQueueName, taskType)
 		},
 		UpdateAckInterval: func() time.Duration {
-			return config.UpdateAckInterval(namespace, taskQueueName, taskType)
+			return config.UpdateAckInterval(namespace.String(), taskQueueName, taskType)
 		},
 		IdleTaskqueueCheckInterval: func() time.Duration {
-			return config.IdleTaskqueueCheckInterval(namespace, taskQueueName, taskType)
+			return config.IdleTaskqueueCheckInterval(namespace.String(), taskQueueName, taskType)
 		},
 		MaxTaskqueueIdleTime: func() time.Duration {
-			return config.MaxTaskqueueIdleTime(namespace, taskQueueName, taskType)
+			return config.MaxTaskqueueIdleTime(namespace.String(), taskQueueName, taskType)
 		},
 		MinTaskThrottlingBurstSize: func() int {
-			return config.MinTaskThrottlingBurstSize(namespace, taskQueueName, taskType)
+			return config.MinTaskThrottlingBurstSize(namespace.String(), taskQueueName, taskType)
 		},
 		SyncMatchWaitDuration: func() time.Duration {
-			return config.SyncMatchWaitDuration(namespace, taskQueueName, taskType)
+			return config.SyncMatchWaitDuration(namespace.String(), taskQueueName, taskType)
 		},
 		LongPollExpirationInterval: func() time.Duration {
-			return config.LongPollExpirationInterval(namespace, taskQueueName, taskType)
+			return config.LongPollExpirationInterval(namespace.String(), taskQueueName, taskType)
 		},
 		MaxTaskDeleteBatchSize: func() int {
-			return config.MaxTaskDeleteBatchSize(namespace, taskQueueName, taskType)
+			return config.MaxTaskDeleteBatchSize(namespace.String(), taskQueueName, taskType)
 		},
 		OutstandingTaskAppendsThreshold: func() int {
-			return config.OutstandingTaskAppendsThreshold(namespace, taskQueueName, taskType)
+			return config.OutstandingTaskAppendsThreshold(namespace.String(), taskQueueName, taskType)
 		},
 		MaxTaskBatchSize: func() int {
-			return config.MaxTaskBatchSize(namespace, taskQueueName, taskType)
+			return config.MaxTaskBatchSize(namespace.String(), taskQueueName, taskType)
 		},
 		NumWritePartitions: writePartition,
 		NumReadPartitions:  readPartition,
 		AdminNamespaceToPartitionDispatchRate: func() float64 {
-			return config.AdminNamespaceToPartitionDispatchRate(namespace)
+			return config.AdminNamespaceToPartitionDispatchRate(namespace.String())
 		},
 		AdminNamespaceTaskQueueToPartitionDispatchRate: func() float64 {
-			return config.AdminNamespaceTaskqueueToPartitionDispatchRate(namespace, taskQueueName, taskType)
+			return config.AdminNamespaceTaskqueueToPartitionDispatchRate(namespace.String(), taskQueueName, taskType)
 		},
 		forwarderConfig: forwarderConfig{
 			ForwarderMaxOutstandingPolls: func() int {
-				return config.ForwarderMaxOutstandingPolls(namespace, taskQueueName, taskType)
+				return config.ForwarderMaxOutstandingPolls(namespace.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxOutstandingTasks: func() int {
-				return config.ForwarderMaxOutstandingTasks(namespace, taskQueueName, taskType)
+				return config.ForwarderMaxOutstandingTasks(namespace.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxRatePerSecond: func() int {
-				return config.ForwarderMaxRatePerSecond(namespace, taskQueueName, taskType)
+				return config.ForwarderMaxRatePerSecond(namespace.String(), taskQueueName, taskType)
 			},
 			ForwarderMaxChildrenPerNode: func() int {
-				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(namespace, taskQueueName, taskType))
+				return common.MaxInt(1, config.ForwarderMaxChildrenPerNode(namespace.String(), taskQueueName, taskType))
 			},
 		},
 	}, nil

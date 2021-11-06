@@ -162,6 +162,8 @@ const (
 	FlagClusterMembershipRole                 = "role"
 	FlagIsGlobalNamespace                     = "global_namespace"
 	FlagIsGlobalNamespaceWithAlias            = FlagIsGlobalNamespace + ", gd"
+	FlagPromoteNamespace                      = "promote_namespace"
+	FlagPromoteNamespaceWithAlias             = FlagPromoteNamespace + ", pn"
 	FlagNamespaceData                         = "namespace_data"
 	FlagNamespaceDataWithAlias                = FlagNamespaceData + ", dmd"
 	FlagEventID                               = "event_id"
@@ -243,6 +245,7 @@ const (
 	FlagType                                  = "type"
 	FlagTypeWithAlias                         = FlagType + ", t"
 	FlagVersion                               = "version"
+	FlagPort                                  = "port"
 
 	FlagProtoType  = "type"
 	FlagHexData    = "hex_data"

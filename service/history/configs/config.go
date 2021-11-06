@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
 )
 
@@ -220,8 +221,7 @@ type Config struct {
 	ReplicationEventsFromCurrentCluster    dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	StandbyTaskReReplicationContextTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
 
-	EnableDropStuckTaskByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
-	SkipReapplicationByNamespaceID   dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
+	SkipReapplicationByNamespaceID dynamicconfig.BoolPropertyFnWithNamespaceIDFilter
 
 	// ===== Visibility related =====
 	// VisibilityQueueProcessor settings
@@ -405,8 +405,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ReplicationEventsFromCurrentCluster:    dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.ReplicationEventsFromCurrentCluster, false),
 		StandbyTaskReReplicationContextTimeout: dc.GetDurationPropertyFilteredByNamespaceID(dynamicconfig.StandbyTaskReReplicationContextTimeout, 3*time.Minute),
 
-		EnableDropStuckTaskByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.EnableDropStuckTaskByNamespaceID, false),
-		SkipReapplicationByNamespaceID:   dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceID, false),
+		SkipReapplicationByNamespaceID: dc.GetBoolPropertyFnWithNamespaceIDFilter(dynamicconfig.SkipReapplicationByNamespaceID, false),
 
 		// ===== Visibility related =====
 		VisibilityTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.VisibilityTaskBatchSize, 100),
@@ -447,8 +446,8 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 }
 
 // GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
-func (config *Config) GetShardID(namespaceID, workflowID string) int32 {
-	return common.WorkflowIDToHistoryShard(namespaceID, workflowID, config.NumberOfShards)
+func (config *Config) GetShardID(namespaceID namespace.ID, workflowID string) int32 {
+	return common.WorkflowIDToHistoryShard(namespaceID.String(), workflowID, config.NumberOfShards)
 }
 
 func NewDynamicConfig() *Config {

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -63,8 +64,8 @@ type (
 		logger          log.Logger
 		mockExecManager *persistence.MockExecutionManager
 
-		namespaceID string
-		namespace   string
+		namespaceID namespace.ID
+		namespace   namespace.Name
 		workflowID  string
 		baseRunID   string
 		newContext  workflow.Context
@@ -103,7 +104,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.namespaceID = uuid.New()
+	s.namespaceID = namespace.ID(uuid.New())
 	s.namespace = "some random namespace name"
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
@@ -126,6 +127,7 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 
 func (s *nDCWorkflowResetterSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
@@ -170,7 +172,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		ctx,
 		now,
 		definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			s.workflowID,
 			s.baseRunID,
 		),
@@ -178,7 +180,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		baseEventID,
 		baseVersion,
 		definition.NewWorkflowKey(
-			s.namespaceID,
+			s.namespaceID.String(),
 			s.workflowID,
 			s.newRunID,
 		),
@@ -190,7 +192,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	s.mockExecManager.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,
-		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID, s.workflowID, s.newRunID),
+		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.newRunID),
 		ShardID:         shardID,
 	}).Return(&persistence.ForkHistoryBranchResponse{NewBranchToken: newBranchToken}, nil)
 
@@ -256,7 +258,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_Error() {
 	s.True(isRetryError)
 	expectedErr := serviceerrors.NewRetryReplication(
 		resendOnResetWorkflowMessage,
-		s.namespaceID,
+		s.namespaceID.String(),
 		s.workflowID,
 		s.newRunID,
 		common.EmptyEventID,

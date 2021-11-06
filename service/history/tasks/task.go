@@ -41,11 +41,15 @@ type (
 	// Task is the generic task interface
 	Task interface {
 		GetKey() Key
-		GetVersion() int64
-		SetVersion(version int64)
+		GetNamespaceID() string
+		GetWorkflowID() string
+		GetRunID() string
 		GetTaskID() int64
-		SetTaskID(id int64)
 		GetVisibilityTime() time.Time
+		GetVersion() int64
+
+		SetVersion(version int64)
+		SetTaskID(id int64)
 		SetVisibilityTime(timestamp time.Time)
 	}
 )

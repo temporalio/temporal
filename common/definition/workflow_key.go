@@ -62,3 +62,15 @@ func NewWorkflowKey(
 		RunID:       runID,
 	}
 }
+
+func (k *WorkflowKey) GetNamespaceID() string {
+	return k.NamespaceID
+}
+
+func (k *WorkflowKey) GetWorkflowID() string {
+	return k.WorkflowID
+}
+
+func (k *WorkflowKey) GetRunID() string {
+	return k.RunID
+}

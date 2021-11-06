@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 )
 
@@ -58,17 +59,17 @@ func NewDCRedirectionHandler(
 	wfHandler Handler,
 	policy config.DCRedirectionPolicy,
 ) *DCRedirectionHandlerImpl {
-	resource := wfHandler.GetResource()
+	rsc := wfHandler.GetResource()
 	dcRedirectionPolicy := RedirectionPolicyGenerator(
-		resource.GetClusterMetadata(),
+		rsc.GetClusterMetadata(),
 		wfHandler.GetConfig(),
-		resource.GetNamespaceRegistry(),
+		rsc.GetNamespaceRegistry(),
 		policy,
 	)
 
 	return &DCRedirectionHandlerImpl{
-		Resource:           resource,
-		currentClusterName: resource.GetClusterMetadata().GetCurrentClusterName(),
+		Resource:           rsc,
+		currentClusterName: rsc.GetClusterMetadata().GetCurrentClusterName(),
 		config:             wfHandler.GetConfig(),
 		redirectionPolicy:  dcRedirectionPolicy,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
@@ -210,7 +211,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeTaskQueue(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -240,7 +241,7 @@ func (handler *DCRedirectionHandlerImpl) DescribeWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -270,7 +271,7 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -300,7 +301,7 @@ func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -330,7 +331,7 @@ func (handler *DCRedirectionHandlerImpl) ListClosedWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -360,7 +361,7 @@ func (handler *DCRedirectionHandlerImpl) ListOpenWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -390,7 +391,7 @@ func (handler *DCRedirectionHandlerImpl) ListWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -419,7 +420,7 @@ func (handler *DCRedirectionHandlerImpl) ScanWorkflowExecutions(
 	defer func() {
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -449,7 +450,7 @@ func (handler *DCRedirectionHandlerImpl) CountWorkflowExecutions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -495,7 +496,7 @@ func (handler *DCRedirectionHandlerImpl) PollActivityTaskQueue(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -525,7 +526,7 @@ func (handler *DCRedirectionHandlerImpl) PollWorkflowTaskQueue(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -554,7 +555,7 @@ func (handler *DCRedirectionHandlerImpl) QueryWorkflow(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -589,7 +590,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeat(
 		return nil, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, namespace.ID(token.GetNamespaceId()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -619,7 +620,7 @@ func (handler *DCRedirectionHandlerImpl) RecordActivityTaskHeartbeatById(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -649,7 +650,7 @@ func (handler *DCRedirectionHandlerImpl) RequestCancelWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -679,7 +680,7 @@ func (handler *DCRedirectionHandlerImpl) ResetStickyTaskQueue(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -709,7 +710,7 @@ func (handler *DCRedirectionHandlerImpl) ResetWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -744,7 +745,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceled(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, namespace.ID(token.GetNamespaceId()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -774,7 +775,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCanceledById(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -809,7 +810,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompleted(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, namespace.ID(token.GetNamespaceId()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -839,7 +840,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskCompletedById(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -874,7 +875,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailed(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, namespace.ID(token.GetNamespaceId()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -904,7 +905,7 @@ func (handler *DCRedirectionHandlerImpl) RespondActivityTaskFailedById(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -939,7 +940,7 @@ func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskCompleted(
 		return nil, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, namespace.ID(token.GetNamespaceId()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -974,7 +975,7 @@ func (handler *DCRedirectionHandlerImpl) RespondWorkflowTaskFailed(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, namespace.ID(token.GetNamespaceId()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1009,7 +1010,7 @@ func (handler *DCRedirectionHandlerImpl) RespondQueryTaskCompleted(
 		return resp, err
 	}
 
-	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, token.GetNamespaceId(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceIDRedirect(ctx, namespace.ID(token.GetNamespaceId()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1039,7 +1040,7 @@ func (handler *DCRedirectionHandlerImpl) SignalWithStartWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1069,7 +1070,7 @@ func (handler *DCRedirectionHandlerImpl) SignalWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1098,7 +1099,7 @@ func (handler *DCRedirectionHandlerImpl) StartWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1128,7 +1129,7 @@ func (handler *DCRedirectionHandlerImpl) TerminateWorkflowExecution(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:
@@ -1158,7 +1159,7 @@ func (handler *DCRedirectionHandlerImpl) ListTaskQueuePartitions(
 		handler.afterCall(scope, startTime, cluster, &retError)
 	}()
 
-	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, request.GetNamespace(), apiName, func(targetDC string) error {
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
 		cluster = targetDC
 		switch {
 		case targetDC == handler.currentClusterName:

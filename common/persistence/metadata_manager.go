@@ -96,6 +96,7 @@ func (m *metadataManagerImpl) UpdateNamespace(request *UpdateNamespaceRequest) e
 		Name:                request.Namespace.Info.Name,
 		Namespace:           datablob,
 		NotificationVersion: request.NotificationVersion,
+		IsGlobal:            request.IsGlobalNamespace,
 	})
 }
 

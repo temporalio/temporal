@@ -27,6 +27,8 @@ package postgresql
 import (
 	"fmt"
 	"time"
+
+	"github.com/lib/pq"
 )
 
 const (
@@ -40,7 +42,7 @@ const (
 
 	writeSchemaUpdateHistoryQuery = `INSERT into schema_update_history(version_partition, year, month, update_time, old_version, new_version, manifest_md5, description) VALUES(0,$1,$2,$3,$4,$5,$6,$7)`
 
-	createSchemaVersionTableQuery = `CREATE TABLE schema_version(` +
+	createSchemaVersionTableQuery = `CREATE TABLE IF NOT EXISTS schema_version(` +
 		`version_partition INT not null, ` +
 		`db_name VARCHAR(255) not null, ` +
 		`creation_time TIMESTAMP, ` +
@@ -48,7 +50,7 @@ const (
 		`min_compatible_version VARCHAR(64), ` +
 		`PRIMARY KEY (version_partition, db_name));`
 
-	createSchemaUpdateHistoryTableQuery = `CREATE TABLE schema_update_history(` +
+	createSchemaUpdateHistoryTableQuery = `CREATE TABLE IF NOT EXISTS schema_update_history(` +
 		`version_partition INT not null, ` +
 		`year int not null, ` +
 		`month int not null, ` +
@@ -131,7 +133,16 @@ func (pdb *db) DropAllTables(database string) error {
 
 // CreateDatabase creates a database if it doesn't exist
 func (pdb *db) CreateDatabase(name string) error {
-	return pdb.Exec(fmt.Sprintf(createDatabaseQuery, name))
+	if err := pdb.Exec(fmt.Sprintf(createDatabaseQuery, name)); err != nil {
+		if err, ok := err.(*pq.Error); ok {
+			if err.Code.Name() == "duplicate_database" {
+				return nil
+			}
+		}
+		return err
+	}
+
+	return nil
 }
 
 // DropDatabase drops a database

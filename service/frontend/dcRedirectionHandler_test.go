@@ -37,6 +37,7 @@ import (
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/namespace"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/cluster"
@@ -58,8 +59,8 @@ type (
 
 		mockDCRedirectionPolicy *MockDCRedirectionPolicy
 
-		namespace              string
-		namespaceID            string
+		namespace              namespace.Name
+		namespaceID            namespace.ID
 		currentClusterName     string
 		alternativeClusterName string
 		config                 *Config
@@ -123,11 +124,11 @@ func (s *dcRedirectionHandlerSuite) TestDescribeTaskQueue() {
 	apiName := "DescribeTaskQueue"
 
 	req := &workflowservice.DescribeTaskQueueRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().DescribeTaskQueue(gomock.Any(), req).Return(&workflowservice.DescribeTaskQueueResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -146,10 +147,10 @@ func (s *dcRedirectionHandlerSuite) TestDescribeWorkflowExecution() {
 	apiName := "DescribeWorkflowExecution"
 
 	req := &workflowservice.DescribeWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().DescribeWorkflowExecution(gomock.Any(), req).Return(&workflowservice.DescribeWorkflowExecutionResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -168,11 +169,11 @@ func (s *dcRedirectionHandlerSuite) TestGetWorkflowExecutionHistory() {
 	apiName := "GetWorkflowExecutionHistory"
 
 	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().GetWorkflowExecutionHistory(gomock.Any(), req).Return(&workflowservice.GetWorkflowExecutionHistoryResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -191,10 +192,10 @@ func (s *dcRedirectionHandlerSuite) TestListArchivedWorkflowExecutions() {
 	apiName := "ListArchivedWorkflowExecutions"
 
 	req := &workflowservice.ListArchivedWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().ListArchivedWorkflowExecutions(gomock.Any(), req).Return(&workflowservice.ListArchivedWorkflowExecutionsResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -213,11 +214,11 @@ func (s *dcRedirectionHandlerSuite) TestListClosedWorkflowExecutions() {
 	apiName := "ListClosedWorkflowExecutions"
 
 	req := &workflowservice.ListClosedWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().ListClosedWorkflowExecutions(gomock.Any(), req).Return(&workflowservice.ListClosedWorkflowExecutionsResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -236,11 +237,11 @@ func (s *dcRedirectionHandlerSuite) TestListOpenWorkflowExecutions() {
 	apiName := "ListOpenWorkflowExecutions"
 
 	req := &workflowservice.ListOpenWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().ListOpenWorkflowExecutions(gomock.Any(), req).Return(&workflowservice.ListOpenWorkflowExecutionsResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -259,11 +260,11 @@ func (s *dcRedirectionHandlerSuite) TestListWorkflowExecutions() {
 	apiName := "ListWorkflowExecutions"
 
 	req := &workflowservice.ListWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().ListWorkflowExecutions(gomock.Any(), req).Return(&workflowservice.ListWorkflowExecutionsResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -282,11 +283,11 @@ func (s *dcRedirectionHandlerSuite) TestScanWorkflowExecutions() {
 	apiName := "ScanWorkflowExecutions"
 
 	req := &workflowservice.ScanWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().ScanWorkflowExecutions(gomock.Any(), req).Return(&workflowservice.ScanWorkflowExecutionsResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -305,11 +306,11 @@ func (s *dcRedirectionHandlerSuite) TestCountWorkflowExecutions() {
 	apiName := "CountWorkflowExecutions"
 
 	req := &workflowservice.CountWorkflowExecutionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().CountWorkflowExecutions(gomock.Any(), req).Return(&workflowservice.CountWorkflowExecutionsResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -328,11 +329,11 @@ func (s *dcRedirectionHandlerSuite) TestPollActivityTaskQueue() {
 	apiName := "PollActivityTaskQueue"
 
 	req := &workflowservice.PollActivityTaskQueueRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().PollActivityTaskQueue(gomock.Any(), req).Return(&workflowservice.PollActivityTaskQueueResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -351,11 +352,11 @@ func (s *dcRedirectionHandlerSuite) TestPollWorkflowTaskQueue() {
 	apiName := "PollWorkflowTaskQueue"
 
 	req := &workflowservice.PollWorkflowTaskQueueRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().PollWorkflowTaskQueue(gomock.Any(), req).Return(&workflowservice.PollWorkflowTaskQueueResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -374,11 +375,11 @@ func (s *dcRedirectionHandlerSuite) TestQueryWorkflow() {
 	apiName := "QueryWorkflow"
 
 	req := &workflowservice.QueryWorkflowRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().QueryWorkflow(gomock.Any(), req).Return(&workflowservice.QueryWorkflowResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -398,7 +399,7 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID,
+		NamespaceId:     s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RecordActivityTaskHeartbeatRequest{
@@ -406,7 +407,7 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeat() {
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceIDRedirect(gomock.Any(), s.namespaceID, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.ID, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RecordActivityTaskHeartbeat(gomock.Any(), req).Return(&workflowservice.RecordActivityTaskHeartbeatResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -425,11 +426,11 @@ func (s *dcRedirectionHandlerSuite) TestRecordActivityTaskHeartbeatById() {
 	apiName := "RecordActivityTaskHeartbeatById"
 
 	req := &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RecordActivityTaskHeartbeatById(gomock.Any(), req).Return(&workflowservice.RecordActivityTaskHeartbeatByIdResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -448,11 +449,11 @@ func (s *dcRedirectionHandlerSuite) TestRequestCancelWorkflowExecution() {
 	apiName := "RequestCancelWorkflowExecution"
 
 	req := &workflowservice.RequestCancelWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), req).Return(&workflowservice.RequestCancelWorkflowExecutionResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -471,11 +472,11 @@ func (s *dcRedirectionHandlerSuite) TestResetStickyTaskQueue() {
 	apiName := "ResetStickyTaskQueue"
 
 	req := &workflowservice.ResetStickyTaskQueueRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().ResetStickyTaskQueue(gomock.Any(), req).Return(&workflowservice.ResetStickyTaskQueueResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -494,11 +495,11 @@ func (s *dcRedirectionHandlerSuite) TestResetWorkflowExecution() {
 	apiName := "ResetWorkflowExecution"
 
 	req := &workflowservice.ResetWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().ResetWorkflowExecution(gomock.Any(), req).Return(&workflowservice.ResetWorkflowExecutionResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -518,7 +519,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID,
+		NamespaceId:     s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondActivityTaskCanceledRequest{
@@ -526,7 +527,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceled() {
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceIDRedirect(gomock.Any(), s.namespaceID, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.ID, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondActivityTaskCanceled(gomock.Any(), req).Return(&workflowservice.RespondActivityTaskCanceledResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -545,11 +546,11 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCanceledById() {
 	apiName := "RespondActivityTaskCanceledById"
 
 	req := &workflowservice.RespondActivityTaskCanceledByIdRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondActivityTaskCanceledById(gomock.Any(), req).Return(&workflowservice.RespondActivityTaskCanceledByIdResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -569,7 +570,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID,
+		NamespaceId:     s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondActivityTaskCompletedRequest{
@@ -577,7 +578,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompleted() {
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceIDRedirect(gomock.Any(), s.namespaceID, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.ID, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondActivityTaskCompleted(gomock.Any(), req).Return(&workflowservice.RespondActivityTaskCompletedResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -596,11 +597,11 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskCompletedById() {
 	apiName := "RespondActivityTaskCompletedById"
 
 	req := &workflowservice.RespondActivityTaskCompletedByIdRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondActivityTaskCompletedById(gomock.Any(), req).Return(&workflowservice.RespondActivityTaskCompletedByIdResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -620,7 +621,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID,
+		NamespaceId:     s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondActivityTaskFailedRequest{
@@ -628,7 +629,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailed() {
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceIDRedirect(gomock.Any(), s.namespaceID, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.ID, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondActivityTaskFailed(gomock.Any(), req).Return(&workflowservice.RespondActivityTaskFailedResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -647,11 +648,11 @@ func (s *dcRedirectionHandlerSuite) TestRespondActivityTaskFailedById() {
 	apiName := "RespondActivityTaskFailedById"
 
 	req := &workflowservice.RespondActivityTaskFailedByIdRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondActivityTaskFailedById(gomock.Any(), req).Return(&workflowservice.RespondActivityTaskFailedByIdResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -671,7 +672,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskCompleted() {
 
 	taskToken, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID,
+		NamespaceId:     s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondWorkflowTaskCompletedRequest{
@@ -679,7 +680,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskCompleted() {
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceIDRedirect(gomock.Any(), s.namespaceID, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.ID, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondWorkflowTaskCompleted(gomock.Any(), req).Return(&workflowservice.RespondWorkflowTaskCompletedResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -699,7 +700,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskFailed() {
 
 	token, err := s.handler.tokenSerializer.Serialize(&tokenspb.Task{
 		ScheduleAttempt: 1,
-		NamespaceId:     s.namespaceID,
+		NamespaceId:     s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondWorkflowTaskFailedRequest{
@@ -707,7 +708,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondWorkflowTaskFailed() {
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceIDRedirect(gomock.Any(), s.namespaceID, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.ID, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondWorkflowTaskFailed(gomock.Any(), req).Return(&workflowservice.RespondWorkflowTaskFailedResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -726,7 +727,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondQueryTaskCompleted() {
 	apiName := "RespondQueryTaskCompleted"
 
 	taskToken, err := s.handler.tokenSerializer.SerializeQueryTaskToken(&tokenspb.QueryTask{
-		NamespaceId: s.namespaceID,
+		NamespaceId: s.namespaceID.String(),
 	})
 	s.NoError(err)
 	req := &workflowservice.RespondQueryTaskCompletedRequest{
@@ -734,7 +735,7 @@ func (s *dcRedirectionHandlerSuite) TestRespondQueryTaskCompleted() {
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceIDRedirect(gomock.Any(), s.namespaceID, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.ID, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().RespondQueryTaskCompleted(gomock.Any(), req).Return(&workflowservice.RespondQueryTaskCompletedResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -753,11 +754,11 @@ func (s *dcRedirectionHandlerSuite) TestSignalWithStartWorkflowExecution() {
 	apiName := "SignalWithStartWorkflowExecution"
 
 	req := &workflowservice.SignalWithStartWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().SignalWithStartWorkflowExecution(gomock.Any(), req).Return(&workflowservice.SignalWithStartWorkflowExecutionResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -776,11 +777,11 @@ func (s *dcRedirectionHandlerSuite) TestSignalWorkflowExecution() {
 	apiName := "SignalWorkflowExecution"
 
 	req := &workflowservice.SignalWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().SignalWorkflowExecution(gomock.Any(), req).Return(&workflowservice.SignalWorkflowExecutionResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -799,11 +800,11 @@ func (s *dcRedirectionHandlerSuite) TestStartWorkflowExecution() {
 	apiName := "StartWorkflowExecution"
 
 	req := &workflowservice.StartWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().StartWorkflowExecution(gomock.Any(), req).Return(&workflowservice.StartWorkflowExecutionResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -822,11 +823,11 @@ func (s *dcRedirectionHandlerSuite) TestTerminateWorkflowExecution() {
 	apiName := "TerminateWorkflowExecution"
 
 	req := &workflowservice.TerminateWorkflowExecutionRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().TerminateWorkflowExecution(gomock.Any(), req).Return(&workflowservice.TerminateWorkflowExecutionResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)
@@ -845,7 +846,7 @@ func (s *dcRedirectionHandlerSuite) TestListTaskQueuePartitions() {
 	apiName := "ListTaskQueuePartitions"
 
 	req := &workflowservice.ListTaskQueuePartitionsRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 		TaskQueue: &taskqueuepb.TaskQueue{
 			Name: "test_tesk_list",
 			Kind: 0,
@@ -853,7 +854,7 @@ func (s *dcRedirectionHandlerSuite) TestListTaskQueuePartitions() {
 	}
 
 	s.mockDCRedirectionPolicy.EXPECT().WithNamespaceRedirect(gomock.Any(), s.namespace, apiName, gomock.Any()).DoAndReturn(
-		func(ctx context.Context, namespace string, apiName string, callFn func(string) error) error {
+		func(ctx context.Context, namespace namespace.Name, apiName string, callFn func(string) error) error {
 			s.mockFrontendHandler.EXPECT().ListTaskQueuePartitions(gomock.Any(), req).Return(&workflowservice.ListTaskQueuePartitionsResponse{}, nil)
 			err := callFn(s.currentClusterName)
 			s.NoError(err)

@@ -31,13 +31,15 @@ import (
 	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
 	// taskQueueID is the key that uniquely identifies a task queue
 	taskQueueID struct {
 		qualifiedTaskQueueName
-		namespaceID string
+		namespaceID namespace.ID
 		taskType    enumspb.TaskQueueType
 	}
 	// qualifiedTaskQueueName refers to the fully qualified task queue name
@@ -131,7 +133,7 @@ func (tn *qualifiedTaskQueueName) init() error {
 }
 
 // newTaskQueueID returns taskQueueID which uniquely identfies as task queue
-func newTaskQueueID(namespaceID string, taskQueueName string, taskType enumspb.TaskQueueType) (*taskQueueID, error) {
+func newTaskQueueID(namespaceID namespace.ID, taskQueueName string, taskType enumspb.TaskQueueType) (*taskQueueID, error) {
 	name, err := newTaskQueueName(taskQueueName)
 	if err != nil {
 		return nil, err

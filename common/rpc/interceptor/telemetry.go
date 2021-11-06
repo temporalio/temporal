@@ -135,9 +135,9 @@ func (ti *TelemetryInterceptor) metricsScopeLogTags(
 	if namespace == "" {
 		return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceUnknownTag()), []tag.Tag{tag.Operation(methodName)}
 	}
-	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(namespace)), []tag.Tag{
+	return ti.metricsClient.Scope(scopeDef).Tagged(metrics.NamespaceTag(namespace.String())), []tag.Tag{
 		tag.Operation(methodName),
-		tag.WorkflowNamespace(namespace),
+		tag.WorkflowNamespace(namespace.String()),
 	}
 }
 

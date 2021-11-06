@@ -35,7 +35,6 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		NamespaceID         string // TODO remove since not used
 		TaskQueue           string
 		ScheduleID          int64
 		Version             int64

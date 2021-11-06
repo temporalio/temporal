@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 )
 
@@ -102,7 +103,7 @@ func (h *Handler) Stop() {
 	h.engine.Stop()
 }
 
-// https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+// Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
 func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
 	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
 
@@ -125,7 +126,7 @@ func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServe
 
 func (h *Handler) newHandlerContext(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	taskQueue *taskqueuepb.TaskQueue,
 	scope int,
 ) *handlerContext {
@@ -148,13 +149,13 @@ func (h *Handler) AddActivityTask(
 	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
 		metrics.MatchingAddActivityTaskScope,
 	)
 
 	if request.GetForwardedSource() != "" {
-		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
+		h.reportForwardedPerTaskQueueCounter(hCtx, namespace.ID(request.GetNamespaceId()))
 	}
 
 	syncMatch, err := h.engine.AddActivityTask(hCtx, request)
@@ -174,13 +175,13 @@ func (h *Handler) AddWorkflowTask(
 	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
 		metrics.MatchingAddWorkflowTaskScope,
 	)
 
 	if request.GetForwardedSource() != "" {
-		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
+		h.reportForwardedPerTaskQueueCounter(hCtx, namespace.ID(request.GetNamespaceId()))
 	}
 
 	syncMatch, err := h.engine.AddWorkflowTask(hCtx, request)
@@ -198,13 +199,13 @@ func (h *Handler) PollActivityTaskQueue(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		request.GetPollRequest().GetTaskQueue(),
 		metrics.MatchingPollActivityTaskQueueScope,
 	)
 
 	if request.GetForwardedSource() != "" {
-		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
+		h.reportForwardedPerTaskQueueCounter(hCtx, namespace.ID(request.GetNamespaceId()))
 	}
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
@@ -227,13 +228,13 @@ func (h *Handler) PollWorkflowTaskQueue(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		request.GetPollRequest().GetTaskQueue(),
 		metrics.MatchingPollWorkflowTaskQueueScope,
 	)
 
 	if request.GetForwardedSource() != "" {
-		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
+		h.reportForwardedPerTaskQueueCounter(hCtx, namespace.ID(request.GetNamespaceId()))
 	}
 
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
@@ -256,13 +257,13 @@ func (h *Handler) QueryWorkflow(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
 		metrics.MatchingQueryWorkflowScope,
 	)
 
 	if request.GetForwardedSource() != "" {
-		h.reportForwardedPerTaskQueueCounter(hCtx, request.GetNamespaceId())
+		h.reportForwardedPerTaskQueueCounter(hCtx, namespace.ID(request.GetNamespaceId()))
 	}
 
 	response, err := h.engine.QueryWorkflow(hCtx, request)
@@ -277,7 +278,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
 		metrics.MatchingRespondQueryTaskCompletedScope,
 	)
@@ -292,7 +293,7 @@ func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		request.GetTaskQueue(),
 		metrics.MatchingCancelOutstandingPollScope,
 	)
@@ -311,7 +312,7 @@ func (h *Handler) DescribeTaskQueue(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
-		request.GetNamespaceId(),
+		namespace.ID(request.GetNamespaceId()),
 		request.GetDescRequest().GetTaskQueue(),
 		metrics.MatchingDescribeTaskQueueScope,
 	)
@@ -328,7 +329,7 @@ func (h *Handler) ListTaskQueuePartitions(
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	hCtx := newHandlerContext(
 		ctx,
-		request.GetNamespace(),
+		namespace.Name(request.GetNamespace()),
 		request.GetTaskQueue(),
 		h.metricsClient,
 		metrics.MatchingListTaskQueuePartitionsScope,
@@ -339,7 +340,7 @@ func (h *Handler) ListTaskQueuePartitions(
 	return response, err
 }
 
-func (h *Handler) namespaceName(id string) string {
+func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 	entry, err := h.GetNamespaceRegistry().GetNamespaceByID(id)
 	if err != nil {
 		return ""
@@ -347,11 +348,11 @@ func (h *Handler) namespaceName(id string) string {
 	return entry.Name()
 }
 
-func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId string) {
+func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId namespace.ID) {
 	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
 	h.GetMetricsClient().
 		Scope(metrics.MatchingAddWorkflowTaskScope).
-		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId))).
+		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId).String())).
 		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).
 		IncCounter(metrics.MatchingClientForwardedCounter)
 }

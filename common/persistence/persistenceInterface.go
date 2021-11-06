@@ -664,6 +664,7 @@ type (
 		Name                string
 		Namespace           *commonpb.DataBlob
 		NotificationVersion int64
+		IsGlobal            bool
 	}
 
 	// InternalListNamespacesResponse is the response for GetNamespace

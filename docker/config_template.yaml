@@ -149,6 +149,8 @@ global:
     membership:
         maxJoinDuration: 30s
         broadcastAddress: "{{ default .Env.TEMPORAL_BROADCAST_ADDRESS "" }}"
+    pprof:
+        port: {{ default .Env.PPROF_PORT "0" }}
     tls:
         refreshInterval: {{ default .Env.TEMPORAL_TLS_REFRESH_INTERVAL "0s" }}
         expirationChecks:

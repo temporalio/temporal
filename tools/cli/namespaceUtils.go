@@ -28,7 +28,7 @@ import (
 	"strings"
 
 	"github.com/golang/mock/gomock"
-	"github.com/uber-go/tally"
+	"github.com/uber-go/tally/v4"
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -157,6 +157,10 @@ var (
 		cli.StringFlag{
 			Name:  FlagReason,
 			Usage: "Reason for the operation",
+		},
+		cli.BoolFlag{
+			Name:  FlagPromoteNamespaceWithAlias,
+			Usage: "Promote local namespace to global namespace",
 		},
 	}
 

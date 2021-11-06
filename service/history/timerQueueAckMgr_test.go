@@ -154,6 +154,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 
 func (s *timerQueueAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 // Test for normal ack manager
@@ -607,6 +608,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 
 func (s *timerQueueFailoverAckMgrSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *timerQueueFailoverAckMgrSuite) TestIsProcessNow() {

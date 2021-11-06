@@ -25,22 +25,13 @@
 package namespace
 
 import (
-	"hash/fnv"
-	"strconv"
 	"time"
 
+	"github.com/google/uuid"
 	namespacepb "go.temporal.io/api/namespace/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/primitives/timestamp"
-)
-
-const (
-	// SampleRetentionKey is key to specify sample retention
-	SampleRetentionKey = "sample_retention_days"
-
-	// SampleRateKey is key to specify sample rate
-	SampleRateKey = "sample_retention_rate"
 )
 
 type (
@@ -55,6 +46,12 @@ type (
 		cksum string
 		info  *namespacepb.BadBinaryInfo
 	}
+
+	// ID is the unique identifier type for a Namespace.
+	ID string
+
+	// Name is a user-supplied nickname for a Namespace.
+	Name string
 
 	// Namespaces is a *Namespace slice
 	Namespaces []*Namespace
@@ -71,6 +68,15 @@ type (
 		notificationVersion         int64
 	}
 )
+
+const (
+	EmptyName Name = ""
+	EmptyID   ID   = ""
+)
+
+func NewID() ID {
+	return ID(uuid.NewString())
+}
 
 func FromPersistentState(record *persistence.GetNamespaceResponse) *Namespace {
 	return &Namespace{
@@ -138,13 +144,13 @@ func (ns *Namespace) VerifyBinaryChecksum(cksum string) error {
 }
 
 // ID observes this namespace's permanent unique identifier in string form.
-func (ns *Namespace) ID() string {
-	return ns.info.Id
+func (ns *Namespace) ID() ID {
+	return ID(ns.info.Id)
 }
 
 // Name observes this namespace's configured name.
-func (ns *Namespace) Name() string {
-	return ns.info.Name
+func (ns *Namespace) Name() Name {
+	return Name(ns.info.Name)
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active
@@ -224,54 +230,13 @@ func (t Namespaces) Less(i, j int) bool {
 	return t[i].notificationVersion < t[j].notificationVersion
 }
 
-// Retention returns retention in days for given workflow
-func (ns *Namespace) Retention(workflowID string) time.Duration {
+// Retention returns retention duration for this namespace.
+func (ns *Namespace) Retention() time.Duration {
 	if ns.config.Retention == nil {
 		return 0
 	}
 
-	if ns.IsSampledForLongerRetention(workflowID) {
-		if sampledRetentionValue, ok := ns.info.Data[SampleRetentionKey]; ok {
-			sampledRetentionDays, err := strconv.Atoi(sampledRetentionValue)
-			sampledRetention := *timestamp.DurationFromDays(int32(sampledRetentionDays))
-			if err != nil || sampledRetention < *ns.config.Retention {
-				return *ns.config.Retention
-			}
-			return sampledRetention
-		}
-	}
-
 	return *ns.config.Retention
-}
-
-// IsSampledForLongerRetentionEnabled return whether sample for longer retention
-// is enabled or not
-func (ns *Namespace) IsSampledForLongerRetentionEnabled(string) bool {
-	_, ok := ns.info.Data[SampleRateKey]
-	return ok
-}
-
-// IsSampledForLongerRetention return should given workflow been sampled or not
-func (ns *Namespace) IsSampledForLongerRetention(workflowID string) bool {
-	sampledRateValue, ok := ns.info.Data[SampleRateKey]
-	if !ok {
-		return false
-	}
-	sampledRate, err := strconv.ParseFloat(sampledRateValue, 64)
-	if err != nil {
-		return false
-	}
-
-	h := fnv.New32a()
-	_, err = h.Write([]byte(workflowID))
-	if err != nil {
-		return false
-	}
-	hash := h.Sum32()
-
-	// use 1000 so we support one decimal rate like 1.5%.
-	r := float64(hash%1000) / float64(1000)
-	return r < sampledRate
 }
 
 // Error returns the reason associated with this bad binary.
@@ -297,4 +262,20 @@ func (e BadBinaryError) Created() time.Time {
 // Checksum observes the binary checksum that caused this error.
 func (e BadBinaryError) Checksum() string {
 	return e.cksum
+}
+
+func (id ID) String() string {
+	return string(id)
+}
+
+func (id ID) IsEmpty() bool {
+	return id == EmptyID
+}
+
+func (n Name) String() string {
+	return string(n)
+}
+
+func (n Name) IsEmpty() bool {
+	return n == EmptyName
 }

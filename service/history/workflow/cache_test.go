@@ -38,6 +38,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
@@ -87,12 +88,13 @@ func (s *historyCacheSuite) SetupTest() {
 
 func (s *historyCacheSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *historyCacheSuite) TestHistoryCacheBasic() {
 	s.cache = NewCache(s.mockShard)
 
-	namespaceID := "test_namespace_id"
+	namespaceID := namespace.ID("test_namespace_id")
 	execution1 := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
@@ -134,7 +136,7 @@ func (s *historyCacheSuite) TestHistoryCacheBasic() {
 
 func (s *historyCacheSuite) TestHistoryCachePinning() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(1)
-	namespaceID := "test_namespace_id"
+	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewCache(s.mockShard)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",
@@ -189,7 +191,7 @@ func (s *historyCacheSuite) TestHistoryCachePinning() {
 
 func (s *historyCacheSuite) TestHistoryCacheClear() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
-	namespaceID := "test_namespace_id"
+	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewCache(s.mockShard)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-clear",
@@ -239,7 +241,7 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 
 func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
-	namespaceID := "test_namespace_id"
+	namespaceID := namespace.ID("test_namespace_id")
 	s.cache = NewCache(s.mockShard)
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wf-cache-test-pinning",

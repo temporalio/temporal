@@ -52,7 +52,7 @@ type (
 
 		mockResource *resource.Test
 
-		namespaceID        string
+		namespaceID        namespace.ID
 		mockNamespaceCache *namespace.MockRegistry
 		namespaceEntry     *namespace.Namespace
 
@@ -87,7 +87,7 @@ func (s *contextSuite) SetupTest() {
 	s.mockResource = shardContext.Resource
 
 	s.namespaceID = "namespace-Id"
-	s.namespaceEntry = namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID}, &persistencespb.NamespaceConfig{}, "")
+	s.namespaceEntry = namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID.String()}, &persistencespb.NamespaceConfig{}, "")
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
 
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
@@ -102,7 +102,7 @@ func (s *contextSuite) TearDownTest() {
 
 func (s *contextSuite) TestAddTasks_Success() {
 	task := &persistencespb.TimerTaskInfo{
-		NamespaceId:     s.namespaceID,
+		NamespaceId:     s.namespaceID.String(),
 		WorkflowId:      "workflow-id",
 		RunId:           "run-id",
 		TaskType:        enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION,

@@ -29,9 +29,10 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/quotas"
-	"google.golang.org/grpc"
 )
 
 const (
@@ -80,7 +81,7 @@ func (ni *NamespaceRateLimitInterceptor) Intercept(
 	if !ni.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
 		methodName,
 		token,
-		namespace,
+		namespace.String(),
 	)) {
 		return nil, ErrNamespaceRateLimitServerBusy
 	}

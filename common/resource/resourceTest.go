@@ -28,7 +28,7 @@ import (
 	"net"
 
 	"github.com/golang/mock/gomock"
-	"github.com/uber-go/tally"
+	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
 	sdkclient "go.temporal.io/sdk/client"

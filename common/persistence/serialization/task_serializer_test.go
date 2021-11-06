@@ -83,7 +83,6 @@ func (s *taskSerializerSuite) TestTransferWorkflowTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
-		NamespaceID:         uuid.New().String(),
 		TaskQueue:           shuffle.String("random task queue name"),
 		ScheduleID:          rand.Int63(),
 		Version:             rand.Int63(),
@@ -308,7 +307,7 @@ func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
 func (s *taskSerializerSuite) TestReplicateActivityTask() {
 	replicateActivityTask := &tasks.SyncActivityTask{
 		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: time.Time{},
+		VisibilityTimestamp: time.Unix(0, 0),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		ScheduledID:         rand.Int63(),
@@ -320,7 +319,7 @@ func (s *taskSerializerSuite) TestReplicateActivityTask() {
 func (s *taskSerializerSuite) TestReplicateHistoryTask() {
 	replicateHistoryTask := &tasks.HistoryReplicationTask{
 		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: time.Time{},
+		VisibilityTimestamp: time.Unix(0, 0),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		FirstEventID:        rand.Int63(),

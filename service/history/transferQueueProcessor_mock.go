@@ -118,14 +118,14 @@ func (mr *MocktransferQueueProcessorMockRecorder) Stop() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MocktransferQueueProcessor)(nil).Stop))
 }
 
-// UnlockTaskPrrocessing mocks base method.
-func (m *MocktransferQueueProcessor) UnlockTaskPrrocessing() {
+// UnlockTaskProcessing mocks base method.
+func (m *MocktransferQueueProcessor) UnlockTaskProcessing() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UnlockTaskPrrocessing")
+	m.ctrl.Call(m, "UnlockTaskProcessing")
 }
 
-// UnlockTaskPrrocessing indicates an expected call of UnlockTaskPrrocessing.
-func (mr *MocktransferQueueProcessorMockRecorder) UnlockTaskPrrocessing() *gomock.Call {
+// UnlockTaskProcessing indicates an expected call of UnlockTaskProcessing.
+func (mr *MocktransferQueueProcessorMockRecorder) UnlockTaskProcessing() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlockTaskPrrocessing", reflect.TypeOf((*MocktransferQueueProcessor)(nil).UnlockTaskPrrocessing))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnlockTaskProcessing", reflect.TypeOf((*MocktransferQueueProcessor)(nil).UnlockTaskProcessing))
 }

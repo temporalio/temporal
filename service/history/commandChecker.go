@@ -208,17 +208,17 @@ func (c *workflowSizeChecker) failWorkflowIfMemoSizeExceedsLimit(
 
 func (c *workflowSizeChecker) failWorkflowIfSearchAttributesSizeExceedsLimit(
 	searchAttributes *commonpb.SearchAttributes,
-	namespace string,
+	namespace namespace.Name,
 	commandTypeTag metrics.Tag,
 ) (bool, error) {
 	c.metricsScope.Tagged(commandTypeTag).RecordDistribution(metrics.SearchAttributesSize, searchAttributes.Size())
 
-	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace)
+	err := c.searchAttributesValidator.ValidateSize(searchAttributes, namespace.String())
 	if err == nil {
 		return false, nil
 	}
 
-	c.logger.Warn("Search attributes size exceeds limits. Fail workflow.", tag.Error(err), tag.WorkflowNamespace(namespace))
+	c.logger.Warn("Search attributes size exceeds limits. Fail workflow.", tag.Error(err), tag.WorkflowNamespace(namespace.String()))
 
 	attributes := &commandpb.FailWorkflowExecutionCommandAttributes{
 		Failure: failure.NewServerFailure(err.Error(), true),
@@ -232,8 +232,8 @@ func (c *workflowSizeChecker) failWorkflowIfSearchAttributesSizeExceedsLimit(
 }
 
 func (v *commandAttrValidator) validateActivityScheduleAttributes(
-	namespaceID string,
-	targetNamespaceID string,
+	namespaceID namespace.ID,
+	targetNamespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 	runTimeout time.Duration,
 ) error {
@@ -430,8 +430,8 @@ func (v *commandAttrValidator) validateCancelWorkflowExecutionAttributes(
 }
 
 func (v *commandAttrValidator) validateCancelExternalWorkflowExecutionAttributes(
-	namespaceID string,
-	targetNamespaceID string,
+	namespaceID namespace.ID,
+	targetNamespaceID namespace.ID,
 	initiatedChildExecutionsInSession map[string]struct{},
 	attributes *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
@@ -467,8 +467,8 @@ func (v *commandAttrValidator) validateCancelExternalWorkflowExecutionAttributes
 }
 
 func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes(
-	namespaceID string,
-	targetNamespaceID string,
+	namespaceID namespace.ID,
+	targetNamespaceID namespace.ID,
 	attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -507,7 +507,7 @@ func (v *commandAttrValidator) validateSignalExternalWorkflowExecutionAttributes
 }
 
 func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
-	namespace string,
+	namespace namespace.Name,
 	attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 	visibilityIndexName string,
 ) error {
@@ -524,11 +524,11 @@ func (v *commandAttrValidator) validateUpsertWorkflowSearchAttributes(
 		return serviceerror.NewInvalidArgument("IndexedFields is empty on command.")
 	}
 
-	return v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace, visibilityIndexName)
+	return v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String(), visibilityIndexName)
 }
 
 func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
-	namespace string,
+	namespace namespace.Name,
 	attributes *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	visibilityIndexName string,
@@ -574,13 +574,13 @@ func (v *commandAttrValidator) validateContinueAsNewWorkflowExecutionAttributes(
 		attributes.WorkflowTaskTimeout = timestamp.DurationPtr(timestamp.DurationValue(executionInfo.DefaultWorkflowTaskTimeout))
 	}
 
-	return v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace, visibilityIndexName)
+	return v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), namespace.String(), visibilityIndexName)
 }
 
 func (v *commandAttrValidator) validateStartChildExecutionAttributes(
-	namespaceID string,
-	targetNamespaceID string,
-	targetNamespace string,
+	namespaceID namespace.ID,
+	targetNamespaceID namespace.ID,
+	targetNamespace namespace.Name,
 	attributes *commandpb.StartChildWorkflowExecutionCommandAttributes,
 	parentInfo *persistencespb.WorkflowExecutionInfo,
 	defaultWorkflowTaskTimeoutFn dynamicconfig.DurationPropertyFnWithNamespaceFilter,
@@ -638,7 +638,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 		return err
 	}
 
-	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace, visibilityIndexName); err != nil {
+	if err := v.searchAttributesValidator.Validate(attributes.GetSearchAttributes(), targetNamespace.String(), visibilityIndexName); err != nil {
 		return err
 	}
 
@@ -661,7 +661,7 @@ func (v *commandAttrValidator) validateStartChildExecutionAttributes(
 
 	attributes.WorkflowTaskTimeout = timestamp.DurationPtr(
 		common.OverrideWorkflowTaskTimeout(
-			targetNamespace,
+			targetNamespace.String(),
 			timestamp.DurationValue(attributes.GetWorkflowTaskTimeout()),
 			timestamp.DurationValue(attributes.GetWorkflowRunTimeout()),
 			defaultWorkflowTaskTimeoutFn,
@@ -729,8 +729,8 @@ func (v *commandAttrValidator) validateWorkflowRetryPolicy(
 }
 
 func (v *commandAttrValidator) validateCrossNamespaceCall(
-	namespaceID string,
-	targetNamespaceID string,
+	namespaceID namespace.ID,
+	targetNamespaceID namespace.ID,
 ) error {
 
 	// same name, no check needed

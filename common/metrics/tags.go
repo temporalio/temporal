@@ -24,6 +24,10 @@
 
 package metrics
 
+import (
+	"strconv"
+)
+
 const (
 	gitRevisionTag   = "git_revision"
 	gitBranchTag     = "git_branch"
@@ -103,7 +107,15 @@ type (
 		value string
 	}
 
+	queueTypeTag struct {
+		value string
+	}
+
 	visibilityTypeTag struct {
+		value string
+	}
+
+	httpStatusTag struct {
 		value string
 	}
 )
@@ -115,7 +127,7 @@ func NamespaceTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return namespaceTag{value}
+	return namespaceTag{value: value}
 }
 
 // Key returns the key of the namespace tag
@@ -160,7 +172,7 @@ func (d namespaceUnknownTag) Value() string {
 
 // InstanceTag returns a new instance tag
 func InstanceTag(value string) Tag {
-	return instanceTag{value}
+	return instanceTag{value: value}
 }
 
 // Key returns the key of the instance tag
@@ -178,7 +190,7 @@ func TargetClusterTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return targetClusterTag{value}
+	return targetClusterTag{value: value}
 }
 
 // Key returns the key of the target cluster tag
@@ -214,7 +226,7 @@ func WorkflowTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return workflowTypeTag{value}
+	return workflowTypeTag{value: value}
 }
 
 // Key returns the key of the workflow type tag
@@ -232,7 +244,7 @@ func ActivityTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return activityTypeTag{value}
+	return activityTypeTag{value: value}
 }
 
 // Key returns the key of the activity type tag
@@ -250,7 +262,7 @@ func CommandTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return commandTypeTag{value}
+	return commandTypeTag{value: value}
 }
 
 // Key returns the key of the command type tag
@@ -268,7 +280,7 @@ func ServiceRoleTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return serviceRoleTag{value}
+	return serviceRoleTag{value: value}
 }
 
 // Key returns the key of the service role tag
@@ -286,7 +298,7 @@ func StatsTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return statsTypeTag{value}
+	return statsTypeTag{value: value}
 }
 
 // Key returns the key of the stats type tag
@@ -304,7 +316,7 @@ func FailureTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return failureTag{value}
+	return failureTag{value: value}
 }
 
 // Key returns the key of the tag
@@ -321,8 +333,15 @@ func TaskTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return taskTypeTag{value}
+	return taskTypeTag{value: value}
 
+}
+
+func QueueTypeTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return queueTypeTag{value: value}
 }
 
 // Key returns the key of the tag
@@ -358,4 +377,27 @@ func (d visibilityTypeTag) Key() string {
 // Value returns the value of the tag
 func (d visibilityTypeTag) Value() string {
 	return d.value
+}
+
+func (d queueTypeTag) Key() string {
+	return QueueTypeTagName
+}
+
+func (d queueTypeTag) Value() string {
+	return d.value
+}
+
+// HttpStatusTag returns a new httpStatusTag.
+func HttpStatusTag(value int) Tag {
+	return httpStatusTag{value: strconv.Itoa(value)}
+}
+
+// Key returns the key of the stats type tag
+func (t httpStatusTag) Key() string {
+	return httpStatusTagName
+}
+
+// Value returns the value of the stats type tag
+func (t httpStatusTag) Value() string {
+	return t.value
 }

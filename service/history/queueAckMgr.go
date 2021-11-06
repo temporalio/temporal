@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -95,12 +96,12 @@ func newQueueFailoverAckMgr(shard shard.Context, options *QueueProcessorOptions,
 	}
 }
 
-func (a *queueAckMgrImpl) readQueueTasks() ([]queueTaskInfo, bool, error) {
+func (a *queueAckMgrImpl) readQueueTasks() ([]tasks.Task, bool, error) {
 	a.RLock()
 	readLevel := a.readLevel
 	a.RUnlock()
 
-	var tasks []queueTaskInfo
+	var tasks []tasks.Task
 	var morePage bool
 	op := func() error {
 		var err error
@@ -121,21 +122,21 @@ func (a *queueAckMgrImpl) readQueueTasks() ([]queueTaskInfo, bool, error) {
 
 TaskFilterLoop:
 	for _, task := range tasks {
-		_, isLoaded := a.outstandingTasks[task.GetTaskId()]
+		_, isLoaded := a.outstandingTasks[task.GetTaskID()]
 		if isLoaded {
 			// task already loaded
 			a.logger.Debug("Skipping transfer task", tag.Task(task))
 			continue TaskFilterLoop
 		}
 
-		if a.readLevel >= task.GetTaskId() {
+		if a.readLevel >= task.GetTaskID() {
 			a.logger.Fatal("Next task ID is less than current read level.",
-				tag.TaskID(task.GetTaskId()),
+				tag.TaskID(task.GetTaskID()),
 				tag.ReadLevel(a.readLevel))
 		}
-		a.logger.Debug("Moving read level", tag.TaskID(task.GetTaskId()))
-		a.readLevel = task.GetTaskId()
-		a.outstandingTasks[task.GetTaskId()] = false
+		a.logger.Debug("Moving read level", tag.TaskID(task.GetTaskID()))
+		a.readLevel = task.GetTaskID()
+		a.outstandingTasks[task.GetTaskID()] = false
 	}
 
 	return tasks, morePage, nil

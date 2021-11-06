@@ -32,7 +32,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
+	"github.com/uber-go/tally/v4"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -117,6 +117,7 @@ func (s *mutableStateSuite) SetupTest() {
 
 func (s *mutableStateSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *mutableStateSuite) TestTransientWorkflowTaskCompletionFirstBatchReplicated_ReplicateWorkflowTaskCompleted() {
@@ -613,7 +614,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 
 	startTime := timestamp.TimePtr(time.Date(2020, 8, 22, 1, 2, 3, 4, time.UTC))
 	info := &persistencespb.WorkflowExecutionInfo{
-		NamespaceId:                namespaceID,
+		NamespaceId:                namespaceID.String(),
 		WorkflowId:                 we.GetWorkflowId(),
 		TaskQueue:                  tl,
 		WorkflowTypeName:           "wType",
@@ -678,7 +679,7 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 			InitiatedEventBatchId: 20,
 			StartedId:             common.EmptyEventID,
 			CreateRequestId:       uuid.New(),
-			Namespace:             tests.NamespaceID,
+			Namespace:             tests.Namespace.String(),
 			WorkflowTypeName:      "code.uber.internal/test/foobar",
 		},
 	}

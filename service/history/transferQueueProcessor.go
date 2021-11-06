@@ -28,10 +28,11 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -47,7 +48,7 @@ import (
 )
 
 var (
-	errUnknownTransferTask = errors.New("Unknown transfer task")
+	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
 )
 
 type (
@@ -56,10 +57,10 @@ type (
 		FailoverNamespace(namespaceIDs map[string]struct{})
 		NotifyNewTask(clusterName string, transferTasks []tasks.Task)
 		LockTaskProcessing()
-		UnlockTaskPrrocessing()
+		UnlockTaskProcessing()
 	}
 
-	taskFilter func(task queueTaskInfo) (bool, error)
+	taskFilter func(task tasks.Task) (bool, error)
 
 	transferQueueProcessorImpl struct {
 		isGlobalNamespaceEnabled bool
@@ -252,7 +253,7 @@ func (t *transferQueueProcessorImpl) LockTaskProcessing() {
 	t.taskAllocator.lock()
 }
 
-func (t *transferQueueProcessorImpl) UnlockTaskPrrocessing() {
+func (t *transferQueueProcessorImpl) UnlockTaskProcessing() {
 	t.taskAllocator.unlock()
 }
 

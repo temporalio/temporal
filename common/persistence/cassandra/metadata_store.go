@@ -64,6 +64,7 @@ const (
 	templateUpdateNamespaceByNameQueryWithinBatchV2 = `UPDATE namespaces ` +
 		`SET detail = ? ,` +
 		`detail_encoding = ? ,` +
+		`is_global_namespace = ? ,` +
 		`notification_version = ? ` +
 		`WHERE namespaces_partition = ? ` +
 		`and name = ?`
@@ -176,6 +177,7 @@ func (m *MetadataStore) UpdateNamespace(request *p.InternalUpdateNamespaceReques
 	batch.Query(templateUpdateNamespaceByNameQueryWithinBatchV2,
 		request.Namespace.Data,
 		request.Namespace.EncodingType.String(),
+		request.IsGlobal,
 		request.NotificationVersion,
 		constNamespacePartition,
 		request.Name,

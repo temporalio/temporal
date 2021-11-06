@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -72,7 +73,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 
 	targetExecutionInfo := targetWorkflow.getMutableState().GetExecutionInfo()
 	targetExecutionState := targetWorkflow.getMutableState().GetExecutionState()
-	namespaceID := targetExecutionInfo.NamespaceId
+	namespaceID := namespace.ID(targetExecutionInfo.NamespaceId)
 	workflowID := targetExecutionInfo.WorkflowId
 	targetRunID := targetExecutionState.RunId
 
@@ -149,7 +150,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
-	ctx context.Context,
+	_ context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -202,7 +203,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
-	ctx context.Context,
+	_ context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -264,7 +265,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
-	ctx context.Context,
+	_ context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,

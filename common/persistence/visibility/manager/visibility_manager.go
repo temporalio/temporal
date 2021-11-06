@@ -34,6 +34,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -63,8 +64,8 @@ type (
 	}
 
 	VisibilityRequestBase struct {
-		NamespaceID          string
-		Namespace            string // not persisted, used as config filter key
+		NamespaceID          namespace.ID
+		Namespace            namespace.Name // namespace.Name is not persisted.
 		Execution            commonpb.WorkflowExecution
 		WorkflowTypeName     string
 		StartTime            time.Time
@@ -98,8 +99,8 @@ type (
 
 	// ListWorkflowExecutionsRequest is used to list executions in a namespace
 	ListWorkflowExecutionsRequest struct {
-		NamespaceID       string
-		Namespace         string // namespace name is not persisted, but used as config filter key
+		NamespaceID       namespace.ID
+		Namespace         namespace.Name // namespace.Name is not persisted.
 		EarliestStartTime time.Time
 		LatestStartTime   time.Time
 		// Maximum number of workflow executions per page
@@ -111,9 +112,9 @@ type (
 
 	// ListWorkflowExecutionsRequestV2 is used to list executions in a namespace
 	ListWorkflowExecutionsRequestV2 struct {
-		NamespaceID string
-		Namespace   string // namespace name is not persisted
-		PageSize    int    // Maximum number of workflow executions per page
+		NamespaceID namespace.ID
+		Namespace   namespace.Name // namespace.Name is not persisted.
+		PageSize    int            // Maximum number of workflow executions per page
 		// Token to continue reading next page of workflow executions.
 		// Pass in empty slice for first page.
 		NextPageToken []byte
@@ -130,8 +131,8 @@ type (
 
 	// CountWorkflowExecutionsRequest is request from CountWorkflowExecutions
 	CountWorkflowExecutionsRequest struct {
-		NamespaceID string
-		Namespace   string // namespace name is not persisted
+		NamespaceID namespace.ID
+		Namespace   namespace.Name // namespace.Name is not persisted.
 		Query       string
 	}
 
@@ -163,7 +164,7 @@ type (
 
 	// VisibilityDeleteWorkflowExecutionRequest contains the request params for DeleteWorkflowExecution call
 	VisibilityDeleteWorkflowExecutionRequest struct {
-		NamespaceID string
+		NamespaceID namespace.ID
 		RunID       string
 		WorkflowID  string
 		TaskID      int64

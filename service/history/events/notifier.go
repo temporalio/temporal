@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 const (
@@ -75,7 +76,7 @@ type (
 		// this channel will never close
 		eventsChan chan *Notification
 		// function which calculate the shard ID from given namespaceID and workflowID pair
-		workflowIDToShardID func(string, string) int32
+		workflowIDToShardID func(namespace.ID, string) int32
 
 		// concurrent map with key workflowKey, value map[string]chan *Notification.
 		// the reason for the second map being non thread safe:
@@ -118,7 +119,7 @@ func NewNotification(
 func NewNotifier(
 	timeSource clock.TimeSource,
 	metrics metrics.Client,
-	workflowIDToShardID func(string, string) int32,
+	workflowIDToShardID func(namespace.ID, string) int32,
 ) *NotifierImpl {
 
 	hashFn := func(key interface{}) uint32 {
@@ -126,7 +127,7 @@ func NewNotifier(
 		if !ok {
 			return 0
 		}
-		return uint32(workflowIDToShardID(notification.ID.NamespaceID, notification.ID.WorkflowID))
+		return uint32(workflowIDToShardID(namespace.ID(notification.ID.NamespaceID), notification.ID.WorkflowID))
 	}
 	return &NotifierImpl{
 		timeSource: timeSource,

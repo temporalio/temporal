@@ -116,7 +116,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 	req *historyservice.ScheduleWorkflowTaskRequest,
 ) error {
 
-	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -161,7 +161,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 	req *historyservice.RecordWorkflowTaskStartedRequest,
 ) (*historyservice.RecordWorkflowTaskStartedResponse, error) {
 
-	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			if workflowTask.StartedID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
 				if workflowTask.RequestID == requestID {
-					resp, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, mutableState, workflowTask, req.PollRequest.GetIdentity())
+					resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowTask, req.PollRequest.GetIdentity())
 					if err != nil {
 						return nil, err
 					}
@@ -237,11 +237,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 			workflowScheduleToStartLatency := workflowTask.StartedTime.Sub(*workflowTask.ScheduledTime)
 			namespaceName := namespaceEntry.Name()
 			taskQueue := workflowTask.TaskQueue
-			metrics.GetPerTaskQueueScope(metricsScope, namespaceName, taskQueue.GetName(), taskQueue.GetKind()).
+			metrics.GetPerTaskQueueScope(metricsScope, namespaceName.String(), taskQueue.GetName(), taskQueue.GetKind()).
 				Tagged(metrics.TaskTypeTag("workflow")).
 				RecordTimer(metrics.TaskScheduleToStartLatency, workflowScheduleToStartLatency)
 
-			resp, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, mutableState, workflowTask, req.PollRequest.GetIdentity())
+			resp, err = handler.createRecordWorkflowTaskStartedResponse(mutableState, workflowTask, req.PollRequest.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -259,7 +259,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 	req *historyservice.RespondWorkflowTaskFailedRequest,
 ) (retError error) {
 
-	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -308,7 +308,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	req *historyservice.RespondWorkflowTaskCompletedRequest,
 ) (resp *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
 
-	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(req.GetNamespaceId())
+	namespaceEntry, err := handler.historyEngine.getActiveNamespaceEntry(namespace.ID(req.GetNamespaceId()))
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,7 @@ Update_History_Loop:
 		}
 
 		startedID := currentWorkflowTask.StartedID
-		maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name())
+		maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name().String())
 		if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
 			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
 		}
@@ -380,11 +380,11 @@ Update_History_Loop:
 		var completedEvent *historypb.HistoryEvent
 		if workflowTaskHeartbeating {
 			namespace := namespaceEntry.Name()
-			timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace)
+			timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace.String())
 			origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTime)
 			if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
 				workflowTaskHeartbeatTimeout = true
-				scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace))
+				scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace.String()))
 				scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
 				completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduleID, currentWorkflowTask.StartedID)
 				if err != nil {
@@ -429,19 +429,19 @@ Update_History_Loop:
 		} else {
 			namespace := namespaceEntry.Name()
 			workflowSizeChecker := newWorkflowSizeChecker(
-				handler.config.BlobSizeLimitWarn(namespace),
-				handler.config.BlobSizeLimitError(namespace),
-				handler.config.MemoSizeLimitWarn(namespace),
-				handler.config.MemoSizeLimitError(namespace),
-				handler.config.HistorySizeLimitWarn(namespace),
-				handler.config.HistorySizeLimitError(namespace),
-				handler.config.HistoryCountLimitWarn(namespace),
-				handler.config.HistoryCountLimitError(namespace),
+				handler.config.BlobSizeLimitWarn(namespace.String()),
+				handler.config.BlobSizeLimitError(namespace.String()),
+				handler.config.MemoSizeLimitWarn(namespace.String()),
+				handler.config.MemoSizeLimitError(namespace.String()),
+				handler.config.HistorySizeLimitWarn(namespace.String()),
+				handler.config.HistorySizeLimitError(namespace.String()),
+				handler.config.HistoryCountLimitWarn(namespace.String()),
+				handler.config.HistoryCountLimitError(namespace.String()),
 				completedEvent.GetEventId(),
 				msBuilder,
 				handler.historyEngine.searchAttributesValidator,
 				executionStats,
-				handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace)),
+				handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace.String())),
 				handler.throttledLogger,
 			)
 
@@ -484,7 +484,7 @@ Update_History_Loop:
 				tag.Value(wtFailedCause.Message()),
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunID(token.GetRunId()),
-				tag.WorkflowNamespaceID(namespaceID))
+				tag.WorkflowNamespaceID(namespaceID.String()))
 			msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, wtFailedCause, request)
 			if err != nil {
 				return nil, err
@@ -538,7 +538,7 @@ Update_History_Loop:
 			updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
 				handler.shard.GetTimeSource().Now(),
 				workflow.NewContext(
-					newWorkflowExecutionInfo.NamespaceId,
+					namespace.ID(newWorkflowExecutionInfo.NamespaceId),
 					commonpb.WorkflowExecution{
 						WorkflowId: newWorkflowExecutionInfo.WorkflowId,
 						RunId:      newWorkflowExecutionState.RunId,
@@ -602,7 +602,7 @@ Update_History_Loop:
 		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
 		if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
 			workflowTask, _ := msBuilder.GetWorkflowTaskInfo(newWorkflowTaskScheduledID)
-			resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(namespaceID, msBuilder, workflowTask, request.GetIdentity())
+			resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(msBuilder, workflowTask, request.GetIdentity())
 			if err != nil {
 				return nil, err
 			}
@@ -617,7 +617,6 @@ Update_History_Loop:
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
-	namespaceID string,
 	msBuilder workflow.MutableState,
 	workflowTask *workflow.WorkflowTaskInfo,
 	identity string,
@@ -678,14 +677,13 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 		return
 	}
 
-	namespaceID := namespaceEntry.ID()
-	namespace := namespaceEntry.Name()
+	namespaceName := namespaceEntry.Name()
 	workflowID := msBuilder.GetExecutionInfo().WorkflowId
 	runID := msBuilder.GetExecutionState().GetRunId()
 
 	scope := handler.metricsClient.Scope(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
-		metrics.NamespaceTag(namespaceEntry.Name()),
+		metrics.NamespaceTag(namespaceEntry.Name().String()),
 		metrics.CommandTypeTag("ConsistentQuery"))
 
 	// if its a heartbeat workflow task it means local activities may still be running on the worker
@@ -694,8 +692,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 		return
 	}
 
-	sizeLimitError := handler.config.BlobSizeLimitError(namespace)
-	sizeLimitWarn := handler.config.BlobSizeLimitWarn(namespace)
+	sizeLimitError := handler.config.BlobSizeLimitError(namespaceName.String())
+	sizeLimitWarn := handler.config.BlobSizeLimitWarn(namespaceName.String())
 
 	// Complete or fail all queries we have results for
 	for id, result := range queryResults {
@@ -703,7 +701,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 			result.GetAnswer().Size(),
 			sizeLimitWarn,
 			sizeLimitError,
-			namespaceID,
+			namespaceName.String(),
 			workflowID,
 			runID,
 			scope,
@@ -711,7 +709,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 			tag.BlobSizeViolationOperation("ConsistentQuery"),
 		); err != nil {
 			handler.logger.Info("failing query because query result size is too large",
-				tag.WorkflowNamespace(namespace),
+				tag.WorkflowNamespace(namespaceName.String()),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),
 				tag.QueryID(id),
@@ -723,7 +721,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 			if err := queryRegistry.SetTerminationState(id, failedTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to failed",
-					tag.WorkflowNamespace(namespace),
+					tag.WorkflowNamespace(namespaceName.String()),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),
@@ -738,7 +736,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 			if err := queryRegistry.SetTerminationState(id, completedTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to completed",
-					tag.WorkflowNamespace(namespace),
+					tag.WorkflowNamespace(namespaceName.String()),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),
@@ -759,7 +757,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleBufferedQueries(msBuilder
 			if err := queryRegistry.SetTerminationState(id, unblockTerminationState); err != nil {
 				handler.logger.Error(
 					"failed to set query termination state to unblocked",
-					tag.WorkflowNamespace(namespace),
+					tag.WorkflowNamespace(namespaceName.String()),
 					tag.WorkflowID(workflowID),
 					tag.WorkflowRunID(runID),
 					tag.QueryID(id),

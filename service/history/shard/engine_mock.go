@@ -37,6 +37,7 @@ import (
 	history "go.temporal.io/api/history/v1"
 	historyservice "go.temporal.io/server/api/historyservice/v1"
 	repication "go.temporal.io/server/api/replication/v1"
+	namespace "go.temporal.io/server/common/namespace"
 	events "go.temporal.io/server/service/history/events"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
@@ -92,6 +93,21 @@ func (m *MockEngine) DescribeWorkflowExecution(ctx context.Context, request *his
 func (mr *MockEngineMockRecorder) DescribeWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeWorkflowExecution", reflect.TypeOf((*MockEngine)(nil).DescribeWorkflowExecution), ctx, request)
+}
+
+// GenerateLastHistoryReplicationTasks mocks base method.
+func (m *MockEngine) GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", ctx, request)
+	ret0, _ := ret[0].(*historyservice.GenerateLastHistoryReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
+func (mr *MockEngineMockRecorder) GenerateLastHistoryReplicationTasks(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockEngine)(nil).GenerateLastHistoryReplicationTasks), ctx, request)
 }
 
 // GetDLQMessages mocks base method.
@@ -274,7 +290,7 @@ func (mr *MockEngineMockRecorder) QueryWorkflow(ctx, request interface{}) *gomoc
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID, workflowID, runID string, events []*history.HistoryEvent) error {
+func (m *MockEngine) ReapplyEvents(ctx context.Context, namespaceUUID namespace.ID, workflowID, runID string, events []*history.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReapplyEvents", ctx, namespaceUUID, workflowID, runID, events)
 	ret0, _ := ret[0].(error)
@@ -347,7 +363,7 @@ func (mr *MockEngineMockRecorder) RecordWorkflowTaskStarted(ctx, request interfa
 }
 
 // RefreshWorkflowTasks mocks base method.
-func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID string, execution common.WorkflowExecution) error {
+func (m *MockEngine) RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution common.WorkflowExecution) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", ctx, namespaceUUID, execution)
 	ret0, _ := ret[0].(error)

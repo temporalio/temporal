@@ -112,6 +112,7 @@ func (s *nDCBranchMgrSuite) SetupTest() {
 
 func (s *nDCBranchMgrSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *nDCBranchMgrSuite) TestCreateNewBranch() {

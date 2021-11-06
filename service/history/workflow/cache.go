@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -51,13 +52,13 @@ type (
 	Cache interface {
 		GetOrCreateCurrentWorkflowExecution(
 			ctx context.Context,
-			namespaceID string,
+			namespaceID namespace.ID,
 			workflowID string,
 		) (Context, ReleaseCacheFunc, error)
 
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
-			namespaceID string,
+			namespaceID namespace.ID,
 			execution commonpb.WorkflowExecution,
 			caller CallerType,
 		) (Context, ReleaseCacheFunc, error)
@@ -101,7 +102,7 @@ func NewCache(shard shard.Context) Cache {
 
 func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 ) (Context, ReleaseCacheFunc, error) {
 
@@ -129,7 +130,7 @@ func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
 
 func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	caller CallerType,
 ) (Context, ReleaseCacheFunc, error) {
@@ -160,14 +161,14 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 
 func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 	scope int,
 	forceClearContext bool,
 	caller CallerType,
 ) (Context, ReleaseCacheFunc, error) {
 
-	key := definition.NewWorkflowKey(namespaceID, execution.GetWorkflowId(), execution.GetRunId())
+	key := definition.NewWorkflowKey(namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
 	workflowCtx, cacheHit := c.Get(key).(Context)
 	if !cacheHit {
 		c.metricsClient.IncCounter(scope, metrics.CacheMissCounter)
@@ -223,7 +224,7 @@ func (c *CacheImpl) makeReleaseFunc(
 }
 
 func (c *CacheImpl) validateWorkflowExecutionInfo(
-	namespaceID string,
+	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 ) error {
 
@@ -235,7 +236,7 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 	if execution.GetRunId() == "" {
 		response, err := c.getCurrentExecutionWithRetry(&persistence.GetCurrentExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
-			NamespaceID: namespaceID,
+			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
 		})
 

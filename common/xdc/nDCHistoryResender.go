@@ -58,7 +58,7 @@ type (
 	NDCHistoryResender interface {
 		// SendSingleWorkflowHistory sends multiple run IDs's history events to remote
 		SendSingleWorkflowHistory(
-			namespaceID string,
+			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
 			startEventID int64,
@@ -110,7 +110,7 @@ func NewNDCHistoryResender(
 
 // SendSingleWorkflowHistory sends one run IDs's history events to remote
 func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -122,7 +122,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 	ctx := context.Background()
 	var cancel context.CancelFunc
 	if n.rereplicationTimeout != nil {
-		resendContextTimeout := n.rereplicationTimeout(namespaceID)
+		resendContextTimeout := n.rereplicationTimeout(namespaceID.String())
 		if resendContextTimeout > 0 {
 			ctx, cancel = context.WithTimeout(ctx, resendContextTimeout)
 			defer cancel()
@@ -143,7 +143,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		result, err := historyIterator.Next()
 		if err != nil {
 			n.logger.Error("failed to get history events",
-				tag.WorkflowNamespaceID(namespaceID),
+				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),
 				tag.Error(err))
@@ -161,7 +161,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		err = n.sendReplicationRawRequest(ctx, replicationRequest)
 		if err != nil {
 			n.logger.Error("failed to replicate events",
-				tag.WorkflowNamespaceID(namespaceID),
+				tag.WorkflowNamespaceID(namespaceID.String()),
 				tag.WorkflowID(workflowID),
 				tag.WorkflowRunID(runID),
 				tag.Error(err))
@@ -173,7 +173,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 
 func (n *NDCHistoryResenderImpl) getPaginationFn(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -214,7 +214,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 }
 
 func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	historyBlob *commonpb.DataBlob,
@@ -222,7 +222,7 @@ func (n *NDCHistoryResenderImpl) createReplicationRawRequest(
 ) *historyservice.ReplicateEventsV2Request {
 
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -245,7 +245,7 @@ func (n *NDCHistoryResenderImpl) sendReplicationRawRequest(
 
 func (n *NDCHistoryResenderImpl) getHistory(
 	ctx context.Context,
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -268,7 +268,7 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndHeaders(ctx, resendContextTimeout)
 	defer cancel()
 	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: namespace,
+		Namespace: namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

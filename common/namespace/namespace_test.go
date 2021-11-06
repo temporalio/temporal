@@ -31,6 +31,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	namespacepb "go.temporal.io/api/namespace/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
@@ -41,7 +42,7 @@ func base(t *testing.T) *namespace.Namespace {
 	return namespace.FromPersistentState(&persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   uuid.NewString(),
+				Id:   namespace.NewID().String(),
 				Name: t.Name(),
 				Data: make(map[string]string),
 			},
@@ -108,23 +109,14 @@ func Test_GetRetentionDays(t *testing.T) {
 	for _, tt := range [...]struct {
 		name       string
 		retention  string
-		rate       string
 		workflowID string
 		want       time.Duration
 	}{
 		{
 			name:       "30x0",
 			retention:  "30",
-			rate:       "0",
 			workflowID: uuid.NewString(),
 			want:       defaultRetention,
-		},
-		{
-			name:       "30x1",
-			retention:  "30",
-			rate:       "1",
-			workflowID: uuid.NewString(),
-			want:       30 * 24 * time.Hour,
 		},
 		{
 			name:       "invalid retention",
@@ -132,43 +124,10 @@ func Test_GetRetentionDays(t *testing.T) {
 			workflowID: uuid.NewString(),
 			want:       defaultRetention,
 		},
-		{
-			name:       "invalid rate",
-			retention:  "30",
-			rate:       "invalid-value",
-			workflowID: uuid.NewString(),
-			want:       defaultRetention,
-		},
-		{
-			name:       "hash outside of sample rate",
-			retention:  "30",
-			rate:       "0.8",
-			workflowID: "3aef42a8-db0a-4a3b-b8b7-9829d74b4ebf",
-			want:       defaultRetention,
-		},
-		{
-			name:       "hash inside sample rate",
-			retention:  "30",
-			rate:       "0.9",
-			workflowID: "3aef42a8-db0a-4a3b-b8b7-9829d74b4ebf",
-			want:       30 * 24 * time.Hour,
-		},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
-			ns := base.Clone(
-				namespace.WithData(namespace.SampleRetentionKey, tt.retention),
-				namespace.WithData(namespace.SampleRateKey, tt.rate))
-			require.Equal(t, tt.want, ns.Retention(tt.workflowID))
+			ns := base.Clone()
+			require.Equal(t, tt.want, ns.Retention())
 		})
 	}
-}
-
-func TestIsSampledForLongerRetentionEnabled(t *testing.T) {
-	ns := base(t)
-	wid := uuid.NewString()
-	require.False(t, ns.IsSampledForLongerRetentionEnabled(wid))
-	ns = ns.Clone(
-		namespace.WithData(namespace.SampleRetentionKey, "30"),
-		namespace.WithData(namespace.SampleRateKey, "0"))
-	require.True(t, ns.IsSampledForLongerRetentionEnabled(wid))
 }

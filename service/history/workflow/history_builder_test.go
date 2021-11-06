@@ -45,6 +45,7 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tests"
 )
@@ -65,8 +66,8 @@ type (
 )
 
 var (
-	testNamespaceID   = uuid.New()
-	testNamespaceName = "test namespace"
+	testNamespaceID   = namespace.ID(uuid.New())
+	testNamespaceName = namespace.Name("test namespace")
 	testWorkflowID    = "test workflow ID"
 	testRunID         = uuid.New()
 
@@ -167,7 +168,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 	originalRunID := uuid.New()
 
 	request := &historyservice.StartWorkflowExecutionRequest{
-		NamespaceId: testNamespaceID,
+		NamespaceId: testNamespaceID.String(),
 		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
 			NamespaceId: testParentNamespaceID,
 			Namespace:   testParentNamespaceName,
@@ -185,7 +186,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 		FirstWorkflowTaskBackoff:        firstWorkflowTaskBackoff,
 
 		StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-			Namespace:                testNamespaceName,
+			Namespace:                testNamespaceName.String(),
 			WorkflowId:               testWorkflowID,
 			WorkflowType:             testWorkflowType,
 			TaskQueue:                testTaskQueue,
@@ -258,7 +259,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 func (s *historyBuilderSuite) TestWorkflowExecutionCancelRequested() {
 	initiatedEventID := rand.Int63()
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
-		NamespaceId: tests.NamespaceID,
+		NamespaceId: tests.NamespaceID.String(),
 		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 			// Namespace: not used for test
 			// WorkflowExecution: not used for test
@@ -721,7 +722,7 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 	startToCloseTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
 	heartbeatTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
 	attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
-		Namespace:              testNamespaceName,
+		Namespace:              testNamespaceName.String(),
 		ActivityId:             activityID,
 		ActivityType:           testActivityType,
 		TaskQueue:              testTaskQueue,
@@ -747,7 +748,7 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				Namespace:                    testNamespaceName,
+				Namespace:                    testNamespaceName.String(),
 				ActivityId:                   activityID,
 				ActivityType:                 testActivityType,
 				TaskQueue:                    testTaskQueue,
@@ -1021,7 +1022,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionInitiate
 	control := "random control"
 	childWorkflowOnly := rand.Int31()%2 == 0
 	attributes := &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
-		Namespace:         testNamespaceName,
+		Namespace:         testNamespaceName.String(),
 		WorkflowId:        testWorkflowID,
 		RunId:             testRunID,
 		Control:           control,
@@ -1041,7 +1042,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionInitiate
 		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 			RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				Namespace:                    testNamespaceName,
+				Namespace:                    testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1071,7 +1072,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionSuccess(
 		Attributes: &historypb.HistoryEvent_ExternalWorkflowExecutionCancelRequestedEventAttributes{
 			ExternalWorkflowExecutionCancelRequestedEventAttributes: &historypb.ExternalWorkflowExecutionCancelRequestedEventAttributes{
 				InitiatedEventId: scheduleEventID,
-				Namespace:        testNamespaceName,
+				Namespace:        testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1104,7 +1105,7 @@ func (s *historyBuilderSuite) TestRequestCancelExternalWorkflowExecutionFailed()
 			RequestCancelExternalWorkflowExecutionFailedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionFailedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
 				InitiatedEventId:             scheduleEventID,
-				Namespace:                    testNamespaceName,
+				Namespace:                    testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1124,7 +1125,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 	control := "random control"
 	childWorkflowOnly := rand.Int31()%2 == 0
 	attributes := &commandpb.SignalExternalWorkflowExecutionCommandAttributes{
-		Namespace: testNamespaceName,
+		Namespace: testNamespaceName.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: testWorkflowID,
 			RunId:      testRunID,
@@ -1148,7 +1149,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionInitiated() {
 		Attributes: &historypb.HistoryEvent_SignalExternalWorkflowExecutionInitiatedEventAttributes{
 			SignalExternalWorkflowExecutionInitiatedEventAttributes: &historypb.SignalExternalWorkflowExecutionInitiatedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				Namespace:                    testNamespaceName,
+				Namespace:                    testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1182,7 +1183,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionSuccess() {
 		Attributes: &historypb.HistoryEvent_ExternalWorkflowExecutionSignaledEventAttributes{
 			ExternalWorkflowExecutionSignaledEventAttributes: &historypb.ExternalWorkflowExecutionSignaledEventAttributes{
 				InitiatedEventId: scheduleEventID,
-				Namespace:        testNamespaceName,
+				Namespace:        testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1218,7 +1219,7 @@ func (s *historyBuilderSuite) TestSignalExternalWorkflowExecutionFailed() {
 			SignalExternalWorkflowExecutionFailedEventAttributes: &historypb.SignalExternalWorkflowExecutionFailedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
 				InitiatedEventId:             scheduleEventID,
-				Namespace:                    testNamespaceName,
+				Namespace:                    testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1243,7 +1244,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 	control := "random control"
 
 	attributes := &commandpb.StartChildWorkflowExecutionCommandAttributes{
-		Namespace:                testNamespaceName,
+		Namespace:                testNamespaceName.String(),
 		WorkflowId:               testWorkflowID,
 		WorkflowType:             testWorkflowType,
 		TaskQueue:                testTaskQueue,
@@ -1274,7 +1275,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionInitiated() {
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionInitiatedEventAttributes{
 			StartChildWorkflowExecutionInitiatedEventAttributes: &historypb.StartChildWorkflowExecutionInitiatedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				Namespace:                    testNamespaceName,
+				Namespace:                    testNamespaceName.String(),
 				WorkflowId:                   testWorkflowID,
 				WorkflowType:                 testWorkflowType,
 				TaskQueue:                    testTaskQueue,
@@ -1316,7 +1317,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionSuccess() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{
 			ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{
-				Namespace: testNamespaceName,
+				Namespace: testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1353,7 +1354,7 @@ func (s *historyBuilderSuite) TestStartChildWorkflowExecutionFailed() {
 		Attributes: &historypb.HistoryEvent_StartChildWorkflowExecutionFailedEventAttributes{
 			StartChildWorkflowExecutionFailedEventAttributes: &historypb.StartChildWorkflowExecutionFailedEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				Namespace:                    testNamespaceName,
+				Namespace:                    testNamespaceName.String(),
 				WorkflowId:                   testWorkflowID,
 				WorkflowType:                 testWorkflowType,
 				InitiatedEventId:             scheduleEventID,
@@ -1390,7 +1391,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCompleted() {
 			ChildWorkflowExecutionCompletedEventAttributes: &historypb.ChildWorkflowExecutionCompletedEventAttributes{
 				InitiatedEventId: scheduleEventID,
 				StartedEventId:   startedEventID,
-				Namespace:        testNamespaceName,
+				Namespace:        testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1429,7 +1430,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionFailed() {
 			ChildWorkflowExecutionFailedEventAttributes: &historypb.ChildWorkflowExecutionFailedEventAttributes{
 				InitiatedEventId: scheduleEventID,
 				StartedEventId:   startedEventID,
-				Namespace:        testNamespaceName,
+				Namespace:        testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1468,7 +1469,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTimeout() {
 			ChildWorkflowExecutionTimedOutEventAttributes: &historypb.ChildWorkflowExecutionTimedOutEventAttributes{
 				InitiatedEventId: scheduleEventID,
 				StartedEventId:   startedEventID,
-				Namespace:        testNamespaceName,
+				Namespace:        testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1505,7 +1506,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionCancelled() {
 			ChildWorkflowExecutionCanceledEventAttributes: &historypb.ChildWorkflowExecutionCanceledEventAttributes{
 				InitiatedEventId: scheduleEventID,
 				StartedEventId:   startedEventID,
-				Namespace:        testNamespaceName,
+				Namespace:        testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,
@@ -1541,7 +1542,7 @@ func (s *historyBuilderSuite) TestChildWorkflowExecutionTerminated() {
 			ChildWorkflowExecutionTerminatedEventAttributes: &historypb.ChildWorkflowExecutionTerminatedEventAttributes{
 				InitiatedEventId: scheduleEventID,
 				StartedEventId:   startedEventID,
-				Namespace:        testNamespaceName,
+				Namespace:        testNamespaceName.String(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: testWorkflowID,
 					RunId:      testRunID,

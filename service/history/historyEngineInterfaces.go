@@ -30,7 +30,6 @@ import (
 	"context"
 	"time"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/tasks"
@@ -58,25 +57,15 @@ type (
 
 	queueAckMgr interface {
 		getFinishedChan() <-chan struct{}
-		readQueueTasks() ([]queueTaskInfo, bool, error)
+		readQueueTasks() ([]tasks.Task, bool, error)
 		completeQueueTask(taskID int64)
 		getQueueAckLevel() int64
 		getQueueReadLevel() int64
 		updateQueueAckLevel() error
 	}
 
-	queueTaskInfo interface {
-		GetVersion() int64
-		GetTaskId() int64
-		GetTaskType() enumsspb.TaskType
-		GetVisibilityTime() *time.Time
-		GetWorkflowId() string
-		GetRunId() string
-		GetNamespaceId() string
-	}
-
 	queueTaskExecutor interface {
-		execute(ctx context.Context, taskInfo queueTaskInfo, shouldProcessTask bool) error
+		execute(ctx context.Context, taskInfo tasks.Task, shouldProcessTask bool) error
 	}
 
 	// TODO: deprecate this interface in favor of the task interface
@@ -89,7 +78,7 @@ type (
 
 	processor interface {
 		taskExecutor
-		readTasks(readLevel int64) ([]queueTaskInfo, bool, error)
+		readTasks(readLevel int64) ([]tasks.Task, bool, error)
 		updateAckLevel(taskID int64) error
 		queueShutdown() error
 	}
@@ -107,13 +96,4 @@ type (
 		getReadLevel() timerKey
 		updateAckLevel() error
 	}
-
-	queueType int
-)
-
-const (
-	transferQueueType queueType = iota + 1
-	timerQueueType
-	replicationQueueType
-	visibilityQueueType
 )

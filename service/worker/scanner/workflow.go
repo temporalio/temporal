@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/worker/scanner/executions"
 	"go.temporal.io/server/service/worker/scanner/history"
 	"go.temporal.io/server/service/worker/scanner/taskqueue"
@@ -50,10 +49,6 @@ type (
 )
 
 func (s scannerCtxExecMgrFactory) Close() {}
-
-func (s scannerCtxExecMgrFactory) NewExecutionManager() persistence.ExecutionManager {
-	return s.ctx.GetExecutionManager()
-}
 
 const (
 	scannerContextKey = contextKey(0)
@@ -153,18 +148,18 @@ func HistoryScavengerActivity(
 	hbd := history.ScavengerHeartbeatDetails{}
 	if activity.HasHeartbeatDetails(activityCtx) {
 		if err := activity.GetHeartbeatDetails(activityCtx, &hbd); err != nil {
-			ctx.GetLogger().Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
+			ctx.logger.Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
 		}
 	}
 
 	scavenger := history.NewScavenger(
 		numShards,
-		ctx.GetExecutionManager(),
+		ctx.executionManager,
 		rps,
-		ctx.GetHistoryClient(),
+		ctx.historyClient,
 		hbd,
-		ctx.GetMetricsClient(),
-		ctx.GetLogger(),
+		ctx.metricsClient,
+		ctx.logger,
 	)
 	return scavenger.Run(activityCtx)
 }
@@ -174,13 +169,13 @@ func TaskQueueScavengerActivity(
 	activityCtx context.Context,
 ) error {
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
-	scavenger := taskqueue.NewScavenger(ctx.GetTaskManager(), ctx.GetMetricsClient(), ctx.GetLogger())
-	ctx.GetLogger().Info("Starting task queue scavenger")
+	scavenger := taskqueue.NewScavenger(ctx.taskManager, ctx.metricsClient, ctx.logger)
+	ctx.logger.Info("Starting task queue scavenger")
 	scavenger.Start()
 	for scavenger.Alive() {
 		activity.RecordHeartbeat(activityCtx)
 		if activityCtx.Err() != nil {
-			ctx.GetLogger().Info("activity context error, stopping scavenger", tag.Error(activityCtx.Err()))
+			ctx.logger.Info("activity context error, stopping scavenger", tag.Error(activityCtx.Err()))
 			scavenger.Stop()
 			return activityCtx.Err()
 		}
@@ -195,18 +190,18 @@ func ExecutionsScavengerActivity(
 ) error {
 	ctx := activityCtx.Value(scannerContextKey).(scannerContext)
 
-	metricsClient := ctx.GetMetricsClient()
+	metricsClient := ctx.metricsClient
 	scavenger := executions.NewScavenger(
 		ctx.cfg.Persistence.NumHistoryShards,
-		ctx.GetExecutionManager(),
+		ctx.executionManager,
 		metricsClient,
-		ctx.GetLogger(),
+		ctx.logger,
 	)
 	scavenger.Start()
 	for scavenger.Alive() {
 		activity.RecordHeartbeat(activityCtx)
 		if activityCtx.Err() != nil {
-			ctx.GetLogger().Info("activity context error, stopping scavenger", tag.Error(activityCtx.Err()))
+			ctx.logger.Info("activity context error, stopping scavenger", tag.Error(activityCtx.Err()))
 			scavenger.Stop()
 			return activityCtx.Err()
 		}

@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -111,7 +112,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 
@@ -125,7 +126,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -141,7 +142,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -179,7 +180,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -216,7 +217,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -254,7 +255,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -291,7 +292,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	newRunID := "some random new run ID"
@@ -325,14 +326,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -366,7 +367,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	newRunID := "some random new run ID"
@@ -400,14 +401,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 
 	targetMutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -441,7 +442,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 
@@ -467,7 +468,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	newWorkflow.EXPECT().getReleaseFn().Return(newReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -496,7 +497,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	currentRunID := "other random runID"
@@ -533,7 +534,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -570,7 +571,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	newRunID := "some random new run ID"
@@ -603,14 +604,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
@@ -646,7 +647,7 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	ctx := context.Background()
 	now := time.Now().UTC()
 
-	namespaceID := "some random namespace ID"
+	namespaceID := namespace.ID("some random namespace ID")
 	workflowID := "some random workflow ID"
 	targetRunID := "some random run ID"
 	newRunID := "some random new run ID"
@@ -679,14 +680,14 @@ func (s *nDCTransactionMgrForExistingWorkflowSuite) TestDispatchForExistingWorkf
 	currentWorkflow.EXPECT().getReleaseFn().Return(currentReleaseFn).AnyTimes()
 
 	targetMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	targetMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
 		RunId: targetRunID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
-		NamespaceId: namespaceID,
+		NamespaceId: namespaceID.String(),
 		WorkflowId:  workflowID,
 	}).AnyTimes()
 	newMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{

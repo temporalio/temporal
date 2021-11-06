@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -93,13 +94,13 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// 2. activity heart beat
 	// no sync activity task will be sent when active side fail / timeout activity,
 	// since standby side does not have activity retry timer
-	namespaceID := request.GetNamespaceId()
+	namespaceID := namespace.ID(request.GetNamespaceId())
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
 		RunId:      request.RunId,
 	}
 
-	context, release, err := r.historyCache.GetOrCreateWorkflowExecution(
+	executionContext, release, err := r.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		execution,
@@ -112,7 +113,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := executionContext.LoadWorkflowExecution()
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
@@ -121,7 +122,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		// this can happen if the workflow start event and this sync activity task are out of order
 		// or the target workflow is long gone
 		// the safe solution to this is to throw away the sync activity task
-		// or otherwise, worker attempt will exceeds limit and put this message to DLQ
+		// or otherwise, worker attempt will exceed limit and put this message to DLQ
 		return nil
 	}
 
@@ -188,7 +189,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		updateMode = persistence.UpdateWorkflowModeBypassCurrent
 	}
 
-	return context.UpdateWorkflowExecutionWithNew(
+	return executionContext.UpdateWorkflowExecutionWithNew(
 		now,
 		updateMode,
 		nil, // no new workflow
@@ -256,7 +257,7 @@ func (r *nDCActivityReplicatorImpl) testActivity(
 }
 
 func (r *nDCActivityReplicatorImpl) testVersionHistory(
-	namespaceID string,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	scheduleID int64,
@@ -299,7 +300,7 @@ func (r *nDCActivityReplicatorImpl) testVersionHistory(
 		if scheduleID > lcaItem.GetEventId() {
 			return false, serviceerrors.NewRetryReplication(
 				resendMissingEventMessage,
-				namespaceID,
+				namespaceID.String(),
 				workflowID,
 				runID,
 				lcaItem.GetEventId(),
@@ -317,7 +318,7 @@ func (r *nDCActivityReplicatorImpl) testVersionHistory(
 			// case 2-2
 			return false, serviceerrors.NewRetryReplication(
 				resendHigherVersionMessage,
-				namespaceID,
+				namespaceID.String(),
 				workflowID,
 				runID,
 				lcaItem.GetEventId(),

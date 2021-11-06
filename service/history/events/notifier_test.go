@@ -31,7 +31,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally"
+	"github.com/uber-go/tally/v4"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 )
 
 type (
@@ -69,8 +70,8 @@ func (s *notifierSuite) SetupTest() {
 	s.notifier = NewNotifier(
 		clock.NewRealTimeSource(),
 		metrics.NewClient(tally.NoopScope, metrics.History),
-		func(namespaceID, workflowID string) int32 {
-			key := namespaceID + "_" + workflowID
+		func(namespaceID namespace.ID, workflowID string) int32 {
+			key := namespaceID.String() + "_" + workflowID
 			return int32(len(key))
 		},
 	)

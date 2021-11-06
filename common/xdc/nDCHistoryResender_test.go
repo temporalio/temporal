@@ -64,8 +64,8 @@ type (
 		mockAdminClient     *adminservicemock.MockAdminServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 
-		namespaceID string
-		namespace   string
+		namespaceID namespace.ID
+		namespace   namespace.Name
 
 		serializer serialization.Serializer
 		logger     log.Logger
@@ -98,10 +98,10 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.logger = log.NewTestLogger()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 
-	s.namespaceID = uuid.New()
+	s.namespaceID = namespace.ID(uuid.New())
 	s.namespace = "some random namespace name"
 	namespaceEntry := namespace.NewGlobalNamespaceForTest(
-		&persistencespb.NamespaceInfo{Id: s.namespaceID, Name: s.namespace},
+		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: cluster.TestCurrentClusterName,
@@ -165,7 +165,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace: s.namespace,
+			Namespace: s.namespace.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -187,7 +187,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(
 		gomock.Any(),
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace: s.namespace,
+			Namespace: s.namespace.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -209,7 +209,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 	s.mockHistoryClient.EXPECT().ReplicateEventsV2(
 		gomock.Any(),
 		&historyservice.ReplicateEventsV2Request{
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -246,7 +246,7 @@ func (s *nDCHistoryResenderSuite) TestCreateReplicateRawEventsRequest() {
 	}
 
 	s.Equal(&historyservice.ReplicateEventsV2Request{
-		NamespaceId: s.namespaceID,
+		NamespaceId: s.namespaceID.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -269,7 +269,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest() {
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: s.namespaceID,
+		NamespaceId: s.namespaceID.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -294,7 +294,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 		Version: 1,
 	}
 	request := &historyservice.ReplicateEventsV2Request{
-		NamespaceId: s.namespaceID,
+		NamespaceId: s.namespaceID.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
@@ -307,7 +307,7 @@ func (s *nDCHistoryResenderSuite) TestSendReplicationRawRequest_Err() {
 	}
 	retryErr := serviceerrors.NewRetryReplication(
 		"",
-		s.namespaceID,
+		s.namespaceID.String(),
 		workflowID,
 		runID,
 		common.EmptyEventID,
@@ -340,7 +340,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 		NextPageToken: nextTokenOut,
 	}
 	s.mockAdminClient.EXPECT().GetWorkflowExecutionRawHistoryV2(gomock.Any(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,

@@ -301,7 +301,7 @@ Loop:
 
 		scheduleEvent, err := r.eventsCache.GetEvent(
 			events.EventKey{
-				NamespaceID: executionInfo.NamespaceId,
+				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
 				EventID:     activityInfo.ScheduleId,
@@ -385,7 +385,7 @@ Loop:
 
 		scheduleEvent, err := r.eventsCache.GetEvent(
 			events.EventKey{
-				NamespaceID: executionInfo.NamespaceId,
+				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
 				EventID:     childWorkflowInfo.InitiatedId,
@@ -427,7 +427,7 @@ func (r *TaskRefresherImpl) refreshTasksForRequestCancelExternalWorkflow(
 	for _, requestCancelInfo := range pendingRequestCancelInfos {
 		initiateEvent, err := r.eventsCache.GetEvent(
 			events.EventKey{
-				NamespaceID: executionInfo.NamespaceId,
+				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
 				EventID:     requestCancelInfo.GetInitiatedId(),
@@ -469,7 +469,7 @@ func (r *TaskRefresherImpl) refreshTasksForSignalExternalWorkflow(
 	for _, signalInfo := range pendingSignalInfos {
 		initiateEvent, err := r.eventsCache.GetEvent(
 			events.EventKey{
-				NamespaceID: executionInfo.NamespaceId,
+				NamespaceID: namespace.ID(executionInfo.NamespaceId),
 				WorkflowID:  executionInfo.WorkflowId,
 				RunID:       executionState.RunId,
 				EventID:     signalInfo.GetInitiatedId(),

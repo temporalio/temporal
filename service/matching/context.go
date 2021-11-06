@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 )
@@ -41,7 +42,7 @@ type handlerContext struct {
 
 func newHandlerContext(
 	ctx context.Context,
-	namespace string,
+	namespace namespace.Name,
 	taskQueue *taskqueuepb.TaskQueue,
 	metricsClient metrics.Client,
 	metricsScope int,
@@ -51,7 +52,7 @@ func newHandlerContext(
 		Context: ctx,
 		scope: metrics.GetPerTaskQueueScope(
 			metricsClient.Scope(metricsScope),
-			namespace,
+			namespace.String(),
 			taskQueue.GetName(),
 			taskQueue.GetKind(),
 		),

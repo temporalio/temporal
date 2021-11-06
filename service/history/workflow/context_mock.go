@@ -36,6 +36,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
 	v10 "go.temporal.io/server/api/persistence/v1"
+	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 )
 
@@ -131,10 +132,10 @@ func (mr *MockContextMockRecorder) GetHistorySize() *gomock.Call {
 }
 
 // GetNamespace mocks base method.
-func (m *MockContext) GetNamespace() string {
+func (m *MockContext) GetNamespace() namespace.Name {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespace")
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(namespace.Name)
 	return ret0
 }
 
@@ -145,10 +146,10 @@ func (mr *MockContextMockRecorder) GetNamespace() *gomock.Call {
 }
 
 // GetNamespaceID mocks base method.
-func (m *MockContext) GetNamespaceID() string {
+func (m *MockContext) GetNamespaceID() namespace.ID {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceID")
-	ret0, _ := ret[0].(string)
+	ret0, _ := ret[0].(namespace.ID)
 	return ret0
 }
 
