@@ -2086,9 +2086,14 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
+	}
+	if request.GetRequestId() == "" {
+		return nil, errRequestIDNotSet
+	}
+	if len(request.GetRequestId()) > wh.config.MaxIDLengthLimit() {
+		return nil, errRequestIDTooLong
 	}
 
 	if err := wh.validateExecution(request.WorkflowExecution); err != nil {
