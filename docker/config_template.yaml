@@ -239,8 +239,12 @@ global:
     authorization:
         jwtKeyProvider:
             keySourceURIs:
+                {{- if .Env.TEMPORAL_JWT_KEY_SOURCE1 }}
                 - {{ default .Env.TEMPORAL_JWT_KEY_SOURCE1 "" }}
+                {{- end }}
+                {{- if .Env.TEMPORAL_JWT_KEY_SOURCE2 }}
                 - {{ default .Env.TEMPORAL_JWT_KEY_SOURCE2 "" }}
+                {{- end }}
             refreshInterval: {{ default .Env.TEMPORAL_JWT_KEY_REFRESH "1m" }}
         permissionsClaimName: {{ default .Env.TEMPORAL_JWT_PERMISSIONS_CLAIM "permissions" }}
         authorizer: {{ default .Env.TEMPORAL_AUTH_AUTHORIZER "" }}
