@@ -336,3 +336,7 @@ func (tc *TestCluster) GetExecutionManager() persistence.ExecutionManager {
 func (tc *TestCluster) RefreshNamespaceCache() {
 	tc.host.RefreshNamespaceCache()
 }
+
+func (tc *TestCluster) GetHost() *temporalImpl {
+	return tc.host
+}
