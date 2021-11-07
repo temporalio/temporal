@@ -27,52 +27,32 @@ package worker
 import (
 	"context"
 
-	"go.temporal.io/server/service/worker/scanner/replication"
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service"
+	"go.temporal.io/server/service/worker/addsearchattributes"
+	"go.temporal.io/server/service/worker/scanner/replication"
+	"go.uber.org/fx"
 )
 
 var Module = fx.Options(
-	persistenceClient.Module,
 	replication.Module,
+	addsearchattributes.Module,
+	resource.Module,
 	fx.Provide(ParamsExpandProvider),
-	fx.Provide(resource.PersistenceConfigProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(NewConfig),
 	fx.Provide(PersistenceMaxQpsProvider),
-	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(NamespaceReplicationQueueProvider),
-	fx.Provide(resource.ClusterMetadataManagerProvider),
-	fx.Provide(resource.MetricsClientProvider),
-	fx.Provide(resource.ClientBeanProvider),
-	fx.Provide(resource.NamespaceCacheProvider),
-	fx.Provide(resource.ArchiverProviderProvider),
-	fx.Provide(resource.MetricsScopeProvider),
-	fx.Provide(resource.MembershipMonitorProvider),
-	fx.Provide(resource.PersistenceExecutionManagerProvider),
-	fx.Provide(resource.AbstractDatastoreFactoryProvider),
-	fx.Provide(resource.PersistenceServiceResolverProvider),
-	fx.Provide(resource.SdkClientProvider),
-	fx.Provide(resource.ClientFactoryProvider),
-	fx.Provide(resource.SnTaggedLoggerProvider),
-	fx.Provide(resource.MembershipFactoryProvider),
-	fx.Provide(resource.ServiceNameProvider),
-	fx.Provide(resource.MetadataManagerProvider),
 	fx.Provide(PersistenceTaskManagerProvider),
 	fx.Provide(HistoryServiceClientProvider),
-	fx.Provide(cluster.NewMetadataFromConfig),
 	fx.Provide(NewService),
 	fx.Provide(NewWorkerManager),
 	fx.Invoke(ServiceLifetimeHooks),
@@ -90,10 +70,6 @@ func PersistenceMaxQpsProvider(
 	serviceConfig *Config,
 ) persistenceClient.PersistenceMaxQps {
 	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
-}
-
-func ArchivalMetadataProvider(params *resource.BootstrapParams) archiver.ArchivalMetadata {
-	return params.ArchivalMetadata
 }
 
 func NamespaceReplicationQueueProvider(bean persistenceClient.Bean) persistence.NamespaceReplicationQueue {

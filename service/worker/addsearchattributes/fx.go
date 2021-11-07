@@ -25,63 +25,64 @@
 package addsearchattributes
 
 import (
-	sdkclient "go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/worker"
+	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
+	workercommon "go.temporal.io/server/service/worker/common"
+	"go.uber.org/fx"
 )
 
 type (
-	// addSearchAttributes is the background sub-system that execute workflow to add new search attributes.
+	// addSearchAttributes represent background work needed for adding search attributes
 	addSearchAttributes struct {
-		sdkClient     sdkclient.Client
-		esClient      esclient.Client
-		saManager     searchattribute.Manager
-		metricsClient metrics.Client
-		logger        log.Logger
+		initParams
+	}
+
+	initParams struct {
+		fx.In
+		EsClient      esclient.Client
+		Manager       searchattribute.Manager
+		MetricsClient metrics.Client
+		Logger        log.Logger
+	}
+
+	fxResult struct {
+		fx.Out
+		Component workercommon.WorkerComponent `group:"workerComponent"`
 	}
 )
 
-// New returns a new instance of addSearchAttributes.
-func New(
-	sdkClient sdkclient.Client,
-	esClient esclient.Client,
-	saManager searchattribute.Manager,
-	metricsClient metrics.Client,
-	logger log.Logger,
-) *addSearchAttributes {
-	return &addSearchAttributes{
-		sdkClient:     sdkClient,
-		esClient:      esClient,
-		saManager:     saManager,
-		metricsClient: metricsClient,
-		logger: log.With(logger,
-			tag.ComponentAddSearchAttributes,
-			tag.WorkflowID(WorkflowName),
-		),
+var Module = fx.Options(
+	fx.Provide(NewResult),
+)
+
+func NewResult(params initParams) fxResult {
+	component := &addSearchAttributes{
+		initParams: params,
+	}
+	return fxResult{
+		Component: component,
 	}
 }
 
-// Start service.
-func (s *addSearchAttributes) Start() error {
-	workerOpts := worker.Options{}
+func (wc *addSearchAttributes) Register(worker sdkworker.Worker) {
+	worker.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
+	worker.RegisterActivity(wc.activities())
+}
 
-	wrk := worker.New(s.sdkClient, TaskQueueName, workerOpts)
+func (wc *addSearchAttributes) DedicatedWorkerOptions() *workercommon.DedicatedWorkerOptions {
+	// use default worker
+	return nil
+}
 
-	a := newActivities(
-		s.esClient,
-		s.saManager,
-		s.metricsClient,
-		s.logger,
-	)
-
-	wrk.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
-	wrk.RegisterActivity(a)
-
-	return wrk.Start()
+func (wc *addSearchAttributes) activities() *activities {
+	return &activities{
+		esClient:      wc.EsClient,
+		saManager:     wc.Manager,
+		metricsClient: wc.MetricsClient,
+		logger:        wc.Logger,
+	}
 }

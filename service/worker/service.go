@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -49,8 +48,6 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
@@ -350,8 +347,6 @@ func (s *Service) Start() {
 		s.startParentClosePolicyProcessor()
 	}
 
-	s.startAddSearchAttributes()
-
 	s.manager.Start()
 
 	s.logger.Info(
@@ -414,25 +409,6 @@ func (s *Service) startBatcher() {
 	if err := batcher.New(params).Start(); err != nil {
 		s.logger.Fatal(
 			"error starting batcher",
-			tag.Error(err),
-		)
-	}
-}
-
-func (s *Service) startAddSearchAttributes() {
-	addSearchAttributesService := addsearchattributes.New(
-		s.sdkClient,
-		s.esClient,
-		searchattribute.NewManager(
-			clock.NewRealTimeSource(),
-			s.clusterMetadataManager,
-		),
-		s.metricsClient,
-		s.logger,
-	)
-	if err := addSearchAttributesService.Start(); err != nil {
-		s.logger.Fatal(
-			"error starting add search attributes service",
 			tag.Error(err),
 		)
 	}

@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -59,6 +58,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 )
 
@@ -195,7 +195,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	run, err := adh.GetSDKClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{
-			TaskQueue: addsearchattributes.TaskQueueName,
+			TaskQueue: worker.DefaultWorkerTaskQueue,
 			ID:        addsearchattributes.WorkflowName,
 		},
 		addsearchattributes.WorkflowName,
