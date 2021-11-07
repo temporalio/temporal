@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	clientKeyConnection = "client-key-connection"
+	constClientKey = "const-client-key"
 )
 
 type (
@@ -85,6 +85,13 @@ type (
 	}
 
 	factoryProviderImpl struct {
+	}
+
+	serviceKeyResolverImpl struct {
+		resolver membership.ServiceResolver
+	}
+
+	constKeyResolverImpl struct {
 	}
 )
 
@@ -130,20 +137,13 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 		return nil, err
 	}
 
-	keyResolver := func(key string) (string, error) {
-		host, err := resolver.Lookup(key)
-		if err != nil {
-			return "", err
-		}
-		return host.GetAddress(), nil
-	}
-
+	keyResolver := newServiceKeyResolver(resolver)
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return historyservice.NewHistoryServiceClient(connection), nil
 	}
-
-	client := history.NewClient(cf.numberOfHistoryShards, timeout, common.NewClientCache(keyResolver, clientProvider), cf.logger)
+	clientCache := common.NewClientCache(keyResolver, clientProvider)
+	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
 	if cf.metricsClient != nil {
 		client = history.NewMetricClient(client, cf.metricsClient)
 	}
@@ -160,19 +160,11 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 		return nil, err
 	}
 
-	keyResolver := func(key string) (string, error) {
-		host, err := resolver.Lookup(key)
-		if err != nil {
-			return "", err
-		}
-		return host.GetAddress(), nil
-	}
-
+	keyResolver := newServiceKeyResolver(resolver)
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateInternodeGRPCConnection(clientKey)
 		return matchingservice.NewMatchingServiceClient(connection), nil
 	}
-
 	client := matching.NewClient(
 		timeout,
 		longPollTimeout,
@@ -192,15 +184,11 @@ func (cf *rpcClientFactory) NewFrontendClientWithTimeout(
 	timeout time.Duration,
 	longPollTimeout time.Duration,
 ) (workflowservice.WorkflowServiceClient, error) {
-	keyResolver := func(key string) (string, error) {
-		return clientKeyConnection, nil
-	}
-
+	keyResolver := newConstKeyResolver()
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateFrontendGRPCConnection(rpcAddress)
 		return workflowservice.NewWorkflowServiceClient(connection), nil
 	}
-
 	client := frontend.NewClient(timeout, longPollTimeout, common.NewClientCache(keyResolver, clientProvider))
 	if cf.metricsClient != nil {
 		client = frontend.NewMetricClient(client, cf.metricsClient)
@@ -213,10 +201,7 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 	timeout time.Duration,
 	largeTimeout time.Duration,
 ) (adminservice.AdminServiceClient, error) {
-	keyResolver := func(key string) (string, error) {
-		return clientKeyConnection, nil
-	}
-
+	keyResolver := newConstKeyResolver()
 	clientProvider := func(clientKey string) (interface{}, error) {
 		connection := cf.rpcFactory.CreateFrontendGRPCConnection(rpcAddress)
 		return adminservice.NewAdminServiceClient(connection), nil
@@ -227,4 +212,40 @@ func (cf *rpcClientFactory) NewAdminClientWithTimeout(
 		client = admin.NewMetricClient(client, cf.metricsClient)
 	}
 	return client, nil
+}
+
+func newServiceKeyResolver(resolver membership.ServiceResolver) *serviceKeyResolverImpl {
+	return &serviceKeyResolverImpl{
+		resolver: resolver,
+	}
+}
+
+func newConstKeyResolver() *constKeyResolverImpl {
+	return &constKeyResolverImpl{}
+}
+
+func (r *serviceKeyResolverImpl) Lookup(key string) (string, error) {
+	host, err := r.resolver.Lookup(key)
+	if err != nil {
+		return "", err
+	}
+	return host.GetAddress(), nil
+}
+
+func (r *serviceKeyResolverImpl) GetAllAddresses() ([]string, error) {
+	var all []string
+
+	for _, host := range r.resolver.Members() {
+		all = append(all, host.GetAddress())
+	}
+
+	return all, nil
+}
+
+func (r *constKeyResolverImpl) Lookup(_ string) (string, error) {
+	return constClientKey, nil
+}
+
+func (r *constKeyResolverImpl) GetAllAddresses() ([]string, error) {
+	return []string{constClientKey}, nil
 }
