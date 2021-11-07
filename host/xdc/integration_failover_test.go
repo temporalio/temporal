@@ -1868,7 +1868,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	testWorkflowFn := func(ctx workflow.Context) error {
 		ao := workflow.ActivityOptions{
 			StartToCloseTimeout: time.Second * 1000,
-			HeartbeatTimeout:  time.Second * 3,
+			HeartbeatTimeout:    time.Second * 3,
 		}
 		ctx = workflow.WithActivityOptions(ctx, ao)
 		err := workflow.ExecuteActivity(ctx, activityWithHB).Get(ctx, nil)
@@ -2002,7 +2002,7 @@ func (s *integrationClustersTestSuite) registerNamespace(namespace string) {
 
 func (s *integrationClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
 	sdkClient1, err := sdkclient.NewClient(sdkclient.Options{
-		HostPort: hostport,
+		HostPort:  hostport,
 		Namespace: namespace,
 	})
 	s.NoError(err)
