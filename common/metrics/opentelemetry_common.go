@@ -25,14 +25,14 @@
 package metrics
 
 import (
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 )
 
-func tagMapToLabelArray(tags map[string]string) []label.KeyValue {
-	result := make([]label.KeyValue, len(tags))
+func tagMapToLabelArray(tags map[string]string) []attribute.KeyValue {
+	result := make([]attribute.KeyValue, len(tags))
 	idx := 0
 	for k, v := range tags {
-		result[idx] = label.String(k, v)
+		result[idx] = attribute.String(k, v)
 		idx++
 	}
 	return result
