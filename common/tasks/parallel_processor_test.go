@@ -67,7 +67,7 @@ func (s *parallelProcessorSuite) SetupTest() {
 			QueueSize:   1,
 			WorkerCount: 1,
 		},
-		metrics.NewClient(tally.NoopScope, metrics.Common),
+		metrics.NewClient(&metrics.ClientConfig{}, tally.NoopScope, metrics.Common),
 		log.NewNoopLogger(),
 	)
 	s.retryPolicy = backoff.NewExponentialRetryPolicy(time.Millisecond)
