@@ -26,7 +26,6 @@ package cli
 
 import (
 	"github.com/urfave/cli"
-	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 )
@@ -43,17 +42,4 @@ func AdminDescribeCluster(c *cli.Context) {
 	}
 
 	prettyPrintJSONObject(response)
-}
-
-// AdminClusterMetadata is used to dump information about the cluster
-func AdminClusterMetadata(c *cli.Context) {
-	frontendClient := cFactory.FrontendClient(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
-
-	info, err := frontendClient.GetClusterInfo(ctx, &workflowservice.GetClusterInfoRequest{})
-	if err != nil {
-		ErrorAndExit("Operation AdminClusterMetadata failed.", err)
-	}
-	prettyPrintJSONObject(info)
 }
