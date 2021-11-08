@@ -1,0 +1,8 @@
+{
+  "CurrVersion": "1.6",
+  "MinCompatibleVersion": "1.0",
+  "Description": "create cluster metadata info table to store cluster information",
+  "SchemaUpdateCqlFiles": [
+    "cluster_metadata_info.cql"
+  ]
+}

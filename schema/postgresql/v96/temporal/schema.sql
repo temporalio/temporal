@@ -248,12 +248,22 @@ CREATE TABLE queue_metadata (
   PRIMARY KEY(queue_type)
 );
 
+-- TODO deprecate this table in v1.15+
 CREATE TABLE cluster_metadata (
   metadata_partition        INTEGER NOT NULL,
   data                      BYTEA NOT NULL,
   data_encoding             VARCHAR(16) NOT NULL,
   version                   BIGINT NOT NULL,
   PRIMARY KEY(metadata_partition)
+);
+
+CREATE TABLE cluster_metadata_info (
+  metadata_partition        INTEGER NOT NULL,
+  cluster_name              VARCHAR(255) NOT NULL,
+  data                      BYTEA NOT NULL,
+  data_encoding             VARCHAR(16) NOT NULL,
+  version                   BIGINT NOT NULL,
+  PRIMARY KEY(metadata_partition, cluster_name)
 );
 
 CREATE TABLE cluster_membership
