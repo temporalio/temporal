@@ -47,7 +47,7 @@ message IndexSearchAttributes{
 
 message TLS {
     string server_name = 1;
-    bool disableServerVerification = 2;
-    repeated string rootCAData = 3;
-    bool forceTLS = 4;
+    bool disable_server_verification = 2;
+    repeated string root_ca_data = 3;
+    bool force_tls = 4;
 }
