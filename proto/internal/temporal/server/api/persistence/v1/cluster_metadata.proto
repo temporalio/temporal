@@ -33,8 +33,21 @@ message ClusterMetadata {
     string cluster_id = 3;
     temporal.api.version.v1.VersionInfo version_info = 4;
     map<string,temporal.server.api.persistence.v1.IndexSearchAttributes> index_search_attributes = 5;
+    string cluster_address = 6;
+    int32 failover_version_increment = 7;
+    int32 initial_failover_version = 8;
+    bool is_global_namespace_enabled = 9;
+    TLS tls = 10;
+    bool is_connection_active = 11;
 }
 
 message IndexSearchAttributes{
     map<string,temporal.api.enums.v1.IndexedValueType> custom_search_attributes = 1;
+}
+
+message TLS {
+    string server_name = 1;
+    bool disableServerVerification = 2;
+    repeated string rootCAData = 3;
+    bool forceTLS = 4;
 }
