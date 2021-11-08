@@ -29,6 +29,7 @@ import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/common/v1/message.proto";
+import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
@@ -192,6 +193,12 @@ message DescribeClusterResponse {
     map<string,string> supported_clients = 1;
     string server_version = 2;
     temporal.server.api.cluster.v1.MembershipInfo membership_info = 3;
+    string cluster_id = 4;
+    string cluster_name = 5;
+    int32 history_shard_count = 6;
+    string persistence_store = 7;
+    string visibility_store = 8;
+    temporal.api.version.v1.VersionInfo version_info = 9;
 }
 
 message GetDLQMessagesRequest {

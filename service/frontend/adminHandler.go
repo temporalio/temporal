@@ -54,6 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -79,6 +80,7 @@ type (
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
 		eventSerializer       serialization.Serializer
+		visibilityMgr         manager.VisibilityManager
 	}
 )
 
@@ -96,6 +98,7 @@ func NewAdminHandler(
 	config *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
+	visibilityMrg manager.VisibilityManager,
 ) *AdminHandler {
 
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
@@ -113,6 +116,7 @@ func NewAdminHandler(
 			resource.GetLogger(),
 		),
 		eventSerializer: serialization.NewSerializer(),
+		visibilityMgr:   visibilityMrg,
 		ESConfig:        esConfig,
 		ESClient:        esClient,
 	}
@@ -650,10 +654,21 @@ func (adh *AdminHandler) DescribeCluster(_ context.Context, _ *adminservice.Desc
 		membershipInfo.Rings = rings
 	}
 
+	metadata, err := adh.GetClusterMetadataManager().GetClusterMetadata()
+	if err != nil {
+		return nil, err
+	}
+
 	return &adminservice.DescribeClusterResponse{
-		SupportedClients: headers.SupportedClients,
-		ServerVersion:    headers.ServerVersion,
-		MembershipInfo:   membershipInfo,
+		SupportedClients:  headers.SupportedClients,
+		ServerVersion:     headers.ServerVersion,
+		MembershipInfo:    membershipInfo,
+		ClusterId:         metadata.ClusterId,
+		ClusterName:       metadata.ClusterName,
+		HistoryShardCount: metadata.HistoryShardCount,
+		PersistenceStore:  adh.GetExecutionManager().GetName(),
+		VisibilityStore:   adh.visibilityMgr.GetName(),
+		VersionInfo:       metadata.VersionInfo,
 	}, nil
 }
 

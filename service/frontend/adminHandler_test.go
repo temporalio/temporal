@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -66,7 +67,8 @@ type (
 		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 
-		mockExecutionMgr *persistence.MockExecutionManager
+		mockExecutionMgr  *persistence.MockExecutionManager
+		mockVisibilityMgr *manager.MockVisibilityManager
 
 		namespace   namespace.Name
 		namespaceID namespace.ID
@@ -98,7 +100,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		},
 	}
 	config := &Config{}
-	s.handler = NewAdminHandler(s.mockResource, params, config, nil, s.mockResource.ESClient)
+	s.handler = NewAdminHandler(s.mockResource, params, config, nil, s.mockResource.ESClient, s.mockVisibilityMgr)
 	s.handler.Start()
 }
 
