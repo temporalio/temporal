@@ -1174,8 +1174,11 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	setStateStopping := func() {
 		s.state = contextStateStopping
 		// The change in state should cause all write methods to fail, but just in case, set this also,
-		// which will cause failures at the persistence level
-		s.shardInfo.RangeId = -1
+		// which will cause failures at the persistence level. (Note that if persistence is unavailable
+		// and we couldn't even load the shard metadata, shardInfo may still be nil here.)
+		if s.shardInfo != nil {
+			s.shardInfo.RangeId = -1
+		}
 		// This will cause the controller to remove this shard from the map and then call s.stop()
 		go s.closeCallback(s)
 	}
