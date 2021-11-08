@@ -32,7 +32,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
@@ -67,7 +66,7 @@ func (s *fifoTaskSchedulerSuite) SetupTest() {
 	s.queueSize = 2
 	s.scheduler = NewFIFOTaskScheduler(
 		log.NewTestLogger(),
-		metrics.NewClient(tally.NoopScope, metrics.Common),
+		metrics.NewNoopMetricsClient(),
 		&FIFOTaskSchedulerOptions{
 			QueueSize:   s.queueSize,
 			WorkerCount: 1,

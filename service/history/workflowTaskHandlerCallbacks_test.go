@@ -30,7 +30,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
 
@@ -64,7 +63,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.workflowTaskHandlerCallback = &workflowTaskHandlerCallbacksImpl{
-		metricsClient: metrics.NewClient(tally.NoopScope, metrics.History),
+		metricsClient: metrics.NewNoopMetricsClient(),
 		config:        tests.NewDynamicConfig(),
 		logger:        log.NewNoopLogger(),
 	}

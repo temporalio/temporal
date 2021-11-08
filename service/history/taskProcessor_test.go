@@ -33,7 +33,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -103,7 +102,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	s.scopeIdx = 0
-	s.scope = metrics.NewClient(tally.NoopScope, metrics.History).Scope(s.scopeIdx)
+	s.scope = metrics.NewNoopMetricsClient().Scope(s.scopeIdx)
 	s.notificationChan = make(chan struct{})
 	h := &historyEngineImpl{
 		shard:         s.mockShard,

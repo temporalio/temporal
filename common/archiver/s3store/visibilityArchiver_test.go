@@ -39,6 +39,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/searchattribute"
 
 	archiverspb "go.temporal.io/server/api/archiver/v1"
@@ -139,7 +140,7 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 
 	s.container = &archiver.VisibilityBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NewClient(scope, metrics.VisibilityArchiverScope),
+		MetricsClient: metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.VisibilityArchiverScope),
 	}
 }
 

@@ -32,31 +32,22 @@ import (
 
 type tallyScope struct {
 	scope             tally.Scope
-	rootScope         tally.Scope
+	rootScope         internalScope
 	defs              map[int]metricDefinition
 	isNamespaceTagged bool
 }
 
-func newTallyScope(
-	rootScope tally.Scope,
+func newTallyScopeInternal(
+	rootScope internalScope,
 	scope tally.Scope,
 	defs map[int]metricDefinition,
 	isNamespace bool,
-) Scope {
+) internalScope {
 	return &tallyScope{
 		scope:             scope,
 		rootScope:         rootScope,
 		defs:              defs,
 		isNamespaceTagged: isNamespace,
-	}
-}
-
-// NoopScope returns a noop scope of metrics
-func NoopScope(serviceIdx ServiceIdx) Scope {
-	return &tallyScope{
-		scope:     tally.NoopScope,
-		rootScope: tally.NoopScope,
-		defs:      getMetricDefs(serviceIdx),
 	}
 }
 
@@ -68,8 +59,12 @@ func (m *tallyScope) AddCounter(id int, delta int64) {
 	def := m.defs[id]
 	m.scope.Counter(def.metricName.String()).Inc(delta)
 	if !def.metricRollupName.Empty() {
-		m.rootScope.Counter(def.metricRollupName.String()).Inc(delta)
+		m.rootScope.AddCounterInternal(def.metricRollupName.String(), delta)
 	}
+}
+
+func (m *tallyScope) AddCounterInternal(name string, delta int64) {
+	m.scope.Counter(name).Inc(delta)
 }
 
 func (m *tallyScope) UpdateGauge(id int, value float64) {
@@ -82,18 +77,20 @@ func (m *tallyScope) UpdateGauge(id int, value float64) {
 
 func (m *tallyScope) StartTimer(id int) Stopwatch {
 	def := m.defs[id]
-	timer := m.scope.Timer(def.metricName.String())
+	timer := NewStopwatch(m.scope.Timer(def.metricName.String()))
 	switch {
 	case !def.metricRollupName.Empty():
-		return NewStopwatch(timer, m.rootScope.Timer(def.metricRollupName.String()))
+		return NewCompositeStopwatch(timer, m.rootScope.StartTimerInternal(def.metricRollupName.String()))
 	case m.isNamespaceTagged:
-		// remove next line in v1.20.0
-		timerAllDeprecated := m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(def.metricName.String())
-		timerAll := m.rootScope.Timer(def.metricName.String() + totalMetricSuffix)
-		return NewStopwatch(timer, timerAll, timerAllDeprecated)
+		timerAll := m.rootScope.StartTimerInternal(def.metricName.String() + totalMetricSuffix)
+		return NewCompositeStopwatch(timer, timerAll)
 	default:
-		return NewStopwatch(timer)
+		return timer
 	}
+}
+
+func (m *tallyScope) StartTimerInternal(timer string) Stopwatch {
+	return NewStopwatch(m.scope.Timer(timer))
 }
 
 func (m *tallyScope) RecordTimer(id int, d time.Duration) {
@@ -101,12 +98,14 @@ func (m *tallyScope) RecordTimer(id int, d time.Duration) {
 	m.scope.Timer(def.metricName.String()).Record(d)
 	switch {
 	case !def.metricRollupName.Empty():
-		m.rootScope.Timer(def.metricRollupName.String()).Record(d)
+		m.rootScope.RecordTimerInternal(def.metricRollupName.String(), d)
 	case m.isNamespaceTagged:
-		// remove next line in v1.20.0
-		m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(def.metricName.String()).Record(d)
-		m.rootScope.Timer(def.metricName.String() + totalMetricSuffix).Record(d)
+		m.rootScope.RecordTimerInternal(def.metricName.String()+totalMetricSuffix, d)
 	}
+}
+
+func (m *tallyScope) RecordTimerInternal(name string, d time.Duration) {
+	m.scope.Timer(name).Record(d)
 }
 
 func (m *tallyScope) RecordDistribution(id int, d int) {
@@ -115,33 +114,22 @@ func (m *tallyScope) RecordDistribution(id int, d int) {
 	m.scope.Timer(def.metricName.String()).Record(dist)
 	switch {
 	case !def.metricRollupName.Empty():
-		m.rootScope.Timer(def.metricRollupName.String()).Record(dist)
+		m.rootScope.RecordDistributionInternal(def.metricRollupName.String(), d)
 	case m.isNamespaceTagged:
-		// remove next line in v1.20.0
-		m.scope.Tagged(map[string]string{namespace: namespaceAllValue}).Timer(def.metricName.String()).Record(dist)
-		m.rootScope.Timer(def.metricName.String() + totalMetricSuffix).Record(dist)
+		m.rootScope.RecordDistributionInternal(def.metricName.String()+totalMetricSuffix, d)
 	}
 }
 
-// Deprecated: not used
-func (m *tallyScope) RecordHistogramDuration(id int, value time.Duration) {
-	def := m.defs[id]
-	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordDuration(value)
-	if !def.metricRollupName.Empty() {
-		m.rootScope.Histogram(def.metricRollupName.String(), m.getBuckets(id)).RecordDuration(value)
-	}
-}
-
-// Deprecated: not used
-func (m *tallyScope) RecordHistogramValue(id int, value float64) {
-	def := m.defs[id]
-	m.scope.Histogram(def.metricName.String(), m.getBuckets(id)).RecordValue(value)
-	if !def.metricRollupName.Empty() {
-		m.rootScope.Histogram(def.metricRollupName.String(), m.getBuckets(id)).RecordValue(value)
-	}
+func (m *tallyScope) RecordDistributionInternal(name string, d int) {
+	dist := time.Duration(d * distributionToTimerRatio)
+	m.scope.Timer(name).Record(dist)
 }
 
 func (m *tallyScope) Tagged(tags ...Tag) Scope {
+	return m.TaggedInternal(tags...)
+}
+
+func (m *tallyScope) TaggedInternal(tags ...Tag) internalScope {
 	namespaceTagged := m.isNamespaceTagged
 	tagMap := make(map[string]string, len(tags))
 	for _, tag := range tags {
@@ -150,7 +138,7 @@ func (m *tallyScope) Tagged(tags ...Tag) Scope {
 		}
 		tagMap[tag.Key()] = tag.Value()
 	}
-	return newTallyScope(m.rootScope, m.scope.Tagged(tagMap), m.defs, namespaceTagged)
+	return newTallyScopeInternal(m.rootScope, m.scope.Tagged(tagMap), m.defs, namespaceTagged)
 }
 
 // todo: Add root service definition in metrics and remove after. See use in server.go.

@@ -166,32 +166,6 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	}
 }
 
-// Deprecated: not used
-func (m *opentelemetryScope) RecordHistogramDuration(id int, value time.Duration) {
-	def := m.defs[id]
-	ctx := context.Background()
-	m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(ctx, value.Nanoseconds(), m.labels...)
-
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
-			ctx, value.Nanoseconds(), m.rootScope.labels...,
-		)
-	}
-}
-
-// Deprecated: not used
-func (m *opentelemetryScope) RecordHistogramValue(id int, value float64) {
-	def := m.defs[id]
-	ctx := context.Background()
-	m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()).Record(ctx, value, m.labels...)
-
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricRollupName.String()).Record(
-			ctx, value, m.rootScope.labels...,
-		)
-	}
-}
-
 func (m *opentelemetryScope) taggedString(tags map[string]string) *opentelemetryScope {
 	namespaceTagged := m.isNamespaceTagged
 	tagMap := make(map[string]string, len(tags)+len(m.labels))
@@ -223,4 +197,24 @@ func (m *opentelemetryScope) namespaceTagged(key string, value string) bool {
 
 func (m *opentelemetryScope) userScope() UserScope {
 	return newOpentelemetryUserScope(m.reporter, m.tags)
+}
+
+func (m *opentelemetryScope) AddCounterInternal(name string, delta int64) {
+	panic("should not be used")
+}
+
+func (m *opentelemetryScope) StartTimerInternal(timer string) Stopwatch {
+	panic("should not be used")
+}
+
+func (m *opentelemetryScope) RecordTimerInternal(timer string, d time.Duration) {
+	panic("should not be used")
+}
+
+func (m *opentelemetryScope) RecordDistributionInternal(id string, d int) {
+	panic("should not be used")
+}
+
+func (m *opentelemetryScope) TaggedInternal(tags ...Tag) internalScope {
+	panic("should not be used")
 }

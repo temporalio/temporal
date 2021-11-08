@@ -30,8 +30,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/uber-go/tally/v4"
-
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/collection"
@@ -82,7 +80,7 @@ func (s *SequentialTaskProcessorSuite) SetupTest() {
 				taskQueue: taskQueue,
 			}
 		},
-		metrics.NewClient(tally.NoopScope, metrics.Common),
+		metrics.NewNoopMetricsClient(),
 		logger,
 	)
 }

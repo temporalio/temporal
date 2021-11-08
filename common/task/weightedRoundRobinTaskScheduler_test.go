@@ -34,7 +34,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -252,7 +251,7 @@ func (s *weightedRoundRobinTaskSchedulerSuite) newTestWeightedRoundRobinTaskSche
 ) *weightedRoundRobinTaskSchedulerImpl {
 	scheduler, err := NewWeightedRoundRobinTaskScheduler(
 		log.NewTestLogger(),
-		metrics.NewClient(tally.NoopScope, metrics.Common),
+		metrics.NewNoopMetricsClient(),
 		options,
 	)
 	s.NoError(err)

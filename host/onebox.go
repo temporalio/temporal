@@ -375,7 +375,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 	params.Authorizer = authorization.NewNoopAuthorizer()
@@ -451,7 +451,7 @@ func (c *temporalImpl) startHistory(
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadataConfig = c.clusterMetadataConfig
-		params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+		params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 
@@ -546,7 +546,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -600,7 +600,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 

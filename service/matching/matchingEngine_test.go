@@ -112,7 +112,7 @@ func (s *matchingEngineSuite) SetupTest() {
 		context.Background(),
 		matchingTestNamespace,
 		&taskqueuepb.TaskQueue{Name: matchingTestTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		metrics.NewClient(tally.NoopScope, metrics.Matching),
+		metrics.NewNoopMetricsClient(),
 		metrics.MatchingTaskQueueMgrScope,
 		log.NewNoopLogger(),
 	)
@@ -142,7 +142,7 @@ func newMatchingEngine(
 		taskQueues:        make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,
-		metricsClient:     metrics.NewClient(tally.NoopScope, metrics.Matching),
+		metricsClient:     metrics.NewNoopMetricsClient(),
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,
@@ -681,7 +681,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
+	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
@@ -868,7 +868,7 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 	}
 	const workerCount = 20
 	const taskCount = 100
-	s.matchingEngine.metricsClient = metrics.NewClient(tally.NewTestScope("test", nil), metrics.Matching)
+	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("test", nil), metrics.Matching)
 	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
 	s.logger.Info("Number of tasks throttled", tag.Number(throttleCt))
 	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
@@ -882,7 +882,7 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchLimitFn func(int, int64) float64,
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewClient(scope, metrics.Matching)
+	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}

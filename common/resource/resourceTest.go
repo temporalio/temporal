@@ -178,7 +178,7 @@ func NewTest(
 		NamespaceCache:    namespace.NewMockRegistry(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
-		MetricsClient:     metrics.NewClient(scope, serviceMetricsIndex),
+		MetricsClient:     metrics.NewClient(&metrics.ClientConfig{}, scope, serviceMetricsIndex),
 		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
 		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
 

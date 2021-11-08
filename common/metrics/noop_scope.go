@@ -16,7 +16,7 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
@@ -25,35 +25,49 @@
 package metrics
 
 import (
-	"github.com/uber-go/tally/v4"
-
-	"go.temporal.io/server/common/log"
+	"time"
 )
 
-// TallyReporter is a base class for reporting metrics to Tally.
-type TallyReporter struct {
-	scope        tally.Scope
-	clientConfig *ClientConfig
+type (
+	NoopScopeImpl struct{}
+)
+
+func (n NoopScopeImpl) AddCounterInternal(name string, delta int64) {
 }
 
-func newTallyReporter(
-	scope tally.Scope,
-	clientConfig *ClientConfig,
-) *TallyReporter {
-	return &TallyReporter{
-		scope:        scope,
-		clientConfig: clientConfig,
-	}
+func (n NoopScopeImpl) StartTimerInternal(timer string) Stopwatch {
+	return nopStopwatch{}
 }
 
-func (tr *TallyReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	return NewClient(tr.clientConfig, tr.scope, serviceIdx), nil
+func (n NoopScopeImpl) RecordTimerInternal(timer string, d time.Duration) {
 }
 
-func (tr *TallyReporter) GetScope() tally.Scope {
-	return tr.scope
+func (n NoopScopeImpl) RecordDistributionInternal(id string, d int) {
 }
 
-func (tr *TallyReporter) Stop(logger log.Logger) {
-	// noop
+func (n NoopScopeImpl) TaggedInternal(tags ...Tag) internalScope {
+	return n
+}
+
+// NoopScope returns a noop scope of metrics
+func NoopScope(serviceIdx ServiceIdx) internalScope {
+	return &NoopScopeImpl{}
+}
+
+func (n NoopScopeImpl) IncCounter(counter int) {}
+
+func (n NoopScopeImpl) AddCounter(counter int, delta int64) {}
+
+func (n NoopScopeImpl) StartTimer(timer int) Stopwatch {
+	return nopStopwatch{}
+}
+
+func (n NoopScopeImpl) RecordTimer(timer int, d time.Duration) {}
+
+func (n NoopScopeImpl) RecordDistribution(id int, d int) {}
+
+func (n NoopScopeImpl) UpdateGauge(gauge int, value float64) {}
+
+func (n NoopScopeImpl) Tagged(tags ...Tag) Scope {
+	return n
 }

@@ -16,7 +16,7 @@
 //
 // THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 // IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EENT SHALL THE
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
 // AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 // LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
@@ -25,35 +25,27 @@
 package metrics
 
 import (
-	"github.com/uber-go/tally/v4"
-
-	"go.temporal.io/server/common/log"
+	"time"
 )
 
-// TallyReporter is a base class for reporting metrics to Tally.
-type TallyReporter struct {
-	scope        tally.Scope
-	clientConfig *ClientConfig
+type CompositeStopwatch struct {
+	items []Stopwatch
 }
 
-func newTallyReporter(
-	scope tally.Scope,
-	clientConfig *ClientConfig,
-) *TallyReporter {
-	return &TallyReporter{
-		scope:        scope,
-		clientConfig: clientConfig,
+func NewCompositeStopwatch(items ...Stopwatch) *CompositeStopwatch {
+	return &CompositeStopwatch{
+		items: items,
 	}
 }
 
-func (tr *TallyReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	return NewClient(tr.clientConfig, tr.scope, serviceIdx), nil
+func (c CompositeStopwatch) Stop() {
+	for _, stopwatch := range c.items {
+		stopwatch.Stop()
+	}
 }
 
-func (tr *TallyReporter) GetScope() tally.Scope {
-	return tr.scope
-}
-
-func (tr *TallyReporter) Stop(logger log.Logger) {
-	// noop
+func (c CompositeStopwatch) Subtract(d time.Duration) {
+	for _, stopwatch := range c.items {
+		stopwatch.Subtract(d)
+	}
 }

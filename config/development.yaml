@@ -29,6 +29,11 @@ global:
 #      framework: "tally"
 #      timerType: "histogram"
 #      listenAddress: "127.0.0.1:8001"
+#    tags:
+#      type: test
+#    excludeTags:
+#      namespace:
+#        - temporal-system
 
 services:
   frontend:
