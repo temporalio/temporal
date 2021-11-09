@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -1057,6 +1058,9 @@ func (c *clientImpl) getClientForWorkflowID(namespaceID, workflowID string) (his
 }
 
 func (c *clientImpl) getClientForShardID(shardID int32) (historyservice.HistoryServiceClient, error) {
+	if shardID <= 0 {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ShardID: %d", shardID))
+	}
 	client, err := c.clients.GetClientForKey(convert.Int32ToString(shardID))
 	if err != nil {
 		return nil, err
