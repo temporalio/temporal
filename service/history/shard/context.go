@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -105,7 +106,9 @@ type (
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error)
-		DeleteWorkflowExecution(curRequest *persistence.DeleteCurrentWorkflowExecutionRequest, delRequest *persistence.DeleteWorkflowExecutionRequest) error
+		// Delete workflow execution, current workflow execution, and add task to delete visibility.
+		// If branchToken != nil, then delete history also, otherwise leave history.
+		DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64) error
 		AddTasks(request *persistence.AddTasksRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 	}

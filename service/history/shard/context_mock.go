@@ -36,6 +36,7 @@ import (
 	v1 "go.temporal.io/api/common/v1"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
+	definition "go.temporal.io/server/common/definition"
 	log "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
@@ -156,17 +157,17 @@ func (mr *MockContextMockRecorder) DeleteTransferFailoverLevel(failoverID interf
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockContext) DeleteWorkflowExecution(curRequest *persistence.DeleteCurrentWorkflowExecutionRequest, delRequest *persistence.DeleteWorkflowExecutionRequest) error {
+func (m *MockContext) DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", curRequest, delRequest)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", workflowKey, branchToken, version)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockContextMockRecorder) DeleteWorkflowExecution(curRequest, delRequest interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) DeleteWorkflowExecution(workflowKey, branchToken, version interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), curRequest, delRequest)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), workflowKey, branchToken, version)
 }
 
 // GenerateTransferTaskID mocks base method.
