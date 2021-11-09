@@ -142,6 +142,7 @@ func NewTest(
 	metadataMgr := persistence.NewMockMetadataManager(controller)
 	taskMgr := persistence.NewMockTaskManager(controller)
 	shardMgr := persistence.NewMockShardManager(controller)
+	shardMgr.EXPECT().CloseShard(gomock.Any()).Return(nil).AnyTimes()
 	executionMgr := persistence.NewMockExecutionManager(controller)
 	namespaceReplicationQueue := persistence.NewMockNamespaceReplicationQueue(controller)
 	namespaceReplicationQueue.EXPECT().Start().AnyTimes()
