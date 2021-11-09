@@ -167,6 +167,13 @@ func (p *shardRateLimitedPersistenceClient) UpdateShard(request *UpdateShardRequ
 	return err
 }
 
+func (p *shardRateLimitedPersistenceClient) CloseShard(request *CloseShardRequest) error {
+	// not rate limited
+
+	err := p.persistence.CloseShard(request)
+	return err
+}
+
 func (p *shardRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

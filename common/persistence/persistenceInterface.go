@@ -58,6 +58,7 @@ type (
 		CreateShard(request *InternalCreateShardRequest) error
 		GetShard(request *InternalGetShardRequest) (*InternalGetShardResponse, error)
 		UpdateShard(request *InternalUpdateShardRequest) error
+		CloseShard(request *InternalCloseShardRequest) error
 	}
 
 	// TaskStore is a lower level of TaskManager
@@ -223,6 +224,11 @@ type (
 		RangeID         int64
 		ShardInfo       *commonpb.DataBlob
 		PreviousRangeID int64
+	}
+
+	// InternalCloseShardRequest is a notification that history is unloading a shard
+	InternalCloseShardRequest struct {
+		ShardID int32
 	}
 
 	InternalCreateTaskQueueRequest struct {

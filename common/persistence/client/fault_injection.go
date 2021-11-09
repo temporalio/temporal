@@ -1001,6 +1001,13 @@ func (s *FaultInjectionShardStore) UpdateShard(request *persistence.InternalUpda
 	return s.baseShardStore.UpdateShard(request)
 }
 
+func (s *FaultInjectionShardStore) CloseShard(request *persistence.InternalCloseShardRequest) error {
+	if err := s.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return s.baseShardStore.CloseShard(request)
+}
+
 func (s *FaultInjectionShardStore) UpdateRate(rate float64) {
 	s.ErrorGenerator.UpdateRate(rate)
 }

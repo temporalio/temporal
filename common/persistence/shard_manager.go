@@ -101,3 +101,10 @@ func (m *shardManagerImpl) UpdateShard(request *UpdateShardRequest) error {
 	}
 	return m.shardStore.UpdateShard(internalRequest)
 }
+
+func (m *shardManagerImpl) CloseShard(request *CloseShardRequest) error {
+	internalRequest := &InternalCloseShardRequest{
+		ShardID: request.ShardID,
+	}
+	return m.shardStore.CloseShard(internalRequest)
+}

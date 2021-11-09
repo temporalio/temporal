@@ -190,6 +190,20 @@ func (p *shardPersistenceClient) UpdateShard(request *UpdateShardRequest) error 
 	return err
 }
 
+func (p *shardPersistenceClient) CloseShard(request *CloseShardRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceCloseShardScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceCloseShardScope, metrics.PersistenceLatency)
+	err := p.persistence.CloseShard(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceCloseShardScope, err)
+	}
+
+	return err
+}
+
 func (p *shardPersistenceClient) Close() {
 	p.persistence.Close()
 }

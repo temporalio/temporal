@@ -212,6 +212,11 @@ type (
 		PreviousRangeID int64
 	}
 
+	// CloseShardRequest is used to notify persistence that we're unloading a shard
+	CloseShardRequest struct {
+		ShardID int32
+	}
+
 	// AddTasksRequest is used to write new tasks
 	AddTasksRequest struct {
 		ShardID int32
@@ -1022,6 +1027,7 @@ type (
 		CreateShard(request *CreateShardRequest) error
 		GetShard(request *GetShardRequest) (*GetShardResponse, error)
 		UpdateShard(request *UpdateShardRequest) error
+		CloseShard(request *CloseShardRequest) error
 	}
 
 	// ExecutionManager is used to manage workflow executions

@@ -104,6 +104,20 @@ func (mr *MockShardManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockShardManager)(nil).Close))
 }
 
+// CloseShard mocks base method.
+func (m *MockShardManager) CloseShard(request *CloseShardRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CloseShard", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CloseShard indicates an expected call of CloseShard.
+func (mr *MockShardManagerMockRecorder) CloseShard(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockShardManager)(nil).CloseShard), request)
+}
+
 // CreateShard mocks base method.
 func (m *MockShardManager) CreateShard(request *CreateShardRequest) error {
 	m.ctrl.T.Helper()

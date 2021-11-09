@@ -153,6 +153,8 @@ const (
 	PersistenceGetShardScope
 	// PersistenceUpdateShardScope tracks UpdateShard calls made by service to persistence layer
 	PersistenceUpdateShardScope
+	// PersistenceCloseShardScope tracks CloseShard calls made by service to persistence layer
+	PersistenceCloseShardScope
 	// PersistenceCreateWorkflowExecutionScope tracks CreateWorkflowExecution calls made by service to persistence layer
 	PersistenceCreateWorkflowExecutionScope
 	// PersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to persistence layer
@@ -1112,6 +1114,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceCreateShardScope:                       {operation: "CreateShard"},
 		PersistenceGetShardScope:                          {operation: "GetShard"},
 		PersistenceUpdateShardScope:                       {operation: "UpdateShard"},
+		PersistenceCloseShardScope:                        {operation: "CloseShard"},
 		PersistenceCreateWorkflowExecutionScope:           {operation: "CreateWorkflowExecution"},
 		PersistenceGetWorkflowExecutionScope:              {operation: "GetWorkflowExecution"},
 		PersistenceUpdateWorkflowExecutionScope:           {operation: "UpdateWorkflowExecution"},

@@ -29,6 +29,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 )
@@ -166,6 +167,12 @@ func (d *ShardStore) UpdateShard(
 		}
 	}
 
+	return nil
+}
+
+func (d *ShardStore) CloseShard(
+	request *persistence.InternalCloseShardRequest,
+) error {
 	return nil
 }
 

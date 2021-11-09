@@ -137,6 +137,12 @@ func (m *sqlShardStore) UpdateShard(
 	})
 }
 
+func (m *sqlShardStore) CloseShard(
+	request *persistence.InternalCloseShardRequest,
+) error {
+	return nil
+}
+
 // initiated by the owning shard
 func lockShard(
 	ctx context.Context,

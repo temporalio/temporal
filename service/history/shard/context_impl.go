@@ -1083,6 +1083,15 @@ func (s *ContextImpl) stop() {
 		engine.Stop()
 		s.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
 	}
+
+	// Tell persistence we're done with the shard
+	err := s.GetShardManager().CloseShard(&persistence.CloseShardRequest{
+		ShardID: s.shardID,
+	})
+	if err != nil {
+		// Don't do anything for now, just log
+		s.logger.Info("persistence CloseShard returned error", tag.Error(err))
+	}
 }
 
 func (s *ContextImpl) isValid() bool {
