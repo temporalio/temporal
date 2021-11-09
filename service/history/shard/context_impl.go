@@ -51,7 +51,7 @@ import (
 var (
 	defaultTime = time.Unix(0, 0)
 
-	persistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 const (
