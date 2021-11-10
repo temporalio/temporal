@@ -595,14 +595,6 @@ func newAdminClusterCommands() []cli.Command {
 				AdminDescribeCluster(c)
 			},
 		},
-		{
-			Name:    "metadata",
-			Aliases: []string{"m"},
-			Usage:   "Show cluster metadata",
-			Action: func(c *cli.Context) {
-				AdminClusterMetadata(c)
-			},
-		},
 	}
 }
 

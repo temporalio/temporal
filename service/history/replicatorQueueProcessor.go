@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -74,7 +73,7 @@ type (
 )
 
 var (
-	errUnknownReplicationTask = errors.New("unknown replication task")
+	errUnknownReplicationTask = serviceerror.NewInternal("unknown replication task")
 )
 
 func newReplicatorQueueProcessor(

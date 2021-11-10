@@ -32,7 +32,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -64,7 +63,7 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.taskQueueTable = &mockTaskQueueTable{}
 	s.taskTables = make(map[string]*mockTaskTable)
 	logger := log.NewTestLogger()
-	s.scvgr = NewScavenger(s.taskMgr, metrics.NewClient(tally.NoopScope, metrics.Worker), logger)
+	s.scvgr = NewScavenger(s.taskMgr, metrics.NewNoopMetricsClient(), logger)
 	maxTasksPerJob = 4
 	executorPollInterval = time.Millisecond * 50
 }

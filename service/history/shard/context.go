@@ -56,9 +56,8 @@ type (
 		GetThrottledLogger() log.Logger
 		GetMetricsClient() metrics.Client
 		GetTimeSource() clock.TimeSource
-		PreviousShardOwnerWasDifferent() bool
 
-		GetEngine() Engine
+		GetEngine() (Engine, error)
 
 		GenerateTransferTaskID() (int64, error)
 		GenerateTransferTaskIDs(number int) ([]int64, error)

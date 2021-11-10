@@ -190,6 +190,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 func (s *transferQueueStandbyTaskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending() {

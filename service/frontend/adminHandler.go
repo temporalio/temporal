@@ -36,7 +36,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -55,10 +54,12 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 )
 
@@ -79,6 +80,7 @@ type (
 		config                *Config
 		namespaceDLQHandler   namespace.DLQMessageHandler
 		eventSerializer       serialization.Serializer
+		visibilityMgr         manager.VisibilityManager
 	}
 )
 
@@ -96,6 +98,7 @@ func NewAdminHandler(
 	config *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
+	visibilityMrg manager.VisibilityManager,
 ) *AdminHandler {
 
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
@@ -113,6 +116,7 @@ func NewAdminHandler(
 			resource.GetLogger(),
 		),
 		eventSerializer: serialization.NewSerializer(),
+		visibilityMgr:   visibilityMrg,
 		ESConfig:        esConfig,
 		ESClient:        esClient,
 	}
@@ -195,7 +199,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 	run, err := adh.GetSDKClient().ExecuteWorkflow(
 		ctx,
 		client.StartWorkflowOptions{
-			TaskQueue: addsearchattributes.TaskQueueName,
+			TaskQueue: worker.DefaultWorkerTaskQueue,
 			ID:        addsearchattributes.WorkflowName,
 		},
 		addsearchattributes.WorkflowName,
@@ -650,10 +654,21 @@ func (adh *AdminHandler) DescribeCluster(_ context.Context, _ *adminservice.Desc
 		membershipInfo.Rings = rings
 	}
 
+	metadata, err := adh.GetClusterMetadataManager().GetClusterMetadata()
+	if err != nil {
+		return nil, err
+	}
+
 	return &adminservice.DescribeClusterResponse{
-		SupportedClients: headers.SupportedClients,
-		ServerVersion:    headers.ServerVersion,
-		MembershipInfo:   membershipInfo,
+		SupportedClients:  headers.SupportedClients,
+		ServerVersion:     headers.ServerVersion,
+		MembershipInfo:    membershipInfo,
+		ClusterId:         metadata.ClusterId,
+		ClusterName:       metadata.ClusterName,
+		HistoryShardCount: metadata.HistoryShardCount,
+		PersistenceStore:  adh.GetExecutionManager().GetName(),
+		VisibilityStore:   adh.visibilityMgr.GetName(),
+		VersionInfo:       metadata.VersionInfo,
 	}, nil
 }
 
@@ -1081,10 +1096,6 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 		return errInvalidStartEventCombination
 	}
 
-	if (request.GetEndEventId() != common.EmptyEventID && request.GetEndEventVersion() == common.EmptyVersion) ||
-		(request.GetEndEventId() == common.EmptyEventID && request.GetEndEventVersion() != common.EmptyVersion) {
-		return errInvalidEndEventCombination
-	}
 	return nil
 }
 

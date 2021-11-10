@@ -32,7 +32,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
@@ -95,7 +94,7 @@ func (s *eventsCacheSuite) newTestEventsCache() *CacheImpl {
 		s.mockExecutionManager,
 		false,
 		s.logger,
-		metrics.NewClient(tally.NoopScope, metrics.History),
+		metrics.NewNoopMetricsClient(),
 	)
 }
 

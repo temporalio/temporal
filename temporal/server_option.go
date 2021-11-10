@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -166,5 +167,17 @@ func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) Ser
 func WithSearchAttributesMapper(m searchattribute.Mapper) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.searchAttributesMapper = m
+	})
+}
+
+// WithChainedFrontendGrpcInterceptors sets a chain of ordered custom grpc interceptors that will be invoked for all
+// Frontend gRPC API calls. The list of custom interceptors will be appended to the end of the internal
+// ServerInterceptors. The custom interceptors will be invoked in the order as they appear in the supplied list, after
+// the internal ServerInterceptors.
+func WithChainedFrontendGrpcInterceptors(
+	interceptors ...grpc.UnaryServerInterceptor,
+) ServerOption {
+	return newApplyFuncContainer(func(s *serverOptions) {
+		s.customInterceptors = interceptors
 	})
 }

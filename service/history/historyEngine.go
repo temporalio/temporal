@@ -171,7 +171,7 @@ func NewEngineWithShardContext(
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
 			shard,
-			historyEngImpl.historyCache,
+			historyCache,
 			executionManager,
 			logger,
 		)
@@ -3173,6 +3173,52 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 		return err
 	}
 	return nil
+}
+
+func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
+	ctx context.Context,
+	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
+) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
+	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(request.GetNamespaceId()))
+	if err != nil {
+		return nil, err
+	}
+	namespaceID := namespaceEntry.ID()
+
+	context, release, err := e.historyCache.GetOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		*request.GetExecution(),
+		workflow.CallerTypeAPI,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := context.LoadWorkflowExecution()
+	if err != nil {
+		return nil, err
+	}
+
+	now := e.shard.GetTimeSource().Now()
+	task, err := mutableState.GenerateLastHistoryReplicationTasks(now)
+	if err != nil {
+		return nil, err
+	}
+
+	err = e.shard.AddTasks(&persistence.AddTasksRequest{
+		ShardID: e.shard.GetShardID(),
+		// RangeID is set by shard
+		NamespaceID:      string(namespaceID),
+		WorkflowID:       request.Execution.WorkflowId,
+		RunID:            request.Execution.RunId,
+		ReplicationTasks: []tasks.Task{task},
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
 }
 
 func (e *historyEngineImpl) loadWorkflowOnce(

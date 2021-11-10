@@ -33,7 +33,6 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -136,7 +135,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier: events.NewNotifier(
 			clock.NewRealTimeSource(),
-			metrics.NewClient(tally.NoopScope, metrics.History),
+			metrics.NewNoopMetricsClient(),
 			func(namespace.ID, string) int32 { return 1 },
 		),
 		txProcessor:    s.mockTxProcessor,
@@ -153,6 +152,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 func (s *activityReplicatorSuite) TearDownTest() {
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *activityReplicatorSuite) TestRefreshTask_DiffCluster() {

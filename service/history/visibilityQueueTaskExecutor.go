@@ -26,12 +26,12 @@ package history
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -63,7 +63,7 @@ type (
 )
 
 var (
-	errUnknownVisibilityTask = errors.New("unknown visibility task")
+	errUnknownVisibilityTask = serviceerror.NewInternal("unknown visibility task")
 )
 
 func newVisibilityQueueTaskExecutor(
@@ -274,11 +274,6 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 		return err
 	}
 
-	// if sampled for longer retention is enabled, only record those sampled events
-	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) && !namespaceEntry.IsSampledForLongerRetention(workflowID) {
-		return nil
-	}
-
 	request := &manager.RecordWorkflowExecutionStartedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
@@ -449,12 +444,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 
 	recordWorkflowClose := true
 
-	retention := namespaceEntry.Retention(workflowID)
-	// if sampled for longer retention is enabled, only record those sampled events
-	if namespaceEntry.IsSampledForLongerRetentionEnabled(workflowID) &&
-		!namespaceEntry.IsSampledForLongerRetention(workflowID) {
-		recordWorkflowClose = false
-	}
+	retention := namespaceEntry.Retention()
 
 	if recordWorkflowClose {
 		return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{

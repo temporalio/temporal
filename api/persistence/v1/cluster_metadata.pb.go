@@ -54,11 +54,17 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
 // data column
 type ClusterMetadata struct {
-	ClusterName           string                            `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
-	HistoryShardCount     int32                             `protobuf:"varint,2,opt,name=history_shard_count,json=historyShardCount,proto3" json:"history_shard_count,omitempty"`
-	ClusterId             string                            `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
-	VersionInfo           *v1.VersionInfo                   `protobuf:"bytes,4,opt,name=version_info,json=versionInfo,proto3" json:"version_info,omitempty"`
-	IndexSearchAttributes map[string]*IndexSearchAttributes `protobuf:"bytes,5,rep,name=index_search_attributes,json=indexSearchAttributes,proto3" json:"index_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	ClusterName              string                            `protobuf:"bytes,1,opt,name=cluster_name,json=clusterName,proto3" json:"cluster_name,omitempty"`
+	HistoryShardCount        int32                             `protobuf:"varint,2,opt,name=history_shard_count,json=historyShardCount,proto3" json:"history_shard_count,omitempty"`
+	ClusterId                string                            `protobuf:"bytes,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
+	VersionInfo              *v1.VersionInfo                   `protobuf:"bytes,4,opt,name=version_info,json=versionInfo,proto3" json:"version_info,omitempty"`
+	IndexSearchAttributes    map[string]*IndexSearchAttributes `protobuf:"bytes,5,rep,name=index_search_attributes,json=indexSearchAttributes,proto3" json:"index_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	ClusterAddress           string                            `protobuf:"bytes,6,opt,name=cluster_address,json=clusterAddress,proto3" json:"cluster_address,omitempty"`
+	FailoverVersionIncrement int32                             `protobuf:"varint,7,opt,name=failover_version_increment,json=failoverVersionIncrement,proto3" json:"failover_version_increment,omitempty"`
+	InitialFailoverVersion   int32                             `protobuf:"varint,8,opt,name=initial_failover_version,json=initialFailoverVersion,proto3" json:"initial_failover_version,omitempty"`
+	IsGlobalNamespaceEnabled bool                              `protobuf:"varint,9,opt,name=is_global_namespace_enabled,json=isGlobalNamespaceEnabled,proto3" json:"is_global_namespace_enabled,omitempty"`
+	ClientTls                *ClientTLS                        `protobuf:"bytes,10,opt,name=client_tls,json=clientTls,proto3" json:"client_tls,omitempty"`
+	IsConnectionEnabled      bool                              `protobuf:"varint,11,opt,name=is_connection_enabled,json=isConnectionEnabled,proto3" json:"is_connection_enabled,omitempty"`
 }
 
 func (m *ClusterMetadata) Reset()      { *m = ClusterMetadata{} }
@@ -128,6 +134,48 @@ func (m *ClusterMetadata) GetIndexSearchAttributes() map[string]*IndexSearchAttr
 	return nil
 }
 
+func (m *ClusterMetadata) GetClusterAddress() string {
+	if m != nil {
+		return m.ClusterAddress
+	}
+	return ""
+}
+
+func (m *ClusterMetadata) GetFailoverVersionIncrement() int32 {
+	if m != nil {
+		return m.FailoverVersionIncrement
+	}
+	return 0
+}
+
+func (m *ClusterMetadata) GetInitialFailoverVersion() int32 {
+	if m != nil {
+		return m.InitialFailoverVersion
+	}
+	return 0
+}
+
+func (m *ClusterMetadata) GetIsGlobalNamespaceEnabled() bool {
+	if m != nil {
+		return m.IsGlobalNamespaceEnabled
+	}
+	return false
+}
+
+func (m *ClusterMetadata) GetClientTls() *ClientTLS {
+	if m != nil {
+		return m.ClientTls
+	}
+	return nil
+}
+
+func (m *ClusterMetadata) GetIsConnectionEnabled() bool {
+	if m != nil {
+		return m.IsConnectionEnabled
+	}
+	return false
+}
+
 type IndexSearchAttributes struct {
 	CustomSearchAttributes map[string]v11.IndexedValueType `protobuf:"bytes,1,rep,name=custom_search_attributes,json=customSearchAttributes,proto3" json:"custom_search_attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3,enum=temporal.api.enums.v1.IndexedValueType"`
 }
@@ -171,11 +219,79 @@ func (m *IndexSearchAttributes) GetCustomSearchAttributes() map[string]v11.Index
 	return nil
 }
 
+type ClientTLS struct {
+	ServerName                string   `protobuf:"bytes,1,opt,name=server_name,json=serverName,proto3" json:"server_name,omitempty"`
+	DisableServerVerification bool     `protobuf:"varint,2,opt,name=disable_server_verification,json=disableServerVerification,proto3" json:"disable_server_verification,omitempty"`
+	RootCaData                []string `protobuf:"bytes,3,rep,name=root_ca_data,json=rootCaData,proto3" json:"root_ca_data,omitempty"`
+	ForceTls                  bool     `protobuf:"varint,4,opt,name=force_tls,json=forceTls,proto3" json:"force_tls,omitempty"`
+}
+
+func (m *ClientTLS) Reset()      { *m = ClientTLS{} }
+func (*ClientTLS) ProtoMessage() {}
+func (*ClientTLS) Descriptor() ([]byte, []int) {
+	return fileDescriptor_1f4771d63f405884, []int{2}
+}
+func (m *ClientTLS) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ClientTLS) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ClientTLS.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ClientTLS) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClientTLS.Merge(m, src)
+}
+func (m *ClientTLS) XXX_Size() int {
+	return m.Size()
+}
+func (m *ClientTLS) XXX_DiscardUnknown() {
+	xxx_messageInfo_ClientTLS.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ClientTLS proto.InternalMessageInfo
+
+func (m *ClientTLS) GetServerName() string {
+	if m != nil {
+		return m.ServerName
+	}
+	return ""
+}
+
+func (m *ClientTLS) GetDisableServerVerification() bool {
+	if m != nil {
+		return m.DisableServerVerification
+	}
+	return false
+}
+
+func (m *ClientTLS) GetRootCaData() []string {
+	if m != nil {
+		return m.RootCaData
+	}
+	return nil
+}
+
+func (m *ClientTLS) GetForceTls() bool {
+	if m != nil {
+		return m.ForceTls
+	}
+	return false
+}
+
 func init() {
 	proto.RegisterType((*ClusterMetadata)(nil), "temporal.server.api.persistence.v1.ClusterMetadata")
 	proto.RegisterMapType((map[string]*IndexSearchAttributes)(nil), "temporal.server.api.persistence.v1.ClusterMetadata.IndexSearchAttributesEntry")
 	proto.RegisterType((*IndexSearchAttributes)(nil), "temporal.server.api.persistence.v1.IndexSearchAttributes")
 	proto.RegisterMapType((map[string]v11.IndexedValueType)(nil), "temporal.server.api.persistence.v1.IndexSearchAttributes.CustomSearchAttributesEntry")
+	proto.RegisterType((*ClientTLS)(nil), "temporal.server.api.persistence.v1.ClientTLS")
 }
 
 func init() {
@@ -183,39 +299,55 @@ func init() {
 }
 
 var fileDescriptor_1f4771d63f405884 = []byte{
-	// 511 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x93, 0x4f, 0x8b, 0xd3, 0x40,
-	0x18, 0xc6, 0x33, 0xad, 0x15, 0x76, 0xba, 0xf8, 0x27, 0xb2, 0x1a, 0x2a, 0x0e, 0xb5, 0x28, 0xf6,
-	0x34, 0xa5, 0xd5, 0x83, 0xab, 0x78, 0xd0, 0x22, 0xd2, 0x83, 0x2b, 0x64, 0x75, 0x0f, 0x5e, 0xc2,
-	0x6c, 0xf2, 0xee, 0x76, 0xb4, 0x99, 0x09, 0x33, 0x93, 0x60, 0x6f, 0x82, 0xe0, 0x55, 0xbf, 0x80,
-	0x77, 0x3f, 0x8a, 0xc7, 0x1e, 0x17, 0xbc, 0xd8, 0xf4, 0xe2, 0x71, 0x3f, 0x82, 0xe4, 0x4f, 0xbb,
-	0x5d, 0xc9, 0xaa, 0x78, 0xcb, 0xcc, 0xfb, 0x3c, 0xcf, 0x3c, 0xfc, 0xc8, 0x8b, 0xb7, 0x0d, 0x84,
-	0x91, 0x54, 0x6c, 0xd2, 0xd3, 0xa0, 0x12, 0x50, 0x3d, 0x16, 0xf1, 0x5e, 0x04, 0x4a, 0x73, 0x6d,
-	0x40, 0xf8, 0xd0, 0x4b, 0xfa, 0x3d, 0x7f, 0x12, 0x6b, 0x03, 0xca, 0x0b, 0xc1, 0xb0, 0x80, 0x19,
-	0x46, 0x23, 0x25, 0x8d, 0xb4, 0x3b, 0x4b, 0x2b, 0x2d, 0xac, 0x94, 0x45, 0x9c, 0xae, 0x59, 0x69,
-	0xd2, 0x6f, 0xad, 0x34, 0x79, 0x2e, 0x88, 0x38, 0xd4, 0x79, 0xa2, 0x0c, 0x43, 0x29, 0x8a, 0x9c,
-	0xd6, 0xed, 0x53, 0x9a, 0x24, 0x0b, 0x90, 0x22, 0x53, 0x85, 0xa0, 0x35, 0x3b, 0x84, 0x42, 0xd6,
-	0xf9, 0x5e, 0xc7, 0x17, 0x87, 0x45, 0x93, 0xe7, 0x65, 0x11, 0xfb, 0x26, 0xde, 0x5c, 0x96, 0x13,
-	0x2c, 0x04, 0x07, 0xb5, 0x51, 0x77, 0xc3, 0x6d, 0x96, 0x77, 0x3b, 0x2c, 0x04, 0x9b, 0xe2, 0x2b,
-	0x63, 0xae, 0x8d, 0x54, 0x53, 0x4f, 0x8f, 0x99, 0x0a, 0x3c, 0x5f, 0xc6, 0xc2, 0x38, 0xb5, 0x36,
-	0xea, 0x36, 0xdc, 0xcb, 0xe5, 0x68, 0x37, 0x9b, 0x0c, 0xb3, 0x81, 0x7d, 0x03, 0xe3, 0x65, 0x24,
-	0x0f, 0x9c, 0x7a, 0x1e, 0xb8, 0x51, 0xde, 0x8c, 0x02, 0xfb, 0x19, 0xde, 0x2c, 0x1b, 0x7a, 0x5c,
-	0x1c, 0x48, 0xe7, 0x5c, 0x1b, 0x75, 0x9b, 0x83, 0x5b, 0x74, 0xc5, 0x22, 0x83, 0x50, 0x2a, 0x68,
-	0xd2, 0xa7, 0x7b, 0xc5, 0xe7, 0x48, 0x1c, 0x48, 0xb7, 0x99, 0x9c, 0x1c, 0xec, 0x8f, 0x08, 0x5f,
-	0xe3, 0x22, 0x80, 0x77, 0x9e, 0x06, 0xa6, 0xfc, 0xb1, 0xc7, 0x8c, 0x51, 0x7c, 0x3f, 0x36, 0xa0,
-	0x9d, 0x46, 0xbb, 0xde, 0x6d, 0x0e, 0x76, 0xe8, 0xdf, 0x01, 0xd3, 0xdf, 0x88, 0xd0, 0x51, 0x16,
-	0xb9, 0x9b, 0x27, 0x3e, 0x5e, 0x05, 0x3e, 0x15, 0x46, 0x4d, 0xdd, 0x2d, 0x5e, 0x35, 0x6b, 0x7d,
-	0x40, 0xb8, 0x75, 0xb6, 0xcb, 0xbe, 0x84, 0xeb, 0x6f, 0x61, 0x5a, 0x92, 0xcd, 0x3e, 0xed, 0x17,
-	0xb8, 0x91, 0xb0, 0x49, 0x0c, 0x39, 0xc3, 0xe6, 0x60, 0xfb, 0x5f, 0x6a, 0x56, 0x3e, 0xe0, 0x16,
-	0x39, 0x0f, 0x6a, 0xf7, 0x51, 0xe7, 0x4b, 0x0d, 0x6f, 0x55, 0x8a, 0xec, 0x4f, 0x08, 0x3b, 0x7e,
-	0xac, 0x8d, 0x0c, 0x2b, 0x48, 0xa1, 0x9c, 0xd4, 0xab, 0xff, 0xae, 0x40, 0x87, 0x79, 0x72, 0x35,
-	0xb0, 0xab, 0x7e, 0xe5, 0xb0, 0xa5, 0xf0, 0xf5, 0x3f, 0xd8, 0x2a, 0x88, 0x3d, 0x5a, 0x27, 0x76,
-	0x61, 0x70, 0xe7, 0xf4, 0xdf, 0x92, 0x6f, 0xc5, 0xaa, 0x21, 0x04, 0x7b, 0x99, 0xf4, 0xe5, 0x34,
-	0x82, 0x35, 0x3e, 0x4f, 0xde, 0xcc, 0xe6, 0xc4, 0x3a, 0x9a, 0x13, 0xeb, 0x78, 0x4e, 0xd0, 0xfb,
-	0x94, 0xa0, 0xaf, 0x29, 0x41, 0xdf, 0x52, 0x82, 0x66, 0x29, 0x41, 0x3f, 0x52, 0x82, 0x7e, 0xa6,
-	0xc4, 0x3a, 0x4e, 0x09, 0xfa, 0xbc, 0x20, 0xd6, 0x6c, 0x41, 0xac, 0xa3, 0x05, 0xb1, 0x5e, 0xdf,
-	0x3b, 0x94, 0x27, 0x6f, 0x71, 0x79, 0xf6, 0x8e, 0x3f, 0x5c, 0x3b, 0xee, 0x9f, 0xcf, 0x17, 0xee,
-	0xee, 0xaf, 0x00, 0x00, 0x00, 0xff, 0xff, 0x5b, 0x1c, 0x47, 0x38, 0x1c, 0x04, 0x00, 0x00,
+	// 761 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x54, 0x41, 0x4f, 0x1b, 0x47,
+	0x14, 0xf6, 0x60, 0xa0, 0xf6, 0x18, 0x41, 0x3b, 0x08, 0xba, 0xb5, 0xd5, 0xad, 0x8b, 0x5a, 0xe1,
+	0x4b, 0xd7, 0xc2, 0xed, 0x01, 0xda, 0x52, 0x89, 0xba, 0x14, 0x21, 0x51, 0x2a, 0xd9, 0x84, 0x43,
+	0x2e, 0xab, 0xf1, 0xee, 0x33, 0x4c, 0xb2, 0x3b, 0x63, 0xcd, 0x8c, 0x57, 0xf1, 0x2d, 0x52, 0xa4,
+	0x5c, 0x93, 0x3f, 0x90, 0x7b, 0xa4, 0xfc, 0x86, 0xdc, 0x73, 0xe4, 0xc8, 0x31, 0x98, 0x4b, 0x8e,
+	0xfc, 0x84, 0x68, 0x66, 0xd7, 0xc6, 0x20, 0x93, 0xa0, 0xdc, 0x66, 0xdf, 0xfb, 0xde, 0xb7, 0xdf,
+	0x7c, 0xef, 0xcd, 0xc3, 0x5b, 0x1a, 0xe2, 0x9e, 0x90, 0x34, 0xaa, 0x2b, 0x90, 0x09, 0xc8, 0x3a,
+	0xed, 0xb1, 0x7a, 0x0f, 0xa4, 0x62, 0x4a, 0x03, 0x0f, 0xa0, 0x9e, 0x6c, 0xd4, 0x83, 0xa8, 0xaf,
+	0x34, 0x48, 0x3f, 0x06, 0x4d, 0x43, 0xaa, 0xa9, 0xd7, 0x93, 0x42, 0x0b, 0xb2, 0x36, 0x2a, 0xf5,
+	0xd2, 0x52, 0x8f, 0xf6, 0x98, 0x37, 0x51, 0xea, 0x25, 0x1b, 0xe5, 0x31, 0xc6, 0xf2, 0x02, 0xef,
+	0xc7, 0xca, 0x32, 0x8a, 0x38, 0x16, 0x3c, 0xe5, 0x29, 0xff, 0x7c, 0x03, 0x93, 0x18, 0x02, 0xc1,
+	0x0d, 0x2a, 0x06, 0xa5, 0xe8, 0x09, 0xa4, 0xb0, 0xb5, 0xb7, 0xf3, 0x78, 0xa9, 0x99, 0x2a, 0xf9,
+	0x2f, 0x13, 0x42, 0x7e, 0xc4, 0x0b, 0x23, 0x71, 0x9c, 0xc6, 0xe0, 0xa0, 0x2a, 0xaa, 0x15, 0x5b,
+	0xa5, 0x2c, 0x76, 0x48, 0x63, 0x20, 0x1e, 0x5e, 0x3e, 0x65, 0x4a, 0x0b, 0x39, 0xf0, 0xd5, 0x29,
+	0x95, 0xa1, 0x1f, 0x88, 0x3e, 0xd7, 0xce, 0x4c, 0x15, 0xd5, 0xe6, 0x5a, 0xdf, 0x64, 0xa9, 0xb6,
+	0xc9, 0x34, 0x4d, 0x82, 0x7c, 0x8f, 0xf1, 0x88, 0x92, 0x85, 0x4e, 0xde, 0x12, 0x16, 0xb3, 0xc8,
+	0x7e, 0x48, 0xf6, 0xf0, 0x42, 0xa6, 0xd0, 0x67, 0xbc, 0x2b, 0x9c, 0xd9, 0x2a, 0xaa, 0x95, 0x1a,
+	0x3f, 0x79, 0x63, 0x2f, 0x8c, 0x09, 0x19, 0xc2, 0x4b, 0x36, 0xbc, 0xe3, 0xf4, 0xb8, 0xcf, 0xbb,
+	0xa2, 0x55, 0x4a, 0xae, 0x3f, 0xc8, 0x73, 0x84, 0xbf, 0x65, 0x3c, 0x84, 0x27, 0xbe, 0x02, 0x2a,
+	0x83, 0x53, 0x9f, 0x6a, 0x2d, 0x59, 0xa7, 0xaf, 0x41, 0x39, 0x73, 0xd5, 0x7c, 0xad, 0xd4, 0x38,
+	0xf4, 0x3e, 0x6f, 0xb0, 0x77, 0xcb, 0x11, 0x6f, 0xdf, 0x50, 0xb6, 0x2d, 0xe3, 0xce, 0x98, 0x70,
+	0x97, 0x6b, 0x39, 0x68, 0xad, 0xb0, 0x69, 0x39, 0xb2, 0x8e, 0x97, 0x46, 0x17, 0xa6, 0x61, 0x28,
+	0x41, 0x29, 0x67, 0xde, 0xde, 0x7a, 0x31, 0x0b, 0xef, 0xa4, 0x51, 0xf2, 0x27, 0x2e, 0x77, 0x29,
+	0x8b, 0x44, 0x02, 0xd2, 0xbf, 0xf6, 0x20, 0x90, 0x10, 0x03, 0xd7, 0xce, 0x57, 0xd6, 0x50, 0x67,
+	0x84, 0x18, 0xdf, 0x3b, 0xcb, 0x93, 0x4d, 0xec, 0x30, 0xce, 0x34, 0xa3, 0x91, 0x7f, 0x9b, 0xc5,
+	0x29, 0xd8, 0xda, 0xd5, 0x2c, 0xff, 0xef, 0x4d, 0x0a, 0xb2, 0x8d, 0x2b, 0x4c, 0xf9, 0x27, 0x91,
+	0xe8, 0xd0, 0xc8, 0xb6, 0x59, 0xf5, 0x68, 0x00, 0x3e, 0x70, 0xda, 0x89, 0x20, 0x74, 0x8a, 0x55,
+	0x54, 0x2b, 0xb4, 0x1c, 0xa6, 0xf6, 0x2c, 0xe2, 0x70, 0x04, 0xd8, 0x4d, 0xf3, 0xe4, 0xc0, 0x34,
+	0x94, 0x01, 0xd7, 0xbe, 0x8e, 0x94, 0x83, 0x6d, 0xbf, 0x7e, 0xb9, 0x9f, 0xb5, 0xa6, 0xea, 0xe8,
+	0xa0, 0x6d, 0xfa, 0x6f, 0x8f, 0x91, 0x22, 0x0d, 0xbc, 0xc2, 0x94, 0x1f, 0x08, 0xce, 0x21, 0xd0,
+	0xc6, 0x81, 0x91, 0x8c, 0x92, 0x95, 0xb1, 0xcc, 0x54, 0x73, 0x9c, 0xcb, 0x14, 0x94, 0x9f, 0x21,
+	0x5c, 0xbe, 0xbb, 0x2f, 0xe4, 0x6b, 0x9c, 0x7f, 0x0c, 0x83, 0x6c, 0x76, 0xcd, 0x91, 0xfc, 0x8f,
+	0xe7, 0x12, 0x1a, 0xf5, 0xc1, 0x4e, 0x69, 0xa9, 0xb1, 0x75, 0x1f, 0xb5, 0x53, 0x7f, 0xd0, 0x4a,
+	0x79, 0x7e, 0x9f, 0xd9, 0x44, 0x6b, 0xaf, 0x66, 0xf0, 0xca, 0x54, 0x10, 0x79, 0x81, 0xb0, 0x13,
+	0xf4, 0x95, 0x16, 0xf1, 0x94, 0x59, 0x44, 0x76, 0x16, 0x1f, 0x7c, 0xb1, 0x04, 0xaf, 0x69, 0x99,
+	0xa7, 0x8f, 0xe4, 0x6a, 0x30, 0x35, 0x59, 0x96, 0xb8, 0xf2, 0x89, 0xb2, 0x29, 0x8e, 0x6d, 0x4f,
+	0x3a, 0xb6, 0xd8, 0x58, 0xbf, 0xf9, 0x1e, 0xed, 0xde, 0x19, 0x2b, 0x84, 0xf0, 0xd8, 0x40, 0x8f,
+	0x06, 0x3d, 0x98, 0xf4, 0xe7, 0x0d, 0xc2, 0xc5, 0x71, 0xcb, 0xc9, 0x0f, 0xb8, 0x94, 0x5e, 0x74,
+	0x72, 0xb1, 0xe0, 0x34, 0x64, 0xf7, 0xca, 0x5f, 0xb8, 0x12, 0x32, 0x65, 0x1a, 0xec, 0x67, 0xc0,
+	0x04, 0x24, 0xeb, 0xb2, 0x80, 0x9a, 0xd6, 0x5b, 0x1d, 0x85, 0xd6, 0x77, 0x19, 0xa4, 0x6d, 0x11,
+	0xc7, 0x13, 0x00, 0x52, 0xc5, 0x0b, 0x52, 0x08, 0xed, 0x07, 0xd4, 0x37, 0x0f, 0xd7, 0xc9, 0x57,
+	0xf3, 0xe6, 0x0f, 0x26, 0xd6, 0xa4, 0xff, 0x98, 0xe5, 0x56, 0xc1, 0xc5, 0xae, 0x90, 0x01, 0xd8,
+	0xb9, 0x9d, 0xb5, 0x7c, 0x05, 0x1b, 0x38, 0x8a, 0xd4, 0xdf, 0x8f, 0xce, 0x2e, 0xdc, 0xdc, 0xf9,
+	0x85, 0x9b, 0xbb, 0xba, 0x70, 0xd1, 0xd3, 0xa1, 0x8b, 0x5e, 0x0f, 0x5d, 0xf4, 0x6e, 0xe8, 0xa2,
+	0xb3, 0xa1, 0x8b, 0xde, 0x0f, 0x5d, 0xf4, 0x61, 0xe8, 0xe6, 0xae, 0x86, 0x2e, 0x7a, 0x79, 0xe9,
+	0xe6, 0xce, 0x2e, 0xdd, 0xdc, 0xf9, 0xa5, 0x9b, 0x7b, 0xf8, 0xdb, 0x89, 0xb8, 0x76, 0x86, 0x89,
+	0xbb, 0x77, 0xfe, 0x1f, 0x13, 0x9f, 0x9d, 0x79, 0xbb, 0x80, 0x7f, 0xfd, 0x18, 0x00, 0x00, 0xff,
+	0xff, 0x3c, 0x47, 0x97, 0x5d, 0x2c, 0x06, 0x00, 0x00,
 }
 
 func (this *ClusterMetadata) Equal(that interface{}) bool {
@@ -257,6 +389,24 @@ func (this *ClusterMetadata) Equal(that interface{}) bool {
 			return false
 		}
 	}
+	if this.ClusterAddress != that1.ClusterAddress {
+		return false
+	}
+	if this.FailoverVersionIncrement != that1.FailoverVersionIncrement {
+		return false
+	}
+	if this.InitialFailoverVersion != that1.InitialFailoverVersion {
+		return false
+	}
+	if this.IsGlobalNamespaceEnabled != that1.IsGlobalNamespaceEnabled {
+		return false
+	}
+	if !this.ClientTls.Equal(that1.ClientTls) {
+		return false
+	}
+	if this.IsConnectionEnabled != that1.IsConnectionEnabled {
+		return false
+	}
 	return true
 }
 func (this *IndexSearchAttributes) Equal(that interface{}) bool {
@@ -288,11 +438,49 @@ func (this *IndexSearchAttributes) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *ClientTLS) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ClientTLS)
+	if !ok {
+		that2, ok := that.(ClientTLS)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.ServerName != that1.ServerName {
+		return false
+	}
+	if this.DisableServerVerification != that1.DisableServerVerification {
+		return false
+	}
+	if len(this.RootCaData) != len(that1.RootCaData) {
+		return false
+	}
+	for i := range this.RootCaData {
+		if this.RootCaData[i] != that1.RootCaData[i] {
+			return false
+		}
+	}
+	if this.ForceTls != that1.ForceTls {
+		return false
+	}
+	return true
+}
 func (this *ClusterMetadata) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 9)
+	s := make([]string, 0, 15)
 	s = append(s, "&persistence.ClusterMetadata{")
 	s = append(s, "ClusterName: "+fmt.Sprintf("%#v", this.ClusterName)+",\n")
 	s = append(s, "HistoryShardCount: "+fmt.Sprintf("%#v", this.HistoryShardCount)+",\n")
@@ -313,6 +501,14 @@ func (this *ClusterMetadata) GoString() string {
 	if this.IndexSearchAttributes != nil {
 		s = append(s, "IndexSearchAttributes: "+mapStringForIndexSearchAttributes+",\n")
 	}
+	s = append(s, "ClusterAddress: "+fmt.Sprintf("%#v", this.ClusterAddress)+",\n")
+	s = append(s, "FailoverVersionIncrement: "+fmt.Sprintf("%#v", this.FailoverVersionIncrement)+",\n")
+	s = append(s, "InitialFailoverVersion: "+fmt.Sprintf("%#v", this.InitialFailoverVersion)+",\n")
+	s = append(s, "IsGlobalNamespaceEnabled: "+fmt.Sprintf("%#v", this.IsGlobalNamespaceEnabled)+",\n")
+	if this.ClientTls != nil {
+		s = append(s, "ClientTls: "+fmt.Sprintf("%#v", this.ClientTls)+",\n")
+	}
+	s = append(s, "IsConnectionEnabled: "+fmt.Sprintf("%#v", this.IsConnectionEnabled)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -335,6 +531,19 @@ func (this *IndexSearchAttributes) GoString() string {
 	if this.CustomSearchAttributes != nil {
 		s = append(s, "CustomSearchAttributes: "+mapStringForCustomSearchAttributes+",\n")
 	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *ClientTLS) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 8)
+	s = append(s, "&persistence.ClientTLS{")
+	s = append(s, "ServerName: "+fmt.Sprintf("%#v", this.ServerName)+",\n")
+	s = append(s, "DisableServerVerification: "+fmt.Sprintf("%#v", this.DisableServerVerification)+",\n")
+	s = append(s, "RootCaData: "+fmt.Sprintf("%#v", this.RootCaData)+",\n")
+	s = append(s, "ForceTls: "+fmt.Sprintf("%#v", this.ForceTls)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -366,6 +575,55 @@ func (m *ClusterMetadata) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.IsConnectionEnabled {
+		i--
+		if m.IsConnectionEnabled {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x58
+	}
+	if m.ClientTls != nil {
+		{
+			size, err := m.ClientTls.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintClusterMetadata(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x52
+	}
+	if m.IsGlobalNamespaceEnabled {
+		i--
+		if m.IsGlobalNamespaceEnabled {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x48
+	}
+	if m.InitialFailoverVersion != 0 {
+		i = encodeVarintClusterMetadata(dAtA, i, uint64(m.InitialFailoverVersion))
+		i--
+		dAtA[i] = 0x40
+	}
+	if m.FailoverVersionIncrement != 0 {
+		i = encodeVarintClusterMetadata(dAtA, i, uint64(m.FailoverVersionIncrement))
+		i--
+		dAtA[i] = 0x38
+	}
+	if len(m.ClusterAddress) > 0 {
+		i -= len(m.ClusterAddress)
+		copy(dAtA[i:], m.ClusterAddress)
+		i = encodeVarintClusterMetadata(dAtA, i, uint64(len(m.ClusterAddress)))
+		i--
+		dAtA[i] = 0x32
+	}
 	if len(m.IndexSearchAttributes) > 0 {
 		for k := range m.IndexSearchAttributes {
 			v := m.IndexSearchAttributes[k]
@@ -466,6 +724,65 @@ func (m *IndexSearchAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *ClientTLS) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ClientTLS) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ClientTLS) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.ForceTls {
+		i--
+		if m.ForceTls {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x20
+	}
+	if len(m.RootCaData) > 0 {
+		for iNdEx := len(m.RootCaData) - 1; iNdEx >= 0; iNdEx-- {
+			i -= len(m.RootCaData[iNdEx])
+			copy(dAtA[i:], m.RootCaData[iNdEx])
+			i = encodeVarintClusterMetadata(dAtA, i, uint64(len(m.RootCaData[iNdEx])))
+			i--
+			dAtA[i] = 0x1a
+		}
+	}
+	if m.DisableServerVerification {
+		i--
+		if m.DisableServerVerification {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	if len(m.ServerName) > 0 {
+		i -= len(m.ServerName)
+		copy(dAtA[i:], m.ServerName)
+		i = encodeVarintClusterMetadata(dAtA, i, uint64(len(m.ServerName)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintClusterMetadata(dAtA []byte, offset int, v uint64) int {
 	offset -= sovClusterMetadata(v)
 	base := offset
@@ -511,6 +828,26 @@ func (m *ClusterMetadata) Size() (n int) {
 			n += mapEntrySize + 1 + sovClusterMetadata(uint64(mapEntrySize))
 		}
 	}
+	l = len(m.ClusterAddress)
+	if l > 0 {
+		n += 1 + l + sovClusterMetadata(uint64(l))
+	}
+	if m.FailoverVersionIncrement != 0 {
+		n += 1 + sovClusterMetadata(uint64(m.FailoverVersionIncrement))
+	}
+	if m.InitialFailoverVersion != 0 {
+		n += 1 + sovClusterMetadata(uint64(m.InitialFailoverVersion))
+	}
+	if m.IsGlobalNamespaceEnabled {
+		n += 2
+	}
+	if m.ClientTls != nil {
+		l = m.ClientTls.Size()
+		n += 1 + l + sovClusterMetadata(uint64(l))
+	}
+	if m.IsConnectionEnabled {
+		n += 2
+	}
 	return n
 }
 
@@ -527,6 +864,31 @@ func (m *IndexSearchAttributes) Size() (n int) {
 			mapEntrySize := 1 + len(k) + sovClusterMetadata(uint64(len(k))) + 1 + sovClusterMetadata(uint64(v))
 			n += mapEntrySize + 1 + sovClusterMetadata(uint64(mapEntrySize))
 		}
+	}
+	return n
+}
+
+func (m *ClientTLS) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.ServerName)
+	if l > 0 {
+		n += 1 + l + sovClusterMetadata(uint64(l))
+	}
+	if m.DisableServerVerification {
+		n += 2
+	}
+	if len(m.RootCaData) > 0 {
+		for _, s := range m.RootCaData {
+			l = len(s)
+			n += 1 + l + sovClusterMetadata(uint64(l))
+		}
+	}
+	if m.ForceTls {
+		n += 2
 	}
 	return n
 }
@@ -557,6 +919,12 @@ func (this *ClusterMetadata) String() string {
 		`ClusterId:` + fmt.Sprintf("%v", this.ClusterId) + `,`,
 		`VersionInfo:` + strings.Replace(fmt.Sprintf("%v", this.VersionInfo), "VersionInfo", "v1.VersionInfo", 1) + `,`,
 		`IndexSearchAttributes:` + mapStringForIndexSearchAttributes + `,`,
+		`ClusterAddress:` + fmt.Sprintf("%v", this.ClusterAddress) + `,`,
+		`FailoverVersionIncrement:` + fmt.Sprintf("%v", this.FailoverVersionIncrement) + `,`,
+		`InitialFailoverVersion:` + fmt.Sprintf("%v", this.InitialFailoverVersion) + `,`,
+		`IsGlobalNamespaceEnabled:` + fmt.Sprintf("%v", this.IsGlobalNamespaceEnabled) + `,`,
+		`ClientTls:` + strings.Replace(this.ClientTls.String(), "ClientTLS", "ClientTLS", 1) + `,`,
+		`IsConnectionEnabled:` + fmt.Sprintf("%v", this.IsConnectionEnabled) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -577,6 +945,19 @@ func (this *IndexSearchAttributes) String() string {
 	mapStringForCustomSearchAttributes += "}"
 	s := strings.Join([]string{`&IndexSearchAttributes{`,
 		`CustomSearchAttributes:` + mapStringForCustomSearchAttributes + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ClientTLS) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ClientTLS{`,
+		`ServerName:` + fmt.Sprintf("%v", this.ServerName) + `,`,
+		`DisableServerVerification:` + fmt.Sprintf("%v", this.DisableServerVerification) + `,`,
+		`RootCaData:` + fmt.Sprintf("%v", this.RootCaData) + `,`,
+		`ForceTls:` + fmt.Sprintf("%v", this.ForceTls) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -866,6 +1247,152 @@ func (m *ClusterMetadata) Unmarshal(dAtA []byte) error {
 			}
 			m.IndexSearchAttributes[mapkey] = mapvalue
 			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterAddress", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ClusterAddress = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FailoverVersionIncrement", wireType)
+			}
+			m.FailoverVersionIncrement = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.FailoverVersionIncrement |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 8:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InitialFailoverVersion", wireType)
+			}
+			m.InitialFailoverVersion = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.InitialFailoverVersion |= int32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 9:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsGlobalNamespaceEnabled", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsGlobalNamespaceEnabled = bool(v != 0)
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClientTls", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ClientTls == nil {
+				m.ClientTls = &ClientTLS{}
+			}
+			if err := m.ClientTls.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 11:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field IsConnectionEnabled", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.IsConnectionEnabled = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipClusterMetadata(dAtA[iNdEx:])
@@ -1032,6 +1559,163 @@ func (m *IndexSearchAttributes) Unmarshal(dAtA []byte) error {
 			}
 			m.CustomSearchAttributes[mapkey] = mapvalue
 			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipClusterMetadata(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ClientTLS) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowClusterMetadata
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ClientTLS: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ClientTLS: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ServerName", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ServerName = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field DisableServerVerification", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.DisableServerVerification = bool(v != 0)
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RootCaData", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthClusterMetadata
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.RootCaData = append(m.RootCaData, string(dAtA[iNdEx:postIndex]))
+			iNdEx = postIndex
+		case 4:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ForceTls", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowClusterMetadata
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.ForceTls = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipClusterMetadata(dAtA[iNdEx:])

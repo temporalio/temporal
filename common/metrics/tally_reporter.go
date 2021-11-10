@@ -26,20 +26,28 @@ package metrics
 
 import (
 	"github.com/uber-go/tally/v4"
+
 	"go.temporal.io/server/common/log"
 )
 
 // TallyReporter is a base class for reporting metrics to Tally.
 type TallyReporter struct {
-	scope tally.Scope
+	scope        tally.Scope
+	clientConfig *ClientConfig
 }
 
-func newTallyReporter(scope tally.Scope) *TallyReporter {
-	return &TallyReporter{scope: scope}
+func newTallyReporter(
+	scope tally.Scope,
+	clientConfig *ClientConfig,
+) *TallyReporter {
+	return &TallyReporter{
+		scope:        scope,
+		clientConfig: clientConfig,
+	}
 }
 
 func (tr *TallyReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	return NewClient(tr.scope, serviceIdx), nil
+	return NewClient(tr.clientConfig, tr.scope, serviceIdx), nil
 }
 
 func (tr *TallyReporter) GetScope() tally.Scope {

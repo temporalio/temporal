@@ -140,6 +140,7 @@ func (s *stateBuilderSuite) SetupTest() {
 func (s *stateBuilderSuite) TearDownTest() {
 	s.stateRebuilder = nil
 	s.controller.Finish()
+	s.mockShard.StopForTest()
 }
 
 func (s *stateBuilderSuite) mockUpdateVersion(events ...*historypb.HistoryEvent) {

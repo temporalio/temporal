@@ -42,8 +42,6 @@ import (
 )
 
 const (
-	// TaskQueueName is the task queue name.
-	TaskQueueName = "temporal-sys-add-search-attributes-task-queue"
 	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-add-search-attributes-workflow"
 )
@@ -97,20 +95,6 @@ var (
 	ErrUnableToGetSearchAttributes  = errors.New("unable to get search attributes from cluster metadata")
 	ErrUnableToSaveSearchAttributes = errors.New("unable to save search attributes to cluster metadata")
 )
-
-func newActivities(
-	esClient esclient.Client,
-	saManager searchattribute.Manager,
-	metricsClient metrics.Client,
-	logger log.Logger,
-) *activities {
-	return &activities{
-		esClient:      esClient,
-		saManager:     saManager,
-		metricsClient: metricsClient,
-		logger:        logger,
-	}
-}
 
 // AddSearchAttributesWorkflow is the workflow that adds search attributes to the cluster for specific index.
 func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) error {

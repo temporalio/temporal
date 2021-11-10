@@ -31,6 +31,7 @@ package xdc
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"errors"
 	"flag"
@@ -51,8 +52,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"gopkg.in/yaml.v2"
-
+	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
@@ -63,6 +66,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
+	"gopkg.in/yaml.v2"
 )
 
 type (
@@ -1544,201 +1548,6 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	}
 }
 
-func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
-	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
-	client1 := s.cluster1.GetFrontendClient() // active
-	regReq := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
-		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
-		ActiveClusterName:                clusterName[0],
-		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
-	}
-	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
-	s.NoError(err)
-
-	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
-	}
-	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
-	s.NoError(err)
-	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
-
-	client2 := s.cluster2.GetFrontendClient() // standby
-
-	// Start a workflow
-	id := "integration-activity-heartbeat-workflow-failover-test"
-	wt := "integration-activity-heartbeat-workflow-failover-test-type"
-	tl := "integration-activity-heartbeat-workflow-failover-test-taskqueue"
-	identity1 := "worker1"
-	identity2 := "worker2"
-	workflowType := &commonpb.WorkflowType{Name: wt}
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
-	startReq := &workflowservice.StartWorkflowExecutionRequest{
-		RequestId:           uuid.New(),
-		Namespace:           namespace,
-		WorkflowId:          id,
-		WorkflowType:        workflowType,
-		TaskQueue:           taskQueue,
-		Input:               nil,
-		WorkflowRunTimeout:  timestamp.DurationPtr(300 * time.Second),
-		WorkflowTaskTimeout: timestamp.DurationPtr(10 * time.Second),
-		Identity:            identity1,
-	}
-	var we *workflowservice.StartWorkflowExecutionResponse
-	for i := 0; i < 10; i++ {
-		we, err = client1.StartWorkflowExecution(host.NewContext(), startReq)
-		if err == nil {
-			break
-		}
-		time.Sleep(1 * time.Second)
-	}
-	s.NoError(err)
-	s.NotNil(we.GetRunId())
-
-	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.GetRunId()))
-
-	activitySent := false
-	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
-		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
-		if !activitySent {
-			activitySent = true
-			return []*commandpb.Command{{
-				CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
-				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
-					ActivityId:             strconv.Itoa(1),
-					ActivityType:           &commonpb.ActivityType{Name: "some random activity type"},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
-					Input:                  payloads.EncodeString("some random input"),
-					ScheduleToCloseTimeout: timestamp.DurationPtr(1000 * time.Second),
-					ScheduleToStartTimeout: timestamp.DurationPtr(1000 * time.Second),
-					StartToCloseTimeout:    timestamp.DurationPtr(1000 * time.Second),
-					HeartbeatTimeout:       timestamp.DurationPtr(3 * time.Second),
-					RetryPolicy: &commonpb.RetryPolicy{
-						InitialInterval:        timestamp.DurationPtr(1 * time.Second),
-						MaximumAttempts:        3,
-						MaximumInterval:        timestamp.DurationPtr(1 * time.Second),
-						NonRetryableErrorTypes: []string{"bad-bug"},
-						BackoffCoefficient:     1,
-					},
-				}},
-			}}, nil
-		}
-
-		return []*commandpb.Command{{
-			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
-			Attributes: &commandpb.Command_CompleteWorkflowExecutionCommandAttributes{CompleteWorkflowExecutionCommandAttributes: &commandpb.CompleteWorkflowExecutionCommandAttributes{
-				Result: payloads.EncodeString("Done"),
-			}},
-		}}, nil
-	}
-
-	// activity handler
-	activity1Called := false
-	heartbeatDetails := payloads.EncodeString("details")
-	atHandler1 := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		activity1Called = true
-		_, err = client1.RecordActivityTaskHeartbeat(host.NewContext(), &workflowservice.RecordActivityTaskHeartbeatRequest{
-			TaskToken: taskToken, Details: heartbeatDetails})
-		s.NoError(err)
-		time.Sleep(5 * time.Second)
-		return payloads.EncodeString("Activity Result"), false, nil
-	}
-
-	// activity handler
-	activity2Called := false
-	atHandler2 := func(execution *commonpb.WorkflowExecution, activityType *commonpb.ActivityType,
-		activityID string, input *commonpb.Payloads, taskToken []byte) (*commonpb.Payloads, bool, error) {
-		activity2Called = true
-		return payloads.EncodeString("Activity Result"), false, nil
-	}
-
-	poller1 := &host.TaskPoller{
-		Engine:              client1,
-		Namespace:           namespace,
-		TaskQueue:           taskQueue,
-		Identity:            identity1,
-		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler1,
-		Logger:              s.logger,
-		T:                   s.T(),
-	}
-
-	poller2 := &host.TaskPoller{
-		Engine:              client2,
-		Namespace:           namespace,
-		TaskQueue:           taskQueue,
-		Identity:            identity2,
-		WorkflowTaskHandler: wtHandler,
-		ActivityTaskHandler: atHandler2,
-		Logger:              s.logger,
-		T:                   s.T(),
-	}
-
-	describeWorkflowExecution := func(client workflowservice.WorkflowServiceClient) (*workflowservice.DescribeWorkflowExecutionResponse, error) {
-		return client.DescribeWorkflowExecution(host.NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: id,
-				RunId:      we.RunId,
-			},
-		})
-	}
-
-	_, err = poller1.PollAndProcessWorkflowTask(false, false)
-	s.NoError(err)
-	err = poller1.PollAndProcessActivityTask(false)
-	s.IsType(&serviceerror.NotFound{}, err)
-
-	s.failover(namespace, clusterName[1], int64(2), client1)
-
-	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
-	// has heartbeat timeout. Also make sure the information is recorded when the activity state
-	// is "Scheduled"
-	dweResponse, err := describeWorkflowExecution(client2)
-	s.NoError(err)
-	pendingActivities := dweResponse.GetPendingActivities()
-	s.Equal(1, len(pendingActivities))
-	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
-	s.Equal(heartbeatDetails, pendingActivities[0].GetHeartbeatDetails())
-	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
-	s.Equal(identity1, pendingActivities[0].GetLastWorkerIdentity())
-
-	for i := 0; i < 10; i++ {
-		poller2.PollAndProcessActivityTask(false)
-		if activity2Called {
-			break
-		} else {
-			time.Sleep(1 * time.Second)
-		}
-	}
-
-	s.True(activity1Called)
-	s.True(activity2Called)
-
-	historyResponse, err := client2.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
-		Namespace: namespace,
-		Execution: &commonpb.WorkflowExecution{
-			WorkflowId: id,
-		},
-	})
-	s.NoError(err)
-	history := historyResponse.History
-
-	activityRetryFound := false
-	for _, event := range history.Events {
-		if event.GetEventType() == enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED {
-			attribute := event.GetActivityTaskStartedEventAttributes()
-			s.True(attribute.GetAttempt() > 1)
-			activityRetryFound = true
-		}
-	}
-	s.True(activityRetryFound)
-}
-
 func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	namespace := "test-transient-workflow-task-workflow-failover-" + common.GenerateRandomString(5)
 	client1 := s.cluster1.GetFrontendClient() // active
@@ -2031,6 +1840,97 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	s.Equal(int32(3), events[0].GetWorkflowExecutionStartedEventAttributes().GetAttempt())
 }
 
+func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
+	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
+	s.registerNamespace(namespace)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
+
+	taskqueue := "integration-activity-heartbeat-workflow-failover-test-taskqueue"
+	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+	client2, worker2 := s.newClientAndWorker(s.cluster2.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker2")
+
+	lastAttemptCount := 0
+	expectedHeartbeatValue := 100
+	activityWithHB := func(ctx context.Context) error {
+		lastAttemptCount = int(activity.GetInfo(ctx).Attempt)
+		if activity.HasHeartbeatDetails(ctx) {
+			var retrievedHeartbeatValue int
+			if err := activity.GetHeartbeatDetails(ctx, &retrievedHeartbeatValue); err == nil {
+				s.Equal(expectedHeartbeatValue, retrievedHeartbeatValue)
+				return nil
+			}
+		}
+		activity.RecordHeartbeat(ctx, expectedHeartbeatValue)
+		time.Sleep(time.Second * 10)
+		return errors.New("no heartbeat progress found")
+	}
+	testWorkflowFn := func(ctx workflow.Context) error {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Second * 1000,
+			HeartbeatTimeout:    time.Second * 3,
+		}
+		ctx = workflow.WithActivityOptions(ctx, ao)
+		err := workflow.ExecuteActivity(ctx, activityWithHB).Get(ctx, nil)
+		return err
+	}
+	worker1.RegisterWorkflow(testWorkflowFn)
+	worker1.RegisterActivity(activityWithHB)
+	worker1.Start()
+
+	// Start a workflow
+	workflowID := "integration-activity-heartbeat-workflow-failover-test"
+	run1, err := client1.ExecuteWorkflow(host.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 300,
+	}, testWorkflowFn)
+
+	s.NoError(err)
+	s.NotEmpty(run1.GetRunID())
+
+	s.logger.Info("StartWorkflowExecution", tag.WorkflowRunID(run1.GetRunID()))
+	time.Sleep(time.Second * 4) // wait for heartbeat from activity to be reported and activity timed out on heartbeat
+
+	worker1.Stop() // stop worker1 so cluster 1 won't make any progress
+	s.failover(namespace, clusterName[1], int64(2), s.cluster1.GetFrontendClient())
+
+	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
+	// has heartbeat timeout. Also make sure the information is recorded when the activity state
+	// is "Scheduled"
+	dweResponse, err := client2.DescribeWorkflowExecution(host.NewContext(), workflowID, "")
+	s.NoError(err)
+	pendingActivities := dweResponse.GetPendingActivities()
+	s.Equal(1, len(pendingActivities))
+	s.Equal(enumspb.PENDING_ACTIVITY_STATE_SCHEDULED, pendingActivities[0].GetState())
+	heartbeatPayload := pendingActivities[0].GetHeartbeatDetails()
+	var heartbeatValue int
+	s.NoError(payloads.Decode(heartbeatPayload, &heartbeatValue))
+	s.Equal(expectedHeartbeatValue, heartbeatValue)
+	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, pendingActivities[0].GetLastFailure().GetTimeoutFailureInfo().GetTimeoutType())
+	s.Equal("worker1", pendingActivities[0].GetLastWorkerIdentity())
+
+	// start worker2
+	worker2.RegisterWorkflow(testWorkflowFn)
+	worker2.RegisterActivity(activityWithHB)
+	worker2.Start()
+	defer worker2.Stop()
+
+	// ExecuteWorkflow return existing running workflow if it already started
+	run2, err := client2.ExecuteWorkflow(host.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 300,
+	}, testWorkflowFn)
+	s.NoError(err)
+	// verify we get the same execution as in cluster1
+	s.Equal(run1.GetRunID(), run2.GetRunID())
+
+	err = run2.Get(host.NewContext(), nil)
+	s.NoError(err) // workflow succeed
+	s.Equal(2, lastAttemptCount)
+}
+
 func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
@@ -2076,4 +1976,40 @@ func (s *integrationClustersTestSuite) failover(
 
 	// wait till failover completed
 	time.Sleep(cacheRefreshInterval)
+}
+
+func (s *integrationClustersTestSuite) registerNamespace(namespace string) {
+	client1 := s.cluster1.GetFrontendClient() // active
+	regReq := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		IsGlobalNamespace:                true,
+		Clusters:                         clusterReplicationConfig,
+		ActiveClusterName:                clusterName[0],
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
+	}
+	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
+	s.NoError(err)
+
+	descReq := &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	}
+	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal(namespace, resp.NamespaceInfo.Name)
+	s.Equal(true, resp.IsGlobalNamespace)
+}
+
+func (s *integrationClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {
+	sdkClient1, err := sdkclient.NewClient(sdkclient.Options{
+		HostPort:  hostport,
+		Namespace: namespace,
+	})
+	s.NoError(err)
+
+	worker1 := sdkworker.New(sdkClient1, taskqueue, sdkworker.Options{
+		Identity: identity,
+	})
+
+	return sdkClient1, worker1
 }

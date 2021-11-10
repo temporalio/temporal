@@ -32,13 +32,11 @@ import (
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -50,8 +48,6 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
@@ -93,6 +89,8 @@ type (
 		sdkClient sdkclient.Client
 		esClient  esclient.Client
 		config    *Config
+
+		manager *workerManager
 	}
 
 	// Config contains all the service config for worker
@@ -129,6 +127,7 @@ func NewService(
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
+	manager *workerManager,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
 	if err != nil {
@@ -159,6 +158,8 @@ func NewService(
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
+
+		manager: manager,
 	}, nil
 }
 
@@ -346,7 +347,7 @@ func (s *Service) Start() {
 		s.startParentClosePolicyProcessor()
 	}
 
-	s.startAddSearchAttributes()
+	s.manager.Start()
 
 	s.logger.Info(
 		"worker service started",
@@ -368,6 +369,7 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
+	s.manager.Stop()
 	s.namespaceRegistry.Stop()
 	s.membershipMonitor.Stop()
 	s.persistenceBean.Close()
@@ -407,25 +409,6 @@ func (s *Service) startBatcher() {
 	if err := batcher.New(params).Start(); err != nil {
 		s.logger.Fatal(
 			"error starting batcher",
-			tag.Error(err),
-		)
-	}
-}
-
-func (s *Service) startAddSearchAttributes() {
-	addSearchAttributesService := addsearchattributes.New(
-		s.sdkClient,
-		s.esClient,
-		searchattribute.NewManager(
-			clock.NewRealTimeSource(),
-			s.clusterMetadataManager,
-		),
-		s.metricsClient,
-		s.logger,
-	)
-	if err := addSearchAttributesService.Start(); err != nil {
-		s.logger.Fatal(
-			"error starting add search attributes service",
 			tag.Error(err),
 		)
 	}

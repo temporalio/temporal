@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -1026,6 +1027,27 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	return response, nil
 }
 
+func (c *clientImpl) GenerateLastHistoryReplicationTasks(
+	ctx context.Context,
+	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	var response *historyservice.GenerateLastHistoryReplicationTasksResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.GenerateLastHistoryReplicationTasks(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }
@@ -1036,6 +1058,9 @@ func (c *clientImpl) getClientForWorkflowID(namespaceID, workflowID string) (his
 }
 
 func (c *clientImpl) getClientForShardID(shardID int32) (historyservice.HistoryServiceClient, error) {
+	if shardID <= 0 {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid ShardID: %d", shardID))
+	}
 	client, err := c.clients.GetClientForKey(convert.Int32ToString(shardID))
 	if err != nil {
 		return nil, err
