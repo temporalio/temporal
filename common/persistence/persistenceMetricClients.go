@@ -1107,6 +1107,7 @@ func (c *clusterMetadataPersistenceClient) Close() {
 }
 
 func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
+	//This is a wrapper of GetClusterMetadata API, use the same scope here
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceLatency)

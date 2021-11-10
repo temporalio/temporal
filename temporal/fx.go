@@ -482,57 +482,88 @@ func ApplyClusterMetadataConfigProvider(
 	defer clusterMetadataManager.Close()
 
 	clusterData := config.ClusterMetadata
-	currentClusterName := clusterData.CurrentClusterName
-	currentClusterInfo, ok := clusterData.ClusterInformation[currentClusterName]
-	if !ok {
-		// This already validate in cluster.Metadata and we should not hit this line
-		panic("current cluster information is not found in cluster metadata.")
-	}
-	applied, err := clusterMetadataManager.SaveClusterMetadata(
-		&persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount:        config.Persistence.NumHistoryShards,
-				ClusterName:              currentClusterName,
-				ClusterId:                uuid.New(),
-				ClusterAddress:           currentClusterInfo.RPCAddress,
-				FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
-				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
-				IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
-				IsConnectionEnabled:      true,
-			}})
-	if err != nil {
-		logger.Warn("Failed to save cluster metadata.", tag.Error(err))
-	}
-	if applied {
-		logger.Info("Successfully saved cluster metadata.")
-		return config.ClusterMetadata, config.Persistence, nil
-	}
+	for clusterName, clusterInfo := range clusterData.ClusterInformation {
+		// We assume the existing remote cluster info is correct.
+		applied, err := clusterMetadataManager.SaveClusterMetadata(
+			&persistence.SaveClusterMetadataRequest{
+				ClusterMetadata: persistencespb.ClusterMetadata{
+					HistoryShardCount:        config.Persistence.NumHistoryShards,
+					ClusterName:              clusterName,
+					ClusterId:                uuid.New(),
+					ClusterAddress:           clusterInfo.RPCAddress,
+					FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
+					InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
+					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
+					IsConnectionEnabled:      clusterInfo.Enabled,
+				}})
+		if err != nil {
+			logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(clusterName))
+		}
 
-	resp, err := clusterMetadataManager.GetCurrentClusterMetadata()
-	if err != nil {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+		if applied {
+			logger.Info("Successfully saved cluster metadata.", tag.ClusterName(clusterName))
+			continue
+		}
+
+		resp, err := clusterMetadataManager.GetCurrentClusterMetadata()
+		if err != nil {
+			return config.ClusterMetadata,
+			config.Persistence,
+			fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
+		}
+
+		if clusterName == clusterData.CurrentClusterName {
+			if config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("clusterMetadata.currentClusterName"),
+					tag.IgnoredValue(config.ClusterMetadata.CurrentClusterName),
+					tag.Value(resp.ClusterName))
+
+				config.ClusterMetadata.CurrentClusterName = resp.ClusterName
+			}
+			var persistedShardCount = resp.HistoryShardCount
+			if config.Persistence.NumHistoryShards != persistedShardCount {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("persistence.numHistoryShards"),
+					tag.IgnoredValue(config.Persistence.NumHistoryShards),
+					tag.Value(persistedShardCount))
+				config.Persistence.NumHistoryShards = persistedShardCount
+			}
+		}
+
+		// Overwrite cluster information from DB
+		// TODO: load all cluster information from DB
+		if clusterInfo.RPCAddress != resp.ClusterAddress {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInfo.rpcAddress"),
+				tag.IgnoredValue(clusterInfo.RPCAddress),
+				tag.Value(resp.ClusterAddress))
+
+			clusterInfo.RPCAddress = resp.ClusterAddress
+		}
+		if clusterInfo.InitialFailoverVersion != resp.InitialFailoverVersion {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInfo.initialFailoverVersion"),
+				tag.IgnoredValue(clusterInfo.InitialFailoverVersion),
+				tag.Value(resp.InitialFailoverVersion))
+
+			clusterInfo.InitialFailoverVersion = resp.InitialFailoverVersion
+		}
+		if clusterInfo.Enabled != resp.IsConnectionEnabled {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInfo.enabled"),
+				tag.IgnoredValue(clusterInfo.Enabled),
+				tag.Value(resp.IsConnectionEnabled))
+
+			clusterInfo.Enabled = resp.IsConnectionEnabled
+		}
+		config.ClusterMetadata.ClusterInformation[clusterName] = clusterInfo
 	}
-
-	if config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
-		logger.Error(
-			mismatchLogMessage,
-			tag.Key("clusterMetadata.currentClusterName"),
-			tag.IgnoredValue(config.ClusterMetadata.CurrentClusterName),
-			tag.Value(resp.ClusterName))
-
-		config.ClusterMetadata.CurrentClusterName = resp.ClusterName
-	}
-
-	var persistedShardCount = resp.HistoryShardCount
-	if config.Persistence.NumHistoryShards != persistedShardCount {
-		logger.Error(
-			mismatchLogMessage,
-			tag.Key("persistence.numHistoryShards"),
-			tag.IgnoredValue(config.Persistence.NumHistoryShards),
-			tag.Value(persistedShardCount))
-		config.Persistence.NumHistoryShards = persistedShardCount
-	}
-
 	return config.ClusterMetadata, config.Persistence, nil
 }
 
