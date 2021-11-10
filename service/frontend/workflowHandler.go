@@ -227,6 +227,10 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errNamespaceNotSet
 	}
 
+	if len(request.GetNamespace()) > wh.config.MaxIDLengthLimit() {
+		return nil, errNamespaceTooLong
+	}
+
 	resp, err := wh.namespaceHandler.RegisterNamespace(ctx, request)
 	if err != nil {
 		return nil, err
@@ -365,10 +369,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errNamespaceNotSet
 	}
 
-	if len(namespaceName) > wh.config.MaxIDLengthLimit() {
-		return nil, errNamespaceTooLong
-	}
-
 	if request.GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
@@ -377,7 +377,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errWorkflowIDTooLong
 	}
 
-	if err := wh.validateRetryPolicy(request.GetNamespace(), request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
 		return nil, err
 	}
 
@@ -760,9 +760,6 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
 	}
-	if len(request.GetNamespace()) > wh.config.MaxIDLengthLimit() {
-		return nil, errNamespaceTooLong
-	}
 
 	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
 		return nil, errIdentityTooLong
@@ -1030,10 +1027,6 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 	if request.GetNamespace() == "" {
 		return nil, errNamespaceNotSet
-	}
-
-	if len(request.GetNamespace()) > wh.config.MaxIDLengthLimit() {
-		return nil, errNamespaceTooLong
 	}
 
 	if err := wh.validateTaskQueue(request.TaskQueue); err != nil {
@@ -1916,10 +1909,6 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, errNamespaceNotSet
 	}
 
-	if len(request.GetNamespace()) > wh.config.MaxIDLengthLimit() {
-		return nil, errNamespaceTooLong
-	}
-
 	if err := wh.validateExecution(request.WorkflowExecution); err != nil {
 		return nil, err
 	}
@@ -1993,10 +1982,6 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errNamespaceNotSet
 	}
 
-	if len(namespaceName) > wh.config.MaxIDLengthLimit() {
-		return nil, errNamespaceTooLong
-	}
-
 	if request.GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
@@ -2033,7 +2018,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	if err := wh.validateRetryPolicy(request.GetNamespace(), request.RetryPolicy); err != nil {
+	if err := wh.validateRetryPolicy(namespaceName, request.RetryPolicy); err != nil {
 		return nil, err
 	}
 
@@ -3473,13 +3458,13 @@ func (hs HealthStatus) String() string {
 	}
 }
 
-func (wh *WorkflowHandler) validateRetryPolicy(namespace string, retryPolicy *commonpb.RetryPolicy) error {
+func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, retryPolicy *commonpb.RetryPolicy) error {
 	if retryPolicy == nil {
 		// By default, if the user does not explicitly set a retry policy for a Workflow, do not perform any retries.
 		return nil
 	}
 
-	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(wh.getDefaultWorkflowRetrySettings(namespace))
+	defaultWorkflowRetrySettings := common.FromConfigToDefaultRetrySettings(wh.getDefaultWorkflowRetrySettings(namespaceName.String()))
 	common.EnsureRetryPolicyDefaults(retryPolicy, defaultWorkflowRetrySettings)
 	return common.ValidateRetryPolicy(retryPolicy)
 }
