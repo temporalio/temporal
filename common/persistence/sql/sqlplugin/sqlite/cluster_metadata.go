@@ -81,6 +81,7 @@ func (mdb *db) SaveClusterMetadata(
 		return mdb.conn.ExecContext(ctx,
 			insertClusterMetadataQry,
 			constMetadataPartition,
+			row.ClusterName,
 			row.Data,
 			row.DataEncoding,
 			1,
@@ -92,17 +93,20 @@ func (mdb *db) SaveClusterMetadata(
 		row.DataEncoding,
 		row.Version+1,
 		constMetadataPartition,
+		row.ClusterName,
 	)
 }
 
 func (mdb *db) GetClusterMetadata(
 	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := mdb.conn.GetContext(ctx,
 		&row,
 		getClusterMetadataQry,
 		constMetadataPartition,
+		filter.ClusterName,
 	)
 	if err != nil {
 		return nil, err
@@ -112,12 +116,14 @@ func (mdb *db) GetClusterMetadata(
 
 func (mdb *db) WriteLockGetClusterMetadata(
 	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := mdb.conn.GetContext(ctx,
 		&row,
 		writeLockGetClusterMetadataQry,
 		constMetadataPartition,
+		filter.ClusterName,
 	)
 	if err != nil {
 		return nil, err
