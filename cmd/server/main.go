@@ -32,7 +32,6 @@ import (
 	"strings"
 
 	"github.com/urfave/cli/v2"
-
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"

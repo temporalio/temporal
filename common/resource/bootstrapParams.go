@@ -27,6 +27,7 @@ package resource
 import (
 	"github.com/uber-go/tally/v4"
 	sdkclient "go.temporal.io/sdk/client"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -72,6 +73,7 @@ type (
 		PersistenceServiceResolver   resolver.ServiceResolver
 		AudienceGetter               authorization.JWTAudienceMapper
 		SearchAttributesMapper       searchattribute.Mapper
+		CustomInterceptors           []grpc.UnaryServerInterceptor
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor
