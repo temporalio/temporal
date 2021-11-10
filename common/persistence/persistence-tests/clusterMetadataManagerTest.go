@@ -280,7 +280,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	clusterIdToPersist := "12345"
 	clusterAddress := "cluster-address"
 	failoverVersionIncrement := int64(10)
-	initialFailoverVersion   := int64(1)
+	initialFailoverVersion := int64(1)
 
 	// Case 1 - Get, mo data persisted
 	// Fetch the persisted values, there should be nothing on start.
@@ -297,10 +297,10 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	initialResp, err := s.ClusterMetadataManager.SaveClusterMetadata(
 		&p.SaveClusterMetadataRequest{
 			ClusterMetadata: persistencespb.ClusterMetadata{
-				ClusterName:       clusterNameToPersist,
-				HistoryShardCount: historyShardsToPersist,
-				ClusterId:         clusterIdToPersist,
-				ClusterAddress:    clusterAddress,
+				ClusterName:              clusterNameToPersist,
+				HistoryShardCount:        historyShardsToPersist,
+				ClusterId:                clusterIdToPersist,
+				ClusterAddress:           clusterAddress,
 				FailoverVersionIncrement: failoverVersionIncrement,
 				InitialFailoverVersion:   initialFailoverVersion,
 				IsGlobalNamespaceEnabled: true,

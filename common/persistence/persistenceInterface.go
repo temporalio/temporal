@@ -687,7 +687,7 @@ type (
 
 	// InternalSaveClusterMetadataRequest is the request for SaveClusterMetadata
 	InternalSaveClusterMetadataRequest struct {
-		ClusterName     string
+		ClusterName string
 		// Serialized MutableCusterMetadata.
 		ClusterMetadata *commonpb.DataBlob
 		Version         int64

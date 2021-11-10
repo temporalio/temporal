@@ -99,7 +99,7 @@ func (mdb *db) SaveClusterMetadata(
 
 func (mdb *db) GetClusterMetadata(
 	ctx context.Context,
-	filter * sqlplugin.ClusterMetadataFilter,
+	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := mdb.conn.GetContext(ctx,
@@ -116,7 +116,7 @@ func (mdb *db) GetClusterMetadata(
 
 func (mdb *db) WriteLockGetClusterMetadata(
 	ctx context.Context,
-	filter * sqlplugin.ClusterMetadataFilter,
+	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := mdb.conn.GetContext(ctx,

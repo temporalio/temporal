@@ -142,9 +142,9 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 	oldClusterMetadata, err := m.GetClusterMetadata(&GetClusterMetadataRequest{ClusterName: request.GetClusterName()})
 	if _, notFound := err.(*serviceerror.NotFound); notFound {
 		return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{
-			ClusterName: request.ClusterName,
+			ClusterName:     request.ClusterName,
 			ClusterMetadata: mcm,
-			Version: request.Version,
+			Version:         request.Version,
 		})
 	}
 	if err != nil {
@@ -155,9 +155,9 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 	}
 
 	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{
-		ClusterName: request.ClusterName,
+		ClusterName:     request.ClusterName,
 		ClusterMetadata: mcm,
-		Version: request.Version,
+		Version:         request.Version,
 	})
 }
 
