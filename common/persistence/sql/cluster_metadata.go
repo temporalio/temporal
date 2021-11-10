@@ -80,6 +80,7 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 				request.Version, oldClusterMetadata.Version))
 		}
 		_, err = tx.SaveClusterMetadata(ctx, &sqlplugin.ClusterMetadataRow{
+			ClusterName:  request.ClusterName,
 			Data:         request.ClusterMetadata.Data,
 			DataEncoding: request.ClusterMetadata.EncodingType.String(),
 			Version:      request.Version,
