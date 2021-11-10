@@ -169,6 +169,7 @@ func GrpcServerOptionsProvider(
 			logger,
 			audienceGetter,
 		),
+		namespaceValidator.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		interceptors = append(interceptors, customInterceptors...)

@@ -74,6 +74,10 @@ type (
 			ctx context.Context,
 			updateRequest *workflowservice.UpdateNamespaceRequest,
 		) (*workflowservice.UpdateNamespaceResponse, error)
+		// DeleteNamespace(
+		// 	ctx context.Context,
+		// 	deleteRequest *workflowservice.DeleteNamespaceRequest,
+		// ) (*workflowservice.DeleteNamespaceResponse, error)
 	}
 
 	// HandlerImpl is the namespace operation handler implementation
@@ -635,6 +639,55 @@ func (d *HandlerImpl) DeprecateNamespace(
 			ConfigVersion:               getResponse.Namespace.ConfigVersion,
 			FailoverVersion:             getResponse.Namespace.FailoverVersion,
 			FailoverNotificationVersion: getResponse.Namespace.FailoverNotificationVersion,
+		},
+		NotificationVersion: notificationVersion,
+		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
+	}
+	err = d.metadataMgr.UpdateNamespace(updateReq)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.DeprecateNamespaceResponse{}, nil
+}
+
+// DeleteNamespace marks namespace as deleted
+func (d *HandlerImpl) DeleteNamespace(
+	_ context.Context,
+	deprecateRequest *workflowservice.DeleteNamespaceRequest,
+) (*workflowservice.DeleteNamespaceResponse, error) {
+
+	clusterMetadata := d.clusterMetadata
+	// TODO remove the IsGlobalNamespaceEnabled check once cross DC is public
+	if clusterMetadata.IsGlobalNamespaceEnabled() && !clusterMetadata.IsMasterCluster() {
+		return nil, errNotMasterCluster
+	}
+
+	// must get the metadata (notificationVersion) first
+	// this version can be regarded as the lock on the v2 namespace table
+	// and since we do not know which table will return the namespace afterwards
+	// this call has to be made
+	metadata, err := d.metadataMgr.GetMetadata()
+	if err != nil {
+		return nil, err
+	}
+	notificationVersion := metadata.NotificationVersion
+	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: deprecateRequest.GetNamespace()})
+	if err != nil {
+		return nil, err
+	}
+
+	namespaceDetail := getResponse.Namespace
+
+	namespaceDetail.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
+	namespaceDetail.Info.State = enumspb.NAMESPACE_STATE_DELETED
+	updateReq := &persistence.UpdateNamespaceRequest{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:                        namespaceDetail.Info,
+			Config:                      namespaceDetail.Config,
+			ReplicationConfig:           namespaceDetail.ReplicationConfig,
+			ConfigVersion:               namespaceDetail.ConfigVersion,
+			FailoverVersion:             namespaceDetail.FailoverVersion,
+			FailoverNotificationVersion: namespaceDetail.FailoverNotificationVersion,
 		},
 		NotificationVersion: notificationVersion,
 		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
