@@ -369,12 +369,6 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errNamespaceNotSet
 	}
 
-	wh.GetLogger().Debug("Start workflow execution request namespace.", tag.WorkflowNamespace(namespaceName.String()))
-	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespaceName)
-	if err != nil {
-		return nil, err
-	}
-
 	if request.GetWorkflowId() == "" {
 		return nil, errWorkflowIDNotSet
 	}
@@ -420,6 +414,12 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	enums.SetDefaultWorkflowIdReusePolicy(&request.WorkflowIdReusePolicy)
+
+	wh.GetLogger().Debug("Start workflow execution request namespace", tag.WorkflowNamespace(namespaceName.String()))
+	namespaceID, err := wh.GetNamespaceRegistry().GetNamespaceID(namespaceName)
+	if err != nil {
+		return nil, err
+	}
 
 	wh.GetLogger().Debug("Start workflow execution request namespaceID", tag.WorkflowNamespaceID(namespaceID.String()))
 	resp, err := wh.GetHistoryClient().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), request, nil, time.Now().UTC()))
