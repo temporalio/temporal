@@ -117,7 +117,8 @@ func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, no
 }
 
 func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
-	clusterMetadata, err := m.clusterMetadataManager.GetClusterMetadata()
+
+	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata()
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:
@@ -157,7 +158,7 @@ func (m *managerImpl) SaveSearchAttributes(
 	newCustomSearchAttributes map[string]enumspb.IndexedValueType,
 ) error {
 
-	clusterMetadataResponse, err := m.clusterMetadataManager.GetClusterMetadata()
+	clusterMetadataResponse, err := m.clusterMetadataManager.GetCurrentClusterMetadata()
 	if err != nil {
 		return err
 	}

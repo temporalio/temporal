@@ -481,12 +481,24 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
+	clusterData := config.ClusterMetadata
+	currentClusterName := clusterData.CurrentClusterName
+	currentClusterInfo, ok := clusterData.ClusterInformation[currentClusterName]
+	if !ok {
+		// This already validate in cluster.Metadata and we should not hit this line
+		panic("current cluster information is not found in cluster metadata.")
+	}
 	applied, err := clusterMetadataManager.SaveClusterMetadata(
 		&persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount: config.Persistence.NumHistoryShards,
-				ClusterName:       config.ClusterMetadata.CurrentClusterName,
-				ClusterId:         uuid.New(),
+				HistoryShardCount:        config.Persistence.NumHistoryShards,
+				ClusterName:              currentClusterName,
+				ClusterId:                uuid.New(),
+				ClusterAddress:           currentClusterInfo.RPCAddress,
+				FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
+				InitialFailoverVersion:   currentClusterInfo.InitialFailoverVersion,
+				IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
+				IsConnectionEnabled:      true,
 			}})
 	if err != nil {
 		logger.Warn("Failed to save cluster metadata.", tag.Error(err))
@@ -496,7 +508,7 @@ func ApplyClusterMetadataConfigProvider(
 		return config.ClusterMetadata, config.Persistence, nil
 	}
 
-	resp, err := clusterMetadataManager.GetClusterMetadata()
+	resp, err := clusterMetadataManager.GetCurrentClusterMetadata()
 	if err != nil {
 		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 	}

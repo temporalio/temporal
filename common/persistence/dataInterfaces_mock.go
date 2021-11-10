@@ -1148,18 +1148,33 @@ func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMembers(request inte
 }
 
 // GetClusterMetadata mocks base method.
-func (m *MockClusterMetadataManager) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+func (m *MockClusterMetadataManager) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterMetadata")
+	ret := m.ctrl.Call(m, "GetClusterMetadata", request)
 	ret0, _ := ret[0].(*GetClusterMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterMetadata indicates an expected call of GetClusterMetadata.
-func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadata() *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadata(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadata))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadata), request)
+}
+
+// GetCurrentClusterMetadata mocks base method.
+func (m *MockClusterMetadataManager) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentClusterMetadata")
+	ret0, _ := ret[0].(*GetClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentClusterMetadata indicates an expected call of GetCurrentClusterMetadata.
+func (mr *MockClusterMetadataManagerMockRecorder) GetCurrentClusterMetadata() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetCurrentClusterMetadata))
 }
 
 // GetName mocks base method.

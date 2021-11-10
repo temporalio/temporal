@@ -39,11 +39,11 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES($1, $2, $3, $4)`
+	insertClusterMetadataQry = `INSERT INTO cluster_metadata_info (metadata_partition, cluster_name, data, data_encoding, version) VALUES($1, $2, $3, $4, $5)`
 
-	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4`
+	updateClusterMetadataQry = `UPDATE cluster_metadata_info SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4 AND cluster_name = $5`
 
-	getClusterMetadataQry = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = $1`
+	getClusterMetadataQry = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = $1 AND cluster_name = $2`
 
 	writeLockGetClusterMetadataQry = getClusterMetadataQry + ` FOR UPDATE`
 
@@ -85,6 +85,7 @@ func (pdb *db) SaveClusterMetadata(
 		return pdb.conn.ExecContext(ctx,
 			insertClusterMetadataQry,
 			constMetadataPartition,
+			row.ClusterName,
 			row.Data,
 			row.DataEncoding,
 			1,
@@ -96,17 +97,20 @@ func (pdb *db) SaveClusterMetadata(
 		row.DataEncoding,
 		row.Version+1,
 		constMetadataPartition,
+		row.ClusterName,
 	)
 }
 
 func (pdb *db) GetClusterMetadata(
 	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := pdb.conn.GetContext(ctx,
 		&row,
 		getClusterMetadataQry,
 		constMetadataPartition,
+		filter.ClusterName,
 	)
 	if err != nil {
 		return nil, err
@@ -116,12 +120,14 @@ func (pdb *db) GetClusterMetadata(
 
 func (pdb *db) WriteLockGetClusterMetadata(
 	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := pdb.conn.GetContext(ctx,
 		&row,
 		writeLockGetClusterMetadataQry,
 		constMetadataPartition,
+		filter.ClusterName,
 	)
 	if err != nil {
 		return nil, err

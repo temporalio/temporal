@@ -792,11 +792,18 @@ func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(req
 	return c.persistence.PruneClusterMembership(request)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.persistence.GetClusterMetadata()
+	return c.persistence.GetCurrentClusterMetadata()
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.persistence.GetClusterMetadata(request)
 }
 
 func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {

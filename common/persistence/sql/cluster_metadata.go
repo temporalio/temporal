@@ -43,10 +43,12 @@ type sqlClusterMetadataManager struct {
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
-func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
+func (s *sqlClusterMetadataManager) GetClusterMetadata(
+	request *p.InternalGetClusterMetadataRequest,
+) (*p.InternalGetClusterMetadataResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := s.Db.GetClusterMetadata(ctx)
+	row, err := s.Db.GetClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMetadata", err)
@@ -62,7 +64,10 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	err := s.txExecute(ctx, "SaveClusterMetadata", func(tx sqlplugin.Tx) error {
-		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata(ctx)
+		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata(
+			ctx,
+			&sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName,
+		})
 		var lastVersion int64
 		if err != nil {
 			if err != sql.ErrNoRows {

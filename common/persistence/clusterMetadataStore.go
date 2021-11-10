@@ -49,20 +49,26 @@ var (
 type (
 	// clusterMetadataManagerImpl implements MetadataManager based on MetadataStore and Serializer
 	clusterMetadataManagerImpl struct {
-		serializer  serialization.Serializer
-		persistence ClusterMetadataStore
-		logger      log.Logger
+		serializer         serialization.Serializer
+		persistence        ClusterMetadataStore
+		currentClusterName string
+		logger             log.Logger
 	}
 )
 
 var _ ClusterMetadataManager = (*clusterMetadataManagerImpl)(nil)
 
 //NewClusterMetadataManagerImpl returns new ClusterMetadataManager
-func NewClusterMetadataManagerImpl(persistence ClusterMetadataStore, logger log.Logger) ClusterMetadataManager {
+func NewClusterMetadataManagerImpl(
+	persistence ClusterMetadataStore,
+	currentClusterName string,
+	logger log.Logger,
+) ClusterMetadataManager {
 	return &clusterMetadataManagerImpl{
-		serializer:  serialization.NewSerializer(),
-		persistence: persistence,
-		logger:      logger,
+		serializer:         serialization.NewSerializer(),
+		persistence:        persistence,
+		currentClusterName: currentClusterName,
+		logger:             logger,
 	}
 }
 
@@ -102,8 +108,21 @@ func (m *clusterMetadataManagerImpl) PruneClusterMembership(request *PruneCluste
 	return m.persistence.PruneClusterMembership(request)
 }
 
-func (m *clusterMetadataManagerImpl) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
-	resp, err := m.persistence.GetClusterMetadata()
+func (m *clusterMetadataManagerImpl) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
+	resp, err := m.persistence.GetClusterMetadata(&InternalGetClusterMetadataRequest{ClusterName: m.currentClusterName})
+	if err != nil {
+		return nil, err
+	}
+
+	mcm, err := m.serializer.DeserializeClusterMetadata(resp.ClusterMetadata)
+	if err != nil {
+		return nil, err
+	}
+	return &GetClusterMetadataResponse{ClusterMetadata: *mcm, Version: resp.Version}, nil
+}
+
+func (m *clusterMetadataManagerImpl) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
+	resp, err := m.persistence.GetClusterMetadata(&InternalGetClusterMetadataRequest{ClusterName: request.ClusterName})
 	if err != nil {
 		return nil, err
 	}
@@ -120,9 +139,13 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 	if err != nil {
 		return false, err
 	}
-	oldClusterMetadata, err := m.GetClusterMetadata()
+	oldClusterMetadata, err := m.GetClusterMetadata(&GetClusterMetadataRequest{ClusterName: request.GetClusterName()})
 	if _, notFound := err.(*serviceerror.NotFound); notFound {
-		return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm, Version: request.Version})
+		return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{
+			ClusterName: request.ClusterName,
+			ClusterMetadata: mcm,
+			Version: request.Version,
+		})
 	}
 	if err != nil {
 		return false, err
@@ -131,12 +154,18 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 		return false, nil
 	}
 
-	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{ClusterMetadata: mcm, Version: request.Version})
+	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{
+		ClusterName: request.ClusterName,
+		ClusterMetadata: mcm,
+		Version: request.Version,
+	})
 }
 
 // immutableFieldsChanged returns true if any of immutable fields changed.
 func immutableFieldsChanged(old persistencespb.ClusterMetadata, cur persistencespb.ClusterMetadata) bool {
 	return (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
 		(old.ClusterId != "" && old.ClusterId != cur.ClusterId) ||
-		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount)
+		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount) ||
+		(old.FailoverVersionIncrement != 0 && old.FailoverVersionIncrement != cur.FailoverVersionIncrement) ||
+		(old.InitialFailoverVersion != cur.InitialFailoverVersion)
 }

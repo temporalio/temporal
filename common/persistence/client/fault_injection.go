@@ -701,14 +701,14 @@ func (c *FaultInjectionClusterMetadataStore) GetName() string {
 	return c.baseCMStore.GetName()
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata() (
+func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(request *persistence.InternalGetClusterMetadataRequest) (
 	*persistence.InternalGetClusterMetadataResponse,
 	error,
 ) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return c.baseCMStore.GetClusterMetadata()
+	return c.baseCMStore.GetClusterMetadata(request)
 }
 
 func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(request *persistence.InternalSaveClusterMetadataRequest) (
