@@ -114,6 +114,11 @@ func newBatchCommands() []cli.Command {
 					Name:  FlagYes,
 					Usage: "Optional flag to disable confirmation prompt",
 				},
+				cli.IntFlag{
+					Name:  FlagConcurrency,
+					Value: batcher.DefaultConcurrency,
+					Usage: "Number of goroutines running in parallel to process",
+				},
 			},
 			Action: func(c *cli.Context) {
 				StartBatchJob(c)
