@@ -34,7 +34,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
@@ -307,7 +306,7 @@ func (s *taskSerializerSuite) TestVisibilityDeleteTask() {
 func (s *taskSerializerSuite) TestReplicateActivityTask() {
 	replicateActivityTask := &tasks.SyncActivityTask{
 		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: time.Unix(0, 0),
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		ScheduledID:         rand.Int63(),
@@ -319,7 +318,7 @@ func (s *taskSerializerSuite) TestReplicateActivityTask() {
 func (s *taskSerializerSuite) TestReplicateHistoryTask() {
 	replicateHistoryTask := &tasks.HistoryReplicationTask{
 		WorkflowKey:         s.workflowKey,
-		VisibilityTimestamp: time.Unix(0, 0),
+		VisibilityTimestamp: time.Unix(0, 0).UTC(), // go == compare for location as well which is striped during marshaling/unmarshaling
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
 		FirstEventID:        rand.Int63(),
