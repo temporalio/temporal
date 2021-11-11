@@ -1505,7 +1505,9 @@ func (s *ExecutionManagerSuite) TestDeleteWorkflow() {
 	s.Equal(common.EmptyEventID, info0.WorkflowTaskStartedId)
 	s.EqualValues(1, int64(info0.WorkflowTaskTimeout.Seconds()))
 
-	err4 := s.DeleteWorkflowExecution(info0, state0.ExecutionState)
+	err4 := s.DeleteCurrentWorkflowExecution(info0, state0.ExecutionState)
+	s.NoError(err4)
+	err4 = s.DeleteWorkflowExecution(info0, state0.ExecutionState)
 	s.NoError(err4)
 
 	_, err3 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
@@ -1682,7 +1684,9 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	s.Equal(info2, info1)
 
 	// delete the run
-	err8 := s.DeleteWorkflowExecution(info0.ExecutionInfo, info0.ExecutionState)
+	err8 := s.DeleteCurrentWorkflowExecution(info0.ExecutionInfo, info0.ExecutionState)
+	s.NoError(err8)
+	err8 = s.DeleteWorkflowExecution(info0.ExecutionInfo, info0.ExecutionState)
 	s.NoError(err8)
 
 	// execution record should be gone
@@ -1830,7 +1834,9 @@ func (s *ExecutionManagerSuite) TestTransferTasksThroughUpdate() {
 	_, err9 := s.CreateWorkflowExecution(namespaceID, newExecution, "queue1", "wType", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(13), 3, 0, 2, nil)
 	s.Error(err9, "createWFExecution (brand_new) must fail when there is a previous instance of workflow state already in DB")
 
-	err10 := s.DeleteWorkflowExecution(info1, state1.ExecutionState)
+	err10 := s.DeleteCurrentWorkflowExecution(info1, state1.ExecutionState)
+	s.NoError(err10)
+	err10 = s.DeleteWorkflowExecution(info1, state1.ExecutionState)
 	s.NoError(err10)
 }
 
