@@ -45,7 +45,8 @@ const (
 	taskQueue     = "taskqueue"
 	workflowType  = "workflowType"
 	activityType  = "activityType"
-	commandType   = "commandType"
+	commandType = "commandType"
+	serviceName = "service_name"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -226,4 +227,8 @@ func HttpStatusTag(value int) Tag {
 
 func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
+}
+
+func ServiceTypeTag(value string) Tag {
+	return &tagImpl{key: serviceName, value: value}
 }

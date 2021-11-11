@@ -160,7 +160,10 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 	logger := log.NewTestLogger()
 	globalLogger = workflowTestLogger
-	globalMetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("replay", nil), metrics.Worker)
+	var err error
+	globalMetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("replay", nil), metrics.Worker)
+	s.NoError(err)
+
 	globalConfig = &Config{
 		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(50),
 		ArchivalsPerIteration:         dynamicconfig.GetIntPropertyFn(1000),
@@ -169,7 +172,7 @@ func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 
 	replayer := worker.NewWorkflowReplayer()
 	s.registerWorkflowsForReplayer(replayer)
-	err := replayer.ReplayWorkflowHistoryFromJSONFile(log.NewSdkLogger(logger), "testdata/archival_workflow_history_v1.json")
+	err = replayer.ReplayWorkflowHistoryFromJSONFile(log.NewSdkLogger(logger), "testdata/archival_workflow_history_v1.json")
 	s.NoError(err)
 }
 

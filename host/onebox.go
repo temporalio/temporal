@@ -383,11 +383,14 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	var err error
+	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	if err != nil {
+		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+	}
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
-	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for frontend", tag.Error(err))
@@ -479,7 +482,11 @@ func (c *temporalImpl) startHistory(
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadataConfig = c.clusterMetadataConfig
-		params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+		var err error
+		params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+		if err != nil {
+			c.logger.Fatal("metrics.NewClient", tag.Error(err))
+		}
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 
@@ -492,7 +499,6 @@ func (c *temporalImpl) startHistory(
 		params.ArchivalMetadata = c.archiverMetadata
 		params.ArchiverProvider = c.archiverProvider
 
-		var err error
 		params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -579,11 +585,16 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+
+	var err error
+	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	if err != nil {
+		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+	}
+
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
-	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
@@ -657,11 +668,16 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		clusterConfigCopy.EnableGlobalNamespace = true
 	}
 	params.ClusterMetadataConfig = &clusterConfigCopy
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+
+	var err error
+	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	if err != nil {
+		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+	}
+
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
-	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))

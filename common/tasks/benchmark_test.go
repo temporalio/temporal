@@ -53,11 +53,14 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
 		3: 1,
 	}
 	logger := log.NewTestLogger()
-	metricsClient := metrics.NewClient(
+	metricsClient, err := metrics.NewClient(
 		&metrics.ClientConfig{},
 		tally.NewTestScope("test", nil),
 		metrics.Common,
 	)
+	if err != nil {
+		panic(err)
+	}
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions{
