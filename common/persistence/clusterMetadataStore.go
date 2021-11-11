@@ -163,7 +163,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 
 func (m *clusterMetadataManagerImpl) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
 	if request.ClusterName == m.currentClusterName {
-		return serviceerror.NewInvalidArgument("Cannot delete cluster metadata")
+		return serviceerror.NewInvalidArgument("Cannot delete current cluster metadata")
 	}
 
 	return m.persistence.DeleteClusterMetadata(&InternalDeleteClusterMetadataRequest{ClusterName: request.ClusterName})
