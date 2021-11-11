@@ -117,7 +117,6 @@ func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, no
 }
 
 func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
-
 	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata()
 	if err != nil {
 		switch err.(type) {

@@ -483,13 +483,18 @@ func ApplyClusterMetadataConfigProvider(
 
 	clusterData := config.ClusterMetadata
 	for clusterName, clusterInfo := range clusterData.ClusterInformation {
+		var clusterId = ""
+		if clusterName == clusterData.CurrentClusterName {
+			// Only set current cluster Id as we don't know the remote cluster Id.
+			clusterId = uuid.New()
+		}
 		// We assume the existing remote cluster info is correct.
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
 			&persistence.SaveClusterMetadataRequest{
 				ClusterMetadata: persistencespb.ClusterMetadata{
 					HistoryShardCount:        config.Persistence.NumHistoryShards,
 					ClusterName:              clusterName,
-					ClusterId:                uuid.New(),
+					ClusterId:                clusterId,
 					ClusterAddress:           clusterInfo.RPCAddress,
 					FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
 					InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
