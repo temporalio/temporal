@@ -508,8 +508,8 @@ func ApplyClusterMetadataConfigProvider(
 		resp, err := clusterMetadataManager.GetCurrentClusterMetadata()
 		if err != nil {
 			return config.ClusterMetadata,
-			config.Persistence,
-			fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
+				config.Persistence,
+				fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
 		}
 
 		if clusterName == clusterData.CurrentClusterName {
