@@ -654,7 +654,7 @@ func (adh *AdminHandler) DescribeCluster(_ context.Context, _ *adminservice.Desc
 		membershipInfo.Rings = rings
 	}
 
-	metadata, err := adh.GetClusterMetadataManager().GetClusterMetadata()
+	metadata, err := adh.GetClusterMetadataManager().GetCurrentClusterMetadata()
 	if err != nil {
 		return nil, err
 	}

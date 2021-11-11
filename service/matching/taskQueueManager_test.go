@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/internal/goro"
 )
 
 var rpsInf = math.Inf(1)
@@ -172,20 +173,10 @@ func TestSyncMatchLeasingUnavailable(t *testing.T) {
 			// unload itself because resilient sync match is enabled.
 			return taskQueueState{}, errors.New(t.Name())
 		}))
-	pollctx, stoppoller := context.WithCancel(context.Background())
-	defer stoppoller()
-	go func() {
-		task, err := tqm.GetTask(pollctx, &rpsInf)
-		if errors.Is(err, ErrNoTasks) {
-			return
-		}
-		task.finish(err)
-	}()
-	// tqm.GetTask() needs some time to attach the goro started above to the
-	// internal task channel. Sorry for this but it appears unavoidable.
-	time.Sleep(10 * time.Millisecond)
 	tqm.Start()
 	defer tqm.Stop()
+	poller, _ := runOneShotPoller(context.Background(), tqm)
+	defer poller.Cancel()
 
 	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
 		execution: &commonpb.WorkflowExecution{},
@@ -227,6 +218,70 @@ func TestForeignPartitionOwnerCausesUnload(t *testing.T) {
 		source:    enumsspb.TASK_SOURCE_HISTORY,
 	})
 	require.False(t, sync)
+}
+
+func TestReaderSignaling(t *testing.T) {
+	readerNotifications := make(chan struct{}, 1)
+	clearNotifications := func() {
+		for len(readerNotifications) > 0 {
+			<-readerNotifications
+		}
+	}
+	tqm := mustCreateTestTaskQueueManager(t, gomock.NewController(t))
+
+	// redirect taskReader signals into our local channel
+	tqm.taskReader.notifyC = readerNotifications
+
+	tqm.Start()
+	defer tqm.Stop()
+
+	// shut down the taskReader so it doesn't steal notifications from us
+	tqm.taskReader.gorogrp.Cancel()
+	tqm.taskReader.gorogrp.Wait()
+
+	clearNotifications()
+
+	sync, err := tqm.AddTask(context.TODO(), addTaskParams{
+		execution: &commonpb.WorkflowExecution{},
+		taskInfo:  &persistencespb.TaskInfo{},
+		source:    enumsspb.TASK_SOURCE_HISTORY})
+	require.NoError(t, err)
+	require.False(t, sync)
+	require.Len(t, readerNotifications, 1,
+		"Sync match failure with successful db write should signal taskReader")
+
+	clearNotifications()
+	poller, _ := runOneShotPoller(context.Background(), tqm)
+	defer poller.Cancel()
+
+	sync, err = tqm.AddTask(context.TODO(), addTaskParams{
+		execution: &commonpb.WorkflowExecution{},
+		taskInfo:  &persistencespb.TaskInfo{},
+		source:    enumsspb.TASK_SOURCE_HISTORY})
+	require.NoError(t, err)
+	require.True(t, sync)
+	require.Len(t, readerNotifications, 0,
+		"Sync match should not signal taskReader")
+}
+
+// runOneShotPoller spawns a goroutine to call tqm.GetTask on the provided tqm.
+// The second return value is a channel of either error or *internalTask.
+func runOneShotPoller(ctx context.Context, tqm taskQueueManager) (*goro.Handle, chan interface{}) {
+	out := make(chan interface{}, 1)
+	handle := goro.Go(ctx, func(ctx context.Context) error {
+		task, err := tqm.GetTask(ctx, &rpsInf)
+		if task == nil {
+			out <- err
+			return nil
+		}
+		task.finish(err)
+		out <- task
+		return nil
+	})
+	// tqm.GetTask() needs some time to attach the goro started above to the
+	// internal task channel. Sorry for this but it appears unavoidable.
+	time.Sleep(10 * time.Millisecond)
+	return handle, out
 }
 
 func mustCreateTestTaskQueueManager(

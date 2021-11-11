@@ -232,7 +232,7 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 		return nil, err
 	}
 
-	result := p.NewClusterMetadataManagerImpl(store, f.logger)
+	result := p.NewClusterMetadataManagerImpl(store, f.clusterName, f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}

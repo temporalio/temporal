@@ -3679,7 +3679,7 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 		return nil, nil, err
 	}
 
-	workflowEventsSeq, bufferEvents, clearBuffer, err := e.prepareEventsAndReplicationTasks(transactionPolicy)
+	workflowEventsSeq, bufferEvents, clearBuffer, err := e.prepareEventsAndReplicationTasks(now, transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3763,7 +3763,7 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 		return nil, nil, err
 	}
 
-	workflowEventsSeq, bufferEvents, _, err := e.prepareEventsAndReplicationTasks(transactionPolicy)
+	workflowEventsSeq, bufferEvents, _, err := e.prepareEventsAndReplicationTasks(now, transactionPolicy)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -3930,6 +3930,7 @@ func (e *MutableStateImpl) cleanupTransaction(
 }
 
 func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
+	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) ([]*persistence.WorkflowEvents, []*historypb.HistoryEvent, bool, error) {
 
@@ -3984,7 +3985,7 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 
 	e.InsertReplicationTasks = append(
 		e.InsertReplicationTasks,
-		e.syncActivityToReplicationTask(transactionPolicy)...,
+		e.syncActivityToReplicationTask(now, transactionPolicy)...,
 	)
 
 	if transactionPolicy == TransactionPolicyPassive && len(e.InsertReplicationTasks) > 0 {
@@ -4017,6 +4018,7 @@ func (e *MutableStateImpl) eventsToReplicationTask(
 }
 
 func (e *MutableStateImpl) syncActivityToReplicationTask(
+	now time.Time,
 	transactionPolicy TransactionPolicy,
 ) []tasks.Task {
 
@@ -4026,6 +4028,7 @@ func (e *MutableStateImpl) syncActivityToReplicationTask(
 	}
 
 	return convertSyncActivityInfos(
+		now,
 		definition.NewWorkflowKey(
 			e.executionInfo.NamespaceId,
 			e.executionInfo.WorkflowId,

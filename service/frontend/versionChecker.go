@@ -97,7 +97,7 @@ func (vc *VersionChecker) versionCheckLoop() {
 func (vc *VersionChecker) performVersionCheck() {
 	sw := vc.metricsScope.StartTimer(metrics.VersionCheckLatency)
 	defer sw.Stop()
-	metadata, err := vc.clusterMetadataManager.GetClusterMetadata()
+	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata()
 	if err != nil {
 		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
 		return
@@ -148,7 +148,7 @@ func (vc *VersionChecker) getVersionInfo(req *check.VersionCheckRequest) (*check
 }
 
 func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) error {
-	metadata, err := vc.clusterMetadataManager.GetClusterMetadata()
+	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata()
 	if err != nil {
 		return err
 	}

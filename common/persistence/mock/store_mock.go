@@ -523,6 +523,20 @@ func (mr *MockClusterMetadataStoreMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockClusterMetadataStore)(nil).Close))
 }
 
+// DeleteClusterMetadata mocks base method.
+func (m *MockClusterMetadataStore) DeleteClusterMetadata(request *persistence.InternalDeleteClusterMetadataRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteClusterMetadata", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteClusterMetadata indicates an expected call of DeleteClusterMetadata.
+func (mr *MockClusterMetadataStoreMockRecorder) DeleteClusterMetadata(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).DeleteClusterMetadata), request)
+}
+
 // GetClusterMembers mocks base method.
 func (m *MockClusterMetadataStore) GetClusterMembers(request *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
 	m.ctrl.T.Helper()
@@ -539,18 +553,18 @@ func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMembers(request interf
 }
 
 // GetClusterMetadata mocks base method.
-func (m *MockClusterMetadataStore) GetClusterMetadata() (*persistence.InternalGetClusterMetadataResponse, error) {
+func (m *MockClusterMetadataStore) GetClusterMetadata(request *persistence.InternalGetClusterMetadataRequest) (*persistence.InternalGetClusterMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterMetadata")
+	ret := m.ctrl.Call(m, "GetClusterMetadata", request)
 	ret0, _ := ret[0].(*persistence.InternalGetClusterMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterMetadata indicates an expected call of GetClusterMetadata.
-func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMetadata() *gomock.Call {
+func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMetadata(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetClusterMetadata))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetClusterMetadata), request)
 }
 
 // GetName mocks base method.
