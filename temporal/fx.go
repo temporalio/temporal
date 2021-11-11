@@ -518,15 +518,6 @@ func ApplyClusterMetadataConfigProvider(
 		}
 
 		if clusterName == clusterData.CurrentClusterName {
-			if config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
-				logger.Error(
-					mismatchLogMessage,
-					tag.Key("clusterMetadata.currentClusterName"),
-					tag.IgnoredValue(config.ClusterMetadata.CurrentClusterName),
-					tag.Value(resp.ClusterName))
-
-				config.ClusterMetadata.CurrentClusterName = resp.ClusterName
-			}
 			var persistedShardCount = resp.HistoryShardCount
 			if config.Persistence.NumHistoryShards != persistedShardCount {
 				logger.Error(
@@ -539,25 +530,6 @@ func ApplyClusterMetadataConfigProvider(
 		}
 
 		// Overwrite cluster information from DB
-		// TODO: load all cluster information from DB
-		if clusterInfo.RPCAddress != resp.ClusterAddress {
-			logger.Error(
-				mismatchLogMessage,
-				tag.Key("clusterInfo.rpcAddress"),
-				tag.IgnoredValue(clusterInfo.RPCAddress),
-				tag.Value(resp.ClusterAddress))
-
-			clusterInfo.RPCAddress = resp.ClusterAddress
-		}
-		if clusterInfo.InitialFailoverVersion != resp.InitialFailoverVersion {
-			logger.Error(
-				mismatchLogMessage,
-				tag.Key("clusterInfo.initialFailoverVersion"),
-				tag.IgnoredValue(clusterInfo.InitialFailoverVersion),
-				tag.Value(resp.InitialFailoverVersion))
-
-			clusterInfo.InitialFailoverVersion = resp.InitialFailoverVersion
-		}
 		if clusterInfo.Enabled != resp.IsConnectionEnabled {
 			logger.Error(
 				mismatchLogMessage,
@@ -566,6 +538,24 @@ func ApplyClusterMetadataConfigProvider(
 				tag.Value(resp.IsConnectionEnabled))
 
 			clusterInfo.Enabled = resp.IsConnectionEnabled
+		}
+		if clusterInfo.Enabled && clusterInfo.RPCAddress != resp.ClusterAddress {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInfo.rpcAddress"),
+				tag.IgnoredValue(clusterInfo.RPCAddress),
+				tag.Value(resp.ClusterAddress))
+
+			clusterInfo.RPCAddress = resp.ClusterAddress
+		}
+		if clusterInfo.Enabled && clusterInfo.InitialFailoverVersion != resp.InitialFailoverVersion {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInfo.initialFailoverVersion"),
+				tag.IgnoredValue(clusterInfo.InitialFailoverVersion),
+				tag.Value(resp.InitialFailoverVersion))
+
+			clusterInfo.InitialFailoverVersion = resp.InitialFailoverVersion
 		}
 		config.ClusterMetadata.ClusterInformation[clusterName] = clusterInfo
 	}
