@@ -1972,6 +1972,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 			Input:             si.Input,
 			RequestId:         si.GetRequestId(),
 			Control:           si.Control,
+			Header:            si.Header,
 		},
 		ExternalWorkflowExecution: &sourceExecution,
 		ChildWorkflowOnly:         task.TargetChildWorkflowOnly,
