@@ -137,6 +137,13 @@ func (tr *taskReader) getTasksPump(ctx context.Context) error {
 
 Loop:
 	for {
+		// Prioritize exiting over other processing
+		select {
+		case <-ctx.Done():
+			return nil
+		default:
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil
@@ -158,9 +165,9 @@ Loop:
 				continue Loop
 			}
 
-			if err := tr.addTasksToBuffer(ctx, tasks); err != nil {
-				return err
-			}
+			// only error here is due to context cancelation which we also
+			// handle above
+			tr.addTasksToBuffer(ctx, tasks)
 			// There maybe more tasks. We yield now, but signal pump to check again later.
 			tr.Signal()
 
