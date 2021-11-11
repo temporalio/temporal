@@ -2926,7 +2926,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 func (wh *WorkflowHandler) GetClusterInfo(_ context.Context, _ *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
 
-	metadata, err := wh.GetClusterMetadataManager().GetClusterMetadata()
+	metadata, err := wh.GetClusterMetadataManager().GetCurrentClusterMetadata()
 	if err != nil {
 		return nil, err
 	}

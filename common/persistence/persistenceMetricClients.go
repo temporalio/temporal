@@ -1106,11 +1106,26 @@ func (c *clusterMetadataPersistenceClient) Close() {
 	c.persistence.Close()
 }
 
-func (c *clusterMetadataPersistenceClient) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
+	//This is a wrapper of GetClusterMetadata API, use the same scope here
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceLatency)
-	result, err := c.persistence.GetClusterMetadata()
+	result, err := c.persistence.GetCurrentClusterMetadata()
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
+}
+
+func (c *clusterMetadataPersistenceClient) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceLatency)
+	result, err := c.persistence.GetClusterMetadata(request)
 	sw.Stop()
 
 	if err != nil {
@@ -1132,6 +1147,20 @@ func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(request *SaveClus
 	}
 
 	return applied, err
+}
+
+func (c *clusterMetadataPersistenceClient) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+	c.metricClient.IncCounter(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceLatency)
+	err := c.persistence.DeleteClusterMetadata(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return err
 }
 
 func (c *clusterMetadataPersistenceClient) GetName() string {

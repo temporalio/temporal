@@ -309,6 +309,8 @@ const (
 	PersistenceGetClusterMetadataScope
 	// PersistenceSaveClusterMetadataScope tracks SaveClusterMetadata calls made by service to persistence layer
 	PersistenceSaveClusterMetadataScope
+	// PersistenceDeleteClusterMetadataScope tracks DeleteClusterMetadata calls made by service to persistence layer
+	PersistenceDeleteClusterMetadataScope
 	// PersistenceUpsertClusterMembershipScope tracks UpsertClusterMembership calls made by service to persistence layer
 	PersistenceUpsertClusterMembershipScope
 	// PersistencePruneClusterMembershipScope tracks PruneClusterMembership calls made by service to persistence layer
@@ -1200,6 +1202,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceNamespaceReplicationQueueScope:  {operation: "NamespaceReplicationQueue"},
 		PersistenceGetClusterMetadataScope:         {operation: "GetClusterMetadata"},
 		PersistenceSaveClusterMetadataScope:        {operation: "SaveClusterMetadata"},
+		PersistenceDeleteClusterMetadataScope:      {operation: "DeleteClusterMetadata"},
 		PersistencePruneClusterMembershipScope:     {operation: "PruneClusterMembership"},
 		PersistenceGetClusterMembersScope:          {operation: "GetClusterMembership"},
 		PersistenceUpsertClusterMembershipScope:    {operation: "UpsertClusterMembership"},
