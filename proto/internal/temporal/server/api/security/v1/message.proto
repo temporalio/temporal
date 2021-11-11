@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// Copyright (c) 2021 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,28 +20,12 @@
 
 syntax = "proto3";
 
-package temporal.server.api.persistence.v1;
-option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
+package temporal.server.api.security.v1;
+option go_package = "go.temporal.io/server/api/security/v1;security";
 
-import "temporal/api/enums/v1/common.proto";
-import "temporal/api/version/v1/message.proto";
-import "temporal/server/api/security/v1/message.proto";
-
-// data column
-message ClusterMetadata {
-    string cluster_name = 1;
-    int32 history_shard_count = 2;
-    string cluster_id = 3;
-    temporal.api.version.v1.VersionInfo version_info = 4;
-    map<string,temporal.server.api.persistence.v1.IndexSearchAttributes> index_search_attributes = 5;
-    string cluster_address = 6;
-    int32 failover_version_increment = 7;
-    int32 initial_failover_version = 8;
-    bool is_global_namespace_enabled = 9;
-    temporal.server.api.security.v1.ClientTLS client_tls = 10;
-    bool is_connection_enabled = 11;
-}
-
-message IndexSearchAttributes{
-    map<string,temporal.api.enums.v1.IndexedValueType> custom_search_attributes = 1;
+message ClientTLS {
+    string server_name = 1;
+    bool disable_server_verification = 2;
+    repeated string root_ca_data = 3;
+    bool force_tls = 4;
 }

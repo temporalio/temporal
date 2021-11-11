@@ -203,6 +203,34 @@ func (c *clientImpl) DescribeCluster(
 	return client.DescribeCluster(ctx, request, opts...)
 }
 
+func (c *clientImpl) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+}
+
+func (c *clientImpl) RemoveRemoteCluster(
+	ctx context.Context,
+	request *adminservice.RemoveRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RemoveRemoteClusterResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RemoveRemoteCluster(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
