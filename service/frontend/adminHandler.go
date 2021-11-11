@@ -683,7 +683,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(_ context.Context, _ *adminser
 	  2. Call remote DescribeCluster
 	  3. Compare cluster_name, failover_version_increment, initial_failover_version, is_global_namespace_enabled
 	  4. persist the remote cluster metadata
-	 */
+	*/
 	return nil, adh.error(serviceerror.NewUnimplemented("TODO"), scope)
 }
 
@@ -696,7 +696,7 @@ func (adh *AdminHandler) RemoveRemoteCluster(_ context.Context, _ *adminservice.
 	/**
 	  1. Check if it is current cluster, return error if yes
 	  2. Remove cluster metadata
-	 */
+	*/
 	return nil, adh.error(serviceerror.NewUnimplemented("TODO"), scope)
 }
 

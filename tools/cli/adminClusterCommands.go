@@ -66,7 +66,7 @@ func AdminAddOrUpdateRemoteCluster(c *cli.Context) {
 	}
 	_, err := adminClient.AddOrUpdateRemoteCluster(ctx, &adminservice.AddOrUpdateRemoteClusterRequest{
 		FrontendAddress: getRequiredOption(c, FlagFrontendAddressWithAlias),
-		ClientTls: clientTLS,
+		ClientTls:       clientTLS,
 	})
 	if err != nil {
 		ErrorAndExit("Operation AddOrUpdateRemoteCluster failed.", err)

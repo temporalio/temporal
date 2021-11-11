@@ -608,8 +608,8 @@ func newAdminClusterCommands() []cli.Command {
 			Usage:   "Add or update remote cluster information in the current cluster",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagFrontendAddressWithAlias,
-					Usage: "Remote cluster frontend address",
+					Name:     FlagFrontendAddressWithAlias,
+					Usage:    "Remote cluster frontend address",
 					Required: true,
 				},
 				cli.BoolFlag{
@@ -643,8 +643,8 @@ func newAdminClusterCommands() []cli.Command {
 			Usage:   "Remove remote cluster information from the current cluster",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagCluster,
-					Usage: "Remote cluster name",
+					Name:     FlagCluster,
+					Usage:    "Remote cluster name",
 					Required: true,
 				},
 			},
