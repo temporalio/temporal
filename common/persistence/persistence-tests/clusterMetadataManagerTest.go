@@ -274,6 +274,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertInvalidExpiry()
 // 3 - Get, data persisted
 // 4 - Init, data persisted
 // 5 - Update, add version info and make sure it's persisted and can be retrieved.
+// 6 - Delete, no data persisted
 func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	clusterNameToPersist := "testing"
 	historyShardsToPersist := int32(43)
@@ -368,4 +369,15 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	s.Nil(err)
 	s.NotNil(getResp)
 	s.Equal("1.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
+
+	// Case 6 - Delete Cluster Metadata
+	err = s.ClusterMetadataManager.DeleteClusterMetadata(&p.DeleteClusterMetadataRequest{ClusterName: clusterNameToPersist})
+	s.Nil(err)
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(&p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
+
+	// Validate they match our initializations
+	s.NotNil(err)
+	s.IsType(&serviceerror.NotFound{}, err)
+	s.Nil(getResp)
+
 }

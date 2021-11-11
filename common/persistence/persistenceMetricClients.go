@@ -1149,6 +1149,20 @@ func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(request *SaveClus
 	return applied, err
 }
 
+func (c *clusterMetadataPersistenceClient) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+	c.metricClient.IncCounter(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceLatency)
+	err := c.persistence.DeleteClusterMetadata(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return err
+}
+
 func (c *clusterMetadataPersistenceClient) GetName() string {
 	return c.persistence.GetName()
 }

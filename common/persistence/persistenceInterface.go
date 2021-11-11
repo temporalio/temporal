@@ -96,6 +96,7 @@ type (
 		GetName() string
 		GetClusterMetadata(request *InternalGetClusterMetadataRequest) (*InternalGetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *InternalSaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(request *InternalDeleteClusterMetadataRequest) error
 		// Membership APIs
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
@@ -691,6 +692,11 @@ type (
 		// Serialized MutableCusterMetadata.
 		ClusterMetadata *commonpb.DataBlob
 		Version         int64
+	}
+
+	// InternalDeleteClusterMetadataRequest is the request for DeleteClusterMetadata
+	InternalDeleteClusterMetadataRequest struct {
+		ClusterName string
 	}
 
 	// InternalUpsertClusterMembershipRequest is the request to UpsertClusterMembership

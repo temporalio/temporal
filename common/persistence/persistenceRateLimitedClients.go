@@ -813,6 +813,13 @@ func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(reques
 	return c.persistence.SaveClusterMetadata(request)
 }
 
+func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return c.persistence.DeleteClusterMetadata(request)
+}
+
 func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded

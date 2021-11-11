@@ -973,6 +973,11 @@ type (
 		Version int64
 	}
 
+	// DeleteClusterMetadataRequest is the request to DeleteClusterMetadata
+	DeleteClusterMetadataRequest struct {
+		ClusterName string
+	}
+
 	// GetClusterMembersRequest is the response to GetClusterMembers
 	GetClusterMembersRequest struct {
 		LastHeartbeatWithin time.Duration
@@ -1156,6 +1161,7 @@ type (
 		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
 		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error
 	}
 )
 

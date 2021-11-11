@@ -97,6 +97,19 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 	return true, nil
 }
 
+func (s *sqlClusterMetadataManager) DeleteClusterMetadata(
+	request *p.InternalDeleteClusterMetadataRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	_, err := s.Db.DeleteClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
+
+	if err != nil {
+		return convertCommonErrors("DeleteClusterMetadata", err)
+	}
+	return nil
+}
+
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()

@@ -45,6 +45,8 @@ const (
 	getClusterMetadataQry          = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name = ?`
 	writeLockGetClusterMetadataQry = getClusterMetadataQry + ` FOR UPDATE`
 
+	deleteClusterMetadataQry = `DELETE FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name = ?`
+
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO
 cluster_membership (membership_partition, host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry)
@@ -112,6 +114,18 @@ func (mdb *db) GetClusterMetadata(
 		return nil, err
 	}
 	return &row, err
+}
+
+func (mdb *db) DeleteClusterMetadata(
+	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
+) (sql.Result, error) {
+
+	return mdb.conn.ExecContext(ctx,
+		deleteClusterMetadataQry,
+		constMetadataPartition,
+		filter.ClusterName,
+	)
 }
 
 func (mdb *db) WriteLockGetClusterMetadata(

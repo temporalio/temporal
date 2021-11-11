@@ -721,6 +721,15 @@ func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(request *persis
 	return c.baseCMStore.SaveClusterMetadata(request)
 }
 
+func (c *FaultInjectionClusterMetadataStore) DeleteClusterMetadata(
+	request *persistence.InternalDeleteClusterMetadataRequest,
+) error {
+	if err := c.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return c.baseCMStore.DeleteClusterMetadata(request)
+}
+
 func (c *FaultInjectionClusterMetadataStore) GetClusterMembers(request *persistence.GetClusterMembersRequest) (
 	*persistence.GetClusterMembersResponse,
 	error,

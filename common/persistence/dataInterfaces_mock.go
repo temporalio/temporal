@@ -1132,6 +1132,20 @@ func (mr *MockClusterMetadataManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockClusterMetadataManager)(nil).Close))
 }
 
+// DeleteClusterMetadata mocks base method.
+func (m *MockClusterMetadataManager) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteClusterMetadata", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteClusterMetadata indicates an expected call of DeleteClusterMetadata.
+func (mr *MockClusterMetadataManagerMockRecorder) DeleteClusterMetadata(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).DeleteClusterMetadata), request)
+}
+
 // GetClusterMembers mocks base method.
 func (m *MockClusterMetadataManager) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
 	m.ctrl.T.Helper()

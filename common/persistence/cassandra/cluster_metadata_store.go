@@ -44,6 +44,7 @@ const (
 	templateGetClusterMetadata    = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name= ?`
 	templateCreateClusterMetadata = `INSERT INTO cluster_metadata_info (metadata_partition, cluster_name, data, data_encoding, version) VALUES(?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateUpdateClusterMetadata = `UPDATE cluster_metadata_info SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? AND cluster_name = ? IF version = ?`
+	templateDeleteClusterMetadata = `DELETE FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name= ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `INSERT INTO 
@@ -134,6 +135,14 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(request *p.InternalSaveCluste
 		return false, serviceerror.NewUnavailable("SaveClusterMetadata operation encountered concurrent write.")
 	}
 	return true, nil
+}
+
+func (m *ClusterMetadataStore) DeleteClusterMetadata(request *p.InternalDeleteClusterMetadataRequest) error {
+	query := m.session.Query(templateDeleteClusterMetadata, constMetadataPartition, request.ClusterName)
+	if err := query.Exec(); err != nil {
+		return gocql.ConvertError("DeleteClusterMetadata", err)
+	}
+	return nil
 }
 
 func (m *ClusterMetadataStore) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {

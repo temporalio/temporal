@@ -161,6 +161,14 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(request *SaveClusterMet
 	})
 }
 
+func (m *clusterMetadataManagerImpl) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+	if request.ClusterName == m.currentClusterName {
+		return serviceerror.NewInvalidArgument("Cannot delete cluster metadata")
+	}
+
+	return m.persistence.DeleteClusterMetadata(&InternalDeleteClusterMetadataRequest{ClusterName: request.ClusterName})
+}
+
 // immutableFieldsChanged returns true if any of immutable fields changed.
 func immutableFieldsChanged(old persistencespb.ClusterMetadata, cur persistencespb.ClusterMetadata) bool {
 	return (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
