@@ -25,7 +25,7 @@ option go_package = "go.temporal.io/server/api/persistence/v1;persistence";
 
 import "temporal/api/enums/v1/common.proto";
 import "temporal/api/version/v1/message.proto";
-import "temporal/server/api/security/v1/message.proto";
+import "temporal/server/api/auth/v1/message.proto";
 
 // data column
 message ClusterMetadata {
@@ -38,7 +38,7 @@ message ClusterMetadata {
     int32 failover_version_increment = 7;
     int32 initial_failover_version = 8;
     bool is_global_namespace_enabled = 9;
-    temporal.server.api.security.v1.ClientTLS client_tls = 10;
+    temporal.server.api.auth.v1.ClientTLS client_tls = 10;
     bool is_connection_enabled = 11;
 }
 

@@ -28,6 +28,7 @@ import (
 	"github.com/urfave/cli"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/auth/v1"
 )
 
 // AdminDescribeCluster is used to dump information about the cluster
@@ -36,10 +37,53 @@ func AdminDescribeCluster(c *cli.Context) {
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	clusterName := c.String(FlagCluster)
+	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{
+		ClusterName: clusterName,
+	})
 	if err != nil {
 		ErrorAndExit("Operation DescribeCluster failed.", err)
 	}
 
 	prettyPrintJSONObject(response)
+}
+
+// AdminAddOrUpdateRemoteCluster is used to add or update remote cluster information
+func AdminAddOrUpdateRemoteCluster(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	var clientTLS *auth.ClientTLS
+	if c.Bool(FlagEnableTLS) {
+		clientTLS = &auth.ClientTLS{
+			ServerName:                c.String(FlagTLSServerName),
+			DisableServerVerification: c.Bool(FlagTLSDisableHostVerification),
+			RootCaData:                c.StringSlice(FlagTLSRootCaData),
+			ForceTls:                  c.Bool(FlagTLSForceEnable),
+		}
+	}
+	_, err := adminClient.AddOrUpdateRemoteCluster(ctx, &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress: getRequiredOption(c, FlagFrontendAddressWithAlias),
+		ClientTls: clientTLS,
+	})
+	if err != nil {
+		ErrorAndExit("Operation AddOrUpdateRemoteCluster failed.", err)
+	}
+}
+
+// AdminRemoveRemoteCluster is used to remove remote cluster information from the cluster
+func AdminRemoveRemoteCluster(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	clusterName := getRequiredOption(c, FlagCluster)
+	_, err := adminClient.RemoveRemoteCluster(ctx, &adminservice.RemoveRemoteClusterRequest{
+		ClusterName: clusterName,
+	})
+	if err != nil {
+		ErrorAndExit("Operation RemoveRemoteCluster failed.", err)
+	}
 }

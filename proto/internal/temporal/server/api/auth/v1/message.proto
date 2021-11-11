@@ -20,8 +20,8 @@
 
 syntax = "proto3";
 
-package temporal.server.api.security.v1;
-option go_package = "go.temporal.io/server/api/security/v1;security";
+package temporal.server.api.auth.v1;
+option go_package = "go.temporal.io/server/api/auth/v1;auth";
 
 message ClientTLS {
     string server_name = 1;
