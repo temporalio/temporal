@@ -107,6 +107,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Provide(WorkerServiceProvider),
 		fx.Provide(ApplyClusterMetadataConfigProvider),
 		fx.Invoke(ServerLifetimeHooks),
+		fx.NopLogger,
 	)
 	s := &ServerFx{
 		app,
@@ -187,7 +188,7 @@ func HistoryServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -213,6 +214,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		history.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -244,7 +246,7 @@ func MatchingServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -270,6 +272,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		matching.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -301,7 +304,7 @@ func FrontendServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -327,6 +330,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		frontend.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -358,7 +362,7 @@ func WorkerServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -384,6 +388,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		worker.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
