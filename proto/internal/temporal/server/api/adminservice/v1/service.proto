@@ -27,6 +27,9 @@ import "temporal/server/api/adminservice/v1/request_response.proto";
 
 // AdminService provides advanced APIs for debugging and analysis with admin privilege
 service AdminService {
+    // ListNamespaces returns the information and configuration for all namespaces.
+    rpc ListNamespaces (ListNamespacesRequest) returns (ListNamespacesResponse) {
+    }
 
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {

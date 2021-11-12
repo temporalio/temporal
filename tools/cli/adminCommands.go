@@ -186,28 +186,26 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeMutableStateResp
 
 // AdminListNamespaces outputs a list of all namespaces
 func AdminListNamespaces(c *cli.Context) {
-	pFactory := CreatePersistenceFactory(c)
-	metadataManager, err := pFactory.NewMetadataManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize metadata manager", err)
-	}
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
 
-	req := &persistence.ListNamespacesRequest{
-		PageSize: c.Int(FlagPageSize),
+	req := &adminservice.ListNamespacesRequest{
+		PageSize: int32(c.Int(FlagPageSize)),
 	}
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		req.NextPageToken = paginationToken
-		response, err := metadataManager.ListNamespaces(req)
+
+		resp, err := adminClient.ListNamespaces(ctx, req)
 		if err != nil {
 			return nil, nil, err
 		}
-		token := response.NextPageToken
 
 		var items []interface{}
-		for _, task := range response.Namespaces {
+		for _, task := range resp.Namespaces {
 			items = append(items, task)
 		}
-		return items, token, nil
+		return items, resp.NextPageToken, nil
 	}
 	paginate(c, paginationFunc)
 }
