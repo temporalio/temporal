@@ -27,6 +27,7 @@ package temporal
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/uber-go/tally/v4"
@@ -510,14 +511,16 @@ func ApplyClusterMetadataConfigProvider(
 			continue
 		}
 
-		resp, err := clusterMetadataManager.GetCurrentClusterMetadata()
+		resp, err := clusterMetadataManager.GetClusterMetadata(&persistence.GetClusterMetadataRequest{
+			ClusterName: clusterName,
+		})
 		if err != nil {
 			return config.ClusterMetadata,
 				config.Persistence,
 				fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
 		}
 
-		if clusterName == clusterData.CurrentClusterName {
+		if clusterName == resp.GetClusterName() {
 			var persistedShardCount = resp.HistoryShardCount
 			if config.Persistence.NumHistoryShards != persistedShardCount {
 				logger.Error(
@@ -557,6 +560,7 @@ func ApplyClusterMetadataConfigProvider(
 
 			clusterInfo.InitialFailoverVersion = resp.InitialFailoverVersion
 		}
+		fmt.Println("cluster : version" + clusterName + ":" + strconv.Itoa(int(clusterInfo.InitialFailoverVersion)))
 		config.ClusterMetadata.ClusterInformation[clusterName] = clusterInfo
 	}
 	return config.ClusterMetadata, config.Persistence, nil

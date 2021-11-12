@@ -99,6 +99,20 @@ func (mr *MockMetadataMockRecorder) GetCurrentClusterName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentClusterName", reflect.TypeOf((*MockMetadata)(nil).GetCurrentClusterName))
 }
 
+// GetFailoverVersionIncrement mocks base method.
+func (m *MockMetadata) GetFailoverVersionIncrement() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetFailoverVersionIncrement")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetFailoverVersionIncrement indicates an expected call of GetFailoverVersionIncrement.
+func (mr *MockMetadataMockRecorder) GetFailoverVersionIncrement() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFailoverVersionIncrement", reflect.TypeOf((*MockMetadata)(nil).GetFailoverVersionIncrement))
+}
+
 // GetMasterClusterName mocks base method.
 func (m *MockMetadata) GetMasterClusterName() string {
 	m.ctrl.T.Helper()

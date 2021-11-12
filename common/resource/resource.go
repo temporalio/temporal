@@ -93,6 +93,7 @@ type (
 		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
 		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
 		GetClientBean() client.Bean
+		GetClientFactory() client.Factory
 
 		// persistence clients
 
