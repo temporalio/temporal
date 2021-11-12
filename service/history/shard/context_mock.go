@@ -592,17 +592,17 @@ func (mr *MockContextMockRecorder) SetCurrentTime(cluster, currentTime interface
 }
 
 // UpdateClusterReplicationLevel mocks base method.
-func (m *MockContext) UpdateClusterReplicationLevel(cluster string, ackTaskID int64) error {
+func (m *MockContext) UpdateClusterReplicationLevel(cluster string, ackTaskID int64, ackTimestamp time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateClusterReplicationLevel", cluster, ackTaskID)
+	ret := m.ctrl.Call(m, "UpdateClusterReplicationLevel", cluster, ackTaskID, ackTimestamp)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateClusterReplicationLevel indicates an expected call of UpdateClusterReplicationLevel.
-func (mr *MockContextMockRecorder) UpdateClusterReplicationLevel(cluster, ackTaskID interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateClusterReplicationLevel(cluster, ackTaskID, ackTimestamp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClusterReplicationLevel", reflect.TypeOf((*MockContext)(nil).UpdateClusterReplicationLevel), cluster, ackTaskID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClusterReplicationLevel", reflect.TypeOf((*MockContext)(nil).UpdateClusterReplicationLevel), cluster, ackTaskID, ackTimestamp)
 }
 
 // UpdateNamespaceNotificationVersion mocks base method.
