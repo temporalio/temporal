@@ -26,6 +26,7 @@ package config
 
 import (
 	"bytes"
+	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -487,4 +488,16 @@ func (r *GroupTLS) IsEnabled() bool {
 	return r.Server.KeyFile != "" || r.Server.KeyData != "" ||
 		len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0 ||
 		r.Client.ForceTLS
+}
+
+func (p *JWTKeyProvider) HasSourceURIsConfigured() bool {
+	if len(p.KeySourceURIs) == 0 {
+		return false
+	}
+	for _, uri := range p.KeySourceURIs {
+		if strings.TrimSpace(uri) != "" {
+			return true
+		}
+	}
+	return false
 }
