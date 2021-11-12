@@ -42,7 +42,7 @@ import (
 )
 
 type (
-	// Bean in an collection of clients
+	// Bean is a collection of clients
 	Bean interface {
 		GetHistoryClient() historyservice.HistoryServiceClient
 		SetHistoryClient(client historyservice.HistoryServiceClient)
