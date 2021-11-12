@@ -84,6 +84,14 @@ service AdminService {
     rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
     }
 
+    // AddOrUpdateRemoteCluster adds or updates remote cluster.
+    rpc AddOrUpdateRemoteCluster(AddOrUpdateRemoteClusterRequest) returns (AddOrUpdateRemoteClusterResponse) {
+    }
+
+    // RemoveRemoteCluster removes remote cluster.
+    rpc RemoveRemoteCluster(RemoveRemoteClusterRequest) returns (RemoveRemoteClusterResponse) {
+    }
+
     // GetDLQMessages returns messages from DLQ.
     rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
     }

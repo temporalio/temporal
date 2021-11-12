@@ -610,7 +610,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 func (adh *AdminHandler) DescribeCluster(_ context.Context, _ *adminservice.DescribeClusterRequest) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
+	scope, sw := adh.startRequestProfile(metrics.AdminDescribeClusterScope)
 	defer sw.Stop()
 
 	membershipInfo := &clusterspb.MembershipInfo{}
@@ -670,6 +670,34 @@ func (adh *AdminHandler) DescribeCluster(_ context.Context, _ *adminservice.Desc
 		VisibilityStore:   adh.visibilityMgr.GetName(),
 		VersionInfo:       metadata.VersionInfo,
 	}, nil
+}
+
+func (adh *AdminHandler) AddOrUpdateRemoteCluster(_ context.Context, _ *adminservice.AddOrUpdateRemoteClusterRequest) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminAddOrUpdateRemoteClusterScope)
+	defer sw.Stop()
+
+	/**
+	  1. Not allow update current cluster metadata (current cluster metadata can only be done from config)
+	  2. Call remote DescribeCluster
+	  3. Compare cluster_name, failover_version_increment, initial_failover_version, is_global_namespace_enabled
+	  4. persist the remote cluster metadata
+	*/
+	return nil, adh.error(serviceerror.NewUnimplemented("TODO"), scope)
+}
+
+func (adh *AdminHandler) RemoveRemoteCluster(_ context.Context, _ *adminservice.RemoveRemoteClusterRequest) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminRemoveRemoteClusterScope)
+	defer sw.Stop()
+
+	/**
+	  1. Check if it is current cluster, return error if yes
+	  2. Remove cluster metadata
+	*/
+	return nil, adh.error(serviceerror.NewUnimplemented("TODO"), scope)
 }
 
 // GetReplicationMessages returns new replication tasks since the read level provided in the token.
