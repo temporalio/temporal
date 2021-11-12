@@ -245,6 +245,20 @@ func (c *clientImpl) GetReplicationMessages(
 	return client.GetReplicationMessages(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListNamespaces(
+	ctx context.Context,
+	request *adminservice.ListNamespacesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListNamespacesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListNamespaces(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,
