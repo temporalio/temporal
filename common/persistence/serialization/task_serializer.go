@@ -240,6 +240,50 @@ func (s *TaskSerializer) DeserializeVisibilityTasks(
 	return taskSlice, nil
 }
 
+func (s *TaskSerializer) SerializeTieredStorageTasks(
+	taskSlice []tasks.Task,
+) (map[tasks.Key]commonpb.DataBlob, error) {
+	blobSlice := make(map[tasks.Key]commonpb.DataBlob, len(taskSlice))
+	for _, task := range taskSlice {
+		var tieredStorageTask *persistencespb.TieredStorageTaskInfo
+		switch task := task.(type) {
+		case *tasks.TieredStorageTask:
+			tieredStorageTask = s.TieredStorageTaskToProto(task)
+		default:
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibilit task type: %v", task))
+		}
+
+		blob, err := TieredStorageTaskInfoToBlob(tieredStorageTask)
+		if err != nil {
+			return nil, err
+		}
+		blobSlice[task.GetKey()] = blob
+	}
+	return blobSlice, nil
+}
+
+func (s *TaskSerializer) DeserializeTieredStorageTasks(
+	blobSlice []commonpb.DataBlob,
+) ([]tasks.Task, error) {
+	taskSlice := make([]tasks.Task, len(blobSlice))
+	for index, blob := range blobSlice {
+		tieredStorageTask, err := TieredStorageTaskInfoFromBlob(blob.Data, blob.EncodingType.String())
+		if err != nil {
+			return nil, err
+		}
+		var visibility tasks.Task
+		switch tieredStorageTask.TaskType {
+		case enumsspb.TASK_TYPE_TIERED_STORAGE:
+			visibility = s.tieredStorageTaskFromProto(tieredStorageTask)
+		default:
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibility task type: %v", tieredStorageTask.TaskType))
+		}
+
+		taskSlice[index] = visibility
+	}
+	return taskSlice, nil
+}
+
 func (s *TaskSerializer) SerializeReplicationTasks(
 	taskSlice []tasks.Task,
 ) (map[tasks.Key]commonpb.DataBlob, error) {
@@ -817,6 +861,35 @@ func (s *TaskSerializer) visibilityStartTaskFromProto(
 		VisibilityTimestamp: *startVisibilityTask.VisibilityTime,
 		TaskID:              startVisibilityTask.TaskId,
 		Version:             startVisibilityTask.Version,
+	}
+}
+
+func (s *TaskSerializer) TieredStorageTaskToProto(
+	tieredStorageTask *tasks.TieredStorageTask,
+) *persistencespb.TieredStorageTaskInfo {
+	return &persistencespb.TieredStorageTaskInfo{
+		NamespaceId:    tieredStorageTask.WorkflowKey.NamespaceID,
+		WorkflowId:     tieredStorageTask.WorkflowKey.WorkflowID,
+		RunId:          tieredStorageTask.WorkflowKey.RunID,
+		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION,
+		Version:        tieredStorageTask.Version,
+		TaskId:         tieredStorageTask.TaskID,
+		VisibilityTime: &tieredStorageTask.VisibilityTimestamp,
+	}
+}
+
+func (s *TaskSerializer) tieredStorageTaskFromProto(
+	tieredStorageTask *persistencespb.TieredStorageTaskInfo,
+) *tasks.TieredStorageTask {
+	return &tasks.TieredStorageTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			tieredStorageTask.NamespaceId,
+			tieredStorageTask.WorkflowId,
+			tieredStorageTask.RunId,
+		),
+		VisibilityTimestamp: *tieredStorageTask.VisibilityTime,
+		TaskID:              tieredStorageTask.TaskId,
+		Version:             tieredStorageTask.Version,
 	}
 }
 

@@ -553,6 +553,82 @@ func (m *sqlExecutionStore) RangeCompleteVisibilityTask(
 	return nil
 }
 
+func (m *sqlExecutionStore) GetTieredStorageTask(
+	request *persistence.GetTieredStorageTaskRequest,
+) (*persistence.InternalGetTieredStorageTaskResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := m.Db.SelectFromTieredStorageTasks(ctx, sqlplugin.TieredStorageTasksFilter{
+		ShardID: request.ShardID,
+		TaskID:  request.TaskID,
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTieredStorageTask operation failed. Task with ID %v not found. Error: %v", request.TaskID, err))
+		}
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTieredStorageTask operation failed. Failed to get record. TaskId: %v. Error: %v", request.TaskID, err))
+	}
+
+	if len(rows) == 0 {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTieredStorageTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+	}
+
+	TieredStorageRow := rows[0]
+	resp := &persistence.InternalGetTieredStorageTaskResponse{Task: *p.NewDataBlob(TieredStorageRow.Data, TieredStorageRow.DataEncoding)}
+	return resp, nil
+}
+
+func (m *sqlExecutionStore) GetTieredStorageTasks(
+	request *p.GetTieredStorageTasksRequest,
+) (*p.InternalGetTieredStorageTasksResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	rows, err := m.Db.RangeSelectFromTieredStorageTasks(ctx, sqlplugin.TieredStorageTasksRangeFilter{
+		ShardID:   request.ShardID,
+		MinTaskID: request.ReadLevel,
+		MaxTaskID: request.MaxReadLevel,
+	})
+	if err != nil {
+		if err != sql.ErrNoRows {
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTieredStorageTasks operation failed. Select failed. Error: %v", err))
+		}
+	}
+	resp := &p.InternalGetTieredStorageTasksResponse{Tasks: make([]commonpb.DataBlob, len(rows))}
+	for i, row := range rows {
+		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
+	}
+	return resp, nil
+}
+
+func (m *sqlExecutionStore) CompleteTieredStorageTask(
+	request *p.CompleteTieredStorageTaskRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.Db.DeleteFromTieredStorageTasks(ctx, sqlplugin.TieredStorageTasksFilter{
+		ShardID: request.ShardID,
+		TaskID:  request.TaskID,
+	}); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("CompleteTieredStorageTask operation failed. Error: %v", err))
+	}
+	return nil
+}
+
+func (m *sqlExecutionStore) RangeCompleteTieredStorageTask(
+	request *p.RangeCompleteTieredStorageTaskRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	if _, err := m.Db.RangeDeleteFromTieredStorageTasks(ctx, sqlplugin.TieredStorageTasksRangeFilter{
+		ShardID:   request.ShardID,
+		MinTaskID: request.ExclusiveBeginTaskID,
+		MaxTaskID: request.InclusiveEndTaskID,
+	}); err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RangeCompleteTieredStorageTask operation failed. Error: %v", err))
+	}
+	return nil
+}
+
 type timerTaskPageToken struct {
 	TaskID    int64
 	Timestamp time.Time

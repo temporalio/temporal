@@ -142,6 +142,17 @@ ORDER BY task_id LIMIT $5`
 	deleteVisibilityTaskQuery      = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id = $2`
 	rangeDeleteVisibilityTaskQuery = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3`
 
+	createTieredStorageTasksQuery = `INSERT INTO tiered_storage_tasks(shard_id, task_id, data, data_encoding) 
+ VALUES(:shard_id, :task_id, :data, :data_encoding)`
+
+	getTieredStorageTaskQuery = `SELECT task_id, data, data_encoding 
+ FROM tiered_storage_tasks WHERE shard_id = $1 AND task_id = $2`
+	getTieredStorageTasksQuery = `SELECT task_id, data, data_encoding 
+ FROM tiered_storage_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3 ORDER BY shard_id, task_id`
+
+	deleteTieredStorageTaskQuery      = `DELETE FROM tiered_storage_tasks WHERE shard_id = $1 AND task_id = $2`
+	rangeDeleteTieredStorageTaskQuery = `DELETE FROM tiered_storage_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3`
+
 	bufferedEventsColumns     = `shard_id, namespace_id, workflow_id, run_id, data, data_encoding`
 	createBufferedEventsQuery = `INSERT INTO buffered_events(` + bufferedEventsColumns + `)
 VALUES (:shard_id, :namespace_id, :workflow_id, :run_id, :data, :data_encoding)`
@@ -773,6 +784,79 @@ func (pdb *db) RangeDeleteFromVisibilityTasks(
 ) (sql.Result, error) {
 	return pdb.conn.ExecContext(ctx,
 		rangeDeleteVisibilityTaskQuery,
+		filter.ShardID,
+		filter.MinTaskID,
+		filter.MaxTaskID,
+	)
+}
+
+// InsertIntoTieredStorageTasks inserts one or more rows into tiered_storage_tasks table
+func (pdb *db) InsertIntoTieredStorageTasks(
+	ctx context.Context,
+	rows []sqlplugin.TieredStorageTasksRow,
+) (sql.Result, error) {
+	return pdb.conn.NamedExecContext(ctx,
+		createTieredStorageTasksQuery,
+		rows,
+	)
+}
+
+// SelectFromTieredStorageTasks reads one or more rows from tiered_storage_tasks table
+func (pdb *db) SelectFromTieredStorageTasks(
+	ctx context.Context,
+	filter sqlplugin.TieredStorageTasksFilter,
+) ([]sqlplugin.TieredStorageTasksRow, error) {
+	var rows []sqlplugin.TieredStorageTasksRow
+	err := pdb.conn.SelectContext(ctx,
+		&rows,
+		getTieredStorageTaskQuery,
+		filter.ShardID,
+		filter.TaskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// RangeSelectFromTieredStorageTasks reads one or more rows from tiered_storage_tasks table
+func (pdb *db) RangeSelectFromTieredStorageTasks(
+	ctx context.Context,
+	filter sqlplugin.TieredStorageTasksRangeFilter,
+) ([]sqlplugin.TieredStorageTasksRow, error) {
+	var rows []sqlplugin.TieredStorageTasksRow
+	err := pdb.conn.SelectContext(ctx,
+		&rows,
+		getTieredStorageTasksQuery,
+		filter.ShardID,
+		filter.MinTaskID,
+		filter.MaxTaskID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return rows, nil
+}
+
+// DeleteFromTieredStorageTasks deletes one or more rows from tiered_storage_tasks table
+func (pdb *db) DeleteFromTieredStorageTasks(
+	ctx context.Context,
+	filter sqlplugin.TieredStorageTasksFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		deleteTieredStorageTaskQuery,
+		filter.ShardID,
+		filter.TaskID,
+	)
+}
+
+// RangeDeleteFromTieredStorageTasks deletes one or more rows from tiered_storage_tasks table
+func (pdb *db) RangeDeleteFromTieredStorageTasks(
+	ctx context.Context,
+	filter sqlplugin.TieredStorageTasksRangeFilter,
+) (sql.Result, error) {
+	return pdb.conn.ExecContext(ctx,
+		rangeDeleteTieredStorageTaskQuery,
 		filter.ShardID,
 		filter.MinTaskID,
 		filter.MaxTaskID,

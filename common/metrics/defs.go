@@ -191,6 +191,15 @@ const (
 	// PersistenceRangeCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
 	PersistenceRangeCompleteVisibilityTaskScope
 
+	// PersistenceGetTieredStorageTaskScope tracks GetTieredStorageTask calls made by service to persistence layer
+	PersistenceGetTieredStorageTaskScope
+	// PersistenceGetTieredStorageTasksScope tracks GetTieredStorageTasks calls made by service to persistence layer
+	PersistenceGetTieredStorageTasksScope
+	// PersistenceCompleteTieredStorageTaskScope tracks CompleteTieredStorageTasks calls made by service to persistence layer
+	PersistenceCompleteTieredStorageTaskScope
+	// PersistenceRangeCompleteTieredStorageTaskScope tracks CompleteTieredStorageTasks calls made by service to persistence layer
+	PersistenceRangeCompleteTieredStorageTaskScope
+
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetReplicationTaskScope
 	// PersistenceGetReplicationTasksScope tracks GetReplicationTasks calls made by service to persistence layer
@@ -689,6 +698,9 @@ const (
 	DynamicConfigScope
 
 	NumCommonScopes
+
+	// TieredStorageQueueProcessorScope is the scope used by all metric emitted by tiered storage queue processor
+	TieredStorageQueueProcessorScope
 )
 
 // -- Operation scopes for Admin service --

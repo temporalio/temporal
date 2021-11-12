@@ -239,6 +239,20 @@ func (mr *MockExecutionManagerMockRecorder) CompleteReplicationTask(request inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteReplicationTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteReplicationTask), request)
 }
 
+// CompleteTieredStorageTask mocks base method.
+func (m *MockExecutionManager) CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteTieredStorageTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CompleteTieredStorageTask indicates an expected call of CompleteTieredStorageTask.
+func (mr *MockExecutionManagerMockRecorder) CompleteTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTieredStorageTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteTieredStorageTask), request)
+}
+
 // CompleteTimerTask mocks base method.
 func (m *MockExecutionManager) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
 	m.ctrl.T.Helper()
@@ -486,6 +500,36 @@ func (mr *MockExecutionManagerMockRecorder) GetReplicationTasksFromDLQ(request i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).GetReplicationTasksFromDLQ), request)
 }
 
+// GetTieredStorageTask mocks base method.
+func (m *MockExecutionManager) GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*GetTieredStorageTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTieredStorageTask", request)
+	ret0, _ := ret[0].(*GetTieredStorageTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTieredStorageTask indicates an expected call of GetTieredStorageTask.
+func (mr *MockExecutionManagerMockRecorder) GetTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTieredStorageTask", reflect.TypeOf((*MockExecutionManager)(nil).GetTieredStorageTask), request)
+}
+
+// GetTieredStorageTasks mocks base method.
+func (m *MockExecutionManager) GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*GetTieredStorageTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTieredStorageTasks", request)
+	ret0, _ := ret[0].(*GetTieredStorageTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTieredStorageTasks indicates an expected call of GetTieredStorageTasks.
+func (mr *MockExecutionManagerMockRecorder) GetTieredStorageTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTieredStorageTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetTieredStorageTasks), request)
+}
+
 // GetTimerTask mocks base method.
 func (m *MockExecutionManager) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -632,6 +676,20 @@ func (m *MockExecutionManager) RangeCompleteReplicationTask(request *RangeComple
 func (mr *MockExecutionManagerMockRecorder) RangeCompleteReplicationTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteReplicationTask", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteReplicationTask), request)
+}
+
+// RangeCompleteTieredStorageTask mocks base method.
+func (m *MockExecutionManager) RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeCompleteTieredStorageTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeCompleteTieredStorageTask indicates an expected call of RangeCompleteTieredStorageTask.
+func (mr *MockExecutionManagerMockRecorder) RangeCompleteTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTieredStorageTask", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteTieredStorageTask), request)
 }
 
 // RangeCompleteTimerTask mocks base method.

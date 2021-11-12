@@ -107,6 +107,7 @@ var (
 	ComponentEventsCache              = component("events-cache")
 	ComponentTransferQueue            = component("transfer-queue-processor")
 	ComponentVisibilityQueue          = component("visibility-queue-processor")
+	ComponentTieredStorageQueue       = component("tiered-storage-queue-processor")
 	ComponentTimerQueue               = component("timer-queue-processor")
 	ComponentTimerBuilder             = component("timer-builder")
 	ComponentReplicatorQueue          = component("replicator-queue-processor")

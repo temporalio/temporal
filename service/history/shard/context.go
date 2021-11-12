@@ -79,6 +79,9 @@ type (
 		GetVisibilityAckLevel() int64
 		UpdateVisibilityAckLevel(ackLevel int64) error
 
+		GetTieredStorageAckLevel() int64
+		UpdateTieredStorageAckLevel(ackLevel int64) error
+
 		GetReplicatorAckLevel() int64
 		UpdateReplicatorAckLevel(ackLevel int64) error
 		GetReplicatorDLQAckLevel(sourceCluster string) int64

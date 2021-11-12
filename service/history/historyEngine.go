@@ -95,6 +95,7 @@ type (
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
 		visibilityProcessor       visibilityQueueProcessor
+		tieredStorageProcessor    tieredStorageQueueProcessor
 		nDCReplicator             nDCHistoryReplicator
 		nDCActivityReplicator     nDCActivityReplicator
 		replicatorProcessor       *replicatorQueueProcessorImpl
@@ -166,6 +167,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
 	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
+	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {

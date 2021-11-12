@@ -153,6 +153,12 @@ type (
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 
+		// TieredStorage tasks
+		GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*InternalGetTieredStorageTaskResponse, error)
+		GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*InternalGetTieredStorageTasksResponse, error)
+		CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error
+		RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error
+
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 
@@ -530,6 +536,15 @@ type (
 	}
 
 	InternalGetVisibilityTasksResponse struct {
+		Tasks         []commonpb.DataBlob
+		NextPageToken []byte
+	}
+
+	InternalGetTieredStorageTaskResponse struct {
+		Task commonpb.DataBlob
+	}
+
+	InternalGetTieredStorageTasksResponse struct {
 		Tasks         []commonpb.DataBlob
 		NextPageToken []byte
 	}
