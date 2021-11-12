@@ -1171,6 +1171,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 				ctx,
 				request.GetClusterName(),
 				token.GetLastProcessedMessageId(),
+				timestamp.TimeValue(token.LastProcessedVisibilityTime),
 				token.GetLastRetrievedMessageId(),
 			)
 			if err != nil {
