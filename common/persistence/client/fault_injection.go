@@ -701,14 +701,14 @@ func (c *FaultInjectionClusterMetadataStore) GetName() string {
 	return c.baseCMStore.GetName()
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata() (
+func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(request *persistence.InternalGetClusterMetadataRequest) (
 	*persistence.InternalGetClusterMetadataResponse,
 	error,
 ) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return c.baseCMStore.GetClusterMetadata()
+	return c.baseCMStore.GetClusterMetadata(request)
 }
 
 func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(request *persistence.InternalSaveClusterMetadataRequest) (
@@ -719,6 +719,15 @@ func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(request *persis
 		return false, err
 	}
 	return c.baseCMStore.SaveClusterMetadata(request)
+}
+
+func (c *FaultInjectionClusterMetadataStore) DeleteClusterMetadata(
+	request *persistence.InternalDeleteClusterMetadataRequest,
+) error {
+	if err := c.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return c.baseCMStore.DeleteClusterMetadata(request)
 }
 
 func (c *FaultInjectionClusterMetadataStore) GetClusterMembers(request *persistence.GetClusterMembersRequest) (

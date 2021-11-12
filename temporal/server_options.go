@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
+	"google.golang.org/grpc"
 )
 
 type (
@@ -64,6 +65,7 @@ type (
 		customDataStoreFactory     persistenceClient.AbstractDataStoreFactory
 		clientFactoryProvider      client.FactoryProvider
 		searchAttributesMapper     searchattribute.Mapper
+		customInterceptors         []grpc.UnaryServerInterceptor
 	}
 )
 

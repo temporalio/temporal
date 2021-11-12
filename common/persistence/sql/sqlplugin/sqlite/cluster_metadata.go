@@ -40,12 +40,14 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	insertClusterMetadataQry = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?)`
+	insertClusterMetadataQry = `INSERT INTO cluster_metadata_info (metadata_partition, cluster_name, data, data_encoding, version) VALUES(?, ?, ?, ?, ?)`
 
-	updateClusterMetadataQry = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ?`
+	updateClusterMetadataQry = `UPDATE cluster_metadata_info SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? AND cluster_name = ?`
 
-	getClusterMetadataQry          = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
+	getClusterMetadataQry          = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name = ?`
 	writeLockGetClusterMetadataQry = getClusterMetadataQry
+
+	deleteClusterMetadataQry = `DELETE FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name = ?`
 
 	// ****** CLUSTER_MEMBERSHIP TABLE ******
 	templateUpsertActiveClusterMembership = `REPLACE INTO
@@ -81,6 +83,7 @@ func (mdb *db) SaveClusterMetadata(
 		return mdb.conn.ExecContext(ctx,
 			insertClusterMetadataQry,
 			constMetadataPartition,
+			row.ClusterName,
 			row.Data,
 			row.DataEncoding,
 			1,
@@ -92,17 +95,20 @@ func (mdb *db) SaveClusterMetadata(
 		row.DataEncoding,
 		row.Version+1,
 		constMetadataPartition,
+		row.ClusterName,
 	)
 }
 
 func (mdb *db) GetClusterMetadata(
 	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := mdb.conn.GetContext(ctx,
 		&row,
 		getClusterMetadataQry,
 		constMetadataPartition,
+		filter.ClusterName,
 	)
 	if err != nil {
 		return nil, err
@@ -112,17 +118,31 @@ func (mdb *db) GetClusterMetadata(
 
 func (mdb *db) WriteLockGetClusterMetadata(
 	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
 ) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := mdb.conn.GetContext(ctx,
 		&row,
 		writeLockGetClusterMetadataQry,
 		constMetadataPartition,
+		filter.ClusterName,
 	)
 	if err != nil {
 		return nil, err
 	}
 	return &row, err
+}
+
+func (mdb *db) DeleteClusterMetadata(
+	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
+) (sql.Result, error) {
+
+	return mdb.conn.ExecContext(ctx,
+		deleteClusterMetadataQry,
+		constMetadataPartition,
+		filter.ClusterName,
+	)
 }
 
 func (mdb *db) UpsertClusterMembership(

@@ -922,19 +922,24 @@ func (s *TaskSerializer) ReplicationActivityTaskToProto(
 		NextEventId:       0,
 		BranchToken:       nil,
 		NewRunBranchToken: nil,
+		VisibilityTime:    &activityTask.VisibilityTimestamp,
 	}
 }
 
 func (s *TaskSerializer) replicationActivityTaskFromProto(
 	activityTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncActivityTask {
+	visibilityTimestamp := time.Unix(0, 0)
+	if activityTask.VisibilityTime != nil {
+		visibilityTimestamp = *activityTask.VisibilityTime
+	}
 	return &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			activityTask.NamespaceId,
 			activityTask.WorkflowId,
 			activityTask.RunId,
 		),
-		VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+		VisibilityTimestamp: visibilityTimestamp,
 		Version:             activityTask.Version,
 		TaskID:              activityTask.TaskId,
 		ScheduledID:         activityTask.ScheduledId,
@@ -956,19 +961,24 @@ func (s *TaskSerializer) ReplicationHistoryTaskToProto(
 		NextEventId:       historyTask.NextEventID,
 		BranchToken:       historyTask.BranchToken,
 		NewRunBranchToken: historyTask.NewRunBranchToken,
+		VisibilityTime:    &historyTask.VisibilityTimestamp,
 	}
 }
 
 func (s *TaskSerializer) replicationHistoryTaskFromProto(
 	historyTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.HistoryReplicationTask {
+	visibilityTimestamp := time.Unix(0, 0)
+	if historyTask.VisibilityTime != nil {
+		visibilityTimestamp = *historyTask.VisibilityTime
+	}
 	return &tasks.HistoryReplicationTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			historyTask.NamespaceId,
 			historyTask.WorkflowId,
 			historyTask.RunId,
 		),
-		VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+		VisibilityTimestamp: visibilityTimestamp,
 		TaskID:              historyTask.TaskId,
 		FirstEventID:        historyTask.FirstEventId,
 		NextEventID:         historyTask.NextEventId,

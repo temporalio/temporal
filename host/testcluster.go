@@ -144,7 +144,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	}
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)
-	testBase.Setup(nil)
+	testBase.Setup(clusterMetadataConfig)
 	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
 
@@ -165,7 +165,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			HistoryShardCount: options.HistoryConfig.NumHistoryShards,
-			ClusterName:       options.ClusterMetadata.CurrentClusterName,
+			ClusterName:       clusterMetadataConfig.CurrentClusterName,
 			ClusterId:         uuid.New(),
 		}})
 	if err != nil {

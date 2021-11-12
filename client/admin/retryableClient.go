@@ -210,6 +210,37 @@ func (c *retryableClient) DescribeCluster(
 	return resp, err
 }
 
+func (c *retryableClient) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+
+	var resp *adminservice.AddOrUpdateRemoteClusterResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+func (c *retryableClient) RemoveRemoteCluster(
+	ctx context.Context,
+	request *adminservice.RemoveRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RemoveRemoteClusterResponse, error) {
+
+	var resp *adminservice.RemoveRemoteClusterResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.RemoveRemoteCluster(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
@@ -219,6 +250,22 @@ func (c *retryableClient) GetReplicationMessages(
 	op := func() error {
 		var err error
 		resp, err = c.client.GetReplicationMessages(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) ListNamespaces(
+	ctx context.Context,
+	request *adminservice.ListNamespacesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListNamespacesResponse, error) {
+
+	var resp *adminservice.ListNamespacesResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListNamespaces(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

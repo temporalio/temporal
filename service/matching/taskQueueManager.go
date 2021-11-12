@@ -303,7 +303,7 @@ func (c *taskQueueManagerImpl) AddTask(
 		c.signalIfFatal(err)
 		return resp, err
 	})
-	if err == nil {
+	if !syncMatch && err == nil {
 		c.taskReader.Signal()
 	}
 	return syncMatch, err

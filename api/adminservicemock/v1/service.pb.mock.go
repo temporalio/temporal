@@ -60,6 +60,26 @@ func (m *MockAdminServiceClient) EXPECT() *MockAdminServiceClientMockRecorder {
 	return m.recorder
 }
 
+// AddOrUpdateRemoteCluster mocks base method.
+func (m *MockAdminServiceClient) AddOrUpdateRemoteCluster(ctx context.Context, in *adminservice.AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "AddOrUpdateRemoteCluster", varargs...)
+	ret0, _ := ret[0].(*adminservice.AddOrUpdateRemoteClusterResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddOrUpdateRemoteCluster indicates an expected call of AddOrUpdateRemoteCluster.
+func (mr *MockAdminServiceClientMockRecorder) AddOrUpdateRemoteCluster(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddOrUpdateRemoteCluster", reflect.TypeOf((*MockAdminServiceClient)(nil).AddOrUpdateRemoteCluster), varargs...)
+}
+
 // AddSearchAttributes mocks base method.
 func (m *MockAdminServiceClient) AddSearchAttributes(ctx context.Context, in *adminservice.AddSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.AddSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
@@ -300,6 +320,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetWorkflowExecutionRawHistoryV2(c
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockAdminServiceClient)(nil).GetWorkflowExecutionRawHistoryV2), varargs...)
 }
 
+// ListNamespaces mocks base method.
+func (m *MockAdminServiceClient) ListNamespaces(ctx context.Context, in *adminservice.ListNamespacesRequest, opts ...grpc.CallOption) (*adminservice.ListNamespacesResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListNamespaces", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListNamespacesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNamespaces indicates an expected call of ListNamespaces.
+func (mr *MockAdminServiceClientMockRecorder) ListNamespaces(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockAdminServiceClient)(nil).ListNamespaces), varargs...)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockAdminServiceClient) MergeDLQMessages(ctx context.Context, in *adminservice.MergeDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -378,6 +418,26 @@ func (mr *MockAdminServiceClientMockRecorder) RefreshWorkflowTasks(ctx, in inter
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).RefreshWorkflowTasks), varargs...)
+}
+
+// RemoveRemoteCluster mocks base method.
+func (m *MockAdminServiceClient) RemoveRemoteCluster(ctx context.Context, in *adminservice.RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*adminservice.RemoveRemoteClusterResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RemoveRemoteCluster", varargs...)
+	ret0, _ := ret[0].(*adminservice.RemoveRemoteClusterResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveRemoteCluster indicates an expected call of RemoveRemoteCluster.
+func (mr *MockAdminServiceClientMockRecorder) RemoveRemoteCluster(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRemoteCluster", reflect.TypeOf((*MockAdminServiceClient)(nil).RemoveRemoteCluster), varargs...)
 }
 
 // RemoveSearchAttributes mocks base method.
@@ -461,6 +521,21 @@ func NewMockAdminServiceServer(ctrl *gomock.Controller) *MockAdminServiceServer 
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockAdminServiceServer) EXPECT() *MockAdminServiceServerMockRecorder {
 	return m.recorder
+}
+
+// AddOrUpdateRemoteCluster mocks base method.
+func (m *MockAdminServiceServer) AddOrUpdateRemoteCluster(arg0 context.Context, arg1 *adminservice.AddOrUpdateRemoteClusterRequest) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AddOrUpdateRemoteCluster", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.AddOrUpdateRemoteClusterResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AddOrUpdateRemoteCluster indicates an expected call of AddOrUpdateRemoteCluster.
+func (mr *MockAdminServiceServerMockRecorder) AddOrUpdateRemoteCluster(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddOrUpdateRemoteCluster", reflect.TypeOf((*MockAdminServiceServer)(nil).AddOrUpdateRemoteCluster), arg0, arg1)
 }
 
 // AddSearchAttributes mocks base method.
@@ -643,6 +718,21 @@ func (mr *MockAdminServiceServerMockRecorder) GetWorkflowExecutionRawHistoryV2(a
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecutionRawHistoryV2", reflect.TypeOf((*MockAdminServiceServer)(nil).GetWorkflowExecutionRawHistoryV2), arg0, arg1)
 }
 
+// ListNamespaces mocks base method.
+func (m *MockAdminServiceServer) ListNamespaces(arg0 context.Context, arg1 *adminservice.ListNamespacesRequest) (*adminservice.ListNamespacesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListNamespaces", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListNamespacesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListNamespaces indicates an expected call of ListNamespaces.
+func (mr *MockAdminServiceServerMockRecorder) ListNamespaces(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockAdminServiceServer)(nil).ListNamespaces), arg0, arg1)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockAdminServiceServer) MergeDLQMessages(arg0 context.Context, arg1 *adminservice.MergeDLQMessagesRequest) (*adminservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -701,6 +791,21 @@ func (m *MockAdminServiceServer) RefreshWorkflowTasks(arg0 context.Context, arg1
 func (mr *MockAdminServiceServerMockRecorder) RefreshWorkflowTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).RefreshWorkflowTasks), arg0, arg1)
+}
+
+// RemoveRemoteCluster mocks base method.
+func (m *MockAdminServiceServer) RemoveRemoteCluster(arg0 context.Context, arg1 *adminservice.RemoveRemoteClusterRequest) (*adminservice.RemoveRemoteClusterResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RemoveRemoteCluster", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.RemoveRemoteClusterResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RemoveRemoteCluster indicates an expected call of RemoveRemoteCluster.
+func (mr *MockAdminServiceServerMockRecorder) RemoveRemoteCluster(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveRemoteCluster", reflect.TypeOf((*MockAdminServiceServer)(nil).RemoveRemoteCluster), arg0, arg1)
 }
 
 // RemoveSearchAttributes mocks base method.

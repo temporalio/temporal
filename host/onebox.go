@@ -410,6 +410,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		frontend.Module,
 		fx.Populate(&frontendService),
+		fx.NopLogger,
 	)
 	err = feApp.Err()
 	if err != nil {
@@ -500,7 +501,8 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			history.Module,
-			fx.Populate(&historyService))
+			fx.Populate(&historyService),
+			fx.NopLogger)
 		err = app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
@@ -569,6 +571,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() log.Logger { return c.logger }),
 		matching.Module,
 		fx.Populate(&matchingService),
+		fx.NopLogger,
 	)
 	err = app.Err()
 	if err != nil {

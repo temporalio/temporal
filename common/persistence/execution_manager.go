@@ -532,7 +532,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		SignalInfos:         make(map[int64]*commonpb.DataBlob),
 
 		ExecutionState:     input.ExecutionState,
-		SignalRequestedIDs: input.SignalRequestedIDs,
+		SignalRequestedIDs: make(map[string]struct{}),
 
 		TransferTasks:    transferTasks,
 		TimerTasks:       timerTasks,
@@ -594,6 +594,10 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		}
 		result.SignalInfos[key] = blob
 	}
+	for key := range input.SignalRequestedIDs {
+		result.SignalRequestedIDs[key] = struct{}{}
+	}
+
 	result.Checksum, err = m.serializer.ChecksumToBlob(input.Checksum, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err

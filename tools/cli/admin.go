@@ -352,7 +352,7 @@ func newAdminNamespaceCommands() []cli.Command {
 		{
 			Name:  "list",
 			Usage: "List namespaces",
-			Flags: append(getDBFlags(), getFlagsForList()...),
+			Flags: flagsForPagination,
 			Action: func(c *cli.Context) {
 				AdminListNamespaces(c)
 			},
@@ -591,16 +591,45 @@ func newAdminClusterCommands() []cli.Command {
 			Name:    "describe",
 			Aliases: []string{"d"},
 			Usage:   "Describe cluster information",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Value: "",
+					Usage: "Remote cluster name (optional, default to return current cluster information)",
+				},
+			},
 			Action: func(c *cli.Context) {
 				AdminDescribeCluster(c)
 			},
 		},
 		{
-			Name:    "metadata",
-			Aliases: []string{"m"},
-			Usage:   "Show cluster metadata",
+			Name:    "upsert-remote-cluster",
+			Aliases: []string{"urc"},
+			Usage:   "Add or update remote cluster information in the current cluster",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:     FlagFrontendAddressWithAlias,
+					Usage:    "Remote cluster frontend address",
+					Required: true,
+				},
+			},
 			Action: func(c *cli.Context) {
-				AdminClusterMetadata(c)
+				AdminAddOrUpdateRemoteCluster(c)
+			},
+		},
+		{
+			Name:    "remove-remote-cluster",
+			Aliases: []string{"rrc"},
+			Usage:   "Remove remote cluster information from the current cluster",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:     FlagCluster,
+					Usage:    "Remote cluster name",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminRemoveRemoteCluster(c)
 			},
 		},
 	}

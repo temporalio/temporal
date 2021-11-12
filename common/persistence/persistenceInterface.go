@@ -94,8 +94,9 @@ type (
 	ClusterMetadataStore interface {
 		Closeable
 		GetName() string
-		GetClusterMetadata() (*InternalGetClusterMetadataResponse, error)
+		GetClusterMetadata(request *InternalGetClusterMetadataRequest) (*InternalGetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *InternalSaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(request *InternalDeleteClusterMetadataRequest) error
 		// Membership APIs
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
@@ -673,37 +674,29 @@ type (
 		NextPageToken []byte
 	}
 
-	// InternalInitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
-	// These values can only be set a single time upon cluster initialization.
-	InternalInitializeImmutableClusterMetadataRequest struct {
-		// Serialized ImmutableCusterMetadata to persist.
-		ImmutableClusterMetadata *commonpb.DataBlob
+	// InternalGetClusterMetadataRequest is the request for GetClusterMetadata
+	InternalGetClusterMetadataRequest struct {
+		ClusterName string
 	}
 
-	// InternalInitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
-	InternalInitializeImmutableClusterMetadataResponse struct {
-		// Serialized ImmutableCusterMetadata that is currently persisted.
-		PersistedImmutableMetadata *commonpb.DataBlob
-		RequestApplied             bool
-	}
-
-	// InternalGetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
-	// These values are set a single time upon cluster initialization.
-	InternalGetImmutableClusterMetadataResponse struct {
-		// Serialized ImmutableCusterMetadata.
-		ImmutableClusterMetadata *commonpb.DataBlob
-	}
-
+	// InternalGetClusterMetadataResponse is the response for GetClusterMetadata
 	InternalGetClusterMetadataResponse struct {
 		// Serialized MutableCusterMetadata.
 		ClusterMetadata *commonpb.DataBlob
 		Version         int64
 	}
 
+	// InternalSaveClusterMetadataRequest is the request for SaveClusterMetadata
 	InternalSaveClusterMetadataRequest struct {
+		ClusterName string
 		// Serialized MutableCusterMetadata.
 		ClusterMetadata *commonpb.DataBlob
 		Version         int64
+	}
+
+	// InternalDeleteClusterMetadataRequest is the request for DeleteClusterMetadata
+	InternalDeleteClusterMetadataRequest struct {
+		ClusterName string
 	}
 
 	// InternalUpsertClusterMembershipRequest is the request to UpsertClusterMembership

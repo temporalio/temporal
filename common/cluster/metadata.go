@@ -52,6 +52,8 @@ type (
 		GetAllClusterInfo() map[string]ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 		ClusterNameForFailoverVersion(failoverVersion int64) string
+		// GetFailoverVersionIncrement return the Failover version increment value
+		GetFailoverVersionIncrement() int64
 	}
 
 	metadataImpl struct {
@@ -230,4 +232,9 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int64) stri
 		))
 	}
 	return clusterName
+}
+
+// GetFailoverVersionIncrement return the Failover version increment value
+func (m *metadataImpl) GetFailoverVersionIncrement() int64 {
+	return m.failoverVersionIncrement
 }

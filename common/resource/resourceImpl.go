@@ -116,6 +116,7 @@ type (
 		historyRawClient  historyservice.HistoryServiceClient
 		historyClient     historyservice.HistoryServiceClient
 		clientBean        client.Bean
+		clientFactory     client.Factory
 
 		// persistence clients
 		persistenceBean           persistenceClient.Bean
@@ -215,17 +216,15 @@ func New(
 	if factoryProvider == nil {
 		factoryProvider = client.NewFactoryProvider()
 	}
-	clientBean, err := client.NewClientBean(
-		factoryProvider.NewFactory(
-			params.RPCFactory,
-			membershipMonitor,
-			params.MetricsClient,
-			dynamicCollection,
-			numShards,
-			logger,
-		),
-		clusterMetadata,
+	clientFactory := factoryProvider.NewFactory(
+		params.RPCFactory,
+		membershipMonitor,
+		params.MetricsClient,
+		dynamicCollection,
+		numShards,
+		logger,
 	)
+	clientBean, err := client.NewClientBean(clientFactory, clusterMetadata)
 	if err != nil {
 		return nil, err
 	}
@@ -344,6 +343,7 @@ func New(
 		historyRawClient:  historyRawClient,
 		historyClient:     historyClient,
 		clientBean:        clientBean,
+		clientFactory:     clientFactory,
 
 		// persistence clients
 
@@ -550,6 +550,11 @@ func (h *Impl) GetRemoteFrontendClient(
 // GetClientBean return RPC client bean
 func (h *Impl) GetClientBean() client.Bean {
 	return h.clientBean
+}
+
+// GetClientFactory return RPC client factory
+func (h *Impl) GetClientFactory() client.Factory {
+	return h.clientFactory
 }
 
 // persistence clients

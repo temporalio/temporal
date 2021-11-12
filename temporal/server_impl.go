@@ -184,13 +184,17 @@ func newBootstrapParams(
 ) (*resource.BootstrapParams, error) {
 	svcName := string(serviceName)
 	params := &resource.BootstrapParams{
-		Name:                     svcName,
-		NamespaceLogger:          namespaceLogger,
-		PersistenceConfig:        persistenceConfig,
-		ClusterMetadataConfig:    clusterMetadata,
-		DCRedirectionPolicy:      so.config.DCRedirectionPolicy,
-		AbstractDatastoreFactory: so.customDataStoreFactory,
-		ClientFactoryProvider:    so.clientFactoryProvider,
+		Name:                       svcName,
+		NamespaceLogger:            namespaceLogger,
+		PersistenceConfig:          persistenceConfig,
+		ClusterMetadataConfig:      clusterMetadata,
+		DCRedirectionPolicy:        so.config.DCRedirectionPolicy,
+		AbstractDatastoreFactory:   so.customDataStoreFactory,
+		ClientFactoryProvider:      so.clientFactoryProvider,
+		AudienceGetter:             so.audienceGetter,
+		PersistenceServiceResolver: so.persistenceServiceResolver,
+		SearchAttributesMapper:     so.searchAttributesMapper,
+		CustomInterceptors:         so.customInterceptors,
 	}
 
 	svcCfg := so.config.Services[svcName]
@@ -284,10 +288,6 @@ func newBootstrapParams(
 	} else {
 		params.ClaimMapper = authorization.NewNoopClaimMapper()
 	}
-	params.AudienceGetter = so.audienceGetter
-
-	params.PersistenceServiceResolver = so.persistenceServiceResolver
-	params.SearchAttributesMapper = so.searchAttributesMapper
 
 	return params, nil
 }

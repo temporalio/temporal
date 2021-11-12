@@ -34,20 +34,12 @@ message ClusterMetadata {
     temporal.api.version.v1.VersionInfo version_info = 4;
     map<string,temporal.server.api.persistence.v1.IndexSearchAttributes> index_search_attributes = 5;
     string cluster_address = 6;
-    int32 failover_version_increment = 7;
-    int32 initial_failover_version = 8;
+    int64 failover_version_increment = 7;
+    int64 initial_failover_version = 8;
     bool is_global_namespace_enabled = 9;
-    ClientTLS client_tls = 10;
-    bool is_connection_enabled = 11;
+    bool is_connection_enabled = 10;
 }
 
 message IndexSearchAttributes{
     map<string,temporal.api.enums.v1.IndexedValueType> custom_search_attributes = 1;
-}
-
-message ClientTLS {
-    string server_name = 1;
-    bool disable_server_verification = 2;
-    repeated string root_ca_data = 3;
-    bool force_tls = 4;
 }

@@ -39,18 +39,20 @@ type (
 		metricDefs   map[int]metricDefinition
 		serviceIdx   ServiceIdx
 		scopeWrapper func(impl internalScope) internalScope
+		gaugeCache   OtelGaugeCache
 	}
 )
 
 // NewOpentelemeteryClientByReporter creates and returns a new instance of Client implementation
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter *OpentelemetryReporter, logger log.Logger) (Client, error) {
+func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter *OpentelemetryReporter, logger log.Logger, gaugeCache OtelGaugeCache) (Client, error) {
 	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
+
 	scopeWrapper := func(impl internalScope) internalScope {
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
-	rootScope := newOpentelemetryScope(serviceIdx, reporter, nil, clientConfig.Tags, getMetricDefs(serviceIdx), false)
+	rootScope := newOpentelemetryScope(serviceIdx, reporter, nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache)
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &opentelemetryClient{
@@ -59,6 +61,7 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 		metricDefs:   getMetricDefs(serviceIdx),
 		serviceIdx:   serviceIdx,
 		scopeWrapper: scopeWrapper,
+		gaugeCache:   gaugeCache,
 	}
 
 	for idx, def := range ScopeDefs[Common] {

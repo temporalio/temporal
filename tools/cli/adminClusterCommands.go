@@ -26,7 +26,6 @@ package cli
 
 import (
 	"github.com/urfave/cli"
-	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 )
@@ -37,7 +36,10 @@ func AdminDescribeCluster(c *cli.Context) {
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	clusterName := c.String(FlagCluster)
+	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{
+		ClusterName: clusterName,
+	})
 	if err != nil {
 		ErrorAndExit("Operation DescribeCluster failed.", err)
 	}
@@ -45,15 +47,32 @@ func AdminDescribeCluster(c *cli.Context) {
 	prettyPrintJSONObject(response)
 }
 
-// AdminClusterMetadata is used to dump information about the cluster
-func AdminClusterMetadata(c *cli.Context) {
-	frontendClient := cFactory.FrontendClient(c)
+// AdminAddOrUpdateRemoteCluster is used to add or update remote cluster information
+func AdminAddOrUpdateRemoteCluster(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	info, err := frontendClient.GetClusterInfo(ctx, &workflowservice.GetClusterInfoRequest{})
+	_, err := adminClient.AddOrUpdateRemoteCluster(ctx, &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress: getRequiredOption(c, FlagFrontendAddressWithAlias),
+	})
 	if err != nil {
-		ErrorAndExit("Operation AdminClusterMetadata failed.", err)
+		ErrorAndExit("Operation AddOrUpdateRemoteCluster failed.", err)
 	}
-	prettyPrintJSONObject(info)
+}
+
+// AdminRemoveRemoteCluster is used to remove remote cluster information from the cluster
+func AdminRemoveRemoteCluster(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	clusterName := getRequiredOption(c, FlagCluster)
+	_, err := adminClient.RemoveRemoteCluster(ctx, &adminservice.RemoveRemoteClusterRequest{
+		ClusterName: clusterName,
+	})
+	if err != nil {
+		ErrorAndExit("Operation RemoveRemoteCluster failed.", err)
+	}
 }

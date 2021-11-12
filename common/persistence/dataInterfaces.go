@@ -956,15 +956,26 @@ type (
 		Branches []HistoryBranchDetail
 	}
 
+	// GetClusterMetadataRequest is the request to GetClusterMetadata
+	GetClusterMetadataRequest struct {
+		ClusterName string
+	}
+
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
 		persistencespb.ClusterMetadata
 		Version int64
 	}
 
+	// SaveClusterMetadataRequest is the request to SaveClusterMetadata
 	SaveClusterMetadataRequest struct {
 		persistencespb.ClusterMetadata
 		Version int64
+	}
+
+	// DeleteClusterMetadataRequest is the request to DeleteClusterMetadata
+	DeleteClusterMetadataRequest struct {
+		ClusterName string
 	}
 
 	// GetClusterMembersRequest is the response to GetClusterMembers
@@ -1147,8 +1158,10 @@ type (
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
-		GetClusterMetadata() (*GetClusterMetadataResponse, error)
+		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
+		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error
 	}
 )
 
