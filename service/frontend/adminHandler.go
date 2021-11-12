@@ -715,16 +715,18 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		return nil, adh.error(err, scope)
 	}
 
+	var updateRequestVersion int64 = 0
 	clusterMetadataMrg := adh.GetClusterMetadataManager()
 	clusterData, err := clusterMetadataMrg.GetClusterMetadata(
 		&persistence.GetClusterMetadataRequest{ClusterName: resp.GetClusterName()},
 	)
-	if _, notFound := err.(*serviceerror.NotFound); err != nil && !notFound {
-		return nil, adh.error(err, scope)
-	}
-	var updateRequestVersion int64 = 0
-	if clusterData != nil {
+	switch err.(type) {
+	case nil:
 		updateRequestVersion = clusterData.Version
+	case *serviceerror.NotFound:
+		updateRequestVersion = 0
+	default:
+		return nil, adh.error(err, scope)
 	}
 
 	applied, err := clusterMetadataMrg.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
@@ -745,7 +747,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	}
 	if !applied {
 		return nil, adh.error(serviceerror.NewInvalidArgument(
-			"Cannot add remote cluster due to update immutable fields"),
+			"Cannot update remote cluster due to update immutable fields"),
 			scope,
 		)
 	}
