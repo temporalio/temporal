@@ -612,26 +612,6 @@ func newAdminClusterCommands() []cli.Command {
 					Usage:    "Remote cluster frontend address",
 					Required: true,
 				},
-				cli.BoolFlag{
-					Name:  FlagEnableTLS,
-					Usage: "Enable TLS over the remote cluster connection",
-				},
-				cli.StringFlag{
-					Name:  FlagTLSServerName,
-					Usage: "TLS remote server name",
-				},
-				cli.BoolFlag{
-					Name:  FlagTLSDisableHostVerification,
-					Usage: "Disable verification on hostname and server cert.",
-				},
-				cli.StringSliceFlag{
-					Name:  FlagTLSRootCaData,
-					Usage: "TLS CA Data",
-				},
-				cli.BoolFlag{
-					Name:  FlagTLSForceEnable,
-					Usage: "Use TLS even is neither client certificate nor root CAs are configured",
-				},
 			},
 			Action: func(c *cli.Context) {
 				AdminAddOrUpdateRemoteCluster(c)

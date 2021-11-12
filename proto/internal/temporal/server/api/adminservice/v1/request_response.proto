@@ -32,7 +32,6 @@ import "temporal/api/common/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 
-import "temporal/server/api/auth/v1/message.proto";
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/task.proto";
@@ -208,7 +207,6 @@ message DescribeClusterResponse {
 
 message AddOrUpdateRemoteClusterRequest {
     string frontend_address = 1;
-    temporal.server.api.auth.v1.ClientTLS client_tls = 2;
 }
 
 message AddOrUpdateRemoteClusterResponse {
