@@ -27,7 +27,7 @@ package frontend
 import "go.temporal.io/api/serviceerror"
 
 var (
-	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errTaskTokenNamespaceIDNotSet                         = serviceerror.NewInvalidArgument("NamespaceId is not set in the task token.")
 	errTaskTokenNotSet                                    = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errInvalidTaskToken                                   = serviceerror.NewInvalidArgument("Invalid TaskToken.")
 	errTaskQueueNotSet                                    = serviceerror.NewInvalidArgument("TaskQueue is not set on request.")

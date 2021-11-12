@@ -27,13 +27,12 @@ package frontend
 import (
 	"context"
 
-	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/rpc"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -46,6 +45,7 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -60,6 +60,7 @@ var Module = fx.Options(
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
+	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
@@ -87,6 +88,7 @@ func GrpcServerOptionsProvider(
 	namespaceLogInterceptor *interceptor.NamespaceLogInterceptor,
 	namespaceRateLimiterInterceptor *interceptor.NamespaceRateLimitInterceptor,
 	namespaceCountLimiterInterceptor *interceptor.NamespaceCountLimitInterceptor,
+	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 ) []grpc.ServerOption {
@@ -120,6 +122,7 @@ func GrpcServerOptionsProvider(
 			logger,
 			params.AudienceGetter,
 		),
+		namespaceValidatorInterceptor.Intercept,
 	}
 	if len(params.CustomInterceptors) > 0 {
 		interceptors = append(interceptors, params.CustomInterceptors...)
@@ -219,6 +222,14 @@ func NamespaceCountLimitInterceptorProvider(
 		serviceResource.GetLogger(),
 		serviceConfig.MaxNamespaceCountPerInstance,
 		configs.ExecutionAPICountLimitOverride,
+	)
+}
+
+func NamespaceValidatorInterceptorProvider(
+	serviceResource resource.Resource,
+) *interceptor.NamespaceValidatorInterceptor {
+	return interceptor.NewNamespaceValidatorInterceptor(
+		serviceResource.GetNamespaceRegistry(),
 	)
 }
 

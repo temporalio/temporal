@@ -42,6 +42,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -63,6 +64,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/worker"
@@ -1028,7 +1030,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 	if request.GetNamespace() == "" {
-		return nil, adh.error(errNamespaceNotSet, scope)
+		return nil, adh.error(interceptor.ErrNamespaceNotSet, scope)
 	}
 	if request.WorkflowExecution == nil {
 		return nil, adh.error(errExecutionNotSet, scope)

@@ -290,7 +290,10 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 	config.RPS = dc.GetIntPropertyFn(10)
 	wh := s.getWorkflowHandler(config)
 
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.EmptyName).Return(namespace.EmptyID, serviceerror.NewNotFound("not found")).AnyTimes()
+
 	startWorkflowExecutionRequest := &workflowservice.StartWorkflowExecutionRequest{
+		// Namespace: "forget to specify",
 		WorkflowId: "workflow-id",
 		WorkflowType: &commonpb.WorkflowType{
 			Name: "workflow-type",
@@ -311,7 +314,8 @@ func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_NamespaceNotSet
 	}
 	_, err := wh.StartWorkflowExecution(context.Background(), startWorkflowExecutionRequest)
 	s.Error(err)
-	s.Equal(errNamespaceNotSet, err)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
 }
 
 func (s *workflowHandlerSuite) TestStartWorkflowExecution_Failed_WorkflowIdNotSet() {
@@ -1224,6 +1228,8 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {
+	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
+
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	resp, err := wh.ListArchivedWorkflowExecutions(context.Background(), &workflowservice.ListArchivedWorkflowExecutionsRequest{})
