@@ -309,8 +309,8 @@ func (s *ContextImpl) UpdateClusterReplicationLevel(cluster string, ackTaskID in
 
 	s.shardInfo.ClusterReplicationLevel[cluster] = ackTaskID
 	s.shardInfo.StolenSinceRenew = 0
-	s.remoteClusterInfos[cluster].AckedReplicationTaskID = ackTaskID
-	s.remoteClusterInfos[cluster].AckedReplicationTimestamp = ackTimestamp
+	s.getRemoteClusterInfoLocked(cluster).AckedReplicationTaskID = ackTaskID
+	s.getRemoteClusterInfoLocked(cluster).AckedReplicationTimestamp = ackTimestamp
 	return s.updateShardInfoLocked()
 }
 
@@ -440,7 +440,7 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 
 	currentTime := s.GetTimeSource().Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime = s.remoteClusterInfos[cluster].CurrentTime
+		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
 	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
@@ -958,7 +958,6 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 			logWarnTimerLevelDiff < timerLag) {
 
 		s.logger.Warn("Shard ack levels diff exceeds warn threshold.",
-			tag.ShardTime(s.remoteClusterInfos),
 			tag.ShardReplicationAck(s.shardInfo.ReplicationAckLevel),
 			tag.ShardTimerAcks(s.shardInfo.ClusterTimerAckLevel),
 			tag.ShardTransferAcks(s.shardInfo.ClusterTransferAckLevel))
@@ -1071,9 +1070,9 @@ func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
 	s.wLock()
 	defer s.wUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		prevTime := s.remoteClusterInfos[cluster].CurrentTime
+		prevTime := s.getRemoteClusterInfoLocked(cluster).CurrentTime
 		if prevTime.Before(currentTime) {
-			s.remoteClusterInfos[cluster].CurrentTime = currentTime
+			s.getRemoteClusterInfoLocked(cluster).CurrentTime = currentTime
 		}
 	} else {
 		panic("Cannot set current time for current cluster")
@@ -1084,7 +1083,7 @@ func (s *ContextImpl) GetCurrentTime(cluster string) time.Time {
 	s.rLock()
 	defer s.rUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		return s.remoteClusterInfos[cluster].CurrentTime
+		return s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 	return s.GetTimeSource().Now().UTC()
 }
@@ -1436,6 +1435,17 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.timerMaxReadLevelMap = timerMaxReadLevelMap
 
 	return nil
+}
+
+func (s *ContextImpl) getRemoteClusterInfoLocked(clusterName string) *remoteClusterInfo {
+	if info, ok := s.remoteClusterInfos[clusterName]; ok {
+		return info
+	}
+	info := &remoteClusterInfo{
+		AckedReplicationTaskID: persistence.EmptyQueueMessageID,
+	}
+	s.remoteClusterInfos[clusterName] = info
+	return info
 }
 
 func (s *ContextImpl) acquireShard() {

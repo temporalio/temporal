@@ -363,7 +363,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
 	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
+	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID, time.Time{})
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID
@@ -374,7 +374,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
 	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
+	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID, time.Time{})
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
