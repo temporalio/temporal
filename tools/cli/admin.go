@@ -352,7 +352,7 @@ func newAdminNamespaceCommands() []cli.Command {
 		{
 			Name:  "list",
 			Usage: "List namespaces",
-			Flags: append(getDBFlags(), getFlagsForList()...),
+			Flags: flagsForPagination,
 			Action: func(c *cli.Context) {
 				AdminListNamespaces(c)
 			},
