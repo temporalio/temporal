@@ -360,6 +360,30 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 	return resp, err
 }
 
+// DeleteNamespace us used to delete namespace. Once the namespace is deleted  it cannot be used to start new workflow executions.
+// All existing workflow executions will be also deleted.
+func (wh *WorkflowHandler) DeleteNamespace(ctx context.Context, request *workflowservice.DeleteNamespaceRequest) (_ *workflowservice.DeleteNamespaceResponse, retError error) {
+	defer log.CapturePanic(wh.GetLogger(), &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	resp, err := wh.namespaceHandler.DeleteNamespace(ctx, request)
+	if err != nil {
+		return nil, err
+	}
+	return resp, err
+}
+
 // StartWorkflowExecution starts a new long running workflow instance.  It will create the instance with
 // 'WorkflowExecutionStarted' event in history and also schedule the first WorkflowTask for the worker to make the
 // first workflow task for this instance.  It will return 'WorkflowExecutionAlreadyStartedError', if an instance already
@@ -1444,6 +1468,9 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	namespaceID := namespace.ID(taskToken.GetNamespaceId())
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
+		return nil, err
+	}
+	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 

@@ -74,10 +74,10 @@ type (
 			ctx context.Context,
 			updateRequest *workflowservice.UpdateNamespaceRequest,
 		) (*workflowservice.UpdateNamespaceResponse, error)
-		// DeleteNamespace(
-		// 	ctx context.Context,
-		// 	deleteRequest *workflowservice.DeleteNamespaceRequest,
-		// ) (*workflowservice.DeleteNamespaceResponse, error)
+		DeleteNamespace(
+			ctx context.Context,
+			deleteRequest *workflowservice.DeleteNamespaceRequest,
+		) (*workflowservice.DeleteNamespaceResponse, error)
 	}
 
 	// HandlerImpl is the namespace operation handler implementation
@@ -603,63 +603,35 @@ func (d *HandlerImpl) UpdateNamespace(
 	return response, nil
 }
 
-// DeprecateNamespace deprecates a namespace
+// DeprecateNamespace marks namespace as deprecated.
 func (d *HandlerImpl) DeprecateNamespace(
-	ctx context.Context,
+	_ context.Context,
 	deprecateRequest *workflowservice.DeprecateNamespaceRequest,
 ) (*workflowservice.DeprecateNamespaceResponse, error) {
-
-	clusterMetadata := d.clusterMetadata
-	// TODO remove the IsGlobalNamespaceEnabled check once cross DC is public
-	if clusterMetadata.IsGlobalNamespaceEnabled() && !clusterMetadata.IsMasterCluster() {
-		return nil, errNotMasterCluster
-	}
-
-	// must get the metadata (notificationVersion) first
-	// this version can be regarded as the lock on the v2 namespace table
-	// and since we do not know which table will return the namespace afterwards
-	// this call has to be made
-	metadata, err := d.metadataMgr.GetMetadata()
-	if err != nil {
-		return nil, err
-	}
-	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: deprecateRequest.GetNamespace()})
-	if err != nil {
-		return nil, err
-	}
-
-	getResponse.Namespace.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
-	getResponse.Namespace.Info.State = enumspb.NAMESPACE_STATE_DEPRECATED
-	updateReq := &persistence.UpdateNamespaceRequest{
-		Namespace: &persistencespb.NamespaceDetail{
-			Info:                        getResponse.Namespace.Info,
-			Config:                      getResponse.Namespace.Config,
-			ReplicationConfig:           getResponse.Namespace.ReplicationConfig,
-			ConfigVersion:               getResponse.Namespace.ConfigVersion,
-			FailoverVersion:             getResponse.Namespace.FailoverVersion,
-			FailoverNotificationVersion: getResponse.Namespace.FailoverNotificationVersion,
-		},
-		NotificationVersion: notificationVersion,
-		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
-	}
-	err = d.metadataMgr.UpdateNamespace(updateReq)
+	err := d.updateState(Name(deprecateRequest.GetNamespace()), enumspb.NAMESPACE_STATE_DEPRECATED)
 	if err != nil {
 		return nil, err
 	}
 	return &workflowservice.DeprecateNamespaceResponse{}, nil
 }
 
-// DeleteNamespace marks namespace as deleted
+// DeleteNamespace marks namespace as deleted.
 func (d *HandlerImpl) DeleteNamespace(
 	_ context.Context,
-	deprecateRequest *workflowservice.DeleteNamespaceRequest,
+	deleteRequest *workflowservice.DeleteNamespaceRequest,
 ) (*workflowservice.DeleteNamespaceResponse, error) {
+	err := d.updateState(Name(deleteRequest.GetNamespace()), enumspb.NAMESPACE_STATE_DELETED)
+	if err != nil {
+		return nil, err
+	}
+	return &workflowservice.DeleteNamespaceResponse{}, nil
+}
 
+func (d *HandlerImpl) updateState(namespaceName Name, newState enumspb.NamespaceState) error {
 	clusterMetadata := d.clusterMetadata
 	// TODO remove the IsGlobalNamespaceEnabled check once cross DC is public
 	if clusterMetadata.IsGlobalNamespaceEnabled() && !clusterMetadata.IsMasterCluster() {
-		return nil, errNotMasterCluster
+		return errNotMasterCluster
 	}
 
 	// must get the metadata (notificationVersion) first
@@ -668,18 +640,18 @@ func (d *HandlerImpl) DeleteNamespace(
 	// this call has to be made
 	metadata, err := d.metadataMgr.GetMetadata()
 	if err != nil {
-		return nil, err
+		return err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: deprecateRequest.GetNamespace()})
+	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: namespaceName.String()})
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	namespaceDetail := getResponse.Namespace
 
 	namespaceDetail.ConfigVersion = getResponse.Namespace.ConfigVersion + 1
-	namespaceDetail.Info.State = enumspb.NAMESPACE_STATE_DELETED
+	namespaceDetail.Info.State = newState
 	updateReq := &persistence.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info:                        namespaceDetail.Info,
@@ -694,9 +666,9 @@ func (d *HandlerImpl) DeleteNamespace(
 	}
 	err = d.metadataMgr.UpdateNamespace(updateReq)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return nil, nil
+	return nil
 }
 
 func (d *HandlerImpl) createResponse(
