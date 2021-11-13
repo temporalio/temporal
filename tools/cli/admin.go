@@ -360,9 +360,12 @@ func newAdminNamespaceCommands() []cli.Command {
 			Name:    "register",
 			Aliases: []string{"re"},
 			Usage:   "Register workflow namespace",
-			Flags:   adminRegisterNamespaceFlags,
+			Flags:   registerNamespaceFlags,
 			Action: func(c *cli.Context) {
-				newNamespaceCLI(c, true).RegisterNamespace(c)
+				err := RegisterNamespace(c)
+				if err != nil {
+					ErrorAndExit("unable to register namespace", err)
+				}
 			},
 		},
 		{

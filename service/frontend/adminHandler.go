@@ -264,7 +264,7 @@ func (adh *AdminHandler) UpdateNamespace(ctx context.Context, request *adminserv
 	}
 
 	if request.GetNamespace() == "" {
-		return nil, adh.error(errNamespaceNotSet, scope)
+		return nil, adh.error(interceptor.ErrNamespaceNotSet, scope)
 	}
 
 	req := &workflowservice.UpdateNamespaceRequest{
