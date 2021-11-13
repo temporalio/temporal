@@ -1121,6 +1121,20 @@ func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata() (*GetClus
 	return result, err
 }
 
+func (c *clusterMetadataPersistenceClient) GetClusterMetadataV1() (*GetClusterMetadataResponse, error) {
+	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceLatency)
+	result, err := c.persistence.GetClusterMetadataV1()
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
+}
+
 func (c *clusterMetadataPersistenceClient) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
 

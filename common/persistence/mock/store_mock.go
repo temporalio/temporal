@@ -567,6 +567,21 @@ func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMetadata(request inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetClusterMetadata), request)
 }
 
+// GetClusterMetadataV1 mocks base method.
+func (m *MockClusterMetadataStore) GetClusterMetadataV1() (*persistence.InternalGetClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterMetadataV1")
+	ret0, _ := ret[0].(*persistence.InternalGetClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterMetadataV1 indicates an expected call of GetClusterMetadataV1.
+func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMetadataV1() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadataV1", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetClusterMetadataV1))
+}
+
 // GetName mocks base method.
 func (m *MockClusterMetadataStore) GetName() string {
 	m.ctrl.T.Helper()
@@ -608,6 +623,21 @@ func (m *MockClusterMetadataStore) SaveClusterMetadata(request *persistence.Inte
 func (mr *MockClusterMetadataStoreMockRecorder) SaveClusterMetadata(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).SaveClusterMetadata), request)
+}
+
+// SaveClusterMetadataV1 mocks base method.
+func (m *MockClusterMetadataStore) SaveClusterMetadataV1(request *persistence.InternalSaveClusterMetadataRequest) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveClusterMetadataV1", request)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SaveClusterMetadataV1 indicates an expected call of SaveClusterMetadataV1.
+func (mr *MockClusterMetadataStoreMockRecorder) SaveClusterMetadataV1(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveClusterMetadataV1", reflect.TypeOf((*MockClusterMetadataStore)(nil).SaveClusterMetadataV1), request)
 }
 
 // UpsertClusterMembership mocks base method.
