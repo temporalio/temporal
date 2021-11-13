@@ -24,6 +24,7 @@ package temporal.server.api.adminservice.v1;
 option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 import "dependencies/gogoproto/gogo.proto";
 
@@ -34,6 +35,7 @@ import "temporal/api/workflow/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
+import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/task.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/namespace/v1/message.proto";
@@ -235,6 +237,25 @@ message RemoveRemoteClusterRequest {
 }
 
 message RemoveRemoteClusterResponse {
+}
+
+message ListClusterMembersRequest {
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "within" is used to indicate a time range. --)
+    google.protobuf.Duration last_heartbeat_within = 1 [(gogoproto.stdduration) = true];
+    string rpc_address = 2;
+    string host_id = 3;
+    temporal.server.api.enums.v1.ClusterMemberRole role = 4;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "after" is used to indicate a time range. --)
+    google.protobuf.Timestamp session_started_after_time = 5 [(gogoproto.stdtime) = true];
+    int32 page_size = 6;
+    bytes next_page_token = 7;
+}
+
+message ListClusterMembersResponse {
+    repeated temporal.server.api.cluster.v1.ClusterMember active_members = 1;
+    bytes next_page_token = 2;
 }
 
 message GetDLQMessagesRequest {

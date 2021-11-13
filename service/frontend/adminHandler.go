@@ -28,7 +28,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync/atomic"
+	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client/admin"
@@ -720,6 +722,61 @@ func (adh *AdminHandler) DescribeCluster(
 		InitialFailoverVersion:   metadata.InitialFailoverVersion,
 		IsGlobalNamespaceEnabled: metadata.IsGlobalNamespaceEnabled,
 	}, nil
+}
+
+func (adh *AdminHandler) ListClusterMembers(
+	ctx context.Context,
+	request *adminservice.ListClusterMembersRequest,
+) (_ *adminservice.ListClusterMembersResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminListClusterMembersScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	metadataMgr := adh.GetClusterMetadataManager()
+
+	heartbitRef := request.GetLastHeartbeatWithin()
+	var heartbit time.Duration
+	if heartbitRef != nil {
+		heartbit = *heartbitRef
+	}
+	startedTimeRef := request.GetSessionStartedAfterTime()
+	var startedTime time.Time
+	if startedTimeRef != nil {
+		startedTime = *startedTimeRef
+	}
+
+	resp, err := metadataMgr.GetClusterMembers(&persistence.GetClusterMembersRequest{
+		LastHeartbeatWithin: heartbit,
+		RPCAddressEquals:    net.ParseIP(request.GetRpcAddress()),
+		HostIDEquals:        uuid.Parse(request.GetHostId()),
+		RoleEquals:          persistence.ServiceType(request.GetRole()),
+		SessionStartedAfter: startedTime,
+		PageSize:            int(request.GetPageSize()),
+		NextPageToken:       request.GetNextPageToken(),
+	})
+
+	var activeMembers []*clusterspb.ClusterMember
+	for _, member := range resp.ActiveMembers {
+		activeMembers = append(activeMembers, &clusterspb.ClusterMember{
+			Role:             enumsspb.ClusterMemberRole(member.Role),
+			HostId:           member.HostID.String(),
+			RpcAddress:       member.RPCAddress.String(),
+			RpcPort:          int32(member.RPCPort),
+			SessionStartTime: &member.SessionStart,
+			LastHeartbitTime: &member.LastHeartbeat,
+			RecordExpiryTime: &member.RecordExpiry,
+		})
+	}
+
+	return &adminservice.ListClusterMembersResponse{
+		ActiveMembers: activeMembers,
+		NextPageToken: resp.NextPageToken,
+	}, err
 }
 
 func (adh *AdminHandler) AddOrUpdateRemoteCluster(

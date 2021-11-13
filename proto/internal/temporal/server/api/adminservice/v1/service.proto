@@ -87,6 +87,10 @@ service AdminService {
     rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
     }
 
+    // ListClusterMembers returns information about Temporal cluster members.
+    rpc ListClusterMembers(ListClusterMembersRequest) returns (ListClusterMembersResponse) {
+    }
+
     // AddOrUpdateRemoteCluster adds or updates remote cluster.
     rpc AddOrUpdateRemoteCluster(AddOrUpdateRemoteClusterRequest) returns (AddOrUpdateRemoteClusterResponse) {
     }

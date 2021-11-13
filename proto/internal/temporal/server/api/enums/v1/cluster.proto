@@ -1,4 +1,4 @@
-// Copyright (c) 2020 Temporal Technologies, Inc.
+// Copyright (c) 2021 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -20,37 +20,14 @@
 
 syntax = "proto3";
 
-package temporal.server.api.cluster.v1;
+package temporal.server.api.enums.v1;
 
-option go_package = "go.temporal.io/server/api/cluster/v1;cluster";
+option go_package = "go.temporal.io/server/api/enums/v1;enums";
 
-import "google/protobuf/timestamp.proto";
-import "dependencies/gogoproto/gogo.proto";
-
-import "temporal/server/api/enums/v1/cluster.proto";
-
-message HostInfo {
-    string identity = 1;
-}
-
-message RingInfo {
-    string role = 1;
-    int32 member_count = 2;
-    repeated HostInfo members = 3;
-}
-
-message MembershipInfo {
-    HostInfo current_host = 1;
-    repeated string reachable_members = 2;
-    repeated RingInfo rings = 3;
-}
-
-message ClusterMember {
-    temporal.server.api.enums.v1.ClusterMemberRole role = 1;
-    string host_id = 2;
-    string rpc_address = 3;
-    int32 rpc_port = 4;
-    google.protobuf.Timestamp session_start_time = 5 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp last_heartbit_time = 6 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp record_expiry_time = 7 [(gogoproto.stdtime) = true];
+enum ClusterMemberRole {
+    CLUSTER_MEMBER_ROLE_UNSPECIFIED = 0;
+    CLUSTER_MEMBER_ROLE_FRONTEND = 1;
+    CLUSTER_MEMBER_ROLE_HISTORY = 2;
+    CLUSTER_MEMBER_ROLE_MATCHING = 3;
+    CLUSTER_MEMBER_ROLE_WORKER = 4;
 }

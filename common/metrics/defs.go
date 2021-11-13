@@ -509,6 +509,8 @@ const (
 	AdminClientGetWorkflowExecutionRawHistoryV2Scope
 	// AdminClientDescribeClusterScope tracks RPC calls to admin service
 	AdminClientDescribeClusterScope
+	// AdminClientListClusterMembersScope tracks RPC calls to admin service
+	AdminClientListClusterMembersScope
 	// AdminClientAddOrUpdateRemoteClusterScope tracks RPC calls to admin service
 	AdminClientAddOrUpdateRemoteClusterScope
 	// AdminClientRemoveRemoteClusterScope tracks RPC calls to admin service
@@ -727,6 +729,8 @@ const (
 	AdminListNamespacesScope
 	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
 	AdminMergeDLQMessagesScope
+	// AdminListClusterMembersScope is the metric scope for admin.AdminListClusterMembersScope
+	AdminListClusterMembersScope
 	// AdminDescribeClusterScope is the metric scope for admin.AdminDescribeClusterScope
 	AdminDescribeClusterScope
 	// AdminAddOrUpdateRemoteClusterScope is the metric scope for admin.AdminAddOrUpdateRemoteClusterScope
@@ -1322,6 +1326,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientRefreshWorkflowTasksScope:                  {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListNamespacesScope:                        {operation: "AdminClientListNamespaces", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientResendReplicationTasksScope:                {operation: "AdminClientResendReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListClusterMembersScope:                    {operation: "AdminClientListClusterMembers", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetShardScope:                              {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetDLQMessagesScope:                        {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1413,6 +1418,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},
 		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "GetWorkflowExecutionRawHistoryV2"},
 		AdminGetReplicationMessagesScope:           {operation: "GetReplicationMessages"},
+		AdminListClusterMembersScope:               {operation: "AdminListClusterMembers"},
 		AdminGetNamespaceReplicationMessagesScope:  {operation: "GetNamespaceReplicationMessages"},
 		AdminListNamespacesScope:                   {operation: "AdminListNamespaces"},
 		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
