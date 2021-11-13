@@ -27,8 +27,9 @@ package temporal
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/api/serviceerror"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"github.com/uber-go/tally/v4"
 	"go.uber.org/fx"

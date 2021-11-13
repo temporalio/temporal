@@ -729,7 +729,7 @@ func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadataV1(
 
 func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(
 	request *persistence.InternalSaveClusterMetadataRequest,
-	) (bool, error) {
+) (bool, error) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return false, err
 	}

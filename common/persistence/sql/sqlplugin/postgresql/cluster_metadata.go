@@ -39,7 +39,7 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
-	insertClusterMetadataQryV1= `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES($1, $2, $3, $4)`
+	insertClusterMetadataQryV1 = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES($1, $2, $3, $4)`
 
 	updateClusterMetadataQryV1 = `UPDATE cluster_metadata SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4`
 
