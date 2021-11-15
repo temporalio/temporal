@@ -47,7 +47,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -671,31 +670,28 @@ func AdminListGossipMembers(c *cli.Context) {
 	prettyPrintJSONObject(members)
 }
 
-// AdminListClusterMembership outputs a list of cluster membership items
-func AdminListClusterMembership(c *cli.Context) {
-	roleFlag := c.String(FlagClusterMembershipRole)
-	role, err := membership.ServiceNameToServiceTypeEnum(roleFlag)
-	if err != nil {
-		ErrorAndExit("Failed to map membership role", err)
-	}
+// AdminListClusterMembers outputs a list of cluster members
+func AdminListClusterMembers(c *cli.Context) {
+	role, _ := stringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
 	// TODO: refactor this: parseTime shouldn't be used for duration.
 	heartbeatFlag := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC()).UnixNano()
 	heartbeat := time.Duration(heartbeatFlag)
 
-	pFactory := CreatePersistenceFactory(c)
-	manager, err := pFactory.NewClusterMetadataManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize cluster metadata manager", err)
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &adminservice.ListClusterMembersRequest{
+		Role:                enumsspb.ClusterMemberRole(role),
+		LastHeartbeatWithin: &heartbeat,
 	}
 
-	req := &persistence.GetClusterMembersRequest{
-		RoleEquals:          role,
-		LastHeartbeatWithin: heartbeat,
-	}
-	members, err := manager.GetClusterMembers(req)
+	resp, err := adminClient.ListClusterMembers(ctx, req)
 	if err != nil {
-		ErrorAndExit("Failed to get cluster members", err)
+		ErrorAndExit("unable to list cluster members", err)
 	}
+
+	members := resp.ActiveMembers
 
 	prettyPrintJSONObject(members)
 }

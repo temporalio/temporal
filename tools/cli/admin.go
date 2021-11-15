@@ -272,8 +272,7 @@ func newAdminMembershipCommands() []cli.Command {
 		{
 			Name:  "list_db",
 			Usage: "List cluster membership items",
-			Flags: append(
-				getDBFlags(),
+			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagHeartbeatedWithin,
 					Value: "15m",
@@ -286,9 +285,9 @@ func newAdminMembershipCommands() []cli.Command {
 					Value: "all",
 					Usage: "Membership role filter: all (default), frontend, history, matching, worker",
 				},
-			),
+			},
 			Action: func(c *cli.Context) {
-				AdminListClusterMembership(c)
+				AdminListClusterMembers(c)
 			},
 		},
 	}
