@@ -221,7 +221,7 @@ func (adh *AdminHandler) RegisterNamespace(ctx context.Context, request *adminse
 	}
 
 	if request.GetNamespace() == "" {
-		return nil, adh.error(errNamespaceNotSet, scope)
+		return nil, adh.error(interceptor.ErrNamespaceNotSet, scope)
 	}
 
 	if len(request.GetNamespace()) > adh.config.MaxIDLengthLimit() {
