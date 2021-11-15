@@ -79,6 +79,7 @@ type (
 		mockClientFactory          *clientmocks.MockFactory
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
 		mockMetadata               *cluster.MockMetadata
+		mockProducer               *persistence.MockNamespaceReplicationQueue
 
 		namespace   namespace.Name
 		namespaceID namespace.ID
@@ -108,6 +109,7 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockMetadata = s.mockResource.ClusterMetadata
 	s.mockVisibilityMgr = manager.NewMockVisibilityManager(s.controller)
+	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
 	params := &resource.BootstrapParams{
 		PersistenceConfig: config.Persistence{
@@ -115,7 +117,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		},
 	}
 	config := &Config{}
-	s.handler = NewAdminHandler(s.mockResource, params, config, nil, s.mockResource.ESClient, s.mockVisibilityMgr)
+	s.handler = NewAdminHandler(s.mockResource, params, config, s.mockProducer, nil, s.mockResource.ESClient, s.mockVisibilityMgr)
 	s.handler.Start()
 }
 
