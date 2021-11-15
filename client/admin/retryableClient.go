@@ -287,6 +287,22 @@ func (c *retryableClient) ListNamespaces(
 	return resp, err
 }
 
+func (c *retryableClient) RegisterNamespace(
+	ctx context.Context,
+	request *adminservice.RegisterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RegisterNamespaceResponse, error) {
+
+	var resp *adminservice.RegisterNamespaceResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.RegisterNamespace(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,

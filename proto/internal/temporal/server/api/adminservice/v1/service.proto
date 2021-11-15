@@ -31,6 +31,10 @@ service AdminService {
     rpc ListNamespaces (ListNamespacesRequest) returns (ListNamespacesResponse) {
     }
 
+    // RegisterNamespace creates a new namespace.
+    rpc RegisterNamespace (RegisterNamespaceRequest) returns (RegisterNamespaceResponse) {
+    }
+
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     }
