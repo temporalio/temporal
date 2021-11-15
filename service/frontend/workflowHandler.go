@@ -40,8 +40,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"go.temporal.io/server/common/persistence/visibility/manager"
-
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -58,6 +56,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -815,26 +814,11 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errRequestNotSet
 	}
 
-	if request.TaskToken == nil {
-		return nil, errTaskTokenNotSet
-	}
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
 	}
-
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
-	if namespaceId.IsEmpty() {
-		return nil, errTaskTokenNamespaceIDNotSet
-	}
-	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
-		return nil, err
-	}
 
 	histResp, err := wh.GetHistoryClient().RespondWorkflowTaskCompleted(ctx, &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId:     namespaceId.String(),
@@ -897,24 +881,13 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		return nil, errRequestNotSet
 	}
 
-	if request.TaskToken == nil {
-		return nil, errTaskTokenNotSet
-	}
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
-	if namespaceId.IsEmpty() {
-		return nil, errTaskTokenNamespaceIDNotSet
-	}
-
 	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -1077,24 +1050,13 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 	}
 
 	wh.GetLogger().Debug("Received RecordActivityTaskHeartbeat")
-	if request.TaskToken == nil {
-		return nil, errTaskTokenNotSet
-	}
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
-	if namespaceId.IsEmpty() {
-		return nil, errTaskTokenNamespaceIDNotSet
-	}
-
 	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
 	if err != nil {
-		return nil, err
-	}
-
-	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -1262,24 +1224,13 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 	if request == nil {
 		return nil, errRequestNotSet
 	}
-
-	if request.TaskToken == nil {
-		return nil, errTaskTokenNotSet
-	}
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
 	}
 	namespaceId := namespace.ID(taskToken.GetNamespaceId())
-	if namespaceId.IsEmpty() {
-		return nil, errTaskTokenNamespaceIDNotSet
-	}
-
 	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
 	if err != nil {
-		return nil, err
-	}
-	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -1454,23 +1405,13 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errRequestNotSet
 	}
 
-	if request.TaskToken == nil {
-		return nil, errTaskTokenNotSet
-	}
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
 	}
 	namespaceID := namespace.ID(taskToken.GetNamespaceId())
-	if namespaceID.IsEmpty() {
-		return nil, errTaskTokenNamespaceIDNotSet
-	}
-
 	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, err
-	}
-	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -1622,25 +1563,13 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, errRequestNotSet
 	}
 
-	if request.TaskToken == nil {
-		return nil, errTaskTokenNotSet
-	}
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
 	}
-
 	namespaceID := namespace.ID(taskToken.GetNamespaceId())
-
-	if namespaceID.IsEmpty() {
-		return nil, errTaskTokenNamespaceIDNotSet
-	}
-
 	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, err
-	}
-	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -2545,9 +2474,6 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		return nil, errRequestNotSet
 	}
 
-	if request.TaskToken == nil {
-		return nil, errTaskTokenNotSet
-	}
 	queryTaskToken, err := wh.tokenSerializer.DeserializeQueryTaskToken(request.TaskToken)
 	if err != nil {
 		return nil, err
@@ -2555,16 +2481,9 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 	if queryTaskToken.GetTaskQueue() == "" || queryTaskToken.GetTaskId() == "" {
 		return nil, errInvalidTaskToken
 	}
-
 	namespaceId := namespace.ID(queryTaskToken.GetNamespaceId())
-	if namespaceId.IsEmpty() {
-		return nil, errTaskTokenNamespaceIDNotSet
-	}
 	namespaceEntry, err := wh.GetNamespaceRegistry().GetNamespaceByID(namespaceId)
 	if err != nil {
-		return nil, err
-	}
-	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
@@ -3388,16 +3307,6 @@ func (wh *WorkflowHandler) validateSignalWithStartWorkflowTimeouts(
 		return errInvalidWorkflowTaskTimeoutSeconds
 	}
 
-	return nil
-}
-
-func (wh *WorkflowHandler) checkNamespaceMatch(requestNamespace namespace.Name, tokenNamespace namespace.Name) error {
-	if !wh.config.EnableTokenNamespaceEnforcement() {
-		return nil
-	}
-	if requestNamespace != tokenNamespace {
-		return errTokenNamespaceMismatch
-	}
 	return nil
 }
 

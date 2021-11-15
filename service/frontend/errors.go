@@ -27,8 +27,6 @@ package frontend
 import "go.temporal.io/api/serviceerror"
 
 var (
-	errTaskTokenNamespaceIDNotSet                         = serviceerror.NewInvalidArgument("NamespaceId is not set in the task token.")
-	errTaskTokenNotSet                                    = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errInvalidTaskToken                                   = serviceerror.NewInvalidArgument("Invalid TaskToken.")
 	errTaskQueueNotSet                                    = serviceerror.NewInvalidArgument("TaskQueue is not set on request.")
 	errExecutionNotSet                                    = serviceerror.NewInvalidArgument("Execution is not set on request.")
@@ -72,7 +70,6 @@ var (
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")
 	errFailureMustHaveApplicationFailureInfo              = serviceerror.NewInvalidArgument("Failure must have ApplicationFailureInfo.")
 	errStatusFilterMustBeNotRunning                       = serviceerror.NewInvalidArgument("StatusFilter must be specified and must be not Running.")
-	errTokenNamespaceMismatch                             = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 	errShuttingDown                                       = serviceerror.NewUnavailable("Shutting down")
 
 	errPageSizeTooBigMessage = "PageSize is larger than allowed %d."

@@ -112,6 +112,7 @@ func GrpcServerOptionsProvider(
 		rpc.ServiceErrorInterceptor,
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		telemetryInterceptor.Intercept,
+		namespaceValidatorInterceptor.Intercept,
 		rateLimitInterceptor.Intercept,
 		namespaceRateLimiterInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
@@ -122,7 +123,6 @@ func GrpcServerOptionsProvider(
 			logger,
 			params.AudienceGetter,
 		),
-		namespaceValidatorInterceptor.Intercept,
 	}
 	if len(params.CustomInterceptors) > 0 {
 		interceptors = append(interceptors, params.CustomInterceptors...)
@@ -226,10 +226,12 @@ func NamespaceCountLimitInterceptorProvider(
 }
 
 func NamespaceValidatorInterceptorProvider(
+	serviceConfig *Config,
 	serviceResource resource.Resource,
 ) *interceptor.NamespaceValidatorInterceptor {
 	return interceptor.NewNamespaceValidatorInterceptor(
 		serviceResource.GetNamespaceRegistry(),
+		serviceConfig.EnableTokenNamespaceEnforcement,
 	)
 }
 

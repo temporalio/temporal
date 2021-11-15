@@ -34,38 +34,50 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 )
 
 type (
 	// NamespaceValidatorInterceptor validates:
-	// 1. Namespace is specified in request if there is a `namespace` field.
-	// 2. Namespace exists.
-	// 3. Namespace is in correct state.
+	// 1. Namespace is specified in task token if there is a `task_token` field.
+	// 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
+	// 3. Namespace exists.
+	// 4. Namespace from request match namespace from task token , if check is enabled with dynamic config.
+	// 5. Namespace is in correct state.
 	NamespaceValidatorInterceptor struct {
-		namespaceRegistry namespace.Registry
+		namespaceRegistry               namespace.Registry
+		tokenSerializer                 common.TaskTokenSerializer
+		enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn
 	}
 )
 
 var (
 	ErrNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errTaskTokenNotSet              = serviceerror.NewInvalidArgument("Task token not set on request.")
+	errTaskTokenNamespaceMismatch   = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 	errInvalidNamespaceStateMessage = "Namespace has invalid state: %s. Must be %s."
 
-	// By default, enumspb.NAMESPACE_STATE_REGISTERED and enumspb.NAMESPACE_STATE_DEPRECATED are allowed states for all APIs that have `namespace` field in the request object.
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
 		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
 	}
+	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
+	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).Intercept
 
 func NewNamespaceValidatorInterceptor(
 	namespaceRegistry namespace.Registry,
+	enableTokenNamespaceEnforcement dynamicconfig.BoolPropertyFn,
 ) *NamespaceValidatorInterceptor {
 	return &NamespaceValidatorInterceptor{
-		namespaceRegistry: namespaceRegistry,
+		namespaceRegistry:               namespaceRegistry,
+		tokenSerializer:                 common.NewProtoTaskTokenSerializer(),
+		enableTokenNamespaceEnforcement: enableTokenNamespaceEnforcement,
 	}
 }
 
@@ -79,64 +91,140 @@ func (ni *NamespaceValidatorInterceptor) Intercept(
 	if err != nil {
 		return nil, err
 	}
-	if namespaceEntry != nil {
-		_, methodName := splitMethodName(info.FullMethod)
-		allowedStates, allowedStatesDefined := allowedNamespaceStates[methodName]
-		if !allowedStatesDefined {
-			// If not explicitly defined, only enumspb.NAMESPACE_STATE_REGISTERED and enumspb.NAMESPACE_STATE_DEPRECATED are allowed.
-			if namespaceEntry.State() != enumspb.NAMESPACE_STATE_REGISTERED && namespaceEntry.State() != enumspb.NAMESPACE_STATE_DEPRECATED {
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidNamespaceStateMessage, namespaceEntry.State(), fmt.Sprintf("%s or %s", enumspb.NAMESPACE_STATE_REGISTERED.String(), enumspb.NAMESPACE_STATE_DEPRECATED.String())))
-			}
-		} else {
-			isStateAllowed := false
-			for _, allowedState := range allowedStates {
-				if allowedState == namespaceEntry.State() {
-					isStateAllowed = true
-					break
-				}
-			}
-			if !isStateAllowed {
-				var allowedStatesStr []string
-				for _, allowedState := range allowedStates {
-					allowedStatesStr = append(allowedStatesStr, allowedState.String())
-				}
-				return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidNamespaceStateMessage, namespaceEntry.State(), strings.Join(allowedStatesStr, " or ")))
-			}
-		}
+
+	err = ni.checkNamespaceState(namespaceEntry, info.FullMethod)
+	if err != nil {
+		return nil, err
 	}
 
 	return handler(ctx, req)
 }
 
 func (ni *NamespaceValidatorInterceptor) extractNamespace(req interface{}) (*namespace.Namespace, error) {
-	if reqWithNamespace, ok := req.(NamespaceNameGetter); ok {
-		namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
+	// Token namespace has priority over request namespace. Check it first.
+	tokenNamespaceEntry, tokenErr := ni.extractNamespaceFromTaskToken(req)
+	if tokenErr != nil {
+		return nil, tokenErr
+	}
 
-		if !namespaceName.IsEmpty() {
-			// Special case for "RegisterNamespace" API. `namespaceName` is name of namespace that about to be registered. There is no namespace entry for it.
-			if _, isRegisterNamespace := req.(*workflowservice.RegisterNamespaceRequest); isRegisterNamespace {
-				return nil, nil
-			}
+	requestNamespaceEntry, requestErr := ni.extractNamespaceFromRequest(req)
+	if requestErr != nil && tokenNamespaceEntry == nil {
+		//
+		return nil, requestErr
+	}
 
-			namespaceEntry, err := ni.namespaceRegistry.GetNamespace(namespaceName)
-			if err != nil {
-				return nil, err
-			}
-			return namespaceEntry, nil
+	err := ni.checkNamespaceMatch(requestNamespaceEntry, tokenNamespaceEntry)
+	if err != nil {
+		return nil, err
+	}
+
+	// Use namespace from task token (if specified) and ignore namespace from request.
+	if tokenNamespaceEntry != nil {
+		return tokenNamespaceEntry, nil
+	}
+
+	return requestNamespaceEntry, nil
+}
+
+func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interface{}) (*namespace.Namespace, error) {
+	reqWithNamespace, hasNamespace := req.(NamespaceNameGetter)
+	if !hasNamespace {
+		return nil, nil
+	}
+	namespaceName := namespace.Name(reqWithNamespace.GetNamespace())
+
+	switch request := req.(type) {
+	case *workflowservice.DescribeNamespaceRequest:
+		// Special case for DescribeNamespace API which can get namespace by Id.
+		if request.GetId() != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetId()))
 		}
-
-		// Special case for "DescribeNamespace" API which can get namespace by Id.
-		dnr, isDescribeNamespace := req.(*workflowservice.DescribeNamespaceRequest)
-		if !isDescribeNamespace || dnr.GetId() == "" {
+		if namespaceName.IsEmpty() {
 			return nil, ErrNamespaceNotSet
 		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	case *workflowservice.RegisterNamespaceRequest:
+		// Special case for RegisterNamespace API. `namespace` is name of namespace that about to be registered. There is no namespace entry for it.
+		if namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
+		return nil, nil
+	default:
+		// All other APIs.
+		if namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	}
+}
 
-		namespaceEntry, err := ni.namespaceRegistry.GetNamespaceByID(namespace.ID(dnr.GetId()))
+func (ni *NamespaceValidatorInterceptor) extractNamespaceFromTaskToken(req interface{}) (*namespace.Namespace, error) {
+	reqWithTaskToken, hasTaskToken := req.(interface{ GetTaskToken() []byte })
+	if !hasTaskToken {
+		return nil, nil
+	}
+	taskTokenBytes := reqWithTaskToken.GetTaskToken()
+	if len(taskTokenBytes) == 0 {
+		return nil, errTaskTokenNotSet
+	}
+	var namespaceID namespace.ID
+	// Special case for deprecated RespondQueryTaskCompleted API.
+	if _, ok := req.(*workflowservice.RespondQueryTaskCompletedRequest); ok {
+		taskToken, err := ni.tokenSerializer.DeserializeQueryTaskToken(taskTokenBytes)
 		if err != nil {
 			return nil, err
 		}
-		return namespaceEntry, nil
+		namespaceID = namespace.ID(taskToken.GetNamespaceId())
+	} else {
+		taskToken, err := ni.tokenSerializer.Deserialize(taskTokenBytes)
+		if err != nil {
+			return nil, err
+		}
+		namespaceID = namespace.ID(taskToken.GetNamespaceId())
 	}
 
-	return nil, nil
+	if namespaceID.IsEmpty() {
+		return nil, ErrNamespaceNotSet
+	}
+	return ni.namespaceRegistry.GetNamespaceByID(namespaceID)
+}
+
+func (ni *NamespaceValidatorInterceptor) checkNamespaceMatch(requestNamespace *namespace.Namespace, tokenNamespace *namespace.Namespace) error {
+	if tokenNamespace == nil || requestNamespace == nil || !ni.enableTokenNamespaceEnforcement() {
+		return nil
+	}
+
+	if requestNamespace.ID() != tokenNamespace.ID() {
+		return errTaskTokenNamespaceMismatch
+	}
+	return nil
+}
+
+func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *namespace.Namespace, fullMethod string) error {
+	if namespaceEntry == nil {
+		return nil
+	}
+
+	_, methodName := splitMethodName(fullMethod)
+
+	allowedStates, allowedStatesDefined := allowedNamespaceStates[methodName]
+	if !allowedStatesDefined {
+		allowedStates = defaultAllowedNamespaceStates
+	}
+
+	for _, allowedState := range allowedStates {
+		if allowedState == namespaceEntry.State() {
+			return nil
+		}
+	}
+
+	return ni.stateNotAllowedError(namespaceEntry.State(), allowedStates)
+}
+
+func (ni *NamespaceValidatorInterceptor) stateNotAllowedError(currentState enumspb.NamespaceState, allowedStates []enumspb.NamespaceState) error {
+	var allowedStatesStr []string
+	for _, allowedState := range allowedStates {
+		allowedStatesStr = append(allowedStatesStr, allowedState.String())
+	}
+	return serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidNamespaceStateMessage, currentState, strings.Join(allowedStatesStr, " or ")))
 }
