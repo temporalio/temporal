@@ -28,7 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"sync/atomic"
+	"time"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client/admin"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -149,6 +154,42 @@ func (adh *AdminHandler) Stop() {
 
 	// Calling stop if the queue does not start is ok
 	adh.Resource.GetNamespaceReplicationQueue().Stop()
+}
+
+func (adh *AdminHandler) ListNamespaces(
+	ctx context.Context,
+	request *adminservice.ListNamespacesRequest,
+) (_ *adminservice.ListNamespacesResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminListNamespacesScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	resp, err := adh.GetMetadataManager().ListNamespaces(&persistence.ListNamespacesRequest{
+		PageSize:      int(request.GetPageSize()),
+		NextPageToken: request.GetNextPageToken(),
+	})
+	if err != nil {
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to get namespaces. Error: %v", err))
+	}
+
+	var namespaces []*adminservice.DescribeNamespaceResponse
+	for _, namespace := range resp.Namespaces {
+		namespaces = append(namespaces, &adminservice.DescribeNamespaceResponse{
+			Namespace:           namespace.Namespace,
+			NotificationVersion: namespace.NotificationVersion,
+			IsGlobalNamespace:   namespace.IsGlobalNamespace,
+		})
+	}
+
+	return &adminservice.ListNamespacesResponse{
+		Namespaces:    namespaces,
+		NextPageToken: resp.NextPageToken,
+	}, err
 }
 
 // AddSearchAttributes add search attribute to the cluster.
@@ -607,10 +648,13 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 }
 
 // DescribeCluster return information about temporal deployment
-func (adh *AdminHandler) DescribeCluster(_ context.Context, _ *adminservice.DescribeClusterRequest) (_ *adminservice.DescribeClusterResponse, retError error) {
+func (adh *AdminHandler) DescribeCluster(
+	_ context.Context,
+	request *adminservice.DescribeClusterRequest,
+) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminGetWorkflowExecutionRawHistoryV2Scope)
+	scope, sw := adh.startRequestProfile(metrics.AdminDescribeClusterScope)
 	defer sw.Stop()
 
 	membershipInfo := &clusterspb.MembershipInfo{}
@@ -654,22 +698,170 @@ func (adh *AdminHandler) DescribeCluster(_ context.Context, _ *adminservice.Desc
 		membershipInfo.Rings = rings
 	}
 
-	metadata, err := adh.GetClusterMetadataManager().GetClusterMetadata()
+	if len(request.ClusterName) == 0 {
+		request.ClusterName = adh.GetClusterMetadata().GetCurrentClusterName()
+	}
+	metadata, err := adh.GetClusterMetadataManager().GetClusterMetadata(
+		&persistence.GetClusterMetadataRequest{ClusterName: request.GetClusterName()},
+	)
 	if err != nil {
-		return nil, err
+		return nil, adh.error(err, scope)
 	}
 
 	return &adminservice.DescribeClusterResponse{
-		SupportedClients:  headers.SupportedClients,
-		ServerVersion:     headers.ServerVersion,
-		MembershipInfo:    membershipInfo,
-		ClusterId:         metadata.ClusterId,
-		ClusterName:       metadata.ClusterName,
-		HistoryShardCount: metadata.HistoryShardCount,
-		PersistenceStore:  adh.GetExecutionManager().GetName(),
-		VisibilityStore:   adh.visibilityMgr.GetName(),
-		VersionInfo:       metadata.VersionInfo,
+		SupportedClients:         headers.SupportedClients,
+		ServerVersion:            headers.ServerVersion,
+		MembershipInfo:           membershipInfo,
+		ClusterId:                metadata.ClusterId,
+		ClusterName:              metadata.ClusterName,
+		HistoryShardCount:        metadata.HistoryShardCount,
+		PersistenceStore:         adh.GetExecutionManager().GetName(),
+		VisibilityStore:          adh.visibilityMgr.GetName(),
+		VersionInfo:              metadata.VersionInfo,
+		FailoverVersionIncrement: metadata.FailoverVersionIncrement,
+		InitialFailoverVersion:   metadata.InitialFailoverVersion,
+		IsGlobalNamespaceEnabled: metadata.IsGlobalNamespaceEnabled,
 	}, nil
+}
+
+func (adh *AdminHandler) ListClusterMembers(
+	ctx context.Context,
+	request *adminservice.ListClusterMembersRequest,
+) (_ *adminservice.ListClusterMembersResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminListClusterMembersScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	metadataMgr := adh.GetClusterMetadataManager()
+
+	heartbitRef := request.GetLastHeartbeatWithin()
+	var heartbit time.Duration
+	if heartbitRef != nil {
+		heartbit = *heartbitRef
+	}
+	startedTimeRef := request.GetSessionStartedAfterTime()
+	var startedTime time.Time
+	if startedTimeRef != nil {
+		startedTime = *startedTimeRef
+	}
+
+	resp, err := metadataMgr.GetClusterMembers(&persistence.GetClusterMembersRequest{
+		LastHeartbeatWithin: heartbit,
+		RPCAddressEquals:    net.ParseIP(request.GetRpcAddress()),
+		HostIDEquals:        uuid.Parse(request.GetHostId()),
+		RoleEquals:          persistence.ServiceType(request.GetRole()),
+		SessionStartedAfter: startedTime,
+		PageSize:            int(request.GetPageSize()),
+		NextPageToken:       request.GetNextPageToken(),
+	})
+
+	var activeMembers []*clusterspb.ClusterMember
+	for _, member := range resp.ActiveMembers {
+		activeMembers = append(activeMembers, &clusterspb.ClusterMember{
+			Role:             enumsspb.ClusterMemberRole(member.Role),
+			HostId:           member.HostID.String(),
+			RpcAddress:       member.RPCAddress.String(),
+			RpcPort:          int32(member.RPCPort),
+			SessionStartTime: &member.SessionStart,
+			LastHeartbitTime: &member.LastHeartbeat,
+			RecordExpiryTime: &member.RecordExpiry,
+		})
+	}
+
+	return &adminservice.ListClusterMembersResponse{
+		ActiveMembers: activeMembers,
+		NextPageToken: resp.NextPageToken,
+	}, err
+}
+
+func (adh *AdminHandler) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *adminservice.AddOrUpdateRemoteClusterRequest,
+) (_ *adminservice.AddOrUpdateRemoteClusterResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminAddOrUpdateRemoteClusterScope)
+	defer sw.Stop()
+
+	adminClient, err := adh.Resource.GetClientFactory().NewAdminClientWithTimeout(
+		request.GetFrontendAddress(),
+		admin.DefaultTimeout,
+		admin.DefaultLargeTimeout,
+	)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	// Fetch cluster metadata from remote cluster
+	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	err = adh.validateRemoteClusterMetadata(resp)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	var updateRequestVersion int64 = 0
+	clusterMetadataMrg := adh.GetClusterMetadataManager()
+	clusterData, err := clusterMetadataMrg.GetClusterMetadata(
+		&persistence.GetClusterMetadataRequest{ClusterName: resp.GetClusterName()},
+	)
+	switch err.(type) {
+	case nil:
+		updateRequestVersion = clusterData.Version
+	case *serviceerror.NotFound:
+		updateRequestVersion = 0
+	default:
+		return nil, adh.error(err, scope)
+	}
+
+	applied, err := clusterMetadataMrg.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterName:              resp.GetClusterName(),
+			HistoryShardCount:        resp.GetHistoryShardCount(),
+			ClusterId:                resp.GetClusterId(),
+			ClusterAddress:           request.GetFrontendAddress(),
+			FailoverVersionIncrement: resp.GetFailoverVersionIncrement(),
+			InitialFailoverVersion:   resp.GetInitialFailoverVersion(),
+			IsGlobalNamespaceEnabled: resp.GetIsGlobalNamespaceEnabled(),
+			IsConnectionEnabled:      request.GetEnableRemoteClusterConnection(),
+		},
+		Version: updateRequestVersion,
+	})
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+	if !applied {
+		return nil, adh.error(serviceerror.NewInvalidArgument(
+			"Cannot update remote cluster due to update immutable fields"),
+			scope,
+		)
+	}
+	return &adminservice.AddOrUpdateRemoteClusterResponse{}, nil
+}
+
+func (adh *AdminHandler) RemoveRemoteCluster(
+	_ context.Context,
+	request *adminservice.RemoveRemoteClusterRequest,
+) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminRemoveRemoteClusterScope)
+	defer sw.Stop()
+
+	if err := adh.GetClusterMetadataManager().DeleteClusterMetadata(
+		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
+	); err != nil {
+		return nil, adh.error(err, scope)
+	}
+	return &adminservice.RemoveRemoteClusterResponse{}, nil
 }
 
 // GetReplicationMessages returns new replication tasks since the read level provided in the token.
@@ -1096,6 +1288,36 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 		return errInvalidStartEventCombination
 	}
 
+	return nil
+}
+
+func (adh *AdminHandler) validateRemoteClusterMetadata(metadata *adminservice.DescribeClusterResponse) error {
+	// Verify remote cluster config
+	currentClusterInfo := adh.GetClusterMetadata()
+	if metadata.GetClusterName() == currentClusterInfo.GetCurrentClusterName() {
+		// cluster name conflict
+		return serviceerror.NewInvalidArgument("Cannot update current cluster metadata from rpc calls")
+	}
+	if metadata.GetFailoverVersionIncrement() != currentClusterInfo.GetFailoverVersionIncrement() {
+		// failover version increment is mismatch with current cluster config
+		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to failover version increment mismatch")
+	}
+	if metadata.GetHistoryShardCount() != adh.config.NumHistoryShards {
+		// cluster shard number not equal
+		// TODO: remove this check once we support different shard numbers
+		return serviceerror.NewInvalidArgument("Cannot add remote cluster due to history shard number mismatch")
+	}
+	if !metadata.IsGlobalNamespaceEnabled {
+		// remote cluster doesn't support global namespace
+		return serviceerror.NewInvalidArgument("Cannot add remote cluster as global namespace is not supported")
+	}
+	for clusterName, cluster := range currentClusterInfo.GetAllClusterInfo() {
+		if clusterName != metadata.ClusterName && cluster.InitialFailoverVersion == metadata.GetInitialFailoverVersion() {
+			// initial failover version conflict
+			// best effort: race condition if a concurrent write to db with the same version.
+			return serviceerror.NewInvalidArgument("Cannot add remote cluster due to initial failover version conflict")
+		}
+	}
 	return nil
 }
 

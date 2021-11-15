@@ -138,8 +138,8 @@ func AwaitWaitGroup(wg *sync.WaitGroup, timeout time.Duration) bool {
 	}
 }
 
-// CreatePersistanceRetryPolicy creates a retry policy for persistence layer operations
-func CreatePersistanceRetryPolicy() backoff.RetryPolicy {
+// CreatePersistenceRetryPolicy creates a retry policy for persistence layer operations
+func CreatePersistenceRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(retryPersistenceOperationInitialInterval)
 	policy.SetMaximumInterval(retryPersistenceOperationMaxInterval)
 	policy.SetExpirationInterval(retryPersistenceOperationExpirationInterval)

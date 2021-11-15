@@ -87,8 +87,6 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 PINNED_DEPENDENCIES := \
 	github.com/DataDog/sketches-go@v0.0.1 \
-	go.opentelemetry.io/otel@v0.15.0 \
-	go.opentelemetry.io/otel/exporters/metric/prometheus@v0.15.0 \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
 	github.com/go-sql-driver/mysql@v1.5.0
 
@@ -229,7 +227,7 @@ vet:
 
 goimports-check:
 	@printf $(COLOR) "Run goimports checks..."
-	@GO_IMPORTS_OUTPUT=$$(goimports -l .); if [ -n "$${GO_IMPORTS_OUTPUT}" ]; then echo "$${GO_IMPORTS_OUTPUT}" && exit 1; fi
+	@GO_IMPORTS_OUTPUT=$$(goimports -l .); if [ -n "$${GO_IMPORTS_OUTPUT}" ]; then echo "$${GO_IMPORTS_OUTPUT}" && echo "Please run make goimports" && exit 1; fi
 
 goimports:
 	@printf $(COLOR) "Run goimports..."

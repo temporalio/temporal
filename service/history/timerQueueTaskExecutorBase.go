@@ -31,12 +31,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -137,20 +135,20 @@ func (t *timerQueueTaskExecutorBase) deleteWorkflow(
 	workflowContext workflow.Context,
 	msBuilder workflow.MutableState,
 ) error {
-
-	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
+	branchToken, err := msBuilder.GetCurrentBranchToken()
+	if err != nil {
 		return err
 	}
 
-	if err := t.deleteWorkflowExecution(task); err != nil {
-		return err
-	}
-
-	if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
-		return err
-	}
-
-	if err := t.deleteWorkflowVisibility(task); err != nil {
+	if err := t.shard.DeleteWorkflowExecution(
+		definition.WorkflowKey{
+			NamespaceID: task.NamespaceID,
+			WorkflowID:  task.WorkflowID,
+			RunID:       task.RunID,
+		},
+		branchToken,
+		task.Version,
+	); err != nil {
 		return err
 	}
 
@@ -213,105 +211,32 @@ func (t *timerQueueTaskExecutorBase) archiveWorkflow(
 
 	// delete visibility record here regardless if it's been archived inline or not
 	// since the entire record is included as part of the archive request.
-	if err := t.deleteWorkflowVisibility(task); err != nil {
-		return err
-	}
 
-	if err := t.deleteCurrentWorkflowExecution(task); err != nil {
-		return err
-	}
-
-	if err := t.deleteWorkflowExecution(task); err != nil {
-		return err
-	}
-
-	// delete workflow history if history archival is not needed or history as been archived inline
+	// delete workflow history if history archival is not needed or history has been archived inline
 	if resp.HistoryArchivedInline {
+		// branchToken was retrieved above
 		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteHistoryInlineCount)
-		if err := t.deleteWorkflowHistory(task, msBuilder); err != nil {
-			return err
-		}
+	} else {
+		// branchToken == nil means don't delete history
+		branchToken = nil
 	}
+
+	if err := t.shard.DeleteWorkflowExecution(
+		definition.WorkflowKey{
+			NamespaceID: task.NamespaceID,
+			WorkflowID:  task.WorkflowID,
+			RunID:       task.RunID,
+		},
+		branchToken,
+		task.Version,
+	); err != nil {
+		return err
+	}
+
 	// calling clear here to force accesses of mutable state to read database
 	// if this is not called then callers will get mutable state even though its been removed from database
 	workflowContext.Clear()
 	return nil
-}
-
-func (t *timerQueueTaskExecutorBase) deleteWorkflowExecution(
-	task *tasks.DeleteHistoryEventTask,
-) error {
-
-	op := func() error {
-		return t.shard.GetExecutionManager().DeleteWorkflowExecution(&persistence.DeleteWorkflowExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.NamespaceID,
-			WorkflowID:  task.WorkflowID,
-			RunID:       task.RunID,
-		})
-	}
-	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *timerQueueTaskExecutorBase) deleteCurrentWorkflowExecution(
-	task *tasks.DeleteHistoryEventTask,
-) error {
-
-	op := func() error {
-		return t.shard.GetExecutionManager().DeleteCurrentWorkflowExecution(&persistence.DeleteCurrentWorkflowExecutionRequest{
-			ShardID:     t.shard.GetShardID(),
-			NamespaceID: task.NamespaceID,
-			WorkflowID:  task.WorkflowID,
-			RunID:       task.RunID,
-		})
-	}
-	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *timerQueueTaskExecutorBase) deleteWorkflowHistory(
-	task *tasks.DeleteHistoryEventTask,
-	msBuilder workflow.MutableState,
-) error {
-
-	op := func() error {
-		branchToken, err := msBuilder.GetCurrentBranchToken()
-		if err != nil {
-			return err
-		}
-		return t.shard.GetExecutionManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-			BranchToken: branchToken,
-			ShardID:     t.shard.GetShardID(),
-		})
-
-	}
-	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-}
-
-func (t *timerQueueTaskExecutorBase) deleteWorkflowVisibility(
-	task *tasks.DeleteHistoryEventTask,
-) error {
-
-	return t.shard.AddTasks(&persistence.AddTasksRequest{
-		ShardID: t.shard.GetShardID(),
-		// RangeID is set by shard
-		NamespaceID: task.NamespaceID,
-		WorkflowID:  task.WorkflowID,
-		RunID:       task.RunID,
-
-		TransferTasks:    nil,
-		TimerTasks:       nil,
-		ReplicationTasks: nil,
-		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
-			// TaskID is set by shard
-			WorkflowKey: definition.NewWorkflowKey(
-				task.NamespaceID,
-				task.WorkflowID,
-				task.RunID,
-			),
-			VisibilityTimestamp: t.shard.GetTimeSource().Now(),
-			Version:             task.Version,
-		}},
-	})
 }
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(

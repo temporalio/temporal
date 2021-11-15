@@ -155,7 +155,7 @@ type (
 var _ Context = (*ContextImpl)(nil)
 
 var (
-	PersistenceOperationRetryPolicy = common.CreatePersistanceRetryPolicy()
+	PersistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 func NewContext(

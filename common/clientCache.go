@@ -33,10 +33,13 @@ type (
 	ClientCache interface {
 		GetClientForKey(key string) (interface{}, error)
 		GetClientForClientKey(clientKey string) (interface{}, error)
-		GetHostNameForKey(key string) (string, error)
 	}
 
-	keyResolver    func(string) (string, error)
+	keyResolver interface {
+		Lookup(key string) (string, error)
+		GetAllAddresses() ([]string, error)
+	}
+
 	clientProvider func(string) (interface{}, error)
 
 	clientCacheImpl struct {
@@ -62,16 +65,8 @@ func NewClientCache(
 	}
 }
 
-func (c *clientCacheImpl) GetHostNameForKey(key string) (string, error) {
-	hostName, err := c.keyResolver(key)
-	if err != nil {
-		return "", err
-	}
-	return hostName, nil
-}
-
 func (c *clientCacheImpl) GetClientForKey(key string) (interface{}, error) {
-	clientKey, err := c.keyResolver(key)
+	clientKey, err := c.keyResolver.Lookup(key)
 	if err != nil {
 		return nil, err
 	}

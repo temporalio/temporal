@@ -203,6 +203,48 @@ func (c *clientImpl) DescribeCluster(
 	return client.DescribeCluster(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListClusterMembers(
+	ctx context.Context,
+	request *adminservice.ListClusterMembersRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListClusterMembersResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListClusterMembers(ctx, request, opts...)
+}
+
+func (c *clientImpl) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+}
+
+func (c *clientImpl) RemoveRemoteCluster(
+	ctx context.Context,
+	request *adminservice.RemoveRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RemoveRemoteClusterResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RemoveRemoteCluster(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
@@ -215,6 +257,20 @@ func (c *clientImpl) GetReplicationMessages(
 	ctx, cancel := c.createContextWithLargeTimeout(ctx)
 	defer cancel()
 	return client.GetReplicationMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListNamespaces(
+	ctx context.Context,
+	request *adminservice.ListNamespacesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListNamespacesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListNamespaces(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetNamespaceReplicationMessages(

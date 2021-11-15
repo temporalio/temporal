@@ -27,6 +27,7 @@ package temporal
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/uber-go/tally/v4"
@@ -106,6 +107,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Provide(WorkerServiceProvider),
 		fx.Provide(ApplyClusterMetadataConfigProvider),
 		fx.Invoke(ServerLifetimeHooks),
+		fx.NopLogger,
 	)
 	s := &ServerFx{
 		app,
@@ -186,7 +188,7 @@ func HistoryServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -212,6 +214,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		history.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -243,7 +246,7 @@ func MatchingServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -269,6 +272,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		matching.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -300,7 +304,7 @@ func FrontendServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -326,6 +330,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		frontend.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -357,7 +362,7 @@ func WorkerServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -383,6 +388,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		worker.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -481,46 +487,87 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
-	applied, err := clusterMetadataManager.SaveClusterMetadata(
-		&persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount: config.Persistence.NumHistoryShards,
-				ClusterName:       config.ClusterMetadata.CurrentClusterName,
-				ClusterId:         uuid.New(),
-			}})
-	if err != nil {
-		logger.Warn("Failed to save cluster metadata.", tag.Error(err))
-	}
-	if applied {
-		logger.Info("Successfully saved cluster metadata.")
-		return config.ClusterMetadata, config.Persistence, nil
-	}
+	clusterData := config.ClusterMetadata
+	for clusterName, clusterInfo := range clusterData.ClusterInformation {
+		var clusterId = ""
+		if clusterName == clusterData.CurrentClusterName {
+			// Only set current cluster Id as we don't know the remote cluster Id.
+			clusterId = uuid.New()
+		}
+		// We assume the existing remote cluster info is correct.
+		applied, err := clusterMetadataManager.SaveClusterMetadata(
+			&persistence.SaveClusterMetadataRequest{
+				ClusterMetadata: persistencespb.ClusterMetadata{
+					HistoryShardCount:        config.Persistence.NumHistoryShards,
+					ClusterName:              clusterName,
+					ClusterId:                clusterId,
+					ClusterAddress:           clusterInfo.RPCAddress,
+					FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
+					InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
+					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
+					IsConnectionEnabled:      clusterInfo.Enabled,
+				}})
+		if err != nil {
+			logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(clusterName))
+		}
 
-	resp, err := clusterMetadataManager.GetClusterMetadata()
-	if err != nil {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+		if applied {
+			logger.Info("Successfully saved cluster metadata.", tag.ClusterName(clusterName))
+			continue
+		}
+
+		resp, err := clusterMetadataManager.GetClusterMetadata(&persistence.GetClusterMetadataRequest{
+			ClusterName: clusterName,
+		})
+		if err != nil {
+			return config.ClusterMetadata,
+				config.Persistence,
+				fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
+		}
+
+		if clusterName == resp.GetClusterName() {
+			var persistedShardCount = resp.HistoryShardCount
+			if config.Persistence.NumHistoryShards != persistedShardCount {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("persistence.numHistoryShards"),
+					tag.IgnoredValue(config.Persistence.NumHistoryShards),
+					tag.Value(persistedShardCount))
+				config.Persistence.NumHistoryShards = persistedShardCount
+			}
+		}
+
+		// Overwrite cluster information from DB
+		if clusterInfo.Enabled != resp.IsConnectionEnabled {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInfo.enabled"),
+				tag.IgnoredValue(clusterInfo.Enabled),
+				tag.Value(resp.IsConnectionEnabled))
+
+			clusterInfo.Enabled = resp.IsConnectionEnabled
+		}
+		if clusterInfo.Enabled && clusterInfo.RPCAddress != resp.ClusterAddress {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInfo.rpcAddress"),
+				tag.IgnoredValue(clusterInfo.RPCAddress),
+				tag.Value(resp.ClusterAddress))
+
+			clusterInfo.RPCAddress = resp.ClusterAddress
+		}
+		if clusterInfo.Enabled && clusterInfo.InitialFailoverVersion != resp.InitialFailoverVersion {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInfo.initialFailoverVersion"),
+				tag.IgnoredValue(clusterInfo.InitialFailoverVersion),
+				tag.Value(resp.InitialFailoverVersion))
+
+			clusterInfo.InitialFailoverVersion = resp.InitialFailoverVersion
+		}
+		fmt.Println("cluster : version" + clusterName + ":" + strconv.Itoa(int(clusterInfo.InitialFailoverVersion)))
+		config.ClusterMetadata.ClusterInformation[clusterName] = clusterInfo
 	}
-
-	if config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
-		logger.Error(
-			mismatchLogMessage,
-			tag.Key("clusterMetadata.currentClusterName"),
-			tag.IgnoredValue(config.ClusterMetadata.CurrentClusterName),
-			tag.Value(resp.ClusterName))
-
-		config.ClusterMetadata.CurrentClusterName = resp.ClusterName
-	}
-
-	var persistedShardCount = resp.HistoryShardCount
-	if config.Persistence.NumHistoryShards != persistedShardCount {
-		logger.Error(
-			mismatchLogMessage,
-			tag.Key("persistence.numHistoryShards"),
-			tag.IgnoredValue(config.Persistence.NumHistoryShards),
-			tag.Value(persistedShardCount))
-		config.Persistence.NumHistoryShards = persistedShardCount
-	}
-
 	return config.ClusterMetadata, config.Persistence, nil
 }
 

@@ -63,7 +63,7 @@ func NewDefaultTokenKeyProvider(cfg *config.Authorization, logger log.Logger) *d
 func (a *defaultTokenKeyProvider) initialize() {
 	a.rsaKeys = make(map[string]*rsa.PublicKey)
 	a.ecKeys = make(map[string]*ecdsa.PublicKey)
-	if len(a.config.KeySourceURIs) > 0 {
+	if a.config.HasSourceURIsConfigured() {
 		err := a.updateKeys()
 		if err != nil {
 			a.logger.Error("error during initial retrieval of token keys: ", tag.Error(err))
@@ -117,7 +117,7 @@ func (a *defaultTokenKeyProvider) timerCallback() {
 			break
 		case <-a.ticker.C:
 		}
-		if len(a.config.KeySourceURIs) > 0 {
+		if a.config.HasSourceURIsConfigured() {
 			err := a.updateKeys()
 			if err != nil {
 				a.logger.Error("error while refreshing token keys: ", tag.Error(err))
@@ -127,7 +127,7 @@ func (a *defaultTokenKeyProvider) timerCallback() {
 }
 
 func (a *defaultTokenKeyProvider) updateKeys() error {
-	if len(a.config.KeySourceURIs) == 0 {
+	if !a.config.HasSourceURIsConfigured() {
 		return fmt.Errorf("no URIs configured for retrieving token keys")
 	}
 
@@ -135,6 +135,9 @@ func (a *defaultTokenKeyProvider) updateKeys() error {
 	ecKeys := make(map[string]*ecdsa.PublicKey)
 
 	for _, uri := range a.config.KeySourceURIs {
+		if strings.TrimSpace(uri) == "" {
+			continue
+		}
 		err := a.updateKeysFromURI(uri, rsaKeys, ecKeys)
 		if err != nil {
 			return err

@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -50,6 +51,8 @@ import (
 
 var (
 	defaultTime = time.Unix(0, 0)
+
+	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 const (
@@ -609,7 +612,6 @@ func (s *ContextImpl) AddTasks(
 	}
 
 	namespaceID := namespace.ID(request.NamespaceID)
-	workflowID := request.WorkflowID
 
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -620,10 +622,17 @@ func (s *ContextImpl) AddTasks(
 	s.wLock()
 	defer s.wUnlock()
 
+	return s.addTasksLocked(request, namespaceEntry)
+}
+
+func (s *ContextImpl) addTasksLocked(
+	request *persistence.AddTasksRequest,
+	namespaceEntry *namespace.Namespace,
+) error {
 	transferMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDsLocked(
 		namespaceEntry,
-		workflowID,
+		request.WorkflowID,
 		request.TransferTasks,
 		request.ReplicationTasks,
 		request.TimerTasks,
@@ -635,7 +644,7 @@ func (s *ContextImpl) AddTasks(
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	request.RangeID = s.getRangeIDLocked()
-	err = s.executionManager.AddTasks(request)
+	err := s.executionManager.AddTasks(request)
 	if err = s.handleErrorLocked(err); err != nil {
 		return err
 	}
@@ -681,6 +690,91 @@ func (s *ContextImpl) AppendHistoryEvents(
 		size = resp.Size
 	}
 	return size, err0
+}
+
+func (s *ContextImpl) DeleteWorkflowExecution(
+	key definition.WorkflowKey,
+	branchToken []byte,
+	version int64,
+) error {
+	if err := s.errorByState(); err != nil {
+		return err
+	}
+
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
+	if err != nil {
+		return err
+	}
+
+	s.wLock()
+	defer s.wUnlock()
+
+	delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: key.NamespaceID,
+		WorkflowID:  key.WorkflowID,
+		RunID:       key.RunID,
+	}
+	op := func() error {
+		return s.GetExecutionManager().DeleteCurrentWorkflowExecution(delCurRequest)
+	}
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return err
+	}
+
+	delRequest := &persistence.DeleteWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: key.NamespaceID,
+		WorkflowID:  key.WorkflowID,
+		RunID:       key.RunID,
+	}
+	op = func() error {
+		return s.GetExecutionManager().DeleteWorkflowExecution(delRequest)
+	}
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return err
+	}
+
+	if branchToken != nil {
+		delHistoryRequest := &persistence.DeleteHistoryBranchRequest{
+			BranchToken: branchToken,
+			ShardID:     s.shardID,
+		}
+		op := func() error {
+			return s.GetExecutionManager().DeleteHistoryBranch(delHistoryRequest)
+		}
+		err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete visibility
+	addTasksRequest := &persistence.AddTasksRequest{
+		ShardID:     s.shardID,
+		NamespaceID: key.NamespaceID,
+		WorkflowID:  key.WorkflowID,
+		RunID:       key.RunID,
+
+		TransferTasks:    nil,
+		TimerTasks:       nil,
+		ReplicationTasks: nil,
+		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
+			// TaskID is set by addTasksLocked
+			WorkflowKey:         key,
+			VisibilityTimestamp: s.GetTimeSource().Now(),
+			Version:             version,
+		}},
+	}
+	err = s.addTasksLocked(addTasksRequest, namespaceEntry)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *ContextImpl) GetConfig() *configs.Config {
