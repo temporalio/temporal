@@ -94,7 +94,9 @@ type (
 	ClusterMetadataStore interface {
 		Closeable
 		GetName() string
+		GetClusterMetadataV1() (*InternalGetClusterMetadataResponse, error) //TODO: deprecate this after 1.15+
 		GetClusterMetadata(request *InternalGetClusterMetadataRequest) (*InternalGetClusterMetadataResponse, error)
+		SaveClusterMetadataV1(request *InternalSaveClusterMetadataRequest) (bool, error) //TODO: deprecate this after 1.15+
 		SaveClusterMetadata(request *InternalSaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(request *InternalDeleteClusterMetadataRequest) error
 		// Membership APIs

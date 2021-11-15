@@ -1159,6 +1159,7 @@ type (
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
+		GetClusterMetadataV1() (*GetClusterMetadataResponse, error) //TODO: deprecate this after 1.15+
 		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error
