@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -771,6 +772,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 			SignalName: "some random signal name",
 			Input:      payloads.EncodeString("some random signal input"),
 			Identity:   "some random signal identity",
+			Header:     &commonpb.Header{Fields: map[string]*commonpb.Payload{"myheader": {Data: []byte("myheader")}}},
 		}},
 	}
 	event2 := &historypb.HistoryEvent{
@@ -798,6 +800,7 @@ func (s *workflowResetterSuite) TestReapplyEvents() {
 				attr.GetSignalName(),
 				attr.GetInput(),
 				attr.GetIdentity(),
+				attr.GetHeader(),
 			).Return(&historypb.HistoryEvent{}, nil)
 		}
 	}

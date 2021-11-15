@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -1656,6 +1657,9 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 	signalRequestID := uuid.New()
 	signalName := "some random signal name"
 	signalInput := payloads.EncodeString("some random signal input")
+	signalHeader := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
+	}
 	control := "some random control"
 	evenType := enumspb.EVENT_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED
 	event := &historypb.HistoryEvent{
@@ -1673,6 +1677,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 			SignalName:        signalName,
 			Input:             signalInput,
 			ChildWorkflowOnly: childWorkflowOnly,
+			Header:            signalHeader,
 		}},
 	}
 	si := &persistencespb.SignalInfo{
@@ -1682,6 +1687,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 		Name:        signalName,
 		Input:       signalInput,
 		Control:     control,
+		Header:      signalHeader,
 	}
 
 	// the cancellation request ID is generated inside, cannot assert equal
