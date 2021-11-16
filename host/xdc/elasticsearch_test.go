@@ -158,14 +158,14 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
