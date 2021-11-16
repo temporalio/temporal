@@ -366,6 +366,21 @@ func connectToCassandra(c *cli.Context) gocql.Session {
 	return session
 }
 
+func newESClient(c *cli.Context) esclient.CLIClient {
+	url := getRequiredOption(c, FlagURL)
+	var version string
+	if c.IsSet(FlagVersion) {
+		version = c.String(FlagVersion)
+	}
+
+	client, err := esclient.NewCLIClient(url, version)
+	if err != nil {
+		ErrorAndExit("Unable to create Elasticsearch client", err)
+	}
+
+	return client
+}
+
 // AdminGetNamespaceIDOrName map namespace
 func AdminGetNamespaceIDOrName(c *cli.Context) {
 	namespaceID := c.String(FlagNamespaceID)
