@@ -360,7 +360,7 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 	return resp, err
 }
 
-// DeleteNamespace us used to delete namespace. Once the namespace is deleted  it cannot be used to start new workflow executions.
+// DeleteNamespace is used to delete namespace. Once the namespace is deleted  it cannot be used to start new workflow executions.
 // All existing workflow executions will be also deleted.
 func (wh *WorkflowHandler) DeleteNamespace(ctx context.Context, request *workflowservice.DeleteNamespaceRequest) (_ *workflowservice.DeleteNamespaceResponse, retError error) {
 	defer log.CapturePanic(wh.GetLogger(), &retError)
@@ -1468,9 +1468,6 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	namespaceID := namespace.ID(taskToken.GetNamespaceId())
 	namespaceEntry, err := wh.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		return nil, err
-	}
-	if err := wh.checkNamespaceMatch(namespace.Name(request.Namespace), namespaceEntry.Name()); err != nil {
 		return nil, err
 	}
 
