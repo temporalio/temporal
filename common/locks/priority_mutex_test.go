@@ -86,6 +86,14 @@ func (s *priorityMutexSuite) TearDownTest() {
 
 }
 
+func (s *priorityMutexSuite) TestTryLock_High() {
+	s.True(s.lock.TryLockHigh())
+	s.False(s.lock.TryLockHigh())
+	s.False(s.lock.TryLockLow())
+	s.lock.UnlockHigh()
+	s.False(s.lock.IsLocked())
+}
+
 func (s *priorityMutexSuite) TestLock_High_Success() {
 	ctx := context.Background()
 	err := s.lock.LockHigh(ctx)
@@ -102,6 +110,14 @@ func (s *priorityMutexSuite) TestLock_High_Fail() {
 
 	err := s.lock.LockHigh(ctx)
 	s.Error(err)
+	s.False(s.lock.IsLocked())
+}
+
+func (s *priorityMutexSuite) TestTryLock_Low() {
+	s.True(s.lock.TryLockLow())
+	s.False(s.lock.TryLockHigh())
+	s.False(s.lock.TryLockLow())
+	s.lock.UnlockLow()
 	s.False(s.lock.IsLocked())
 }
 

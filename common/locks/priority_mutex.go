@@ -38,5 +38,13 @@ type (
 		UnlockHigh()
 		// UnlockLow unlock with low priority, use LockLow / UnlockLow pair to lock / unlock
 		UnlockLow()
+		// TryLockHigh try to lock with high priority, return true if lock acquired
+		// use TryLockHigh / UnlockHigh pair to lock / unlock
+		TryLockHigh() bool
+		// TryLockLow try to lock with high priority, return true if lock acquired
+		// use TryLockLow / UnlockLow pair to lock / unlock
+		TryLockLow() bool
+		// IsLocked returns true if already locked
+		IsLocked() bool
 	}
 )
