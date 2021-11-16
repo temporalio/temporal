@@ -137,6 +137,13 @@ func (c *PriorityMutexImpl) UnlockLow() {
 	c.notify()
 }
 
+func (c *PriorityMutexImpl) IsLocked() bool {
+	c.locker.Lock()
+	defer c.locker.Unlock()
+
+	return c.lockState != PriorityMutexStateUnlocked
+}
+
 func (c *PriorityMutexImpl) notify() {
 	if c.highWait > 0 {
 		c.highCV.Signal()
