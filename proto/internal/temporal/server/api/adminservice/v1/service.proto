@@ -35,6 +35,14 @@ service AdminService {
     rpc RegisterNamespace (RegisterNamespaceRequest) returns (RegisterNamespaceResponse) {
     }
 
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+    // UpdateNamespace is used to update the information and configuration for a registered namespace.
+    rpc UpdateNamespace (UpdateNamespaceRequest) returns (UpdateNamespaceResponse) {
+    }
+
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     }

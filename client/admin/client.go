@@ -287,6 +287,20 @@ func (c *clientImpl) RegisterNamespace(
 	return client.RegisterNamespace(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateNamespace(
+	ctx context.Context,
+	request *adminservice.UpdateNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateNamespaceResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateNamespace(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,

@@ -540,6 +540,26 @@ func (mr *MockAdminServiceClientMockRecorder) ResendReplicationTasks(ctx, in int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ResendReplicationTasks), varargs...)
 }
 
+// UpdateNamespace mocks base method.
+func (m *MockAdminServiceClient) UpdateNamespace(ctx context.Context, in *adminservice.UpdateNamespaceRequest, opts ...grpc.CallOption) (*adminservice.UpdateNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "UpdateNamespace", varargs...)
+	ret0, _ := ret[0].(*adminservice.UpdateNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNamespace indicates an expected call of UpdateNamespace.
+func (mr *MockAdminServiceClientMockRecorder) UpdateNamespace(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockAdminServiceClient)(nil).UpdateNamespace), varargs...)
+}
+
 // MockAdminServiceServer is a mock of AdminServiceServer interface.
 type MockAdminServiceServer struct {
 	ctrl     *gomock.Controller
@@ -921,4 +941,19 @@ func (m *MockAdminServiceServer) ResendReplicationTasks(arg0 context.Context, ar
 func (mr *MockAdminServiceServerMockRecorder) ResendReplicationTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ResendReplicationTasks), arg0, arg1)
+}
+
+// UpdateNamespace mocks base method.
+func (m *MockAdminServiceServer) UpdateNamespace(arg0 context.Context, arg1 *adminservice.UpdateNamespaceRequest) (*adminservice.UpdateNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateNamespace", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.UpdateNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateNamespace indicates an expected call of UpdateNamespace.
+func (mr *MockAdminServiceServerMockRecorder) UpdateNamespace(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockAdminServiceServer)(nil).UpdateNamespace), arg0, arg1)
 }
