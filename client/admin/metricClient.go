@@ -299,6 +299,24 @@ func (c *metricClient) GetReplicationMessages(
 	return resp, err
 }
 
+func (c *metricClient) DescribeNamespace(
+	ctx context.Context,
+	request *adminservice.DescribeNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.DescribeNamespaceResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientDescribeNamespaceScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.DescribeNamespace(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientDescribeNamespaceScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) ListNamespaces(
 	ctx context.Context,
 	request *adminservice.ListNamespacesRequest,

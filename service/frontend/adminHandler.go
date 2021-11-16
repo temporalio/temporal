@@ -170,6 +170,40 @@ func (adh *AdminHandler) Stop() {
 	adh.Resource.GetNamespaceReplicationQueue().Stop()
 }
 
+// DescribeNamespace returns the information and configuration for a registered namespace.
+func (adh *AdminHandler) DescribeNamespace(ctx context.Context, request *adminservice.DescribeNamespaceRequest) (_ *adminservice.DescribeNamespaceResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminDescribeNamespaceScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if request.GetNamespace() == "" && request.GetId() == "" {
+		return nil, adh.error(interceptor.ErrNamespaceNotSet, scope)
+	}
+
+	req := &workflowservice.DescribeNamespaceRequest{
+		Namespace: request.GetNamespace(),
+		Id:        request.GetId(),
+	}
+
+	resp, err := adh.namespaceHandler.DescribeNamespace(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.DescribeNamespaceResponse{
+		NamespaceInfo:     resp.GetNamespaceInfo(),
+		Config:            resp.GetConfig(),
+		ReplicationConfig: resp.GetReplicationConfig(),
+		FailoverVersion:   resp.GetFailoverVersion(),
+		IsGlobalNamespace: resp.GetIsGlobalNamespace(),
+	}, err
+}
+
 func (adh *AdminHandler) ListNamespaces(
 	ctx context.Context,
 	request *adminservice.ListNamespacesRequest,
@@ -183,8 +217,8 @@ func (adh *AdminHandler) ListNamespaces(
 		return nil, adh.error(errRequestNotSet, scope)
 	}
 
-	resp, err := adh.GetMetadataManager().ListNamespaces(&persistence.ListNamespacesRequest{
-		PageSize:      int(request.GetPageSize()),
+	resp, err := adh.namespaceHandler.ListNamespaces(ctx, &workflowservice.ListNamespacesRequest{
+		PageSize:      request.GetPageSize(),
 		NextPageToken: request.GetNextPageToken(),
 	})
 	if err != nil {
@@ -194,9 +228,11 @@ func (adh *AdminHandler) ListNamespaces(
 	var namespaces []*adminservice.DescribeNamespaceResponse
 	for _, namespace := range resp.Namespaces {
 		namespaces = append(namespaces, &adminservice.DescribeNamespaceResponse{
-			Namespace:           namespace.Namespace,
-			NotificationVersion: namespace.NotificationVersion,
-			IsGlobalNamespace:   namespace.IsGlobalNamespace,
+			NamespaceInfo:     namespace.GetNamespaceInfo(),
+			Config:            namespace.GetConfig(),
+			ReplicationConfig: namespace.GetReplicationConfig(),
+			FailoverVersion:   namespace.GetFailoverVersion(),
+			IsGlobalNamespace: namespace.GetIsGlobalNamespace(),
 		})
 	}
 
