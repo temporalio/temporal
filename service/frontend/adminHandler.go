@@ -205,7 +205,7 @@ func (adh *AdminHandler) ListNamespaces(
 }
 
 // RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
-// entity within Temporal, used as a container for all resources like workflow executions, taskqueues, etc.  Namespace
+// entity within Temporal, used as a container for all resources like workflow executions, taskqueues, etc. Namespace
 // acts as a sandbox and provides isolation for all resources within the namespace.  All resources belongs to exactly one
 // namespace.
 func (adh *AdminHandler) RegisterNamespace(ctx context.Context, request *adminservice.RegisterNamespaceRequest) (_ *adminservice.RegisterNamespaceResponse, retError error) {
@@ -248,6 +248,39 @@ func (adh *AdminHandler) RegisterNamespace(ctx context.Context, request *adminse
 	}
 
 	return &adminservice.RegisterNamespaceResponse{}, nil
+}
+
+// UpdateNamespace is used to update the information and configuration of a registered namespace.
+func (adh *AdminHandler) UpdateNamespace(ctx context.Context, request *adminservice.UpdateNamespaceRequest) (_ *adminservice.UpdateNamespaceResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminUpdateNamespaceScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if request.GetNamespace() == "" {
+		return nil, adh.error(errNamespaceNotSet, scope)
+	}
+
+	req := &workflowservice.UpdateNamespaceRequest{
+		Namespace:         request.GetNamespace(),
+		UpdateInfo:        request.GetUpdateInfo(),
+		ReplicationConfig: request.GetReplicationConfig(),
+		DeleteBadBinary:   request.GetDeleteBadBinary(),
+		PromoteNamespace:  request.GetPromoteNamespace(),
+		Config:            request.GetConfig(),
+		SecurityToken:     request.GetSecurityToken(),
+	}
+
+	_, err := adh.namespaceHandler.UpdateNamespace(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	return &adminservice.UpdateNamespaceResponse{}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.

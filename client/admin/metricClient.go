@@ -335,6 +335,24 @@ func (c *metricClient) RegisterNamespace(
 	return resp, err
 }
 
+func (c *metricClient) UpdateNamespace(
+	ctx context.Context,
+	request *adminservice.UpdateNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateNamespaceResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientUpdateNamespaceScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientUpdateNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.UpdateNamespace(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientUpdateNamespaceScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,

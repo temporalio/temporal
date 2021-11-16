@@ -34,6 +34,7 @@ import "temporal/api/common/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/replication/v1/message.proto";
+import "temporal/api/namespace/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
@@ -62,7 +63,6 @@ message DescribeNamespaceResponse {
     bool is_global_namespace = 3;
 }
 
-
 message RegisterNamespaceRequest {
     string namespace = 1;
     string description = 2;
@@ -83,6 +83,24 @@ message RegisterNamespaceRequest {
 }
 
 message RegisterNamespaceResponse {
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+message UpdateNamespaceRequest {
+    string namespace = 1;
+    temporal.api.namespace.v1.UpdateNamespaceInfo update_info = 2;
+    temporal.api.namespace.v1.NamespaceConfig config = 3;
+    temporal.api.replication.v1.NamespaceReplicationConfig replication_config = 4;
+    string security_token = 5;
+    string delete_bad_binary = 6;
+    // promote local namespace to global namespace. Ignored if namespace is already global namespace.
+    bool promote_namespace = 7;
+}
+
+message UpdateNamespaceResponse {
 }
 
 message DescribeMutableStateRequest {
