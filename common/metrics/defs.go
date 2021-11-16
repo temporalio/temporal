@@ -415,6 +415,8 @@ const (
 	MatchingClientListTaskQueuePartitionsScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
+	// FrontendClientDeleteNamespaceScope tracks RPC calls to frontend service
+	FrontendClientDeleteNamespaceScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDescribeNamespaceScope
 	// FrontendClientDescribeTaskQueueScope tracks RPC calls to frontend service
@@ -555,6 +557,8 @@ const (
 	AdminClientGetTaskQueueTasksScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
+	// DCRedirectionDeleteNamespaceScope tracks RPC calls for dc redirection
+	DCRedirectionDeleteNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDescribeNamespaceScope
 	// DCRedirectionDescribeTaskQueueScope tracks RPC calls for dc redirection
@@ -1327,6 +1331,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		MatchingClientDescribeTaskQueueScope:                  {operation: "MatchingClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientListTaskQueuePartitionsScope:            {operation: "MatchingClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDeleteNamespaceScope:                    {operation: "FrontendClientDeleteNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeTaskQueueScope:                  {operation: "FrontendClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeWorkflowExecutionScope:          {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1397,6 +1402,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		DCRedirectionDeprecateNamespaceScope:                  {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDeleteNamespaceScope:                     {operation: "DCRedirectionDeleteNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeNamespaceScope:                   {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeTaskQueueScope:                   {operation: "DCRedirectionDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeWorkflowExecutionScope:           {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},

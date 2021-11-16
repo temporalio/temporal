@@ -66,6 +66,24 @@ func (c *metricClient) DeprecateNamespace(
 	return resp, err
 }
 
+func (c *metricClient) DeleteNamespace(
+	ctx context.Context,
+	request *workflowservice.DeleteNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteNamespaceResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientDeleteNamespaceScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientDeleteNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.DeleteNamespace(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientDeleteNamespaceScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) DescribeNamespace(
 	ctx context.Context,
 	request *workflowservice.DescribeNamespaceRequest,
