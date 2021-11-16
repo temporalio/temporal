@@ -44,7 +44,7 @@ type (
 	// 1. Namespace is specified in task token if there is a `task_token` field.
 	// 2. Namespace is specified in request if there is a `namespace` field and no `task_token` field.
 	// 3. Namespace exists.
-	// 4. Namespace from request match namespace from task token , if check is enabled with dynamic config.
+	// 4. Namespace from request match namespace from task token, if check is enabled with dynamic config.
 	// 5. Namespace is in correct state.
 	NamespaceValidatorInterceptor struct {
 		namespaceRegistry               namespace.Registry
