@@ -56,6 +56,8 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"gopkg.in/yaml.v2"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
@@ -66,7 +68,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
-	"gopkg.in/yaml.v2"
 )
 
 type (
@@ -154,6 +155,8 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -161,8 +164,6 @@ func (s *integrationClustersTestSuite) TestNamespaceFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
@@ -229,6 +230,8 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespaceName,
@@ -236,8 +239,6 @@ func (s *integrationClustersTestSuite) TestSimpleWorkflowFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(namespace.CacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
@@ -510,6 +511,8 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -517,8 +520,6 @@ func (s *integrationClustersTestSuite) TestStickyWorkflowTaskFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -660,6 +661,8 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(namespace.CacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespaceName,
@@ -667,8 +670,6 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(namespace.CacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)
@@ -783,6 +784,8 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -790,8 +793,6 @@ func (s *integrationClustersTestSuite) TestTerminateFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -954,6 +955,8 @@ func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -961,8 +964,6 @@ func (s *integrationClustersTestSuite) TestResetWorkflowFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -1111,6 +1112,8 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -1118,8 +1121,6 @@ func (s *integrationClustersTestSuite) TestContinueAsNewFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -1235,6 +1236,8 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -1242,8 +1245,6 @@ func (s *integrationClustersTestSuite) TestSignalFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -1402,6 +1403,8 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -1409,8 +1412,6 @@ func (s *integrationClustersTestSuite) TestUserTimerFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -1560,6 +1561,8 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -1567,8 +1570,6 @@ func (s *integrationClustersTestSuite) TestTransientWorkflowTaskFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -1667,6 +1668,8 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -1674,8 +1677,6 @@ func (s *integrationClustersTestSuite) TestCronWorkflowFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -1752,6 +1753,8 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
@@ -1759,8 +1762,6 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 
@@ -1843,8 +1844,6 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
 	s.registerNamespace(namespace)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	taskqueue := "integration-activity-heartbeat-workflow-failover-test-taskqueue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
@@ -1989,6 +1988,8 @@ func (s *integrationClustersTestSuite) registerNamespace(namespace string) {
 	}
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,

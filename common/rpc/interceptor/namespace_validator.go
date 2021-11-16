@@ -108,8 +108,8 @@ func (ni *NamespaceValidatorInterceptor) extractNamespace(req interface{}) (*nam
 	}
 
 	requestNamespaceEntry, requestErr := ni.extractNamespaceFromRequest(req)
+	// If namespace was extracted from token then it will be used.
 	if requestErr != nil && tokenNamespaceEntry == nil {
-		//
 		return nil, requestErr
 	}
 
