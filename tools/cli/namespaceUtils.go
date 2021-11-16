@@ -166,8 +166,12 @@ var (
 
 	describeNamespaceFlags = []cli.Flag{
 		cli.StringFlag{
+			Name:  FlagNamespace,
+			Usage: "Namespace name (required if namespace id is not specified)",
+		},
+		cli.StringFlag{
 			Name:  FlagNamespaceID,
-			Usage: "Namespace Id (required if not specify namespace)",
+			Usage: "Namespace Id (optional, can be used instead of namespace name)",
 		},
 	}
 
@@ -194,11 +198,6 @@ var (
 	)
 
 	adminUpdateNamespaceFlags = append(
-		updateNamespaceFlags,
-		adminNamespaceCommonFlags...,
-	)
-
-	adminDescribeNamespaceFlags = append(
 		updateNamespaceFlags,
 		adminNamespaceCommonFlags...,
 	)

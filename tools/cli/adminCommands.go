@@ -32,12 +32,14 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/olekukonko/tablewriter"
 	"github.com/olivere/elastic/v7"
 	"github.com/urfave/cli"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -181,6 +183,42 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeMutableStateResp
 		ErrorAndExit("Get workflow mutableState failed", err)
 	}
 	return resp
+}
+
+// DescribeNamespace updates a namespace
+func DescribeNamespace(c *cli.Context) error {
+	namespace := c.String(FlagNamespace)
+	namespaceID := c.String(FlagNamespaceID)
+
+	if namespaceID == "" && namespace == "" {
+		return fmt.Errorf("provide either %s or %s flag", FlagNamespaceID, FlagNamespace)
+	}
+	if namespaceID != "" && namespace != "" {
+		return fmt.Errorf("provide only one of the flags: %s or %s", FlagNamespaceID, FlagNamespace)
+	}
+
+	client := cFactory.AdminClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	if namespaceID != "" {
+		namespace = ""
+	}
+	resp, err := client.DescribeNamespace(ctx, &adminservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+		Id:        namespaceID,
+	})
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
+			return fmt.Errorf("namespace describe failed: %s", err)
+		}
+		return fmt.Errorf("namespace %s does not exist: %s", namespace, err)
+	}
+
+	printAdminNamespace(resp)
+
+	return nil
 }
 
 // AdminListNamespaces outputs a list of all namespaces
@@ -767,5 +805,51 @@ func AdminRefreshWorkflowTasks(c *cli.Context) {
 		ErrorAndExit("Refresh workflow task failed", err)
 	} else {
 		fmt.Println("Refresh workflow task succeeded.")
+	}
+}
+
+func printAdminNamespace(resp *adminservice.DescribeNamespaceResponse) {
+	var formatStr = "Name: %v\nId: %v\nDescription: %v\nOwnerEmail: %v\nNamespaceData: %#v\nState: %v\nRetention: %v\n" +
+		"ActiveClusterName: %v\nClusters: %v\nHistoryArchivalState: %v\n"
+	descValues := []interface{}{
+		resp.NamespaceInfo.GetName(),
+		resp.NamespaceInfo.GetId(),
+		resp.NamespaceInfo.GetDescription(),
+		resp.NamespaceInfo.GetOwnerEmail(),
+		resp.NamespaceInfo.Data,
+		resp.NamespaceInfo.GetState(),
+		timestamp.DurationValue(resp.Config.GetWorkflowExecutionRetentionTtl()),
+		resp.ReplicationConfig.GetActiveClusterName(),
+		clustersToString(resp.ReplicationConfig.Clusters),
+		resp.Config.GetHistoryArchivalState().String(),
+	}
+	if resp.Config.GetHistoryArchivalUri() != "" {
+		formatStr = formatStr + "HistoryArchivalURI: %v\n"
+		descValues = append(descValues, resp.Config.GetHistoryArchivalUri())
+	}
+	formatStr = formatStr + "VisibilityArchivalState: %v\n"
+	descValues = append(descValues, resp.Config.GetVisibilityArchivalState().String())
+	if resp.Config.GetVisibilityArchivalUri() != "" {
+		formatStr = formatStr + "VisibilityArchivalURI: %v\n"
+		descValues = append(descValues, resp.Config.GetVisibilityArchivalUri())
+	}
+	fmt.Printf(formatStr, descValues...)
+	if resp.Config.BadBinaries != nil {
+		fmt.Println("Bad binaries to reset:")
+		table := tablewriter.NewWriter(os.Stdout)
+		table.SetBorder(true)
+		table.SetColumnSeparator("|")
+		header := []string{"Binary Checksum", "Operator", "Start Time", "Reason"}
+		headerColor := []tablewriter.Colors{tableHeaderBlue, tableHeaderBlue, tableHeaderBlue, tableHeaderBlue}
+		table.SetHeader(header)
+		table.SetHeaderColor(headerColor...)
+		for cs, bin := range resp.Config.BadBinaries.Binaries {
+			row := []string{cs}
+			row = append(row, bin.GetOperator())
+			row = append(row, timestamp.TimeValue(bin.GetCreateTime()).String())
+			row = append(row, bin.GetReason())
+			table.Append(row)
+		}
+		table.Render()
 	}
 }

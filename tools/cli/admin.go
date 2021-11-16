@@ -378,9 +378,9 @@ func newAdminNamespaceCommands() []cli.Command {
 			Name:    "describe",
 			Aliases: []string{"desc"},
 			Usage:   "Describe existing workflow namespace",
-			Flags:   adminDescribeNamespaceFlags,
+			Flags:   describeNamespaceFlags,
 			Action: func(c *cli.Context) {
-				newNamespaceCLI(c, true).DescribeNamespace(c)
+				DescribeNamespace(c)
 			},
 		},
 		{
