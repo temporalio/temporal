@@ -102,22 +102,6 @@ func newClientV6(cfg *Config, httpClient *http.Client, logger log.Logger) (*clie
 	return &clientV6{esClient: client}, nil
 }
 
-func newSimpleClientV6(url string) (*clientV6, error) {
-	retrier := elastic6.NewBackoffRetrier(elastic6.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))
-	var client *elastic6.Client
-	var err error
-	if client, err = elastic6.NewClient(
-		elastic6.SetURL(url),
-		elastic6.SetSniff(false),
-		elastic6.SetHealthcheck(false),
-		elastic6.SetRetrier(retrier),
-	); err != nil {
-		return nil, convertV6ErrorToV7(err)
-	}
-
-	return &clientV6{esClient: client}, nil
-}
-
 func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchSource := elastic6.NewSearchSource().
 		Query(p.Query).

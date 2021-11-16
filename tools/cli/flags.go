@@ -169,8 +169,10 @@ const (
 	FlagMaxFieldLengthWithAlias               = FlagMaxFieldLength + ", maxl"
 	FlagSkipErrorMode                         = "skip_errors"
 	FlagSkipErrorModeWithAlias                = FlagSkipErrorMode + ", serr"
-	FlagURL                                   = "url"
-	FlagIndex                                 = "index"
+	FlagElasticsearchURL                      = "url"
+	FlagElasticsearchUsername                 = "es-username"
+	FlagElasticsearchPassword                 = "es-password"
+	FlagElasticsearchIndex                    = "index"
 	FlagMemoKey                               = "memo_key"
 	FlagMemo                                  = "memo"
 	FlagMemoFile                              = "memo_file"
@@ -662,9 +664,19 @@ func getDBFlags() []cli.Flag {
 func getESFlags(index bool) []cli.Flag {
 	flags := []cli.Flag{
 		cli.StringFlag{
-			Name:  FlagURL,
+			Name:  FlagElasticsearchURL,
 			Value: "http://127.0.0.1:9200",
 			Usage: "URL of Elasticsearch cluster",
+		},
+		cli.StringFlag{
+			Name:  FlagElasticsearchUsername,
+			Value: "",
+			Usage: "Username for Elasticsearch cluster",
+		},
+		cli.StringFlag{
+			Name:  FlagElasticsearchPassword,
+			Value: "",
+			Usage: "Password for Elasticsearch cluster",
 		},
 		cli.StringFlag{
 			Name:  FlagVersion,
@@ -675,7 +687,7 @@ func getESFlags(index bool) []cli.Flag {
 	if index {
 		flags = append(flags,
 			cli.StringFlag{
-				Name:  FlagIndex,
+				Name:  FlagElasticsearchIndex,
 				Usage: "Elasticsearch index name",
 			},
 		)

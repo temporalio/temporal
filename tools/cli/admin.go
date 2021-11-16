@@ -471,7 +471,7 @@ func newAdminClusterCommands() []cli.Command {
 					Required: false,
 				},
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
@@ -494,7 +494,7 @@ func newAdminClusterCommands() []cli.Command {
 			Usage:   "Remove custom search attributes metadata only (Elasticsearch index schema is not modified)",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
@@ -517,7 +517,7 @@ func newAdminClusterCommands() []cli.Command {
 					Usage: "Output in JSON format",
 				},
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
