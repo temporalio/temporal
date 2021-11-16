@@ -180,6 +180,26 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeMutableState(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeMutableState), varargs...)
 }
 
+// DescribeNamespace mocks base method.
+func (m *MockAdminServiceClient) DescribeNamespace(ctx context.Context, in *adminservice.DescribeNamespaceRequest, opts ...grpc.CallOption) (*adminservice.DescribeNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DescribeNamespace", varargs...)
+	ret0, _ := ret[0].(*adminservice.DescribeNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeNamespace indicates an expected call of DescribeNamespace.
+func (mr *MockAdminServiceClientMockRecorder) DescribeNamespace(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeNamespace", reflect.TypeOf((*MockAdminServiceClient)(nil).DescribeNamespace), varargs...)
+}
+
 // GetDLQMessages mocks base method.
 func (m *MockAdminServiceClient) GetDLQMessages(ctx context.Context, in *adminservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
@@ -651,6 +671,21 @@ func (m *MockAdminServiceServer) DescribeMutableState(arg0 context.Context, arg1
 func (mr *MockAdminServiceServerMockRecorder) DescribeMutableState(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeMutableState", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeMutableState), arg0, arg1)
+}
+
+// DescribeNamespace mocks base method.
+func (m *MockAdminServiceServer) DescribeNamespace(arg0 context.Context, arg1 *adminservice.DescribeNamespaceRequest) (*adminservice.DescribeNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeNamespace", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.DescribeNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeNamespace indicates an expected call of DescribeNamespace.
+func (mr *MockAdminServiceServerMockRecorder) DescribeNamespace(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeNamespace", reflect.TypeOf((*MockAdminServiceServer)(nil).DescribeNamespace), arg0, arg1)
 }
 
 // GetDLQMessages mocks base method.
