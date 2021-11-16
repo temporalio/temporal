@@ -95,16 +95,12 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
 	s.namespace = s.randomizeStr("integration-test-namespace")
-	s.Require().NoError(
-		s.registerNamespace(s.namespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
-	s.Require().NoError(
-		s.registerNamespace(s.testRawHistoryNamespaceName, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
-
 	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
-	s.Require().NoError(
-		s.registerNamespace(s.foreignNamespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
-
-	s.Require().NoError(s.registerArchivalNamespace())
+	s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
+	s.Require().NoError(s.registerNamespace(s.namespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+	s.Require().NoError(s.registerNamespace(s.testRawHistoryNamespaceName, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+	s.Require().NoError(s.registerNamespace(s.foreignNamespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+	s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
 
 	if clusterConfig.FrontendAddress == "" {
 		// Poke all the in-process namespace caches to refresh without waiting for the usual refresh interval.
@@ -147,12 +143,18 @@ func GetTestClusterConfig(configFile string) (*TestClusterConfig, error) {
 }
 
 func (s *IntegrationBase) tearDownSuite() {
+	s.Require().NoError(s.deleteNamespace(s.namespace))
+	s.Require().NoError(s.deleteNamespace(s.testRawHistoryNamespaceName))
+	s.Require().NoError(s.deleteNamespace(s.foreignNamespace))
+	s.Require().NoError(s.deleteNamespace(s.archivalNamespace))
+
 	if s.testCluster != nil {
 		s.testCluster.TearDownCluster()
 		s.testCluster = nil
-		s.engine = nil
-		s.adminClient = nil
 	}
+
+	s.engine = nil
+	s.adminClient = nil
 }
 
 func (s *IntegrationBase) registerNamespace(
@@ -173,6 +175,18 @@ func (s *IntegrationBase) registerNamespace(
 		HistoryArchivalUri:               historyArchivalURI,
 		VisibilityArchivalState:          visibilityArchivalState,
 		VisibilityArchivalUri:            visibilityArchivalURI,
+	})
+
+	return err
+}
+
+func (s *IntegrationBase) deleteNamespace(
+	namespace string,
+) error {
+	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
+	defer cancel()
+	_, err := s.engine.DeleteNamespace(ctx, &workflowservice.DeleteNamespaceRequest{
+		Namespace: namespace,
 	})
 
 	return err
@@ -215,14 +229,13 @@ func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.Workf
 // To register archival namespace we can't use frontend API as the retention period is set to 0 for testing,
 // and request will be rejected by frontend. Here we make a call directly to persistence to register
 // the namespace.
-func (s *IntegrationBase) registerArchivalNamespace() error {
-	s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
+func (s *IntegrationBase) registerArchivalNamespace(archivalNamespace string) error {
 	currentClusterName := s.testCluster.testBase.ClusterMetadata.GetCurrentClusterName()
 	namespaceRequest := &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:    uuid.New(),
-				Name:  s.archivalNamespace,
+				Name:  archivalNamespace,
 				State: enumspb.NAMESPACE_STATE_REGISTERED,
 			},
 			Config: &persistencespb.NamespaceConfig{
@@ -247,7 +260,7 @@ func (s *IntegrationBase) registerArchivalNamespace() error {
 	response, err := s.testCluster.testBase.MetadataManager.CreateNamespace(namespaceRequest)
 
 	s.Logger.Info("Register namespace succeeded",
-		tag.WorkflowNamespace(s.archivalNamespace),
+		tag.WorkflowNamespace(archivalNamespace),
 		tag.WorkflowNamespaceID(response.ID),
 	)
 	return err
