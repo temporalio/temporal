@@ -624,6 +624,9 @@ func (d *HandlerImpl) DeleteNamespace(
 	if err != nil {
 		return nil, err
 	}
+
+	// TODO: start workflow which will actually delete all data associated with namespace.
+
 	return &workflowservice.DeleteNamespaceResponse{}, nil
 }
 
