@@ -1170,6 +1170,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetVisibilityTasksScope:                {operation: "GetVisibilityTasks"},
 		PersistenceCompleteVisibilityTaskScope:            {operation: "CompleteVisibilityTask"},
 		PersistenceRangeCompleteVisibilityTaskScope:       {operation: "RangeCompleteVisibilityTask"},
+		PersistenceGetTieredStorageTaskScope:              {operation: "GetTieredStorageTask"},
+		PersistenceGetTieredStorageTasksScope:             {operation: "GetTieredStorageTasks"},
+		PersistenceCompleteTieredStorageTaskScope:         {operation: "CompleteTieredStorageTask"},
+		PersistenceRangeCompleteTieredStorageTaskScope:    {operation: "RangeCompleteTieredStorageTask"},
 		PersistenceGetReplicationTaskScope:                {operation: "GetReplicationTask"},
 		PersistenceGetReplicationTasksScope:               {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:           {operation: "CompleteReplicationTask"},
@@ -1421,7 +1425,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 
-		DynamicConfigScope: {operation: "DynamicConfig"},
+		DynamicConfigScope:               {operation: "DynamicConfig"},
+		TieredStorageQueueProcessorScope: {operation: "TieredStorageQueueProcessor"},
 	},
 	// Frontend Scope Names
 	Frontend: {
