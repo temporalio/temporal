@@ -236,7 +236,11 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	}
 
 	s.TaskIDGenerator = &TestTransferTaskIDGenerator{}
-	err = s.ShardMgr.CreateShard(&persistence.CreateShardRequest{ShardInfo: s.ShardInfo})
+	_, err = s.ShardMgr.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+		ShardID:          shardID,
+		InitialShardInfo: s.ShardInfo,
+		CreateIfMissing:  true,
+	})
 	s.fatalOnError("CreateShard", err)
 
 	queue, err := factory.NewNamespaceReplicationQueue()
@@ -258,14 +262,17 @@ func (s *TestBase) CreateShard(shardID int32, owner string, rangeID int64) error
 		RangeId: rangeID,
 	}
 
-	return s.ShardMgr.CreateShard(&persistence.CreateShardRequest{
-		ShardInfo: info,
+	_, err := s.ShardMgr.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+		ShardID:          shardID,
+		InitialShardInfo: info,
+		CreateIfMissing:  true,
 	})
+	return err
 }
 
 // GetShard is a utility method to get the shard using persistence layer
 func (s *TestBase) GetShard(shardID int32) (*persistencespb.ShardInfo, error) {
-	response, err := s.ShardMgr.GetShard(&persistence.GetShardRequest{
+	response, err := s.ShardMgr.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID: shardID,
 	})
 

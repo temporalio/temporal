@@ -147,10 +147,8 @@ const (
 
 	// -- Common Operation scopes --
 
-	// PersistenceCreateShardScope tracks CreateShard calls made by service to persistence layer
-	PersistenceCreateShardScope
-	// PersistenceGetShardScope tracks GetShard calls made by service to persistence layer
-	PersistenceGetShardScope
+	// PersistenceGetOrCreateShardScope tracks GetOrCreateShard calls made by service to persistence layer
+	PersistenceGetOrCreateShardScope
 	// PersistenceUpdateShardScope tracks UpdateShard calls made by service to persistence layer
 	PersistenceUpdateShardScope
 	// PersistenceCreateWorkflowExecutionScope tracks CreateWorkflowExecution calls made by service to persistence layer
@@ -1141,8 +1139,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
 		UnknownScope:                                      {operation: "Unknown"},
-		PersistenceCreateShardScope:                       {operation: "CreateShard"},
-		PersistenceGetShardScope:                          {operation: "GetShard"},
+		PersistenceGetOrCreateShardScope:                  {operation: "GetOrCreateShard"},
 		PersistenceUpdateShardScope:                       {operation: "UpdateShard"},
 		PersistenceCreateWorkflowExecutionScope:           {operation: "CreateWorkflowExecution"},
 		PersistenceGetWorkflowExecutionScope:              {operation: "GetWorkflowExecution"},

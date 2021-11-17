@@ -26,6 +26,8 @@ package persistence
 
 import (
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -53,30 +55,41 @@ func (m *shardManagerImpl) GetName() string {
 	return m.shardStore.GetName()
 }
 
-func (m *shardManagerImpl) CreateShard(request *CreateShardRequest) error {
-	shardInfo := request.ShardInfo
+func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetShardResponse, error) {
+	internalResp, err := m.shardStore.GetShard(&InternalGetShardRequest{
+		ShardID: request.ShardID,
+	})
+	if err == nil {
+		shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo, m.shardStore.GetClusterName())
+		if err != nil {
+			return nil, err
+		}
+		return &GetShardResponse{
+			ShardInfo: shardInfo,
+		}, nil
+	}
+
+	if _, ok := err.(*serviceerror.NotFound); !ok || !request.CreateIfMissing {
+		return nil, err
+	}
+
+	// Not in shard store: create it. Fill in initial shard info if missing.
+	shardInfo := request.InitialShardInfo
+	if shardInfo == nil {
+		shardInfo = &persistencespb.ShardInfo{}
+	}
+	shardInfo.ShardId = request.ShardID
 	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 	data, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
-		return err
+		return nil, err
 	}
-
 	internalRequest := &InternalCreateShardRequest{
 		ShardID:   shardInfo.GetShardId(),
 		RangeID:   shardInfo.GetRangeId(),
 		ShardInfo: data,
 	}
-	return m.shardStore.CreateShard(internalRequest)
-}
-
-func (m *shardManagerImpl) GetShard(request *GetShardRequest) (*GetShardResponse, error) {
-	internalResp, err := m.shardStore.GetShard(&InternalGetShardRequest{
-		ShardID: request.ShardID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo, m.shardStore.GetClusterName())
+	err = m.shardStore.CreateShard(internalRequest)
 	if err != nil {
 		return nil, err
 	}
