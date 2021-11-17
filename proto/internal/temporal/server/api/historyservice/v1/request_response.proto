@@ -511,6 +511,8 @@ message GenerateLastHistoryReplicationTasksResponse {
 }
 
 message GetReplicationStatusRequest {
+    // Remote cluster names to query for. If omit, will return for all remote clusters.
+    repeated string remote_clusters = 1;
 }
 
 message GetReplicationStatusResponse {
@@ -519,11 +521,14 @@ message GetReplicationStatusResponse {
 
 message ShardReplicationStatus {
     int32 shard_id = 1;
+    // Max replication task id of current cluster
     int64 max_replication_task_id = 2;
     map<string, ShardReplicationStatusPerCluster> remote_clusters = 3;
 }
 
 message ShardReplicationStatusPerCluster {
+    // Acked replication task id
     int64 acked_task_id = 1;
+    // Acked replication task creation time
     google.protobuf.Timestamp acked_task_visibility_time = 2;
 }
