@@ -509,3 +509,21 @@ message GenerateLastHistoryReplicationTasksRequest {
 
 message GenerateLastHistoryReplicationTasksResponse {
 }
+
+message GetReplicationStatusRequest {
+}
+
+message GetReplicationStatusResponse {
+    repeated ShardReplicationStatus shards = 1;
+}
+
+message ShardReplicationStatus {
+    int32 shard_id = 1;
+    int64 max_replication_task_id = 2;
+    map<string, ShardReplicationStatusPerCluster> remote_clusters = 3;
+}
+
+message ShardReplicationStatusPerCluster {
+    int64 acked_task_id = 1;
+    google.protobuf.Timestamp acked_task_visibility_time = 2;
+}

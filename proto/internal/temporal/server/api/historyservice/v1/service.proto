@@ -236,4 +236,8 @@ service HistoryService {
     // GenerateLastHistoryReplicationTasks generate a replication task for last history event for requested workflow execution
     rpc GenerateLastHistoryReplicationTasks(GenerateLastHistoryReplicationTasksRequest) returns (GenerateLastHistoryReplicationTasksResponse) {
     }
+
+    rpc GetReplicationStatus(GetReplicationStatusRequest) returns (GetReplicationStatusResponse) {
+
+    }
 }

@@ -68,6 +68,7 @@ var (
 		"SyncShardStatus":                     0,
 		"TerminateWorkflowExecution":          0,
 		"GenerateLastHistoryReplicationTasks": 0,
+		"GetReplicationStatus":                0,
 	}
 
 	APIPriorities = map[int]struct{}{

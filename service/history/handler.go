@@ -1434,6 +1434,21 @@ func (h *Handler) GenerateLastHistoryReplicationTasks(
 	return resp, nil
 }
 
+func (h *Handler) GetReplicationStatus(
+	ctx context.Context,
+	request *historyservice.GetReplicationStatusRequest,
+) (_ *historyservice.GetReplicationStatusResponse, retError error) {
+	defer log.CapturePanic(h.GetLogger(), &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	// TODO: @yiminc implement in follow up PR
+	return &historyservice.GetReplicationStatusResponse{}, nil
+}
+
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various
 // HistoryEngine API calls to ShardOwnershipLost error return by HistoryService for client to be redirected to the
 // correct shard.

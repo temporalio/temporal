@@ -383,6 +383,8 @@ const (
 	HistoryClientRefreshWorkflowTasksScope
 	// HistoryClientGenerateLastHistoryReplicationTasksScope tracks RPC calls to history service
 	HistoryClientGenerateLastHistoryReplicationTasksScope
+	// HistoryClientGetReplicationStatusScope tracks RPC calls to history service
+	HistoryClientGetReplicationStatusScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
@@ -904,6 +906,8 @@ const (
 	HistoryRefreshWorkflowTasksScope
 	// HistoryGenerateLastHistoryReplicationTasksScope is the scope used by generate last replication tasks API
 	HistoryGenerateLastHistoryReplicationTasksScope
+	// HistoryGetReplicationStatusScope is the scope used by GetReplicationStatus API
+	HistoryGetReplicationStatusScope
 	// HistoryHistoryRemoveTaskScope is the scope used by remove task API
 	HistoryHistoryRemoveTaskScope
 	// HistoryCloseShard is the scope used by close shard API
@@ -1264,6 +1268,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientMergeDLQMessagesScope:                    {operation: "HistoryClientMergeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRefreshWorkflowTasksScope:                {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGenerateLastHistoryReplicationTasksScope: {operation: "HistoryClientGenerateLastHistoryReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetReplicationStatusScope:                {operation: "HistoryClientGetReplicationStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollWorkflowTaskQueueScope:              {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollActivityTaskQueueScope:              {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                    {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
@@ -1516,6 +1521,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryReapplyEventsScope:                       {operation: "EventReapplication"},
 		HistoryRefreshWorkflowTasksScope:                {operation: "RefreshWorkflowTasks"},
 		HistoryGenerateLastHistoryReplicationTasksScope: {operation: "GenerateLastHistoryReplicationTasks"},
+		HistoryGetReplicationStatusScope:                {operation: "GetReplicationStatus"},
 		HistoryHistoryRemoveTaskScope:                   {operation: "RemoveTask"},
 		HistoryCloseShard:                               {operation: "CloseShard"},
 		HistoryGetShard:                                 {operation: "GetShard"},
