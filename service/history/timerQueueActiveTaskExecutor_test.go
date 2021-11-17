@@ -71,7 +71,7 @@ type (
 		mockTimerProcessor  *MocktimerQueueProcessor
 		mockNamespaceCache  *namespace.MockRegistry
 		mockMatchingClient  *matchingservicemock.MockMatchingServiceClient
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *persistence.MockExecutionManager

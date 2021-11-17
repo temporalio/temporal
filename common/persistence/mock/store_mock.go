@@ -581,6 +581,21 @@ func (mr *MockClusterMetadataStoreMockRecorder) GetName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetName))
 }
 
+// ListClusterMetadata mocks base method.
+func (m *MockClusterMetadataStore) ListClusterMetadata(request *persistence.InternalListClusterMetadataRequest) (*persistence.InternalListClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListClusterMetadata", request)
+	ret0, _ := ret[0].(*persistence.InternalListClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListClusterMetadata indicates an expected call of ListClusterMetadata.
+func (mr *MockClusterMetadataStoreMockRecorder) ListClusterMetadata(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).ListClusterMetadata), request)
+}
+
 // PruneClusterMembership mocks base method.
 func (m *MockClusterMetadataStore) PruneClusterMembership(request *persistence.PruneClusterMembershipRequest) error {
 	m.ctrl.T.Helper()

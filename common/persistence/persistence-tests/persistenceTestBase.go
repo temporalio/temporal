@@ -100,7 +100,7 @@ type (
 		NamespaceReplicationQueue persistence.NamespaceReplicationQueue
 		ShardInfo                 *persistencespb.ShardInfo
 		TaskIDGenerator           TransferTaskIDGenerator
-		ClusterMetadata           cluster.Metadata
+		ClusterMetadata           cluster.DynamicMetadata
 		SearchAttributesManager   searchattribute.Manager
 		ReadLevel                 int64
 		ReplicationReadLevel      int64
@@ -208,7 +208,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
-	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig)
+	s.ClusterMetadata = cluster.NewDynamicMetadataForTest(clusterMetadataConfig)
 	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
 
 	s.MetadataManager, err = factory.NewMetadataManager()

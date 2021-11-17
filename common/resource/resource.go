@@ -61,7 +61,7 @@ type (
 		GetHostName() string
 		GetHostInfo() *membership.HostInfo
 		GetArchivalMetadata() archiver.ArchivalMetadata
-		GetClusterMetadata() cluster.Metadata
+		GetClusterMetadata() cluster.DynamicMetadata
 		GetSearchAttributesProvider() searchattribute.Provider
 		GetSearchAttributesManager() searchattribute.Manager
 		GetSearchAttributesMapper() searchattribute.Mapper

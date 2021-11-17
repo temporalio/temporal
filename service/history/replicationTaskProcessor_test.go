@@ -70,7 +70,7 @@ type (
 		mockNamespaceCache          *namespace.MockRegistry
 		mockClientBean              *client.MockBean
 		mockAdminClient             *adminservicemock.MockAdminServiceClient
-		mockClusterMetadata         *cluster.MockMetadata
+		mockClusterMetadata         *cluster.MockDynamicMetadata
 		mockHistoryClient           *historyservicemock.MockHistoryServiceClient
 		mockReplicationTaskExecutor *MockreplicationTaskExecutor
 		mockReplicationTaskFetcher  *MockReplicationTaskFetcher

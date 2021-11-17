@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -85,36 +86,38 @@ const (
 
 type (
 	historyEngineImpl struct {
-		status                    int32
-		currentClusterName        string
-		shard                     shard.Context
-		timeSource                clock.TimeSource
-		workflowTaskHandler       workflowTaskHandlerCallbacks
-		clusterMetadata           cluster.Metadata
-		executionManager          persistence.ExecutionManager
-		txProcessor               transferQueueProcessor
-		timerProcessor            timerQueueProcessor
-		visibilityProcessor       visibilityQueueProcessor
-		nDCReplicator             nDCHistoryReplicator
-		nDCActivityReplicator     nDCActivityReplicator
-		replicatorProcessor       *replicatorQueueProcessorImpl
-		eventNotifier             events.Notifier
-		tokenSerializer           common.TaskTokenSerializer
-		historyCache              workflow.Cache
-		metricsClient             metrics.Client
-		logger                    log.Logger
-		throttledLogger           log.Logger
-		config                    *configs.Config
-		archivalClient            archiver.Client
-		workflowResetter          workflowResetter
-		replicationTaskProcessors []ReplicationTaskProcessor
-		publicClient              sdkclient.Client
-		eventsReapplier           nDCEventsReapplier
-		matchingClient            matchingservice.MatchingServiceClient
-		rawMatchingClient         matchingservice.MatchingServiceClient
-		replicationDLQHandler     replicationDLQHandler
-		searchAttributesValidator *searchattribute.Validator
-		searchAttributesMapper    searchattribute.Mapper
+		status                        int32
+		currentClusterName            string
+		shard                         shard.Context
+		timeSource                    clock.TimeSource
+		workflowTaskHandler           workflowTaskHandlerCallbacks
+		clusterMetadata               cluster.DynamicMetadata
+		executionManager              persistence.ExecutionManager
+		txProcessor                   transferQueueProcessor
+		timerProcessor                timerQueueProcessor
+		visibilityProcessor           visibilityQueueProcessor
+		nDCReplicator                 nDCHistoryReplicator
+		nDCActivityReplicator         nDCActivityReplicator
+		replicatorProcessor           *replicatorQueueProcessorImpl
+		eventNotifier                 events.Notifier
+		tokenSerializer               common.TaskTokenSerializer
+		historyCache                  workflow.Cache
+		metricsClient                 metrics.Client
+		logger                        log.Logger
+		throttledLogger               log.Logger
+		config                        *configs.Config
+		archivalClient                archiver.Client
+		workflowResetter              workflowResetter
+		replicationFetchers           ReplicationTaskFetchers
+		replicationTaskProcessorsLock sync.Mutex
+		replicationTaskProcessors     map[string]ReplicationTaskProcessor
+		publicClient                  sdkclient.Client
+		eventsReapplier               nDCEventsReapplier
+		matchingClient                matchingservice.MatchingServiceClient
+		rawMatchingClient             matchingservice.MatchingServiceClient
+		replicationDLQHandler         replicationDLQHandler
+		searchAttributesValidator     *searchattribute.Validator
+		searchAttributesMapper        searchattribute.Mapper
 	}
 )
 
@@ -158,9 +161,10 @@ func NewEngineWithShardContext(
 			shard.GetConfig().ArchiveRequestRPS,
 			shard.GetService().GetArchiverProvider(),
 		),
-		publicClient:      publicClient,
-		matchingClient:    matching,
-		rawMatchingClient: rawMatchingClient,
+		publicClient:              publicClient,
+		matchingClient:            matching,
+		rawMatchingClient:         rawMatchingClient,
+		replicationTaskProcessors: make(map[string]ReplicationTaskProcessor),
 	}
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
@@ -205,58 +209,7 @@ func NewEngineWithShardContext(
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 
-	var replicationTaskProcessors []ReplicationTaskProcessor
-	replicationTaskExecutors := make(map[string]replicationTaskExecutor)
-	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
-		sourceCluster := replicationTaskFetcher.GetSourceCluster()
-		// Intentionally use the raw client to create its own retry policy
-		adminClient := shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
-		adminRetryableClient := admin.NewRetryableClient(
-			adminClient,
-			common.CreateReplicationServiceBusyRetryPolicy(),
-			common.IsResourceExhausted,
-		)
-		// Intentionally use the raw client to create its own retry policy
-		historyClient := shard.GetService().GetClientBean().GetHistoryClient()
-		historyRetryableClient := history.NewRetryableClient(
-			historyClient,
-			common.CreateReplicationServiceBusyRetryPolicy(),
-			common.IsResourceExhausted,
-		)
-		nDCHistoryResender := xdc.NewNDCHistoryResender(
-			shard.GetNamespaceRegistry(),
-			adminRetryableClient,
-			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-				_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
-				return err
-			},
-			shard.GetService().GetPayloadSerializer(),
-			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-			shard.GetLogger(),
-		)
-		replicationTaskExecutor := newReplicationTaskExecutor(
-			sourceCluster,
-			shard,
-			shard.GetNamespaceRegistry(),
-			nDCHistoryResender,
-			historyEngImpl,
-			shard.GetMetricsClient(),
-			shard.GetLogger(),
-		)
-		replicationTaskExecutors[sourceCluster] = replicationTaskExecutor
-
-		replicationTaskProcessor := NewReplicationTaskProcessor(
-			shard,
-			historyEngImpl,
-			config,
-			shard.GetMetricsClient(),
-			replicationTaskFetcher,
-			replicationTaskExecutor,
-		)
-		replicationTaskProcessors = append(replicationTaskProcessors, replicationTaskProcessor)
-	}
-	historyEngImpl.replicationTaskProcessors = replicationTaskProcessors
-	replicationMessageHandler := newReplicationDLQHandler(shard, replicationTaskExecutors)
+	replicationMessageHandler := newReplicationDLQHandler(shard, nil)
 	historyEngImpl.replicationDLQHandler = replicationMessageHandler
 
 	return historyEngImpl
@@ -290,9 +243,7 @@ func (e *historyEngineImpl) Start() {
 	// queue processor need to be started.
 	e.registerNamespaceFailoverCallback()
 
-	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
-		replicationTaskProcessor.Start()
-	}
+	e.watchClusterMetadataChange()
 }
 
 // Stop the service.
@@ -314,9 +265,12 @@ func (e *historyEngineImpl) Stop() {
 		e.visibilityProcessor.Stop()
 	}
 
+	e.clusterMetadata.UnRegisterMetadataChangeCallback(fmt.Sprintf("%s-%v", common.HistoryServiceName, e.shard.GetShardID()))
+	e.replicationTaskProcessorsLock.Lock()
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Stop()
 	}
+	e.replicationTaskProcessorsLock.Unlock()
 
 	// unset the failover callback
 	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e.shard.GetShardID())
@@ -398,6 +352,71 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 			// nolint:errcheck
 			e.shard.UpdateNamespaceNotificationVersion(nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1)
+		},
+	)
+}
+
+func (e *historyEngineImpl) watchClusterMetadataChange() {
+	e.clusterMetadata.RegisterMetadataChangeCallback(
+		fmt.Sprintf("%s-%v", common.HistoryServiceName, e.shard.GetShardID()),
+		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
+			e.replicationTaskProcessorsLock.Lock()
+			defer e.replicationTaskProcessorsLock.Unlock()
+
+			for clusterName := range newClusterMetadata {
+				if clusterName == e.currentClusterName {
+					continue
+				}
+				if processor, ok := e.replicationTaskProcessors[clusterName]; ok {
+					processor.Stop()
+					delete(e.replicationTaskProcessors, clusterName)
+				}
+				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+					fetcher := e.replicationFetchers.GetOrCreateFetcher(clusterName)
+					adminClient := e.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName)
+					adminRetryableClient := admin.NewRetryableClient(
+						adminClient,
+						common.CreateReplicationServiceBusyRetryPolicy(),
+						common.IsResourceExhausted,
+					)
+					// Intentionally use the raw client to create its own retry policy
+					historyClient := e.shard.GetService().GetClientBean().GetHistoryClient()
+					historyRetryableClient := history.NewRetryableClient(
+						historyClient,
+						common.CreateReplicationServiceBusyRetryPolicy(),
+						common.IsResourceExhausted,
+					)
+					nDCHistoryResender := xdc.NewNDCHistoryResender(
+						e.shard.GetNamespaceRegistry(),
+						adminRetryableClient,
+						func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+							_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
+							return err
+						},
+						e.shard.GetService().GetPayloadSerializer(),
+						e.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
+						e.shard.GetLogger(),
+					)
+					replicationTaskExecutor := newReplicationTaskExecutor(
+						e.shard,
+						e.shard.GetNamespaceRegistry(),
+						nDCHistoryResender,
+						e,
+						e.shard.GetMetricsClient(),
+						e.shard.GetLogger(),
+					)
+					replicationTaskProcessor := NewReplicationTaskProcessor(
+						e.shard,
+						e,
+						e.config,
+						e.shard.GetMetricsClient(),
+						fetcher,
+						replicationTaskExecutor,
+					)
+					replicationTaskProcessor.Start()
+					e.replicationTaskProcessors[clusterName] = replicationTaskProcessor
+				}
+			}
 		},
 	)
 }

@@ -84,7 +84,7 @@ type (
 		hostName        string
 		hostInfo        *membership.HostInfo
 		metricsScope    tally.Scope
-		clusterMetadata cluster.Metadata
+		clusterMetadata cluster.DynamicMetadata
 		saProvider      searchattribute.Provider
 		saManager       searchattribute.Manager
 		saMapper        searchattribute.Mapper
@@ -193,12 +193,14 @@ func New(
 		return nil, err
 	}
 
-	clusterMetadata := cluster.NewMetadata(
+	clusterMetadata := cluster.NewDynamicMetadata(
 		params.ClusterMetadataConfig.EnableGlobalNamespace,
 		params.ClusterMetadataConfig.FailoverVersionIncrement,
 		params.ClusterMetadataConfig.MasterClusterName,
 		params.ClusterMetadataConfig.CurrentClusterName,
 		params.ClusterMetadataConfig.ClusterInformation,
+		persistenceBean.GetClusterMetadataManager(),
+		logger,
 	)
 
 	membershipFactory, err := params.MembershipFactoryInitializer(persistenceBean, logger)
@@ -373,7 +375,7 @@ func New(
 	return impl, nil
 }
 
-// Start start all resources
+// Start starts all resources
 func (h *Impl) Start() {
 
 	if !atomic.CompareAndSwapInt32(
@@ -387,6 +389,7 @@ func (h *Impl) Start() {
 	h.metricsScope.Counter(metrics.RestartCount).Inc(1)
 	h.runtimeMetricsReporter.Start()
 
+	h.clusterMetadata.Start()
 	h.membershipMonitor.Start()
 	h.namespaceRegistry.Start()
 
@@ -415,6 +418,7 @@ func (h *Impl) Stop() {
 
 	h.namespaceRegistry.Stop()
 	h.membershipMonitor.Stop()
+	h.clusterMetadata.Stop()
 	h.ringpopChannel.Close()
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
@@ -436,7 +440,7 @@ func (h *Impl) GetHostInfo() *membership.HostInfo {
 }
 
 // GetClusterMetadata return cluster metadata
-func (h *Impl) GetClusterMetadata() cluster.Metadata {
+func (h *Impl) GetClusterMetadata() cluster.DynamicMetadata {
 	return h.clusterMetadata
 }
 

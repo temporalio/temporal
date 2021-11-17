@@ -77,9 +77,9 @@ var Module = fx.Options(
 	fx.Provide(MetricsScopeProvider),
 	fx.Provide(HostNameProvider),
 	fx.Provide(ServiceNameProvider),
-	fx.Provide(cluster.NewMetadataFromConfig),
 	fx.Provide(TimeSourceProvider),
 	fx.Provide(ClusterMetadataManagerProvider),
+	fx.Provide(cluster.NewDynamicMetadataFromConfig),
 	fx.Provide(PersistenceServiceResolverProvider),
 	fx.Provide(AbstractDatastoreFactoryProvider),
 	fx.Provide(MetricsClientProvider),
@@ -189,7 +189,7 @@ func MetadataManagerProvider(factory persistenceClient.Factory) (persistence.Met
 func NamespaceCacheProvider(
 	logger SnTaggedLogger,
 	metricsClient metrics.Client,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	metadataManager persistence.MetadataManager,
 ) namespace.Registry {
 	return namespace.NewRegistry(
@@ -224,7 +224,7 @@ func ClientBeanProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
 	logger SnTaggedLogger,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 ) (client.Bean, error) {
 	return client.NewClientBean(
 		factoryProvider.NewFactory(
@@ -293,7 +293,7 @@ func RuntimeMetricsReporterProvider(
 func VisibilityBootstrapContainerProvider(
 	logger SnTaggedLogger,
 	metricsClient metrics.Client,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 ) *archiver.VisibilityBootstrapContainer {
 	return &archiver.VisibilityBootstrapContainer{
 		Logger:          logger,
@@ -311,7 +311,7 @@ func PersistenceExecutionManagerProvider(
 func HistoryBootstrapContainerProvider(
 	logger SnTaggedLogger,
 	metricsClient metrics.Client,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	executionManager persistence.ExecutionManager,
 ) *archiver.HistoryBootstrapContainer {
 	return &archiver.HistoryBootstrapContainer{
@@ -340,7 +340,7 @@ func NewFromDI(
 	svcName ServiceName,
 	metricsScope tally.Scope,
 	hostName HostName,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	saMapper searchattribute.Mapper,

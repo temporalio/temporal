@@ -65,7 +65,7 @@ type (
 		mockNamespaceCache  *namespace.MockRegistry
 		mockTaskGenerator   *MockTaskGenerator
 		mockMutableState    *MockMutableState
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 
 		mockTaskGeneratorForNew *MockTaskGenerator
 

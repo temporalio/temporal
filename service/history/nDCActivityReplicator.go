@@ -66,7 +66,7 @@ type (
 
 	nDCActivityReplicatorImpl struct {
 		historyCache    workflow.Cache
-		clusterMetadata cluster.Metadata
+		clusterMetadata cluster.DynamicMetadata
 		logger          log.Logger
 	}
 )

@@ -171,7 +171,7 @@ type (
 		QueryRegistry       QueryRegistry
 
 		shard           shard.Context
-		clusterMetadata cluster.Metadata
+		clusterMetadata cluster.DynamicMetadata
 		eventsCache     events.Cache
 		config          *configs.Config
 		timeSource      clock.TimeSource

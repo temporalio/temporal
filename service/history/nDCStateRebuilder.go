@@ -68,7 +68,7 @@ type (
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
 		eventsCache       events.Cache
-		clusterMetadata   cluster.Metadata
+		clusterMetadata   cluster.DynamicMetadata
 		executionMgr      persistence.ExecutionManager
 		taskRefresher     workflow.TaskRefresher
 

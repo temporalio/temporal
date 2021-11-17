@@ -214,10 +214,10 @@ func (mr *MockContextMockRecorder) GetAllTransferFailoverLevels() *gomock.Call {
 }
 
 // GetClusterMetadata mocks base method.
-func (m *MockContext) GetClusterMetadata() cluster.Metadata {
+func (m *MockContext) GetClusterMetadata() cluster.DynamicMetadata {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetClusterMetadata")
-	ret0, _ := ret[0].(cluster.Metadata)
+	ret0, _ := ret[0].(cluster.DynamicMetadata)
 	return ret0
 }
 

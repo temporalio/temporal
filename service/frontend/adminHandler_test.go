@@ -78,7 +78,7 @@ type (
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
 		mockClientFactory          *clientmocks.MockFactory
 		mockAdminClient            *adminservicemock.MockAdminServiceClient
-		mockMetadata               *cluster.MockMetadata
+		mockMetadata               *cluster.MockDynamicMetadata
 
 		namespace   namespace.Name
 		namespaceID namespace.ID

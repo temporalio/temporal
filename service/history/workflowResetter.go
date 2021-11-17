@@ -80,7 +80,7 @@ type (
 	workflowResetterImpl struct {
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
-		clusterMetadata   cluster.Metadata
+		clusterMetadata   cluster.DynamicMetadata
 		executionMgr      persistence.ExecutionManager
 		historyCache      workflow.Cache
 		newStateRebuilder nDCStateRebuilderProvider

@@ -94,7 +94,7 @@ type (
 		maxBadBinaryCount      dynamicconfig.IntPropertyFnWithNamespaceFilter
 		logger                 log.Logger
 		metadataMgr            persistence.MetadataManager
-		clusterMetadata        cluster.Metadata
+		clusterMetadata        cluster.DynamicMetadata
 		namespaceReplicator    Replicator
 		namespaceAttrValidator *AttrValidatorImpl
 		archivalMetadata       archiver.ArchivalMetadata
@@ -109,7 +109,7 @@ func NewHandler(
 	maxBadBinaryCount dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	namespaceReplicator Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,

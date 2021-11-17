@@ -59,7 +59,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 		mockNamespaceCache  *namespace.MockRegistry
 		mockAdminClient     *adminservicemock.MockAdminServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
@@ -90,7 +90,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClusterMetadata = cluster.NewMockDynamicMetadata(s.controller)
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)

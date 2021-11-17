@@ -54,7 +54,7 @@ type (
 		mockNamespaceCache  *namespace.MockRegistry
 		mockContext         *workflow.MockContext
 		mockMutableState    *workflow.MockMutableState
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 
 		namespaceID string
 		workflowID  string
@@ -74,7 +74,7 @@ func (s *nDCWorkflowSuite) SetupTest() {
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 	s.mockContext = workflow.NewMockContext(s.controller)
 	s.mockMutableState = workflow.NewMockMutableState(s.controller)
-	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClusterMetadata = cluster.NewMockDynamicMetadata(s.controller)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.namespaceID = uuid.New()

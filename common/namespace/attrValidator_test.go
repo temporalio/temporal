@@ -40,7 +40,7 @@ type (
 		suite.Suite
 
 		controller          *gomock.Controller
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 
 		validator *AttrValidatorImpl
 	}
@@ -59,7 +59,7 @@ func (s *attrValidatorSuite) TearDownSuite() {
 
 func (s *attrValidatorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
-	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClusterMetadata = cluster.NewMockDynamicMetadata(s.controller)
 
 	s.validator = newAttrValidator(s.mockClusterMetadata)
 }

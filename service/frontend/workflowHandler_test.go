@@ -87,7 +87,7 @@ type (
 		mockResource                 *resource.Test
 		mockNamespaceCache           *namespace.MockRegistry
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata          *cluster.MockMetadata
+		mockClusterMetadata          *cluster.MockDynamicMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
 		mockSearchAttributesMapper   *searchattribute.MockMapper
 		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient

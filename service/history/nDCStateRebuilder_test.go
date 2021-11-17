@@ -66,7 +66,7 @@ type (
 		mockEventsCache     *events.MockCache
 		mockTaskRefresher   *workflow.MockTaskRefresher
 		mockNamespaceCache  *namespace.MockRegistry
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 
 		mockExecutionManager *persistence.MockExecutionManager
 		logger               log.Logger

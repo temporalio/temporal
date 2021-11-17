@@ -43,6 +43,50 @@ type sqlClusterMetadataManager struct {
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
+func (s *sqlClusterMetadataManager) ListClusterMetadata(
+	request *p.InternalListClusterMetadataRequest,
+) (*p.InternalListClusterMetadataResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	var clusterName string
+	if request.NextPageToken != nil {
+		err := gobDeserialize(request.NextPageToken, &clusterName)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing page token: %v", err))
+		}
+	}
+
+	rows, err := s.Db.ListClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: clusterName, PageSize: &request.PageSize})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return &p.InternalListClusterMetadataResponse{}, nil
+		}
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClusterMetadata operation failed. Failed to get cluster metadata rows. Error: %v", err))
+	}
+
+	var clusterMetadata []*p.InternalGetClusterMetadataResponse
+	for _, row := range rows {
+		resp := &p.InternalGetClusterMetadataResponse{
+			ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
+			Version:         row.Version,
+		}
+		if err != nil {
+			return nil, err
+		}
+		clusterMetadata = append(clusterMetadata, resp)
+	}
+
+	resp := &p.InternalListClusterMetadataResponse{ClusterMetadata: clusterMetadata}
+	if len(rows) >= request.PageSize {
+		nextPageToken, err := gobSerialize(rows[len(rows)-1].ClusterName)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("error serializing page token: %v", err))
+		}
+		resp.NextPageToken = nextPageToken
+	}
+	return resp, nil
+}
+
 func (s *sqlClusterMetadataManager) GetClusterMetadata(
 	request *p.InternalGetClusterMetadataRequest,
 ) (*p.InternalGetClusterMetadataResponse, error) {

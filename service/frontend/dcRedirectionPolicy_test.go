@@ -56,7 +56,7 @@ type (
 		*require.Assertions
 
 		controller          *gomock.Controller
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 		mockNamespaceCache  *namespace.MockRegistry
 
 		namespace              namespace.Name
@@ -128,7 +128,7 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClusterMetadata = cluster.NewMockDynamicMetadata(s.controller)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 
 	s.namespace = "some random namespace name"

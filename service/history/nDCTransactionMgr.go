@@ -157,7 +157,7 @@ type (
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
 		historyCache      workflow.Cache
-		clusterMetadata   cluster.Metadata
+		clusterMetadata   cluster.DynamicMetadata
 		executionManager  persistence.ExecutionManager
 		serializer        serialization.Serializer
 		metricsClient     metrics.Client

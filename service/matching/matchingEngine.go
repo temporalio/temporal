@@ -94,7 +94,7 @@ type (
 		lockableQueryTaskMap lockableQueryTaskMap
 		namespaceRegistry    namespace.Registry
 		keyResolver          membership.ServiceResolver
-		clusterMeta          cluster.Metadata
+		clusterMeta          cluster.DynamicMetadata
 	}
 )
 
@@ -125,7 +125,7 @@ func NewEngine(taskManager persistence.TaskManager,
 	metricsClient metrics.Client,
 	namespaceRegistry namespace.Registry,
 	resolver membership.ServiceResolver,
-	clusterMeta cluster.Metadata,
+	clusterMeta cluster.DynamicMetadata,
 ) Engine {
 
 	return &matchingEngineImpl{

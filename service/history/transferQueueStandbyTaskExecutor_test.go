@@ -72,7 +72,7 @@ type (
 		controller             *gomock.Controller
 		mockShard              *shard.ContextTest
 		mockNamespaceCache     *namespace.MockRegistry
-		mockClusterMetadata    *cluster.MockMetadata
+		mockClusterMetadata    *cluster.MockDynamicMetadata
 		mockAdminClient        *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender *xdc.MockNDCHistoryResender
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient

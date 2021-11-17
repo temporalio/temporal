@@ -60,7 +60,7 @@ type (
 	nDCBranchMgrImpl struct {
 		shard             shard.Context
 		namespaceRegistry namespace.Registry
-		clusterMetadata   cluster.Metadata
+		clusterMetadata   cluster.DynamicMetadata
 		executionMgr      persistence.ExecutionManager
 
 		context      workflow.Context

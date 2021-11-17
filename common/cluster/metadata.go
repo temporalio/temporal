@@ -33,28 +33,28 @@ import (
 )
 
 type (
-	// Metadata provides information about clusters
-	Metadata interface {
-		// IsGlobalNamespaceEnabled whether the global namespace is enabled,
-		// this attr should be discarded when cross DC is made public
-		IsGlobalNamespaceEnabled() bool
-		// IsMasterCluster whether current cluster is master cluster
-		IsMasterCluster() bool
-		// GetNextFailoverVersion return the next failover version for namespace failover
-		GetNextFailoverVersion(string, int64) int64
-		// IsVersionFromSameCluster return true if 2 version are used for the same cluster
-		IsVersionFromSameCluster(version1 int64, version2 int64) bool
-		// GetMasterClusterName return the master cluster name
-		GetMasterClusterName() string
-		// GetCurrentClusterName return the current cluster name
-		GetCurrentClusterName() string
-		// GetAllClusterInfo return the all cluster name -> corresponding info
-		GetAllClusterInfo() map[string]ClusterInformation
-		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
-		ClusterNameForFailoverVersion(failoverVersion int64) string
-		// GetFailoverVersionIncrement return the Failover version increment value
-		GetFailoverVersionIncrement() int64
-	}
+	//// Metadata provides information about clusters
+	//Metadata interface {
+	//	// IsGlobalNamespaceEnabled whether the global namespace is enabled,
+	//	// this attr should be discarded when cross DC is made public
+	//	IsGlobalNamespaceEnabled() bool
+	//	// IsMasterCluster whether current cluster is master cluster
+	//	IsMasterCluster() bool
+	//	// GetNextFailoverVersion return the next failover version for namespace failover
+	//	GetNextFailoverVersion(string, int64) int64
+	//	// IsVersionFromSameCluster return true if 2 version are used for the same cluster
+	//	IsVersionFromSameCluster(version1 int64, version2 int64) bool
+	//	// GetMasterClusterName return the master cluster name
+	//	GetMasterClusterName() string
+	//	// GetCurrentClusterName return the current cluster name
+	//	GetCurrentClusterName() string
+	//	// GetAllClusterInfo return the all cluster name -> corresponding info
+	//	GetAllClusterInfo() map[string]ClusterInformation
+	//	// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
+	//	ClusterNameForFailoverVersion(failoverVersion int64) string
+	//	// GetFailoverVersionIncrement return the Failover version increment value
+	//	GetFailoverVersionIncrement() int64
+	//}
 
 	metadataImpl struct {
 		// EnableGlobalNamespace whether the global namespace is enabled,
@@ -71,97 +71,75 @@ type (
 		// versionToClusterName contains all initial version -> corresponding cluster name
 		versionToClusterName map[int64]string
 	}
-
-	// ClusterMetadata contains the all cluster which participated in cross DC
-	Config struct {
-		EnableGlobalNamespace bool `yaml:"enableGlobalNamespace"`
-		// FailoverVersionIncrement is the increment of each cluster version when failover happens
-		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
-		// MasterClusterName is the master cluster name, only the master cluster can register / update namespace
-		// all clusters can do namespace failover
-		MasterClusterName string `yaml:"masterClusterName"`
-		// CurrentClusterName is the name of the current cluster
-		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterInformation contains all cluster names to corresponding information about that cluster
-		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
-	}
-
-	// ClusterInformation contains the information about each cluster which participated in cross DC
-	ClusterInformation struct {
-		Enabled                bool  `yaml:"enabled"`
-		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
-		// Address indicate the remote service address(Host:Port). Host can be DNS name.
-		RPCAddress string `yaml:"rpcAddress"`
-	}
 )
 
 // NewMetadata create a new instance of Metadata
-func NewMetadata(
-	enableGlobalNamespace bool,
-	failoverVersionIncrement int64,
-	masterClusterName string,
-	currentClusterName string,
-	clusterInfo map[string]ClusterInformation,
-) Metadata {
+//func NewMetadata(
+//	enableGlobalNamespace bool,
+//	failoverVersionIncrement int64,
+//	masterClusterName string,
+//	currentClusterName string,
+//	clusterInfo map[string]ClusterInformation,
+//) Metadata {
+//
+//	if len(clusterInfo) == 0 {
+//		panic("Empty cluster information")
+//	} else if len(masterClusterName) == 0 {
+//		panic("Master cluster name is empty")
+//	} else if len(currentClusterName) == 0 {
+//		panic("Current cluster name is empty")
+//	} else if failoverVersionIncrement == 0 {
+//		panic("Version increment is 0")
+//	}
+//
+//	versionToClusterName := make(map[int64]string)
+//	for clusterName, info := range clusterInfo {
+//		if failoverVersionIncrement <= info.InitialFailoverVersion || info.InitialFailoverVersion <= 0 {
+//			panic(fmt.Sprintf(
+//				"Version increment %v is smaller than initial version: %v.",
+//				failoverVersionIncrement,
+//				info.InitialFailoverVersion,
+//			))
+//		}
+//		if len(clusterName) == 0 {
+//			panic("Cluster name in all cluster names is empty")
+//		}
+//		versionToClusterName[info.InitialFailoverVersion] = clusterName
+//
+//		if info.Enabled && info.RPCAddress == "" {
+//			panic(fmt.Sprintf("Cluster %v: RPCAddress is empty", clusterName))
+//		}
+//	}
+//
+//	if _, ok := clusterInfo[currentClusterName]; !ok {
+//		panic("Current cluster is not specified in cluster info")
+//	}
+//	if _, ok := clusterInfo[masterClusterName]; !ok {
+//		panic("Master cluster is not specified in cluster info")
+//	}
+//	if len(versionToClusterName) != len(clusterInfo) {
+//		panic("Cluster info initial versions have duplicates")
+//	}
 
-	if len(clusterInfo) == 0 {
-		panic("Empty cluster information")
-	} else if len(masterClusterName) == 0 {
-		panic("Master cluster name is empty")
-	} else if len(currentClusterName) == 0 {
-		panic("Current cluster name is empty")
-	} else if failoverVersionIncrement == 0 {
-		panic("Version increment is 0")
-	}
-
-	versionToClusterName := make(map[int64]string)
-	for clusterName, info := range clusterInfo {
-		if failoverVersionIncrement <= info.InitialFailoverVersion || info.InitialFailoverVersion <= 0 {
-			panic(fmt.Sprintf(
-				"Version increment %v is smaller than initial version: %v.",
-				failoverVersionIncrement,
-				info.InitialFailoverVersion,
-			))
-		}
-		if len(clusterName) == 0 {
-			panic("Cluster name in all cluster names is empty")
-		}
-		versionToClusterName[info.InitialFailoverVersion] = clusterName
-
-		if info.Enabled && info.RPCAddress == "" {
-			panic(fmt.Sprintf("Cluster %v: RPCAddress is empty", clusterName))
-		}
-	}
-
-	if _, ok := clusterInfo[currentClusterName]; !ok {
-		panic("Current cluster is not specified in cluster info")
-	}
-	if _, ok := clusterInfo[masterClusterName]; !ok {
-		panic("Master cluster is not specified in cluster info")
-	}
-	if len(versionToClusterName) != len(clusterInfo) {
-		panic("Cluster info initial versions have duplicates")
-	}
-
-	return &metadataImpl{
-		enableGlobalNamespace:    enableGlobalNamespace,
-		failoverVersionIncrement: failoverVersionIncrement,
-		masterClusterName:        masterClusterName,
-		currentClusterName:       currentClusterName,
-		clusterInfo:              clusterInfo,
-		versionToClusterName:     versionToClusterName,
-	}
-}
-
-func NewMetadataFromConfig(config *Config) Metadata {
-	return NewMetadata(
-		config.EnableGlobalNamespace,
-		config.FailoverVersionIncrement,
-		config.MasterClusterName,
-		config.CurrentClusterName,
-		config.ClusterInformation,
-	)
-}
+//	return &metadataImpl{
+//		enableGlobalNamespace:    enableGlobalNamespace,
+//		failoverVersionIncrement: failoverVersionIncrement,
+//		masterClusterName:        masterClusterName,
+//		currentClusterName:       currentClusterName,
+//		clusterInfo:              clusterInfo,
+//		versionToClusterName:     versionToClusterName,
+//	}
+//}
+//
+//func NewMetadataFromConfig(config *Config) Metadata {
+//	return NewMetadata(
+//		config.EnableGlobalNamespace,
+//		config.FailoverVersionIncrement,
+//		config.MasterClusterName,
+//		config.CurrentClusterName,
+//		config.ClusterInformation,
+//	)
+//}
 
 // IsGlobalNamespaceEnabled whether the global namespace is enabled,
 // this attr should be discarded when cross DC is made public

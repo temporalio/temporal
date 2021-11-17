@@ -56,7 +56,7 @@ type (
 		mockNamespaceCache *namespace.MockRegistry
 		namespaceEntry     *namespace.Namespace
 
-		mockClusterMetadata  *cluster.MockMetadata
+		mockClusterMetadata  *cluster.MockDynamicMetadata
 		mockExecutionManager *persistence.MockExecutionManager
 		mockHistoryEngine    *MockEngine
 	}

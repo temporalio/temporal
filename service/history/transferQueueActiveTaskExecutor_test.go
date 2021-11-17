@@ -92,7 +92,7 @@ type (
 		mockNamespaceCache           *namespace.MockRegistry
 		mockMatchingClient           *matchingservicemock.MockMatchingServiceClient
 		mockHistoryClient            *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata          *cluster.MockMetadata
+		mockClusterMetadata          *cluster.MockDynamicMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
 
 		mockExecutionMgr            *persistence.MockExecutionManager

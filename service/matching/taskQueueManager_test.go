@@ -314,7 +314,7 @@ func createTestTaskQueueManagerWithConfig(
 	tm := newTestTaskManager(logger)
 	mockNamespaceCache := namespace.NewMockRegistry(controller)
 	mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(&namespace.Namespace{}, nil).AnyTimes()
-	cmeta := cluster.NewMetadataFromConfig(cluster.NewTestClusterMetadataConfig(false, true))
+	cmeta := cluster.NewDynamicMetadataForTest(cluster.NewTestClusterMetadataConfig(false, true))
 	me := newMatchingEngine(cfg, tm, nil, logger, mockNamespaceCache)
 	tl := "tq"
 	dID := namespace.ID("deadbeef-0000-4567-890a-bcdef0123456")

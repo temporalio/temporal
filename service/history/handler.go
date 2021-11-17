@@ -146,7 +146,7 @@ func (h *Handler) Start() {
 		h.config,
 	)
 	h.eventNotifier = events.NewNotifier(h.GetTimeSource(), h.GetMetricsClient(), h.config.GetShardID)
-	// events notifier must starts before controller
+	// events notifier must start before controller
 	h.eventNotifier.Start()
 	h.controller.Start()
 

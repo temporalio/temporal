@@ -131,7 +131,7 @@ type (
 		outstandingPollsLock sync.Mutex
 		outstandingPollsMap  map[string]context.CancelFunc
 		signalFatalProblem   func(taskQueueManager)
-		clusterMeta          cluster.Metadata
+		clusterMeta          cluster.DynamicMetadata
 	}
 )
 
@@ -150,7 +150,7 @@ func newTaskQueueManager(
 	taskQueue *taskQueueID,
 	taskQueueKind enumspb.TaskQueueKind,
 	config *Config,
-	clusterMeta cluster.Metadata,
+	clusterMeta cluster.DynamicMetadata,
 	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
 

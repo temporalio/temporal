@@ -37,13 +37,13 @@ import (
 type (
 	// AttrValidatorImpl is namespace attr validator
 	AttrValidatorImpl struct {
-		clusterMetadata cluster.Metadata
+		clusterMetadata cluster.DynamicMetadata
 	}
 )
 
 // newAttrValidator create a new namespace attr validator
 func newAttrValidator(
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 ) *AttrValidatorImpl {
 
 	return &AttrValidatorImpl{

@@ -56,7 +56,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 
 		mockExecutionMgr *persistence.MockExecutionManager
 		mockShardMgr     *persistence.MockShardManager
@@ -72,7 +72,7 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 
 		mockExecutionMgr *persistence.MockExecutionManager
 		mockShardMgr     *persistence.MockShardManager

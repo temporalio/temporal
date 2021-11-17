@@ -74,7 +74,7 @@ type (
 		mockReplicationProcessor *MockReplicatorQueueProcessor
 		mockTimerProcessor       *MocktimerQueueProcessor
 		mockNamespaceCache       *namespace.MockRegistry
-		mockClusterMetadata      *cluster.MockMetadata
+		mockClusterMetadata      *cluster.MockDynamicMetadata
 		mockAdminClient          *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
 

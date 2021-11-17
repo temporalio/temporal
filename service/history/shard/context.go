@@ -49,7 +49,7 @@ type (
 		GetService() resource.Resource
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
-		GetClusterMetadata() cluster.Metadata
+		GetClusterMetadata() cluster.DynamicMetadata
 		GetConfig() *configs.Config
 		GetEventsCache() events.Cache
 		GetLogger() log.Logger

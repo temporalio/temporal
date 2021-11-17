@@ -112,6 +112,10 @@ func (p *namespaceReplicationMessageProcessor) Start() {
 	go p.processorLoop()
 }
 
+func (p *namespaceReplicationMessageProcessor) Stop() {
+	close(p.done)
+}
+
 func (p *namespaceReplicationMessageProcessor) processorLoop() {
 	timer := time.NewTimer(getWaitDuration())
 
@@ -210,10 +214,6 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	defer sw.Stop()
 
 	return p.taskExecutor.Execute(task.GetNamespaceTaskAttributes())
-}
-
-func (p *namespaceReplicationMessageProcessor) Stop() {
-	close(p.done)
 }
 
 func getWaitDuration() time.Duration {

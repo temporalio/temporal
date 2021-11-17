@@ -61,7 +61,7 @@ type (
 		mockUpdateMgr        *MocknDCTransactionMgrForExistingWorkflow
 		mockEventsReapplier  *MocknDCEventsReapplier
 		mockWorkflowResetter *MockworkflowResetter
-		mockClusterMetadata  *cluster.MockMetadata
+		mockClusterMetadata  *cluster.MockDynamicMetadata
 
 		mockExecutionMgr *persistence.MockExecutionManager
 

@@ -57,7 +57,7 @@ type (
 		mockShard           *shard.ContextTest
 		mockContext         *workflow.MockContext
 		mockMutableState    *workflow.MockMutableState
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 
 		mockExecutionManager *persistence.MockExecutionManager
 

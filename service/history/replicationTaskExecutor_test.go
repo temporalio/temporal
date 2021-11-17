@@ -69,7 +69,7 @@ type (
 		mockNamespaceCache *namespace.MockRegistry
 		mockClientBean     *client.MockBean
 		adminClient        *adminservicemock.MockAdminServiceClient
-		clusterMetadata    *cluster.MockMetadata
+		clusterMetadata    *cluster.MockDynamicMetadata
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskHandler *replicationTaskExecutorImpl
@@ -121,7 +121,6 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.replicationTaskHandler = newReplicationTaskExecutor(
-		s.currentCluster,
 		s.mockShard,
 		s.mockNamespaceCache,
 		s.nDCHistoryResender,

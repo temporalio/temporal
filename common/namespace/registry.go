@@ -68,10 +68,6 @@ const (
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
 	CacheRefreshPageSize             = 200
-
-	cacheInitialized int32 = 0
-	cacheStarted     int32 = 1
-	cacheStopped     int32 = 2
 )
 
 const (

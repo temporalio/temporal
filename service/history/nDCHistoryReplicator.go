@@ -102,7 +102,7 @@ type (
 
 	nDCHistoryReplicatorImpl struct {
 		shard             shard.Context
-		clusterMetadata   cluster.Metadata
+		clusterMetadata   cluster.DynamicMetadata
 		executionMgr      persistence.ExecutionManager
 		historySerializer serialization.Serializer
 		metricsClient     metrics.Client

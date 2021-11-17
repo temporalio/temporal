@@ -1106,6 +1106,21 @@ func (c *clusterMetadataPersistenceClient) Close() {
 	c.persistence.Close()
 }
 
+func (c *clusterMetadataPersistenceClient) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
+	//This is a wrapper of GetClusterMetadata API, use the same scope here
+	c.metricClient.IncCounter(metrics.PersistenceListClusterMetadataScope, metrics.PersistenceRequests)
+
+	sw := c.metricClient.StartTimer(metrics.PersistenceListClusterMetadataScope, metrics.PersistenceLatency)
+	result, err := c.persistence.ListClusterMetadata(request)
+	sw.Stop()
+
+	if err != nil {
+		c.metricClient.IncCounter(metrics.PersistenceListClusterMetadataScope, metrics.PersistenceFailures)
+	}
+
+	return result, err
+}
+
 func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
 	//This is a wrapper of GetClusterMetadata API, use the same scope here
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)

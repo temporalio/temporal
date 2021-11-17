@@ -25,6 +25,7 @@
 package replicator
 
 import (
+	"sync"
 	"sync/atomic"
 
 	"go.temporal.io/server/client"
@@ -42,10 +43,11 @@ type (
 	// Replicator is the processor for replication tasks
 	Replicator struct {
 		status                           int32
-		clusterMetadata                  cluster.Metadata
+		clusterMetadata                  cluster.DynamicMetadata
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 		clientBean                       client.Bean
-		namespaceProcessors              []*namespaceReplicationMessageProcessor
+		namespaceProcessorsLock          sync.Mutex
+		namespaceProcessors              map[string]*namespaceReplicationMessageProcessor
 		logger                           log.Logger
 		metricsClient                    metrics.Client
 		hostInfo                         *membership.HostInfo
@@ -60,7 +62,7 @@ type (
 
 // NewReplicator creates a new replicator for processing replication tasks
 func NewReplicator(
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	clientBean client.Bean,
 	logger log.Logger,
 	metricsClient metrics.Client,
@@ -71,39 +73,19 @@ func NewReplicator(
 ) *Replicator {
 
 	logger = log.With(logger, tag.ComponentReplicator)
-	var namespaceReplicationMessageProcessors []*namespaceReplicationMessageProcessor
-	currentClusterName := clusterMetadata.GetCurrentClusterName()
-	for targetClusterName, info := range clusterMetadata.GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-
-		if targetClusterName != currentClusterName {
-			namespaceReplicationMessageProcessors = append(namespaceReplicationMessageProcessors, newNamespaceReplicationMessageProcessor(
-				currentClusterName,
-				targetClusterName,
-				log.With(logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(targetClusterName)),
-				clientBean.GetRemoteAdminClient(targetClusterName),
-				metricsClient,
-				namespaceReplicationTaskExecutor,
-				hostInfo,
-				serviceResolver,
-				namespaceReplicationQueue,
-			))
-		}
-	}
-	return &Replicator{
+	replicator := &Replicator{
 		status:                           common.DaemonStatusInitialized,
 		hostInfo:                         hostInfo,
 		serviceResolver:                  serviceResolver,
 		clusterMetadata:                  clusterMetadata,
 		namespaceReplicationTaskExecutor: namespaceReplicationTaskExecutor,
-		namespaceProcessors:              namespaceReplicationMessageProcessors,
+		namespaceProcessors:              make(map[string]*namespaceReplicationMessageProcessor),
 		clientBean:                       clientBean,
 		logger:                           logger,
 		metricsClient:                    metricsClient,
 		namespaceReplicationQueue:        namespaceReplicationQueue,
 	}
+	return replicator
 }
 
 // Start is called to start replicator
@@ -115,10 +97,7 @@ func (r *Replicator) Start() {
 	) {
 		return
 	}
-
-	for _, namespaceProcessor := range r.namespaceProcessors {
-		namespaceProcessor.Start()
-	}
+	r.watchClusterMetadataChange()
 }
 
 // Stop is called to stop replicator
@@ -131,7 +110,50 @@ func (r *Replicator) Stop() {
 		return
 	}
 
+	currentClusterName := r.clusterMetadata.GetCurrentClusterName()
+	r.clusterMetadata.UnRegisterMetadataChangeCallback(currentClusterName)
+
+	r.namespaceProcessorsLock.Lock()
+	defer r.namespaceProcessorsLock.Unlock()
 	for _, namespaceProcessor := range r.namespaceProcessors {
 		namespaceProcessor.Stop()
 	}
+}
+
+func (r *Replicator) watchClusterMetadataChange() {
+	currentClusterName := r.clusterMetadata.GetCurrentClusterName()
+	r.clusterMetadata.RegisterMetadataChangeCallback(
+		currentClusterName,
+		func(
+			oldClusterMetadata map[string]*cluster.ClusterInformation,
+			newClusterMetadata map[string]*cluster.ClusterInformation,
+		) {
+			r.namespaceProcessorsLock.Lock()
+			defer r.namespaceProcessorsLock.Unlock()
+			for clusterName := range newClusterMetadata {
+				if clusterName == currentClusterName {
+					continue
+				}
+				if processor, ok := r.namespaceProcessors[clusterName]; ok {
+					processor.Stop()
+					delete(r.namespaceProcessors, clusterName)
+				}
+				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+					processor := newNamespaceReplicationMessageProcessor(
+						currentClusterName,
+						clusterName,
+						log.With(r.logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
+						r.clientBean.GetRemoteAdminClient(clusterName),
+						r.metricsClient,
+						r.namespaceReplicationTaskExecutor,
+						r.hostInfo,
+						r.serviceResolver,
+						r.namespaceReplicationQueue,
+					)
+					processor.Start()
+					r.namespaceProcessors[clusterName] = processor
+				}
+			}
+		},
+	)
 }

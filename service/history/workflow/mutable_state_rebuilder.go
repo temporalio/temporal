@@ -59,7 +59,7 @@ type (
 
 	MutableStateRebuilderImpl struct {
 		shard             shard.Context
-		clusterMetadata   cluster.Metadata
+		clusterMetadata   cluster.DynamicMetadata
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 

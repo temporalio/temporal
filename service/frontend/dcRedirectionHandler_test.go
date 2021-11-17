@@ -55,7 +55,7 @@ type (
 		mockResource             *resource.Test
 		mockFrontendHandler      *workflowservicemock.MockWorkflowServiceServer
 		mockRemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
-		mockClusterMetadata      *cluster.MockMetadata
+		mockClusterMetadata      *cluster.MockDynamicMetadata
 
 		mockDCRedirectionPolicy *MockDCRedirectionPolicy
 

@@ -67,7 +67,7 @@ type (
 		mockTxProcessor     *MocktransferQueueProcessor
 		mockTimerProcessor  *MocktimerQueueProcessor
 		mockNamespaceCache  *namespace.MockRegistry
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 		mockMutableState    *workflow.MockMutableState
 
 		mockExecutionMgr *persistence.MockExecutionManager

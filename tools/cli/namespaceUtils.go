@@ -229,7 +229,11 @@ func initializeAdminNamespaceHandler(
 		ErrorAndExit("Unable to initialize metadata manager.", err)
 	}
 
-	clusterMetadata := initializeClusterMetadata(configuration)
+	clusterMetdataMgr, err := factory.NewClusterMetadataManager()
+	if err != nil {
+		ErrorAndExit("Unable to initialize cluster metadata manager.", err)
+	}
+	clusterMetadata := initializeClusterMetadata(configuration, clusterMetdataMgr, logger)
 
 	dynamicConfig := initializeDynamicConfig(configuration, logger)
 	return initializeNamespaceHandler(
@@ -258,7 +262,7 @@ func loadConfig(
 func initializeNamespaceHandler(
 	logger log.Logger,
 	metadataMgr persistence.MetadataManager,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 ) namespace.Handler {
@@ -294,15 +298,19 @@ func initializePersistenceFactory(
 
 func initializeClusterMetadata(
 	serviceConfig *config.Config,
-) cluster.Metadata {
+	clusterMetadataStore persistence.ClusterMetadataManager,
+	logger log.Logger,
+) cluster.DynamicMetadata {
 
 	clusterMetadata := serviceConfig.ClusterMetadata
-	return cluster.NewMetadata(
+	return cluster.NewDynamicMetadata(
 		clusterMetadata.EnableGlobalNamespace,
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
+		clusterMetadataStore,
+		logger,
 	)
 }
 
@@ -323,7 +331,7 @@ func initializeArchivalMetadata(
 
 func initializeArchivalProvider(
 	serviceConfig *config.Config,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) provider.ArchiverProvider {

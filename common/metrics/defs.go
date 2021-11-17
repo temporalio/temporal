@@ -305,6 +305,8 @@ const (
 	PersistenceUpdateDLQAckLevelScope
 	// PersistenceGetDLQAckLevelScope tracks GetDLQAckLevel calls made by service to persistence layer
 	PersistenceGetDLQAckLevelScope
+	// PersistenceListClusterMetadataScope tracks ListClusterMetadata calls made by service to persistence layer
+	PersistenceListClusterMetadataScope
 	// PersistenceGetClusterMetadataScope tracks GetClusterMetadata calls made by service to persistence layer
 	PersistenceGetClusterMetadataScope
 	// PersistenceSaveClusterMetadataScope tracks SaveClusterMetadata calls made by service to persistence layer
@@ -1214,6 +1216,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceUpdateDLQAckLevelScope:          {operation: "UpdateDLQAckLevel"},
 		PersistenceGetDLQAckLevelScope:             {operation: "GetDLQAckLevel"},
 		PersistenceNamespaceReplicationQueueScope:  {operation: "NamespaceReplicationQueue"},
+		PersistenceListClusterMetadataScope:        {operation: "ListClusterMetadata"},
 		PersistenceGetClusterMetadataScope:         {operation: "GetClusterMetadata"},
 		PersistenceSaveClusterMetadataScope:        {operation: "SaveClusterMetadata"},
 		PersistenceDeleteClusterMetadataScope:      {operation: "DeleteClusterMetadata"},

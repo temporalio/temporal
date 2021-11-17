@@ -61,7 +61,7 @@ type (
 	// Test is the test implementation used for testing
 	Test struct {
 		MetricsScope             tally.Scope
-		ClusterMetadata          *cluster.MockMetadata
+		ClusterMetadata          *cluster.MockDynamicMetadata
 		SearchAttributesProvider *searchattribute.MockProvider
 		SearchAttributesManager  *searchattribute.MockManager
 		SearchAttributesMapper   *searchattribute.MockMapper
@@ -170,7 +170,7 @@ func NewTest(
 
 	return &Test{
 		MetricsScope:             scope,
-		ClusterMetadata:          cluster.NewMockMetadata(controller),
+		ClusterMetadata:          cluster.NewMockDynamicMetadata(controller),
 		SearchAttributesProvider: searchattribute.NewMockProvider(controller),
 		SearchAttributesManager:  searchattribute.NewMockManager(controller),
 		SearchAttributesMapper:   searchattribute.NewMockMapper(controller),
@@ -248,7 +248,7 @@ func (s *Test) GetHostInfo() *membership.HostInfo {
 }
 
 // GetClusterMetadata for testing
-func (s *Test) GetClusterMetadata() cluster.Metadata {
+func (s *Test) GetClusterMetadata() cluster.DynamicMetadata {
 	return s.ClusterMetadata
 }
 

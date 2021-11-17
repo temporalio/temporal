@@ -68,12 +68,11 @@ func (m *MockFactory) EXPECT() *MockFactoryMockRecorder {
 }
 
 // NewAdminClientWithTimeout mocks base method.
-func (m *MockFactory) NewAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) (v10.AdminServiceClient, error) {
+func (m *MockFactory) NewAdminClientWithTimeout(rpcAddress string, timeout, largeTimeout time.Duration) v10.AdminServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewAdminClientWithTimeout", rpcAddress, timeout, largeTimeout)
 	ret0, _ := ret[0].(v10.AdminServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // NewAdminClientWithTimeout indicates an expected call of NewAdminClientWithTimeout.
@@ -83,12 +82,11 @@ func (mr *MockFactoryMockRecorder) NewAdminClientWithTimeout(rpcAddress, timeout
 }
 
 // NewFrontendClient mocks base method.
-func (m *MockFactory) NewFrontendClient(rpcAddress string) (v1.WorkflowServiceClient, error) {
+func (m *MockFactory) NewFrontendClient(rpcAddress string) v1.WorkflowServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewFrontendClient", rpcAddress)
 	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // NewFrontendClient indicates an expected call of NewFrontendClient.
@@ -98,12 +96,11 @@ func (mr *MockFactoryMockRecorder) NewFrontendClient(rpcAddress interface{}) *go
 }
 
 // NewFrontendClientWithTimeout mocks base method.
-func (m *MockFactory) NewFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) (v1.WorkflowServiceClient, error) {
+func (m *MockFactory) NewFrontendClientWithTimeout(rpcAddress string, timeout, longPollTimeout time.Duration) v1.WorkflowServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewFrontendClientWithTimeout", rpcAddress, timeout, longPollTimeout)
 	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	return ret0
 }
 
 // NewFrontendClientWithTimeout indicates an expected call of NewFrontendClientWithTimeout.

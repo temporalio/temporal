@@ -62,7 +62,7 @@ type (
 		mockExecutionManager         *persistence.MockExecutionManager
 		mockArchivalClient           *archiver.MockClient
 		mockNamespaceCache           *namespace.MockRegistry
-		mockClusterMetadata          *cluster.MockMetadata
+		mockClusterMetadata          *cluster.MockDynamicMetadata
 		mockSearchAttributesProvider *searchattribute.MockProvider
 
 		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase

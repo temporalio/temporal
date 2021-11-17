@@ -55,7 +55,7 @@ type (
 
 	nDCWorkflowImpl struct {
 		namespaceRegistry namespace.Registry
-		clusterMetadata   cluster.Metadata
+		clusterMetadata   cluster.DynamicMetadata
 
 		ctx          context.Context
 		context      workflow.Context
@@ -67,7 +67,7 @@ type (
 func newNDCWorkflow(
 	ctx context.Context,
 	namespaceRegistry namespace.Registry,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	context workflow.Context,
 	mutableState workflow.MutableState,
 	releaseFn workflow.ReleaseCacheFunc,

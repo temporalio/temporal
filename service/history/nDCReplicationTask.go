@@ -100,7 +100,7 @@ var (
 )
 
 func newNDCReplicationTask(
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	historySerializer serialization.Serializer,
 	taskStartTime time.Time,
 	logger log.Logger,

@@ -74,7 +74,7 @@ type (
 		ExecutionManager persistence.ExecutionManager
 		Logger           log.Logger
 		MetricsClient    metrics.Client
-		ClusterMetadata  cluster.Metadata
+		ClusterMetadata  cluster.DynamicMetadata
 	}
 
 	// HistoryArchiver is used to archive history and read archived history
@@ -99,7 +99,7 @@ type (
 	VisibilityBootstrapContainer struct {
 		Logger          log.Logger
 		MetricsClient   metrics.Client
-		ClusterMetadata cluster.Metadata
+		ClusterMetadata cluster.DynamicMetadata
 	}
 
 	// QueryVisibilityRequest is the request to query archived visibility records

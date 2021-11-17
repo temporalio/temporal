@@ -64,7 +64,7 @@ type (
 		controller          *gomock.Controller
 		mockResource        *resource.Test
 		mockHistoryEngine   *MockEngine
-		mockClusterMetadata *cluster.MockMetadata
+		mockClusterMetadata *cluster.MockDynamicMetadata
 		mockServiceResolver *membership.MockServiceResolver
 
 		hostInfo          *membership.HostInfo

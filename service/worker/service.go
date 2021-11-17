@@ -62,7 +62,7 @@ type (
 	Service struct {
 		logger                 log.Logger
 		archivalMetadata       carchiver.ArchivalMetadata
-		clusterMetadata        cluster.Metadata
+		clusterMetadata        cluster.DynamicMetadata
 		metricsClient          metrics.Client
 		clientBean             client.Bean
 		clusterMetadataManager persistence.ClusterMetadataManager
@@ -113,7 +113,7 @@ func NewService(
 	sdkClient sdkclient.Client,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
-	clusterMetadata cluster.Metadata,
+	clusterMetadata cluster.DynamicMetadata,
 	metricsClient metrics.Client,
 	clientBean client.Bean,
 	clusterMetadataManager persistence.ClusterMetadataManager,
@@ -315,6 +315,7 @@ func (s *Service) Start() {
 	// todo: introduce proper counter (same in resource.go)
 	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
 
+	s.clusterMetadata.Start()
 	s.membershipMonitor.Start()
 	s.namespaceRegistry.Start()
 
@@ -372,6 +373,7 @@ func (s *Service) Stop() {
 	s.manager.Stop()
 	s.namespaceRegistry.Stop()
 	s.membershipMonitor.Stop()
+	s.clusterMetadata.Stop()
 	s.persistenceBean.Close()
 
 	s.logger.Info(

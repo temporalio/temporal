@@ -50,7 +50,6 @@ type (
 
 	replicationTaskExecutorImpl struct {
 		currentCluster     string
-		sourceCluster      string
 		shard              shard.Context
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
@@ -64,7 +63,6 @@ type (
 // newReplicationTaskExecutor creates an replication task executor
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func newReplicationTaskExecutor(
-	sourceCluster string,
 	shard shard.Context,
 	namespaceRegistry namespace.Registry,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -74,7 +72,6 @@ func newReplicationTaskExecutor(
 ) replicationTaskExecutor {
 	return &replicationTaskExecutorImpl{
 		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
-		sourceCluster:      sourceCluster,
 		shard:              shard,
 		namespaceRegistry:  namespaceRegistry,
 		nDCHistoryResender: nDCHistoryResender,

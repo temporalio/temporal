@@ -43,7 +43,10 @@ const (
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata_info SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4 AND cluster_name = $5`
 
-	getClusterMetadataQry = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = $1 AND cluster_name = $2`
+	getClusterMetadataBase      = `SELECT data, data_encoding, version FROM cluster_metadata_info `
+	getClusterMetadataQry       = getClusterMetadataBase + `WHERE metadata_partition = $1 AND cluster_name = $2`
+	listClusterMetadataQry      = getClusterMetadataBase + `WHERE metadata_partition = $1 ORDER BY cluster_name LIMIT $2`
+	listClusterMetadataRangeQry = getClusterMetadataBase + `WHERE metadata_partition = $1 AND cluster_name > $2 ORDER BY cluster_name LIMIT $3`
 
 	writeLockGetClusterMetadataQry = getClusterMetadataQry + ` FOR UPDATE`
 
@@ -101,6 +104,32 @@ func (pdb *db) SaveClusterMetadata(
 		constMetadataPartition,
 		row.ClusterName,
 	)
+}
+
+func (pdb *db) ListClusterMetadata(
+	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
+) ([]sqlplugin.ClusterMetadataRow, error) {
+	var err error
+	var rows []sqlplugin.ClusterMetadataRow
+	switch {
+	case len(filter.ClusterName) != 0:
+		err = pdb.conn.SelectContext(ctx,
+			&rows,
+			listClusterMetadataRangeQry,
+			constMetadataPartition,
+			filter.ClusterName,
+			filter.PageSize,
+		)
+	default:
+		err = pdb.conn.SelectContext(ctx,
+			&rows,
+			listClusterMetadataQry,
+			constMetadataPartition,
+			filter.PageSize,
+		)
+	}
+	return rows, err
 }
 
 func (pdb *db) GetClusterMetadata(

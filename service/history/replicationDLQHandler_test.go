@@ -62,7 +62,7 @@ type (
 		config           *configs.Config
 		mockClientBean   *client.MockBean
 		adminClient      *adminservicemock.MockAdminServiceClient
-		clusterMetadata  *cluster.MockMetadata
+		clusterMetadata  *cluster.MockDynamicMetadata
 		executionManager *persistence.MockExecutionManager
 		shardManager     *persistence.MockShardManager
 		taskExecutor     *MockreplicationTaskExecutor

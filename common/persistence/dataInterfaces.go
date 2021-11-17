@@ -956,6 +956,18 @@ type (
 		Branches []HistoryBranchDetail
 	}
 
+	// ListClusterMetadataRequest is the request to ListClusterMetadata
+	ListClusterMetadataRequest struct {
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	// ListClusterMetadataResponse is the response to ListClusterMetadata
+	ListClusterMetadataResponse struct {
+		ClusterMetadata []*GetClusterMetadataResponse
+		NextPageToken   []byte
+	}
+
 	// GetClusterMetadataRequest is the request to GetClusterMetadata
 	GetClusterMetadataRequest struct {
 		ClusterName string
@@ -1158,6 +1170,7 @@ type (
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
+		ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error)
 		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
 		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
