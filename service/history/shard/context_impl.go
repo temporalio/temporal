@@ -1459,17 +1459,6 @@ func (s *ContextImpl) acquireShard() {
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	policy.SetExpirationInterval(5 * time.Minute)
 
-	isRetryable := func(err error) bool {
-		if common.IsPersistenceTransientError(err) {
-			return true
-		}
-		// Retry this in case we need to create the shard and race with someone else doing it.
-		if _, ok := err.(*persistence.ShardAlreadyExistError); ok {
-			return true
-		}
-		return false
-	}
-
 	// Remember this value across attempts
 	ownershipChanged := false
 
@@ -1522,7 +1511,7 @@ func (s *ContextImpl) acquireShard() {
 		return nil
 	}
 
-	err := backoff.Retry(op, policy, isRetryable)
+	err := backoff.Retry(op, policy, common.IsPersistenceTransientError)
 	if err == errStoppingContext {
 		// State changed since this goroutine started, exit silently.
 		return

@@ -254,33 +254,22 @@ func (s *TestBase) fatalOnError(msg string, err error) {
 	}
 }
 
-// CreateShard is a utility method to create the shard using persistence layer
-func (s *TestBase) CreateShard(shardID int32, owner string, rangeID int64) error {
+// GetOrCreateShard is a utility method to get/create the shard using persistence layer
+func (s *TestBase) GetOrCreateShard(shardID int32, owner string, rangeID int64, createIfMissing bool) (*persistencespb.ShardInfo, error) {
 	info := &persistencespb.ShardInfo{
 		ShardId: shardID,
 		Owner:   owner,
 		RangeId: rangeID,
 	}
-
-	_, err := s.ShardMgr.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+	resp, err := s.ShardMgr.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID:          shardID,
+		CreateIfMissing:  createIfMissing,
 		InitialShardInfo: info,
-		CreateIfMissing:  true,
 	})
-	return err
-}
-
-// GetShard is a utility method to get the shard using persistence layer
-func (s *TestBase) GetShard(shardID int32) (*persistencespb.ShardInfo, error) {
-	response, err := s.ShardMgr.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
-		ShardID: shardID,
-	})
-
 	if err != nil {
 		return nil, err
 	}
-
-	return response.ShardInfo, nil
+	return resp.ShardInfo, nil
 }
 
 // UpdateShard is a utility method to update the shard using persistence layer

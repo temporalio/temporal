@@ -90,6 +90,11 @@ func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*
 		ShardInfo: data,
 	}
 	err = m.shardStore.CreateShard(internalRequest)
+	if _, ok := err.(*ShardAlreadyExistError); ok {
+		// raced with someone else trying to create it; just Get again
+		request.CreateIfMissing = false // defensive just to avoid loop if shardStore is broken
+		return m.GetOrCreateShard(request)
+	}
 	if err != nil {
 		return nil, err
 	}
