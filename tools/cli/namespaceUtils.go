@@ -188,11 +188,6 @@ var (
 		},
 	}
 
-	adminRegisterNamespaceFlags = append(
-		registerNamespaceFlags,
-		adminNamespaceCommonFlags...,
-	)
-
 	adminUpdateNamespaceFlags = append(
 		updateNamespaceFlags,
 		adminNamespaceCommonFlags...,
