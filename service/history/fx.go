@@ -39,8 +39,10 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/workflow"
@@ -130,15 +132,17 @@ func VisibilityManagerProvider(
 	serviceConfig *configs.Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapper searchattribute.Mapper,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		params.PersistenceConfig,
-		params.PersistenceServiceResolver,
+		persistenceServiceResolver,
 		esConfig.GetVisibilityIndex(),
 		esClient,
 		esProcessorConfig,
 		serviceResource.GetSearchAttributesProvider(),
-		params.SearchAttributesMapper,
+		searchAttributesMapper,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,

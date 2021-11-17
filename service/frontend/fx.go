@@ -44,9 +44,11 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 )
@@ -80,7 +82,6 @@ func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
 }
 
 func GrpcServerOptionsProvider(
-	params *resource.BootstrapParams,
 	logger log.Logger,
 	serviceConfig *Config,
 	serviceResource resource.Resource,
@@ -91,6 +92,10 @@ func GrpcServerOptionsProvider(
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	authorizer authorization.Authorizer,
+	claimMapper authorization.ClaimMapper,
+	audienceGetter authorization.JWTAudienceMapper,
+	customInterceptors []grpc.UnaryServerInterceptor,
 ) []grpc.ServerOption {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -117,15 +122,15 @@ func GrpcServerOptionsProvider(
 		namespaceRateLimiterInterceptor.Intercept,
 		namespaceCountLimiterInterceptor.Intercept,
 		authorization.NewAuthorizationInterceptor(
-			params.ClaimMapper,
-			params.Authorizer,
+			claimMapper,
+			authorizer,
 			serviceResource.GetMetricsClient(),
 			logger,
-			params.AudienceGetter,
+			audienceGetter,
 		),
 	}
-	if len(params.CustomInterceptors) > 0 {
-		interceptors = append(interceptors, params.CustomInterceptors...)
+	if len(customInterceptors) > 0 {
+		interceptors = append(interceptors, customInterceptors...)
 	}
 
 	return append(
@@ -248,15 +253,17 @@ func VisibilityManagerProvider(
 	serviceConfig *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapper searchattribute.Mapper,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		params.PersistenceConfig,
-		params.PersistenceServiceResolver,
+		persistenceServiceResolver,
 		esConfig.GetVisibilityIndex(),
 		esClient,
 		nil, // frontend visibility never write
 		serviceResource.GetSearchAttributesProvider(),
-		params.SearchAttributesMapper,
+		searchAttributesMapper,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.AdvancedVisibilityPersistenceMaxReadQPS,

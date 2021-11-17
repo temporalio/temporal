@@ -37,9 +37,12 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/matching/configs"
 )
 
@@ -59,6 +62,9 @@ func NewService(
 	logger log.Logger,
 	dcClient dynamicconfig.Client,
 	params *resource.BootstrapParams,
+	customDataStoreFactory client.AbstractDataStoreFactory,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapper searchattribute.Mapper,
 ) (*Service, error) {
 	serviceConfig := NewConfig(dynamicconfig.NewCollection(dcClient, logger))
 	serviceResource, err := resource.New(
@@ -69,6 +75,9 @@ func NewService(
 		serviceConfig.PersistenceMaxQPS,
 		serviceConfig.PersistenceGlobalMaxQPS,
 		serviceConfig.ThrottledLogRPS,
+		customDataStoreFactory,
+		persistenceServiceResolver,
+		searchAttributesMapper,
 	)
 	if err != nil {
 		return nil, err

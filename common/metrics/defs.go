@@ -69,6 +69,7 @@ const (
 	History
 	Matching
 	Worker
+	Server
 	NumServices
 )
 
@@ -1136,6 +1137,13 @@ const (
 	NumWorkerScopes
 )
 
+// -- Scopes for Server --
+const (
+	ServerTlsScope = iota + NumWorkerScopes
+
+	NumServerScopes
+)
+
 // ScopeDefs record the scopes for all services
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
@@ -1642,6 +1650,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ParentClosePolicyProcessorScope:        {operation: "ParentClosePolicyProcessor"},
 		AddSearchAttributesWorkflowScope:       {operation: "AddSearchAttributesWorkflow"},
 	},
+	Server: {
+		ServerTlsScope: {operation: "ServerTls"},
+	},
 }
 
 // Common Metrics enum
@@ -2086,6 +2097,14 @@ const (
 	AddSearchAttributesFailuresCount
 
 	NumWorkerMetrics
+)
+
+// Server metrics enum
+const (
+	TlsCertsExpired = iota + NumWorkerMetrics
+	TlsCertsExpiring
+
+	NumServerMetrics
 )
 
 // MetricDefs record the metrics for all services
@@ -2539,6 +2558,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ScavengerValidationRequestsCount:              {metricName: "scavenger_validation_requests", metricType: Counter},
 		ScavengerValidationFailuresCount:              {metricName: "scavenger_validation_failures", metricType: Counter},
 		AddSearchAttributesFailuresCount:              {metricName: "add_search_attributes_failures", metricType: Counter},
+	},
+	Server: {
+		TlsCertsExpired:  {metricName: "certificates_expired", metricType: Gauge},
+		TlsCertsExpiring: {metricName: "certificates_expiring", metricType: Gauge},
 	},
 }
 

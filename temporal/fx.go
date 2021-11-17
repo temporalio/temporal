@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
 
 	"github.com/uber-go/tally/v4"
 	"go.uber.org/fx"
@@ -37,6 +38,8 @@ import (
 	"github.com/pborman/uuid"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -53,6 +56,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
@@ -107,6 +111,15 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Provide(FrontendServiceProvider),
 		fx.Provide(WorkerServiceProvider),
 		fx.Provide(ApplyClusterMetadataConfigProvider),
+		fx.Provide(MetricsClientProvider),
+		fx.Provide(ServiceNamesProvider),
+		fx.Provide(AbstractDatastoreFactoryProvider),
+		fx.Provide(ClientFactoryProvider),
+		fx.Provide(SearchAttributeMapperProvider),
+		fx.Provide(UnaryInterceptorsProvider),
+		fx.Provide(AuthorizerProvider),
+		fx.Provide(ClaimMapperProvider),
+		fx.Provide(JWTAudienceMapperProvider),
 		fx.Invoke(ServerLifetimeHooks),
 		fx.NopLogger,
 	)
@@ -170,10 +183,47 @@ func ESConfigAndClientProvider(so *serverOptions, logger log.Logger) (*esclient.
 	return advancedVisibilityStore.Elasticsearch, esClient, nil
 }
 
+func ServiceNamesProvider(so *serverOptions) ServiceNames {
+	return so.serviceNames
+}
+
+func AbstractDatastoreFactoryProvider(so *serverOptions) persistenceClient.AbstractDataStoreFactory {
+	return so.customDataStoreFactory
+}
+
+func ClientFactoryProvider(so *serverOptions) client.FactoryProvider {
+	factoryProvider := so.clientFactoryProvider
+	if factoryProvider == nil {
+		factoryProvider = client.NewFactoryProvider()
+	}
+	return factoryProvider
+}
+
+func SearchAttributeMapperProvider(so *serverOptions) searchattribute.Mapper {
+	return so.searchAttributesMapper
+}
+
+func UnaryInterceptorsProvider(so *serverOptions) []grpc.UnaryServerInterceptor {
+	return so.customInterceptors
+}
+
+func AuthorizerProvider(so *serverOptions) authorization.Authorizer {
+	return so.authorizer
+}
+
+func ClaimMapperProvider(so *serverOptions) authorization.ClaimMapper {
+	return so.claimMapper
+}
+
+func JWTAudienceMapperProvider(so *serverOptions) authorization.JWTAudienceMapper {
+	return so.audienceGetter
+}
+
 func HistoryServiceProvider(
+	cfg *config.Config,
+	serviceNames ServiceNames,
 	logger log.Logger,
 	namespaceLogger NamespaceLogger,
-	so *serverOptions,
 	dynamicConfigClient dynamicconfig.Client,
 	serverReporter ServerReporter,
 	sdkReporter SdkReporter,
@@ -182,10 +232,18 @@ func HistoryServiceProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
+	clientFactoryProvider client.FactoryProvider,
+	audienceGetter authorization.JWTAudienceMapper,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapper searchattribute.Mapper,
+	customInterceptors []grpc.UnaryServerInterceptor,
+	authorizer authorization.Authorizer,
+	claimMapper authorization.ClaimMapper,
+	dataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.HistoryService
 
-	if _, ok := so.serviceNames[serviceName]; !ok {
+	if _, ok := serviceNames[serviceName]; !ok {
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
@@ -200,11 +258,19 @@ func HistoryServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			so,
 			esConfig,
 			persistenceConfig,
 			clusterMetadata,
+			cfg,
 		),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return dataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return clientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return audienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return persistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return searchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return customInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return claimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
@@ -229,6 +295,7 @@ func HistoryServiceProvider(
 }
 
 func MatchingServiceProvider(
+	cfg *config.Config,
 	logger log.Logger,
 	namespaceLogger NamespaceLogger,
 	so *serverOptions,
@@ -240,6 +307,14 @@ func MatchingServiceProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
+	clientFactoryProvider client.FactoryProvider,
+	audienceGetter authorization.JWTAudienceMapper,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapper searchattribute.Mapper,
+	customInterceptors []grpc.UnaryServerInterceptor,
+	authorizer authorization.Authorizer,
+	claimMapper authorization.ClaimMapper,
+	dataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.MatchingService
 
@@ -262,7 +337,16 @@ func MatchingServiceProvider(
 			esConfig,
 			persistenceConfig,
 			clusterMetadata,
+			cfg,
 		),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return dataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return clientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return audienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return persistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return searchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return customInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return claimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
@@ -287,6 +371,7 @@ func MatchingServiceProvider(
 }
 
 func FrontendServiceProvider(
+	cfg *config.Config,
 	logger log.Logger,
 	namespaceLogger NamespaceLogger,
 	so *serverOptions,
@@ -298,6 +383,14 @@ func FrontendServiceProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
+	clientFactoryProvider client.FactoryProvider,
+	audienceGetter authorization.JWTAudienceMapper,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapper searchattribute.Mapper,
+	customInterceptors []grpc.UnaryServerInterceptor,
+	authorizer authorization.Authorizer,
+	claimMapper authorization.ClaimMapper,
+	dataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.FrontendService
 
@@ -320,7 +413,16 @@ func FrontendServiceProvider(
 			esConfig,
 			persistenceConfig,
 			clusterMetadata,
+			cfg,
 		),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return dataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return clientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return audienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return persistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return searchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return customInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return claimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
@@ -345,6 +447,7 @@ func FrontendServiceProvider(
 }
 
 func WorkerServiceProvider(
+	cfg *config.Config,
 	logger log.Logger,
 	namespaceLogger NamespaceLogger,
 	so *serverOptions,
@@ -356,6 +459,14 @@ func WorkerServiceProvider(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
+	clientFactoryProvider client.FactoryProvider,
+	audienceGetter authorization.JWTAudienceMapper,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapper searchattribute.Mapper,
+	customInterceptors []grpc.UnaryServerInterceptor,
+	authorizer authorization.Authorizer,
+	claimMapper authorization.ClaimMapper,
+	dataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.WorkerService
 
@@ -378,7 +489,16 @@ func WorkerServiceProvider(
 			esConfig,
 			persistenceConfig,
 			clusterMetadata,
+			cfg,
 		),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return dataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return clientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return audienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return persistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return searchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return customInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return claimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
@@ -408,9 +528,8 @@ func SoExpander(so *serverOptions) (
 	*config.PProf,
 	*config.Config,
 	resolver.ServiceResolver,
-	persistenceClient.AbstractDataStoreFactory,
 ) {
-	return &so.config.Global.PProf, so.config, so.persistenceServiceResolver, so.customDataStoreFactory
+	return &so.config.Global.PProf, so.config, so.persistenceServiceResolver
 }
 
 func DynamicConfigClientProvider(so *serverOptions, logger log.Logger, stoppedCh chan interface{}) dynamicconfig.Client {
@@ -606,16 +725,20 @@ func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReport
 	return serverReporter, sdkReporter, globalMetricsScope, nil
 }
 
+func MetricsClientProvider(logger log.Logger, serverReporter ServerReporter) (metrics.Client, error) {
+	return serverReporter.NewClient(logger, metrics.Server)
+}
+
 func TlsConfigProviderProvider(
 	logger log.Logger,
 	so *serverOptions,
-	globalMetricsScope tally.Scope,
+	metricsClient metrics.Client,
 ) (encryption.TLSConfigProvider, error) {
 	if so.tlsConfigProvider != nil {
 		return so.tlsConfigProvider, nil
 	}
 
-	return encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, globalMetricsScope, logger, nil)
+	return encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsClient.Scope(metrics.ServerTlsScope), logger, nil)
 }
 
 func ServerLifetimeHooks(

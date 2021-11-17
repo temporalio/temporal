@@ -31,8 +31,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/server/common/config"
 )
@@ -86,7 +86,7 @@ type (
 // Otherwise, it defaults to using localStoreCertProvider
 func NewTLSConfigProviderFromConfig(
 	encryptionSettings config.RootTLS,
-	scope tally.Scope,
+	scope metrics.Scope,
 	logger log.Logger,
 	certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
