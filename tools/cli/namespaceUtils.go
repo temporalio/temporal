@@ -193,11 +193,6 @@ var (
 		adminNamespaceCommonFlags...,
 	)
 
-	adminUpdateNamespaceFlags = append(
-		updateNamespaceFlags,
-		adminNamespaceCommonFlags...,
-	)
-
 	adminDescribeNamespaceFlags = append(
 		updateNamespaceFlags,
 		adminNamespaceCommonFlags...,

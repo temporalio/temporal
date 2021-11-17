@@ -369,9 +369,12 @@ func newAdminNamespaceCommands() []cli.Command {
 			Name:    "update",
 			Aliases: []string{"up", "u"},
 			Usage:   "Update existing workflow namespace",
-			Flags:   adminUpdateNamespaceFlags,
+			Flags:   updateNamespaceFlags,
 			Action: func(c *cli.Context) {
-				newNamespaceCLI(c, true).UpdateNamespace(c)
+				err := UpdateNamespace(c)
+				if err != nil {
+					ErrorAndExit("unable to register namespace", err)
+				}
 			},
 		},
 		{

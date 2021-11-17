@@ -37,6 +37,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	namespacepb "go.temporal.io/api/namespace/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -207,6 +211,141 @@ func AdminListNamespaces(c *cli.Context) {
 		return items, resp.NextPageToken, nil
 	}
 	paginate(c, paginationFunc)
+}
+
+// UpdateNamespace updates a namespace
+func UpdateNamespace(c *cli.Context) error {
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
+
+	client := cFactory.FrontendClient(c)
+
+	var req *adminservice.UpdateNamespaceRequest
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	if c.IsSet(FlagActiveClusterName) {
+		activeCluster := c.String(FlagActiveClusterName)
+		fmt.Printf("Will set active cluster name to: %s, other flag will be omitted.\n", activeCluster)
+		replicationConfig := &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: activeCluster,
+		}
+		req = &adminservice.UpdateNamespaceRequest{
+			Namespace:         namespace,
+			ReplicationConfig: replicationConfig,
+		}
+	} else {
+		resp, err := client.DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: namespace,
+		})
+		if err != nil {
+			if _, ok := err.(*serviceerror.NotFound); !ok {
+				return fmt.Errorf("namespace update failed: %s", err)
+			} else {
+				return fmt.Errorf("namespace %s does not exist: %s", namespace, err)
+			}
+		}
+
+		description := resp.NamespaceInfo.GetDescription()
+		ownerEmail := resp.NamespaceInfo.GetOwnerEmail()
+		retention := timestamp.DurationValue(resp.Config.GetWorkflowExecutionRetentionTtl())
+		var clusters []*replicationpb.ClusterReplicationConfig
+
+		if c.IsSet(FlagDescription) {
+			description = c.String(FlagDescription)
+		}
+		if c.IsSet(FlagOwnerEmail) {
+			ownerEmail = c.String(FlagOwnerEmail)
+		}
+		namespaceData := map[string]string{}
+		if c.IsSet(FlagNamespaceData) {
+			namespaceDataStr := c.String(FlagNamespaceData)
+			namespaceData, err = parseNamespaceDataKVs(namespaceDataStr)
+			if err != nil {
+				return fmt.Errorf("namespace data format is invalid: %s.", err)
+			}
+		}
+		if c.IsSet(FlagRetention) {
+			retention, err = timestamp.ParseDurationDefaultDays(c.String(FlagRetention))
+			if err != nil {
+				return fmt.Errorf("option %s format is invalid: %s.", FlagRetention, err)
+			}
+		}
+		if c.IsSet(FlagClusters) {
+			clusterStr := c.String(FlagClusters)
+			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
+				ClusterName: clusterStr,
+			})
+			for _, clusterStr := range c.Args() {
+				clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
+					ClusterName: clusterStr,
+				})
+			}
+		}
+
+		var binBinaries *namespacepb.BadBinaries
+		if c.IsSet(FlagAddBadBinary) {
+			if !c.IsSet(FlagReason) {
+				return fmt.Errorf("reason flag is not provided: %s.", err)
+			}
+			binChecksum := c.String(FlagAddBadBinary)
+			reason := c.String(FlagReason)
+			operator := getCurrentUserFromEnv()
+			binBinaries = &namespacepb.BadBinaries{
+				Binaries: map[string]*namespacepb.BadBinaryInfo{
+					binChecksum: {
+						Reason:   reason,
+						Operator: operator,
+					},
+				},
+			}
+		}
+
+		var badBinaryToDelete string
+		if c.IsSet(FlagRemoveBadBinary) {
+			badBinaryToDelete = c.String(FlagRemoveBadBinary)
+		}
+
+		updateInfo := &namespacepb.UpdateNamespaceInfo{
+			Description: description,
+			OwnerEmail:  ownerEmail,
+			Data:        namespaceData,
+		}
+
+		archState := archivalState(c, FlagHistoryArchivalState)
+		archVisState := archivalState(c, FlagVisibilityArchivalState)
+		updateConfig := &namespacepb.NamespaceConfig{
+			WorkflowExecutionRetentionTtl: &retention,
+			HistoryArchivalState:          archState,
+			HistoryArchivalUri:            c.String(FlagHistoryArchivalURI),
+			VisibilityArchivalState:       archVisState,
+			VisibilityArchivalUri:         c.String(FlagVisibilityArchivalURI),
+			BadBinaries:                   binBinaries,
+		}
+		replicationConfig := &replicationpb.NamespaceReplicationConfig{
+			Clusters: clusters,
+		}
+		req = &adminservice.UpdateNamespaceRequest{
+			Namespace:         namespace,
+			UpdateInfo:        updateInfo,
+			Config:            updateConfig,
+			ReplicationConfig: replicationConfig,
+			DeleteBadBinary:   badBinaryToDelete,
+		}
+	}
+
+	admClient := cFactory.AdminClient(c)
+	_, err := admClient.UpdateNamespace(ctx, req)
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); !ok {
+			return fmt.Errorf("namespace update failed: %s", err)
+		} else {
+			return fmt.Errorf("namespace %s does not exist: %s", namespace, err)
+		}
+	} else {
+		fmt.Printf("Namespace %s successfully updated.\n", namespace)
+	}
+
+	return nil
 }
 
 // AdminDeleteWorkflow delete a workflow execution from Cassandra and visibility document from Elasticsearch.
