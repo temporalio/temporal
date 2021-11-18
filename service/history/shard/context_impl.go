@@ -30,6 +30,7 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/historyservice/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -1435,6 +1436,32 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.timerMaxReadLevelMap = timerMaxReadLevelMap
 
 	return nil
+}
+
+func (s *ContextImpl) GetRemoteClusterAckInfo(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, error) {
+	resp := make(map[string]*historyservice.ShardReplicationStatusPerCluster)
+	s.rLock()
+	defer s.rUnlock()
+	if len(cluster) == 0 {
+		// remote acked info for all known remote clusters
+		for k, v := range s.remoteClusterInfos {
+			resp[k] = &historyservice.ShardReplicationStatusPerCluster{
+				AckedTaskId:             v.AckedReplicationTaskID,
+				AckedTaskVisibilityTime: timestamp.TimePtr(v.AckedReplicationTimestamp),
+			}
+		}
+	} else {
+		for _, k := range cluster {
+			if v, ok := s.remoteClusterInfos[k]; ok {
+				resp[k] = &historyservice.ShardReplicationStatusPerCluster{
+					AckedTaskId:             v.AckedReplicationTaskID,
+					AckedTaskVisibilityTime: timestamp.TimePtr(v.AckedReplicationTimestamp),
+				}
+			}
+		}
+	}
+
+	return resp, nil
 }
 
 func (s *ContextImpl) getRemoteClusterInfoLocked(clusterName string) *remoteClusterInfo {

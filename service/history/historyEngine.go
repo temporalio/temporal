@@ -3223,6 +3223,26 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
 }
 
+func (h *historyEngineImpl) GetReplicationStatus(
+	ctx context.Context,
+	request *historyservice.GetReplicationStatusRequest,
+) (_ *historyservice.ShardReplicationStatus, retError error) {
+
+	resp := &historyservice.ShardReplicationStatus{
+		ShardLocalTime: timestamp.TimePtr(h.shard.GetTimeSource().Now()),
+	}
+	if h.replicatorProcessor.maxTaskID != nil {
+		resp.MaxReplicationTaskId = *h.replicatorProcessor.maxTaskID
+	}
+
+	remoteClusters, err := h.shard.GetRemoteClusterAckInfo(request.RemoteClusters)
+	if err != nil {
+		return nil, err
+	}
+	resp.RemoteClusters = remoteClusters
+	return resp, nil
+}
+
 func (e *historyEngineImpl) loadWorkflowOnce(
 	ctx context.Context,
 	namespaceID namespace.ID,

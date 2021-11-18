@@ -171,6 +171,21 @@ func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, pollingCluster, ac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
 }
 
+// GetReplicationStatus mocks base method.
+func (m *MockEngine) GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReplicationStatus", ctx, request)
+	ret0, _ := ret[0].(*historyservice.ShardReplicationStatus)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReplicationStatus indicates an expected call of GetReplicationStatus.
+func (mr *MockEngineMockRecorder) GetReplicationStatus(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationStatus", reflect.TypeOf((*MockEngine)(nil).GetReplicationStatus), ctx, request)
+}
+
 // MergeDLQMessages mocks base method.
 func (m *MockEngine) MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
