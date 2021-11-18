@@ -25,6 +25,9 @@
 package cassandra
 
 import (
+	"encoding/json"
+	"fmt"
+	"reflect"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -70,9 +73,9 @@ const (
 	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
 		`WHERE namespace_id = ? ` +
-		`AND namespace_partition IN (?) ` +
+		`AND namespace_partition = ? ` +
 		`AND start_time >= ? ` +
-		`AND start_time <= ? `
+		`AND start_time <= ? ORDER BY start_time desc`
 
 	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
@@ -93,9 +96,9 @@ const (
 	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
-		`AND namespace_partition IN (?) ` +
+		`AND namespace_partition = ? ` +
 		`AND close_time >= ? ` +
-		`AND close_time <= ? `
+		`AND close_time <= ? ORDER BY close_time desc`
 
 	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
@@ -288,6 +291,17 @@ func (v *visibilityStore) ListOpenWorkflowExecutions(
 	return response, nil
 }
 
+func (v *visibilityStore) listOpenWorkflowExecutions(
+	request manager.PaginationListRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	actualRequest, ok := request.(*manager.ListWorkflowExecutionsRequest)
+	if !ok {
+		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+	}
+
+	return v.ListOpenWorkflowExecutions(actualRequest)
+}
+
 func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
 	request *manager.ListWorkflowExecutionsByTypeRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
@@ -315,6 +329,17 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
 		return nil, gocql.ConvertError("ListOpenWorkflowExecutionsByType", err)
 	}
 	return response, nil
+}
+
+func (v *visibilityStore) listOpenWorkflowExecutionsByType(
+	request manager.PaginationListRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByTypeRequest)
+	if !ok {
+		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+	}
+
+	return v.ListOpenWorkflowExecutionsByType(actualRequest)
 }
 
 func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
@@ -346,6 +371,17 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 	return response, nil
 }
 
+func (v *visibilityStore) listOpenWorkflowExecutionsByWorkflowID(
+	request manager.PaginationListRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByWorkflowIDRequest)
+	if !ok {
+		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+	}
+
+	return v.ListOpenWorkflowExecutionsByWorkflowID(actualRequest)
+}
+
 func (v *visibilityStore) ListClosedWorkflowExecutions(
 	request *manager.ListWorkflowExecutionsRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
@@ -372,6 +408,17 @@ func (v *visibilityStore) ListClosedWorkflowExecutions(
 		return nil, gocql.ConvertError("ListClosedWorkflowExecutions", err)
 	}
 	return response, nil
+}
+
+func (v *visibilityStore) listClosedWorkflowExecutions(
+	request manager.PaginationListRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	actualRequest, ok := request.(*manager.ListWorkflowExecutionsRequest)
+	if !ok {
+		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+	}
+
+	return v.ListClosedWorkflowExecutions(actualRequest)
 }
 
 func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
@@ -403,6 +450,17 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
 	return response, nil
 }
 
+func (v *visibilityStore) listClosedWorkflowExecutionsByType(
+	request manager.PaginationListRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByTypeRequest)
+	if !ok {
+		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+	}
+
+	return v.ListClosedWorkflowExecutionsByType(actualRequest)
+}
+
 func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
@@ -430,6 +488,17 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 		return nil, gocql.ConvertError("ListClosedWorkflowExecutionsByWorkflowID", err)
 	}
 	return response, nil
+}
+
+func (v *visibilityStore) listClosedWorkflowExecutionsByWorkflowID(
+	request manager.PaginationListRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByWorkflowIDRequest)
+	if !ok {
+		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+	}
+
+	return v.ListClosedWorkflowExecutionsByWorkflowID(actualRequest)
 }
 
 func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
@@ -466,8 +535,134 @@ func (v *visibilityStore) DeleteWorkflowExecution(_ *manager.VisibilityDeleteWor
 	return nil
 }
 
-func (v *visibilityStore) ListWorkflowExecutions(_ *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return nil, store.OperationNotSupportedErr
+func (v *visibilityStore) ListWorkflowExecutions(
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	queryFilters, err := newQueryFilters(request.Query)
+	if err != nil {
+		return nil, fmt.Errorf("invalid query: %v", err)
+	}
+
+	baseReq := &manager.ListWorkflowExecutionsRequest{
+		NamespaceID:       request.NamespaceID,
+		Namespace:         request.Namespace,
+		PageSize:          request.PageSize,
+		NextPageToken:     request.NextPageToken,
+		EarliestStartTime: queryFilters.StartTimeFrom,
+		LatestStartTime:   queryFilters.StartTimeTo,
+	}
+
+	// Only a limited query patterns are supported due to the way we set up
+	// visibility tables in Cassandra.
+	// Check QueryFilters validation logic for details.
+	if queryFilters.HasWorkflowIDFilter {
+		request := &manager.ListWorkflowExecutionsByWorkflowIDRequest{
+			ListWorkflowExecutionsRequest: baseReq,
+			WorkflowID:                    queryFilters.WorkflowID,
+		}
+		return v.listWorkflowExecutionsHelper(
+			request,
+			v.listOpenWorkflowExecutionsByWorkflowID,
+			v.listClosedWorkflowExecutionsByWorkflowID)
+	} else if queryFilters.HasWorkflowTypeFilter {
+		request := &manager.ListWorkflowExecutionsByTypeRequest{
+			ListWorkflowExecutionsRequest: baseReq,
+			WorkflowTypeName:              queryFilters.WorkflowType,
+		}
+		return v.listWorkflowExecutionsHelper(
+			request,
+			v.listOpenWorkflowExecutionsByType,
+			v.listClosedWorkflowExecutionsByType)
+	} else if queryFilters.HasExecutionStatusFilter {
+		if queryFilters.ExecutionStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+			return v.ListOpenWorkflowExecutions(baseReq)
+		} else {
+			request := &manager.ListClosedWorkflowExecutionsByStatusRequest{
+				ListWorkflowExecutionsRequest: baseReq,
+				Status:                        queryFilters.ExecutionStatus,
+			}
+			return v.ListClosedWorkflowExecutionsByStatus(request)
+		}
+	} else {
+		return v.listWorkflowExecutionsHelper(
+			baseReq,
+			v.listOpenWorkflowExecutions,
+			v.listClosedWorkflowExecutions)
+	}
+}
+
+type NextPageToken struct {
+	IsForOpen bool
+	Token []byte
+}
+
+func (v *visibilityStore) listWorkflowExecutionsHelper(
+	request manager.PaginationListRequest,
+	listOpenFunc func(request manager.PaginationListRequest) (*store.InternalListWorkflowExecutionsResponse, error),
+	listCloseFunc func(request manager.PaginationListRequest) (*store.InternalListWorkflowExecutionsResponse, error),
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+
+	var nextPageToken NextPageToken
+	if len(request.GetToken()) == 0 {
+		nextPageToken = NextPageToken{
+			IsForOpen: true,
+		}
+	} else {
+		err := json.Unmarshal(request.GetToken(), &nextPageToken)
+		if err != nil {
+			return nil, fmt.Errorf("invalid next page token: %v", err)
+		}
+		request.SetToken(nextPageToken.Token)
+	}
+
+	resp := &store.InternalListWorkflowExecutionsResponse{}
+
+	if nextPageToken.IsForOpen {
+		listOpenResp, err := listOpenFunc(request)
+		if err != nil {
+			return nil, err
+		}
+
+		if len(listOpenResp.Executions) > 0 {
+			request.SetPageSize(request.GetPageSize() - len(listOpenResp.Executions))
+			resp.Executions = append(resp.Executions, listOpenResp.Executions...)
+		}
+
+		if request.GetPageSize() == 0 {
+			nextPageToken.Token = listOpenResp.NextPageToken
+
+			token, err := json.Marshal(nextPageToken)
+			if err != nil {
+				return nil, fmt.Errorf("failed to marshal next page token: %v", err)
+			}
+
+			resp.NextPageToken = token
+			return resp, nil
+		} else {
+			nextPageToken.IsForOpen = false
+			request.SetToken(nil)
+		}
+	}
+
+	listCloseResp, err := listCloseFunc(request)
+	if err != nil {
+		return nil, err
+	}
+	resp.Executions = append(resp.Executions, listCloseResp.Executions...)
+
+	if listCloseResp.NextPageToken == nil {
+		resp.NextPageToken = nil
+	} else {
+		nextPageToken.Token = listCloseResp.NextPageToken
+		token, err := json.Marshal(nextPageToken)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal next page token: %v", err)
+		}
+
+		resp.NextPageToken = token
+	}
+
+	return resp, nil
 }
 
 func (v *visibilityStore) ScanWorkflowExecutions(_ *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {

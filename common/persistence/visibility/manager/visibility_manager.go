@@ -169,4 +169,26 @@ type (
 		WorkflowID  string
 		TaskID      int64
 	}
+
+	// PaginationListRequest represents all the list request types that supports pagination
+	PaginationListRequest interface {
+		SetToken(token []byte)
+		GetToken() []byte
+		SetPageSize(pageSize int)
+		GetPageSize() int
+	}
 )
+
+func (r *ListWorkflowExecutionsRequest) SetToken(token []byte) {
+	r.NextPageToken = token
+}
+
+func (r *ListWorkflowExecutionsRequest) GetToken() []byte {
+	return r.NextPageToken
+}
+func (r *ListWorkflowExecutionsRequest) SetPageSize(pageSize int) {
+	r.PageSize = pageSize
+}
+func (r *ListWorkflowExecutionsRequest) GetPageSize() int {
+	return r.PageSize
+}
