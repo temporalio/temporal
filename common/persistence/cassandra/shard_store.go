@@ -128,7 +128,7 @@ func (d *ShardStore) GetOrCreateShard(
 	}
 	if !applied {
 		// conflict, try again
-		request.CreateShardInfo = nil
+		request.CreateShardInfo = nil // prevent loop
 		return d.GetOrCreateShard(request)
 	}
 	return &p.InternalGetOrCreateShardResponse{

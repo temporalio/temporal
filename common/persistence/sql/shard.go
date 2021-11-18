@@ -94,7 +94,7 @@ func (m *sqlShardStore) GetOrCreateShard(
 		}, nil
 	} else if m.Db.IsDupEntryError(err) {
 		// conflict, try again
-		request.CreateShardInfo = nil
+		request.CreateShardInfo = nil // prevent loop
 		return m.GetOrCreateShard(request)
 	} else {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetOrCreateShard: failed to insert into shards table. Error: %v", err))
