@@ -524,7 +524,7 @@ message ShardReplicationStatus {
     // Max replication task id of current cluster
     int64 max_replication_task_id = 2;
     // Local time on this shard
-    google.protobuf.Timestamp shard_local_time = 3;
+    google.protobuf.Timestamp shard_local_time = 3 [(gogoproto.stdtime) = true];
     map<string, ShardReplicationStatusPerCluster> remote_clusters = 4;
 }
 
@@ -532,5 +532,5 @@ message ShardReplicationStatusPerCluster {
     // Acked replication task id
     int64 acked_task_id = 1;
     // Acked replication task creation time
-    google.protobuf.Timestamp acked_task_visibility_time = 2;
+    google.protobuf.Timestamp acked_task_visibility_time = 2 [(gogoproto.stdtime) = true];
 }
