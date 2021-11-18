@@ -88,13 +88,15 @@ func (m *sqlShardStore) GetOrCreateShard(
 		DataEncoding: shardInfo.EncodingType.String(),
 	}
 	_, err = m.Db.InsertIntoShards(ctx, row)
-	switch err {
-	case nil:
+	if err == nil {
 		return &persistence.InternalGetOrCreateShardResponse{
 			ShardInfo: shardInfo,
 		}, nil
-	// TODO: handle conflict
-	default:
+	} else if m.Db.IsDupEntryError(err) {
+		// conflict, try again
+		request.CreateShardInfo = nil
+		return m.GetOrCreateShard(request)
+	} else {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetOrCreateShard: failed to insert into shards table. Error: %v", err))
 	}
 }
