@@ -28,6 +28,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -70,6 +71,8 @@ type (
 		GetCurrentTime(cluster string) time.Time
 		GetLastUpdatedTime() time.Time
 		GetTimerMaxReadLevel(cluster string) time.Time
+
+		GetRemoteClusterAckInfo(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, error)
 
 		GetTransferAckLevel() int64
 		UpdateTransferAckLevel(ackLevel int64) error

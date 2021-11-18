@@ -1445,8 +1445,19 @@ func (h *Handler) GetReplicationStatus(
 		return nil, errShuttingDown
 	}
 
-	// TODO: @yiminc implement in follow up PR
-	return &historyservice.GetReplicationStatusResponse{}, nil
+	resp := &historyservice.GetReplicationStatusResponse{}
+	for _, shardID := range h.controller.ShardIDs() {
+		engine, err := h.controller.GetEngineForShard(shardID)
+		if err != nil {
+			return nil, err
+		}
+		shard, err := engine.GetReplicationStatus(ctx, request)
+		if err != nil {
+			return nil, err
+		}
+		resp.Shards = append(resp.Shards, shard)
+	}
+	return resp, nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

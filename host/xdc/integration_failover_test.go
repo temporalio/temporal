@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"gopkg.in/yaml.v2"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
@@ -1878,6 +1879,7 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	worker1.Start()
 
 	// Start a workflow
+	startTime := time.Now()
 	workflowID := "integration-activity-heartbeat-workflow-failover-test"
 	run1, err := client1.ExecuteWorkflow(host.NewContext(), sdkclient.StartWorkflowOptions{
 		ID:                 workflowID,
@@ -1893,6 +1895,23 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 
 	worker1.Stop() // stop worker1 so cluster 1 won't make any progress
 	s.failover(namespace, clusterName[1], int64(2), s.cluster1.GetFrontendClient())
+
+	// verify things are replicated over
+	resp, err := s.cluster1.GetHistoryClient().GetReplicationStatus(context.Background(), &historyservice.GetReplicationStatusRequest{})
+	s.NoError(err)
+	s.Equal(1, len(resp.Shards)) // test cluster has only one history shard
+	shard := resp.Shards[0]
+	s.True(shard.MaxReplicationTaskId > 0)
+	s.NotNil(shard.ShardLocalTime)
+	s.True(shard.ShardLocalTime.Before(time.Now()))
+	s.True(shard.ShardLocalTime.After(startTime))
+	s.NotNil(shard.RemoteClusters)
+	standbyAckInfo, ok := shard.RemoteClusters[clusterName[1]]
+	s.True(ok)
+	s.Equal(shard.MaxReplicationTaskId, standbyAckInfo.AckedTaskId)
+	s.NotNil(standbyAckInfo.AckedTaskVisibilityTime)
+	s.True(standbyAckInfo.AckedTaskVisibilityTime.Before(time.Now()))
+	s.True(standbyAckInfo.AckedTaskVisibilityTime.After(startTime))
 
 	// Make sure the heartbeat details are sent to cluster2 even when the activity at cluster1
 	// has heartbeat timeout. Also make sure the information is recorded when the activity state

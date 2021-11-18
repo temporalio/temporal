@@ -34,6 +34,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
+	v10 "go.temporal.io/server/api/historyservice/v1"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
@@ -395,6 +396,21 @@ func (m *MockContext) GetNamespaceRegistry() namespace.Registry {
 func (mr *MockContextMockRecorder) GetNamespaceRegistry() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceRegistry", reflect.TypeOf((*MockContext)(nil).GetNamespaceRegistry))
+}
+
+// GetRemoteClusterAckInfo mocks base method.
+func (m *MockContext) GetRemoteClusterAckInfo(cluster []string) (map[string]*v10.ShardReplicationStatusPerCluster, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRemoteClusterAckInfo", cluster)
+	ret0, _ := ret[0].(map[string]*v10.ShardReplicationStatusPerCluster)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRemoteClusterAckInfo indicates an expected call of GetRemoteClusterAckInfo.
+func (mr *MockContextMockRecorder) GetRemoteClusterAckInfo(cluster interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteClusterAckInfo", reflect.TypeOf((*MockContext)(nil).GetRemoteClusterAckInfo), cluster)
 }
 
 // GetReplicatorAckLevel mocks base method.
