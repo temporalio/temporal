@@ -190,7 +190,7 @@ message VisibilityTaskInfo {
     google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
 }
 
-// visibility_task_data column
+// tiered_storage_task_data column
 message TieredStorageTaskInfo {
     string namespace_id = 1;
     string workflow_id = 2;

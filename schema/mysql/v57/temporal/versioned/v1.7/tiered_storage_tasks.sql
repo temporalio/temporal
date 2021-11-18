@@ -1,5 +1,4 @@
-CREATE TABLE tiered_storage_tasks
-(
+CREATE TABLE tiered_storage_tasks (
     shard_id      INT         NOT NULL,
     task_id       BIGINT      NOT NULL,
     --

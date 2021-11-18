@@ -1,9 +1,8 @@
 {
   "CurrVersion": "1.6",
   "MinCompatibleVersion": "1.0",
-  "Description": "schema update for queue_metadata and tiered storage tasks",
+  "Description": "schema update for queue_metadata",
   "SchemaUpdateCqlFiles": [
-    "queue_metadata.sql",
-    "tiered_storage_tasks.sql"
+    "queue_metadata.sql"
   ]
 }
