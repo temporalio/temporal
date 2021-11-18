@@ -160,7 +160,7 @@ func NewDynamicMetadata(
 	}
 
 	copyClusterInfo := make(map[string]ClusterInformation)
-	for k,v := range clusterInfo {
+	for k, v := range clusterInfo {
 		copyClusterInfo[k] = v
 	}
 	return &dynamicMetadataImpl{
