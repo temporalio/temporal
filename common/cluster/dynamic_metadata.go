@@ -448,7 +448,7 @@ func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failo
 			panic(fmt.Sprintf(
 				"Version increment %v is smaller than initial version: %v.",
 				failoverVersionIncrement,
-				info.InitialFailoverVersion,
+				clusterInfo,
 			))
 		}
 		if len(clusterName) == 0 {
@@ -464,6 +464,11 @@ func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failo
 }
 
 func (d *dynamicMetadataImpl) listAllClusterMetadata() (map[string]*ClusterInformation, error) {
+	result := make(map[string]*ClusterInformation)
+	if d.clusterMetadataStore == nil {
+		return result, nil
+	}
+
 	paginationFn := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		resp, err := d.clusterMetadataStore.ListClusterMetadata(
 			&persistence.ListClusterMetadataRequest{PageSize: defaultClusterMetadataPageSize},
@@ -479,7 +484,6 @@ func (d *dynamicMetadataImpl) listAllClusterMetadata() (map[string]*ClusterInfor
 	}
 
 	iterator := collection.NewPagingIterator(paginationFn)
-	result := make(map[string]*ClusterInformation)
 	for iterator.HasNext() {
 		item, err := iterator.Next()
 		if err != nil {
