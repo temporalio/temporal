@@ -222,7 +222,7 @@ func (s *clientSuite) TestGet() {
 
 func (s *clientSuite) TestWrongGoogleCredentialsPath() {
 	ctx := context.Background()
-	os.Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/Wrong/path")
+	s.T().Setenv("GOOGLE_APPLICATION_CREDENTIALS", "/Wrong/path")
 	_, err := connector.NewClient(ctx, &config.GstorageArchiver{})
 	s.Require().Error(err)
 }

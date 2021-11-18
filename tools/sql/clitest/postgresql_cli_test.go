@@ -25,7 +25,6 @@
 package clitest
 
 import (
-	"os"
 	"strconv"
 	"testing"
 
@@ -92,10 +91,10 @@ func TestPostgreSQLHandlerTestSuite(t *testing.T) {
 }
 
 func TestPostgreSQLSetupSchemaTestSuite(t *testing.T) {
-	os.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
-	os.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
-	os.Setenv("SQL_USER", testUser)
-	os.Setenv("SQL_PASSWORD", testPassword)
+	t.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
+	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
+	t.Setenv("SQL_USER", testUser)
+	t.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewSetupSchemaTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
@@ -105,10 +104,10 @@ func TestPostgreSQLSetupSchemaTestSuite(t *testing.T) {
 }
 
 func TestPostgreSQLUpdateSchemaTestSuite(t *testing.T) {
-	os.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
-	os.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
-	os.Setenv("SQL_USER", testUser)
-	os.Setenv("SQL_PASSWORD", testPassword)
+	t.Setenv("SQL_HOST", environment.GetPostgreSQLAddress())
+	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetPostgreSQLPort()))
+	t.Setenv("SQL_USER", testUser)
+	t.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewUpdateSchemaTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
@@ -122,8 +121,8 @@ func TestPostgreSQLUpdateSchemaTestSuite(t *testing.T) {
 }
 
 func TestPostgreSQLVersionTestSuite(t *testing.T) {
-	os.Setenv("SQL_USER", testUser)
-	os.Setenv("SQL_PASSWORD", testPassword)
+	t.Setenv("SQL_USER", testUser)
+	t.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewVersionTestSuite(
 		environment.GetPostgreSQLAddress(),
 		strconv.Itoa(environment.GetPostgreSQLPort()),
