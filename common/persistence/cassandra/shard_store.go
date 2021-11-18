@@ -80,41 +80,11 @@ func NewShardStore(
 	}
 }
 
-func (d *ShardStore) CreateShard(
-	request *p.InternalCreateShardRequest,
-) error {
-	query := d.Session.Query(templateCreateShardQuery,
-		request.ShardID,
-		rowTypeShard,
-		rowTypeShardNamespaceID,
-		rowTypeShardWorkflowID,
-		rowTypeShardRunID,
-		defaultVisibilityTimestamp,
-		rowTypeShardTaskID,
-		request.ShardInfo.Data,
-		request.ShardInfo.EncodingType.String(),
-		request.RangeID)
-
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
-	if err != nil {
-		return gocql.ConvertError("CreateShard", err)
-	}
-
-	if !applied {
-		return &p.ShardAlreadyExistError{
-			Msg: fmt.Sprintf("Shard already exists in executions table.  ShardId: %v.", request.ShardID),
-		}
-	}
-	return nil
-}
-
-func (d *ShardStore) GetShard(
-	request *p.InternalGetShardRequest,
-) (*p.InternalGetShardResponse, error) {
-	shardID := request.ShardID
+func (d *ShardStore) GetOrCreateShard(
+	request *p.InternalGetOrCreateShardRequest,
+) (*p.InternalGetOrCreateShardResponse, error) {
 	query := d.Session.Query(templateGetShardQuery,
-		shardID,
+		request.ShardID,
 		rowTypeShard,
 		rowTypeShardNamespaceID,
 		rowTypeShardWorkflowID,
@@ -124,11 +94,46 @@ func (d *ShardStore) GetShard(
 
 	var data []byte
 	var encoding string
-	if err := query.Scan(&data, &encoding); err != nil {
-		return nil, gocql.ConvertError("GetShard", err)
+	err := query.Scan(&data, &encoding)
+	if err == nil {
+		return &p.InternalGetOrCreateShardResponse{
+			ShardInfo: p.NewDataBlob(data, encoding),
+		}, nil
+	} else if !gocql.IsNotFoundError(err) || request.CreateShardInfo == nil {
+		return nil, gocql.ConvertError("GetOrCreateShard", err)
 	}
 
-	return &p.InternalGetShardResponse{ShardInfo: p.NewDataBlob(data, encoding)}, nil
+	// shard was not found and we should create it
+	rangeID, shardInfo, err := request.CreateShardInfo()
+	if err != nil {
+		return nil, err
+	}
+
+	query = d.Session.Query(templateCreateShardQuery,
+		request.ShardID,
+		rowTypeShard,
+		rowTypeShardNamespaceID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+		shardInfo.Data,
+		shardInfo.EncodingType.String(),
+		rangeID)
+
+	previous := make(map[string]interface{})
+	applied, err := query.MapScanCAS(previous)
+	if err != nil {
+		return nil, gocql.ConvertError("GetOrCreateShard", err)
+	}
+	if !applied {
+		// conflict, try again
+		request.CreateShardInfo = nil
+		return d.GetOrCreateShard(request)
+	}
+	return &p.InternalGetOrCreateShardResponse{
+		ShardInfo: shardInfo,
+	}, nil
 }
 
 func (d *ShardStore) UpdateShard(

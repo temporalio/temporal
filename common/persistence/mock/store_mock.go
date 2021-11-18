@@ -114,10 +114,10 @@ func (mr *MockShardStoreMockRecorder) GetName() *gomock.Call {
 }
 
 // GetShard mocks base method.
-func (m *MockShardStore) GetShard(request *persistence.InternalGetShardRequest) (*persistence.InternalGetShardResponse, error) {
+func (m *MockShardStore) GetShard(request *persistence.InternalGetShardRequest) (*persistence.InternalGetOrCreateShardResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetShard", request)
-	ret0, _ := ret[0].(*persistence.InternalGetShardResponse)
+	ret0, _ := ret[0].(*persistence.InternalGetOrCreateShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

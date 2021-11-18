@@ -25,8 +25,8 @@
 package persistence
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -56,45 +56,30 @@ func (m *shardManagerImpl) GetName() string {
 }
 
 func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetShardResponse, error) {
-	internalResp, err := m.shardStore.GetShard(&InternalGetShardRequest{
-		ShardID: request.ShardID,
-	})
-	if err == nil {
-		shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo, m.shardStore.GetClusterName())
-		if err != nil {
-			return nil, err
+	var createShardInfo func() (int64, *commonpb.DataBlob, error)
+	if request.CreateIfMissing {
+		createShardInfo = func() (int64, *commonpb.DataBlob, error) {
+			shardInfo := request.InitialShardInfo
+			if shardInfo == nil {
+				shardInfo = &persistencespb.ShardInfo{}
+			}
+			shardInfo.ShardId = request.ShardID
+			shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
+			data, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return 0, nil, err
+			}
+			return shardInfo.GetRangeId(), data, nil
 		}
-		return &GetShardResponse{
-			ShardInfo: shardInfo,
-		}, nil
 	}
-
-	if _, ok := err.(*serviceerror.NotFound); !ok || !request.CreateIfMissing {
-		return nil, err
-	}
-
-	// Not in shard store: create it. Fill in initial shard info if missing.
-	shardInfo := request.InitialShardInfo
-	if shardInfo == nil {
-		shardInfo = &persistencespb.ShardInfo{}
-	}
-	shardInfo.ShardId = request.ShardID
-	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
-	data, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+	internalResp, err := m.shardStore.GetOrCreateShard(&InternalGetOrCreateShardRequest{
+		ShardID:         request.ShardID,
+		CreateShardInfo: createShardInfo,
+	})
 	if err != nil {
 		return nil, err
 	}
-	internalRequest := &InternalCreateShardRequest{
-		ShardID:   shardInfo.GetShardId(),
-		RangeID:   shardInfo.GetRangeId(),
-		ShardInfo: data,
-	}
-	err = m.shardStore.CreateShard(internalRequest)
-	if _, ok := err.(*ShardAlreadyExistError); ok {
-		// raced with someone else trying to create it; just Get again
-		request.CreateIfMissing = false // defensive just to avoid loop if shardStore is broken
-		return m.GetOrCreateShard(request)
-	}
+	shardInfo, err := m.serializer.ShardInfoFromBlob(internalResp.ShardInfo, m.shardStore.GetClusterName())
 	if err != nil {
 		return nil, err
 	}
