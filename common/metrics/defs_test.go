@@ -36,7 +36,7 @@ import (
 var IsMetric = regexp.MustCompile(`^[a-z][a-z_]*$`).MatchString
 
 func TestScopeDefsMapped(t *testing.T) {
-	for i := PersistenceCreateShardScope; i < NumCommonScopes; i++ {
+	for i := PersistenceGetOrCreateShardScope; i < NumCommonScopes; i++ {
 		key, ok := ScopeDefs[Common][i]
 		require.True(t, ok)
 		require.NotEmpty(t, key)
