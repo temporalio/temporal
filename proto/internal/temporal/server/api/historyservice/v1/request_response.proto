@@ -523,7 +523,9 @@ message ShardReplicationStatus {
     int32 shard_id = 1;
     // Max replication task id of current cluster
     int64 max_replication_task_id = 2;
-    map<string, ShardReplicationStatusPerCluster> remote_clusters = 3;
+    // Local time on this shard
+    google.protobuf.Timestamp shard_local_time = 3;
+    map<string, ShardReplicationStatusPerCluster> remote_clusters = 4;
 }
 
 message ShardReplicationStatusPerCluster {
