@@ -651,3 +651,19 @@ func (c *metricClient) GenerateLastHistoryReplicationTasks(
 	}
 	return resp, err
 }
+
+func (c *metricClient) GetReplicationStatus(
+	ctx context.Context,
+	request *historyservice.GetReplicationStatusRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetReplicationStatusResponse, error) {
+	c.metricsClient.IncCounter(metrics.HistoryClientGetReplicationStatusScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.HistoryClientGetReplicationStatusScope, metrics.ClientLatency)
+	resp, err := c.client.GetReplicationStatus(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.HistoryClientGetReplicationStatusScope, metrics.ClientFailures)
+	}
+	return resp, err
+}

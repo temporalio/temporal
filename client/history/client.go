@@ -1048,6 +1048,28 @@ func (c *clientImpl) GenerateLastHistoryReplicationTasks(
 	return response, nil
 }
 
+func (c *clientImpl) GetReplicationStatus(
+	ctx context.Context,
+	request *historyservice.GetReplicationStatusRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.GetReplicationStatusResponse, error) {
+	// TODO: fan out this request to all history services
+	client, err := c.getClientForShardID(1)
+	var response *historyservice.GetReplicationStatusResponse
+	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
+		var err error
+		ctx, cancel := c.createContext(ctx)
+		defer cancel()
+		response, err = client.GetReplicationStatus(ctx, request, opts...)
+		return err
+	}
+	err = c.executeWithRedirect(ctx, client, op)
+	if err != nil {
+		return nil, err
+	}
+	return response, nil
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }

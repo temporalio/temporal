@@ -65,6 +65,7 @@ var (
 		"PurgeDLQMessages":          {},
 		"RemoveTask":                {},
 		"SyncShardStatus":           {},
+		"GetReplicationStatus":      {},
 	}
 )
 
