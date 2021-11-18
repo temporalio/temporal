@@ -43,7 +43,6 @@ type sqlClusterMetadataManager struct {
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
-
 func (s *sqlClusterMetadataManager) ListClusterMetadata(
 	request *p.InternalListClusterMetadataRequest,
 ) (*p.InternalListClusterMetadataResponse, error) {

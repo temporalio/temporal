@@ -701,7 +701,6 @@ func (c *FaultInjectionClusterMetadataStore) GetName() string {
 	return c.baseCMStore.GetName()
 }
 
-
 func (c *FaultInjectionClusterMetadataStore) ListClusterMetadata(request *persistence.InternalListClusterMetadataRequest) (
 	*persistence.InternalListClusterMetadataResponse,
 	error,
