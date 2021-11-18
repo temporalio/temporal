@@ -165,6 +165,7 @@ func NewEngineWithShardContext(
 		matchingClient:            matching,
 		rawMatchingClient:         rawMatchingClient,
 		replicationTaskProcessors: make(map[string]ReplicationTaskProcessor),
+		replicationFetchers:       replicationTaskFetchers,
 	}
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)

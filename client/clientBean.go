@@ -153,18 +153,16 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.Admin
 		info, ok := h.clusterRegistry.GetAllClusterInfo()[cluster]
 		if !ok {
 			panic(fmt.Sprintf(
-				"Unknown cluster name: %v with given cluster client map: %v.",
+				"Unknown cluster name: %v with given cluster client map.",
 				cluster,
-				h.remoteAdminClients,
 			))
 		}
 		// generate new remote cluster
-		client := h.factory.NewAdminClientWithTimeout(
+		client = h.factory.NewAdminClientWithTimeout(
 			info.RPCAddress,
 			admin.DefaultTimeout,
 			admin.DefaultLargeTimeout,
 		)
-
 		h.SetRemoteAdminClient(cluster, client)
 	}
 	return client
@@ -189,13 +187,12 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice
 		info, ok := h.clusterRegistry.GetAllClusterInfo()[cluster]
 		if !ok {
 			panic(fmt.Sprintf(
-				"Unknown cluster name: %v with given cluster client map: %v.",
+				"Unknown cluster name: %v with given cluster client map.",
 				cluster,
-				h.remoteFrontendClients,
 			))
 		}
 		// generate new remote cluster
-		client := h.factory.NewFrontendClient(info.RPCAddress)
+		client = h.factory.NewFrontendClient(info.RPCAddress)
 		h.SetRemoteFrontendClient(cluster, client)
 	}
 	return client

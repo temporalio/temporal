@@ -159,13 +159,17 @@ func NewDynamicMetadata(
 		panic("Cluster info initial versions have duplicates")
 	}
 
+	copyClusterInfo := make(map[string]ClusterInformation)
+	for k,v := range clusterInfo {
+		copyClusterInfo[k] = v
+	}
 	return &dynamicMetadataImpl{
 		status:                   common.DaemonStatusInitialized,
 		enableGlobalNamespace:    enableGlobalNamespace,
 		failoverVersionIncrement: failoverVersionIncrement,
 		masterClusterName:        masterClusterName,
 		currentClusterName:       currentClusterName,
-		clusterInfo:              clusterInfo,
+		clusterInfo:              copyClusterInfo,
 		versionToClusterName:     versionToClusterName,
 		clusterChangeCallback:    make(map[string]CallbackFn),
 		clusterMetadataStore:     clusterMetadataStore,
@@ -313,7 +317,12 @@ func (d *dynamicMetadataImpl) RegisterMetadataChangeCallback(callbackId string, 
 	d.clusterLock.RLock()
 	for clusterName, clusterInfo := range d.clusterInfo {
 		oldEntries[clusterName] = nil
-		newEntries[clusterName] = &clusterInfo
+		newEntries[clusterName] = &ClusterInformation{
+			Enabled:                clusterInfo.Enabled,
+			InitialFailoverVersion: clusterInfo.InitialFailoverVersion,
+			RPCAddress:             clusterInfo.RPCAddress,
+			version:                clusterInfo.version,
+		}
 	}
 	d.clusterLock.RUnlock()
 	cb(oldEntries, newEntries)
@@ -367,14 +376,29 @@ UpdateLoop:
 		if !ok {
 			// handle new cluster registry
 			oldEntries[clusterName] = nil
-			newEntries[clusterName] = &clusterInfo
+			newEntries[clusterName] = &ClusterInformation{
+				Enabled:                clusterMetadata.Enabled,
+				InitialFailoverVersion: clusterMetadata.InitialFailoverVersion,
+				RPCAddress:             clusterMetadata.RPCAddress,
+				version:                clusterMetadata.version,
+			}
 			continue UpdateLoop
 		}
 
 		if clusterMetadata.version > clusterInfo.version {
 			// handle updated cluster registry
-			oldEntries[clusterName] = &clusterInfo
-			newEntries[clusterName] = clusterMetadata
+			oldEntries[clusterName] = &ClusterInformation{
+				Enabled:                clusterInfo.Enabled,
+				InitialFailoverVersion: clusterInfo.InitialFailoverVersion,
+				RPCAddress:             clusterInfo.RPCAddress,
+				version:                clusterInfo.version,
+			}
+			newEntries[clusterName] = &ClusterInformation{
+				Enabled:                clusterMetadata.Enabled,
+				InitialFailoverVersion: clusterMetadata.InitialFailoverVersion,
+				RPCAddress:             clusterMetadata.RPCAddress,
+				version:                clusterMetadata.version,
+			}
 		}
 	}
 	for clusterName, clusterInfo := range clusterInfoMap {
