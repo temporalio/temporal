@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -84,7 +85,7 @@ type (
 		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
 
 		GetClusterReplicationLevel(cluster string) int64
-		UpdateClusterReplicationLevel(cluster string, ackTaskID int64) error
+		UpdateClusterReplicationLevel(cluster string, ackTaskID int64, ackTimestamp time.Time) error
 
 		GetTimerAckLevel() time.Time
 		UpdateTimerAckLevel(ackLevel time.Time) error
@@ -105,6 +106,9 @@ type (
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error)
+		// Delete workflow execution, current workflow execution, and add task to delete visibility.
+		// If branchToken != nil, then delete history also, otherwise leave history.
+		DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64) error
 		AddTasks(request *persistence.AddTasksRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 	}

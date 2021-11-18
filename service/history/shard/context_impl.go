@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -50,6 +51,8 @@ import (
 
 var (
 	defaultTime = time.Unix(0, 0)
+
+	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
 const (
@@ -99,7 +102,13 @@ type (
 		timerMaxReadLevelMap      map[string]time.Time // cluster -> timerMaxReadLevel
 
 		// exist only in memory
-		remoteClusterCurrentTime map[string]time.Time
+		remoteClusterInfos map[string]*remoteClusterInfo
+	}
+
+	remoteClusterInfo struct {
+		CurrentTime               time.Time
+		AckedReplicationTaskID    int64
+		AckedReplicationTimestamp time.Time
 	}
 )
 
@@ -294,12 +303,14 @@ func (s *ContextImpl) GetClusterReplicationLevel(cluster string) int64 {
 	return persistence.EmptyQueueMessageID
 }
 
-func (s *ContextImpl) UpdateClusterReplicationLevel(cluster string, ackTaskID int64) error {
+func (s *ContextImpl) UpdateClusterReplicationLevel(cluster string, ackTaskID int64, ackTimestamp time.Time) error {
 	s.wLock()
 	defer s.wUnlock()
 
 	s.shardInfo.ClusterReplicationLevel[cluster] = ackTaskID
 	s.shardInfo.StolenSinceRenew = 0
+	s.getRemoteClusterInfoLocked(cluster).AckedReplicationTaskID = ackTaskID
+	s.getRemoteClusterInfoLocked(cluster).AckedReplicationTimestamp = ackTimestamp
 	return s.updateShardInfoLocked()
 }
 
@@ -429,7 +440,7 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 
 	currentTime := s.GetTimeSource().Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime = s.remoteClusterCurrentTime[cluster]
+		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
 	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
@@ -609,7 +620,6 @@ func (s *ContextImpl) AddTasks(
 	}
 
 	namespaceID := namespace.ID(request.NamespaceID)
-	workflowID := request.WorkflowID
 
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -620,10 +630,17 @@ func (s *ContextImpl) AddTasks(
 	s.wLock()
 	defer s.wUnlock()
 
+	return s.addTasksLocked(request, namespaceEntry)
+}
+
+func (s *ContextImpl) addTasksLocked(
+	request *persistence.AddTasksRequest,
+	namespaceEntry *namespace.Namespace,
+) error {
 	transferMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDsLocked(
 		namespaceEntry,
-		workflowID,
+		request.WorkflowID,
 		request.TransferTasks,
 		request.ReplicationTasks,
 		request.TimerTasks,
@@ -635,7 +652,7 @@ func (s *ContextImpl) AddTasks(
 	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	request.RangeID = s.getRangeIDLocked()
-	err = s.executionManager.AddTasks(request)
+	err := s.executionManager.AddTasks(request)
 	if err = s.handleErrorLocked(err); err != nil {
 		return err
 	}
@@ -681,6 +698,91 @@ func (s *ContextImpl) AppendHistoryEvents(
 		size = resp.Size
 	}
 	return size, err0
+}
+
+func (s *ContextImpl) DeleteWorkflowExecution(
+	key definition.WorkflowKey,
+	branchToken []byte,
+	version int64,
+) error {
+	if err := s.errorByState(); err != nil {
+		return err
+	}
+
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
+	if err != nil {
+		return err
+	}
+
+	s.wLock()
+	defer s.wUnlock()
+
+	delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: key.NamespaceID,
+		WorkflowID:  key.WorkflowID,
+		RunID:       key.RunID,
+	}
+	op := func() error {
+		return s.GetExecutionManager().DeleteCurrentWorkflowExecution(delCurRequest)
+	}
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return err
+	}
+
+	delRequest := &persistence.DeleteWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: key.NamespaceID,
+		WorkflowID:  key.WorkflowID,
+		RunID:       key.RunID,
+	}
+	op = func() error {
+		return s.GetExecutionManager().DeleteWorkflowExecution(delRequest)
+	}
+	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	if err != nil {
+		return err
+	}
+
+	if branchToken != nil {
+		delHistoryRequest := &persistence.DeleteHistoryBranchRequest{
+			BranchToken: branchToken,
+			ShardID:     s.shardID,
+		}
+		op := func() error {
+			return s.GetExecutionManager().DeleteHistoryBranch(delHistoryRequest)
+		}
+		err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+		if err != nil {
+			return err
+		}
+	}
+
+	// Delete visibility
+	addTasksRequest := &persistence.AddTasksRequest{
+		ShardID:     s.shardID,
+		NamespaceID: key.NamespaceID,
+		WorkflowID:  key.WorkflowID,
+		RunID:       key.RunID,
+
+		TransferTasks:    nil,
+		TimerTasks:       nil,
+		ReplicationTasks: nil,
+		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
+			// TaskID is set by addTasksLocked
+			WorkflowKey:         key,
+			VisibilityTimestamp: s.GetTimeSource().Now(),
+			Version:             version,
+		}},
+	}
+	err = s.addTasksLocked(addTasksRequest, namespaceEntry)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (s *ContextImpl) GetConfig() *configs.Config {
@@ -856,7 +958,6 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 			logWarnTimerLevelDiff < timerLag) {
 
 		s.logger.Warn("Shard ack levels diff exceeds warn threshold.",
-			tag.ShardTime(s.remoteClusterCurrentTime),
 			tag.ShardReplicationAck(s.shardInfo.ReplicationAckLevel),
 			tag.ShardTimerAcks(s.shardInfo.ClusterTimerAckLevel),
 			tag.ShardTransferAcks(s.shardInfo.ClusterTransferAckLevel))
@@ -969,9 +1070,9 @@ func (s *ContextImpl) SetCurrentTime(cluster string, currentTime time.Time) {
 	s.wLock()
 	defer s.wUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		prevTime := s.remoteClusterCurrentTime[cluster]
+		prevTime := s.getRemoteClusterInfoLocked(cluster).CurrentTime
 		if prevTime.Before(currentTime) {
-			s.remoteClusterCurrentTime[cluster] = currentTime
+			s.getRemoteClusterInfoLocked(cluster).CurrentTime = currentTime
 		}
 	} else {
 		panic("Cannot set current time for current cluster")
@@ -982,7 +1083,7 @@ func (s *ContextImpl) GetCurrentTime(cluster string) time.Time {
 	s.rLock()
 	defer s.rUnlock()
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		return s.remoteClusterCurrentTime[cluster]
+		return s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 	return s.GetTimeSource().Now().UTC()
 }
@@ -1300,7 +1401,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	updatedShardInfo.Owner = s.GetHostInfo().Identity()
 
 	// initialize the cluster current time to be the same as ack level
-	remoteClusterCurrentTime := make(map[string]time.Time)
+	remoteClusterInfos := make(map[string]*remoteClusterInfo)
 	timerMaxReadLevelMap := make(map[string]time.Time)
 	for clusterName, info := range s.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
@@ -1313,7 +1414,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 				currentReadTime = timestamp.TimeValue(currentTime)
 			}
 
-			remoteClusterCurrentTime[clusterName] = currentReadTime
+			remoteClusterInfos[clusterName] = &remoteClusterInfo{CurrentTime: currentReadTime}
 			timerMaxReadLevelMap[clusterName] = currentReadTime
 		} else { // active cluster
 			timerMaxReadLevelMap[clusterName] = currentReadTime
@@ -1330,10 +1431,21 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	}
 
 	s.shardInfo = updatedShardInfo
-	s.remoteClusterCurrentTime = remoteClusterCurrentTime
+	s.remoteClusterInfos = remoteClusterInfos
 	s.timerMaxReadLevelMap = timerMaxReadLevelMap
 
 	return nil
+}
+
+func (s *ContextImpl) getRemoteClusterInfoLocked(clusterName string) *remoteClusterInfo {
+	if info, ok := s.remoteClusterInfos[clusterName]; ok {
+		return info
+	}
+	info := &remoteClusterInfo{
+		AckedReplicationTaskID: persistence.EmptyQueueMessageID,
+	}
+	s.remoteClusterInfos[clusterName] = info
+	return info
 }
 
 func (s *ContextImpl) acquireShard() {

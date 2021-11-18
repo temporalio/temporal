@@ -28,6 +28,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -151,6 +152,10 @@ func (ns *Namespace) ID() ID {
 // Name observes this namespace's configured name.
 func (ns *Namespace) Name() Name {
 	return Name(ns.info.Name)
+}
+
+func (ns *Namespace) State() enumspb.NamespaceState {
+	return ns.info.State
 }
 
 // ActiveClusterName observes the name of the cluster that is currently active

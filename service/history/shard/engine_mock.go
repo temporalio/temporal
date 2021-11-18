@@ -31,6 +31,7 @@ package shard
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 
 	gomock "github.com/golang/mock/gomock"
 	common "go.temporal.io/api/common/v1"
@@ -156,18 +157,18 @@ func (mr *MockEngineMockRecorder) GetMutableState(ctx, request interface{}) *gom
 }
 
 // GetReplicationMessages mocks base method.
-func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID, queryMessageID int64) (*repication.ReplicationMessages, error) {
+func (m *MockEngine) GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*repication.ReplicationMessages, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, pollingCluster, ackMessageID, queryMessageID)
+	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
 	ret0, _ := ret[0].(*repication.ReplicationMessages)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReplicationMessages indicates an expected call of GetReplicationMessages.
-func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, pollingCluster, ackMessageID, queryMessageID interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) GetReplicationMessages(ctx, pollingCluster, ackMessageID, ackTimestamp, queryMessageID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, pollingCluster, ackMessageID, queryMessageID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockEngine)(nil).GetReplicationMessages), ctx, pollingCluster, ackMessageID, ackTimestamp, queryMessageID)
 }
 
 // MergeDLQMessages mocks base method.

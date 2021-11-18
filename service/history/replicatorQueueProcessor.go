@@ -386,6 +386,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						VersionHistory:     versionHistory,
 					},
 				},
+				VisibilityTime: &taskInfo.VisibilityTimestamp,
 			}, nil
 		},
 	)
@@ -455,6 +456,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 						NewRunEvents:        newRunEventsBlob,
 					},
 				},
+				VisibilityTime: &taskInfo.VisibilityTimestamp,
 			}
 			return replicationTask, nil
 		},

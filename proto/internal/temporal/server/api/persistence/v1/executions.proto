@@ -289,6 +289,7 @@ message SignalInfo {
     temporal.api.common.v1.Payloads input = 5;
     string control = 6;
     int64 initiated_id = 7;
+    temporal.api.common.v1.Header header = 8;
 }
 
 // checksum column

@@ -2780,6 +2780,9 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 		Name:                  "my signal",
 		Input:                 payloads.EncodeString("test signal input"),
 		Control:               uuid.New(),
+		Header: &commonpb.Header{
+			Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
+		},
 	}
 	err2 := s.UpsertSignalInfoState(updatedInfo, updatedState, int64(5), int64(3), []*persistencespb.SignalInfo{signalInfo})
 	s.NoError(err2)

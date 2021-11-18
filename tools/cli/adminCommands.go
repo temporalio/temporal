@@ -37,6 +37,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -47,7 +49,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -182,6 +183,99 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeMutableStateResp
 		ErrorAndExit("Get workflow mutableState failed", err)
 	}
 	return resp
+}
+
+// RegisterNamespace register a namespace
+func RegisterNamespace(c *cli.Context) error {
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
+
+	description := c.String(FlagDescription)
+	ownerEmail := c.String(FlagOwnerEmail)
+
+	client := cFactory.AdminClient(c)
+
+	var err error
+	retention := defaultNamespaceRetention
+	if c.IsSet(FlagRetention) {
+		retention, err = timestamp.ParseDurationDefaultDays(c.String(FlagRetention))
+		if err != nil {
+			return fmt.Errorf("option %s format is invalid: %s", FlagRetention, err)
+		}
+	}
+
+	var isGlobalNamespace bool
+	if c.IsSet(FlagIsGlobalNamespace) {
+		isGlobalNamespace, err = strconv.ParseBool(c.String(FlagIsGlobalNamespace))
+		if err != nil {
+			return fmt.Errorf("option %s format is invalid: %w.", FlagIsGlobalNamespace, err)
+		}
+	}
+
+	namespaceData := map[string]string{}
+	if c.IsSet(FlagNamespaceData) {
+		namespaceDataStr := c.String(FlagNamespaceData)
+		namespaceData, err = parseNamespaceDataKVs(namespaceDataStr)
+		if err != nil {
+			return fmt.Errorf("option %s format is invalid: %s", FlagNamespaceData, err)
+		}
+	}
+	if len(requiredNamespaceDataKeys) > 0 {
+		err = checkRequiredNamespaceDataKVs(namespaceData)
+		if err != nil {
+			return fmt.Errorf("namespace data missed required data: %s", err)
+		}
+	}
+
+	var activeClusterName string
+	if c.IsSet(FlagActiveClusterName) {
+		activeClusterName = c.String(FlagActiveClusterName)
+	}
+
+	var clusters []*replicationpb.ClusterReplicationConfig
+	if c.IsSet(FlagClusters) {
+		clusterStr := c.String(FlagClusters)
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
+			ClusterName: clusterStr,
+		})
+		for _, clusterStr := range c.Args() {
+			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
+				ClusterName: clusterStr,
+			})
+		}
+	}
+
+	archState := archivalState(c, FlagHistoryArchivalState)
+	archVisState := archivalState(c, FlagVisibilityArchivalState)
+
+	req := &adminservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		Description:                      description,
+		OwnerEmail:                       ownerEmail,
+		Data:                             namespaceData,
+		WorkflowExecutionRetentionPeriod: &retention,
+		Clusters:                         clusters,
+		ActiveClusterName:                activeClusterName,
+		HistoryArchivalState:             archState,
+		HistoryArchivalUri:               c.String(FlagHistoryArchivalURI),
+		VisibilityArchivalState:          archVisState,
+		VisibilityArchivalUri:            c.String(FlagVisibilityArchivalURI),
+		IsGlobalNamespace:                isGlobalNamespace,
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	_, err = client.RegisterNamespace(ctx, req)
+	if err != nil {
+		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); !ok {
+			return fmt.Errorf("namespace registration failed: %s", err)
+		} else {
+			return fmt.Errorf("namespace %s is already registered: %s", namespace, err)
+		}
+	} else {
+		fmt.Printf("Namespace %s successfully registered.\n", namespace)
+	}
+
+	return nil
 }
 
 // AdminListNamespaces outputs a list of all namespaces
@@ -671,31 +765,28 @@ func AdminListGossipMembers(c *cli.Context) {
 	prettyPrintJSONObject(members)
 }
 
-// AdminListClusterMembership outputs a list of cluster membership items
-func AdminListClusterMembership(c *cli.Context) {
-	roleFlag := c.String(FlagClusterMembershipRole)
-	role, err := membership.ServiceNameToServiceTypeEnum(roleFlag)
-	if err != nil {
-		ErrorAndExit("Failed to map membership role", err)
-	}
+// AdminListClusterMembers outputs a list of cluster members
+func AdminListClusterMembers(c *cli.Context) {
+	role, _ := stringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
 	// TODO: refactor this: parseTime shouldn't be used for duration.
 	heartbeatFlag := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC()).UnixNano()
 	heartbeat := time.Duration(heartbeatFlag)
 
-	pFactory := CreatePersistenceFactory(c)
-	manager, err := pFactory.NewClusterMetadataManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize cluster metadata manager", err)
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &adminservice.ListClusterMembersRequest{
+		Role:                enumsspb.ClusterMemberRole(role),
+		LastHeartbeatWithin: &heartbeat,
 	}
 
-	req := &persistence.GetClusterMembersRequest{
-		RoleEquals:          role,
-		LastHeartbeatWithin: heartbeat,
-	}
-	members, err := manager.GetClusterMembers(req)
+	resp, err := adminClient.ListClusterMembers(ctx, req)
 	if err != nil {
-		ErrorAndExit("Failed to get cluster members", err)
+		ErrorAndExit("unable to list cluster members", err)
 	}
+
+	members := resp.ActiveMembers
 
 	prettyPrintJSONObject(members)
 }

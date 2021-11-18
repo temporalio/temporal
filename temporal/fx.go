@@ -27,8 +27,9 @@ package temporal
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
+
+	"go.temporal.io/api/serviceerror"
 
 	"github.com/uber-go/tally/v4"
 	"go.uber.org/fx"
@@ -107,6 +108,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Provide(WorkerServiceProvider),
 		fx.Provide(ApplyClusterMetadataConfigProvider),
 		fx.Invoke(ServerLifetimeHooks),
+		fx.NopLogger,
 	)
 	s := &ServerFx{
 		app,
@@ -187,7 +189,7 @@ func HistoryServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -213,6 +215,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		history.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -244,7 +247,7 @@ func MatchingServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -270,6 +273,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		matching.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -301,7 +305,7 @@ func FrontendServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -327,6 +331,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		frontend.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -358,7 +363,7 @@ func WorkerServiceProvider(
 		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -384,6 +389,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() esclient.Client { return esClient }),
 		fx.Provide(newBootstrapParams),
 		worker.Module,
+		fx.NopLogger,
 	)
 
 	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
@@ -482,6 +488,11 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
+	/**
+	 * 1. Create cluster metadata info in both cluster_metadata and cluster_metadata_info tables.
+	 * 2. For non current clusters, the initialization will be succeeded in the first time but fails in the following due to version conditional update.
+	 * 3. For current cluster, 1) initialize in both tables (applied == true), 2) migrate data from cluster_metadata to cluster_metadata_info (applied == false)
+	 */
 	clusterData := config.ClusterMetadata
 	for clusterName, clusterInfo := range clusterData.ClusterInformation {
 		var clusterId = ""
@@ -489,6 +500,7 @@ func ApplyClusterMetadataConfigProvider(
 			// Only set current cluster Id as we don't know the remote cluster Id.
 			clusterId = uuid.New()
 		}
+		//Case 1: initialize cluster metadata config
 		// We assume the existing remote cluster info is correct.
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
 			&persistence.SaveClusterMetadataRequest{
@@ -505,7 +517,6 @@ func ApplyClusterMetadataConfigProvider(
 		if err != nil {
 			logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(clusterName))
 		}
-
 		if applied {
 			logger.Info("Successfully saved cluster metadata.", tag.ClusterName(clusterName))
 			continue
@@ -514,54 +525,53 @@ func ApplyClusterMetadataConfigProvider(
 		resp, err := clusterMetadataManager.GetClusterMetadata(&persistence.GetClusterMetadataRequest{
 			ClusterName: clusterName,
 		})
-		if err != nil {
+		switch err.(type) {
+		case nil:
+			// Verify current cluster metadata
+			if clusterName == clusterData.CurrentClusterName {
+				var persistedShardCount = resp.HistoryShardCount
+				if config.Persistence.NumHistoryShards != persistedShardCount {
+					logger.Error(
+						mismatchLogMessage,
+						tag.Key("persistence.numHistoryShards"),
+						tag.IgnoredValue(config.Persistence.NumHistoryShards),
+						tag.Value(persistedShardCount))
+					config.Persistence.NumHistoryShards = persistedShardCount
+				}
+			}
+		case *serviceerror.NotFound:
+			if clusterName == clusterData.CurrentClusterName {
+				// Case 3: data exists in cluster metadata but not in cluster metadata info. Back fill data.
+				oldClusterMetadata, err := clusterMetadataManager.GetClusterMetadataV1()
+				if err != nil {
+					return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while getting old cluster metadata: %w", err)
+				}
+				applied, err = clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+					ClusterMetadata: persistencespb.ClusterMetadata{
+						HistoryShardCount:        oldClusterMetadata.HistoryShardCount,
+						ClusterName:              oldClusterMetadata.ClusterName,
+						ClusterId:                oldClusterMetadata.ClusterId,
+						VersionInfo:              oldClusterMetadata.VersionInfo,
+						IndexSearchAttributes:    oldClusterMetadata.IndexSearchAttributes,
+						ClusterAddress:           clusterInfo.RPCAddress,
+						FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
+						InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
+						IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
+						IsConnectionEnabled:      clusterInfo.Enabled,
+					}})
+				if err != nil || !applied {
+					return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while backfiling cluster metadata: %w", err)
+				}
+			} else {
+				return config.ClusterMetadata,
+					config.Persistence,
+					fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
+			}
+		default:
 			return config.ClusterMetadata,
 				config.Persistence,
 				fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
 		}
-
-		if clusterName == resp.GetClusterName() {
-			var persistedShardCount = resp.HistoryShardCount
-			if config.Persistence.NumHistoryShards != persistedShardCount {
-				logger.Error(
-					mismatchLogMessage,
-					tag.Key("persistence.numHistoryShards"),
-					tag.IgnoredValue(config.Persistence.NumHistoryShards),
-					tag.Value(persistedShardCount))
-				config.Persistence.NumHistoryShards = persistedShardCount
-			}
-		}
-
-		// Overwrite cluster information from DB
-		if clusterInfo.Enabled != resp.IsConnectionEnabled {
-			logger.Error(
-				mismatchLogMessage,
-				tag.Key("clusterInfo.enabled"),
-				tag.IgnoredValue(clusterInfo.Enabled),
-				tag.Value(resp.IsConnectionEnabled))
-
-			clusterInfo.Enabled = resp.IsConnectionEnabled
-		}
-		if clusterInfo.Enabled && clusterInfo.RPCAddress != resp.ClusterAddress {
-			logger.Error(
-				mismatchLogMessage,
-				tag.Key("clusterInfo.rpcAddress"),
-				tag.IgnoredValue(clusterInfo.RPCAddress),
-				tag.Value(resp.ClusterAddress))
-
-			clusterInfo.RPCAddress = resp.ClusterAddress
-		}
-		if clusterInfo.Enabled && clusterInfo.InitialFailoverVersion != resp.InitialFailoverVersion {
-			logger.Error(
-				mismatchLogMessage,
-				tag.Key("clusterInfo.initialFailoverVersion"),
-				tag.IgnoredValue(clusterInfo.InitialFailoverVersion),
-				tag.Value(resp.InitialFailoverVersion))
-
-			clusterInfo.InitialFailoverVersion = resp.InitialFailoverVersion
-		}
-		fmt.Println("cluster : version" + clusterName + ":" + strconv.Itoa(int(clusterInfo.InitialFailoverVersion)))
-		config.ClusterMetadata.ClusterInformation[clusterName] = clusterInfo
 	}
 	return config.ClusterMetadata, config.Persistence, nil
 }

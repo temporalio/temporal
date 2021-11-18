@@ -39,6 +39,15 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 const (
 	// ****** CLUSTER_METADATA TABLE ******
+	insertClusterMetadataQryV1 = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES($1, $2, $3, $4)`
+
+	updateClusterMetadataQryV1 = `UPDATE cluster_metadata SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4`
+
+	getClusterMetadataQryV1 = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = $1`
+
+	writeLockGetClusterMetadataQryV1 = getClusterMetadataQryV1 + ` FOR UPDATE`
+
+	// ****** CLUSTER_METADATA_INFO TABLE ******
 	insertClusterMetadataQry = `INSERT INTO cluster_metadata_info (metadata_partition, cluster_name, data, data_encoding, version) VALUES($1, $2, $3, $4, $5)`
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata_info SET data = $1, data_encoding = $2, version = $3 WHERE metadata_partition = $4 AND cluster_name = $5`
@@ -81,6 +90,28 @@ cluster_membership WHERE membership_partition = $`
 	templateWithLimitSuffix               = ` LIMIT $`
 	templateWithOrderBySessionStartSuffix = ` ORDER BY membership_partition ASC, host_id ASC`
 )
+
+func (pdb *db) SaveClusterMetadataV1(
+	ctx context.Context,
+	row *sqlplugin.ClusterMetadataRow,
+) (sql.Result, error) {
+	if row.Version == 0 {
+		return pdb.conn.ExecContext(ctx,
+			insertClusterMetadataQryV1,
+			constMetadataPartition,
+			row.Data,
+			row.DataEncoding,
+			1,
+		)
+	}
+	return pdb.conn.ExecContext(ctx,
+		updateClusterMetadataQryV1,
+		row.Data,
+		row.DataEncoding,
+		row.Version+1,
+		constMetadataPartition,
+	)
+}
 
 func (pdb *db) SaveClusterMetadata(
 	ctx context.Context,
@@ -132,6 +163,19 @@ func (pdb *db) ListClusterMetadata(
 	return rows, err
 }
 
+func (pdb *db) GetClusterMetadataV1(ctx context.Context) (*sqlplugin.ClusterMetadataRow, error) {
+	var row sqlplugin.ClusterMetadataRow
+	err := pdb.conn.GetContext(ctx,
+		&row,
+		getClusterMetadataQryV1,
+		constMetadataPartition,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &row, err
+}
+
 func (pdb *db) GetClusterMetadata(
 	ctx context.Context,
 	filter *sqlplugin.ClusterMetadataFilter,
@@ -147,6 +191,21 @@ func (pdb *db) GetClusterMetadata(
 		return nil, err
 	}
 	return &row, err
+}
+
+func (pdb *db) WriteLockGetClusterMetadataV1(
+	ctx context.Context,
+) (*sqlplugin.ClusterMetadataRow, error) {
+	var row sqlplugin.ClusterMetadataRow
+	err := pdb.conn.GetContext(ctx,
+		&row,
+		writeLockGetClusterMetadataQryV1,
+		constMetadataPartition,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &row, nil
 }
 
 func (pdb *db) WriteLockGetClusterMetadata(

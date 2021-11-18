@@ -209,6 +209,21 @@ func (c *retryableClient) DescribeCluster(
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+func (c *retryableClient) ListClusterMembers(
+	ctx context.Context,
+	request *adminservice.ListClusterMembersRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListClusterMembersResponse, error) {
+
+	var resp *adminservice.ListClusterMembersResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.ListClusterMembers(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
 
 func (c *retryableClient) AddOrUpdateRemoteCluster(
 	ctx context.Context,
@@ -266,6 +281,38 @@ func (c *retryableClient) ListNamespaces(
 	op := func() error {
 		var err error
 		resp, err = c.client.ListNamespaces(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) RegisterNamespace(
+	ctx context.Context,
+	request *adminservice.RegisterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RegisterNamespaceResponse, error) {
+
+	var resp *adminservice.RegisterNamespaceResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.RegisterNamespace(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) UpdateNamespace(
+	ctx context.Context,
+	request *adminservice.UpdateNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateNamespaceResponse, error) {
+
+	var resp *adminservice.UpdateNamespaceResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.UpdateNamespace(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

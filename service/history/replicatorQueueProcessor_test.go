@@ -368,13 +368,14 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
+	taskTimestamp := time.Now().UTC()
 	task := &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			runID,
 		),
-		VisibilityTimestamp: time.Now().UTC(),
+		VisibilityTimestamp: taskTimestamp,
 		TaskID:              taskID,
 		Version:             version,
 		ScheduledID:         scheduleID,
@@ -467,6 +468,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 				VersionHistory:     versionHistory,
 			},
 		},
+		VisibilityTime: timestamp.TimePtr(taskTimestamp),
 	}, result)
 }
 
@@ -479,13 +481,14 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 	scheduleID := int64(144)
 	taskID := int64(1444)
 	version := int64(2333)
+	taskTimestamp := time.Now().UTC()
 	task := &tasks.SyncActivityTask{
 		WorkflowKey: definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			runID,
 		),
-		VisibilityTimestamp: time.Now().UTC(),
+		VisibilityTimestamp: taskTimestamp,
 		TaskID:              taskID,
 		Version:             version,
 		ScheduledID:         scheduleID,
@@ -580,5 +583,6 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 				VersionHistory:     versionHistory,
 			},
 		},
+		VisibilityTime: timestamp.TimePtr(taskTimestamp),
 	}, result)
 }

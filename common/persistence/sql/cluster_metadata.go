@@ -43,6 +43,7 @@ type sqlClusterMetadataManager struct {
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
+
 func (s *sqlClusterMetadataManager) ListClusterMetadata(
 	request *p.InternalListClusterMetadataRequest,
 ) (*p.InternalListClusterMetadataResponse, error) {
@@ -87,6 +88,20 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 	return resp, nil
 }
 
+func (s *sqlClusterMetadataManager) GetClusterMetadataV1() (*p.InternalGetClusterMetadataResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	row, err := s.Db.GetClusterMetadataV1(ctx)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetClusterMetadataV1", err)
+	}
+	return &p.InternalGetClusterMetadataResponse{
+		ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
+		Version:         row.Version,
+	}, nil
+}
+
 func (s *sqlClusterMetadataManager) GetClusterMetadata(
 	request *p.InternalGetClusterMetadataRequest,
 ) (*p.InternalGetClusterMetadataResponse, error) {
@@ -102,6 +117,40 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata(
 		ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
 		Version:         row.Version,
 	}, nil
+}
+
+func (s *sqlClusterMetadataManager) SaveClusterMetadataV1(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	err := s.txExecute(ctx, "SaveClusterMetadataV1", func(tx sqlplugin.Tx) error {
+		oldClusterMetadata, err := tx.WriteLockGetClusterMetadataV1(ctx)
+		var lastVersion int64
+		if err != nil {
+			if err != sql.ErrNoRows {
+				return serviceerror.NewUnavailable(fmt.Sprintf("SaveClusterMetadataV1 operation failed. Error %v", err))
+			}
+		} else {
+			lastVersion = oldClusterMetadata.Version
+		}
+		if request.Version != lastVersion {
+			return serviceerror.NewUnavailable(fmt.Sprintf("SaveClusterMetadataV1 encountered version mismatch, expected %v but got %v.",
+				request.Version, oldClusterMetadata.Version))
+		}
+		_, err = tx.SaveClusterMetadataV1(ctx, &sqlplugin.ClusterMetadataRow{
+			Data:         request.ClusterMetadata.Data,
+			DataEncoding: request.ClusterMetadata.EncodingType.String(),
+			Version:      request.Version,
+		})
+		if err != nil {
+			return convertCommonErrors("SaveClusterMetadataV1", err)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return false, serviceerror.NewUnavailable(err.Error())
+	}
+	return true, nil
 }
 
 func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {

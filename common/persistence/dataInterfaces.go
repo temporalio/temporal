@@ -990,7 +990,7 @@ type (
 		ClusterName string
 	}
 
-	// GetClusterMembersRequest is the response to GetClusterMembers
+	// GetClusterMembersRequest is the request to GetClusterMembers
 	GetClusterMembersRequest struct {
 		LastHeartbeatWithin time.Duration
 		RPCAddressEquals    net.IP
@@ -1172,6 +1172,7 @@ type (
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 		ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error)
 		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
+		GetClusterMetadataV1() (*GetClusterMetadataResponse, error) //TODO: deprecate this after 1.15+
 		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error

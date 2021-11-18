@@ -44,6 +44,7 @@ import (
 	"go.uber.org/atomic"
 
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/rpc"
@@ -123,9 +124,15 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
+	queryArgs := payloads.EncodeString("my query input")
+	queryHeader := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"my query header key": payload.EncodeString("my query header value")},
+	}
 	queryHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
+		s.Equal(queryArgs, task.Query.QueryArgs)
+		s.Equal(queryHeader, task.Query.Header)
 		if task.Query.QueryType == queryType {
 			return payloads.EncodeString("query-result"), nil
 		}
@@ -166,6 +173,8 @@ func (s *integrationSuite) TestQueryWorkflow_Sticky() {
 			},
 			Query: &querypb.WorkflowQuery{
 				QueryType: queryType,
+				QueryArgs: queryArgs,
+				Header:    queryHeader,
 			},
 		})
 		queryResultCh <- QueryResult{Resp: queryResp, Err: err}
@@ -420,9 +429,15 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 		return payloads.EncodeString("Activity Result"), false, nil
 	}
 
+	queryArgs := payloads.EncodeString("my query input")
+	queryHeader := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"my query header key": payload.EncodeString("my query header value")},
+	}
 	queryHandler := func(task *workflowservice.PollWorkflowTaskQueueResponse) (*commonpb.Payloads, error) {
 		s.NotNil(task.Query)
 		s.NotNil(task.Query.QueryType)
+		s.Equal(queryArgs, task.Query.QueryArgs)
+		s.Equal(queryHeader, task.Query.Header)
 		if task.Query.QueryType == queryType {
 			return payloads.EncodeString("query-result"), nil
 		}
@@ -461,6 +476,8 @@ func (s *integrationSuite) TestQueryWorkflow_NonSticky() {
 			},
 			Query: &querypb.WorkflowQuery{
 				QueryType: queryType,
+				QueryArgs: queryArgs,
+				Header:    queryHeader,
 			},
 			QueryRejectCondition: rejectCondition,
 		})

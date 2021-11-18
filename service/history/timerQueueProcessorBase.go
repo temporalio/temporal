@@ -131,7 +131,7 @@ func newTimerQueueProcessorBase(
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(maxPollRPS()) },
 		),
-		retryPolicy: common.CreatePersistanceRetryPolicy(),
+		retryPolicy: common.CreatePersistenceRetryPolicy(),
 	}
 
 	return base

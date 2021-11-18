@@ -696,6 +696,7 @@ func (b *HistoryBuilder) AddSignalExternalWorkflowExecutionInitiatedEvent(
 			Input:             command.Input,
 			Control:           command.Control,
 			ChildWorkflowOnly: command.ChildWorkflowOnly,
+			Header:            command.Header,
 		},
 	}
 
@@ -789,6 +790,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 	signalName string,
 	input *commonpb.Payloads,
 	identity string,
+	header *commonpb.Header,
 ) *historypb.HistoryEvent {
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{
@@ -796,6 +798,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionSignaledEvent(
 			SignalName: signalName,
 			Input:      input,
 			Identity:   identity,
+			Header:     header,
 		},
 	}
 

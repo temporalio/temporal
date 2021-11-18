@@ -1176,6 +1176,21 @@ func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadata(request int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadata), request)
 }
 
+// GetClusterMetadataV1 mocks base method.
+func (m *MockClusterMetadataManager) GetClusterMetadataV1() (*GetClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterMetadataV1")
+	ret0, _ := ret[0].(*GetClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterMetadataV1 indicates an expected call of GetClusterMetadataV1.
+func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadataV1() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadataV1", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadataV1))
+}
+
 // GetCurrentClusterMetadata mocks base method.
 func (m *MockClusterMetadataManager) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
 	m.ctrl.T.Helper()

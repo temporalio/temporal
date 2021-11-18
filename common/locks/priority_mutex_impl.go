@@ -111,6 +111,30 @@ func (c *PriorityMutexImpl) LockLow(
 	return nil
 }
 
+func (c *PriorityMutexImpl) TryLockHigh() bool {
+	c.locker.Lock()
+	defer c.locker.Unlock()
+
+	if c.lockState != PriorityMutexStateUnlocked {
+		return false
+	}
+
+	c.lockState = PriorityMutexStateLockedByHigh
+	return true
+}
+
+func (c *PriorityMutexImpl) TryLockLow() bool {
+	c.locker.Lock()
+	defer c.locker.Unlock()
+
+	if c.lockState != PriorityMutexStateUnlocked {
+		return false
+	}
+
+	c.lockState = PriorityMutexStateLockedByLow
+	return true
+}
+
 // UnlockHigh unlock with high priority, use LockHigh / UnlockHigh pair to lock / unlock
 func (c *PriorityMutexImpl) UnlockHigh() {
 	c.locker.Lock()
@@ -135,6 +159,13 @@ func (c *PriorityMutexImpl) UnlockLow() {
 
 	c.lockState = PriorityMutexStateUnlocked
 	c.notify()
+}
+
+func (c *PriorityMutexImpl) IsLocked() bool {
+	c.locker.Lock()
+	defer c.locker.Unlock()
+
+	return c.lockState != PriorityMutexStateUnlocked
 }
 
 func (c *PriorityMutexImpl) notify() {

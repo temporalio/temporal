@@ -101,6 +101,7 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 			signal.GetSignalName(),
 			signal.GetInput(),
 			signal.GetIdentity(),
+			signal.GetHeader(),
 		); err != nil {
 			return nil, err
 		}

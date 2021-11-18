@@ -31,6 +31,18 @@ service AdminService {
     rpc ListNamespaces (ListNamespacesRequest) returns (ListNamespacesResponse) {
     }
 
+    // RegisterNamespace creates a new namespace.
+    rpc RegisterNamespace (RegisterNamespaceRequest) returns (RegisterNamespaceResponse) {
+    }
+
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+    // UpdateNamespace is used to update the information and configuration for a registered namespace.
+    rpc UpdateNamespace (UpdateNamespaceRequest) returns (UpdateNamespaceResponse) {
+    }
+
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     }
@@ -85,6 +97,10 @@ service AdminService {
 
     // DescribeCluster returns information about Temporal cluster.
     rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
+    }
+
+    // ListClusterMembers returns information about Temporal cluster members.
+    rpc ListClusterMembers(ListClusterMembersRequest) returns (ListClusterMembersResponse) {
     }
 
     // AddOrUpdateRemoteCluster adds or updates remote cluster.

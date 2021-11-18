@@ -723,6 +723,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 				attr.GetSignalName(),
 				attr.GetInput(),
 				attr.GetIdentity(),
+				attr.GetHeader(),
 			); err != nil {
 				return err
 			}

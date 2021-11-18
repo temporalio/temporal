@@ -363,7 +363,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
 	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
+	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID, time.Time{})
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID
@@ -374,7 +374,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
 	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID)
+	err := s.mockShard.UpdateClusterReplicationLevel(cluster.TestAlternativeClusterName, ackedTaskID, time.Time{})
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
@@ -432,13 +432,15 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_More() {
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
 	requestToken := &replicationspb.ReplicationToken{
-		ShardId:                s.shardID,
-		LastProcessedMessageId: maxRxProcessedTaskID,
-		LastRetrievedMessageId: maxRxReceivedTaskID,
+		ShardId:                     s.shardID,
+		LastProcessedMessageId:      maxRxProcessedTaskID,
+		LastProcessedVisibilityTime: &time.Time{},
+		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
 	go func() {
 		request := <-s.requestChan
+		defer close(request.respChan)
 		s.Equal(requestToken, request.token)
 		request.respChan <- &replicationspb.ReplicationMessages{
 			SyncShardStatus:        syncShardTask,
@@ -446,7 +448,6 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_More() {
 			LastRetrievedMessageId: lastRetrievedMessageID,
 			HasMore:                true,
 		}
-		close(request.respChan)
 	}()
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
@@ -504,13 +505,15 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
 	requestToken := &replicationspb.ReplicationToken{
-		ShardId:                s.shardID,
-		LastProcessedMessageId: maxRxProcessedTaskID,
-		LastRetrievedMessageId: maxRxReceivedTaskID,
+		ShardId:                     s.shardID,
+		LastProcessedMessageId:      maxRxProcessedTaskID,
+		LastProcessedVisibilityTime: &time.Time{},
+		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
 	go func() {
 		request := <-s.requestChan
+		defer close(request.respChan)
 		s.Equal(requestToken, request.token)
 		request.respChan <- &replicationspb.ReplicationMessages{
 			SyncShardStatus:        syncShardTask,
@@ -518,7 +521,6 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_NoMore() {
 			LastRetrievedMessageId: lastRetrievedMessageID,
 			HasMore:                false,
 		}
-		close(request.respChan)
 	}()
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
@@ -540,15 +542,16 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Error() {
 	s.replicationTaskProcessor.rxTaskBackoff = rxTaskBackoff
 
 	requestToken := &replicationspb.ReplicationToken{
-		ShardId:                s.shardID,
-		LastProcessedMessageId: maxRxProcessedTaskID,
-		LastRetrievedMessageId: maxRxReceivedTaskID,
+		ShardId:                     s.shardID,
+		LastProcessedMessageId:      maxRxProcessedTaskID,
+		LastProcessedVisibilityTime: &time.Time{},
+		LastRetrievedMessageId:      maxRxReceivedTaskID,
 	}
 
 	go func() {
 		request := <-s.requestChan
+		defer close(request.respChan)
 		s.Equal(requestToken, request.token)
-		close(request.respChan)
 	}()
 
 	tasks, _, err := s.replicationTaskProcessor.paginationFn(nil)
