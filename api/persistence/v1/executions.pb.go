@@ -1162,7 +1162,7 @@ func (m *VisibilityTaskInfo) GetVisibilityTime() *time.Time {
 	return nil
 }
 
-// visibility_task_data column
+// tiered_storage_task_data column
 type TieredStorageTaskInfo struct {
 	NamespaceId    string       `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	WorkflowId     string       `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
