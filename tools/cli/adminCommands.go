@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -384,11 +385,11 @@ func AdminDeleteWorkflow(c *cli.Context) {
 }
 
 func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) {
-	if !c.IsSet(FlagIndex) {
+	if !c.IsSet(FlagElasticsearchIndex) {
 		prompt("Elasticsearch index name is not specified. Continue without visibility document deletion?", c.GlobalBool(FlagAutoConfirm))
 	}
 
-	indexName := getRequiredOption(c, FlagIndex)
+	indexName := getRequiredOption(c, FlagElasticsearchIndex)
 	esClient := newESClient(c)
 
 	query := elastic.NewBoolQuery().
@@ -399,7 +400,7 @@ func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) {
 		query = query.Filter(elastic.NewTermQuery(searchattribute.RunID, c.String(FlagRunID)))
 	}
 	searchParams := &esclient.SearchParameters{
-		Index:    c.String(FlagIndex),
+		Index:    c.String(FlagElasticsearchIndex),
 		Query:    query,
 		PageSize: 10000,
 	}
@@ -459,6 +460,31 @@ func connectToCassandra(c *cli.Context) gocql.Session {
 		ErrorAndExit("connect to Cassandra failed", err)
 	}
 	return session
+}
+
+func newESClient(c *cli.Context) esclient.CLIClient {
+	esUrl := getRequiredOption(c, FlagElasticsearchURL)
+	parsedESUrl, err := url.Parse(esUrl)
+	if err != nil {
+		ErrorAndExit("Unable to parse URL.", err)
+	}
+
+	esConfig := &esclient.Config{
+		URL:      *parsedESUrl,
+		Username: c.String(FlagElasticsearchUsername),
+		Password: c.String(FlagElasticsearchPassword),
+	}
+
+	if c.IsSet(FlagVersion) {
+		esConfig.Version = c.String(FlagVersion)
+	}
+
+	client, err := esclient.NewCLIClient(esConfig, log.NewCLILogger())
+	if err != nil {
+		ErrorAndExit("Unable to create Elasticsearch client", err)
+	}
+
+	return client
 }
 
 // AdminGetNamespaceIDOrName map namespace

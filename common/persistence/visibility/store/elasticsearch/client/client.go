@@ -57,7 +57,7 @@ type (
 		GetMapping(ctx context.Context, index string) (map[string]string, error)
 	}
 
-	// Combine ClientV7 with Client interface after ES v6 support removal.
+	// TODO (alex): Combine ClientV7 with Client interface after ES v6 support removal.
 	ClientV7 interface {
 		Client
 		IsPointInTimeSupported(ctx context.Context) bool
@@ -67,8 +67,6 @@ type (
 
 	CLIClient interface {
 		Client
-		CatIndices(ctx context.Context) (elastic.CatIndicesResponse, error)
-		Bulk() BulkService
 		Delete(ctx context.Context, indexName string, docID string, version int64) error
 	}
 

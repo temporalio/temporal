@@ -169,12 +169,6 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminNamespaceCommands(),
 				},
 				{
-					Name:        "elasticsearch",
-					Aliases:     []string{"es"},
-					Usage:       "Run admin operation on Elasticsearch",
-					Subcommands: newAdminElasticSearchCommands(),
-				},
-				{
 					Name:        "taskqueue",
 					Aliases:     []string{"tq"},
 					Usage:       "Run admin operation on taskQueue",

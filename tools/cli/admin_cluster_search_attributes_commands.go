@@ -103,7 +103,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 
 	request := &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: searchAttributes,
-		IndexName:        c.String(FlagIndex),
+		IndexName:        c.String(FlagElasticsearchIndex),
 		SkipSchemaUpdate: c.Bool(FlagSkipSchemaUpdate),
 	}
 
@@ -118,7 +118,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Search attributes have been added successfully but there was an error while reading them back.", err)
 	}
-	printSearchAttributesResponse(resp, c.String(FlagIndex))
+	printSearchAttributesResponse(resp, c.String(FlagElasticsearchIndex))
 	color.HiGreen("Search attributes have been added successfully.")
 }
 
@@ -138,7 +138,7 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 	defer cancel()
 	request := &adminservice.RemoveSearchAttributesRequest{
 		SearchAttributes: names,
-		IndexName:        c.String(FlagIndex),
+		IndexName:        c.String(FlagElasticsearchIndex),
 	}
 
 	_, err := adminClient.RemoveSearchAttributes(ctx, request)
@@ -150,7 +150,7 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Search attributes have been removed successfully but there was an error while reading them back.", err)
 	}
-	printSearchAttributesResponse(resp, c.String(FlagIndex))
+	printSearchAttributesResponse(resp, c.String(FlagElasticsearchIndex))
 	color.HiGreen("Search attributes have been removed successfully.")
 }
 
@@ -162,17 +162,17 @@ func AdminGetSearchAttributes(c *cli.Context) {
 		ErrorAndExit("Unable to get search attributes.", err)
 	}
 	if c.Bool(FlagPrintJSON) {
-		printSearchAttributesResponseJSON(resp, c.String(FlagIndex))
+		printSearchAttributesResponseJSON(resp, c.String(FlagElasticsearchIndex))
 		return
 	}
-	printSearchAttributesResponse(resp, c.String(FlagIndex))
+	printSearchAttributesResponse(resp, c.String(FlagElasticsearchIndex))
 }
 
 func getSearchAttributes(c *cli.Context, adminClient adminservice.AdminServiceClient) (*adminservice.GetSearchAttributesResponse, error) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	request := &adminservice.GetSearchAttributesRequest{
-		IndexName: c.String(FlagIndex),
+		IndexName: c.String(FlagElasticsearchIndex),
 	}
 	return adminClient.GetSearchAttributes(ctx, request)
 }

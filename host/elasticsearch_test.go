@@ -82,7 +82,7 @@ type elasticsearchIntegrationSuite struct {
 // This cluster use customized threshold for history config
 func (s *elasticsearchIntegrationSuite) SetupSuite() {
 	s.setupSuite("testdata/integration_elasticsearch_cluster.yaml")
-	s.esClient = CreateESClient(s.Suite, s.testClusterConfig.ESConfig.URL.String(), s.testClusterConfig.ESConfig.Version)
+	s.esClient = CreateESClient(s.Suite, s.testClusterConfig.ESConfig, s.Logger)
 	PutIndexTemplate(s.Suite, s.esClient, fmt.Sprintf("testdata/es_%s_index_template.json", s.testClusterConfig.ESConfig.Version), "test-visibility-template")
 	indexName := s.testClusterConfig.ESConfig.GetVisibilityIndex()
 	CreateIndex(s.Suite, s.esClient, indexName)

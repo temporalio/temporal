@@ -90,14 +90,7 @@ const (
 	FlagSkipBaseIsNotCurrent                  = "skip_base_is_not_current"
 	FlagDryRun                                = "dry_run"
 	FlagNonDeterministicOnly                  = "only_non_deterministic"
-	FlagInputTopic                            = "input_topic"
-	FlagInputTopicWithAlias                   = FlagInputTopic + ", it"
-	FlagHostFile                              = "host_file"
 	FlagCluster                               = "cluster"
-	FlagInputCluster                          = "input_cluster"
-	FlagStartOffset                           = "start_offset"
-	FlagTopic                                 = "topic"
-	FlagGroup                                 = "group"
 	FlagResult                                = "result"
 	FlagIdentity                              = "identity"
 	FlagDetail                                = "detail"
@@ -176,20 +169,15 @@ const (
 	FlagMaxFieldLengthWithAlias               = FlagMaxFieldLength + ", maxl"
 	FlagSkipErrorMode                         = "skip_errors"
 	FlagSkipErrorModeWithAlias                = FlagSkipErrorMode + ", serr"
-	FlagHeadersMode                           = "headers"
-	FlagHeadersModeWithAlias                  = FlagHeadersMode + ", he"
-	FlagMessageType                           = "message_type"
-	FlagMessageTypeWithAlias                  = FlagMessageType + ", mt"
-	FlagURL                                   = "url"
-	FlagIndex                                 = "index"
-	FlagBatchSize                             = "batch_size"
-	FlagBatchSizeWithAlias                    = FlagBatchSize + ", bs"
+	FlagElasticsearchURL                      = "url"
+	FlagElasticsearchUsername                 = "es-username"
+	FlagElasticsearchPassword                 = "es-password"
+	FlagElasticsearchIndex                    = "index"
 	FlagMemoKey                               = "memo_key"
 	FlagMemo                                  = "memo"
 	FlagMemoFile                              = "memo_file"
 	FlagSearchAttributeKey                    = "search_attr_key"
 	FlagSearchAttributeValue                  = "search_attr_value"
-	FlagSearchAttributeType                   = "search_attr_type"
 	FlagAddBadBinary                          = "add_bad_binary"
 	FlagRemoveBadBinary                       = "remove_bad_binary"
 	FlagResetType                             = "reset_type"
@@ -676,9 +664,19 @@ func getDBFlags() []cli.Flag {
 func getESFlags(index bool) []cli.Flag {
 	flags := []cli.Flag{
 		cli.StringFlag{
-			Name:  FlagURL,
+			Name:  FlagElasticsearchURL,
 			Value: "http://127.0.0.1:9200",
 			Usage: "URL of Elasticsearch cluster",
+		},
+		cli.StringFlag{
+			Name:  FlagElasticsearchUsername,
+			Value: "",
+			Usage: "Username for Elasticsearch cluster",
+		},
+		cli.StringFlag{
+			Name:  FlagElasticsearchPassword,
+			Value: "",
+			Usage: "Password for Elasticsearch cluster",
 		},
 		cli.StringFlag{
 			Name:  FlagVersion,
@@ -689,7 +687,7 @@ func getESFlags(index bool) []cli.Flag {
 	if index {
 		flags = append(flags,
 			cli.StringFlag{
-				Name:  FlagIndex,
+				Name:  FlagElasticsearchIndex,
 				Usage: "Elasticsearch index name",
 			},
 		)

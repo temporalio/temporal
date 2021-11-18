@@ -406,66 +406,6 @@ func newAdminNamespaceCommands() []cli.Command {
 	}
 }
 
-func newAdminElasticSearchCommands() []cli.Command {
-	return []cli.Command{
-		{
-			Name:    "catIndex",
-			Aliases: []string{"cind"},
-			Usage:   "Cat Indices on Elasticsearch",
-			Flags:   getESFlags(false),
-			Action: func(c *cli.Context) {
-				AdminCatIndices(c)
-			},
-		},
-		{
-			Name:    "index",
-			Aliases: []string{"ind"},
-			Usage:   "Index docs on Elasticsearch",
-			Flags: append(
-				getESFlags(true),
-				cli.StringFlag{
-					Name:  FlagInputFileWithAlias,
-					Usage: "Input file of indexerspb.Message in json format, separated by newline",
-				},
-				cli.IntFlag{
-					Name:  FlagBatchSizeWithAlias,
-					Usage: "Optional batch size of actions for bulk operations",
-					Value: 10,
-				},
-			),
-			Action: func(c *cli.Context) {
-				AdminIndex(c)
-			},
-		},
-		{
-			Name:    "delete",
-			Aliases: []string{"del"},
-			Usage:   "Delete docs on Elasticsearch",
-			Flags: append(
-				getESFlags(true),
-				cli.StringFlag{
-					Name: FlagInputFileWithAlias,
-					Usage: "Input file name. Redirect temporal wf list result (with table format) to a file and use as delete input. " +
-						"First line should be table header like WORKFLOW TYPE | WORKFLOW ID | RUN ID | ...",
-				},
-				cli.IntFlag{
-					Name:  FlagBatchSizeWithAlias,
-					Usage: "Optional batch size of actions for bulk operations",
-					Value: 1000,
-				},
-				cli.IntFlag{
-					Name:  FlagRPS,
-					Usage: "Optional batch request rate per second",
-					Value: 30,
-				},
-			),
-			Action: func(c *cli.Context) {
-				AdminDelete(c)
-			},
-		},
-	}
-}
-
 func newAdminTaskQueueCommands() []cli.Command {
 	return []cli.Command{
 		{
@@ -534,7 +474,7 @@ func newAdminClusterCommands() []cli.Command {
 					Required: false,
 				},
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
@@ -557,7 +497,7 @@ func newAdminClusterCommands() []cli.Command {
 			Usage:   "Remove custom search attributes metadata only (Elasticsearch index schema is not modified)",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
@@ -580,7 +520,7 @@ func newAdminClusterCommands() []cli.Command {
 					Usage: "Output in JSON format",
 				},
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},

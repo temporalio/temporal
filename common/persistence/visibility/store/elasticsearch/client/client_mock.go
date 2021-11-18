@@ -418,35 +418,6 @@ func (m *MockCLIClient) EXPECT() *MockCLIClientMockRecorder {
 	return m.recorder
 }
 
-// Bulk mocks base method.
-func (m *MockCLIClient) Bulk() BulkService {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Bulk")
-	ret0, _ := ret[0].(BulkService)
-	return ret0
-}
-
-// Bulk indicates an expected call of Bulk.
-func (mr *MockCLIClientMockRecorder) Bulk() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Bulk", reflect.TypeOf((*MockCLIClient)(nil).Bulk))
-}
-
-// CatIndices mocks base method.
-func (m *MockCLIClient) CatIndices(ctx context.Context) (v7.CatIndicesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CatIndices", ctx)
-	ret0, _ := ret[0].(v7.CatIndicesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// CatIndices indicates an expected call of CatIndices.
-func (mr *MockCLIClientMockRecorder) CatIndices(ctx interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CatIndices", reflect.TypeOf((*MockCLIClient)(nil).CatIndices), ctx)
-}
-
 // CloseScroll mocks base method.
 func (m *MockCLIClient) CloseScroll(ctx context.Context, id string) error {
 	m.ctrl.T.Helper()

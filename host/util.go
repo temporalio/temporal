@@ -30,12 +30,13 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common/log"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
 
 // CreateESClient create ElasticSearch client for test
-func CreateESClient(s suite.Suite, url string, version string) esclient.IntegrationTestsClient {
-	client, err := esclient.NewIntegrationTestsClient(url, version)
+func CreateESClient(s suite.Suite, config *esclient.Config, logger log.Logger) esclient.IntegrationTestsClient {
+	client, err := esclient.NewIntegrationTestsClient(config, logger)
 	s.Require().NoError(err)
 	return client
 }
