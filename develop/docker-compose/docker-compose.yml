@@ -26,7 +26,7 @@ services:
     networks:
       - temporal-dev-network
   postgresql:
-    image: postgres:9.6
+    image: postgres:13.5
     container_name: temporal-dev-postgresql
     ports:
       - "5432:5432"
