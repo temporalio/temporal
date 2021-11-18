@@ -140,7 +140,7 @@ func (p *shardRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *shardRateLimitedPersistenceClient) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetShardResponse, error) {
+func (p *shardRateLimitedPersistenceClient) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}

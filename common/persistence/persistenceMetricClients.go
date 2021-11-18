@@ -148,7 +148,7 @@ func (p *shardPersistenceClient) GetName() string {
 }
 
 func (p *shardPersistenceClient) GetOrCreateShard(
-	request *GetOrCreateShardRequest) (*GetShardResponse, error) {
+	request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetOrCreateShardScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetOrCreateShardScope, metrics.PersistenceLatency)

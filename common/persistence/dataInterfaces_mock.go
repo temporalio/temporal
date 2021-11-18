@@ -119,10 +119,10 @@ func (mr *MockShardManagerMockRecorder) GetName() *gomock.Call {
 }
 
 // GetOrCreateShard mocks base method.
-func (m *MockShardManager) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetShardResponse, error) {
+func (m *MockShardManager) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetOrCreateShard", request)
-	ret0, _ := ret[0].(*GetShardResponse)
+	ret0, _ := ret[0].(*GetOrCreateShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

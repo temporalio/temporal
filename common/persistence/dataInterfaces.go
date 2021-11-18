@@ -199,8 +199,8 @@ type (
 		InitialShardInfo *persistencespb.ShardInfo
 	}
 
-	// GetShardResponse is the response to GetOrCreateShard
-	GetShardResponse struct {
+	// GetOrCreateShardResponse is the response to GetOrCreateShard
+	GetOrCreateShardResponse struct {
 		ShardInfo *persistencespb.ShardInfo
 	}
 
@@ -1028,7 +1028,7 @@ type (
 	ShardManager interface {
 		Closeable
 		GetName() string
-		GetOrCreateShard(request *GetOrCreateShardRequest) (*GetShardResponse, error)
+		GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
 		UpdateShard(request *UpdateShardRequest) error
 	}
 

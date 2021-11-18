@@ -127,7 +127,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 				ShardID:         shardID,
 				CreateIfMissing: true,
 			}).Return(
-				&persistence.GetShardResponse{
+				&persistence.GetOrCreateShardResponse{
 					ShardInfo: &persistencespb.ShardInfo{
 						ShardId:             shardID,
 						Owner:               s.hostInfo.Identity(),
@@ -212,7 +212,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 				ShardID:         shardID,
 				CreateIfMissing: true,
 			}).Return(
-				&persistence.GetShardResponse{
+				&persistence.GetOrCreateShardResponse{
 					ShardInfo: &persistencespb.ShardInfo{
 						ShardId:             shardID,
 						Owner:               s.hostInfo.Identity(),
@@ -304,7 +304,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 			ShardID:         shardID,
 			CreateIfMissing: true,
 		}).Return(
-			&persistence.GetShardResponse{
+			&persistence.GetOrCreateShardResponse{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
 					Owner:               s.hostInfo.Identity(),
@@ -381,7 +381,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 			ShardID:         shardID,
 			CreateIfMissing: true,
 		}).Return(
-			&persistence.GetShardResponse{
+			&persistence.GetOrCreateShardResponse{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
 					Owner:               s.hostInfo.Identity(),
@@ -593,7 +593,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 		ShardID:         shardID,
 		CreateIfMissing: true,
 	}).Return(
-		&persistence.GetShardResponse{
+		&persistence.GetOrCreateShardResponse{
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:             shardID,
 				Owner:               s.hostInfo.Identity(),

@@ -55,7 +55,7 @@ func (m *shardManagerImpl) GetName() string {
 	return m.shardStore.GetName()
 }
 
-func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetShardResponse, error) {
+func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
 	var createShardInfo func() (int64, *commonpb.DataBlob, error)
 	if request.CreateIfMissing {
 		createShardInfo = func() (int64, *commonpb.DataBlob, error) {
@@ -83,7 +83,7 @@ func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*
 	if err != nil {
 		return nil, err
 	}
-	return &GetShardResponse{
+	return &GetOrCreateShardResponse{
 		ShardInfo: shardInfo,
 	}, nil
 }
