@@ -559,7 +559,11 @@ func (s *ContextImpl) CreateWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
+
+	// Drop lock while calling persistence to allow for more concurrency
+	s.wUnlock()
 	resp, err := s.executionManager.CreateWorkflowExecution(request)
+	s.wLock()
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -613,7 +617,11 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
+
+	// Drop lock while calling persistence to allow for more concurrency
+	s.wUnlock()
 	resp, err := s.executionManager.UpdateWorkflowExecution(request)
+	s.wLock()
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -680,7 +688,11 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
+
+	// Drop lock while calling persistence to allow for more concurrency
+	s.wUnlock()
 	resp, err := s.executionManager.ConflictResolveWorkflowExecution(request)
+	s.wLock()
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -726,15 +738,18 @@ func (s *ContextImpl) addTasksLocked(
 	}
 
 	request.RangeID = s.getRangeIDLocked()
+
+	// Drop lock while calling persistence to allow for more concurrency
+	s.wUnlock()
 	err := s.executionManager.AddTasks(request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
-		return err
+	if err == nil {
+		s.engine.NotifyNewTransferTasks(request.TransferTasks)
+		s.engine.NotifyNewTimerTasks(request.TimerTasks)
+		s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
+		s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
 	}
-	s.engine.NotifyNewTransferTasks(request.TransferTasks)
-	s.engine.NotifyNewTimerTasks(request.TimerTasks)
-	s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
-	s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
-	return nil
+	s.wLock()
+	return s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel)
 }
 
 func (s *ContextImpl) AppendHistoryEvents(
@@ -783,15 +798,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		return err
 	}
 
-	// do not try to get namespace cache within shard lock
-	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
-	if err != nil {
-		return err
-	}
-
-	s.wLock()
-	defer s.wUnlock()
-
 	delCurRequest := &persistence.DeleteCurrentWorkflowExecutionRequest{
 		ShardID:     s.shardID,
 		NamespaceID: key.NamespaceID,
@@ -801,7 +807,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	op := func() error {
 		return s.GetExecutionManager().DeleteCurrentWorkflowExecution(delCurRequest)
 	}
-	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err := backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
 		return err
 	}
@@ -851,7 +857,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			Version:             version,
 		}},
 	}
-	err = s.addTasksLocked(addTasksRequest, namespaceEntry)
+	err = s.AddTasks(addTasksRequest)
 	if err != nil {
 		return err
 	}
