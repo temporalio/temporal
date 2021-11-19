@@ -24,7 +24,7 @@
 
 package cli
 
-import "github.com/urfave/cli"
+import "github.com/urfave/cli/v2"
 
 func newClusterCommands() []cli.Command {
 	return []cli.Command{

@@ -25,7 +25,7 @@
 package cli
 
 import (
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 // GetSearchAttributes get valid search attributes

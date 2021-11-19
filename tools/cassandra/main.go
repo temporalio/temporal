@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/environment"

@@ -22,7 +22,7 @@
 
 package cli
 
-import "github.com/urfave/cli"
+import "github.com/urfave/cli/v2"
 
 func newDataConverterCommands() []cli.Command {
 	return []cli.Command{

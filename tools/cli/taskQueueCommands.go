@@ -32,7 +32,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"github.com/olekukonko/tablewriter"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 // DescribeTaskQueue show pollers info of a given taskqueue

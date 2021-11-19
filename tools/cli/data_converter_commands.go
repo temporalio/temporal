@@ -32,7 +32,7 @@ import (
 	"github.com/gorilla/websocket"
 
 	"github.com/gogo/protobuf/jsonpb"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/server/tools/cli/dataconverter"

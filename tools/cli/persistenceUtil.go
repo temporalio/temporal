@@ -27,7 +27,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 
 	"go.temporal.io/server/common/config"
 

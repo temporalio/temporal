@@ -35,7 +35,6 @@ require (
 	github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95
 	github.com/uber-go/tally/v4 v4.0.1
 	github.com/uber/tchannel-go v1.22.0
-	github.com/urfave/cli v1.22.5
 	github.com/urfave/cli/v2 v2.3.0
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/otel v1.1.0

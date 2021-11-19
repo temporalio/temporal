@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 )
 
 // by default we don't require any namespace data. But this can be overridden by calling SetRequiredNamespaceDataKeys()

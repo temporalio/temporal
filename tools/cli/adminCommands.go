@@ -34,7 +34,7 @@ import (
 	"time"
 
 	"github.com/olivere/elastic/v7"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"

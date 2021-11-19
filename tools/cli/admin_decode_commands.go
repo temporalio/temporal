@@ -33,7 +33,7 @@ import (
 	"strings"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 
 	"go.temporal.io/server/common/codec"
 )

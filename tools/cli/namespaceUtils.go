@@ -29,7 +29,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/uber-go/tally/v4"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/config"
