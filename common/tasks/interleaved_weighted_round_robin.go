@@ -131,9 +131,10 @@ func (s *InterleavedWeightedRoundRobinScheduler) eventLoop() {
 	for {
 		select {
 		case <-s.notifyChan:
-			weightedChannels := s.channels()
-			s.dispatchTasks(weightedChannels)
-			s.notifyRemainingTasks()
+			for s.hasRemainingTasks() {
+				weightedChannels := s.channels()
+				s.dispatchTasks(weightedChannels)
+			}
 
 		case <-s.shutdownChan:
 			return
@@ -219,16 +220,16 @@ LoopDispatch:
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) notifyRemainingTasks() {
+func (s *InterleavedWeightedRoundRobinScheduler) hasRemainingTasks() bool {
 	s.RLock()
 	defer s.RUnlock()
 
 	for _, weightedChan := range s.weightToTaskChannels {
 		if weightedChan.Len() > 0 {
-			s.notifyDispatcher()
-			return
+			return true
 		}
 	}
+	return false
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler) drainTasks() {
