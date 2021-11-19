@@ -266,49 +266,58 @@ func (a *activities) GetMaxReplicationTaskIDs(ctx context.Context) (*replication
 }
 
 func (a *activities) WaitReplication(ctx context.Context, waitRequest waitReplicationRequest) error {
-
-WaitLoop:
 	for {
+		done, err := a.checkReplicationOnce(ctx, waitRequest)
+		if err != nil {
+			return nil
+		}
+		if done {
+			return nil
+		}
+		// keep waiting and check again
 		time.Sleep(time.Second)
 		activity.RecordHeartbeat(ctx, nil)
-		resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
-			RemoteClusters: []string{waitRequest.RemoteCluster},
-		})
-		if err != nil {
-			return err
-		}
-		if int(waitRequest.ShardCount) != len(resp.Shards) {
-			return fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(resp.Shards), waitRequest.ShardCount)
-		}
+	}
+}
 
-		// check that every shard has caught up
-	CheckShard:
-		for _, shard := range resp.Shards {
-			clusterInfo, ok := shard.RemoteClusters[waitRequest.RemoteCluster]
-			if !ok {
-				return fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
-			}
-			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId {
-				continue CheckShard // already caught up, continue to check next shard.
-			}
+// Check if remote cluster has caught up on all shards on replication tasks
+func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitReplicationRequest) (bool, error) {
 
-			if clusterInfo.AckedTaskId < waitRequest.WaitForTaskIds[shard.ShardId] ||
-				shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) > waitRequest.AllowedLagging {
-				a.logger.Info("Wait for remote ack",
-					tag.NewInt32("ShardId", shard.ShardId),
-					tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-					tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
-					tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
-					tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
-					tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-				)
-				continue WaitLoop
-			}
-		}
-		return nil
+	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
+		RemoteClusters: []string{waitRequest.RemoteCluster},
+	})
+	if err != nil {
+		return false, err
+	}
+	if int(waitRequest.ShardCount) != len(resp.Shards) {
+		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(resp.Shards), waitRequest.ShardCount)
 	}
 
-	return nil
+	// check that every shard has caught up
+	for _, shard := range resp.Shards {
+		clusterInfo, ok := shard.RemoteClusters[waitRequest.RemoteCluster]
+		if !ok {
+			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
+		}
+		if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId {
+			continue // already caught up, continue to check next shard.
+		}
+
+		if clusterInfo.AckedTaskId < waitRequest.WaitForTaskIds[shard.ShardId] ||
+			shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) > waitRequest.AllowedLagging {
+			a.logger.Info("Wait for remote ack",
+				tag.NewInt32("ShardId", shard.ShardId),
+				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
+				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
+				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
+				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
+			)
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 func (a *activities) genReplicationTasks(ctx context.Context, request genReplicationForShard) error {
