@@ -32,8 +32,8 @@ import (
 )
 
 const (
-	testMySQLUser      = "root"
-	testMySQLPassword  = "root"
+	testMySQLUser      = "temporal"
+	testMySQLPassword  = "temporal"
 	testMySQLSchemaDir = "schema/mysql/v57"
 
 	testPostgreSQLUser      = "temporal"
