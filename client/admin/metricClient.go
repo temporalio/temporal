@@ -174,6 +174,78 @@ func (c *metricClient) GetShard(
 	return resp, err
 }
 
+func (c *metricClient) ListTimerTasks(
+	ctx context.Context,
+	request *adminservice.ListTimerTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListTimerTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListTimerTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListTimerTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListTimerTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListTimerTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ListReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListReplicationTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListReplicationTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListReplicationTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListReplicationTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListReplicationTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListTransferTasks(
+	ctx context.Context,
+	request *adminservice.ListTransferTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListTransferTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListTransferTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListTransferTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListTransferTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListTransferTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListVisibilityTasks(
+	ctx context.Context,
+	request *adminservice.ListVisibilityTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListVisibilityTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListVisibilityTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListVisibilityTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListVisibilityTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListVisibilityTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) DescribeMutableState(
 	ctx context.Context,
 	request *adminservice.DescribeMutableStateRequest,

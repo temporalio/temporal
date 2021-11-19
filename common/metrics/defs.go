@@ -511,6 +511,14 @@ const (
 	AdminClientCloseShardScope
 	// AdminClientGetShardScope tracks RPC calls to admin service
 	AdminClientGetShardScope
+	// AdminClientListTransferTasksScope tracks RPC calls to admin service
+	AdminClientListTransferTasksScope
+	// AdminClientListTimerTasksScope tracks RPC calls to admin service
+	AdminClientListTimerTasksScope
+	// AdminClientListReplicationTasksScope tracks RPC calls to admin service
+	AdminClientListReplicationTasksScope
+	// AdminClientListVisibilityTasksScope tracks RPC calls to admin service
+	AdminClientListVisibilityTasksScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientDescribeWorkflowMutableStateScope tracks RPC calls to admin service
@@ -740,6 +748,14 @@ const (
 	AdminCloseShardScope
 	// AdminGetShardScope is the metric scope for admin.AdminGetShardScope
 	AdminGetShardScope
+	// AdminListTransferTasksScope is the metric scope for admin.ListTransferTasksScope
+	AdminListTransferTasksScope
+	// AdminListTimerTasksScope is the metric scope for admin.ListTimerTasksScope
+	AdminListTimerTasksScope
+	// AdminListReplicationTasksScope is the metric scope for admin.ListReplicationTasksScope
+	AdminListReplicationTasksScope
+	// AdminListVisibilityTasksScope is the metric scope for admin.ListVisibilityTasksScope
+	AdminListVisibilityTasksScope
 	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
 	AdminReadDLQMessagesScope
 	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
@@ -1368,6 +1384,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientListClusterMembersScope:                    {operation: "AdminClientListClusterMembers", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetShardScope:                              {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListTransferTasksScope:                     {operation: "AdminClientListTransferTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListTimerTasksScope:                        {operation: "AdminClientListTimerTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListReplicationTasksScope:                  {operation: "AdminClientListReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListVisibilityTasksScope:                   {operation: "AdminClientListVisibilityTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetDLQMessagesScope:                        {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1447,6 +1467,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
 		AdminCloseShardScope:                       {operation: "AdminCloseShard"},
 		AdminGetShardScope:                         {operation: "AdminGetShard"},
+		AdminListTransferTasksScope:                {operation: "AdminListTransferTasks"},
+		AdminListTimerTasksScope:                   {operation: "AdminListTimerTasks"},
+		AdminListReplicationTasksScope:             {operation: "AdminListReplicationTasks"},
+		AdminListVisibilityTasksScope:              {operation: "AdminListTimerTasks"},
 		AdminReadDLQMessagesScope:                  {operation: "AdminReadDLQMessages"},
 		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
 		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},

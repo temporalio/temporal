@@ -161,6 +161,62 @@ func (c *clientImpl) GetShard(
 	return client.GetShard(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListTimerTasks(
+	ctx context.Context,
+	request *adminservice.ListTimerTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListTimerTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListTimerTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ListReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListReplicationTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListReplicationTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListTransferTasks(
+	ctx context.Context,
+	request *adminservice.ListTransferTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListTransferTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListTransferTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListVisibilityTasks(
+	ctx context.Context,
+	request *adminservice.ListVisibilityTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListVisibilityTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListVisibilityTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
 	request *adminservice.DescribeMutableStateRequest,
