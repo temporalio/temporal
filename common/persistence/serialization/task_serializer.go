@@ -200,7 +200,7 @@ func (s *TaskSerializer) SerializeVisibilityTasks(
 		case *tasks.DeleteExecutionVisibilityTask:
 			visibilityTask = s.VisibilityDeleteTaskToProto(task)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibilit task type: %v", task))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibility task type: %v", task))
 		}
 
 		blob, err := VisibilityTaskInfoToBlob(visibilityTask)
@@ -250,7 +250,7 @@ func (s *TaskSerializer) SerializeTieredStorageTasks(
 		case *tasks.TieredStorageTask:
 			tieredStorageTask = s.TieredStorageTaskToProto(task)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibilit task type: %v", task))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown tiered storage task type: %v", task))
 		}
 
 		blob, err := TieredStorageTaskInfoToBlob(tieredStorageTask)
@@ -271,15 +271,15 @@ func (s *TaskSerializer) DeserializeTieredStorageTasks(
 		if err != nil {
 			return nil, err
 		}
-		var visibility tasks.Task
+		var task tasks.Task
 		switch tieredStorageTask.TaskType {
 		case enumsspb.TASK_TYPE_TIERED_STORAGE:
-			visibility = s.tieredStorageTaskFromProto(tieredStorageTask)
+			task = s.tieredStorageTaskFromProto(tieredStorageTask)
 		default:
-			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown visibility task type: %v", tieredStorageTask.TaskType))
+			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown tiered storage task type: %v", tieredStorageTask.TaskType))
 		}
 
-		taskSlice[index] = visibility
+		taskSlice[index] = task
 	}
 	return taskSlice, nil
 }

@@ -484,8 +484,8 @@ type (
 	// GetTieredStorageTasksRequest is used to read tasks from the TieredStorage task queue
 	GetTieredStorageTasksRequest struct {
 		ShardID       int32
-		ReadLevel     int64
-		MaxReadLevel  int64
+		MinTaskID     int64
+		MaxTaskID     int64
 		BatchSize     int
 		NextPageToken []byte
 	}

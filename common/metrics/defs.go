@@ -697,10 +697,10 @@ const (
 
 	DynamicConfigScope
 
-	NumCommonScopes
-
 	// TieredStorageQueueProcessorScope is the scope used by all metric emitted by tiered storage queue processor
 	TieredStorageQueueProcessorScope
+
+	NumCommonScopes
 )
 
 // -- Operation scopes for Admin service --

@@ -79,7 +79,7 @@ func (m *sqlExecutionStore) GetTransferTask(
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTransferTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	transferRow := rows[0]
@@ -158,7 +158,7 @@ func (m *sqlExecutionStore) GetTimerTask(
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTimerTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	timerRow := rows[0]
@@ -264,7 +264,7 @@ func (m *sqlExecutionStore) GetReplicationTask(
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetReplicationTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	replicationRow := rows[0]
@@ -494,7 +494,7 @@ func (m *sqlExecutionStore) GetVisibilityTask(
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetVisibilityTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetVisibilityTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	visibilityRow := rows[0]
@@ -570,7 +570,7 @@ func (m *sqlExecutionStore) GetTieredStorageTask(
 	}
 
 	if len(rows) == 0 {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTieredStorageTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetTieredStorageTask operation failed. Failed to get record. TaskId: %v", request.TaskID))
 	}
 
 	TieredStorageRow := rows[0]
@@ -585,8 +585,8 @@ func (m *sqlExecutionStore) GetTieredStorageTasks(
 	defer cancel()
 	rows, err := m.Db.RangeSelectFromTieredStorageTasks(ctx, sqlplugin.TieredStorageTasksRangeFilter{
 		ShardID:   request.ShardID,
-		MinTaskID: request.ReadLevel,
-		MaxTaskID: request.MaxReadLevel,
+		MinTaskID: request.MinTaskID,
+		MaxTaskID: request.MaxTaskID,
 	})
 	if err != nil {
 		if err != sql.ErrNoRows {

@@ -282,10 +282,10 @@ func (t *tieredStorageQueueProcessorImpl) readTasks(
 ) ([]tasks.Task, bool, error) {
 
 	response, err := t.executionManager.GetTieredStorageTasks(&persistence.GetTieredStorageTasksRequest{
-		ShardID:      t.shard.GetShardID(),
-		ReadLevel:    readLevel,
-		MaxReadLevel: t.maxReadAckLevel(),
-		BatchSize:    t.options.BatchSize(),
+		ShardID:   t.shard.GetShardID(),
+		MinTaskID: readLevel,
+		MaxTaskID: t.maxReadAckLevel(),
+		BatchSize: t.options.BatchSize(),
 	})
 
 	if err != nil {

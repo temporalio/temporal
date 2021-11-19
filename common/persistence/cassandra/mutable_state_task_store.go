@@ -883,8 +883,8 @@ func (d *MutableStateTaskStore) GetTieredStorageTasks(
 		rowTypeTieredStorageTaskWorkflowID,
 		rowTypeTieredStorageTaskRunID,
 		defaultTieredStorageTimestamp,
-		request.ReadLevel,
-		request.MaxReadLevel,
+		request.MinTaskID,
+		request.MaxTaskID,
 	)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
