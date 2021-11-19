@@ -27,21 +27,17 @@ package resource
 import (
 	"github.com/uber-go/tally/v4"
 	sdkclient "go.temporal.io/sdk/client"
-	"google.golang.org/grpc"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
@@ -57,7 +53,6 @@ type (
 		MembershipFactoryInitializer MembershipFactoryInitializerFunc
 		RPCFactory                   common.RPCFactory
 		ClientFactoryProvider        client.FactoryProvider
-		AbstractDatastoreFactory     persistenceClient.AbstractDataStoreFactory
 		PersistenceConfig            config.Persistence
 		ClusterMetadataConfig        *cluster.Config
 		ReplicatorConfig             config.Replicator
@@ -68,12 +63,6 @@ type (
 		SdkClient                    sdkclient.Client
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
-		Authorizer                   authorization.Authorizer
-		ClaimMapper                  authorization.ClaimMapper
-		PersistenceServiceResolver   resolver.ServiceResolver
-		AudienceGetter               authorization.JWTAudienceMapper
-		SearchAttributesMapper       searchattribute.Mapper
-		CustomInterceptors           []grpc.UnaryServerInterceptor
 	}
 
 	// MembershipMonitorFactory provides a bootstrapped membership monitor

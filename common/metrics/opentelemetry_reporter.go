@@ -134,6 +134,7 @@ func (r *OpentelemetryReporter) NewClient(logger log.Logger, serviceIdx ServiceI
 	if r.gaugeCache == nil {
 		r.gaugeCache = NewOtelGaugeCache(r)
 	}
+
 	return newOpentelemeteryClient(r.clientConfig, serviceIdx, r, logger, r.gaugeCache)
 }
 

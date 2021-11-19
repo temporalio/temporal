@@ -33,10 +33,10 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -54,6 +54,7 @@ import (
 type (
 	NamespaceLogger log.Logger
 	ServiceName     string
+	ServiceNames    map[string]struct{}
 
 	// ServerImpl is temporal server.
 	ServerImpl struct {
@@ -173,7 +174,7 @@ func (s *ServerImpl) Stop() {
 func newBootstrapParams(
 	logger log.Logger,
 	namespaceLogger NamespaceLogger,
-	so *serverOptions,
+	cfg *config.Config,
 	serviceName ServiceName,
 	dc *dynamicconfig.Collection,
 	serverReporter ServerReporter,
@@ -181,37 +182,33 @@ func newBootstrapParams(
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
+	clientFactoryProvider client.FactoryProvider,
 ) (*resource.BootstrapParams, error) {
 	svcName := string(serviceName)
 	params := &resource.BootstrapParams{
-		Name:                       svcName,
-		NamespaceLogger:            namespaceLogger,
-		PersistenceConfig:          persistenceConfig,
-		ClusterMetadataConfig:      clusterMetadata,
-		DCRedirectionPolicy:        so.config.DCRedirectionPolicy,
-		AbstractDatastoreFactory:   so.customDataStoreFactory,
-		ClientFactoryProvider:      so.clientFactoryProvider,
-		AudienceGetter:             so.audienceGetter,
-		PersistenceServiceResolver: so.persistenceServiceResolver,
-		SearchAttributesMapper:     so.searchAttributesMapper,
-		CustomInterceptors:         so.customInterceptors,
+		Name:                  svcName,
+		NamespaceLogger:       namespaceLogger,
+		PersistenceConfig:     persistenceConfig,
+		ClusterMetadataConfig: clusterMetadata,
+		DCRedirectionPolicy:   cfg.DCRedirectionPolicy,
+		ClientFactoryProvider: clientFactoryProvider,
 	}
 
-	svcCfg := so.config.Services[svcName]
+	svcCfg := cfg.Services[svcName]
 	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, logger, tlsConfigProvider, dc)
 	params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
 	// services to correct addresses used by clients through ServiceResolver lookup API
 	servicePortMap := make(map[string]int)
-	for sn, sc := range so.config.Services {
+	for sn, sc := range cfg.Services {
 		servicePortMap[sn] = sc.RPC.GRPCPort
 	}
 
 	params.MembershipFactoryInitializer =
 		func(persistenceBean persistenceClient.Bean, logger log.Logger) (resource.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
-				&so.config.Global.Membership,
+				&cfg.Global.Membership,
 				rpcFactory.GetRingpopChannel(),
 				svcName,
 				servicePortMap,
@@ -253,7 +250,7 @@ func newBootstrapParams(
 	}
 
 	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
-		HostPort:     so.config.PublicClient.HostPort,
+		HostPort:     cfg.PublicClient.HostPort,
 		Namespace:    common.SystemLocalNamespace,
 		MetricsScope: globalTallyScope,
 		Logger:       log.NewSdkLogger(logger),
@@ -268,26 +265,15 @@ func newBootstrapParams(
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
 		dc,
-		so.config.Archival.History.State,
-		so.config.Archival.History.EnableRead,
-		so.config.Archival.Visibility.State,
-		so.config.Archival.Visibility.EnableRead,
-		&so.config.NamespaceDefaults.Archival,
+		cfg.Archival.History.State,
+		cfg.Archival.History.EnableRead,
+		cfg.Archival.Visibility.State,
+		cfg.Archival.Visibility.EnableRead,
+		&cfg.NamespaceDefaults.Archival,
 	)
 
-	params.ArchiverProvider = provider.NewArchiverProvider(so.config.Archival.History.Provider, so.config.Archival.Visibility.Provider)
+	params.ArchiverProvider = provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
-
-	if so.authorizer != nil {
-		params.Authorizer = so.authorizer
-	} else {
-		params.Authorizer = authorization.NewNoopAuthorizer()
-	}
-	if so.claimMapper != nil {
-		params.ClaimMapper = so.claimMapper
-	} else {
-		params.ClaimMapper = authorization.NewNoopClaimMapper()
-	}
 
 	return params, nil
 }

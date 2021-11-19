@@ -38,6 +38,7 @@ import (
 
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/resolver"
 
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
@@ -150,6 +151,9 @@ func New(
 	persistenceMaxQPS dynamicconfig.IntPropertyFn,
 	persistenceGlobalMaxQPS dynamicconfig.IntPropertyFn,
 	throttledLoggerMaxRPS dynamicconfig.IntPropertyFn,
+	datastoreFactory persistenceClient.AbstractDataStoreFactory,
+	persistenceServiceResolver resolver.ServiceResolver,
+	searchAttributesMapper searchattribute.Mapper,
 ) (impl *Impl, retError error) {
 
 	logger := log.With(pLogger, tag.Service(serviceName))
@@ -168,7 +172,7 @@ func New(
 
 	factory := persistenceClient.NewFactoryImpl(
 		&params.PersistenceConfig,
-		params.PersistenceServiceResolver,
+		persistenceServiceResolver,
 		func(...dynamicconfig.FilterOption) int {
 			if persistenceGlobalMaxQPS() > 0 {
 				// TODO: We have a bootstrap issue to correctly find memberCount.  Membership relies on
@@ -182,7 +186,7 @@ func New(
 			}
 			return persistenceMaxQPS()
 		},
-		params.AbstractDatastoreFactory,
+		datastoreFactory,
 		params.ClusterMetadataConfig.CurrentClusterName,
 		params.MetricsClient,
 		logger,
@@ -314,7 +318,7 @@ func New(
 		clusterMetadata: clusterMetadata,
 		saProvider:      saProvider,
 		saManager:       saManager,
-		saMapper:        params.SearchAttributesMapper,
+		saMapper:        searchAttributesMapper,
 
 		// other common resources
 

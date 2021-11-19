@@ -31,17 +31,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/uber-go/tally/v4"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
-)
-
-const (
-	metricCertsExpired  = "certificates_expired"
-	metricCertsExpiring = "certificates_expiring"
 )
 
 type CertProviderFactory func(
@@ -71,13 +66,13 @@ type localStoreTlsProvider struct {
 	ticker *time.Ticker
 	logger log.Logger
 	stop   chan bool
-	scope  tally.Scope
+	scope  metrics.Scope
 }
 
 var _ TLSConfigProvider = (*localStoreTlsProvider)(nil)
 var _ CertExpirationChecker = (*localStoreTlsProvider)(nil)
 
-func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, logger log.Logger, certProviderFactory CertProviderFactory,
+func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope metrics.Scope, logger log.Logger, certProviderFactory CertProviderFactory,
 ) (TLSConfigProvider, error) {
 
 	internodeProvider := certProviderFactory(&tlsConfig.Internode, nil, nil, tlsConfig.RefreshInterval, logger)
@@ -106,7 +101,6 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope tally.Scope, logg
 }
 
 func (s *localStoreTlsProvider) initialize() {
-
 	period := s.settings.ExpirationChecks.CheckInterval
 	if period != 0 {
 		s.stop = make(chan bool)
@@ -373,7 +367,6 @@ func (s *localStoreTlsProvider) timerCallback() {
 }
 
 func (s *localStoreTlsProvider) checkCertExpiration() {
-
 	defer func() {
 		var retError error
 		log.CapturePanic(s.logger, &retError)
@@ -398,8 +391,8 @@ func (s *localStoreTlsProvider) checkCertExpiration() {
 			return
 		}
 		if s.scope != nil {
-			s.scope.Gauge(metricCertsExpired).Update(float64(len(expired)))
-			s.scope.Gauge(metricCertsExpiring).Update(float64(len(expiring)))
+			s.scope.UpdateGauge(metrics.TlsCertsExpired, float64(len(expired)))
+			s.scope.UpdateGauge(metrics.TlsCertsExpiring, float64(len(expiring)))
 		}
 		s.logCerts(expired, true, errorTime)
 		s.logCerts(expiring, false, errorTime)
