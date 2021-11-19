@@ -27,6 +27,7 @@ package temporal
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/collection"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -657,6 +658,22 @@ func ApplyClusterMetadataConfigProvider(
 						tag.Value(persistedShardCount))
 					config.Persistence.NumHistoryShards = persistedShardCount
 				}
+				if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
+					logger.Error(
+						mismatchLogMessage,
+						tag.Key("clusterMetadata.EnableGlobalNamespace"),
+						tag.IgnoredValue(clusterData.EnableGlobalNamespace),
+						tag.Value(resp.IsGlobalNamespaceEnabled))
+					config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
+				}
+				if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
+					logger.Error(
+						mismatchLogMessage,
+						tag.Key("clusterMetadata.FailoverVersionIncrement"),
+						tag.IgnoredValue(clusterData.FailoverVersionIncrement),
+						tag.Value(resp.FailoverVersionIncrement))
+					config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
+				}
 			}
 		case *serviceerror.NotFound:
 			if clusterName == clusterData.CurrentClusterName {
@@ -692,7 +709,73 @@ func ApplyClusterMetadataConfigProvider(
 				fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
 		}
 	}
+	err = loadClusterInformationFromStore(config, clusterMetadataManager, logger)
+	if err != nil {
+		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
+	}
 	return config.ClusterMetadata, config.Persistence, nil
+}
+
+func loadClusterInformationFromStore(config *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
+	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
+		request := &persistence.ListClusterMetadataRequest{
+			PageSize:      100,
+			NextPageToken: nil,
+		}
+		resp, err := clusterMsg.ListClusterMetadata(request)
+		if err != nil {
+			return nil, nil, err
+		}
+		var pageItem []interface{}
+		for _, metadata := range resp.ClusterMetadata {
+			pageItem = append(pageItem, metadata)
+		}
+		return pageItem, resp.NextPageToken, nil
+	})
+
+	for iter.HasNext() {
+		item, err := iter.Next()
+		if err != nil {
+			return err
+		}
+		metadata := item.(*persistence.GetClusterMetadataResponse)
+		newMetadata := cluster.ClusterInformation{
+			Enabled:                metadata.IsConnectionEnabled,
+			InitialFailoverVersion: metadata.InitialFailoverVersion,
+			RPCAddress:             metadata.ClusterAddress,
+		}
+		if staticMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
+			if staticMetadata.Enabled != metadata.IsConnectionEnabled {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("clusterInformation.Enabled"),
+					tag.IgnoredValue(staticMetadata),
+					tag.Value(newMetadata))
+			}
+			if staticMetadata.RPCAddress != metadata.ClusterAddress {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("clusterInformation.RPCAddress"),
+					tag.IgnoredValue(staticMetadata),
+					tag.Value(newMetadata))
+			}
+			if staticMetadata.InitialFailoverVersion != metadata.InitialFailoverVersion {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("clusterInformation.InitialFailoverVersion"),
+					tag.IgnoredValue(staticMetadata),
+					tag.Value(newMetadata))
+			}
+		} else {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInformation"),
+				tag.IgnoredValue(config.ClusterMetadata.ClusterInformation),
+				tag.Value(newMetadata))
+		}
+		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
+	}
+	return nil
 }
 
 func LoggerProvider(so *serverOptions) log.Logger {

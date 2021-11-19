@@ -52,7 +52,10 @@ const (
 
 	updateClusterMetadataQry = `UPDATE cluster_metadata_info SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? AND cluster_name = ?`
 
-	getClusterMetadataQry          = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name = ?`
+	getClusterMetadataBase         = `SELECT data, data_encoding, version FROM cluster_metadata_info `
+	getClusterMetadataQry          = getClusterMetadataBase + `WHERE metadata_partition = ? AND cluster_name = ?`
+	listClusterMetadataQry         = getClusterMetadataBase + `WHERE metadata_partition = ? ORDER BY cluster_name LIMIT ?`
+	listClusterMetadataRangeQry    = getClusterMetadataBase + `WHERE metadata_partition = ? AND cluster_name > ? ORDER BY cluster_name LIMIT ?`
 	writeLockGetClusterMetadataQry = getClusterMetadataQry
 
 	deleteClusterMetadataQry = `DELETE FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name = ?`
@@ -129,6 +132,32 @@ func (mdb *db) SaveClusterMetadata(
 	)
 }
 
+func (mdb *db) ListClusterMetadata(
+	ctx context.Context,
+	filter *sqlplugin.ClusterMetadataFilter,
+) ([]sqlplugin.ClusterMetadataRow, error) {
+	var err error
+	var rows []sqlplugin.ClusterMetadataRow
+	switch {
+	case len(filter.ClusterName) != 0:
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
+			listClusterMetadataRangeQry,
+			constMetadataPartition,
+			filter.ClusterName,
+			filter.PageSize,
+		)
+	default:
+		err = mdb.conn.SelectContext(ctx,
+			&rows,
+			listClusterMetadataQry,
+			constMetadataPartition,
+			filter.PageSize,
+		)
+	}
+	return rows, err
+}
+
 func (mdb *db) GetClusterMetadataV1(ctx context.Context) (*sqlplugin.ClusterMetadataRow, error) {
 	var row sqlplugin.ClusterMetadataRow
 	err := mdb.conn.GetContext(ctx,
@@ -140,6 +169,7 @@ func (mdb *db) GetClusterMetadataV1(ctx context.Context) (*sqlplugin.ClusterMeta
 		return nil, err
 	}
 	return &row, err
+
 }
 
 func (mdb *db) GetClusterMetadata(

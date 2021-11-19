@@ -1264,6 +1264,21 @@ func (mr *MockClusterMetadataManagerMockRecorder) GetName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetName))
 }
 
+// ListClusterMetadata mocks base method.
+func (m *MockClusterMetadataManager) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListClusterMetadata", request)
+	ret0, _ := ret[0].(*ListClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListClusterMetadata indicates an expected call of ListClusterMetadata.
+func (mr *MockClusterMetadataManagerMockRecorder) ListClusterMetadata(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).ListClusterMetadata), request)
+}
+
 // PruneClusterMembership mocks base method.
 func (m *MockClusterMetadataManager) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
 	m.ctrl.T.Helper()
