@@ -1,1 +1,3 @@
-GRANT ALL PRIVILEGES ON *.* TO 'temporal'@'%' IDENTIFIED BY 'temporal';
+CREATE USER 'temporal'@'%' IDENTIFIED BY 'temporal';
+GRANT ALL PRIVILEGES ON *.* TO 'temporal'@'%';
+FLUSH PRIVILEGES;

@@ -9,7 +9,7 @@ services:
           - cassandra
 
   mysql:
-    image: mysql:5.7
+    image: mysql:8.0
     environment:
       MYSQL_ROOT_PASSWORD: root
     volumes:
