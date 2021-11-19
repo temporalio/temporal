@@ -33,6 +33,7 @@ type (
 	ClientCache interface {
 		GetClientForKey(key string) (interface{}, error)
 		GetClientForClientKey(clientKey string) (interface{}, error)
+		GetAllClients() ([]interface{}, error)
 	}
 
 	keyResolver interface {
@@ -96,4 +97,21 @@ func (c *clientCacheImpl) GetClientForClientKey(clientKey string) (interface{}, 
 	}
 	c.clients[clientKey] = client
 	return client, nil
+}
+
+func (c *clientCacheImpl) GetAllClients() ([]interface{}, error) {
+	var result []interface{}
+	allAddresses, err := c.keyResolver.GetAllAddresses()
+	if err != nil {
+		return nil, err
+	}
+	for _, addr := range allAddresses {
+		client, err := c.GetClientForClientKey(addr)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, client)
+	}
+
+	return result, nil
 }
