@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
@@ -289,13 +290,18 @@ WaitLoop:
 			}
 			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId {
 				continue CheckShard // already caught up, continue to check next shard.
-			} else if clusterInfo.AckedTaskId < waitRequest.WaitForTaskIds[shard.ShardId] {
-				a.logger.Info(fmt.Sprintf("ShardID: %d, acked task id: %d, wait for task id: %d", shard.ShardId, clusterInfo.AckedTaskId, waitRequest.WaitForTaskIds[shard.ShardId]))
-				continue WaitLoop
 			}
 
-			if shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) > waitRequest.AllowedLagging {
-				a.logger.Info(fmt.Sprintf("ShardID: %d, acked %d lagging: %v, allowed lagging: %v", shard.ShardId, clusterInfo.AckedTaskId, shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime), waitRequest.AllowedLagging))
+			if clusterInfo.AckedTaskId < waitRequest.WaitForTaskIds[shard.ShardId] ||
+				shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) > waitRequest.AllowedLagging {
+				a.logger.Info("Wait for remote ack",
+					tag.NewInt32("ShardId", shard.ShardId),
+					tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
+					tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
+					tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
+					tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
+					tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
+				)
 				continue WaitLoop
 			}
 		}
