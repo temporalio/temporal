@@ -26,6 +26,7 @@ package cassandra
 
 import (
 	"fmt"
+	"sync"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -341,7 +342,7 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ? `
 
-	templateDeleteWorkflowExecutionCurrentRowQuery = templateDeleteWorkflowExecutionMutableStateQuery + " if current_run_id = ? "
+	templateDeleteWorkflowExecutionCurrentRowQuery = templateDeleteWorkflowExecutionMutableStateQuery + " IF current_run_id = ? "
 
 	templateDeleteWorkflowExecutionSignalRequestedQuery = `UPDATE executions ` +
 		`SET signal_requested = signal_requested - ? ` +
@@ -358,6 +359,9 @@ type (
 	MutableStateStore struct {
 		Session gocql.Session
 		Logger  log.Logger
+		// Serialize all LWTs on executions table ourselves to avoid Cassandra timeouts.
+		// Key is shardid (partition key of table).
+		locks map[int32]*sync.Mutex
 	}
 )
 
@@ -368,12 +372,26 @@ func NewMutableStateStore(
 	return &MutableStateStore{
 		Session: session,
 		Logger:  logger,
+		locks:   make(map[int32]*sync.Mutex),
 	}
+}
+
+func (d *MutableStateStore) shardLock(shardID int32) *sync.Mutex {
+	lock, ok := d.locks[shardID]
+	if !ok {
+		lock = new(sync.Mutex)
+		d.locks[shardID] = lock
+	}
+	return lock
 }
 
 func (d *MutableStateStore) CreateWorkflowExecution(
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (*p.InternalCreateWorkflowExecutionResponse, error) {
+	lock := d.shardLock(request.ShardID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
 
 	shardID := request.ShardID
@@ -569,6 +587,10 @@ func (d *MutableStateStore) GetWorkflowExecution(
 func (d *MutableStateStore) UpdateWorkflowExecution(
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
+	lock := d.shardLock(request.ShardID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
 
 	updateWorkflow := request.UpdateWorkflowMutation
@@ -701,6 +723,10 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
+	lock := d.shardLock(request.ShardID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
 
 	currentWorkflow := request.CurrentWorkflowMutation
@@ -907,6 +933,10 @@ func (d *MutableStateStore) DeleteWorkflowExecution(
 func (d *MutableStateStore) DeleteCurrentWorkflowExecution(
 	request *p.DeleteCurrentWorkflowExecutionRequest,
 ) error {
+	lock := d.shardLock(request.ShardID)
+	lock.Lock()
+	defer lock.Unlock()
+
 	query := d.Session.Query(templateDeleteWorkflowExecutionCurrentRowQuery,
 		request.ShardID,
 		rowTypeExecution,
