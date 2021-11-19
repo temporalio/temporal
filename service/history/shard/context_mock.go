@@ -483,6 +483,20 @@ func (mr *MockContextMockRecorder) GetThrottledLogger() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetThrottledLogger", reflect.TypeOf((*MockContext)(nil).GetThrottledLogger))
 }
 
+// GetTieredStorageAckLevel mocks base method.
+func (m *MockContext) GetTieredStorageAckLevel() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTieredStorageAckLevel")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetTieredStorageAckLevel indicates an expected call of GetTieredStorageAckLevel.
+func (mr *MockContextMockRecorder) GetTieredStorageAckLevel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTieredStorageAckLevel", reflect.TypeOf((*MockContext)(nil).GetTieredStorageAckLevel))
+}
+
 // GetTimeSource mocks base method.
 func (m *MockContext) GetTimeSource() clock.TimeSource {
 	m.ctrl.T.Helper()
@@ -661,6 +675,20 @@ func (m *MockContext) UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel i
 func (mr *MockContextMockRecorder) UpdateReplicatorDLQAckLevel(sourCluster, ackLevel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReplicatorDLQAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateReplicatorDLQAckLevel), sourCluster, ackLevel)
+}
+
+// UpdateTieredStorageAckLevel mocks base method.
+func (m *MockContext) UpdateTieredStorageAckLevel(ackLevel int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTieredStorageAckLevel", ackLevel)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateTieredStorageAckLevel indicates an expected call of UpdateTieredStorageAckLevel.
+func (mr *MockContextMockRecorder) UpdateTieredStorageAckLevel(ackLevel interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTieredStorageAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateTieredStorageAckLevel), ackLevel)
 }
 
 // UpdateTimerAckLevel mocks base method.

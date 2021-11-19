@@ -279,6 +279,40 @@ func TestPostgreSQLHistoryReplicationTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQLHistoryVisibilityTaskSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryVisibilityTaskSuite(t, store)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLHistoryTieredStorageTaskSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		_ = store.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newHistoryTieredStorageTaskSuite(t, store)
+	suite.Run(t, s)
+}
+
 func TestPostgreSQLHistoryReplicationDLQTaskSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)

@@ -620,6 +620,40 @@ func (e *FaultInjectionExecutionStore) RangeCompleteVisibilityTask(request *pers
 	return e.baseExecutionStore.RangeCompleteVisibilityTask(request)
 }
 
+func (e *FaultInjectionExecutionStore) GetTieredStorageTask(request *persistence.GetTieredStorageTaskRequest) (
+	*persistence.InternalGetTieredStorageTaskResponse,
+	error,
+) {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return e.baseExecutionStore.GetTieredStorageTask(request)
+}
+
+func (e *FaultInjectionExecutionStore) GetTieredStorageTasks(request *persistence.GetTieredStorageTasksRequest) (
+	*persistence.InternalGetTieredStorageTasksResponse,
+	error,
+) {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return e.baseExecutionStore.GetTieredStorageTasks(request)
+}
+
+func (e *FaultInjectionExecutionStore) CompleteTieredStorageTask(request *persistence.CompleteTieredStorageTaskRequest) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.CompleteTieredStorageTask(request)
+}
+
+func (e *FaultInjectionExecutionStore) RangeCompleteTieredStorageTask(request *persistence.RangeCompleteTieredStorageTaskRequest) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.RangeCompleteTieredStorageTask(request)
+}
+
 func (e *FaultInjectionExecutionStore) AppendHistoryNodes(request *persistence.InternalAppendHistoryNodesRequest) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err

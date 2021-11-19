@@ -283,6 +283,24 @@ func (p *executionRateLimitedPersistenceClient) GetVisibilityTasks(request *GetV
 	return response, err
 }
 
+func (p *executionRateLimitedPersistenceClient) GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*GetTieredStorageTaskResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetTieredStorageTask(request)
+	return response, err
+}
+
+func (p *executionRateLimitedPersistenceClient) GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*GetTieredStorageTasksResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetTieredStorageTasks(request)
+	return response, err
+}
+
 func (p *executionRateLimitedPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -334,6 +352,24 @@ func (p *executionRateLimitedPersistenceClient) RangeCompleteVisibilityTask(requ
 	}
 
 	err := p.persistence.RangeCompleteVisibilityTask(request)
+	return err
+}
+
+func (p *executionRateLimitedPersistenceClient) CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.CompleteTieredStorageTask(request)
+	return err
+}
+
+func (p *executionRateLimitedPersistenceClient) RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RangeCompleteTieredStorageTask(request)
 	return err
 }
 

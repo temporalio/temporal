@@ -1,8 +1,9 @@
 {
   "CurrVersion": "1.6",
   "MinCompatibleVersion": "1.0",
-  "Description": "create cluster metadata info table to store cluster information",
+  "Description": "create cluster metadata info table to store cluster information and add tiered storage queue into executions",
   "SchemaUpdateCqlFiles": [
+    "executions.cql",
     "cluster_metadata_info.cql"
   ]
 }

@@ -241,6 +241,22 @@ func (s *ContextImpl) UpdateVisibilityAckLevel(ackLevel int64) error {
 	return s.updateShardInfoLocked()
 }
 
+func (s *ContextImpl) GetTieredStorageAckLevel() int64 {
+	s.rLock()
+	defer s.rUnlock()
+
+	return s.shardInfo.TieredStorageAckLevel
+}
+
+func (s *ContextImpl) UpdateTieredStorageAckLevel(ackLevel int64) error {
+	s.wLock()
+	defer s.wUnlock()
+
+	s.shardInfo.TieredStorageAckLevel = ackLevel
+	s.shardInfo.StolenSinceRenew = 0
+	return s.updateShardInfoLocked()
+}
+
 func (s *ContextImpl) GetReplicatorAckLevel() int64 {
 	s.rLock()
 	defer s.rUnlock()

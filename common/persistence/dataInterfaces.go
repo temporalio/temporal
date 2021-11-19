@@ -468,6 +468,32 @@ type (
 		NextPageToken []byte
 	}
 
+	// GetTieredStorageTaskRequest is the request for GetTieredStorageTask
+	GetTieredStorageTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetTieredStorageTaskResponse is the response to GetTieredStorageTask
+	GetTieredStorageTaskResponse struct {
+		Task tasks.Task
+	}
+
+	// GetTieredStorageTasksRequest is used to read tasks from the TieredStorage task queue
+	GetTieredStorageTasksRequest struct {
+		ShardID       int32
+		MinTaskID     int64
+		MaxTaskID     int64
+		BatchSize     int
+		NextPageToken []byte
+	}
+
+	// GetTieredStorageTasksResponse is the response to GetTieredStorageTasksRequest
+	GetTieredStorageTasksResponse struct {
+		Tasks         []tasks.Task
+		NextPageToken []byte
+	}
+
 	// GetReplicationTaskRequest is the request for GetReplicationTask
 	GetReplicationTaskRequest struct {
 		ShardID int32
@@ -515,6 +541,19 @@ type (
 
 	// RangeCompleteVisibilityTaskRequest is used to complete a range of tasks in the visibility task queue
 	RangeCompleteVisibilityTaskRequest struct {
+		ShardID              int32
+		ExclusiveBeginTaskID int64
+		InclusiveEndTaskID   int64
+	}
+
+	// CompleteTieredStorageTaskRequest is used to complete a task in the TieredStorage task queue
+	CompleteTieredStorageTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// RangeCompleteTieredStorageTaskRequest is used to complete a range of tasks in the TieredStorage task queue
+	RangeCompleteTieredStorageTaskRequest struct {
 		ShardID              int32
 		ExclusiveBeginTaskID int64
 		InclusiveEndTaskID   int64
@@ -1084,6 +1123,11 @@ type (
 		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
+
+		GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*GetTieredStorageTaskResponse, error)
+		GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*GetTieredStorageTasksResponse, error)
+		CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error
+		RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts

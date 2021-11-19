@@ -57,6 +57,7 @@ message ShardInfo {
     map<string, int64> cluster_replication_level = 12;
     map<string, int64> replication_dlq_ack_level = 13;
     int64 visibility_ack_level = 14;
+    int64 tiered_storage_ack_level = 15;
 }
 
 // execution column
@@ -180,6 +181,17 @@ message ReplicationTaskInfo {
 
 // visibility_task_data column
 message VisibilityTaskInfo {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    temporal.server.api.enums.v1.TaskType task_type = 4;
+    int64 version = 5;
+    int64 task_id = 6;
+    google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
+}
+
+// tiered_storage_task_data column
+message TieredStorageTaskInfo {
     string namespace_id = 1;
     string workflow_id = 2;
     string run_id = 3;
