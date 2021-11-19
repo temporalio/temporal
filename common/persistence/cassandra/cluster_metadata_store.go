@@ -48,6 +48,7 @@ const (
 	templateUpdateClusterMetadataV1 = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? IF version = ?`
 
 	// ****** CLUSTER_METADATA_INFO TABLE ******
+	templateListClusterMetadata   = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = ?`
 	templateGetClusterMetadata    = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name= ?`
 	templateCreateClusterMetadata = `INSERT INTO cluster_metadata_info (metadata_partition, cluster_name, data, data_encoding, version) VALUES(?, ?, ?, ?, ?) IF NOT EXISTS`
 	templateUpdateClusterMetadata = `UPDATE cluster_metadata_info SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? AND cluster_name = ? IF version = ?`
@@ -88,6 +89,42 @@ func NewClusterMetadataStore(
 		session: session,
 		logger:  logger,
 	}, nil
+}
+
+func (m *ClusterMetadataStore) ListClusterMetadata(
+	request *p.InternalListClusterMetadataRequest,
+) (*p.InternalListClusterMetadataResponse, error) {
+	query := m.session.Query(templateListClusterMetadata, constMetadataPartition)
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
+
+	response := &p.InternalListClusterMetadataResponse{}
+	for {
+		var clusterMetadata []byte
+		var encoding string
+		var version int64
+
+		if !iter.Scan(
+			&clusterMetadata,
+			&encoding,
+			&version) {
+			break
+		}
+		response.ClusterMetadata = append(
+			response.ClusterMetadata,
+			&p.InternalGetClusterMetadataResponse{
+				ClusterMetadata: p.NewDataBlob(clusterMetadata, encoding),
+				Version:         version,
+			},
+		)
+	}
+
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
+	if err := iter.Close(); err != nil {
+		return nil, gocql.ConvertError("ListClusterMetadata", err)
+	}
+	return response, nil
 }
 
 func (m *ClusterMetadataStore) GetClusterMetadataV1() (*p.InternalGetClusterMetadataResponse, error) {

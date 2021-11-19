@@ -55,6 +55,7 @@ type (
 
 	ClusterMetadataFilter struct {
 		ClusterName string
+		PageSize    *int
 	}
 
 	// ClusterMembershipFilter is used for GetClusterMembership queries
@@ -81,6 +82,7 @@ type (
 		SaveClusterMetadata(ctx context.Context, row *ClusterMetadataRow) (sql.Result, error)
 		GetClusterMetadataV1(ctx context.Context) (*ClusterMetadataRow, error) // TODO: deprecate this after 1.15+
 		GetClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (*ClusterMetadataRow, error)
+		ListClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) ([]ClusterMetadataRow, error)
 		DeleteClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (sql.Result, error)
 		WriteLockGetClusterMetadataV1(ctx context.Context) (*ClusterMetadataRow, error) // TODO: deprecate this after 1.15+
 		WriteLockGetClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (*ClusterMetadataRow, error)

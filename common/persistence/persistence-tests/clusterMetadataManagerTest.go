@@ -405,7 +405,6 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 				IsGlobalNamespaceEnabled: true,
 				IsConnectionEnabled:      true,
 			}})
-
 	s.Nil(err)
 	s.True(initialResp)
 
@@ -457,4 +456,26 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 
 	getResp, err = s.ClusterMetadataManager.GetClusterMetadataV1()
 	s.Equal("2.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
+
+	// Case 11 - List
+	_, err = s.ClusterMetadataManager.SaveClusterMetadata(
+		&p.SaveClusterMetadataRequest{
+			ClusterMetadata: persistencespb.ClusterMetadata{
+				ClusterName:              clusterNameToPersist + "2",
+				HistoryShardCount:        historyShardsToPersist,
+				ClusterId:                clusterIdToPersist,
+				ClusterAddress:           clusterAddress,
+				FailoverVersionIncrement: failoverVersionIncrement,
+				InitialFailoverVersion:   initialFailoverVersion,
+				IsGlobalNamespaceEnabled: true,
+				IsConnectionEnabled:      true,
+			}})
+	s.NoError(err)
+
+	resp, err := s.ClusterMetadataManager.ListClusterMetadata(&p.ListClusterMetadataRequest{PageSize: 1})
+	s.NoError(err)
+	s.Equal(1, len(resp.ClusterMetadata))
+	resp, err = s.ClusterMetadataManager.ListClusterMetadata(&p.ListClusterMetadataRequest{PageSize: 1, NextPageToken: resp.NextPageToken})
+	s.NoError(err)
+	s.Equal(1, len(resp.ClusterMetadata))
 }

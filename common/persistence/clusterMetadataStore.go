@@ -108,6 +108,26 @@ func (m *clusterMetadataManagerImpl) PruneClusterMembership(request *PruneCluste
 	return m.persistence.PruneClusterMembership(request)
 }
 
+func (m *clusterMetadataManagerImpl) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
+	resp, err := m.persistence.ListClusterMetadata(&InternalListClusterMetadataRequest{
+		PageSize:      request.PageSize,
+		NextPageToken: request.NextPageToken,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	clusterMetadata := make([]*GetClusterMetadataResponse, 0, len(resp.ClusterMetadata))
+	for _, cm := range resp.ClusterMetadata {
+		res, err := m.convertInternalGetClusterMetadataResponse(cm)
+		if err != nil {
+			return nil, err
+		}
+		clusterMetadata = append(clusterMetadata, res)
+	}
+	return &ListClusterMetadataResponse{ClusterMetadata: clusterMetadata, NextPageToken: resp.NextPageToken}, nil
+}
+
 func (m *clusterMetadataManagerImpl) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
 	resp, err := m.persistence.GetClusterMetadata(&InternalGetClusterMetadataRequest{ClusterName: m.currentClusterName})
 	if err != nil {
@@ -209,6 +229,20 @@ func (m *clusterMetadataManagerImpl) DeleteClusterMetadata(request *DeleteCluste
 	}
 
 	return m.persistence.DeleteClusterMetadata(&InternalDeleteClusterMetadataRequest{ClusterName: request.ClusterName})
+}
+
+func (m *clusterMetadataManagerImpl) convertInternalGetClusterMetadataResponse(
+	resp *InternalGetClusterMetadataResponse,
+) (*GetClusterMetadataResponse, error) {
+	mcm, err := m.serializer.DeserializeClusterMetadata(resp.ClusterMetadata)
+	if err != nil {
+		return nil, err
+	}
+
+	return &GetClusterMetadataResponse{
+		ClusterMetadata: *mcm,
+		Version:         resp.Version,
+	}, nil
 }
 
 // immutableFieldsChanged returns true if any of immutable fields changed.

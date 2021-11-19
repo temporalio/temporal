@@ -93,6 +93,7 @@ type (
 	ClusterMetadataStore interface {
 		Closeable
 		GetName() string
+		ListClusterMetadata(request *InternalListClusterMetadataRequest) (*InternalListClusterMetadataResponse, error)
 		GetClusterMetadataV1() (*InternalGetClusterMetadataResponse, error) //TODO: deprecate this after 1.15+
 		GetClusterMetadata(request *InternalGetClusterMetadataRequest) (*InternalGetClusterMetadataResponse, error)
 		SaveClusterMetadataV1(request *InternalSaveClusterMetadataRequest) (bool, error) //TODO: deprecate this after 1.15+
@@ -684,6 +685,18 @@ type (
 	InternalListNamespacesResponse struct {
 		Namespaces    []*InternalGetNamespaceResponse
 		NextPageToken []byte
+	}
+
+	// InternalListClusterMetadataRequest is the request for ListClusterMetadata
+	InternalListClusterMetadataRequest struct {
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	// InternalListClusterMetadataResponse is the response for ListClusterMetadata
+	InternalListClusterMetadataResponse struct {
+		ClusterMetadata []*InternalGetClusterMetadataResponse
+		NextPageToken   []byte
 	}
 
 	// InternalGetClusterMetadataRequest is the request for GetClusterMetadata

@@ -735,6 +735,16 @@ func (c *FaultInjectionClusterMetadataStore) GetName() string {
 	return c.baseCMStore.GetName()
 }
 
+func (c *FaultInjectionClusterMetadataStore) ListClusterMetadata(request *persistence.InternalListClusterMetadataRequest) (
+	*persistence.InternalListClusterMetadataResponse,
+	error,
+) {
+	if err := c.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return c.baseCMStore.ListClusterMetadata(request)
+}
+
 func (c *FaultInjectionClusterMetadataStore) GetClusterMetadataV1() (*persistence.InternalGetClusterMetadataResponse, error) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return nil, err
