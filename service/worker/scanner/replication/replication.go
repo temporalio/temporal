@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	apicommon "go.temporal.io/api/common/v1"
@@ -37,20 +38,24 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
 
 const (
-	genReplicationWorkflowName = "gen-replication"
-	listExecutionPageSize      = 1000
+	forceReplicationWorkflowName = "force-replication"
+	listExecutionPageSize        = 1000
 )
 
 type (
-	GenReplicationOptions struct {
+	ForceReplicationOptions struct {
 		Namespace               string
 		SkipAfterTime           time.Time // skip workflows that are updated after this time
 		ConcurrentActivityCount int32
+		RemoteCluster           string // remote cluster name
+		AllowedLaggingSeconds   int    // If not zero, will wait until remote's acked time is within this gap.
 	}
 
 	activities struct {
@@ -58,6 +63,7 @@ type (
 		executionManager  persistence.ExecutionManager
 		namespaceRegistry namespace.Registry
 		historyClient     historyservice.HistoryServiceClient
+		logger            log.Logger
 	}
 
 	genReplicationForShardRange struct {
@@ -89,6 +95,17 @@ type (
 		ShardCount  int32
 		NamespaceID string
 	}
+
+	replicationStatus struct {
+		MaxReplicationTaskIds map[int32]int64 // max replication task id for each shard.
+	}
+
+	waitReplicationRequest struct {
+		ShardCount     int32
+		RemoteCluster  string          // remote cluster name
+		WaitForTaskIds map[int32]int64 // remote acked replication task needs to pass this id
+		AllowedLagging time.Duration   // allowed remote acked lagging
+	}
 )
 
 var (
@@ -96,25 +113,27 @@ var (
 	persistenceRetryPolicy    = common.CreateHistoryServiceRetryPolicy()
 )
 
-func GenReplicationWorkflow(ctx workflow.Context, options GenReplicationOptions) error {
+func GenReplicationWorkflow(ctx workflow.Context, options ForceReplicationOptions) error {
 	retryPolicy := &temporal.RetryPolicy{
 		InitialInterval: time.Second,
 		MaximumInterval: time.Second * 10,
 	}
+
+	// ** Step 1, Get cluster metadata **
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Second * 10,
 		RetryPolicy:         retryPolicy,
 	}
 	ctx1 := workflow.WithActivityOptions(ctx, ao)
-
 	var a *activities
 	var metadataResp metadataResponse
 	metadataRequest := metadataRequest{Namespace: options.Namespace}
-	err := workflow.ExecuteActivity(ctx1, a.GetMetadata, metadataRequest).Get(ctx, &metadataResp)
+	err := workflow.ExecuteActivity(ctx1, a.GetMetadata, metadataRequest).Get(ctx1, &metadataResp)
 	if err != nil {
 		return err
 	}
 
+	// ** Step 2, Force replication **
 	ao2 := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour * 10,
 		HeartbeatTimeout:    time.Second * 30,
@@ -153,6 +172,42 @@ func GenReplicationWorkflow(ctx workflow.Context, options GenReplicationOptions)
 		if err := f.Get(ctx2, nil); err != nil {
 			return err
 		}
+	}
+
+	if options.AllowedLaggingSeconds <= 0 {
+		return nil // no need to wait
+	}
+	// ** Step 3, get replication status **
+	ao3 := workflow.ActivityOptions{
+		StartToCloseTimeout: time.Second * 30,
+		RetryPolicy:         retryPolicy,
+	}
+	ctx3 := workflow.WithActivityOptions(ctx, ao3)
+	var repStatus replicationStatus
+	err = workflow.ExecuteActivity(ctx3, a.GetMaxReplicationTaskIDs).Get(ctx3, &repStatus)
+	if err != nil {
+		return err
+	}
+
+	// ** Step 4, wait remote replication ack to catch up **
+	ao4 := workflow.ActivityOptions{
+		StartToCloseTimeout: time.Hour,
+		HeartbeatTimeout:    time.Second * 10,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: time.Second,
+			MaximumInterval: time.Second,
+		},
+	}
+	ctx4 := workflow.WithActivityOptions(ctx, ao4)
+	waitRequest := waitReplicationRequest{
+		ShardCount:     metadataResp.ShardCount,
+		RemoteCluster:  options.RemoteCluster,
+		AllowedLagging: time.Duration(options.AllowedLaggingSeconds) * time.Second,
+		WaitForTaskIds: repStatus.MaxReplicationTaskIds,
+	}
+	err = workflow.ExecuteActivity(ctx4, a.WaitReplication, waitRequest).Get(ctx4, nil)
+	if err != nil {
+		return err
 	}
 
 	return nil
@@ -195,6 +250,74 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request genRe
 		perShard.Index = 0
 	}
 	return nil
+}
+
+// GetMaxReplicationTaskIDs returns max replication task id per shard
+func (a *activities) GetMaxReplicationTaskIDs(ctx context.Context) (*replicationStatus, error) {
+	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{})
+	if err != nil {
+		return nil, err
+	}
+	result := &replicationStatus{MaxReplicationTaskIds: make(map[int32]int64)}
+	for _, shard := range resp.Shards {
+		result.MaxReplicationTaskIds[shard.ShardId] = shard.MaxReplicationTaskId
+	}
+	return result, nil
+}
+
+func (a *activities) WaitReplication(ctx context.Context, waitRequest waitReplicationRequest) error {
+	for {
+		done, err := a.checkReplicationOnce(ctx, waitRequest)
+		if err != nil {
+			return nil
+		}
+		if done {
+			return nil
+		}
+		// keep waiting and check again
+		time.Sleep(time.Second)
+		activity.RecordHeartbeat(ctx, nil)
+	}
+}
+
+// Check if remote cluster has caught up on all shards on replication tasks
+func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitReplicationRequest) (bool, error) {
+
+	resp, err := a.historyClient.GetReplicationStatus(ctx, &historyservice.GetReplicationStatusRequest{
+		RemoteClusters: []string{waitRequest.RemoteCluster},
+	})
+	if err != nil {
+		return false, err
+	}
+	if int(waitRequest.ShardCount) != len(resp.Shards) {
+		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(resp.Shards), waitRequest.ShardCount)
+	}
+
+	// check that every shard has caught up
+	for _, shard := range resp.Shards {
+		clusterInfo, ok := shard.RemoteClusters[waitRequest.RemoteCluster]
+		if !ok {
+			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
+		}
+		if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId {
+			continue // already caught up, continue to check next shard.
+		}
+
+		if clusterInfo.AckedTaskId < waitRequest.WaitForTaskIds[shard.ShardId] ||
+			shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) > waitRequest.AllowedLagging {
+			a.logger.Info("Wait for remote ack",
+				tag.NewInt32("ShardId", shard.ShardId),
+				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
+				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
+				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
+				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
+			)
+			return false, nil
+		}
+	}
+
+	return true, nil
 }
 
 func (a *activities) genReplicationTasks(ctx context.Context, request genReplicationForShard) error {

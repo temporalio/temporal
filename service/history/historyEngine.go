@@ -3231,6 +3231,7 @@ func (h *historyEngineImpl) GetReplicationStatus(
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 
 	resp := &historyservice.ShardReplicationStatus{
+		ShardId:        h.shard.GetShardID(),
 		ShardLocalTime: timestamp.TimePtr(h.shard.GetTimeSource().Now()),
 	}
 	if h.replicatorProcessor.maxTaskID != nil {
