@@ -27,8 +27,9 @@ package temporal
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/common/collection"
 	"time"
+
+	"go.temporal.io/server/common/collection"
 
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"

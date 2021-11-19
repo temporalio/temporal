@@ -55,7 +55,7 @@ type (
 
 	ClusterMetadataFilter struct {
 		ClusterName string
-		PageSize *int
+		PageSize    *int
 	}
 
 	// ClusterMembershipFilter is used for GetClusterMembership queries
