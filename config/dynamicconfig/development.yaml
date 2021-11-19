@@ -25,3 +25,5 @@ history.defaultWorkflowRetryPolicy:
 system.advancedVisibilityWritingMode:
   - value: "off"
     constraints: {}
+#system.enableParentClosePolicyWorker:
+#  - value: true

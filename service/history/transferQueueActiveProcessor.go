@@ -62,6 +62,7 @@ func newTransferQueueActiveProcessor(
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
+	registry namespace.Registry,
 ) *transferQueueActiveProcessorImpl {
 
 	config := shard.GetConfig()
@@ -108,6 +109,7 @@ func newTransferQueueActiveProcessor(
 			logger,
 			historyEngine.metricsClient,
 			config,
+			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
@@ -154,6 +156,7 @@ func newTransferQueueFailoverProcessor(
 	maxLevel int64,
 	taskAllocator taskAllocator,
 	logger log.Logger,
+	registry namespace.Registry,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
 	config := shard.GetConfig()
@@ -216,6 +219,7 @@ func newTransferQueueFailoverProcessor(
 			logger,
 			historyEngine.metricsClient,
 			config,
+			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,

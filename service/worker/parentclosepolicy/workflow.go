@@ -49,23 +49,26 @@ const (
 	// processorWFTypeName is the workflow type
 	processorWFTypeName   = "temporal-sys-parent-close-policy-workflow"
 	processorActivityName = "temporal-sys-parent-close-policy-activity"
-	infiniteDuration      = 20 * 365 * 24 * time.Hour
 	processorChannelName  = "ParentClosePolicyProcessorChannelName"
 )
 
 type (
 	// RequestDetail defines detail of each workflow to process
 	RequestDetail struct {
-		WorkflowID string
-		RunID      string
-		Policy     enumspb.ParentClosePolicy
+		Namespace   string
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
+		Policy      enumspb.ParentClosePolicy
 	}
 
 	// Request defines the request for parent close policy
 	Request struct {
-		Executions  []RequestDetail
-		Namespace   string
+		// Deprecated: use Namespace in RequestDetail instead. Should be removed in 1.17
+		Namespace string
+		// Deprecated: use NamespaceID in RequestDetail instead. Should be removed in 1.17
 		NamespaceID string
+		Executions  []RequestDetail
 	}
 )
 
@@ -99,21 +102,38 @@ func ProcessorWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
+// todomigryz: we need ot modify request format and need to verify migration process
 // ProcessorActivity is activity for processing batch operation
 func ProcessorActivity(ctx context.Context, request Request) error {
+	// todomigryz: don't even hit here. How to invoke processor?
 	processor := ctx.Value(processorContextKey).(*Processor)
 	client := processor.clientBean.GetHistoryClient()
 	for _, execution := range request.Executions {
+		var namespaceId string
+		if len(execution.NamespaceID) == 0 {
+			namespaceId = request.NamespaceID
+		} else {
+			namespaceId = execution.NamespaceID
+		}
+
+		var namespace string
+		if len(execution.Namespace) == 0 {
+			namespaceId = request.Namespace
+		} else {
+			namespaceId = execution.Namespace
+		}
+
 		var err error
 		switch execution.Policy {
 		case enumspb.PARENT_CLOSE_POLICY_ABANDON:
 			//no-op
 			continue
 		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
+			// todomigryz: close wf activity. validate correct namespaceID
 			_, err = client.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-				NamespaceId: request.NamespaceID,
+				NamespaceId: namespaceId,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-					Namespace: request.Namespace,
+					Namespace: namespace,
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 					},
@@ -124,9 +144,9 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			})
 		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 			_, err = client.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
-				NamespaceId: request.NamespaceID,
+				NamespaceId: namespaceId,
 				CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-					Namespace: request.Namespace,
+					Namespace: namespace,
 					WorkflowExecution: &commonpb.WorkflowExecution{
 						WorkflowId: execution.WorkflowID,
 					},

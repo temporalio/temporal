@@ -124,6 +124,7 @@ type (
 	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
 	CallbackFn func(oldNamespaces []*Namespace, newNamespaces []*Namespace)
 
+	//todomigryz: registry can convert namespace to namespaceid
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
 		common.Daemon

@@ -131,6 +131,7 @@ func NewEngineWithShardContext(
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
+	registry namespace.Registry,
 ) *historyEngineImpl {
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 
@@ -164,7 +165,7 @@ func NewEngineWithShardContext(
 		rawMatchingClient: rawMatchingClient,
 	}
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
+	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, logger, registry)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
 	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
 	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
@@ -2129,6 +2130,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	terminateRequest *historyservice.TerminateWorkflowExecutionRequest,
 ) error {
 
+	// todomigryz: terminateworkflow execution
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(terminateRequest.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -2165,6 +2167,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 			}
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()
+			//todomigryz: histengine: termwf
 			return updateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 				mutableState,
 				eventBatchFirstEventID,
