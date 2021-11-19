@@ -56,7 +56,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
