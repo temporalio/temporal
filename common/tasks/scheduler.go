@@ -28,15 +28,11 @@ import (
 	"go.temporal.io/server/common"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
 type (
-	// Processor is the generic goroutine pool for task processing
-	Processor interface {
+	// Scheduler is the generic interface for scheduling & processing tasks with priority
+	Scheduler interface {
 		common.Daemon
-		// Submit schedule a task to be executed
-		// * if processor is not stopped, then task will be executed,
-		//  one of Ack(), Nack() or Reschedule() will be invoked once task is considered done for this attempt
-		// * if processor is stopped, then Reschedule() will be invoked
-		Submit(task Task)
+		Submit(task PriorityTask)
 	}
 )
