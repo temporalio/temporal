@@ -123,8 +123,11 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 			s.mockHistoryEngine.EXPECT().Start().Return()
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-			s.mockShardManager.EXPECT().GetShard(&persistence.GetShardRequest{ShardID: shardID}).Return(
-				&persistence.GetShardResponse{
+			s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+				ShardID:         shardID,
+				CreateIfMissing: true,
+			}).Return(
+				&persistence.GetOrCreateShardResponse{
 					ShardInfo: &persistencespb.ShardInfo{
 						ShardId:             shardID,
 						Owner:               s.hostInfo.Identity(),
@@ -205,8 +208,11 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 			s.mockHistoryEngine.EXPECT().Start().Return()
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-			s.mockShardManager.EXPECT().GetShard(&persistence.GetShardRequest{ShardID: shardID}).Return(
-				&persistence.GetShardResponse{
+			s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+				ShardID:         shardID,
+				CreateIfMissing: true,
+			}).Return(
+				&persistence.GetOrCreateShardResponse{
 					ShardInfo: &persistencespb.ShardInfo{
 						ShardId:             shardID,
 						Owner:               s.hostInfo.Identity(),
@@ -294,8 +300,11 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 		s.mockHistoryEngine.EXPECT().Start().Return()
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-		s.mockShardManager.EXPECT().GetShard(&persistence.GetShardRequest{ShardID: shardID}).Return(
-			&persistence.GetShardResponse{
+		s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+			ShardID:         shardID,
+			CreateIfMissing: true,
+		}).Return(
+			&persistence.GetOrCreateShardResponse{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
 					Owner:               s.hostInfo.Identity(),
@@ -368,8 +377,11 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 		s.mockHistoryEngine.EXPECT().Start().Return()
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-		s.mockShardManager.EXPECT().GetShard(&persistence.GetShardRequest{ShardID: shardID}).Return(
-			&persistence.GetShardResponse{
+		s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+			ShardID:         shardID,
+			CreateIfMissing: true,
+		}).Return(
+			&persistence.GetOrCreateShardResponse{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
 					Owner:               s.hostInfo.Identity(),
@@ -577,8 +589,11 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 	mockEngine.EXPECT().Start()
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 	s.mockEngineFactory.EXPECT().CreateEngine(newContextMatcher(shardID)).Return(mockEngine)
-	s.mockShardManager.EXPECT().GetShard(&persistence.GetShardRequest{ShardID: shardID}).Return(
-		&persistence.GetShardResponse{
+	s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+		ShardID:         shardID,
+		CreateIfMissing: true,
+	}).Return(
+		&persistence.GetOrCreateShardResponse{
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:             shardID,
 				Owner:               s.hostInfo.Identity(),

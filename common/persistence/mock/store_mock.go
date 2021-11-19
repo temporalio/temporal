@@ -71,20 +71,6 @@ func (mr *MockShardStoreMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockShardStore)(nil).Close))
 }
 
-// CreateShard mocks base method.
-func (m *MockShardStore) CreateShard(request *persistence.InternalCreateShardRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateShard", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateShard indicates an expected call of CreateShard.
-func (mr *MockShardStoreMockRecorder) CreateShard(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateShard", reflect.TypeOf((*MockShardStore)(nil).CreateShard), request)
-}
-
 // GetClusterName mocks base method.
 func (m *MockShardStore) GetClusterName() string {
 	m.ctrl.T.Helper()
@@ -113,19 +99,19 @@ func (mr *MockShardStoreMockRecorder) GetName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockShardStore)(nil).GetName))
 }
 
-// GetShard mocks base method.
-func (m *MockShardStore) GetShard(request *persistence.InternalGetShardRequest) (*persistence.InternalGetShardResponse, error) {
+// GetOrCreateShard mocks base method.
+func (m *MockShardStore) GetOrCreateShard(request *persistence.InternalGetOrCreateShardRequest) (*persistence.InternalGetOrCreateShardResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetShard", request)
-	ret0, _ := ret[0].(*persistence.InternalGetShardResponse)
+	ret := m.ctrl.Call(m, "GetOrCreateShard", request)
+	ret0, _ := ret[0].(*persistence.InternalGetOrCreateShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetShard indicates an expected call of GetShard.
-func (mr *MockShardStoreMockRecorder) GetShard(request interface{}) *gomock.Call {
+// GetOrCreateShard indicates an expected call of GetOrCreateShard.
+func (mr *MockShardStoreMockRecorder) GetOrCreateShard(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockShardStore)(nil).GetShard), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateShard", reflect.TypeOf((*MockShardStore)(nil).GetOrCreateShard), request)
 }
 
 // UpdateShard mocks base method.

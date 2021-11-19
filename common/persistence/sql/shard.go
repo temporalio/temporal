@@ -57,36 +57,9 @@ func (m *sqlShardStore) GetClusterName() string {
 	return m.currentClusterName
 }
 
-func (m *sqlShardStore) CreateShard(
-	request *persistence.InternalCreateShardRequest,
-) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
-	if _, err := m.GetShard(&persistence.InternalGetShardRequest{
-		ShardID: request.ShardID,
-	}); err == nil {
-		return &persistence.ShardAlreadyExistError{
-			Msg: fmt.Sprintf("CreateShard operaiton failed. Shard with ID %v already exists.", request.ShardID),
-		}
-	}
-
-	row := &sqlplugin.ShardsRow{
-		ShardID:      request.ShardID,
-		RangeID:      request.RangeID,
-		Data:         request.ShardInfo.Data,
-		DataEncoding: request.ShardInfo.EncodingType.String(),
-	}
-
-	if _, err := m.Db.InsertIntoShards(ctx, row); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("CreateShard operation failed. Failed to insert into shards table. Error: %v", err))
-	}
-
-	return nil
-}
-
-func (m *sqlShardStore) GetShard(
-	request *persistence.InternalGetShardRequest,
-) (*persistence.InternalGetShardResponse, error) {
+func (m *sqlShardStore) GetOrCreateShard(
+	request *persistence.InternalGetOrCreateShardRequest,
+) (*persistence.InternalGetOrCreateShardResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	row, err := m.Db.SelectFromShards(ctx, sqlplugin.ShardsFilter{
@@ -94,13 +67,37 @@ func (m *sqlShardStore) GetShard(
 	})
 	switch err {
 	case nil:
-		return &persistence.InternalGetShardResponse{
+		return &persistence.InternalGetOrCreateShardResponse{
 			ShardInfo: persistence.NewDataBlob(row.Data, row.DataEncoding),
 		}, nil
 	case sql.ErrNoRows:
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetShard operation failed. Shard with ID %v not found. Error: %v", request.ShardID, err))
+		break
 	default:
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetShard operation failed. Failed to get record. ShardId: %v. Error: %v", request.ShardID, err))
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetOrCreateShard: failed to get ShardID %v. Error: %v", request.ShardID, err))
+	}
+
+	if request.CreateShardInfo == nil {
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("GetOrCreateShard: ShardID %v not found. Error: %v", request.ShardID, err))
+	}
+
+	rangeID, shardInfo, err := request.CreateShardInfo()
+	row = &sqlplugin.ShardsRow{
+		ShardID:      request.ShardID,
+		RangeID:      rangeID,
+		Data:         shardInfo.Data,
+		DataEncoding: shardInfo.EncodingType.String(),
+	}
+	_, err = m.Db.InsertIntoShards(ctx, row)
+	if err == nil {
+		return &persistence.InternalGetOrCreateShardResponse{
+			ShardInfo: shardInfo,
+		}, nil
+	} else if m.Db.IsDupEntryError(err) {
+		// conflict, try again
+		request.CreateShardInfo = nil // prevent loop
+		return m.GetOrCreateShard(request)
+	} else {
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetOrCreateShard: failed to insert into shards table. Error: %v", err))
 	}
 }
 

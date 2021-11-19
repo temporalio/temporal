@@ -1348,32 +1348,6 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	)
 }
 
-func (s *ContextImpl) loadOrCreateShardMetadata() (*persistence.ShardInfoWithFailover, error) {
-	resp, err := s.GetShardManager().GetShard(&persistence.GetShardRequest{
-		ShardID: s.shardID,
-	})
-
-	if _, ok := err.(*serviceerror.NotFound); ok {
-		// EntityNotExistsError: doesn't exist in db yet, try to create it
-		req := &persistence.CreateShardRequest{
-			ShardInfo: &persistencespb.ShardInfo{
-				ShardId: s.shardID,
-			},
-		}
-		err = s.GetShardManager().CreateShard(req)
-		if err != nil {
-			return nil, err
-		}
-		return &persistence.ShardInfoWithFailover{ShardInfo: req.ShardInfo}, nil
-	}
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}, nil
-}
-
 func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// Only have to do this once, we can just re-acquire the rangeid lock after that
 	s.rLock()
@@ -1390,13 +1364,18 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.rUnlock()
 
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
-
-	shardInfo, err := s.loadOrCreateShardMetadata()
+	resp, err := s.GetShardManager().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+		ShardID:         s.shardID,
+		CreateIfMissing: true,
+	})
 	if err != nil {
 		s.logger.Error("Failed to load shard", tag.Error(err))
 		return err
 	}
+	shardInfo := &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}
 
+	// shardInfo is a fresh value, so we don't really need to copy, but
+	// copyShardInfo also ensures that all maps are non-nil
 	updatedShardInfo := copyShardInfo(shardInfo)
 	*ownershipChanged = shardInfo.Owner != s.GetHostInfo().Identity()
 	updatedShardInfo.Owner = s.GetHostInfo().Identity()
@@ -1480,17 +1459,6 @@ func (s *ContextImpl) acquireShard() {
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	policy.SetExpirationInterval(5 * time.Minute)
 
-	isRetryable := func(err error) bool {
-		if common.IsPersistenceTransientError(err) {
-			return true
-		}
-		// Retry this in case we need to create the shard and race with someone else doing it.
-		if _, ok := err.(*persistence.ShardAlreadyExistError); ok {
-			return true
-		}
-		return false
-	}
-
 	// Remember this value across attempts
 	ownershipChanged := false
 
@@ -1543,7 +1511,7 @@ func (s *ContextImpl) acquireShard() {
 		return nil
 	}
 
-	err := backoff.Retry(op, policy, isRetryable)
+	err := backoff.Retry(op, policy, common.IsPersistenceTransientError)
 	if err == errStoppingContext {
 		// State changed since this goroutine started, exit silently.
 		return

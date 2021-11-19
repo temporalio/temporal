@@ -55,8 +55,7 @@ type (
 		Closeable
 		GetName() string
 		GetClusterName() string
-		CreateShard(request *InternalCreateShardRequest) error
-		GetShard(request *InternalGetShardRequest) (*InternalGetShardResponse, error)
+		GetOrCreateShard(request *InternalGetOrCreateShardRequest) (*InternalGetOrCreateShardResponse, error)
 		UpdateShard(request *InternalUpdateShardRequest) error
 	}
 
@@ -203,20 +202,16 @@ type (
 		Version int64
 	}
 
-	// InternalCreateShardRequest is used by ShardStore to create new shard
-	InternalCreateShardRequest struct {
-		ShardID   int32
-		RangeID   int64
-		ShardInfo *commonpb.DataBlob
+	// InternalGetOrCreateShardRequest is used by ShardStore to retrieve or create a shard.
+	// GetOrCreateShard should: if shard exists, return it. If not, and CreateShardInfo != nil,
+	// call it and create the shard with the initial shardInfo and rangeID. Otherwise return error.
+	InternalGetOrCreateShardRequest struct {
+		ShardID         int32
+		CreateShardInfo func() (rangeID int64, shardInfo *commonpb.DataBlob, err error)
 	}
 
-	// InternalGetShardRequest is used by ShardStore to retrieve a shard
-	InternalGetShardRequest struct {
-		ShardID int32
-	}
-
-	// InternalGetShardResponse is the response to GetShard
-	InternalGetShardResponse struct {
+	// InternalGetOrCreateShardResponse is the response to GetShard
+	InternalGetOrCreateShardResponse struct {
 		ShardInfo *commonpb.DataBlob
 	}
 

@@ -147,30 +147,16 @@ func (p *shardPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *shardPersistenceClient) CreateShard(request *CreateShardRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCreateShardScope, metrics.PersistenceRequests)
+func (p *shardPersistenceClient) GetOrCreateShard(
+	request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetOrCreateShardScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceCreateShardScope, metrics.PersistenceLatency)
-	err := p.persistence.CreateShard(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetOrCreateShardScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetOrCreateShard(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCreateShardScope, err)
-	}
-
-	return err
-}
-
-func (p *shardPersistenceClient) GetShard(
-	request *GetShardRequest) (*GetShardResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetShardScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetShardScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetShard(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetShardScope, err)
+		p.updateErrorMetric(metrics.PersistenceGetOrCreateShardScope, err)
 	}
 
 	return response, err

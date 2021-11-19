@@ -191,18 +191,16 @@ type (
 		TaskType    enumspb.TaskQueueType
 	}
 
-	// CreateShardRequest is used to create a shard in executions table
-	CreateShardRequest struct {
-		ShardInfo *persistencespb.ShardInfo
+	// GetOrCreateShardRequest is used to get shard information, or supply
+	// initial information to create a shard in executions table
+	GetOrCreateShardRequest struct {
+		ShardID          int32
+		CreateIfMissing  bool
+		InitialShardInfo *persistencespb.ShardInfo
 	}
 
-	// GetShardRequest is used to get shard information
-	GetShardRequest struct {
-		ShardID int32
-	}
-
-	// GetShardResponse is the response to GetShard
-	GetShardResponse struct {
+	// GetOrCreateShardResponse is the response to GetOrCreateShard
+	GetOrCreateShardResponse struct {
 		ShardInfo *persistencespb.ShardInfo
 	}
 
@@ -1030,8 +1028,7 @@ type (
 	ShardManager interface {
 		Closeable
 		GetName() string
-		CreateShard(request *CreateShardRequest) error
-		GetShard(request *GetShardRequest) (*GetShardResponse, error)
+		GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
 		UpdateShard(request *UpdateShardRequest) error
 	}
 

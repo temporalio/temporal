@@ -1001,21 +1001,14 @@ func (s *FaultInjectionShardStore) GetClusterName() string {
 	return s.baseShardStore.GetClusterName()
 }
 
-func (s *FaultInjectionShardStore) CreateShard(request *persistence.InternalCreateShardRequest) error {
-	if err := s.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return s.baseShardStore.CreateShard(request)
-}
-
-func (s *FaultInjectionShardStore) GetShard(request *persistence.InternalGetShardRequest) (
-	*persistence.InternalGetShardResponse,
+func (s *FaultInjectionShardStore) GetOrCreateShard(request *persistence.InternalGetOrCreateShardRequest) (
+	*persistence.InternalGetOrCreateShardResponse,
 	error,
 ) {
 	if err := s.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return s.baseShardStore.GetShard(request)
+	return s.baseShardStore.GetOrCreateShard(request)
 }
 
 func (s *FaultInjectionShardStore) UpdateShard(request *persistence.InternalUpdateShardRequest) error {
