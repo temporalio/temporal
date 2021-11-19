@@ -480,6 +480,25 @@ docker-admin-tools:
 	@printf $(COLOR) "Build docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
 	docker build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --build-arg TARGET=admin-tools
 
+docker-buildx-container:
+	docker buildx create --driver docker-container --use
+
+docker-server-x:
+	@printf $(COLOR) "Building cross-platform docker image temporalio/server:$(DOCKER_IMAGE_TAG)..."
+	docker buildx build . -t temporalio/server:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=image --build-arg TARGET=server
+
+docker-auto-setup-x:
+	@printf $(COLOR) "Build cross-platform docker image temporalio/auto-setup:$(DOCKER_IMAGE_TAG)..."
+	docker buildx build . -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=image --build-arg TARGET=auto-setup
+
+docker-tctl-x:
+	@printf $(COLOR) "Build cross-platform docker image temporalio/tctl:$(DOCKER_IMAGE_TAG)..."
+	docker buildx build . -t temporalio/tctl:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=image --build-arg TARGET=tctl
+
+docker-admin-tools-x:
+	@printf $(COLOR) "Build cross-platform docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
+	docker buildx build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=image --build-arg TARGET=admin-tools
+
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."
