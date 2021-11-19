@@ -726,6 +726,10 @@ func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReport
 }
 
 func MetricsClientProvider(logger log.Logger, serverReporter ServerReporter) (metrics.Client, error) {
+	// todo: remove after deprecating per-service metrics config.
+	if serverReporter == nil {
+		return metrics.NewNoopMetricsClient(), nil
+	}
 	return serverReporter.NewClient(logger, metrics.Server)
 }
 
