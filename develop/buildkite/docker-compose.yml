@@ -20,7 +20,7 @@ services:
           - mysql
 
   postgresql:
-    image: postgres:9.6
+    image: postgres:13.5
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal
