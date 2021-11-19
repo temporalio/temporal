@@ -92,7 +92,7 @@ workflow_id = :workflow_id
 	getTransferTaskQuery = `SELECT task_id, data, data_encoding 
  FROM transfer_tasks WHERE shard_id = ? AND task_id = ?`
 	getTransferTasksQuery = `SELECT task_id, data, data_encoding 
- FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY shard_id, task_id`
+ FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY task_id`
 
 	deleteTransferTaskQuery      = `DELETE FROM transfer_tasks WHERE shard_id = ? AND task_id = ?`
 	rangeDeleteTransferTaskQuery = `DELETE FROM transfer_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
@@ -139,7 +139,7 @@ ORDER BY task_id LIMIT ?`
 	getVisibilityTaskQuery = `SELECT task_id, data, data_encoding 
  FROM visibility_tasks WHERE shard_id = ? AND task_id = ?`
 	getVisibilityTasksQuery = `SELECT task_id, data, data_encoding 
- FROM visibility_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY shard_id, task_id`
+ FROM visibility_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY task_id`
 
 	deleteVisibilityTaskQuery      = `DELETE FROM visibility_tasks WHERE shard_id = ? AND task_id = ?`
 	rangeDeleteVisibilityTaskQuery = `DELETE FROM visibility_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
@@ -150,7 +150,7 @@ ORDER BY task_id LIMIT ?`
 	getTieredStorageTaskQuery = `SELECT task_id, data, data_encoding 
  FROM tiered_storage_tasks WHERE shard_id = ? AND task_id = ?`
 	getTieredStorageTasksQuery = `SELECT task_id, data, data_encoding 
- FROM tiered_storage_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY shard_id, task_id`
+ FROM tiered_storage_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ? ORDER BY task_id`
 
 	deleteTieredStorageTaskQuery      = `DELETE FROM tiered_storage_tasks WHERE shard_id = ? AND task_id = ?`
 	rangeDeleteTieredStorageTaskQuery = `DELETE FROM tiered_storage_tasks WHERE shard_id = ? AND task_id > ? AND task_id <= ?`
