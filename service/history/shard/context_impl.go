@@ -30,6 +30,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/historyservice/v1"
 
@@ -105,12 +106,18 @@ type (
 
 		// exist only in memory
 		remoteClusterInfos map[string]*remoteClusterInfo
+		handoverNamespaces map[string]*namespaceHandOverInfo // keyed on namespace name
 	}
 
 	remoteClusterInfo struct {
 		CurrentTime               time.Time
 		AckedReplicationTaskID    int64
 		AckedReplicationTimestamp time.Time
+	}
+
+	namespaceHandOverInfo struct {
+		MaxReplicationTaskID int64
+		NotificationVersion  int64
 	}
 )
 
@@ -441,8 +448,43 @@ func (s *ContextImpl) UpdateNamespaceNotificationVersion(namespaceNotificationVe
 	s.wLock()
 	defer s.wUnlock()
 
-	s.shardInfo.NamespaceNotificationVersion = namespaceNotificationVersion
-	return s.updateShardInfoLocked()
+	// update namespace notification version.
+	if s.shardInfo.NamespaceNotificationVersion < namespaceNotificationVersion {
+		s.shardInfo.NamespaceNotificationVersion = namespaceNotificationVersion
+		return s.updateShardInfoLocked()
+	}
+
+	return nil
+}
+
+func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace, maxRepTaskID int64) {
+	s.wLock()
+	defer s.wUnlock()
+
+	newHandoverNamespaces := make(map[string]struct{})
+	for _, ns := range namespaces {
+		if ns.IsGlobalNamespace() && ns.State() == enums.NAMESPACE_STATE_HANDOVER {
+			nsName := ns.Name().String()
+			newHandoverNamespaces[nsName] = struct{}{}
+			if handover, ok := s.handoverNamespaces[nsName]; ok {
+				if handover.NotificationVersion < ns.NotificationVersion() {
+					handover.NotificationVersion = ns.NotificationVersion()
+					handover.MaxReplicationTaskID = maxRepTaskID
+				}
+			} else {
+				s.handoverNamespaces[nsName] = &namespaceHandOverInfo{
+					NotificationVersion:  ns.NotificationVersion(),
+					MaxReplicationTaskID: maxRepTaskID,
+				}
+			}
+		}
+	}
+	// delete old handover ns
+	for k := range s.handoverNamespaces {
+		if _, ok := newHandoverNamespaces[k]; !ok {
+			delete(s.handoverNamespaces, k)
+		}
+	}
 }
 
 func (s *ContextImpl) GetTimerMaxReadLevel(cluster string) time.Time {
@@ -1567,6 +1609,8 @@ func newContext(
 		logger:           log.With(resource.GetLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
 		throttledLogger:  log.With(resource.GetThrottledLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
 		engineFactory:    factory,
+
+		handoverNamespaces: make(map[string]*namespaceHandOverInfo),
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),

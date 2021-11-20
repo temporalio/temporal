@@ -359,7 +359,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	// first set the failover callback
 	e.shard.GetNamespaceRegistry().RegisterNamespaceChangeCallback(
 		e.shard.GetShardID(),
-		e.shard.GetNamespaceNotificationVersion(),
+		0, /* always want callback so UpdateHandoverNamespaces() can be called after shard reload */
 		func() {
 			e.txProcessor.LockTaskProcessing()
 			e.timerProcessor.LockTaskProcessing()
@@ -374,9 +374,19 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				return
 			}
 
-			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
-			failoverNamespaceIDs := map[string]struct{}{}
+			if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
+				e.shard.UpdateHandoverNamespaces(nextNamespaces, e.replicatorProcessor.GetMaxReplicationTaskID())
+			}
 
+			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
+			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
+			if newNotificationVersion <= shardNotificationVersion {
+				// skip if this is known version. this could happen once after shard reload because we use
+				// 0 as initialNotificationVersion when RegisterNamespaceChangeCallback.
+				return
+			}
+
+			failoverNamespaceIDs := map[string]struct{}{}
 			for _, nextNamespace := range nextNamespaces {
 				failoverPredicate(shardNotificationVersion, nextNamespace, func() {
 					failoverNamespaceIDs[nextNamespace.ID().String()] = struct{}{}
@@ -399,7 +409,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			}
 
 			// nolint:errcheck
-			e.shard.UpdateNamespaceNotificationVersion(nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1)
+			e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
 		},
 	)
 }
@@ -3231,11 +3241,9 @@ func (h *historyEngineImpl) GetReplicationStatus(
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 
 	resp := &historyservice.ShardReplicationStatus{
-		ShardId:        h.shard.GetShardID(),
-		ShardLocalTime: timestamp.TimePtr(h.shard.GetTimeSource().Now()),
-	}
-	if h.replicatorProcessor.maxTaskID != nil {
-		resp.MaxReplicationTaskId = *h.replicatorProcessor.maxTaskID
+		ShardId:              h.shard.GetShardID(),
+		ShardLocalTime:       timestamp.TimePtr(h.shard.GetTimeSource().Now()),
+		MaxReplicationTaskId: h.replicatorProcessor.GetMaxReplicationTaskID(),
 	}
 
 	remoteClusters, err := h.shard.GetRemoteClusterAckInfo(request.RemoteClusters)

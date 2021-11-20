@@ -108,6 +108,7 @@ type (
 
 		GetNamespaceNotificationVersion() int64
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
+		UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace, maxRepTaskID int64)
 
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)

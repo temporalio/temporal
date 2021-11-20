@@ -635,6 +635,18 @@ func (mr *MockContextMockRecorder) UpdateClusterReplicationLevel(cluster, ackTas
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClusterReplicationLevel", reflect.TypeOf((*MockContext)(nil).UpdateClusterReplicationLevel), cluster, ackTaskID, ackTimestamp)
 }
 
+// UpdateHandoverNamespaces mocks base method.
+func (m *MockContext) UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace, maxRepTaskID int64) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UpdateHandoverNamespaces", newNamespaces, maxRepTaskID)
+}
+
+// UpdateHandoverNamespaces indicates an expected call of UpdateHandoverNamespaces.
+func (mr *MockContextMockRecorder) UpdateHandoverNamespaces(newNamespaces, maxRepTaskID interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHandoverNamespaces", reflect.TypeOf((*MockContext)(nil).UpdateHandoverNamespaces), newNamespaces, maxRepTaskID)
+}
+
 // UpdateNamespaceNotificationVersion mocks base method.
 func (m *MockContext) UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error {
 	m.ctrl.T.Helper()
