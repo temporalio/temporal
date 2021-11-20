@@ -113,7 +113,7 @@ func (s *InterleavedWeightedRoundRobinScheduler) Stop() {
 
 	s.processor.Stop()
 
-	s.drainTasks()
+	s.rescheduleTasks()
 
 	s.logger.Info("interleaved weighted round robin task scheduler stopped")
 }
@@ -191,7 +191,7 @@ func (s *InterleavedWeightedRoundRobinScheduler) channels() []*WeightedChannel {
 
 func (s *InterleavedWeightedRoundRobinScheduler) notifyDispatcher() {
 	if s.isStopped() {
-		s.drainTasks()
+		s.rescheduleTasks()
 		return
 	}
 
@@ -232,7 +232,7 @@ func (s *InterleavedWeightedRoundRobinScheduler) hasRemainingTasks() bool {
 	return false
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) drainTasks() {
+func (s *InterleavedWeightedRoundRobinScheduler) rescheduleTasks() {
 	s.RLock()
 	defer s.RUnlock()
 
