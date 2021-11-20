@@ -703,24 +703,94 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
 	s.NotNil(resp)
 }
 
-func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Forward_Success() {
 	var clusterName = "cluster"
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
 	).Return(nil)
 
-	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(
+		&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+	).Return(&persistence.GetClusterMetadataResponse{}, nil)
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName, IsForwarded: true})
 	s.NoError(err)
 }
 
-func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_NonForward_Success() {
+	var clusterName = "cluster"
+	var clusterAddress = uuid.New()
+	var currentCluster = "current-cluster"
+
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(currentCluster)
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil)
+
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(
+		&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+	).Return(&persistence.GetClusterMetadataResponse{ClusterMetadata: persistencespb.ClusterMetadata{
+		ClusterAddress: clusterAddress,
+	}}, nil)
+
+	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(clusterAddress, gomock.Any(), gomock.Any()).Return(
+		s.mockAdminClient,
+		nil,
+	)
+	s.mockAdminClient.EXPECT().RemoveRemoteCluster(
+		gomock.Any(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: currentCluster, IsForwarded: true},
+	)
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Delete_Error() {
 	var clusterName = "cluster"
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
 	).Return(fmt.Errorf("test error"))
 
-	_, err := s.handler.RemoveRemoteCluster(context.Background(), &adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(
+		&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+	).Return(&persistence.GetClusterMetadataResponse{}, nil)
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName, IsForwarded: true})
 	s.Error(err)
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_GetData_Error() {
+	var clusterName = "cluster"
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil).Times(0)
+
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(
+		&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil, fmt.Errorf("test error"))
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName, IsForwarded: true})
+	s.Error(err)
+}
+
+func (s *adminHandlerSuite) Test_RemoveRemoteCluster_NotFound() {
+	var clusterName = "cluster"
+	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil).Times(0)
+
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(
+		&persistence.GetClusterMetadataRequest{ClusterName: clusterName},
+	).Return(nil, &serviceerror.NotFound{})
+	_, err := s.handler.RemoveRemoteCluster(
+		context.Background(),
+		&adminservice.RemoveRemoteClusterRequest{ClusterName: clusterName})
+	s.NoError(err)
 }
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() {

@@ -955,7 +955,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 }
 
 func (adh *AdminHandler) RemoveRemoteCluster(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.RemoveRemoteClusterRequest,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.GetLogger(), &retError)
@@ -963,11 +963,37 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 	scope, sw := adh.startRequestProfile(metrics.AdminRemoveRemoteClusterScope)
 	defer sw.Stop()
 
+	getResp, err := adh.GetClusterMetadataManager().GetClusterMetadata(&persistence.GetClusterMetadataRequest{
+		ClusterName: request.GetClusterName(),
+	})
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			return &adminservice.RemoveRemoteClusterResponse{}, nil
+		}
+		return nil, adh.error(err, scope)
+	}
+
+	if !request.GetIsForwarded() {
+		adminClient, err := adh.Resource.GetClientFactory().NewAdminClientWithTimeout(
+			getResp.GetClusterAddress(),
+			admin.DefaultTimeout,
+			admin.DefaultLargeTimeout,
+		)
+		_, err = adminClient.RemoveRemoteCluster(ctx, &adminservice.RemoveRemoteClusterRequest{
+			ClusterName: adh.Resource.GetClusterMetadata().GetCurrentClusterName(),
+			IsForwarded: true,
+		})
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+	}
+
 	if err := adh.GetClusterMetadataManager().DeleteClusterMetadata(
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	); err != nil {
 		return nil, adh.error(err, scope)
 	}
+
 	return &adminservice.RemoveRemoteClusterResponse{}, nil
 }
 

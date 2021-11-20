@@ -278,6 +278,7 @@ message AddOrUpdateRemoteClusterResponse {
 
 message RemoveRemoteClusterRequest {
     string cluster_name = 1;
+    bool is_forwarded = 2;
 }
 
 message RemoveRemoteClusterResponse {
