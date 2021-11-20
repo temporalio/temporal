@@ -937,6 +937,20 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 			scope,
 		)
 	}
+
+	// Add current cluster to remote
+	if request.GetEnableRemoteClusterConnection() && !request.IsForwarded {
+		metadata := adh.Resource.GetClusterMetadata()
+		currentMetadata := metadata.GetAllClusterInfo()[metadata.GetCurrentClusterName()]
+		_, err := adminClient.AddOrUpdateRemoteCluster(ctx, &adminservice.AddOrUpdateRemoteClusterRequest{
+			FrontendAddress:               currentMetadata.RPCAddress,
+			EnableRemoteClusterConnection: request.GetEnableRemoteClusterConnection(),
+			IsForwarded:                   !request.GetIsForwarded(),
+		})
+		if err != nil {
+			return nil, adh.error(err, scope)
+		}
+	}
 	return &adminservice.AddOrUpdateRemoteClusterResponse{}, nil
 }
 
