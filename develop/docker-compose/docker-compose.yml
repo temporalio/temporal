@@ -6,7 +6,7 @@ version: "3.5"
 
 services:
   mysql:
-    image: mysql:8.0.11
+    image: mysql:8.0.19
     container_name: temporal-dev-mysql
     ports:
       - "3306:3306"
