@@ -91,6 +91,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceExecutionManagerProvider),
 	fx.Provide(MembershipFactoryProvider),
 	fx.Provide(MembershipMonitorProvider),
+	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(SdkClientProvider),
 	fx.Provide(FrontedClientProvider),
@@ -190,7 +191,7 @@ func ArchiverProviderProvider(params *BootstrapParams) provider.ArchiverProvider
 	return params.ArchiverProvider
 }
 
-func ClientBeanProvider(
+func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
@@ -198,17 +199,23 @@ func ClientBeanProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
 	logger SnTaggedLogger,
+) client.Factory {
+	return factoryProvider.NewFactory(
+		rpcFactory,
+		membershipMonitor,
+		metricsClient,
+		dynamicCollection,
+		persistenceConfig.NumHistoryShards,
+		logger,
+	)
+}
+
+func ClientBeanProvider(
+	clientFactory client.Factory,
 	clusterMetadata cluster.Metadata,
 ) (client.Bean, error) {
 	return client.NewClientBean(
-		factoryProvider.NewFactory(
-			rpcFactory,
-			membershipMonitor,
-			metricsClient,
-			dynamicCollection,
-			persistenceConfig.NumHistoryShards,
-			logger,
-		),
+		clientFactory,
 		clusterMetadata,
 	)
 }
@@ -327,6 +334,7 @@ func NewFromDI(
 	membershipMonitor membership.Monitor,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
+	clientFactory client.Factory,
 	clientBean client.Bean,
 	persistenceBean persistenceClient.Bean,
 	persistenceFaultInjection *persistenceClient.FaultInjectionDataStoreFactory,
@@ -408,6 +416,7 @@ func NewFromDI(
 		matchingClient:    matchingClient,
 		historyRawClient:  historyRawClient,
 		historyClient:     historyClient,
+		clientFactory:     clientFactory,
 		clientBean:        clientBean,
 
 		persistenceBean:           persistenceBean,
