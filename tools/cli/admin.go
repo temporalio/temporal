@@ -555,8 +555,8 @@ func newAdminClusterCommands() []cli.Command {
 					Required: true,
 				},
 				cli.BoolTFlag{
-					Name:     FlagConnectionEnableAlias,
-					Usage:    "Optional: default ture. Enable remote cluster connection",
+					Name:  FlagConnectionEnableAlias,
+					Usage: "Optional: default ture. Enable remote cluster connection",
 				},
 			},
 			Action: func(c *cli.Context) {

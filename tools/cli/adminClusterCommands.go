@@ -55,7 +55,7 @@ func AdminAddOrUpdateRemoteCluster(c *cli.Context) {
 	defer cancel()
 
 	_, err := adminClient.AddOrUpdateRemoteCluster(ctx, &adminservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress: c.String(FlagFrontendAddressWithAlias),
+		FrontendAddress:               c.String(FlagFrontendAddressWithAlias),
 		EnableRemoteClusterConnection: c.BoolT(FlagConnectionEnableAlias),
 	})
 	if err != nil {
