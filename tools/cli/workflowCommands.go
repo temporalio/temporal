@@ -754,8 +754,8 @@ func ListArchivedWorkflow(c *cli.Context) {
 	}
 
 	contextTimeout := defaultContextTimeoutForListArchivedWorkflow
-	if c.GlobalIsSet(FlagContextTimeout) {
-		contextTimeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+	if c.IsSet(FlagContextTimeout) {
+		contextTimeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
 	}
 
 	var result *workflowservice.ListArchivedWorkflowExecutionsResponse

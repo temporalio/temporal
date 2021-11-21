@@ -238,7 +238,7 @@ func RegisterNamespace(c *cli.Context) error {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 			ClusterName: clusterStr,
 		})
-		for _, clusterStr := range c.Args() {
+		for _, clusterStr := range c.Args().Slice() {
 			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 				ClusterName: clusterStr,
 			})
@@ -386,7 +386,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 
 func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) {
 	if !c.IsSet(FlagElasticsearchIndex) {
-		prompt("Elasticsearch index name is not specified. Continue without visibility document deletion?", c.GlobalBool(FlagAutoConfirm))
+		prompt("Elasticsearch index name is not specified. Continue without visibility document deletion?", c.Bool(FlagAutoConfirm))
 	}
 
 	indexName := getRequiredOption(c, FlagElasticsearchIndex)
@@ -821,7 +821,7 @@ func AdminListClusterMembers(c *cli.Context) {
 func AdminDescribeHistoryHost(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 
-	namespace := c.GlobalString(FlagNamespace)
+	namespace := c.String(FlagNamespace)
 	workflowID := c.String(FlagWorkflowID)
 	shardID := c.Int(FlagShardID)
 	historyAddr := c.String(FlagHistoryAddress)
@@ -831,7 +831,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	if c.IsSet(FlagShardID) {
 		flagsCount++
 	}
-	if c.GlobalIsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
+	if c.IsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
 		flagsCount++
 	}
 	if c.IsSet(FlagHistoryAddress) {
@@ -848,7 +848,7 @@ func AdminDescribeHistoryHost(c *cli.Context) {
 	req := &adminservice.DescribeHistoryHostRequest{}
 	if c.IsSet(FlagShardID) {
 		req.ShardId = int32(shardID)
-	} else if c.GlobalIsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
+	} else if c.IsSet(FlagNamespace) && c.IsSet(FlagWorkflowID) {
 		req.Namespace = namespace
 		req.WorkflowExecution = &commonpb.WorkflowExecution{WorkflowId: workflowID}
 	} else if c.IsSet(FlagHistoryAddress) {

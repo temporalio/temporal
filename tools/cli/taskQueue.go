@@ -34,25 +34,26 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func newTaskQueueCommands() []cli.Command {
-	return []cli.Command{
+func newTaskQueueCommands() []*cli.Command {
+	return []*cli.Command{
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
 			Usage:   "Describe pollers info of task queue",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagTaskQueueWithAlias,
 					Usage: "TaskQueue description",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagTaskQueueTypeWithAlias,
 					Value: "workflow",
 					Usage: "Optional TaskQueue type [workflow|activity]",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				DescribeTaskQueue(c)
+				return nil
 			},
 		},
 		{
@@ -60,13 +61,14 @@ func newTaskQueueCommands() []cli.Command {
 			Aliases: []string{"lp"},
 			Usage:   "List all the taskqueue partitions and the hostname for partitions.",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagTaskQueueWithAlias,
 					Usage: "TaskQueue description",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				ListTaskQueuePartitions(c)
+				return nil
 			},
 		},
 	}

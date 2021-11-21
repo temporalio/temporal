@@ -249,28 +249,30 @@ const (
 	FlagSkipSchemaUpdate = "skip-schema-update"
 )
 
-var flagsForExecution = []cli.Flag{
-	cli.StringFlag{
-		Name:  FlagWorkflowIDWithAlias,
-		Usage: "WorkflowId",
-	},
-	cli.StringFlag{
-		Name:  FlagRunIDWithAlias,
-		Usage: "RunId",
-	},
-}
+var (
+	flagsForExecution = []cli.Flag{
+		&cli.StringFlag{
+			Name:  FlagWorkflowIDWithAlias,
+			Usage: "WorkflowId",
+		},
+		&cli.StringFlag{
+			Name:  FlagRunIDWithAlias,
+			Usage: "RunId",
+		},
+	}
 
-var flagsForPagination = []cli.Flag{
-	cli.BoolFlag{
-		Name:  FlagMoreWithAlias,
-		Usage: "List more pages, default is to list one page of default page size 10",
-	},
-	cli.IntFlag{
-		Name:  FlagPageSizeWithAlias,
-		Value: 10,
-		Usage: "Result page size",
-	},
-}
+	flagsForPagination = []cli.Flag{
+		&cli.BoolFlag{
+			Name:  FlagMoreWithAlias,
+			Usage: "List more pages, default is to list one page of default page size 10",
+		},
+		&cli.IntFlag{
+			Name:  FlagPageSizeWithAlias,
+			Value: 10,
+			Usage: "Result page size",
+		},
+	}
+)
 
 func getFlagsForShow() []cli.Flag {
 	return append(flagsForExecution, getFlagsForShowID()...)
@@ -278,36 +280,36 @@ func getFlagsForShow() []cli.Flag {
 
 func getFlagsForShowID() []cli.Flag {
 	return []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintDateTimeWithAlias,
 			Usage: "Print timestamp",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintRawTimeWithAlias,
 			Usage: "Print raw timestamp",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagOutputFilenameWithAlias,
 			Usage: "Serialize history event to a file",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintFullyDetailWithAlias,
 			Usage: "Print fully event detail",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintEventVersionWithAlias,
 			Usage: "Print event version",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagEventIDWithAlias,
 			Usage: "Print specific event details",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagMaxFieldLengthWithAlias,
 			Usage: "Maximum length for each attribute field",
 			Value: defaultMaxFieldLength,
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagResetPointsOnly,
 			Usage: "Only show events that are eligible for reset",
 		},
@@ -316,32 +318,32 @@ func getFlagsForShowID() []cli.Flag {
 
 func getFlagsForStart() []cli.Flag {
 	return []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagTaskQueueWithAlias,
 			Usage: "TaskQueue",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
 			Usage: "WorkflowId",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagWorkflowTypeWithAlias,
 			Usage: "WorkflowTypeName",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagWorkflowExecutionTimeoutWithAlias,
 			Usage: "Workflow execution timeout, including retries and continue-as-new (seconds)",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagWorkflowRunTimeoutWithAlias,
 			Usage: "Single workflow run timeout (seconds)",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagWorkflowTaskTimeoutWithAlias,
 			Value: defaultWorkflowTaskTimeoutInSeconds,
 			Usage: "Workflow task start to close timeout (seconds)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagCronSchedule,
 			Usage: "Optional cron schedule for the workflow. Cron spec is as following: \n" +
 				"\t┌───────────── minute (0 - 59) \n" +
@@ -352,41 +354,41 @@ func getFlagsForStart() []cli.Flag {
 				"\t│ │ │ │ │ \n" +
 				"\t* * * * *",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagWorkflowIDReusePolicyAlias,
 			Usage: "Configure if the same workflow Id is allowed for use in new workflow execution. " +
 				"Options: AllowDuplicate, AllowDuplicateFailedOnly, RejectDuplicate",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name: FlagInputWithAlias,
 			Usage: "Optional input for the workflow in JSON format. If there are multiple parameters, pass each as a separate input flag. " +
 				"Pass \"null\" for null values",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagInputFileWithAlias,
 			Usage: "Optional input for the workflow from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"Input from file will be overwrite by input from command line",
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name:  FlagMemoKey,
 			Usage: fmt.Sprintf("Optional key of memo. If there are multiple keys, provide multiple %s flags", FlagMemoKey),
 		},
-		cli.StringSliceFlag{
+		&cli.StringSliceFlag{
 			Name: FlagMemo,
 			Usage: fmt.Sprintf("Optional info that can be showed when list workflow. If there are multiple values, provide multiple %s flags. "+
 				"The order must be same as %s", FlagMemo, FlagMemoKey),
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagMemoFile,
 			Usage: fmt.Sprintf("File name of optional info that can be showed when list workflow. If there are multiple values, separate them by newline. "+
 				"The order of lines must be same as %s", FlagMemoKey),
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagSearchAttributeKey,
 			Usage: "Optional search attributes keys that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
 				"Use 'cluster get-search-attr' cmd to list legal keys.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagSearchAttributeValue,
 			Usage: "Optional search attributes value that can be be used in list query. If there are multiple keys, concatenate them and separate by |. " +
 				"If value is array, use json array like [\"a\",\"b\"], [1,2], [\"true\",\"false\"], [\"2019-06-07T17:16:34-08:00\",\"2019-06-07T18:16:34-08:00\"]. " +
@@ -397,11 +399,11 @@ func getFlagsForStart() []cli.Flag {
 
 func getFlagsForRun() []cli.Flag {
 	flagsForRun := []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagShowDetailWithAlias,
 			Usage: "Show event details",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagMaxFieldLengthWithAlias,
 			Usage: "Maximum length for each attribute field",
 		},
@@ -412,27 +414,27 @@ func getFlagsForRun() []cli.Flag {
 
 func getCommonFlagsForVisibility() []cli.Flag {
 	return []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintRawTimeWithAlias,
 			Usage: "Print raw timestamp",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintDateTimeWithAlias,
 			Usage: "Print full date time in '2006-01-02T15:04:05Z07:00' format",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintMemoWithAlias,
 			Usage: "Print memo",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintSearchAttrWithAlias,
 			Usage: "Print search attributes",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintFullyDetailWithAlias,
 			Usage: "Print full message without table format",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintJSONWithAlias,
 			Usage: "Print in raw json format",
 		},
@@ -446,35 +448,35 @@ func getFlagsForList() []cli.Flag {
 
 func getFlagsForListAll() []cli.Flag {
 	flagsForListAll := []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagOpenWithAlias,
 			Usage: "List for open workflow executions, default is to list for closed ones",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagEarliestTimeWithAlias,
 			Usage: "EarliestTime of start time, supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
 				"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
 				"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagLatestTimeWithAlias,
 			Usage: "LatestTime of start time, supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
 				"time range (N<duration>), where 0 < N < 1000000 and duration (in full-notation/short-notation) can be second/s, " +
 				"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
 			Usage: "WorkflowId",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagWorkflowTypeWithAlias,
 			Usage: "WorkflowTypeName",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagWorkflowStatusWithAlias,
 			Usage: "Workflow status [completed, failed, canceled, terminated, continuedasnew, timedout]",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagListQueryWithAlias,
 			Usage: "Optional SQL like query for use of search attributes. NOTE: using query will ignore all other filter flags including: " +
 				"[open, earliest_time, latest_time, workflow_id, workflow_type]",
@@ -486,12 +488,12 @@ func getFlagsForListAll() []cli.Flag {
 
 func getFlagsForScan() []cli.Flag {
 	flagsForScan := []cli.Flag{
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagPageSizeWithAlias,
 			Value: 2000,
 			Usage: "Page size for each Scan API call",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagListQueryWithAlias,
 			Usage: "Optional SQL like query",
 		},
@@ -502,16 +504,16 @@ func getFlagsForScan() []cli.Flag {
 
 func getFlagsForListArchived() []cli.Flag {
 	flagsForListArchived := []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagListQueryWithAlias,
 			Usage: "SQL like query. Please check the documentation of the visibility archiver used by your namespace for detailed instructions",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagPageSizeWithAlias,
 			Value: 100,
 			Usage: "Count of visibility records included in a single page, default to 100",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagAllWithAlias,
 			Usage: "List all pages",
 		},
@@ -522,7 +524,7 @@ func getFlagsForListArchived() []cli.Flag {
 
 func getFlagsForCount() []cli.Flag {
 	return []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagListQueryWithAlias,
 			Usage: "Optional SQL like query. e.g count all open workflows \"ExecutionStatus='Running'\"; 'WorkflowType=\"wtype\" and CloseTime > 0'",
 		},
@@ -531,28 +533,28 @@ func getFlagsForCount() []cli.Flag {
 
 func getFlagsForQuery() []cli.Flag {
 	return []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagWorkflowIDWithAlias,
 			Usage: "WorkflowId",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagRunIDWithAlias,
 			Usage: "RunId",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagQueryTypeWithAlias,
 			Usage: "The query type you want to run",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagInputWithAlias,
 			Usage: "Optional input for the query, in JSON format. If there are multiple parameters, concatenate them and separate by space.",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name: FlagInputFileWithAlias,
 			Usage: "Optional input for the query from JSON file. If there are multiple JSON, concatenate them and separate by space or newline. " +
 				"Input from file will be overwrite by input from command line",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagQueryRejectConditionWithAlias,
 			Usage: "Optional flag to reject queries based on workflow state. Valid values are \"not_open\" and \"not_completed_cleanly\"",
 		},
@@ -563,7 +565,7 @@ func getFlagsForQuery() []cli.Flag {
 func getFlagsForStack() []cli.Flag {
 	flags := getFlagsForQuery()
 	for i := 0; i < len(flags); i++ {
-		if flags[i].GetName() == FlagQueryTypeWithAlias {
+		if flags[i].String() == FlagQueryTypeWithAlias {
 			return append(flags[:i], flags[i+1:]...)
 		}
 	}
@@ -576,11 +578,11 @@ func getFlagsForDescribe() []cli.Flag {
 
 func getFlagsForDescribeID() []cli.Flag {
 	return []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPrintRawWithAlias,
 			Usage: "Print properties as they are stored",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagResetPointsOnly,
 			Usage: "Only show auto-reset points",
 		},
@@ -593,11 +595,11 @@ func getFlagsForObserve() []cli.Flag {
 
 func getFlagsForObserveID() []cli.Flag {
 	return []cli.Flag{
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagShowDetailWithAlias,
 			Usage: "Optional show event details",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagMaxFieldLengthWithAlias,
 			Usage: "Optional maximum length for each attribute field when show details",
 		},
@@ -606,55 +608,55 @@ func getFlagsForObserveID() []cli.Flag {
 
 func getDBFlags() []cli.Flag {
 	return []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagDBEngine,
 			Value: "cassandra",
 			Usage: "Type of the DB engine to use (cassandra, mysql, postgres..)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagDBAddress,
 			Value: "127.0.0.1",
 			Usage: "persistence address",
 		},
-		cli.IntFlag{
+		&cli.IntFlag{
 			Name:  FlagDBPort,
 			Value: 9042,
 			Usage: "persistence port",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagUsername,
 			Usage: "DB username",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagPassword,
 			Usage: "DB password",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagKeyspace,
 			Value: "temporal",
 			Usage: "DB keyspace",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagEnableTLS,
 			Usage: "enable TLS over the DB connection",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagTLSCertPath,
 			Usage: "DB tls client cert path (tls must be enabled)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagTLSKeyPath,
 			Usage: "DB tls client key path (tls must be enabled)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagTLSCaPath,
 			Usage: "DB tls client ca path (tls must be enabled)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagTLSServerName,
 			Usage: "DB tls server name (tls must be enabled)",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagTLSDisableHostVerification,
 			Usage: "DB tls verify hostname and server cert (tls must be enabled)",
 		},
@@ -663,22 +665,22 @@ func getDBFlags() []cli.Flag {
 
 func getESFlags(index bool) []cli.Flag {
 	flags := []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagElasticsearchURL,
 			Value: "http://127.0.0.1:9200",
 			Usage: "URL of Elasticsearch cluster",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagElasticsearchUsername,
 			Value: "",
 			Usage: "Username for Elasticsearch cluster",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagElasticsearchPassword,
 			Value: "",
 			Usage: "Password for Elasticsearch cluster",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagVersion,
 			Value: "v7",
 			Usage: "Version of Elasticsearch cluster: v6 or v7 (default)",
@@ -686,7 +688,7 @@ func getESFlags(index bool) []cli.Flag {
 	}
 	if index {
 		flags = append(flags,
-			cli.StringFlag{
+			&cli.StringFlag{
 				Name:  FlagElasticsearchIndex,
 				Usage: "Elasticsearch index name",
 			},

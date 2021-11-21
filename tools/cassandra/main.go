@@ -43,7 +43,7 @@ func RunTool(args []string) error {
 
 // root handler for all cli commands
 func cliHandler(c *cli.Context, handler func(c *cli.Context, logger log.Logger) error, logger log.Logger) {
-	quiet := c.GlobalBool(schema.CLIOptQuiet)
+	quiet := c.Bool(schema.CLIOptQuiet)
 	err := handler(c, logger)
 	if err != nil && !quiet {
 		os.Exit(1)
@@ -51,7 +51,6 @@ func cliHandler(c *cli.Context, handler func(c *cli.Context, logger log.Logger) 
 }
 
 func buildCLIOptions() *cli.App {
-
 	app := cli.NewApp()
 	app.Name = "temporal-cassandra-tool"
 	app.Usage = "Command line tool for temporal cassandra operations"
@@ -59,111 +58,111 @@ func buildCLIOptions() *cli.App {
 	logger := log.NewCLILogger()
 
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:   schema.CLIFlagEndpoint,
-			Value:  "127.0.0.1",
-			Usage:  "hostname or ip address of cassandra host to connect to",
-			EnvVar: "CASSANDRA_HOST",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagEndpoint,
+			Value:   "127.0.0.1",
+			Usage:   "hostname or ip address of cassandra host to connect to",
+			EnvVars: []string{"CASSANDRA_HOST"},
 		},
-		cli.IntFlag{
-			Name:   schema.CLIFlagPort,
-			Value:  environment.GetCassandraPort(),
-			Usage:  "Port of cassandra host to connect to",
-			EnvVar: "CASSANDRA_PORT",
+		&cli.IntFlag{
+			Name:    schema.CLIFlagPort,
+			Value:   environment.GetCassandraPort(),
+			Usage:   "Port of cassandra host to connect to",
+			EnvVars: []string{"CASSANDRA_PORT"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagUser,
-			Value:  "",
-			Usage:  "User name used for authentication for connecting to cassandra host",
-			EnvVar: "CASSANDRA_USER",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagUser,
+			Value:   "",
+			Usage:   "User name used for authentication for connecting to cassandra host",
+			EnvVars: []string{"CASSANDRA_USER"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagPassword,
-			Value:  "",
-			Usage:  "Password used for authentication for connecting to cassandra host",
-			EnvVar: "CASSANDRA_PASSWORD",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagPassword,
+			Value:   "",
+			Usage:   "Password used for authentication for connecting to cassandra host",
+			EnvVars: []string{"CASSANDRA_PASSWORD"},
 		},
-		cli.IntFlag{
-			Name:   schema.CLIFlagTimeout,
-			Value:  defaultTimeout,
-			Usage:  "request Timeout in seconds used for cql client",
-			EnvVar: "CASSANDRA_TIMEOUT",
+		&cli.IntFlag{
+			Name:    schema.CLIFlagTimeout,
+			Value:   defaultTimeout,
+			Usage:   "request Timeout in seconds used for cql client",
+			EnvVars: []string{"CASSANDRA_TIMEOUT"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagKeyspace,
-			Value:  "temporal",
-			Usage:  "name of the cassandra Keyspace",
-			EnvVar: "CASSANDRA_KEYSPACE",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagKeyspace,
+			Value:   "temporal",
+			Usage:   "name of the cassandra Keyspace",
+			EnvVars: []string{"CASSANDRA_KEYSPACE"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagDatacenter,
-			Value:  "",
-			Usage:  "enable NetworkTopologyStrategy by providing datacenter name",
-			EnvVar: "CASSANDRA_DATACENTER",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagDatacenter,
+			Value:   "",
+			Usage:   "enable NetworkTopologyStrategy by providing datacenter name",
+			EnvVars: []string{"CASSANDRA_DATACENTER"},
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,
 			Usage: "Don't set exit status to 1 on error",
 		},
-
-		cli.BoolFlag{
-			Name:   schema.CLIFlagEnableTLS,
-			Usage:  "enable TLS",
-			EnvVar: "CASSANDRA_ENABLE_TLS",
+		&cli.BoolFlag{
+			Name:    schema.CLIFlagEnableTLS,
+			Usage:   "enable TLS",
+			EnvVars: []string{"CASSANDRA_ENABLE_TLS"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagTLSCertFile,
-			Usage:  "TLS cert file",
-			EnvVar: "CASSANDRA_TLS_CERT",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagTLSCertFile,
+			Usage:   "TLS cert file",
+			EnvVars: []string{"CASSANDRA_TLS_CERT"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagTLSKeyFile,
-			Usage:  "TLS key file",
-			EnvVar: "CASSANDRA_TLS_KEY",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagTLSKeyFile,
+			Usage:   "TLS key file",
+			EnvVars: []string{"CASSANDRA_TLS_KEY"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagTLSCaFile,
-			Usage:  "TLS CA file",
-			EnvVar: "CASSANDRA_TLS_CA",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagTLSCaFile,
+			Usage:   "TLS CA file",
+			EnvVars: []string{"CASSANDRA_TLS_CA"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagTLSHostName,
-			Value:  "",
-			Usage:  "override for target server name",
-			EnvVar: "CASSANDRA_TLS_SERVER_NAME",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagTLSHostName,
+			Value:   "",
+			Usage:   "override for target server name",
+			EnvVars: []string{"CASSANDRA_TLS_SERVER_NAME"},
 		},
-		cli.BoolFlag{
-			Name:   schema.CLIFlagTLSDisableHostVerification,
-			Usage:  "disable tls host name verification (tls must be enabled)",
-			EnvVar: "CASSANDRA_TLS_DISABLE_HOST_VERIFICATION",
+		&cli.BoolFlag{
+			Name:    schema.CLIFlagTLSDisableHostVerification,
+			Usage:   "disable tls host name verification (tls must be enabled)",
+			EnvVars: []string{"CASSANDRA_TLS_DISABLE_HOST_VERIFICATION"},
 		},
 	}
 
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		{
 			Name:    "setup-schema",
 			Aliases: []string{"setup"},
 			Usage:   "setup initial version of cassandra schema",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagVersion,
 					Usage: "initial version of the schema, cannot be used with disable-versioning",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagSchemaFile,
 					Usage: "path to the .cql schema file; if un-specified, will just setup versioning tables",
 				},
-				cli.BoolFlag{
+				&cli.BoolFlag{
 					Name:  schema.CLIFlagDisableVersioning,
 					Usage: "disable setup of schema versioning",
 				},
-				cli.BoolFlag{
+				&cli.BoolFlag{
 					Name:  schema.CLIFlagOverwrite,
 					Usage: "drop all existing tables before setting up new schema",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				cliHandler(c, setupSchema, logger)
+				return nil
 			},
 		},
 		{
@@ -171,17 +170,18 @@ func buildCLIOptions() *cli.App {
 			Aliases: []string{"update"},
 			Usage:   "update cassandra schema to a specific version",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagTargetVersion,
 					Usage: "target version for the schema update, defaults to latest",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagSchemaDir,
 					Usage: "path to directory containing versioned schema",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				cliHandler(c, updateSchema, logger)
+				return nil
 			},
 		},
 		{
@@ -189,23 +189,24 @@ func buildCLIOptions() *cli.App {
 			Aliases: []string{"create", "create-Keyspace"},
 			Usage:   "creates a keyspace with simple strategy or network topology if datacenter name is provided",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagKeyspace,
 					Usage: "name of the keyspace",
 				},
-				cli.IntFlag{
+				&cli.IntFlag{
 					Name:  schema.CLIFlagReplicationFactor,
 					Value: 1,
 					Usage: "replication factor for the keyspace",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagDatacenter,
 					Value: "",
 					Usage: "enable NetworkTopologyStrategy by providing datacenter name",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				cliHandler(c, createKeyspace, logger)
+				return nil
 			},
 		},
 		{
@@ -213,26 +214,26 @@ func buildCLIOptions() *cli.App {
 			Aliases: []string{"drop"},
 			Usage:   "drops a keyspace with simple strategy or network topology if datacenter name is provided",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagKeyspace,
 					Usage: "name of the keyspace",
 				},
-				cli.IntFlag{
+				&cli.IntFlag{
 					Name:  schema.CLIFlagReplicationFactor,
 					Value: 1,
 					Usage: "replication factor for the keyspace",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagDatacenter,
 					Value: "",
 					Usage: "enable NetworkTopologyStrategy by providing datacenter name",
 				},
-				cli.BoolFlag{
+				&cli.BoolFlag{
 					Name:  schema.CLIFlagForce,
 					Usage: "don't prompt for confirmation",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				drop := c.Bool(schema.CLIOptForce)
 				if !drop {
 					keyspace := c.String(schema.CLIOptKeyspace)
@@ -246,14 +247,17 @@ func buildCLIOptions() *cli.App {
 				if drop {
 					cliHandler(c, dropKeyspace, logger)
 				}
+
+				return nil
 			},
 		},
 		{
 			Name:    "validate-health",
 			Aliases: []string{"vh"},
 			Usage:   "validates health of cassandra by attempting to establish CQL session to system keyspace",
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				cliHandler(c, validateHealth, logger)
+				return nil
 			},
 		},
 	}

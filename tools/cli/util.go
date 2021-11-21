@@ -439,7 +439,7 @@ func getRequiredIntOption(c *cli.Context, optionName string) int {
 }
 
 func getRequiredGlobalOption(c *cli.Context, optionName string) string {
-	value := c.GlobalString(optionName)
+	value := c.String(optionName)
 	if len(value) == 0 {
 		ErrorAndExit(fmt.Sprintf("Global option %s is required", optionName), nil)
 	}
@@ -594,8 +594,8 @@ func newContextForLongPoll(c *cli.Context) (context.Context, context.CancelFunc)
 }
 
 func newIndefiniteContext(c *cli.Context) (context.Context, context.CancelFunc) {
-	if c.GlobalIsSet(FlagContextTimeout) {
-		timeout := time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+	if c.IsSet(FlagContextTimeout) {
+		timeout := time.Duration(c.Int(FlagContextTimeout)) * time.Second
 		return rpc.NewContextWithTimeoutAndCLIHeaders(timeout)
 	}
 
@@ -603,8 +603,8 @@ func newIndefiniteContext(c *cli.Context) (context.Context, context.CancelFunc) 
 }
 
 func newContextWithTimeout(c *cli.Context, timeout time.Duration) (context.Context, context.CancelFunc) {
-	if c.GlobalIsSet(FlagContextTimeout) {
-		timeout = time.Duration(c.GlobalInt(FlagContextTimeout)) * time.Second
+	if c.IsSet(FlagContextTimeout) {
+		timeout = time.Duration(c.Int(FlagContextTimeout)) * time.Second
 	}
 
 	return rpc.NewContextWithTimeoutAndCLIHeaders(timeout)
@@ -644,13 +644,12 @@ func readJSONInputs(c *cli.Context) [][]byte {
 		var ok bool
 		if inputs, ok = inputsG.(*cli.StringSlice); !ok {
 			// input could be provided as StringFlag instead of StringSliceFlag
-			ss := make(cli.StringSlice, 1)
-			ss[0] = fmt.Sprintf("%v", inputsG)
-			inputs = &ss
+			ss := cli.NewStringSlice(fmt.Sprintf("%v", inputsG))
+			inputs = ss
 		}
 
 		var inputsRaw [][]byte
-		for _, i := range *inputs {
+		for _, i := range inputs.Value() {
 			if strings.EqualFold(i, "null") {
 				inputsRaw = append(inputsRaw, []byte(nil))
 			} else {

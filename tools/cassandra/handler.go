@@ -168,24 +168,24 @@ func doDropKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error 
 
 func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 	config := &CQLClientConfig{
-		Hosts:       cli.GlobalString(schema.CLIOptEndpoint),
-		Port:        cli.GlobalInt(schema.CLIOptPort),
-		User:        cli.GlobalString(schema.CLIOptUser),
-		Password:    cli.GlobalString(schema.CLIOptPassword),
-		Timeout:     cli.GlobalInt(schema.CLIOptTimeout),
-		Keyspace:    cli.GlobalString(schema.CLIOptKeyspace),
+		Hosts:       cli.String(schema.CLIOptEndpoint),
+		Port:        cli.Int(schema.CLIOptPort),
+		User:        cli.String(schema.CLIOptUser),
+		Password:    cli.String(schema.CLIOptPassword),
+		Timeout:     cli.Int(schema.CLIOptTimeout),
+		Keyspace:    cli.String(schema.CLIOptKeyspace),
 		numReplicas: cli.Int(schema.CLIOptReplicationFactor),
 		Datacenter:  cli.String(schema.CLIOptDatacenter),
 	}
 
-	if cli.GlobalBool(schema.CLIFlagEnableTLS) {
+	if cli.Bool(schema.CLIFlagEnableTLS) {
 		config.TLS = &auth.TLS{
 			Enabled:                true,
-			CertFile:               cli.GlobalString(schema.CLIFlagTLSCertFile),
-			KeyFile:                cli.GlobalString(schema.CLIFlagTLSKeyFile),
-			CaFile:                 cli.GlobalString(schema.CLIFlagTLSCaFile),
-			ServerName:             cli.GlobalString(schema.CLIFlagTLSHostName),
-			EnableHostVerification: !cli.GlobalBool(schema.CLIFlagTLSDisableHostVerification),
+			CertFile:               cli.String(schema.CLIFlagTLSCertFile),
+			KeyFile:                cli.String(schema.CLIFlagTLSKeyFile),
+			CaFile:                 cli.String(schema.CLIFlagTLSCaFile),
+			ServerName:             cli.String(schema.CLIFlagTLSHostName),
+			EnableHostVerification: !cli.Bool(schema.CLIFlagTLSDisableHostVerification),
 		}
 	}
 

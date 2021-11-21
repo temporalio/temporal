@@ -45,71 +45,71 @@ func NewCliApp() *cli.App {
 	app.Usage = "A command-line tool for Temporal users"
 	app.Version = headers.CLIVersion
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:   FlagAddressWithAlias,
-			Value:  "",
-			Usage:  "host:port for Temporal frontend service",
-			EnvVar: "TEMPORAL_CLI_ADDRESS",
+		&cli.StringFlag{
+			Name:    FlagAddressWithAlias,
+			Value:   "",
+			Usage:   "host:port for Temporal frontend service",
+			EnvVars: []string{"TEMPORAL_CLI_ADDRESS"},
 		},
-		cli.StringFlag{
-			Name:   FlagNamespaceWithAlias,
-			Value:  "default",
-			Usage:  "Temporal workflow namespace",
-			EnvVar: "TEMPORAL_CLI_NAMESPACE",
+		&cli.StringFlag{
+			Name:    FlagNamespaceWithAlias,
+			Value:   "default",
+			Usage:   "Temporal workflow namespace",
+			EnvVars: []string{"TEMPORAL_CLI_NAMESPACE"},
 		},
-		cli.IntFlag{
-			Name:   FlagContextTimeoutWithAlias,
-			Value:  defaultContextTimeoutInSeconds,
-			Usage:  "Optional timeout for context of RPC call in seconds",
-			EnvVar: "TEMPORAL_CONTEXT_TIMEOUT",
+		&cli.IntFlag{
+			Name:    FlagContextTimeoutWithAlias,
+			Value:   defaultContextTimeoutInSeconds,
+			Usage:   "Optional timeout for context of RPC call in seconds",
+			EnvVars: []string{"TEMPORAL_CONTEXT_TIMEOUT"},
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagAutoConfirm,
 			Usage: "Automatically confirm all prompts",
 		},
-		cli.StringFlag{
-			Name:   FlagTLSCertPath,
-			Value:  "",
-			Usage:  "Path to x509 certificate",
-			EnvVar: "TEMPORAL_CLI_TLS_CERT",
+		&cli.StringFlag{
+			Name:    FlagTLSCertPath,
+			Value:   "",
+			Usage:   "Path to x509 certificate",
+			EnvVars: []string{"TEMPORAL_CLI_TLS_CERT"},
 		},
-		cli.StringFlag{
-			Name:   FlagTLSKeyPath,
-			Value:  "",
-			Usage:  "Path to private key",
-			EnvVar: "TEMPORAL_CLI_TLS_KEY",
+		&cli.StringFlag{
+			Name:    FlagTLSKeyPath,
+			Value:   "",
+			Usage:   "Path to private key",
+			EnvVars: []string{"TEMPORAL_CLI_TLS_KEY"},
 		},
-		cli.StringFlag{
-			Name:   FlagTLSCaPath,
-			Value:  "",
-			Usage:  "Path to server CA certificate",
-			EnvVar: "TEMPORAL_CLI_TLS_CA",
+		&cli.StringFlag{
+			Name:    FlagTLSCaPath,
+			Value:   "",
+			Usage:   "Path to server CA certificate",
+			EnvVars: []string{"TEMPORAL_CLI_TLS_CA"},
 		},
-		cli.BoolFlag{
-			Name:   FlagTLSDisableHostVerification,
-			Usage:  "Disable tls host name verification (tls must be enabled)",
-			EnvVar: "TEMPORAL_CLI_TLS_DISABLE_HOST_VERIFICATION",
+		&cli.BoolFlag{
+			Name:    FlagTLSDisableHostVerification,
+			Usage:   "Disable tls host name verification (tls must be enabled)",
+			EnvVars: []string{"TEMPORAL_CLI_TLS_DISABLE_HOST_VERIFICATION"},
 		},
-		cli.StringFlag{
-			Name:   FlagTLSServerName,
-			Value:  "",
-			Usage:  "Override for target server name",
-			EnvVar: "TEMPORAL_CLI_TLS_SERVER_NAME",
+		&cli.StringFlag{
+			Name:    FlagTLSServerName,
+			Value:   "",
+			Usage:   "Override for target server name",
+			EnvVars: []string{"TEMPORAL_CLI_TLS_SERVER_NAME"},
 		},
-		cli.StringFlag{
-			Name:   FlagHeadersProviderPluginWithAlias,
-			Value:  "",
-			Usage:  "Headers provider plugin executable name",
-			EnvVar: "TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER",
+		&cli.StringFlag{
+			Name:    FlagHeadersProviderPluginWithAlias,
+			Value:   "",
+			Usage:   "Headers provider plugin executable name",
+			EnvVars: []string{"TEMPORAL_CLI_PLUGIN_HEADERS_PROVIDER"},
 		},
-		cli.StringFlag{
-			Name:   FlagDataConverterPluginWithAlias,
-			Value:  "",
-			Usage:  "Data converter plugin executable name",
-			EnvVar: "TEMPORAL_CLI_PLUGIN_DATA_CONVERTER",
+		&cli.StringFlag{
+			Name:    FlagDataConverterPluginWithAlias,
+			Value:   "",
+			Usage:   "Data converter plugin executable name",
+			EnvVars: []string{"TEMPORAL_CLI_PLUGIN_DATA_CONVERTER"},
 		},
 	}
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		{
 			Name:        "namespace",
 			Aliases:     []string{"n"},
@@ -143,7 +143,7 @@ func NewCliApp() *cli.App {
 			Name:    "admin",
 			Aliases: []string{"adm"},
 			Usage:   "Run admin operation",
-			Subcommands: []cli.Command{
+			Subcommands: []*cli.Command{
 				{
 					Name:        "workflow",
 					Aliases:     []string{"wf"},

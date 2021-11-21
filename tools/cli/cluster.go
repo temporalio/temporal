@@ -26,22 +26,24 @@ package cli
 
 import "github.com/urfave/cli/v2"
 
-func newClusterCommands() []cli.Command {
-	return []cli.Command{
+func newClusterCommands() []*cli.Command {
+	return []*cli.Command{
 		{
 			Name:    "health",
 			Aliases: []string{"h"},
 			Usage:   "Check health of frontend service",
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				HealthCheck(c)
+				return nil
 			},
 		},
 		{
 			Name:    "get-search-attributes",
 			Usage:   "List search attributes that can be used in list workflow query",
 			Aliases: []string{"gsa"},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				GetSearchAttributes(c)
+				return nil
 			},
 		},
 	}

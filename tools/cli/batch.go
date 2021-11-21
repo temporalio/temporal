@@ -32,37 +32,39 @@ import (
 	"go.temporal.io/server/service/worker/batcher"
 )
 
-func newBatchCommands() []cli.Command {
-	return []cli.Command{
+func newBatchCommands() []*cli.Command {
+	return []*cli.Command{
 		{
 			Name:    "describe",
 			Aliases: []string{"desc"},
 			Usage:   "Describe a batch operation job",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagJobIDWithAlias,
 					Usage: "Batch Job Id",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				DescribeBatchJob(c)
+				return nil
 			},
 		},
 		{
 			Name:  "terminate",
 			Usage: "terminate a batch operation job",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagJobIDWithAlias,
 					Usage: "Batch Job Id",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagReasonWithAlias,
 					Usage: "Reason to stop this batch job",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				TerminateBatchJob(c)
+				return nil
 			},
 		},
 		{
@@ -70,58 +72,60 @@ func newBatchCommands() []cli.Command {
 			Aliases: []string{"l"},
 			Usage:   "Describe a batch operation job",
 			Flags: []cli.Flag{
-				cli.IntFlag{
+				&cli.IntFlag{
 					Name:  FlagPageSizeWithAlias,
 					Value: 30,
 					Usage: "Result page size",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				ListBatchJobs(c)
+				return nil
 			},
 		},
 		{
 			Name:  "start",
 			Usage: "Start a batch operation job",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagListQueryWithAlias,
 					Usage: "Query to get workflows for being executed this batch operation",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagReasonWithAlias,
 					Usage: "Reason to run this batch job",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagBatchTypeWithAlias,
 					Usage: "Types supported: " + strings.Join(batcher.AllBatchTypes, ","),
 				},
 				//below are optional
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagSignalNameWithAlias,
 					Usage: "Required for batch signal",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  FlagInputWithAlias,
 					Usage: "Optional input of signal",
 				},
-				cli.IntFlag{
+				&cli.IntFlag{
 					Name:  FlagRPS,
 					Value: batcher.DefaultRPS,
 					Usage: "RPS of processing",
 				},
-				cli.BoolFlag{
+				&cli.BoolFlag{
 					Name:  FlagYes,
 					Usage: "Optional flag to disable confirmation prompt",
 				},
-				cli.IntFlag{
+				&cli.IntFlag{
 					Name:  FlagConcurrency,
 					Value: batcher.DefaultConcurrency,
 					Usage: "Number of goroutines running in parallel to process",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				StartBatchJob(c)
+				return nil
 			},
 		},
 	}

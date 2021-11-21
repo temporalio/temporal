@@ -44,7 +44,7 @@ func RunTool(args []string) error {
 
 // root handler for all cli commands
 func cliHandler(c *cli.Context, handler func(c *cli.Context, logger log.Logger) error, logger log.Logger) {
-	quiet := c.GlobalBool(schema.CLIOptQuiet)
+	quiet := c.Bool(schema.CLIOptQuiet)
 	err := handler(c, logger)
 	if err != nil && !quiet {
 		os.Exit(1)
@@ -62,109 +62,110 @@ func BuildCLIOptions() *cli.App {
 	logger := log.NewCLILogger()
 
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:   schema.CLIFlagEndpoint,
-			Value:  "127.0.0.1",
-			Usage:  "hostname or ip address of sql host to connect to",
-			EnvVar: "SQL_HOST",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagEndpoint,
+			Value:   "127.0.0.1",
+			Usage:   "hostname or ip address of sql host to connect to",
+			EnvVars: []string{"SQL_HOST"},
 		},
-		cli.IntFlag{
-			Name:   schema.CLIFlagPort,
-			Value:  defaultSQLPort,
-			Usage:  "port of sql host to connect to",
-			EnvVar: "SQL_PORT",
+		&cli.IntFlag{
+			Name:    schema.CLIFlagPort,
+			Value:   defaultSQLPort,
+			Usage:   "port of sql host to connect to",
+			EnvVars: []string{"SQL_PORT"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagUser,
-			Value:  "",
-			Usage:  "user name used for authentication when connecting to sql host",
-			EnvVar: "SQL_USER",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagUser,
+			Value:   "",
+			Usage:   "user name used for authentication when connecting to sql host",
+			EnvVars: []string{"SQL_USER"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagPassword,
-			Value:  "",
-			Usage:  "password used for authentication when connecting to sql host",
-			EnvVar: "SQL_PASSWORD",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagPassword,
+			Value:   "",
+			Usage:   "password used for authentication when connecting to sql host",
+			EnvVars: []string{"SQL_PASSWORD"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagDatabase,
-			Value:  "temporal",
-			Usage:  "name of the sql database",
-			EnvVar: "SQL_DATABASE",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagDatabase,
+			Value:   "temporal",
+			Usage:   "name of the sql database",
+			EnvVars: []string{"SQL_DATABASE"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagPluginName,
-			Value:  "mysql",
-			Usage:  "name of the sql plugin",
-			EnvVar: "SQL_PLUGIN",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagPluginName,
+			Value:   "mysql",
+			Usage:   "name of the sql plugin",
+			EnvVars: []string{"SQL_PLUGIN"},
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  schema.CLIFlagQuiet,
 			Usage: "Don't set exit status to 1 on error",
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagConnectAttributes,
-			Usage:  "sql connect attributes",
-			EnvVar: "SQL_CONNECT_ATTRIBUTES",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagConnectAttributes,
+			Usage:   "sql connect attributes",
+			EnvVars: []string{"SQL_CONNECT_ATTRIBUTES"},
 		},
-		cli.BoolFlag{
-			Name:   schema.CLIFlagEnableTLS,
-			Usage:  "enable TLS over sql connection",
-			EnvVar: "SQL_TLS",
+		&cli.BoolFlag{
+			Name:    schema.CLIFlagEnableTLS,
+			Usage:   "enable TLS over sql connection",
+			EnvVars: []string{"SQL_TLS"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagTLSCertFile,
-			Usage:  "sql tls client cert path (tls must be enabled)",
-			EnvVar: "SQL_TLS_CERT_FILE",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagTLSCertFile,
+			Usage:   "sql tls client cert path (tls must be enabled)",
+			EnvVars: []string{"SQL_TLS_CERT_FILE"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagTLSKeyFile,
-			Usage:  "sql tls client key path (tls must be enabled)",
-			EnvVar: "SQL_TLS_KEY_FILE",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagTLSKeyFile,
+			Usage:   "sql tls client key path (tls must be enabled)",
+			EnvVars: []string{"SQL_TLS_KEY_FILE"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagTLSCaFile,
-			Usage:  "sql tls client ca file (tls must be enabled)",
-			EnvVar: "SQL_TLS_CA_FILE",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagTLSCaFile,
+			Usage:   "sql tls client ca file (tls must be enabled)",
+			EnvVars: []string{"SQL_TLS_CA_FILE"},
 		},
-		cli.StringFlag{
-			Name:   schema.CLIFlagTLSHostName,
-			Value:  "",
-			Usage:  "override for target server name",
-			EnvVar: "SQL_TLS_SERVER_NAME",
+		&cli.StringFlag{
+			Name:    schema.CLIFlagTLSHostName,
+			Value:   "",
+			Usage:   "override for target server name",
+			EnvVars: []string{"SQL_TLS_SERVER_NAME"},
 		},
-		cli.BoolFlag{
-			Name:   schema.CLIFlagTLSDisableHostVerification,
-			Usage:  "disable tls host name verification (tls must be enabled)",
-			EnvVar: "SQL_TLS_DISABLE_HOST_VERIFICATION",
+		&cli.BoolFlag{
+			Name:    schema.CLIFlagTLSDisableHostVerification,
+			Usage:   "disable tls host name verification (tls must be enabled)",
+			EnvVars: []string{"SQL_TLS_DISABLE_HOST_VERIFICATION"},
 		},
 	}
 
-	app.Commands = []cli.Command{
+	app.Commands = []*cli.Command{
 		{
 			Name:    "setup-schema",
 			Aliases: []string{"setup"},
 			Usage:   "setup initial version of sql schema",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagVersion,
 					Usage: "initial version of the schema, cannot be used with disable-versioning",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagSchemaFile,
 					Usage: "path to the .sql schema file; if un-specified, will just setup versioning tables",
 				},
-				cli.BoolFlag{
+				&cli.BoolFlag{
 					Name:  schema.CLIFlagDisableVersioning,
 					Usage: "disable setup of schema versioning",
 				},
-				cli.BoolFlag{
+				&cli.BoolFlag{
 					Name:  schema.CLIFlagOverwrite,
 					Usage: "drop all existing tables before setting up new schema",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				cliHandler(c, setupSchema, logger)
+				return nil
 			},
 		},
 		{
@@ -172,17 +173,18 @@ func BuildCLIOptions() *cli.App {
 			Aliases: []string{"update"},
 			Usage:   "update sql schema to a specific version",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagTargetVersion,
 					Usage: "target version for the schema update, defaults to latest",
 				},
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagSchemaDir,
 					Usage: "path to directory containing versioned schema",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				cliHandler(c, updateSchema, logger)
+				return nil
 			},
 		},
 		{
@@ -190,13 +192,14 @@ func BuildCLIOptions() *cli.App {
 			Aliases: []string{"create"},
 			Usage:   "creates a database",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagDatabase,
 					Usage: "name of the database",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				cliHandler(c, createDatabase, logger)
+				return nil
 			},
 		},
 		{
@@ -204,16 +207,16 @@ func BuildCLIOptions() *cli.App {
 			Aliases: []string{"drop"},
 			Usage:   "drops a database",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:  schema.CLIFlagDatabase,
 					Usage: "name of the database",
 				},
-				cli.BoolFlag{
+				&cli.BoolFlag{
 					Name:  schema.CLIFlagForce,
 					Usage: "don't prompt for confirmation",
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				drop := c.Bool(schema.CLIOptForce)
 				if !drop {
 					database := c.String(schema.CLIOptDatabase)
@@ -227,6 +230,7 @@ func BuildCLIOptions() *cli.App {
 				if drop {
 					cliHandler(c, dropDatabase, logger)
 				}
+				return nil
 			},
 		},
 	}

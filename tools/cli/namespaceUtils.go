@@ -53,119 +53,119 @@ const (
 
 var (
 	registerNamespaceFlags = []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagDescriptionWithAlias,
 			Usage: "Namespace description",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagOwnerEmailWithAlias,
 			Usage: "Owner email",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagRetentionWithAlias,
 			Usage: "Workflow execution retention",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagActiveClusterNameWithAlias,
 			Usage: "Active cluster name",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			// use StringFlag instead of buggy StringSliceFlag
 			// TODO when https://github.com/urfave/cli/pull/392 & v2 is released
 			//  consider update urfave/cli
 			Name:  FlagClustersWithAlias,
 			Usage: "Clusters",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagIsGlobalNamespaceWithAlias,
 			Usage: "Flag to indicate whether namespace is a global namespace",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagNamespaceDataWithAlias,
 			Usage: "Namespace data of key value pairs, in format of k1:v1,k2:v2,k3:v3",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagHistoryArchivalStateWithAlias,
 			Usage: "Flag to set history archival state, valid values are \"disabled\" and \"enabled\"",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagHistoryArchivalURIWithAlias,
 			Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagVisibilityArchivalStateWithAlias,
 			Usage: "Flag to set visibility archival state, valid values are \"disabled\" and \"enabled\"",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagVisibilityArchivalURIWithAlias,
 			Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
 		},
 	}
 
 	updateNamespaceFlags = []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagDescriptionWithAlias,
 			Usage: "Namespace description",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagOwnerEmailWithAlias,
 			Usage: "Owner email",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagRetentionWithAlias,
 			Usage: "Workflow execution retention",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagActiveClusterNameWithAlias,
 			Usage: "Active cluster name",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			// use StringFlag instead of buggy StringSliceFlag
 			// TODO when https://github.com/urfave/cli/pull/392 & v2 is released
 			//  consider update urfave/cli
 			Name:  FlagClustersWithAlias,
 			Usage: "Clusters",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagNamespaceDataWithAlias,
 			Usage: "Namespace data of key value pairs, in format of k1:v1,k2:v2,k3:v3 ",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagHistoryArchivalStateWithAlias,
 			Usage: "Flag to set history archival state, valid values are \"disabled\" and \"enabled\"",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagHistoryArchivalURIWithAlias,
 			Usage: "Optionally specify history archival URI (cannot be changed after first time archival is enabled)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagVisibilityArchivalStateWithAlias,
 			Usage: "Flag to set visibility archival state, valid values are \"disabled\" and \"enabled\"",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagVisibilityArchivalURIWithAlias,
 			Usage: "Optionally specify visibility archival URI (cannot be changed after first time archival is enabled)",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagAddBadBinary,
 			Usage: "Binary checksum to add for resetting workflow",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagRemoveBadBinary,
 			Usage: "Binary checksum to remove for resetting workflow",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagReason,
 			Usage: "Reason for the operation",
 		},
-		cli.BoolFlag{
+		&cli.BoolFlag{
 			Name:  FlagPromoteNamespaceWithAlias,
 			Usage: "Promote local namespace to global namespace",
 		},
 	}
 
 	describeNamespaceFlags = []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagNamespaceID,
 			Usage: "Namespace Id (required if not specify namespace)",
 		},
@@ -174,15 +174,15 @@ var (
 	listNamespacesFlags = []cli.Flag{}
 
 	adminNamespaceCommonFlags = []cli.Flag{
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagServiceConfigDirWithAlias,
 			Usage: "Required service configuration dir",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagServiceEnvWithAlias,
 			Usage: "Optional service env for loading service configuration",
 		},
-		cli.StringFlag{
+		&cli.StringFlag{
 			Name:  FlagServiceZoneWithAlias,
 			Usage: "Optional service zone for loading service configuration",
 		},

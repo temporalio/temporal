@@ -91,7 +91,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 
 	if c.Bool(FlagSkipSchemaUpdate) {
 		promptMsg := color.RedString("This command will only modify search attributes metadata. You need to modify Elasticsearch schema manually prior to running this command. Continue? Y/N")
-		prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
+		prompt(promptMsg, c.Bool(FlagAutoConfirm))
 	}
 
 	// ask user for confirmation
@@ -99,7 +99,7 @@ func AdminAddSearchAttributes(c *cli.Context) {
 		"You are about to add search attributes %s. Continue? Y/N",
 		color.YellowString(strings.TrimLeft(fmt.Sprintf("%v", searchAttributes), "map")),
 	)
-	prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
+	prompt(promptMsg, c.Bool(FlagAutoConfirm))
 
 	request := &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: searchAttributes,
@@ -131,7 +131,7 @@ func AdminRemoveSearchAttributes(c *cli.Context) {
 		"You are about to remove search attributes %s. Continue? Y/N",
 		color.YellowString(fmt.Sprintf("%v", names)),
 	)
-	prompt(promptMsg, c.GlobalBool(FlagAutoConfirm))
+	prompt(promptMsg, c.Bool(FlagAutoConfirm))
 
 	adminClient := cFactory.AdminClient(c)
 	ctx, cancel := newContext(c)

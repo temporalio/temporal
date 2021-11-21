@@ -98,7 +98,7 @@ func (b *clientFactory) AdminClient(c *cli.Context) adminservice.AdminServiceCli
 
 // SDKClient builds an SDK client.
 func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Client {
-	hostPort := c.GlobalString(FlagAddress)
+	hostPort := c.String(FlagAddress)
 	if hostPort == "" {
 		hostPort = localHostPort
 	}
@@ -147,7 +147,7 @@ func headersProviderInterceptor(headersProvider plugin.HeadersProvider) grpc.Una
 }
 
 func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, error) {
-	hostPort := c.GlobalString(FlagAddress)
+	hostPort := c.String(FlagAddress)
 	if hostPort == "" {
 		hostPort = localHostPort
 	}
@@ -180,11 +180,11 @@ func (b *clientFactory) createGRPCConnection(c *cli.Context) (*grpc.ClientConn, 
 }
 
 func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
-	certPath := c.GlobalString(FlagTLSCertPath)
-	keyPath := c.GlobalString(FlagTLSKeyPath)
-	caPath := c.GlobalString(FlagTLSCaPath)
-	disableHostNameVerification := c.GlobalBool(FlagTLSDisableHostVerification)
-	serverName := c.GlobalString(FlagTLSServerName)
+	certPath := c.String(FlagTLSCertPath)
+	keyPath := c.String(FlagTLSKeyPath)
+	caPath := c.String(FlagTLSCaPath)
+	disableHostNameVerification := c.Bool(FlagTLSDisableHostVerification)
+	serverName := c.String(FlagTLSServerName)
 
 	var host string
 	var cert *tls.Certificate
@@ -211,7 +211,7 @@ func (b *clientFactory) createTLSConfig(c *cli.Context) (*tls.Config, error) {
 		if serverName != "" {
 			host = serverName
 		} else {
-			hostPort := c.GlobalString(FlagAddress)
+			hostPort := c.String(FlagAddress)
 			if hostPort == "" {
 				hostPort = localHostPort
 			}

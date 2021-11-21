@@ -24,26 +24,27 @@ package cli
 
 import "github.com/urfave/cli/v2"
 
-func newDataConverterCommands() []cli.Command {
-	return []cli.Command{
+func newDataConverterCommands() []*cli.Command {
+	return []*cli.Command{
 		{
 			Name:  "web",
 			Usage: "Provides a data converter websocket for Temporal web",
 			Flags: []cli.Flag{
-				cli.StringFlag{
+				&cli.StringFlag{
 					Name:     FlagWebURL,
 					Usage:    "Web UI URL",
 					Required: true,
 				},
-				cli.IntFlag{
-					Name:   FlagPort,
-					Value:  0,
-					Usage:  "Port for the dataconverter to listen on. Defaults to a random port.",
-					EnvVar: "TEMPORAL_CLI_DATA_CONVERTER_PORT",
+				&cli.IntFlag{
+					Name:    FlagPort,
+					Value:   0,
+					Usage:   "Port for the dataconverter to listen on. Defaults to a random port.",
+					EnvVars: []string{"TEMPORAL_CLI_DATA_CONVERTER_PORT"},
 				},
 			},
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				DataConverter(c)
+				return nil
 			},
 		},
 	}

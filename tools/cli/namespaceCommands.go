@@ -123,7 +123,7 @@ func (d *namespaceCLIImpl) RegisterNamespace(c *cli.Context) {
 		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 			ClusterName: clusterStr,
 		})
-		for _, clusterStr := range c.Args() {
+		for _, clusterStr := range c.Args().Slice() {
 			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 				ClusterName: clusterStr,
 			})
@@ -227,7 +227,7 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 				ClusterName: clusterStr,
 			})
-			for _, clusterStr := range c.Args() {
+			for _, clusterStr := range c.Args().Slice() {
 				clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
 					ClusterName: clusterStr,
 				})
@@ -296,13 +296,13 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 
 // DescribeNamespace updates a namespace
 func (d *namespaceCLIImpl) DescribeNamespace(c *cli.Context) {
-	namespace := c.GlobalString(FlagNamespace)
+	namespace := c.String(FlagNamespace)
 	namespaceID := c.String(FlagNamespaceID)
 
 	if namespaceID == "" && namespace == "" {
 		ErrorAndExit("At least namespace_id or namespace must be provided.", nil)
 	}
-	if c.GlobalIsSet(FlagNamespace) && namespaceID != "" {
+	if c.IsSet(FlagNamespace) && namespaceID != "" {
 		ErrorAndExit("Only one of namespace_id or namespace must be provided.", nil)
 	}
 	if namespaceID != "" {

@@ -66,15 +66,16 @@ func parseNamespaceDataKVs(namespaceDataStr string) (map[string]string, error) {
 	return kvMap, nil
 }
 
-func newNamespaceCommands() []cli.Command {
-	return []cli.Command{
+func newNamespaceCommands() []*cli.Command {
+	return []*cli.Command{
 		{
 			Name:    "register",
 			Aliases: []string{"re"},
 			Usage:   "Register workflow namespace",
 			Flags:   registerNamespaceFlags,
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				newNamespaceCLI(c, false).RegisterNamespace(c)
+				return nil
 			},
 		},
 		{
@@ -82,8 +83,9 @@ func newNamespaceCommands() []cli.Command {
 			Aliases: []string{"up", "u"},
 			Usage:   "Update existing workflow namespace",
 			Flags:   updateNamespaceFlags,
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				newNamespaceCLI(c, false).UpdateNamespace(c)
+				return nil
 			},
 		},
 		{
@@ -91,8 +93,9 @@ func newNamespaceCommands() []cli.Command {
 			Aliases: []string{"desc"},
 			Usage:   "Describe existing workflow namespace",
 			Flags:   describeNamespaceFlags,
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				newNamespaceCLI(c, false).DescribeNamespace(c)
+				return nil
 			},
 		},
 		{
@@ -100,8 +103,9 @@ func newNamespaceCommands() []cli.Command {
 			Aliases: []string{"l"},
 			Usage:   "List all namespaces",
 			Flags:   listNamespacesFlags,
-			Action: func(c *cli.Context) {
+			Action: func(c *cli.Context) error {
 				newNamespaceCLI(c, false).ListNamespaces(c)
+				return nil
 			},
 		},
 	}
