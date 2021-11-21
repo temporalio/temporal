@@ -90,6 +90,7 @@ func buildCLIOptions() *cli.App {
 		},
 		&cli.StringFlag{
 			Name:    schema.CLIFlagKeyspace,
+			Aliases: []string{"k"},
 			Value:   "temporal",
 			Usage:   "name of the cassandra Keyspace",
 			EnvVars: []string{"CASSANDRA_KEYSPACE"},
@@ -101,8 +102,9 @@ func buildCLIOptions() *cli.App {
 			EnvVars: []string{"CASSANDRA_DATACENTER"},
 		},
 		&cli.BoolFlag{
-			Name:  schema.CLIFlagQuiet,
-			Usage: "Don't set exit status to 1 on error",
+			Name:    schema.CLIFlagQuiet,
+			Aliases: []string{"q"},
+			Usage:   "Don't set exit status to 1 on error",
 		},
 		&cli.BoolFlag{
 			Name:    schema.CLIFlagEnableTLS,
@@ -144,20 +146,24 @@ func buildCLIOptions() *cli.App {
 			Usage:   "setup initial version of cassandra schema",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  schema.CLIFlagVersion,
-					Usage: "initial version of the schema, cannot be used with disable-versioning",
+					Name:    schema.CLIFlagVersion,
+					Aliases: []string{"v"},
+					Usage:   "initial version of the schema, cannot be used with disable-versioning",
 				},
 				&cli.StringFlag{
-					Name:  schema.CLIFlagSchemaFile,
-					Usage: "path to the .cql schema file; if un-specified, will just setup versioning tables",
+					Name:    schema.CLIFlagSchemaFile,
+					Aliases: []string{"f"},
+					Usage:   "path to the .cql schema file; if un-specified, will just setup versioning tables",
 				},
 				&cli.BoolFlag{
-					Name:  schema.CLIFlagDisableVersioning,
-					Usage: "disable setup of schema versioning",
+					Name:    schema.CLIFlagDisableVersioning,
+					Aliases: []string{"d"},
+					Usage:   "disable setup of schema versioning",
 				},
 				&cli.BoolFlag{
-					Name:  schema.CLIFlagOverwrite,
-					Usage: "drop all existing tables before setting up new schema",
+					Name:    schema.CLIFlagOverwrite,
+					Aliases: []string{"o"},
+					Usage:   "drop all existing tables before setting up new schema",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -171,12 +177,14 @@ func buildCLIOptions() *cli.App {
 			Usage:   "update cassandra schema to a specific version",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  schema.CLIFlagTargetVersion,
-					Usage: "target version for the schema update, defaults to latest",
+					Name:    schema.CLIFlagTargetVersion,
+					Aliases: []string{"v"},
+					Usage:   "target version for the schema update, defaults to latest",
 				},
 				&cli.StringFlag{
-					Name:  schema.CLIFlagSchemaDir,
-					Usage: "path to directory containing versioned schema",
+					Name:    schema.CLIFlagSchemaDir,
+					Aliases: []string{"d"},
+					Usage:   "path to directory containing versioned schema",
 				},
 			},
 			Action: func(c *cli.Context) error {
@@ -190,13 +198,15 @@ func buildCLIOptions() *cli.App {
 			Usage:   "creates a keyspace with simple strategy or network topology if datacenter name is provided",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  schema.CLIFlagKeyspace,
-					Usage: "name of the keyspace",
+					Name:    schema.CLIFlagKeyspace,
+					Aliases: []string{"k"},
+					Usage:   "name of the keyspace",
 				},
 				&cli.IntFlag{
-					Name:  schema.CLIFlagReplicationFactor,
-					Value: 1,
-					Usage: "replication factor for the keyspace",
+					Name:    schema.CLIFlagReplicationFactor,
+					Aliases: []string{"rf"},
+					Value:   1,
+					Usage:   "replication factor for the keyspace",
 				},
 				&cli.StringFlag{
 					Name:  schema.CLIFlagDatacenter,
@@ -215,13 +225,15 @@ func buildCLIOptions() *cli.App {
 			Usage:   "drops a keyspace with simple strategy or network topology if datacenter name is provided",
 			Flags: []cli.Flag{
 				&cli.StringFlag{
-					Name:  schema.CLIFlagKeyspace,
-					Usage: "name of the keyspace",
+					Name:    schema.CLIFlagKeyspace,
+					Aliases: []string{"k"},
+					Usage:   "name of the keyspace",
 				},
 				&cli.IntFlag{
-					Name:  schema.CLIFlagReplicationFactor,
-					Value: 1,
-					Usage: "replication factor for the keyspace",
+					Name:    schema.CLIFlagReplicationFactor,
+					Aliases: []string{"rf"},
+					Value:   1,
+					Usage:   "replication factor for the keyspace",
 				},
 				&cli.StringFlag{
 					Name:  schema.CLIFlagDatacenter,
