@@ -524,6 +524,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 			break
 		}
 	}
+	s.Len(rows, len(visibilities))
 	s.sortByStartTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -647,7 +648,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowID_Status
 			break
 		}
 	}
-
+	s.Len(rows, len(visibilities))
 	s.sortByCloseTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -772,6 +773,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 			break
 		}
 	}
+	s.Len(rows, len(visibilities))
 	s.sortByStartTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -895,7 +897,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_WorkflowTypeName_
 			break
 		}
 	}
-
+	s.Len(rows, len(visibilities))
 	s.sortByCloseTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -1020,6 +1022,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusOpen_Multip
 			break
 		}
 	}
+	s.Len(rows, len(visibilities))
 	s.sortByStartTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -1151,7 +1154,7 @@ func (s *visibilitySuite) TestSelect_MinStartTime_MaxStartTime_StatusClose_Multi
 			break
 		}
 	}
-
+	s.Len(rows, len(visibilities))
 	s.sortByCloseTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
@@ -1290,6 +1293,7 @@ func (s *visibilitySuite) testSelectMinStartTimeMaxStartTimeStatusCloseByTypeMul
 		}
 	}
 
+	s.Len(rows, len(visibilities))
 	s.sortByCloseTimeDescRunIDAsc(visibilities)
 	for index := range rows {
 		rows[index].NamespaceID = namespaceID.String()
