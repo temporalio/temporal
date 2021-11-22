@@ -173,9 +173,8 @@ func newAdminShardManagementCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks for given shard Id and task type",
-			Flags: append(append(
-				getDBFlags(),
-				flagsForPagination...),
+			Flags: append(
+				flagsForPagination,
 				cli.StringFlag{
 					Name:  FlagTargetCluster,
 					Value: "active",
@@ -188,7 +187,7 @@ func newAdminShardManagementCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagTaskType,
 					Value: "transfer",
-					Usage: "Task type: transfer (default), timer, replication",
+					Usage: "Task type: transfer (default), timer, replication, visibility",
 				},
 				cli.StringFlag{
 					Name:  FlagMinVisibilityTimestamp,
@@ -206,7 +205,7 @@ func newAdminShardManagementCommands() []cli.Command {
 				},
 			),
 			Action: func(c *cli.Context) {
-				AdminListTasks(c)
+				AdminListShardTasks(c)
 			},
 		},
 		{

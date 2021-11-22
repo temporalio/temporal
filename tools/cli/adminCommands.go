@@ -598,8 +598,8 @@ func AdminDescribeTask(c *cli.Context) {
 	}
 }
 
-// AdminListTasks outputs a list of a tasks for given Shard and Task Type
-func AdminListTasks(c *cli.Context) {
+// AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
+func AdminListShardTasks(c *cli.Context) {
 	sid := int32(getRequiredIntOption(c, FlagShardID))
 	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
 	if err != nil {
@@ -610,18 +610,16 @@ func AdminListTasks(c *cli.Context) {
 		ErrorAndExit(fmt.Sprintf("Task type %s is currently not supported", category), nil)
 	}
 
-	pFactory := CreatePersistenceFactory(c)
-	executionManager, err := pFactory.NewExecutionManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize execution manager", err)
-	}
+	client := cFactory.AdminClient(c)
 
+	ctx, cancel := newContext(c)
+	defer cancel()
 	if category == enumsspb.TASK_CATEGORY_TRANSFER {
-		req := &persistence.GetTransferTasksRequest{ShardID: sid}
+		req := &adminservice.ListTransferTasksRequest{ShardId: sid}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetTransferTasks(req)
+			response, err := client.ListTransferTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -635,11 +633,11 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_VISIBILITY {
-		req := &persistence.GetVisibilityTasksRequest{ShardID: sid}
+		req := &adminservice.ListVisibilityTasksRequest{ShardId: sid}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetVisibilityTasks(req)
+			response, err := client.ListVisibilityTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -656,14 +654,14 @@ func AdminListTasks(c *cli.Context) {
 		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
 		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
 
-		req := &persistence.GetTimerTasksRequest{
-			ShardID:      sid,
-			MinTimestamp: minVis,
-			MaxTimestamp: maxVis,
+		req := &adminservice.ListTimerTasksRequest{
+			ShardId: sid,
+			MinTime: &minVis,
+			MaxTime: &maxVis,
 		}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetTimerTasks(req)
+			response, err := client.ListTimerTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -677,10 +675,10 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_REPLICATION {
-		req := &persistence.GetReplicationTasksRequest{}
+		req := &adminservice.ListReplicationTasksRequest{ShardId: sid}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetReplicationTasks(req)
+			response, err := client.ListReplicationTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
