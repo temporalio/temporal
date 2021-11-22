@@ -128,6 +128,7 @@ const (
 	FlagDescriptionWithAlias                  = FlagDescription + ", desc"
 	FlagOwnerEmail                            = "owner_email"
 	FlagOwnerEmailWithAlias                   = FlagOwnerEmail + ", oe"
+	FlagState                                 = "state"
 	FlagRetention                             = "retention"
 	FlagRetentionWithAlias                    = FlagRetention + ", rd"
 	FlagHistoryArchivalState                  = "history_archival_state"
