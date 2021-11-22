@@ -26,10 +26,11 @@ package test
 
 import (
 	"fmt"
-	"go.temporal.io/server/tests/testhelper"
 	"math/rand"
 	"os"
 	"time"
+
+	"go.temporal.io/server/tests/testhelper"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

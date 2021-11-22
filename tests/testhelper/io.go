@@ -25,9 +25,10 @@
 package testhelper
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 // CreateTemp is a helper function which creates a temporary file,

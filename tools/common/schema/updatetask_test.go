@@ -25,9 +25,10 @@
 package schema
 
 import (
-	"go.temporal.io/server/tests/testhelper"
 	"os"
 	"testing"
+
+	"go.temporal.io/server/tests/testhelper"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

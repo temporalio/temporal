@@ -27,12 +27,13 @@ package log
 import (
 	"bytes"
 	"fmt"
-	"go.temporal.io/server/tests/testhelper"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"testing"
+
+	"go.temporal.io/server/tests/testhelper"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

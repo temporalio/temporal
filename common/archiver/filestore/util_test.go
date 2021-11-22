@@ -25,11 +25,12 @@
 package filestore
 
 import (
-	"go.temporal.io/server/tests/testhelper"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/tests/testhelper"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"

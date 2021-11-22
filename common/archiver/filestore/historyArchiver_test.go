@@ -27,11 +27,12 @@ package filestore
 import (
 	"context"
 	"errors"
-	"go.temporal.io/server/tests/testhelper"
 	"os"
 	"path"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/tests/testhelper"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
