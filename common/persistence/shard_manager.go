@@ -75,6 +75,7 @@ func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*
 	internalResp, err := m.shardStore.GetOrCreateShard(&InternalGetOrCreateShardRequest{
 		ShardID:         request.ShardID,
 		CreateShardInfo: createShardInfo,
+		LifetimeContext: request.LifetimeContext,
 	})
 	if err != nil {
 		return nil, err

@@ -27,6 +27,7 @@
 package persistence
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -194,6 +195,7 @@ type (
 		ShardID          int32
 		CreateIfMissing  bool
 		InitialShardInfo *persistencespb.ShardInfo
+		LifetimeContext  context.Context // cancelled when shard is unloaded
 	}
 
 	// GetOrCreateShardResponse is the response to GetOrCreateShard

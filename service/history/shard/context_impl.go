@@ -111,6 +111,10 @@ type (
 		archivalMetadata        archiver.ArchivalMetadata
 		hostInfoProvider        resource.HostInfoProvider
 
+		// Context that lives for the lifetime of the shard context
+		lifetimeCtx    context.Context
+		lifetimeCancel context.CancelFunc
+
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                    sync.RWMutex
 		state                     contextState
@@ -1256,6 +1260,9 @@ func (s *ContextImpl) stop() {
 		engine.Stop()
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
 	}
+
+	// Cancel lifetime context after engine is stopped
+	s.lifetimeCancel()
 }
 
 func (s *ContextImpl) isValid() bool {
@@ -1438,6 +1445,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	resp, err := s.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID:         s.shardID,
 		CreateIfMissing: true,
+		LifetimeContext: s.lifetimeCtx,
 	})
 	if err != nil {
 		s.contextTaggedLogger.Error("Failed to load shard", tag.Error(err))
@@ -1633,6 +1641,8 @@ func newContext(
 
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 
+	lifetimeCtx, lifetimeCancel := context.WithCancel(context.Background())
+
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
 		shardID:                 shardID,
@@ -1655,6 +1665,8 @@ func newContext(
 		archivalMetadata:        archivalMetadata,
 		hostInfoProvider:        hostInfoProvider,
 		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
+		lifetimeCtx:             lifetimeCtx,
+		lifetimeCancel:          lifetimeCancel,
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),

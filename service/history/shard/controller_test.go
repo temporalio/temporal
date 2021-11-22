@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -128,6 +129,17 @@ func (s *controllerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
+type getOrCreateShardRequestMatcher int32
+
+func (s getOrCreateShardRequestMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*persistence.GetOrCreateShardRequest)
+	return ok && req.ShardID == int32(s)
+}
+
+func (s getOrCreateShardRequestMatcher) String() string {
+	return strconv.Itoa(int(s))
+}
+
 func (s *controllerSuite) TestAcquireShardSuccess() {
 	numShards := int32(10)
 	s.config.NumberOfShards = numShards
@@ -146,10 +158,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 			s.mockHistoryEngine.EXPECT().Start().Return()
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-			s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
-				ShardID:         shardID,
-				CreateIfMissing: true,
-			}).Return(
+			s.mockShardManager.EXPECT().GetOrCreateShard(getOrCreateShardRequestMatcher(shardID)).Return(
 				&persistence.GetOrCreateShardResponse{
 					ShardInfo: &persistencespb.ShardInfo{
 						ShardId:             shardID,
@@ -233,10 +242,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 			s.mockHistoryEngine.EXPECT().Start().Return()
 			s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 			s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-			s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
-				ShardID:         shardID,
-				CreateIfMissing: true,
-			}).Return(
+			s.mockShardManager.EXPECT().GetOrCreateShard(getOrCreateShardRequestMatcher(shardID)).Return(
 				&persistence.GetOrCreateShardResponse{
 					ShardInfo: &persistencespb.ShardInfo{
 						ShardId:             shardID,
@@ -329,10 +335,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 		s.mockHistoryEngine.EXPECT().Start().Return()
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-		s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
-			ShardID:         shardID,
-			CreateIfMissing: true,
-		}).Return(
+		s.mockShardManager.EXPECT().GetOrCreateShard(getOrCreateShardRequestMatcher(shardID)).Return(
 			&persistence.GetOrCreateShardResponse{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
@@ -408,10 +411,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 		s.mockHistoryEngine.EXPECT().Start().Return()
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 		s.mockEngineFactory.EXPECT().CreateEngine(gomock.Any()).Return(s.mockHistoryEngine)
-		s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
-			ShardID:         shardID,
-			CreateIfMissing: true,
-		}).Return(
+		s.mockShardManager.EXPECT().GetOrCreateShard(getOrCreateShardRequestMatcher(shardID)).Return(
 			&persistence.GetOrCreateShardResponse{
 				ShardInfo: &persistencespb.ShardInfo{
 					ShardId:             shardID,
@@ -667,10 +667,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 	mockEngine.EXPECT().Start()
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
 	s.mockEngineFactory.EXPECT().CreateEngine(newContextMatcher(shardID)).Return(mockEngine)
-	s.mockShardManager.EXPECT().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
-		ShardID:         shardID,
-		CreateIfMissing: true,
-	}).Return(
+	s.mockShardManager.EXPECT().GetOrCreateShard(getOrCreateShardRequestMatcher(shardID)).Return(
 		&persistence.GetOrCreateShardResponse{
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:             shardID,
