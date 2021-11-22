@@ -25,6 +25,7 @@
 package shard
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -180,8 +181,10 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
 	count := 0
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	for _, shardID := range myShards {
-		s.NotNil(s.shardController.GetEngineForShard(shardID))
+		s.NotNil(s.shardController.GetEngineForShard(ctx, shardID))
 		count++
 	}
 	s.Equal(2, count)
@@ -265,8 +268,10 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.shardController.acquireShards()
 	count := 0
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	for _, shardID := range myShards {
-		s.NotNil(s.shardController.GetEngineForShard(shardID))
+		s.NotNil(s.shardController.GetEngineForShard(ctx, shardID))
 		count++
 	}
 	s.Equal(2, count)
@@ -280,9 +285,11 @@ func (s *controllerSuite) TestAcquireShardLookupFailure() {
 	}
 
 	s.shardController.acquireShards()
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(nil, errors.New("ring failure"))
-		s.Nil(s.shardController.GetEngineForShard(shardID))
+		s.Nil(s.shardController.GetEngineForShard(ctx, shardID))
 	}
 }
 
@@ -358,8 +365,10 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 	}
 	s.shardController.acquireShards()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		s.NotNil(s.shardController.GetEngineForShard(shardID))
+		s.NotNil(s.shardController.GetEngineForShard(ctx, shardID))
 	}
 }
 
@@ -435,8 +444,10 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 	}
 	s.shardController.acquireShards()
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		s.NotNil(s.shardController.GetEngineForShard(shardID))
+		s.NotNil(s.shardController.GetEngineForShard(ctx, shardID))
 	}
 }
 
@@ -451,6 +462,9 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName,
 		gomock.Any()).Return(nil).AnyTimes()
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
@@ -463,7 +477,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		go func() {
 			for attempt := 0; attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
-					engine, err := s.shardController.GetEngineForShard(shardID)
+					engine, err := s.shardController.GetEngineForShard(ctx, shardID)
 					s.Nil(err)
 					s.NotNil(engine)
 				}
@@ -487,7 +501,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		go func() {
 			for attempt := 0; attempt < 10; attempt++ {
 				for shardID := int32(3); shardID <= numShards; shardID++ {
-					engine, err := s.shardController.GetEngineForShard(shardID)
+					engine, err := s.shardController.GetEngineForShard(ctx, shardID)
 					s.Nil(err)
 					s.NotNil(engine)
 					time.Sleep(20 * time.Millisecond)
@@ -503,7 +517,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= 2; shardID++ {
-					_, err := s.shardController.GetEngineForShard(shardID)
+					_, err := s.shardController.GetEngineForShard(ctx, shardID)
 					if err != nil {
 						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
@@ -539,6 +553,9 @@ func (s *controllerSuite) TestShardControllerClosed() {
 		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
 	s.mockServiceResolver.EXPECT().AddListener(shardControllerMembershipUpdateListenerName, gomock.Any()).Return(nil).AnyTimes()
 	// when shard is initialized, it will use the 2 mock function below to initialize the "current" time of each cluster
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -552,7 +569,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
-					_, err := s.shardController.GetEngineForShard(shardID)
+					_, err := s.shardController.GetEngineForShard(ctx, shardID)
 					if err != nil {
 						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
