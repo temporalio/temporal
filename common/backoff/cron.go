@@ -27,7 +27,7 @@ package backoff
 import (
 	"time"
 
-	"github.com/robfig/cron"
+	"github.com/robfig/cron/v3"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/convert"
