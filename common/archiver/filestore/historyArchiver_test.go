@@ -27,6 +27,7 @@ package filestore
 import (
 	"context"
 	"errors"
+	"go.temporal.io/server/tests/testhelper"
 	"os"
 	"path"
 	"testing"
@@ -308,9 +309,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir, err := os.MkdirTemp("", "TestArchiveSingleRead")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestArchiveSingleRead")
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
@@ -493,9 +492,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir, err := os.MkdirTemp("", "TestArchiveAndGet")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestArchiveAndGet")
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	archiveRequest := &archiver.ArchiveHistoryRequest{

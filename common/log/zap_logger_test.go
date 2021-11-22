@@ -27,6 +27,7 @@ package log
 import (
 	"bytes"
 	"fmt"
+	"go.temporal.io/server/tests/testhelper"
 	"io"
 	"os"
 	"strconv"
@@ -64,10 +65,7 @@ func (s *LogSuite) TestParseLogLevel() {
 }
 
 func (s *LogSuite) TestNewLogger() {
-
-	dir, err := os.MkdirTemp("", "config.testNewLogger")
-	s.Nil(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "config.testNewLogger")
 
 	cfg := Config{
 		Level:      "info",
@@ -76,9 +74,10 @@ func (s *LogSuite) TestNewLogger() {
 
 	log := BuildZapLogger(cfg)
 	s.NotNil(log)
-	_, err = os.Stat(dir + "/test.log")
+	_, err := os.Stat(dir + "/test.log")
 	s.Nil(err)
 }
+
 func TestDefaultLogger(t *testing.T) {
 	old := os.Stdout // keep backup of the real stdout
 	r, w, _ := os.Pipe()
@@ -165,5 +164,4 @@ func TestEmptyMsg(t *testing.T) {
 	lineNum := fmt.Sprintf("%v", par+1)
 	fmt.Println(out, lineNum)
 	assert.Equal(t, `{"level":"info","msg":"`+defaultMsgForEmpty+`","error":"test error","wf-action":"add-workflow-started-event","logging-call-at":"zap_logger_test.go:`+lineNum+`"}`+"\n", out)
-
 }

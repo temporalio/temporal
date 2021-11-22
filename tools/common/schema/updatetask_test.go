@@ -25,6 +25,7 @@
 package schema
 
 import (
+	"go.temporal.io/server/tests/testhelper"
 	"os"
 	"testing"
 
@@ -46,21 +47,15 @@ func (s *UpdateTaskTestSuite) SetupSuite() {
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
-
-	emptyDir, err := os.MkdirTemp("", "update_schema_test_empty")
-	s.NoError(err)
-	defer os.RemoveAll(emptyDir)
-
-	tmpDir, err := os.MkdirTemp("", "update_schema_test")
-	s.NoError(err)
-	defer os.RemoveAll(tmpDir)
+	emptyDir := testhelper.MkdirTemp(s.T(), "", "update_schema_test_empty")
+	tmpDir := testhelper.MkdirTemp(s.T(), "", "update_schema_test")
 
 	subDirs := []string{"v0.5", "v1.5", "v2.5", "v3.5", "v10.2", "abc", "2.0", "3.0"}
 	for _, d := range subDirs {
 		s.NoError(os.Mkdir(tmpDir+"/"+d, os.FileMode(0444)))
 	}
 
-	_, err = readSchemaDir(tmpDir, "11.0", "11.2")
+	_, err := readSchemaDir(tmpDir, "11.0", "11.2")
 	s.Error(err)
 	_, err = readSchemaDir(tmpDir, "0.5", "10.3")
 	s.Error(err)
@@ -91,10 +86,7 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
 }
 
 func (s *UpdateTaskTestSuite) TestReadManifest() {
-
-	tmpDir, err := os.MkdirTemp("", "update_schema_test")
-	s.Nil(err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := testhelper.MkdirTemp(s.T(), "", "update_schema_test")
 
 	input := `{
 		"CurrVersion": "0.4",

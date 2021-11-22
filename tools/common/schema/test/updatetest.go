@@ -26,6 +26,7 @@ package test
 
 import (
 	"fmt"
+	"go.temporal.io/server/tests/testhelper"
 	"math/rand"
 	"os"
 	"time"
@@ -97,9 +98,7 @@ func (tb *UpdateSchemaTestBase) RunDryrunTest(app *cli.App, db DB, dbNameFlag st
 
 // RunUpdateSchemaTest tests schema update
 func (tb *UpdateSchemaTestBase) RunUpdateSchemaTest(app *cli.App, db DB, dbNameFlag string, sqlFileContent string, expectedTables []string) {
-	tmpDir, err := os.MkdirTemp("", "update_schema_test")
-	tb.Nil(err)
-	defer os.RemoveAll(tmpDir)
+	tmpDir := testhelper.MkdirTemp(tb.T(), "", "update_schema_test")
 
 	tb.makeSchemaVersionDirs(tmpDir, sqlFileContent)
 

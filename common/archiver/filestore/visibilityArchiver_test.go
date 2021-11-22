@@ -27,6 +27,7 @@ package filestore
 import (
 	"context"
 	"errors"
+	"go.temporal.io/server/tests/testhelper"
 	"os"
 	"path"
 	"testing"
@@ -161,9 +162,7 @@ func (s *visibilityArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 }
 
 func (s *visibilityArchiverSuite) TestArchive_Success() {
-	dir, err := os.MkdirTemp("", "TestVisibilityArchive")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestVisibilityArchive")
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	closeTimestamp := timestamp.TimeNowPtrUtc()
@@ -469,9 +468,7 @@ func (s *visibilityArchiverSuite) TestQuery_Success_SmallPageSize() {
 }
 
 func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
-	dir, err := os.MkdirTemp("", "TestArchiveAndQuery")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestArchiveAndQuery")
 
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
