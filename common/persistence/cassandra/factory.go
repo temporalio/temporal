@@ -28,6 +28,7 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	p "go.temporal.io/server/common/persistence"
@@ -43,7 +44,12 @@ type (
 		clusterName string
 		logger      log.Logger
 		session     gocql.Session
+		shardLock   locks.IDMutex
 	}
+)
+
+const (
+	shardLockShards = 4
 )
 
 // NewFactory returns an instance of a factory object which can be used to create
@@ -73,6 +79,9 @@ func NewFactoryFromSession(
 		clusterName: clusterName,
 		logger:      logger,
 		session:     session,
+		// Serialize all LWTs on executions table ourselves to avoid Cassandra timeouts.
+		// Key is shardid (partition key of table).
+		shardLock: locks.NewIDMutex(shardLockShards, shardIDToLockShard, false),
 	}
 }
 
@@ -83,7 +92,7 @@ func (f *Factory) NewTaskStore() (p.TaskStore, error) {
 
 // NewShardStore returns a new shard store
 func (f *Factory) NewShardStore() (p.ShardStore, error) {
-	return NewShardStore(f.clusterName, f.session, f.logger), nil
+	return NewShardStore(f.clusterName, f.session, f.logger, f.shardLock), nil
 }
 
 // NewMetadataStore returns a metadata store
@@ -98,7 +107,7 @@ func (f *Factory) NewClusterMetadataStore() (p.ClusterMetadataStore, error) {
 
 // NewExecutionStore returns a new ExecutionStore.
 func (f *Factory) NewExecutionStore() (p.ExecutionStore, error) {
-	return NewExecutionStore(f.session, f.logger), nil
+	return NewExecutionStore(f.session, f.logger, f.shardLock), nil
 }
 
 // NewQueue returns a new queue backed by cassandra
@@ -111,4 +120,12 @@ func (f *Factory) Close() {
 	f.Lock()
 	defer f.Unlock()
 	f.session.Close()
+}
+
+func shardIDToLockShard(i interface{}) uint32 {
+	shardID, ok := i.(int32)
+	if !ok {
+		return 0
+	}
+	return uint32(shardID)
 }

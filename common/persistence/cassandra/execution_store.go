@@ -27,6 +27,7 @@ package cassandra
 import (
 	"time"
 
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -121,11 +122,12 @@ var _ p.ExecutionStore = (*ExecutionStore)(nil)
 func NewExecutionStore(
 	session gocql.Session,
 	logger log.Logger,
+	shardLock locks.IDMutex,
 ) *ExecutionStore {
 	return &ExecutionStore{
 		HistoryStore:          NewHistoryStore(session, logger),
-		MutableStateStore:     NewMutableStateStore(session, logger),
-		MutableStateTaskStore: NewMutableStateTaskStore(session, logger),
+		MutableStateStore:     NewMutableStateStore(session, logger, shardLock),
+		MutableStateTaskStore: NewMutableStateTaskStore(session, logger, shardLock),
 	}
 }
 

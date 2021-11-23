@@ -717,13 +717,6 @@ func (s *ContextImpl) AddTasks(
 	s.wLock()
 	defer s.wUnlock()
 
-	return s.addTasksLocked(request, namespaceEntry)
-}
-
-func (s *ContextImpl) addTasksLocked(
-	request *persistence.AddTasksRequest,
-	namespaceEntry *namespace.Namespace,
-) error {
 	transferMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDsLocked(
 		namespaceEntry,
@@ -741,7 +734,7 @@ func (s *ContextImpl) addTasksLocked(
 
 	// Drop lock while calling persistence to allow for more concurrency
 	s.wUnlock()
-	err := s.executionManager.AddTasks(request)
+	err = s.executionManager.AddTasks(request)
 	if err == nil {
 		s.engine.NotifyNewTransferTasks(request.TransferTasks)
 		s.engine.NotifyNewTimerTasks(request.TimerTasks)
@@ -851,7 +844,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		TimerTasks:       nil,
 		ReplicationTasks: nil,
 		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
-			// TaskID is set by addTasksLocked
+			// TaskID is set by AddTasks
 			WorkflowKey:         key,
 			VisibilityTimestamp: s.timeSource.Now(),
 			Version:             version,
@@ -984,10 +977,13 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 	s.emitShardInfoMetricsLogsLocked()
 
+	// Drop lock while calling persistence to allow for more concurrency
+	s.wUnlock()
 	err = s.persistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
+	s.wLock()
 	if err != nil {
 		return s.handleErrorLocked(err)
 	}

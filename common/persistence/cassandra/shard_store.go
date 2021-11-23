@@ -28,6 +28,7 @@ import (
 	"fmt"
 	"strings"
 
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -65,6 +66,7 @@ type (
 		ClusterName string
 		Session     gocql.Session
 		Logger      log.Logger
+		shardLock   locks.IDMutex
 	}
 )
 
@@ -72,17 +74,22 @@ func NewShardStore(
 	clusterName string,
 	session gocql.Session,
 	logger log.Logger,
+	shardLock locks.IDMutex,
 ) *ShardStore {
 	return &ShardStore{
 		ClusterName: clusterName,
 		Session:     session,
 		Logger:      logger,
+		shardLock:   shardLock,
 	}
 }
 
 func (d *ShardStore) GetOrCreateShard(
 	request *p.InternalGetOrCreateShardRequest,
 ) (*p.InternalGetOrCreateShardResponse, error) {
+	unlock := d.shardLock.LockID(request.ShardID)
+	defer unlock()
+
 	query := d.Session.Query(templateGetShardQuery,
 		request.ShardID,
 		rowTypeShard,
@@ -139,6 +146,9 @@ func (d *ShardStore) GetOrCreateShard(
 func (d *ShardStore) UpdateShard(
 	request *p.InternalUpdateShardRequest,
 ) error {
+	unlock := d.shardLock.LockID(request.ShardID)
+	defer unlock()
+
 	query := d.Session.Query(templateUpdateShardQuery,
 		request.ShardInfo.Data,
 		request.ShardInfo.EncodingType.String(),

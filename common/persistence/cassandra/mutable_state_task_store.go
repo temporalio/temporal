@@ -29,6 +29,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -338,24 +339,30 @@ const (
 
 type (
 	MutableStateTaskStore struct {
-		Session gocql.Session
-		Logger  log.Logger
+		Session   gocql.Session
+		Logger    log.Logger
+		shardLock locks.IDMutex
 	}
 )
 
 func NewMutableStateTaskStore(
 	session gocql.Session,
 	logger log.Logger,
+	shardLock locks.IDMutex,
 ) *MutableStateTaskStore {
 	return &MutableStateTaskStore{
-		Session: session,
-		Logger:  logger,
+		Session:   session,
+		Logger:    logger,
+		shardLock: shardLock,
 	}
 }
 
 func (d *MutableStateTaskStore) AddTasks(
 	request *p.InternalAddTasksRequest,
 ) error {
+	unlock := d.shardLock.LockID(request.ShardID)
+	defer unlock()
+
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
 
 	if err := applyTasks(
