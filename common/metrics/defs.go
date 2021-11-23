@@ -551,6 +551,8 @@ const (
 	AdminClientRefreshWorkflowTasksScope
 	// AdminClientResendReplicationTasksScope tracks RPC calls to admin service
 	AdminClientResendReplicationTasksScope
+	// AdminClientGetTaskQueueTasksScope tracks RPC calls to admin service
+	AdminClientGetTaskQueueTasksScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -742,6 +744,8 @@ const (
 	AdminRefreshWorkflowTasksScope
 	// AdminResendReplicationTasksScope is the metric scope for admin.ResendReplicationTasks
 	AdminResendReplicationTasksScope
+	// AdminGetTaskQueueTasksScope is the metric scope for admin.GetTaskQueueTasks
+	AdminGetTaskQueueTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
 	// AdminCloseShardScope is the metric scope for admin.AdminCloseShardScope
@@ -1381,6 +1385,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientRefreshWorkflowTasksScope:                  {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListNamespacesScope:                        {operation: "AdminClientListNamespaces", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientResendReplicationTasksScope:                {operation: "AdminClientResendReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetTaskQueueTasksScope:                     {operation: "AdminClientGetTaskQueueTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListClusterMembersScope:                    {operation: "AdminClientListClusterMembers", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetShardScope:                              {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1491,6 +1496,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminReapplyEventsScope:                    {operation: "ReapplyEvents"},
 		AdminRefreshWorkflowTasksScope:             {operation: "RefreshWorkflowTasks"},
 		AdminResendReplicationTasksScope:           {operation: "ResendReplicationTasks"},
+		AdminGetTaskQueueTasksScope:                {operation: "GetTaskQueueTasks"},
 		AdminDescribeClusterScope:                  {operation: "AdminDescribeCluster"},
 		AdminAddOrUpdateRemoteClusterScope:         {operation: "AdminAddOrUpdateRemoteCluster"},
 		AdminRemoveRemoteClusterScope:              {operation: "AdminRemoveRemoteCluster"},

@@ -1534,6 +1534,46 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	return &adminservice.ResendReplicationTasksResponse{}, nil
 }
 
+// GetTaskQueueTasks returns tasks from task queue
+func (adh *AdminHandler) GetTaskQueueTasks(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueTasksRequest,
+) (_ *adminservice.GetTaskQueueTasksResponse, err error) {
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminGetTaskQueueTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	namespaceID, err := adh.GetNamespaceRegistry().GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	taskMgr := adh.GetTaskManager()
+
+	maxTaskID := request.GetMaxTaskId()
+	req := &persistence.GetTasksRequest{
+		NamespaceID:  namespaceID.String(),
+		TaskQueue:    request.GetTaskQueue(),
+		TaskType:     request.GetTaskQueueType(),
+		ReadLevel:    request.GetMinTaskId(),
+		MaxReadLevel: &maxTaskID,
+		BatchSize:    int(request.GetBatchSize()),
+	}
+
+	resp, err := taskMgr.GetTasks(req)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	return &adminservice.GetTaskQueueTasksResponse{
+		Tasks: resp.Tasks,
+	}, nil
+}
+
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
