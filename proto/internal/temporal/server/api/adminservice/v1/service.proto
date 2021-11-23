@@ -57,6 +57,18 @@ service AdminService {
     rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
     }
 
+    rpc ListTransferTasks (ListTransferTasksRequest) returns (ListTransferTasksResponse) {
+    }
+
+    rpc ListTimerTasks (ListTimerTasksRequest) returns (ListTimerTasksResponse) {
+    }
+
+    rpc ListReplicationTasks (ListReplicationTasksRequest) returns (ListReplicationTasksResponse) {
+    }
+
+    rpc ListVisibilityTasks (ListVisibilityTasksRequest) returns (ListVisibilityTasksResponse) {
+    }
+
     rpc RemoveTask (RemoveTaskRequest) returns (RemoveTaskResponse) {
     }
 

@@ -147,6 +147,69 @@ message GetShardResponse {
     temporal.server.api.persistence.v1.ShardInfo shard_info = 1;
 }
 
+message ListTransferTasksRequest{ 
+    int32 shard_id = 1;
+    int64 min_task_id = 2;
+    int64 max_task_id = 4;
+    int32 batch_size = 5;
+    bytes next_page_token = 6;
+}
+
+message ListTransferTasksResponse {
+    repeated Task tasks = 1;
+    bytes next_page_token = 2;
+}
+
+message ListVisibilityTasksRequest{
+    int32 shard_id = 1;
+    int64 read_level = 2;
+    int64 max_read_level = 4;
+    int32 batch_size = 5;
+    bytes next_page_token = 6;
+}
+
+ message ListVisibilityTasksResponse {
+    repeated Task tasks = 1;
+    bytes next_page_token = 2;
+}
+
+message ListTimerTasksRequest{ 
+    int32 shard_id = 1;
+    google.protobuf.Timestamp min_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp max_time = 3 [(gogoproto.stdtime) = true];
+    int32 batch_size = 4;
+    bytes next_page_token = 5;
+}
+
+
+message ListTimerTasksResponse {
+    repeated Task tasks = 1;
+    bytes next_page_token = 2;
+}
+
+message ListReplicationTasksRequest {
+    int32 shard_id = 1;
+    int64 min_task_id = 2;
+    int64 max_task_id = 3;
+    int32 batch_size = 4;
+    bytes next_page_token = 5;
+}
+
+message ListReplicationTasksResponse {
+    repeated Task tasks = 1;
+    bytes next_page_token = 2;
+}
+
+message Task {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    int64 task_id = 4;
+    temporal.server.api.enums.v1.TaskType task_type = 5;
+    google.protobuf.Timestamp fire_time = 6 [(gogoproto.stdtime) = true];
+    int64 version = 7;
+}
+
 message RemoveTaskRequest {
     int32 shard_id = 1;
     temporal.server.api.enums.v1.TaskCategory category = 2;
