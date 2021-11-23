@@ -33,8 +33,8 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/persistence"
 )
 
 // AdminDescribeTaskQueue displays poller and status information of task queue.
@@ -97,30 +97,35 @@ func printTaskQueueStatus(taskQueueStatus *taskqueuepb.TaskQueueStatus) {
 
 // AdminListTaskQueueTasks displays task information
 func AdminListTaskQueueTasks(c *cli.Context) {
-	namespace := getRequiredOption(c, FlagNamespaceID)
-	tlName := getRequiredOption(c, FlagTaskQueue)
+	namespace := getRequiredOption(c, FlagNamespace)
+	tqName := getRequiredOption(c, FlagTaskQueue)
 	tlTypeInt, err := stringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
 	if err != nil {
 		ErrorAndExit("Failed to parse TaskQueue Type", err)
 	}
-	tlType := enumspb.TaskQueueType(tlTypeInt)
-	if tlType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
+	tqType := enumspb.TaskQueueType(tlTypeInt)
+	if tqType == enumspb.TASK_QUEUE_TYPE_UNSPECIFIED {
 		ErrorAndExit("TaskQueue type Unspecified is currently not supported", nil)
 	}
-	minReadLvl := getRequiredInt64Option(c, FlagMinReadLevel)
-	maxReadLvl := getRequiredInt64Option(c, FlagMaxReadLevel)
+	minTaskID := c.Int64(FlagMinTaskID)
+	maxTaskID := c.Int64(FlagMaxTaskID)
 	workflowID := c.String(FlagWorkflowID)
 	runID := c.String(FlagRunID)
 
-	pFactory := CreatePersistenceFactory(c)
-	taskManager, err := pFactory.NewTaskManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize task manager", err)
+	client := cFactory.AdminClient(c)
+
+	req := &adminservice.GetTaskQueueTasksRequest{
+		Namespace:     namespace,
+		TaskQueue:     tqName,
+		TaskQueueType: tqType,
+		MinTaskId:     minTaskID,
+		MaxTaskId:     maxTaskID,
 	}
 
-	req := &persistence.GetTasksRequest{NamespaceID: namespace, TaskQueue: tlName, TaskType: tlType, ReadLevel: minReadLvl, MaxReadLevel: &maxReadLvl}
+	ctx, cancel := newContext(c)
+	defer cancel()
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-		response, err := taskManager.GetTasks(req)
+		response, err := client.GetTaskQueueTasks(ctx, req)
 		if err != nil {
 			return nil, nil, err
 		}
