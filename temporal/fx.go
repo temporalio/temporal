@@ -225,26 +225,26 @@ type (
 	ServiceProviderParamsCommon struct {
 		fx.In
 
-		Cfg          *config.Config
-		ServiceNames    ServiceNames
-		Logger              log.Logger
-		NamespaceLogger     NamespaceLogger
-		DynamicConfigClient dynamicconfig.Client
-		ServerReporter ServerReporter
-		SdkReporter SdkReporter
-		EsConfig          *esclient.Config
-		EsClient          esclient.Client
-		TlsConfigProvider encryption.TLSConfigProvider
-		PersistenceConfig     config.Persistence
-		ClusterMetadata       *cluster.Config
+		Cfg                        *config.Config
+		ServiceNames               ServiceNames
+		Logger                     log.Logger
+		NamespaceLogger            NamespaceLogger
+		DynamicConfigClient        dynamicconfig.Client
+		ServerReporter             ServerReporter
+		SdkReporter                SdkReporter
+		EsConfig                   *esclient.Config
+		EsClient                   esclient.Client
+		TlsConfigProvider          encryption.TLSConfigProvider
+		PersistenceConfig          config.Persistence
+		ClusterMetadata            *cluster.Config
 		ClientFactoryProvider      client.FactoryProvider
 		AudienceGetter             authorization.JWTAudienceMapper
 		PersistenceServiceResolver resolver.ServiceResolver
-		SearchAttributesMapper searchattribute.Mapper
-		CustomInterceptors []grpc.UnaryServerInterceptor
-		Authorizer       authorization.Authorizer
-		ClaimMapper      authorization.ClaimMapper
-		DataStoreFactory persistenceClient.AbstractDataStoreFactory
+		SearchAttributesMapper     searchattribute.Mapper
+		CustomInterceptors         []grpc.UnaryServerInterceptor
+		Authorizer                 authorization.Authorizer
+		ClaimMapper                authorization.ClaimMapper
+		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
 	}
 )
 
