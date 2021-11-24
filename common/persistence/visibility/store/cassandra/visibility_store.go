@@ -538,11 +538,13 @@ func (v *visibilityStore) DeleteWorkflowExecution(_ *manager.VisibilityDeleteWor
 func (v *visibilityStore) ListWorkflowExecutions(
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	queryFilters, err := newQueryFilters(request.Query)
+	converter := newQueryConverter()
+	_, _, err := converter.ConvertWhereOrderBy(request.Query)
 	if err != nil {
 		return nil, fmt.Errorf("invalid query: %v", err)
 	}
 
+	queryFilters := converter.QueryFilters()
 	baseReq := &manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       request.NamespaceID,
 		Namespace:         request.Namespace,
@@ -593,7 +595,7 @@ func (v *visibilityStore) ListWorkflowExecutions(
 
 type NextPageToken struct {
 	IsForOpen bool
-	Token []byte
+	Token     []byte
 }
 
 func (v *visibilityStore) listWorkflowExecutionsHelper(

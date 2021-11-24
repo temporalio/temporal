@@ -24,8 +24,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-// Package query is inspired and partially copied from by github.com/cch123/elasticsql.
-package query
+package elasticsearch
 
 import (
 	"encoding/json"
@@ -33,22 +32,23 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
 var errorCases = map[string]string{
-	"delete":                          malformedSqlQueryErrMessage,
-	"update x":                        malformedSqlQueryErrMessage,
-	"insert ":                         malformedSqlQueryErrMessage,
-	"insert into a values(1,2)":       notSupportedErrMessage,
-	"update a set id = 1":             notSupportedErrMessage,
-	"delete from a where id=1":        notSupportedErrMessage,
-	"select * from a where NOT(id=1)": notSupportedErrMessage,
-	"select * from a where 1 = 1":     invalidExpressionErrMessage,
-	"select * from a where 1=a":       invalidExpressionErrMessage,
-	"select * from a where zz(k=2)":   notSupportedErrMessage,
-	"select * from a group by k":      notSupportedErrMessage,
-	"invalid query":                   malformedSqlQueryErrMessage,
-	"select * from a where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": notSupportedErrMessage,
+	"delete":                          query.MalformedSqlQueryErrMessage,
+	"update x":                        query.MalformedSqlQueryErrMessage,
+	"insert ":                         query.MalformedSqlQueryErrMessage,
+	"insert into a values(1,2)":       query.NotSupportedErrMessage,
+	"update a set id = 1":             query.NotSupportedErrMessage,
+	"delete from a where id=1":        query.NotSupportedErrMessage,
+	"select * from a where NOT(id=1)": query.NotSupportedErrMessage,
+	"select * from a where 1 = 1":     query.InvalidExpressionErrMessage,
+	"select * from a where 1=a":       query.InvalidExpressionErrMessage,
+	"select * from a where zz(k=2)":   query.NotSupportedErrMessage,
+	"select * from a group by k":      query.NotSupportedErrMessage,
+	"invalid query":                   query.MalformedSqlQueryErrMessage,
+	"select * from a where  a= 1 and multi_match(zz=1, query='this is a test', fields=(title,title.origin), type=phrase)": query.NotSupportedErrMessage,
 }
 
 var supportedWhereCases = map[string]string{
@@ -112,7 +112,7 @@ var supportedWhereOrderCases = map[string]struct {
 }
 
 func TestSupportedSelectWhere(t *testing.T) {
-	c := NewConverter(nil, nil)
+	c := newQueryConverter(nil, nil)
 
 	for sql, expectedJson := range supportedWhereCases {
 		query, _, err := c.ConvertWhereOrderBy(sql)
@@ -126,7 +126,7 @@ func TestSupportedSelectWhere(t *testing.T) {
 }
 
 func TestEmptySelectWhere(t *testing.T) {
-	c := NewConverter(nil, nil)
+	c := newQueryConverter(nil, nil)
 
 	query, sorters, err := c.ConvertWhereOrderBy("")
 	assert.NoError(t, err)
@@ -143,7 +143,7 @@ func TestEmptySelectWhere(t *testing.T) {
 }
 
 func TestSupportedSelectWhereOrder(t *testing.T) {
-	c := NewConverter(nil, nil)
+	c := newQueryConverter(nil, nil)
 
 	for sql, expectedJson := range supportedWhereOrderCases {
 		query, sorters, err := c.ConvertWhereOrderBy(sql)
@@ -164,9 +164,9 @@ func TestSupportedSelectWhereOrder(t *testing.T) {
 }
 
 func TestErrors(t *testing.T) {
-	c := NewConverter(nil, nil)
+	c := newQueryConverter(nil, nil)
 	for sql, expectedErrMessage := range errorCases {
-		_, _, err := c.convertSql(sql)
+		_, _, err := c.ConvertSql(sql)
 		assert.Contains(t, err.Error(), expectedErrMessage, sql)
 	}
 }

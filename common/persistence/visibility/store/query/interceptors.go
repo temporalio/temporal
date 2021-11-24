@@ -32,9 +32,9 @@ type (
 		Values(name string, values ...interface{}) ([]interface{}, error)
 	}
 
-	nopFieldNameInterceptor struct{}
+	NopFieldNameInterceptor struct{}
 
-	nopFieldValuesInterceptor struct{}
+	NopFieldValuesInterceptor struct{}
 
 	FieldNameUsage int
 )
@@ -44,10 +44,10 @@ const (
 	FieldNameSorter
 )
 
-func (n *nopFieldNameInterceptor) Name(name string, _ FieldNameUsage) (string, error) {
+func (n *NopFieldNameInterceptor) Name(name string, _ FieldNameUsage) (string, error) {
 	return name, nil
 }
 
-func (n *nopFieldValuesInterceptor) Values(_ string, values ...interface{}) ([]interface{}, error) {
+func (n *NopFieldValuesInterceptor) Values(_ string, values ...interface{}) ([]interface{}, error) {
 	return values, nil
 }

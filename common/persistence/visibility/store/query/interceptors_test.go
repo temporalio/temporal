@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/xwb1989/sqlparser"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -66,7 +67,7 @@ func (t *testValuesInterceptor) Values(name string, values ...interface{}) ([]in
 }
 
 func TestNameInterceptor(t *testing.T) {
-	c := NewConverter(&testNameInterceptor{}, nil)
+	c := getTestConverter(&testNameInterceptor{}, nil)
 
 	query, sorters, err := c.ConvertWhereOrderBy("ExecutionStatus='Running' order by StartTime")
 	assert.NoError(t, err)
@@ -87,8 +88,7 @@ func TestNameInterceptor(t *testing.T) {
 }
 
 func TestValuesInterceptor(t *testing.T) {
-	c := NewConverter(nil, &testValuesInterceptor{})
-
+	c := getTestConverter(nil, &testValuesInterceptor{})
 	query, _, err := c.ConvertWhereOrderBy("ExecutionStatus=1")
 	assert.NoError(t, err)
 	actualQueryMap, _ := query.Source()
@@ -110,4 +110,14 @@ func TestValuesInterceptor(t *testing.T) {
 	query, _, err = c.ConvertWhereOrderBy("error='Running'")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "interceptor error")
+}
+
+func getTestConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *Converter {
+	whereConverter := NewWhereConverter(
+		nil,
+		nil,
+		NewRangeCondConverter(fnInterceptor, fvInterceptor, false),
+		NewComparisonExprConverter(fnInterceptor, fvInterceptor, map[string]bool{sqlparser.EqualStr: true, sqlparser.InStr: true}),
+		nil)
+	return NewConverter(fnInterceptor, whereConverter)
 }
