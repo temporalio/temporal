@@ -27,8 +27,9 @@ package test
 import (
 	"fmt"
 	"math/rand"
-	"os"
 	"time"
+
+	"go.temporal.io/server/tests/testhelper"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -85,13 +86,8 @@ func (tb *SetupSchemaTestBase) RunSetupTest(
 	tb.Nil(err)
 	tb.Equal(0, len(tables))
 
-	tmpDir, err := os.MkdirTemp("", "setupSchemaTestDir")
-	tb.Nil(err)
-	defer os.Remove(tmpDir)
-
-	sqlFile, err := os.CreateTemp(tmpDir, "setupSchema.cliOptionsTest")
-	tb.Nil(err)
-	defer os.Remove(sqlFile.Name())
+	tmpDir := testhelper.MkdirTemp(tb.T(), "", "setupSchemaTestDir")
+	sqlFile := testhelper.CreateTemp(tb.T(), tmpDir, "setupSchema.cliOptionsTest")
 
 	_, err = sqlFile.WriteString(sqlFileContent)
 	tb.NoError(err)

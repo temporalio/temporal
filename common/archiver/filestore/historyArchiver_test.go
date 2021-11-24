@@ -32,6 +32,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/tests/testhelper"
+
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -308,9 +310,7 @@ func (s *historyArchiverSuite) TestArchive_Success() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir, err := os.MkdirTemp("", "TestArchiveSingleRead")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestArchiveSingleRead")
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	request := &archiver.ArchiveHistoryRequest{
@@ -493,9 +493,7 @@ func (s *historyArchiverSuite) TestArchiveAndGet() {
 		historyIterator.EXPECT().HasNext().Return(false),
 	)
 
-	dir, err := os.MkdirTemp("", "TestArchiveAndGet")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestArchiveAndGet")
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)
 	archiveRequest := &archiver.ArchiveHistoryRequest{

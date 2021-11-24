@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/tests/testhelper"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -59,9 +61,7 @@ func (s *UtilSuite) SetupTest() {
 }
 
 func (s *UtilSuite) TestFileExists() {
-	dir, err := os.MkdirTemp("", "TestFileExists")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestFileExists")
 	s.assertDirectoryExists(dir)
 
 	exists, err := fileExists(dir)
@@ -80,9 +80,7 @@ func (s *UtilSuite) TestFileExists() {
 }
 
 func (s *UtilSuite) TestDirectoryExists() {
-	dir, err := os.MkdirTemp("", "TestDirectoryExists")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestDirectoryExists")
 	s.assertDirectoryExists(dir)
 
 	subdir := "subdir"
@@ -99,9 +97,7 @@ func (s *UtilSuite) TestDirectoryExists() {
 }
 
 func (s *UtilSuite) TestMkdirAll() {
-	dir, err := os.MkdirTemp("", "TestMkdirAll")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestMkdirAll")
 	s.assertDirectoryExists(dir)
 
 	s.NoError(mkdirAll(dir, testDirMode))
@@ -120,9 +116,7 @@ func (s *UtilSuite) TestMkdirAll() {
 }
 
 func (s *UtilSuite) TestWriteFile() {
-	dir, err := os.MkdirTemp("", "TestWriteFile")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestWriteFile")
 	s.assertDirectoryExists(dir)
 
 	filename := "test-file-name"
@@ -140,9 +134,7 @@ func (s *UtilSuite) TestWriteFile() {
 }
 
 func (s *UtilSuite) TestReadFile() {
-	dir, err := os.MkdirTemp("", "TestReadFile")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestReadFile")
 	s.assertDirectoryExists(dir)
 
 	filename := "test-file-name"
@@ -159,9 +151,7 @@ func (s *UtilSuite) TestReadFile() {
 }
 
 func (s *UtilSuite) TestListFilesByPrefix() {
-	dir, err := os.MkdirTemp("", "TestListFiles")
-	s.NoError(err)
-	defer os.Remove(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestListFiles")
 	s.assertDirectoryExists(dir)
 
 	filename := "test-file-name"
@@ -224,9 +214,7 @@ func (s *UtilSuite) TestEncodeDecodeHistoryBatches() {
 }
 
 func (s *UtilSuite) TestValidateDirPath() {
-	dir, err := os.MkdirTemp("", "TestValidateDirPath")
-	s.NoError(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "TestValidateDirPath")
 	s.assertDirectoryExists(dir)
 	filename := "test-file-name"
 	s.createFile(dir, filename)
