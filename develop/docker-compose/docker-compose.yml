@@ -78,6 +78,8 @@ services:
   temporal-web:
     image: temporalio/web:1.13.0
     container_name: temporal-dev-web
+    ports:
+      - "8088:8088"
 
 networks:
   temporal-dev-network:
