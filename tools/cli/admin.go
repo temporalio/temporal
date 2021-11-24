@@ -429,30 +429,31 @@ func newAdminTaskQueueCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks of a task queue",
-			Flags: append(append(append(getDBFlags(), flagsForExecution...),
-				flagsForPagination...),
+			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagNamespaceID,
-					Usage: "Namespace Id",
+					Name:  FlagNamespace,
+					Usage: "Namespace name",
+					Value: "default",
 				},
 				cli.StringFlag{
 					Name:  FlagTaskQueueType,
 					Value: "activity",
-					Usage: "Taskqueue type: activity, workflow",
+					Usage: "Task Queue type: activity, workflow",
 				},
 				cli.StringFlag{
 					Name:  FlagTaskQueue,
-					Usage: "Taskqueue name",
+					Usage: "Task Queue name",
 				},
 				cli.Int64Flag{
-					Name:  FlagMinReadLevel,
-					Usage: "Lower bound of read level",
+					Name:  FlagMinTaskID,
+					Usage: "Minimum task Id",
+					Value: -12346, // include default task id
 				},
 				cli.Int64Flag{
-					Name:  FlagMaxReadLevel,
-					Usage: "Upper bound of read level",
+					Name:  FlagMaxTaskID,
+					Usage: "Maximum task Id",
 				},
-			),
+			},
 			Action: func(c *cli.Context) {
 				AdminListTaskQueueTasks(c)
 			},
