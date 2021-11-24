@@ -68,6 +68,11 @@ type (
 )
 
 var Module = fx.Options(
+	DepsModule,
+	fx.Provide(NewFromDI),
+)
+
+var DepsModule = fx.Options(
 	persistenceClient.Module,
 	fx.Provide(SnTaggedLoggerProvider),
 	fx.Provide(ThrottledLoggerProvider),
@@ -100,7 +105,6 @@ var Module = fx.Options(
 	fx.Provide(InstanceIDProvider),
 	fx.Provide(RingpopChannelProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
-	fx.Provide(NewFromDI),
 	fx.Invoke(RegisterBootstrapContainer),
 )
 
