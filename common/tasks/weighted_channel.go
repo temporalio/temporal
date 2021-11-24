@@ -24,19 +24,51 @@
 
 package tasks
 
-import (
-	"go.temporal.io/server/common"
+const (
+	WeightedChannelDefaultSize = 100
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
 type (
-	// Processor is the generic goroutine pool for task processing
-	Processor interface {
-		common.Daemon
-		// Submit schedule a task to be executed
-		// * if processor is not stopped, then task will be executed,
-		//  one of Ack(), Nack() or Reschedule() will be invoked once task is considered done for this attempt
-		// * if processor is stopped, then Reschedule() will be invoked
-		Submit(task Task)
+	WeightedChannels []*WeightedChannel
+
+	WeightedChannel struct {
+		weight  int
+		channel chan PriorityTask
 	}
 )
+
+func NewWeightedChannel(
+	weight int,
+	size int,
+) *WeightedChannel {
+	return &WeightedChannel{
+		weight:  weight,
+		channel: make(chan PriorityTask, size),
+	}
+}
+
+func (c *WeightedChannel) Chan() chan PriorityTask {
+	return c.channel
+}
+
+func (c *WeightedChannel) Weight() int {
+	return c.weight
+}
+
+func (c *WeightedChannel) Len() int {
+	return len(c.channel)
+}
+
+func (c *WeightedChannel) Cap() int {
+	return cap(c.channel)
+}
+
+func (c WeightedChannels) Len() int {
+	return len(c)
+}
+func (c WeightedChannels) Swap(i, j int) {
+	c[i], c[j] = c[j], c[i]
+}
+func (c WeightedChannels) Less(i, j int) bool {
+	return c[i].Weight() < c[j].Weight()
+}
