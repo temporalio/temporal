@@ -50,13 +50,12 @@ func AdminDescribeCluster(c *cli.Context) {
 // AdminAddOrUpdateRemoteCluster is used to add or update remote cluster information
 func AdminAddOrUpdateRemoteCluster(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
-
 	ctx, cancel := newContext(c)
 	defer cancel()
 
 	_, err := adminClient.AddOrUpdateRemoteCluster(ctx, &adminservice.AddOrUpdateRemoteClusterRequest{
-		FrontendAddress:               c.String(FlagFrontendAddressWithAlias),
-		EnableRemoteClusterConnection: c.BoolT(FlagConnectionEnableAlias),
+		FrontendAddress:               getRequiredOption(c, FlagFrontendAddress),
+		EnableRemoteClusterConnection: c.BoolT(FlagConnectionEnable),
 	})
 	if err != nil {
 		ErrorAndExit("Operation AddOrUpdateRemoteCluster failed.", err)
