@@ -725,7 +725,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	return nil
 }
 
-// todomigryz: handleCommandStartChildWorkflow should be able to dump parentworkflowclosepolicy
 func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {

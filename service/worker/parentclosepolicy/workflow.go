@@ -102,10 +102,8 @@ func ProcessorWorkflow(ctx workflow.Context) error {
 	return nil
 }
 
-// todomigryz: we need ot modify request format and need to verify migration process
 // ProcessorActivity is activity for processing batch operation
 func ProcessorActivity(ctx context.Context, request Request) error {
-	// todomigryz: don't even hit here. How to invoke processor?
 	processor := ctx.Value(processorContextKey).(*Processor)
 	client := processor.clientBean.GetHistoryClient()
 	for _, execution := range request.Executions {
@@ -129,7 +127,6 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			//no-op
 			continue
 		case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-			// todomigryz: close wf activity. validate correct namespaceID
 			_, err = client.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 				NamespaceId: namespaceId,
 				TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{

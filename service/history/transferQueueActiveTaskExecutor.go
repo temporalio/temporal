@@ -1291,7 +1291,6 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 
 			nsId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
 			if err != nil {
-				// todomigryz: might be worth skipping with logging error/metric?
 				return err
 			}
 
@@ -1343,11 +1342,8 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return nil
 
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-		// todomigryz: editing here. Need to get namespaceid to send request for wf termination
-
 		nsId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
 		if err != nil {
-			// todomigryz: might be worth improving error text
 			return err
 		}
 		_, err = t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
@@ -1369,7 +1365,6 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 		nsId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
 		if err != nil {
-			// todomigryz: might be worth improving error text
 			return err
 		}
 

@@ -1997,7 +1997,6 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, err
 	}
 
-	// todomigryz: FE:terminateworkflowexecutionhandler
 	_, err = wh.GetHistoryClient().TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 		NamespaceId:      namespaceID.String(),
 		TerminateRequest: request,

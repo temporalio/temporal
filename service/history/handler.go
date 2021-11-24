@@ -851,8 +851,6 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 // in the history and immediately terminating the execution instance.
 func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (_ *historyservice.TerminateWorkflowExecutionResponse, retError error) {
-
-	//todomigryz: terminatewfexecution on history
 	defer log.CapturePanic(h.GetLogger(), &retError)
 	h.startWG.Wait()
 
