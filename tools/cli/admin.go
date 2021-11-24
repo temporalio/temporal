@@ -37,25 +37,41 @@ func newAdminWorkflowCommands() []cli.Command {
 			Name:    "show",
 			Aliases: []string{"show"},
 			Usage:   "show workflow history from database",
-			Flags: append(getDBFlags(),
-				// v2 history events
+			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagTreeID,
-					Usage: "TreeId",
+					Name:  FlagNamespace,
+					Usage: "Namespace of the workflow",
+					Value: "default",
 				},
 				cli.StringFlag{
-					Name:  FlagBranchID,
-					Usage: "BranchId",
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowId",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunId",
+				},
+				cli.Int64Flag{
+					Name:  FlagMinEventID,
+					Usage: "Minimum event ID to be included in the history",
+				},
+				cli.Int64Flag{
+					Name:  FlagMaxEventID,
+					Usage: "Maximum event ID to be included in the history",
+					Value: 1<<63 - 1,
+				},
+				cli.Int64Flag{
+					Name:  FlagMinEventVersion,
+					Usage: "Start event version to be included in the history",
+				},
+				cli.Int64Flag{
+					Name:  FlagMaxEventVersion,
+					Usage: "End event version to be included in the history",
 				},
 				cli.StringFlag{
 					Name:  FlagOutputFilenameWithAlias,
 					Usage: "output file",
-				},
-				// support mysql query
-				cli.IntFlag{
-					Name:  FlagShardIDWithAlias,
-					Usage: "ShardId",
-				}),
+				}},
 			Action: func(c *cli.Context) {
 				AdminShowWorkflow(c)
 			},
