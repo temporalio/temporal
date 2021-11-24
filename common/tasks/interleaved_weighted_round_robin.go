@@ -42,6 +42,8 @@ type (
 		WorkerCount int
 	}
 
+	// InterleavedWeightedRoundRobinScheduler is a round robin scheduler implementation
+	// ref: https://en.wikipedia.org/wiki/Weighted_round_robin#Interleaved_WRR
 	InterleavedWeightedRoundRobinScheduler struct {
 		status int32
 		option InterleavedWeightedRoundRobinSchedulerOptions
@@ -56,7 +58,16 @@ type (
 		sync.RWMutex
 		priorityToWeight     map[int]int
 		weightToTaskChannels map[int]*WeightedChannel
-		iwrrChannels         []*WeightedChannel
+		// precalculated / flattened task chan according to weight
+		// e.g. if
+		// priorityToWeight := map[int]int{
+		//		0: 5,
+		//		1: 3,
+		//		2: 2,
+		//		3: 1,
+		//	}
+		// then iwrrChannels will contain chan [0, 0, 0, 1, 0, 1, 2, 0, 1, 2, 3] (ID-ed by priority)
+		iwrrChannels []*WeightedChannel
 	}
 )
 
@@ -131,11 +142,7 @@ func (s *InterleavedWeightedRoundRobinScheduler) eventLoop() {
 	for {
 		select {
 		case <-s.notifyChan:
-			for s.hasRemainingTasks() {
-				weightedChannels := s.channels()
-				s.dispatchTasks(weightedChannels)
-			}
-
+			s.dispatchTasks()
 		case <-s.shutdownChan:
 			return
 		}
@@ -182,6 +189,13 @@ func (s *InterleavedWeightedRoundRobinScheduler) getOrCreateTaskChannel(
 	return channel
 }
 
+func (s *InterleavedWeightedRoundRobinScheduler) dispatchTasks() {
+	for s.hasRemainingTasks() {
+		weightedChannels := s.channels()
+		s.doDispatchTasks(weightedChannels)
+	}
+}
+
 func (s *InterleavedWeightedRoundRobinScheduler) channels() []*WeightedChannel {
 	s.RLock()
 	defer s.RUnlock()
@@ -201,7 +215,7 @@ func (s *InterleavedWeightedRoundRobinScheduler) notifyDispatcher() {
 	}
 }
 
-func (s *InterleavedWeightedRoundRobinScheduler) dispatchTasks(
+func (s *InterleavedWeightedRoundRobinScheduler) doDispatchTasks(
 	channels []*WeightedChannel,
 ) {
 
