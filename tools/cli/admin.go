@@ -570,6 +570,10 @@ func newAdminClusterCommands() []cli.Command {
 					Usage:    "Remote cluster frontend address",
 					Required: true,
 				},
+				cli.BoolTFlag{
+					Name:  FlagConnectionEnableWithAlias,
+					Usage: "Optional: default ture. Enable remote cluster connection",
+				},
 			},
 			Action: func(c *cli.Context) {
 				AdminAddOrUpdateRemoteCluster(c)

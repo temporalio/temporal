@@ -240,6 +240,8 @@ const (
 	FlagTypeWithAlias                         = FlagType + ", t"
 	FlagVersion                               = "version"
 	FlagPort                                  = "port"
+	FlagConnectionEnable                      = "enable_connection"
+	FlagConnectionEnableWithAlias             = FlagConnectionEnable + ", ec"
 
 	FlagProtoType  = "type"
 	FlagHexData    = "hex_data"
