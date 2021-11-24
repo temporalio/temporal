@@ -444,6 +444,7 @@ func (d *HandlerImpl) UpdateNamespace(
 			info.Data = d.mergeNamespaceData(info.Data, updatedInfo.Data)
 		}
 		if updatedInfo.State != enumspb.NAMESPACE_STATE_UNSPECIFIED && info.State != updatedInfo.State {
+			configurationChanged = true
 			if err := validateStateUpdate(getResponse, updateRequest); err != nil {
 				return nil, err
 			}
@@ -824,6 +825,14 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 			if replicationClusterCount < 2 {
 				return serviceerror.NewInvalidArgument("namespace state Handover require more than one replication clusters")
 			}
+			return nil
+		default:
+			return ErrInvalidNamespaceStateUpdate
+		}
+
+	case enumspb.NAMESPACE_STATE_DEPRECATED:
+		switch newState {
+		case enumspb.NAMESPACE_STATE_DELETED:
 			return nil
 		default:
 			return ErrInvalidNamespaceStateUpdate
