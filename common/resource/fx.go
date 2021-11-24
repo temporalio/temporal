@@ -72,7 +72,6 @@ var Module = fx.Options(
 	fx.Provide(NewFromDI),
 )
 
-
 var DepsModule = fx.Options(
 	persistenceClient.Module,
 	fx.Provide(SnTaggedLoggerProvider),
