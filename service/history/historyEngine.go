@@ -2129,8 +2129,6 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	ctx context.Context,
 	terminateRequest *historyservice.TerminateWorkflowExecutionRequest,
 ) error {
-
-	// todomigryz: terminateworkflow execution
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(terminateRequest.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -2167,7 +2165,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 			}
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()
-			//todomigryz: histengine: termwf
+
 			return updateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 				mutableState,
 				eventBatchFirstEventID,
