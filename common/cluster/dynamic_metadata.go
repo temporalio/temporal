@@ -345,16 +345,11 @@ func (d *dynamicMetadataImpl) refreshLoop(ctx context.Context) error {
 			return nil
 		case <-timer.C:
 			for err := d.refreshClusterMetadata(ctx); err != nil; err = d.refreshClusterMetadata(ctx) {
+				d.logger.Error("Error refreshing remote cluster metadata", tag.Error(err))
 				select {
+				case <-time.After(refreshFailureInterval):
 				case <-ctx.Done():
 					return nil
-				default:
-					d.logger.Error("Error refreshing remote cluster metadata", tag.Error(err))
-					select {
-					case <-time.After(refreshFailureInterval):
-					case <-ctx.Done():
-						return nil
-					}
 				}
 			}
 		}
@@ -362,7 +357,7 @@ func (d *dynamicMetadataImpl) refreshLoop(ctx context.Context) error {
 }
 
 func (d *dynamicMetadataImpl) refreshClusterMetadata(_ context.Context) error {
-	clusterMetadataMap, err := d.listAllClusterMetadata()
+	clusterMetadataMap, err := d.listAllClusterMetadataFromDB()
 	if err != nil {
 		return err
 	}
@@ -371,41 +366,37 @@ func (d *dynamicMetadataImpl) refreshClusterMetadata(_ context.Context) error {
 	newEntries := make(map[string]*ClusterInformation)
 
 	clusterInfoMap := d.GetAllClusterInfo()
-UpdateLoop:
-	for clusterName, clusterMetadata := range clusterMetadataMap {
-		clusterInfo, ok := clusterInfoMap[clusterName]
+	for clusterName, newClusterInfo := range clusterMetadataMap {
+		oldClusterInfo, ok := clusterInfoMap[clusterName]
 		if !ok {
 			// handle new cluster registry
 			oldEntries[clusterName] = nil
 			newEntries[clusterName] = &ClusterInformation{
-				Enabled:                clusterMetadata.Enabled,
-				InitialFailoverVersion: clusterMetadata.InitialFailoverVersion,
-				RPCAddress:             clusterMetadata.RPCAddress,
-				version:                clusterMetadata.version,
+				Enabled:                newClusterInfo.Enabled,
+				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
+				RPCAddress:             newClusterInfo.RPCAddress,
+				version:                newClusterInfo.version,
 			}
-			continue UpdateLoop
-		}
-
-		if clusterMetadata.version > clusterInfo.version {
+		} else if newClusterInfo.version > oldClusterInfo.version {
 			// handle updated cluster registry
 			oldEntries[clusterName] = &ClusterInformation{
-				Enabled:                clusterInfo.Enabled,
-				InitialFailoverVersion: clusterInfo.InitialFailoverVersion,
-				RPCAddress:             clusterInfo.RPCAddress,
-				version:                clusterInfo.version,
+				Enabled:                oldClusterInfo.Enabled,
+				InitialFailoverVersion: oldClusterInfo.InitialFailoverVersion,
+				RPCAddress:             oldClusterInfo.RPCAddress,
+				version:                oldClusterInfo.version,
 			}
 			newEntries[clusterName] = &ClusterInformation{
-				Enabled:                clusterMetadata.Enabled,
-				InitialFailoverVersion: clusterMetadata.InitialFailoverVersion,
-				RPCAddress:             clusterMetadata.RPCAddress,
-				version:                clusterMetadata.version,
+				Enabled:                newClusterInfo.Enabled,
+				InitialFailoverVersion: newClusterInfo.InitialFailoverVersion,
+				RPCAddress:             newClusterInfo.RPCAddress,
+				version:                newClusterInfo.version,
 			}
 		}
 	}
-	for clusterName, clusterInfo := range clusterInfoMap {
+	for clusterName, oldClusterInfo := range clusterInfoMap {
 		if _, ok := clusterMetadataMap[clusterName]; !ok {
 			// removed cluster registry
-			oldEntries[clusterName] = &clusterInfo
+			oldEntries[clusterName] = &oldClusterInfo
 			newEntries[clusterName] = nil
 		}
 	}
@@ -413,7 +404,7 @@ UpdateLoop:
 	if len(oldEntries) > 0 {
 		d.clusterLock.Lock()
 		d.updateClusterInfoLocked(oldEntries, newEntries)
-		d.updateVersionToClusterNameLocked()
+		d.updateFailoverVersionToClusterName()
 		d.clusterLock.Unlock()
 
 		d.clusterCallbackLock.RLock()
@@ -438,7 +429,7 @@ func (d *dynamicMetadataImpl) updateClusterInfoLocked(
 	}
 }
 
-func (d *dynamicMetadataImpl) updateVersionToClusterNameLocked() {
+func (d *dynamicMetadataImpl) updateFailoverVersionToClusterName() {
 	d.versionToClusterName = updateVersionToClusterName(d.clusterInfo, d.failoverVersionIncrement)
 }
 
@@ -464,7 +455,7 @@ func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failo
 	return versionToClusterName
 }
 
-func (d *dynamicMetadataImpl) listAllClusterMetadata() (map[string]*ClusterInformation, error) {
+func (d *dynamicMetadataImpl) listAllClusterMetadataFromDB() (map[string]*ClusterInformation, error) {
 	result := make(map[string]*ClusterInformation)
 	if d.clusterMetadataStore == nil {
 		return result, nil
