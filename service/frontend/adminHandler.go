@@ -67,6 +67,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 )
@@ -553,6 +554,190 @@ func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.C
 	}
 	_, err := adh.GetHistoryClient().CloseShard(ctx, &historyservice.CloseShardRequest{ShardId: request.GetShardId()})
 	return &adminservice.CloseShardResponse{}, err
+}
+
+// ListTimerTasks lists timer tasks for a given shard
+func (adh *AdminHandler) ListTimerTasks(ctx context.Context, request *adminservice.ListTimerTasksRequest) (_ *adminservice.ListTimerTasksResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminListTimerTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	executionMgr := adh.GetExecutionManager()
+
+	resp, err := executionMgr.GetTimerTasks(&persistence.GetTimerTasksRequest{
+		ShardID:       request.GetShardId(),
+		MinTimestamp:  *request.GetMinTime(),
+		MaxTimestamp:  *request.GetMaxTime(),
+		BatchSize:     int(request.GetBatchSize()),
+		NextPageToken: request.GetNextPageToken(),
+	})
+
+	var timerTasks []*adminservice.Task
+	for _, task := range resp.Tasks {
+		fireTime := task.GetKey().FireTime
+		taskType, err := getTaskType(task)
+		if err != nil {
+			return nil, err
+		}
+
+		timerTasks = append(timerTasks, &adminservice.Task{
+			NamespaceId: task.GetNamespaceID(),
+			WorkflowId:  task.GetWorkflowID(),
+			RunId:       task.GetRunID(),
+			TaskId:      task.GetTaskID(),
+			TaskType:    taskType,
+			FireTime:    &fireTime,
+			Version:     task.GetVersion(),
+		})
+	}
+
+	return &adminservice.ListTimerTasksResponse{
+		Tasks:         timerTasks,
+		NextPageToken: resp.NextPageToken,
+	}, err
+}
+
+// ListReplicationTasks lists replication tasks for a given shard
+func (adh *AdminHandler) ListReplicationTasks(ctx context.Context, request *adminservice.ListReplicationTasksRequest) (_ *adminservice.ListReplicationTasksResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminListReplicationTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	executionMgr := adh.GetExecutionManager()
+
+	resp, err := executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
+		ShardID:       request.GetShardId(),
+		MinTaskID:     request.GetMinTaskId(),
+		MaxTaskID:     request.GetMaxTaskId(),
+		BatchSize:     int(request.GetBatchSize()),
+		NextPageToken: request.GetNextPageToken(),
+	})
+
+	var tasks []*adminservice.Task
+	for _, task := range resp.Tasks {
+		fireTime := time.Unix(0, 0)
+		taskType, err := getTaskType(task)
+		if err != nil {
+			return nil, err
+		}
+
+		tasks = append(tasks, &adminservice.Task{
+			NamespaceId: task.GetNamespaceID(),
+			WorkflowId:  task.GetWorkflowID(),
+			RunId:       task.GetRunID(),
+			TaskId:      task.GetTaskID(),
+			TaskType:    taskType,
+			FireTime:    &fireTime,
+			Version:     task.GetVersion(),
+		})
+	}
+
+	return &adminservice.ListReplicationTasksResponse{
+		Tasks:         tasks,
+		NextPageToken: resp.NextPageToken,
+	}, err
+}
+
+// ListTransferTasks lists transfer tasks for a given shard
+func (adh *AdminHandler) ListTransferTasks(ctx context.Context, request *adminservice.ListTransferTasksRequest) (_ *adminservice.ListTransferTasksResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminListTransferTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	executionMgr := adh.GetExecutionManager()
+
+	resp, err := executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
+		ShardID:       request.GetShardId(),
+		ReadLevel:     request.GetMinTaskId(),
+		MaxReadLevel:  request.GetMaxTaskId(),
+		BatchSize:     int(request.GetBatchSize()),
+		NextPageToken: request.GetNextPageToken(),
+	})
+
+	var tasks []*adminservice.Task
+	for _, task := range resp.Tasks {
+		fireTime := time.Unix(0, 0)
+		taskType, err := getTaskType(task)
+		if err != nil {
+			return nil, err
+		}
+
+		tasks = append(tasks, &adminservice.Task{
+			NamespaceId: task.GetNamespaceID(),
+			WorkflowId:  task.GetWorkflowID(),
+			RunId:       task.GetRunID(),
+			TaskId:      task.GetTaskID(),
+			TaskType:    taskType,
+			FireTime:    &fireTime,
+			Version:     task.GetVersion(),
+		})
+	}
+
+	return &adminservice.ListTransferTasksResponse{
+		Tasks:         tasks,
+		NextPageToken: resp.NextPageToken,
+	}, err
+}
+
+// ListVisibilityTasks lists visibility tasks for a given shard
+func (adh *AdminHandler) ListVisibilityTasks(ctx context.Context, request *adminservice.ListVisibilityTasksRequest) (_ *adminservice.ListVisibilityTasksResponse, retError error) {
+	defer log.CapturePanic(adh.GetLogger(), &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminListVisibilityTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	executionMgr := adh.GetExecutionManager()
+
+	resp, err := executionMgr.GetVisibilityTasks(&persistence.GetVisibilityTasksRequest{
+		ShardID:       request.GetShardId(),
+		ReadLevel:     resendStartEventID,
+		MaxReadLevel:  request.GetMaxReadLevel(),
+		BatchSize:     int(request.GetBatchSize()),
+		NextPageToken: request.GetNextPageToken(),
+	})
+
+	var tasks []*adminservice.Task
+	for _, task := range resp.Tasks {
+		fireTime := time.Unix(0, 0)
+		taskType, err := getTaskType(task)
+		if err != nil {
+			return nil, err
+		}
+
+		tasks = append(tasks, &adminservice.Task{
+			NamespaceId: task.GetNamespaceID(),
+			WorkflowId:  task.GetWorkflowID(),
+			RunId:       task.GetRunID(),
+			TaskId:      task.GetTaskID(),
+			TaskType:    taskType,
+			FireTime:    &fireTime,
+			Version:     task.GetVersion(),
+		})
+	}
+
+	return &adminservice.ListVisibilityTasksResponse{
+		Tasks:         tasks,
+		NextPageToken: resp.NextPageToken,
+	}, err
 }
 
 // DescribeHistoryHost returns information about the internal states of a history host
@@ -1349,6 +1534,46 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	return &adminservice.ResendReplicationTasksResponse{}, nil
 }
 
+// GetTaskQueueTasks returns tasks from task queue
+func (adh *AdminHandler) GetTaskQueueTasks(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueTasksRequest,
+) (_ *adminservice.GetTaskQueueTasksResponse, err error) {
+	defer log.CapturePanic(adh.GetLogger(), &err)
+	scope, sw := adh.startRequestProfile(metrics.AdminGetTaskQueueTasksScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	namespaceID, err := adh.GetNamespaceRegistry().GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	taskMgr := adh.GetTaskManager()
+
+	maxTaskID := request.GetMaxTaskId()
+	req := &persistence.GetTasksRequest{
+		NamespaceID:  namespaceID.String(),
+		TaskQueue:    request.GetTaskQueue(),
+		TaskType:     request.GetTaskQueueType(),
+		ReadLevel:    request.GetMinTaskId(),
+		MaxReadLevel: &maxTaskID,
+		BatchSize:    int(request.GetBatchSize()),
+	}
+
+	resp, err := taskMgr.GetTasks(req)
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	return &adminservice.GetTaskQueueTasksResponse{
+		Tasks: resp.Tasks,
+	}, nil
+}
+
 func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 	request *adminservice.GetWorkflowExecutionRawHistoryV2Request,
 ) error {
@@ -1522,4 +1747,28 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
+}
+
+func getTaskType(task tasks.Task) (enumsspb.TaskType, error) {
+	var taskType enumsspb.TaskType
+	switch task := task.(type) {
+	case *tasks.WorkflowTaskTimeoutTask:
+		taskType = enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
+	case *tasks.WorkflowBackoffTimerTask:
+		taskType = enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
+	case *tasks.ActivityTimeoutTask:
+		taskType = enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
+	case *tasks.ActivityRetryTimerTask:
+		taskType = enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
+	case *tasks.UserTimerTask:
+		taskType = enumsspb.TASK_TYPE_USER_TIMER
+	case *tasks.WorkflowTimeoutTask:
+		taskType = enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
+	case *tasks.DeleteHistoryEventTask:
+		taskType = enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT
+	default:
+		return 0, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task))
+	}
+
+	return taskType, nil
 }

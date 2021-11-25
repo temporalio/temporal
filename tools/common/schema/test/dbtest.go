@@ -27,8 +27,9 @@ package test
 import (
 	"fmt"
 	"math/rand"
-	"os"
 	"time"
+
+	"go.temporal.io/server/tests/testhelper"
 
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -78,15 +79,10 @@ func (tb *DBTestBase) TearDownSuiteBase() {
 
 // RunParseFileTest runs a test against the ParseFile method
 func (tb *DBTestBase) RunParseFileTest(content string) {
-	rootDir, err := os.MkdirTemp("", "dbClientTestDir")
-	tb.Nil(err)
-	defer os.Remove(rootDir)
+	rootDir := testhelper.MkdirTemp(tb.T(), "", "dbClientTestDir")
+	cqlFile := testhelper.CreateTemp(tb.T(), rootDir, "parseCQLTest")
 
-	cqlFile, err := os.CreateTemp(rootDir, "parseCQLTest")
-	tb.Nil(err)
-	defer os.Remove(cqlFile.Name())
-
-	_, err = cqlFile.WriteString(content)
+	_, err := cqlFile.WriteString(content)
 	tb.NoError(err)
 	stmts, err := schema.ParseFile(cqlFile.Name())
 	tb.Nil(err)

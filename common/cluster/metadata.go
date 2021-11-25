@@ -71,28 +71,6 @@ type (
 		// versionToClusterName contains all initial version -> corresponding cluster name
 		versionToClusterName map[int64]string
 	}
-
-	// ClusterMetadata contains the all cluster which participated in cross DC
-	Config struct {
-		EnableGlobalNamespace bool `yaml:"enableGlobalNamespace"`
-		// FailoverVersionIncrement is the increment of each cluster version when failover happens
-		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
-		// MasterClusterName is the master cluster name, only the master cluster can register / update namespace
-		// all clusters can do namespace failover
-		MasterClusterName string `yaml:"masterClusterName"`
-		// CurrentClusterName is the name of the current cluster
-		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterInformation contains all cluster names to corresponding information about that cluster
-		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
-	}
-
-	// ClusterInformation contains the information about each cluster which participated in cross DC
-	ClusterInformation struct {
-		Enabled                bool  `yaml:"enabled"`
-		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
-		// Address indicate the remote service address(Host:Port). Host can be DNS name.
-		RPCAddress string `yaml:"rpcAddress"`
-	}
 )
 
 // NewMetadata create a new instance of Metadata

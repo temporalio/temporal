@@ -25,6 +25,7 @@
 package shard
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -138,19 +139,19 @@ func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
 }
 
-func (c *ControllerImpl) GetEngine(namespaceID namespace.ID, workflowID string) (Engine, error) {
+func (c *ControllerImpl) GetEngine(ctx context.Context, namespaceID namespace.ID, workflowID string) (Engine, error) {
 	shardID := c.config.GetShardID(namespaceID, workflowID)
-	return c.GetEngineForShard(shardID)
+	return c.GetEngineForShard(ctx, shardID)
 }
 
-func (c *ControllerImpl) GetEngineForShard(shardID int32) (Engine, error) {
+func (c *ControllerImpl) GetEngineForShard(ctx context.Context, shardID int32) (Engine, error) {
 	sw := c.metricsScope.StartTimer(metrics.GetEngineForShardLatency)
 	defer sw.Stop()
 	shard, err := c.getOrCreateShardContext(shardID)
 	if err != nil {
 		return nil, err
 	}
-	return shard.getOrCreateEngine()
+	return shard.getOrCreateEngine(ctx)
 }
 
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
@@ -312,10 +313,12 @@ func (c *ControllerImpl) acquireShards() {
 						c.logger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 					} else {
 						if info.Identity() == c.GetHostInfo().Identity() {
-							if _, err := c.GetEngineForShard(shardID); err != nil {
+							ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+							if _, err := c.GetEngineForShard(ctx, shardID); err != nil {
 								c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
-								c.logger.Error("Unable to create history shard engine", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
+								c.logger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 							}
+							cancel()
 						}
 						// TODO: If we're _not_ the owner for this shard, and we have it loaded, we should unload it.
 					}

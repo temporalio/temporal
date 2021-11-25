@@ -66,41 +66,43 @@ const maxEventID = 9999
 
 // AdminShowWorkflow shows history
 func AdminShowWorkflow(c *cli.Context) {
-	tid := c.String(FlagTreeID)
-	bid := c.String(FlagBranchID)
-	sid := int32(c.Int(FlagShardID))
+	namespace := c.String(FlagNamespace)
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := getRequiredOption(c, FlagRunID)
+	startEventId := c.Int64(FlagMinEventID)
+	endEventId := c.Int64(FlagMaxEventID)
+	startEventVerion := int64(c.Int(FlagMinEventVersion))
+	endEventVersion := int64(c.Int(FlagMaxEventVersion))
 	outputFileName := c.String(FlagOutputFilename)
 
-	session := connectToCassandra(c)
+	client := cFactory.AdminClient(c)
+
 	serializer := serialization.NewSerializer()
 	var history []*commonpb.DataBlob
-	if len(tid) != 0 {
-		histV2 := cassandra.NewHistoryStore(session, log.NewNoopLogger())
-		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
-			TreeID:    tid,
-			BranchID:  bid,
-			MinNodeID: 1,
-			MaxNodeID: maxEventID,
-			PageSize:  maxEventID,
-			ShardID:   sid,
-		})
-		if err != nil {
-			ErrorAndExit("ReadHistoryBranch err", err)
-		}
 
-		for _, node := range resp.Nodes {
-			history = append(history, node.Events)
-		}
-	} else {
-		ErrorAndExit("need to specify TreeId/BranchId/ShardId", nil)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+		StartEventId:      startEventId,
+		EndEventId:        endEventId,
+		StartEventVersion: startEventVerion,
+		EndEventVersion:   endEventVersion,
+		MaximumPageSize:   100,
+		NextPageToken:     nil,
+	})
+	if err != nil {
+		ErrorAndExit("ReadHistoryBranch err", err)
 	}
 
-	if len(history) == 0 {
-		ErrorAndExit("no events", nil)
-	}
 	allEvents := &historypb.History{}
 	totalSize := 0
-	for idx, b := range history {
+	for idx, b := range resp.HistoryBatches {
 		totalSize += len(b.Data)
 		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatchThrift, err := serializer.DeserializeEvents(b)
@@ -598,8 +600,8 @@ func AdminDescribeTask(c *cli.Context) {
 	}
 }
 
-// AdminListTasks outputs a list of a tasks for given Shard and Task Type
-func AdminListTasks(c *cli.Context) {
+// AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
+func AdminListShardTasks(c *cli.Context) {
 	sid := int32(getRequiredIntOption(c, FlagShardID))
 	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
 	if err != nil {
@@ -610,18 +612,16 @@ func AdminListTasks(c *cli.Context) {
 		ErrorAndExit(fmt.Sprintf("Task type %s is currently not supported", category), nil)
 	}
 
-	pFactory := CreatePersistenceFactory(c)
-	executionManager, err := pFactory.NewExecutionManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize execution manager", err)
-	}
+	client := cFactory.AdminClient(c)
 
+	ctx, cancel := newContext(c)
+	defer cancel()
 	if category == enumsspb.TASK_CATEGORY_TRANSFER {
-		req := &persistence.GetTransferTasksRequest{ShardID: sid}
+		req := &adminservice.ListTransferTasksRequest{ShardId: sid}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetTransferTasks(req)
+			response, err := client.ListTransferTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -635,11 +635,11 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_VISIBILITY {
-		req := &persistence.GetVisibilityTasksRequest{ShardID: sid}
+		req := &adminservice.ListVisibilityTasksRequest{ShardId: sid}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetVisibilityTasks(req)
+			response, err := client.ListVisibilityTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -656,14 +656,14 @@ func AdminListTasks(c *cli.Context) {
 		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
 		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
 
-		req := &persistence.GetTimerTasksRequest{
-			ShardID:      sid,
-			MinTimestamp: minVis,
-			MaxTimestamp: maxVis,
+		req := &adminservice.ListTimerTasksRequest{
+			ShardId: sid,
+			MinTime: &minVis,
+			MaxTime: &maxVis,
 		}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetTimerTasks(req)
+			response, err := client.ListTimerTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -677,10 +677,10 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_REPLICATION {
-		req := &persistence.GetReplicationTasksRequest{}
+		req := &adminservice.ListReplicationTasksRequest{ShardId: sid}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetReplicationTasks(req)
+			response, err := client.ListReplicationTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}

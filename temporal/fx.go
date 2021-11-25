@@ -221,32 +221,40 @@ func JWTAudienceMapperProvider(so *serverOptions) authorization.JWTAudienceMappe
 	return so.audienceGetter
 }
 
+type (
+	ServiceProviderParamsCommon struct {
+		fx.In
+
+		Cfg                        *config.Config
+		ServiceNames               ServiceNames
+		Logger                     log.Logger
+		NamespaceLogger            NamespaceLogger
+		DynamicConfigClient        dynamicconfig.Client
+		ServerReporter             ServerReporter
+		SdkReporter                SdkReporter
+		EsConfig                   *esclient.Config
+		EsClient                   esclient.Client
+		TlsConfigProvider          encryption.TLSConfigProvider
+		PersistenceConfig          config.Persistence
+		ClusterMetadata            *cluster.Config
+		ClientFactoryProvider      client.FactoryProvider
+		AudienceGetter             authorization.JWTAudienceMapper
+		PersistenceServiceResolver resolver.ServiceResolver
+		SearchAttributesMapper     searchattribute.Mapper
+		CustomInterceptors         []grpc.UnaryServerInterceptor
+		Authorizer                 authorization.Authorizer
+		ClaimMapper                authorization.ClaimMapper
+		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
+	}
+)
+
 func HistoryServiceProvider(
-	cfg *config.Config,
-	serviceNames ServiceNames,
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	dynamicConfigClient dynamicconfig.Client,
-	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
-	esConfig *esclient.Config,
-	esClient esclient.Client,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
-	clientFactoryProvider client.FactoryProvider,
-	audienceGetter authorization.JWTAudienceMapper,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
-	customInterceptors []grpc.UnaryServerInterceptor,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
-	dataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.HistoryService
 
-	if _, ok := serviceNames[serviceName]; !ok {
-		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
+	if _, ok := params.ServiceNames[serviceName]; !ok {
+		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
 				App:           fx.New(fx.NopLogger),
@@ -260,33 +268,33 @@ func HistoryServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			esConfig,
-			persistenceConfig,
-			clusterMetadata,
-			cfg,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
 		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return dataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return clientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return audienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return persistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return searchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return customInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return claimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
+		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
-		fx.Provide(func() log.Logger { return logger }),
-		fx.Provide(func() ServerReporter { return serverReporter }),
-		fx.Provide(func() SdkReporter { return sdkReporter }),
-		fx.Provide(func() NamespaceLogger { return namespaceLogger }), // resolves untyped nil error
-		fx.Provide(func() esclient.Client { return esClient }),
+		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() SdkReporter { return params.SdkReporter }),
+		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
 		history.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
+	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -297,31 +305,12 @@ func HistoryServiceProvider(
 }
 
 func MatchingServiceProvider(
-	cfg *config.Config,
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	so *serverOptions,
-	dynamicConfigClient dynamicconfig.Client,
-	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
-	esConfig *esclient.Config,
-	esClient esclient.Client,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
-	clientFactoryProvider client.FactoryProvider,
-	audienceGetter authorization.JWTAudienceMapper,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
-	customInterceptors []grpc.UnaryServerInterceptor,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
-	dataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.MatchingService
 
-	if _, ok := so.serviceNames[serviceName]; !ok {
-		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
+	if _, ok := params.ServiceNames[serviceName]; !ok {
+		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
 				App:           fx.New(fx.NopLogger),
@@ -335,34 +324,33 @@ func MatchingServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			so,
-			esConfig,
-			persistenceConfig,
-			clusterMetadata,
-			cfg,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
 		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return dataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return clientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return audienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return persistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return searchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return customInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return claimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
+		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
-		fx.Provide(func() log.Logger { return logger }),
-		fx.Provide(func() ServerReporter { return serverReporter }),
-		fx.Provide(func() SdkReporter { return sdkReporter }),
-		fx.Provide(func() NamespaceLogger { return namespaceLogger }), // resolves untyped nil error
-		fx.Provide(func() esclient.Client { return esClient }),
+		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() SdkReporter { return params.SdkReporter }),
+		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
 		matching.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
+	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -373,31 +361,12 @@ func MatchingServiceProvider(
 }
 
 func FrontendServiceProvider(
-	cfg *config.Config,
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	so *serverOptions,
-	dynamicConfigClient dynamicconfig.Client,
-	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
-	esConfig *esclient.Config,
-	esClient esclient.Client,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
-	clientFactoryProvider client.FactoryProvider,
-	audienceGetter authorization.JWTAudienceMapper,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
-	customInterceptors []grpc.UnaryServerInterceptor,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
-	dataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.FrontendService
 
-	if _, ok := so.serviceNames[serviceName]; !ok {
-		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
+	if _, ok := params.ServiceNames[serviceName]; !ok {
+		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
 				App:           fx.New(fx.NopLogger),
@@ -411,34 +380,33 @@ func FrontendServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			so,
-			esConfig,
-			persistenceConfig,
-			clusterMetadata,
-			cfg,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
 		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return dataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return clientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return audienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return persistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return searchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return customInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return claimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
+		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
-		fx.Provide(func() log.Logger { return logger }),
-		fx.Provide(func() ServerReporter { return serverReporter }),
-		fx.Provide(func() SdkReporter { return sdkReporter }),
-		fx.Provide(func() NamespaceLogger { return namespaceLogger }), // resolves untyped nil error
-		fx.Provide(func() esclient.Client { return esClient }),
+		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() SdkReporter { return params.SdkReporter }),
+		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
 		frontend.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
+	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -449,31 +417,12 @@ func FrontendServiceProvider(
 }
 
 func WorkerServiceProvider(
-	cfg *config.Config,
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	so *serverOptions,
-	dynamicConfigClient dynamicconfig.Client,
-	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
-	esConfig *esclient.Config,
-	esClient esclient.Client,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
-	clientFactoryProvider client.FactoryProvider,
-	audienceGetter authorization.JWTAudienceMapper,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
-	customInterceptors []grpc.UnaryServerInterceptor,
-	authorizer authorization.Authorizer,
-	claimMapper authorization.ClaimMapper,
-	dataStoreFactory persistenceClient.AbstractDataStoreFactory,
+	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.WorkerService
 
-	if _, ok := so.serviceNames[serviceName]; !ok {
-		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
+	if _, ok := params.ServiceNames[serviceName]; !ok {
+		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
 				App:           fx.New(fx.NopLogger),
@@ -487,34 +436,33 @@ func WorkerServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			so,
-			esConfig,
-			persistenceConfig,
-			clusterMetadata,
-			cfg,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
 		),
-		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return dataStoreFactory }),
-		fx.Provide(func() client.FactoryProvider { return clientFactoryProvider }),
-		fx.Provide(func() authorization.JWTAudienceMapper { return audienceGetter }),
-		fx.Provide(func() resolver.ServiceResolver { return persistenceServiceResolver }),
-		fx.Provide(func() searchattribute.Mapper { return searchAttributesMapper }),
-		fx.Provide(func() []grpc.UnaryServerInterceptor { return customInterceptors }),
-		fx.Provide(func() authorization.Authorizer { return authorizer }),
-		fx.Provide(func() authorization.ClaimMapper { return claimMapper }),
-		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
+		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
-		fx.Provide(func() log.Logger { return logger }),
-		fx.Provide(func() ServerReporter { return serverReporter }),
-		fx.Provide(func() SdkReporter { return sdkReporter }),
-		fx.Provide(func() NamespaceLogger { return namespaceLogger }), // resolves untyped nil error
-		fx.Provide(func() esclient.Client { return esClient }),
+		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() SdkReporter { return params.SdkReporter }),
+		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
 		worker.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
+	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,

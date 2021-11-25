@@ -57,6 +57,18 @@ service AdminService {
     rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
     }
 
+    rpc ListTransferTasks (ListTransferTasksRequest) returns (ListTransferTasksResponse) {
+    }
+
+    rpc ListTimerTasks (ListTimerTasksRequest) returns (ListTimerTasksResponse) {
+    }
+
+    rpc ListReplicationTasks (ListReplicationTasksRequest) returns (ListReplicationTasksResponse) {
+    }
+
+    rpc ListVisibilityTasks (ListVisibilityTasksRequest) returns (ListVisibilityTasksResponse) {
+    }
+
     rpc RemoveTask (RemoveTaskRequest) returns (RemoveTaskResponse) {
     }
 
@@ -131,6 +143,10 @@ service AdminService {
 
     // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
     rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
+    }
+
+    // GetTaskQueueTasks returns tasks from task queue.
+    rpc GetTaskQueueTasks(GetTaskQueueTasksRequest) returns (GetTaskQueueTasksResponse) {
     }
 }
 

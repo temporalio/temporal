@@ -22,21 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package testhelper
 
 import (
-	"go.temporal.io/server/common"
+	"os"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
-type (
-	// Processor is the generic goroutine pool for task processing
-	Processor interface {
-		common.Daemon
-		// Submit schedule a task to be executed
-		// * if processor is not stopped, then task will be executed,
-		//  one of Ack(), Nack() or Reschedule() will be invoked once task is considered done for this attempt
-		// * if processor is stopped, then Reschedule() will be invoked
-		Submit(task Task)
-	}
-)
+// CreateTemp is a helper function which creates a temporary file,
+// and it is automatically closed after test is completed
+func CreateTemp(t testing.TB, dir, pattern string) *os.File {
+	t.Helper()
+
+	tempFile, err := os.CreateTemp(dir, pattern)
+	require.NoError(t, err)
+	require.NotNil(t, tempFile)
+
+	t.Cleanup(func() { require.NoError(t, os.Remove(tempFile.Name())) })
+	return tempFile
+}
+
+// MkdirTemp is a helper function which creates a temporary directory,
+// and they are automatically removed after test is completed
+func MkdirTemp(t testing.TB, dir, pattern string) string {
+	t.Helper()
+
+	tempDir, err := os.MkdirTemp(dir, pattern)
+	require.NoError(t, err)
+	require.NotNil(t, tempDir)
+
+	t.Cleanup(func() { require.NoError(t, os.RemoveAll(tempDir)) })
+	return tempDir
+}

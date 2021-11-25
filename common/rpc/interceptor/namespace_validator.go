@@ -55,6 +55,7 @@ type (
 
 var (
 	ErrNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errNamespaceHandover            = serviceerror.NewUnavailable(fmt.Sprintf("Namespace in %s state.", enumspb.NAMESPACE_STATE_HANDOVER.String()))
 	errTaskTokenNotSet              = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch   = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 	errInvalidNamespaceStateMessage = "Namespace has invalid state: %s. Must be %s."
@@ -62,7 +63,8 @@ var (
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
+		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_HANDOVER},
+		"UpdateNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
@@ -222,6 +224,10 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 }
 
 func (ni *NamespaceValidatorInterceptor) stateNotAllowedError(currentState enumspb.NamespaceState, allowedStates []enumspb.NamespaceState) error {
+	if currentState == enumspb.NAMESPACE_STATE_HANDOVER {
+		return errNamespaceHandover
+	}
+
 	var allowedStatesStr []string
 	for _, allowedState := range allowedStates {
 		allowedStatesStr = append(allowedStatesStr, allowedState.String())

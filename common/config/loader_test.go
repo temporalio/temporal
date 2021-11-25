@@ -28,6 +28,8 @@ import (
 	"os"
 	"testing"
 
+	"go.temporal.io/server/tests/testhelper"
+
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 )
@@ -59,13 +61,10 @@ func (s *LoaderSuite) SetupTest() {
 }
 
 func (s *LoaderSuite) TestBaseYaml() {
-
-	dir, err := os.MkdirTemp("", "loader.testBaseYaml")
-	s.Nil(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "loader.testBaseYaml")
 
 	data := buildConfig("", "")
-	err = os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
+	err := os.WriteFile(path(dir, "base.yaml"), []byte(data), fileMode)
 	s.Nil(err)
 
 	envs := []string{"", "prod"}
@@ -83,10 +82,7 @@ func (s *LoaderSuite) TestBaseYaml() {
 }
 
 func (s *LoaderSuite) TestHierarchy() {
-
-	dir, err := os.MkdirTemp("", "loader.testHierarchy")
-	s.Nil(err)
-	defer os.RemoveAll(dir)
+	dir := testhelper.MkdirTemp(s.T(), "", "loader.testHierarchy")
 
 	s.createFile(dir, "base.yaml", "", "")
 	s.createFile(dir, "development.yaml", "development", "")
@@ -112,7 +108,7 @@ func (s *LoaderSuite) TestHierarchy() {
 
 	for _, tc := range testCases {
 		var cfg testConfig
-		err = Load(tc.env, dir, tc.zone, &cfg)
+		err := Load(tc.env, dir, tc.zone, &cfg)
 		s.Nil(err)
 		s.Equal(tc.item1, cfg.Items.Item1)
 		s.Equal(tc.item2, cfg.Items.Item2)

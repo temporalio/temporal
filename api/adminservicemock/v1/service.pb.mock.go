@@ -300,6 +300,26 @@ func (mr *MockAdminServiceClientMockRecorder) GetShard(ctx, in interface{}, opts
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockAdminServiceClient)(nil).GetShard), varargs...)
 }
 
+// GetTaskQueueTasks mocks base method.
+func (m *MockAdminServiceClient) GetTaskQueueTasks(ctx context.Context, in *adminservice.GetTaskQueueTasksRequest, opts ...grpc.CallOption) (*adminservice.GetTaskQueueTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetTaskQueueTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.GetTaskQueueTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueTasks indicates an expected call of GetTaskQueueTasks.
+func (mr *MockAdminServiceClientMockRecorder) GetTaskQueueTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).GetTaskQueueTasks), varargs...)
+}
+
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
 func (m *MockAdminServiceClient) GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *adminservice.GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 	m.ctrl.T.Helper()
@@ -358,6 +378,86 @@ func (mr *MockAdminServiceClientMockRecorder) ListNamespaces(ctx, in interface{}
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockAdminServiceClient)(nil).ListNamespaces), varargs...)
+}
+
+// ListReplicationTasks mocks base method.
+func (m *MockAdminServiceClient) ListReplicationTasks(ctx context.Context, in *adminservice.ListReplicationTasksRequest, opts ...grpc.CallOption) (*adminservice.ListReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListReplicationTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListReplicationTasks indicates an expected call of ListReplicationTasks.
+func (mr *MockAdminServiceClientMockRecorder) ListReplicationTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ListReplicationTasks), varargs...)
+}
+
+// ListTimerTasks mocks base method.
+func (m *MockAdminServiceClient) ListTimerTasks(ctx context.Context, in *adminservice.ListTimerTasksRequest, opts ...grpc.CallOption) (*adminservice.ListTimerTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListTimerTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListTimerTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTimerTasks indicates an expected call of ListTimerTasks.
+func (mr *MockAdminServiceClientMockRecorder) ListTimerTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTimerTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ListTimerTasks), varargs...)
+}
+
+// ListTransferTasks mocks base method.
+func (m *MockAdminServiceClient) ListTransferTasks(ctx context.Context, in *adminservice.ListTransferTasksRequest, opts ...grpc.CallOption) (*adminservice.ListTransferTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListTransferTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListTransferTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTransferTasks indicates an expected call of ListTransferTasks.
+func (mr *MockAdminServiceClientMockRecorder) ListTransferTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTransferTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ListTransferTasks), varargs...)
+}
+
+// ListVisibilityTasks mocks base method.
+func (m *MockAdminServiceClient) ListVisibilityTasks(ctx context.Context, in *adminservice.ListVisibilityTasksRequest, opts ...grpc.CallOption) (*adminservice.ListVisibilityTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListVisibilityTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListVisibilityTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListVisibilityTasks indicates an expected call of ListVisibilityTasks.
+func (mr *MockAdminServiceClientMockRecorder) ListVisibilityTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListVisibilityTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ListVisibilityTasks), varargs...)
 }
 
 // MergeDLQMessages mocks base method.
@@ -763,6 +863,21 @@ func (mr *MockAdminServiceServerMockRecorder) GetShard(arg0, arg1 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockAdminServiceServer)(nil).GetShard), arg0, arg1)
 }
 
+// GetTaskQueueTasks mocks base method.
+func (m *MockAdminServiceServer) GetTaskQueueTasks(arg0 context.Context, arg1 *adminservice.GetTaskQueueTasksRequest) (*adminservice.GetTaskQueueTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTaskQueueTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.GetTaskQueueTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTaskQueueTasks indicates an expected call of GetTaskQueueTasks.
+func (mr *MockAdminServiceServerMockRecorder) GetTaskQueueTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueueTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).GetTaskQueueTasks), arg0, arg1)
+}
+
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
 func (m *MockAdminServiceServer) GetWorkflowExecutionRawHistoryV2(arg0 context.Context, arg1 *adminservice.GetWorkflowExecutionRawHistoryV2Request) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
 	m.ctrl.T.Helper()
@@ -806,6 +921,66 @@ func (m *MockAdminServiceServer) ListNamespaces(arg0 context.Context, arg1 *admi
 func (mr *MockAdminServiceServerMockRecorder) ListNamespaces(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockAdminServiceServer)(nil).ListNamespaces), arg0, arg1)
+}
+
+// ListReplicationTasks mocks base method.
+func (m *MockAdminServiceServer) ListReplicationTasks(arg0 context.Context, arg1 *adminservice.ListReplicationTasksRequest) (*adminservice.ListReplicationTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListReplicationTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListReplicationTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListReplicationTasks indicates an expected call of ListReplicationTasks.
+func (mr *MockAdminServiceServerMockRecorder) ListReplicationTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ListReplicationTasks), arg0, arg1)
+}
+
+// ListTimerTasks mocks base method.
+func (m *MockAdminServiceServer) ListTimerTasks(arg0 context.Context, arg1 *adminservice.ListTimerTasksRequest) (*adminservice.ListTimerTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTimerTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListTimerTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTimerTasks indicates an expected call of ListTimerTasks.
+func (mr *MockAdminServiceServerMockRecorder) ListTimerTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTimerTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ListTimerTasks), arg0, arg1)
+}
+
+// ListTransferTasks mocks base method.
+func (m *MockAdminServiceServer) ListTransferTasks(arg0 context.Context, arg1 *adminservice.ListTransferTasksRequest) (*adminservice.ListTransferTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListTransferTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListTransferTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListTransferTasks indicates an expected call of ListTransferTasks.
+func (mr *MockAdminServiceServerMockRecorder) ListTransferTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTransferTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ListTransferTasks), arg0, arg1)
+}
+
+// ListVisibilityTasks mocks base method.
+func (m *MockAdminServiceServer) ListVisibilityTasks(arg0 context.Context, arg1 *adminservice.ListVisibilityTasksRequest) (*adminservice.ListVisibilityTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListVisibilityTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListVisibilityTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListVisibilityTasks indicates an expected call of ListVisibilityTasks.
+func (mr *MockAdminServiceServerMockRecorder) ListVisibilityTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListVisibilityTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ListVisibilityTasks), arg0, arg1)
 }
 
 // MergeDLQMessages mocks base method.

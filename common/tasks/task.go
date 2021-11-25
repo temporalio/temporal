@@ -61,4 +61,13 @@ type (
 		// State returns the current task state
 		State() State
 	}
+
+	// PriorityTask is the interface for tasks which have and can be assigned a priority
+	PriorityTask interface {
+		Task
+		// GetPriority returns the priority of the task
+		GetPriority() int
+		// SetPriority sets the priority of the task
+		SetPriority(int)
+	}
 )

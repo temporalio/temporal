@@ -25,6 +25,7 @@
 package shard
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -1153,16 +1154,15 @@ func (s *ContextImpl) createEngine() Engine {
 	return engine
 }
 
-func (s *ContextImpl) getOrCreateEngine() (engine Engine, retErr error) {
-	// Wait on shard acquisition for 1s. Note that this retry is just polling a value in memory.
-	// Another goroutine is doing the actual work.
-	// TODO: use context to do timeout here
+func (s *ContextImpl) getOrCreateEngine(ctx context.Context) (engine Engine, retErr error) {
+	// Block on shard acquisition for the lifetime of this context. Note that this retry is just
+	// polling a value in memory. Another goroutine is doing the actual work.
 	policy := backoff.NewExponentialRetryPolicy(5 * time.Millisecond)
-	policy.SetExpirationInterval(1 * time.Second)
+	policy.SetMaximumInterval(1 * time.Second)
 
 	isRetryable := func(err error) bool { return err == ErrShardStatusUnknown }
 
-	op := func() error {
+	op := func(context.Context) error {
 		s.rLock()
 		defer s.rUnlock()
 		err := s.errorByStateLocked()
@@ -1172,7 +1172,7 @@ func (s *ContextImpl) getOrCreateEngine() (engine Engine, retErr error) {
 		return err
 	}
 
-	retErr = backoff.Retry(op, policy, isRetryable)
+	retErr = backoff.RetryContext(ctx, op, policy, isRetryable)
 	if retErr == nil && engine == nil {
 		// This shouldn't ever happen, but don't let it return nil error.
 		retErr = ErrShardStatusUnknown
