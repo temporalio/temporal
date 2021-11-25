@@ -189,6 +189,12 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 			method:      "/temporal/StartWorkflowExecution",
 			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
+		{
+			state:       enumspb.NAMESPACE_STATE_HANDOVER,
+			expectedErr: errNamespaceHandover,
+			method:      "/temporal/StartWorkflowExecution",
+			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
 		// DescribeNamespace
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -208,6 +214,12 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 			method:      "/temporal/DescribeNamespace",
 			req:         &workflowservice.DescribeNamespaceRequest{Namespace: "test-namespace"},
 		},
+		{
+			state:       enumspb.NAMESPACE_STATE_HANDOVER,
+			expectedErr: nil,
+			method:      "/temporal/DescribeNamespace",
+			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+		},
 		// PollWorkflowTaskQueue (default)
 		{
 			state:       enumspb.NAMESPACE_STATE_REGISTERED,
@@ -226,6 +238,31 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 			expectedErr: &serviceerror.InvalidArgument{},
 			method:      "/temporal/PollWorkflowTaskQueue",
 			req:         &workflowservice.PollWorkflowTaskQueueRequest{Namespace: "test-namespace"},
+		},
+		// UpdateNamespace
+		{
+			state:       enumspb.NAMESPACE_STATE_REGISTERED,
+			expectedErr: nil,
+			method:      "/temporal/UpdateNamespace",
+			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DEPRECATED,
+			expectedErr: nil,
+			method:      "/temporal/UpdateNamespace",
+			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_HANDOVER,
+			expectedErr: nil,
+			method:      "/temporal/UpdateNamespace",
+			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
+		},
+		{
+			state:       enumspb.NAMESPACE_STATE_DELETED,
+			expectedErr: &serviceerror.InvalidArgument{},
+			method:      "/temporal/UpdateNamespace",
+			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
 		},
 	}
 
