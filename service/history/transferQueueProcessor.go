@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -90,15 +91,16 @@ func newTransferQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	logger log.Logger,
+	clientBean client.Bean,
 	registry namespace.Registry,
 ) *transferQueueProcessorImpl {
 
 	logger = log.With(logger, tag.ComponentTransferQueue)
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 	taskAllocator := newTaskAllocator(shard)
 	standbyTaskProcessors := make(map[string]*transferQueueStandbyProcessorImpl)
-	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+	for clusterName, info := range shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
@@ -106,11 +108,11 @@ func newTransferQueueProcessor(
 		if clusterName != currentClusterName {
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
 				shard.GetNamespaceRegistry(),
-				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+				shard.GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 					return historyService.ReplicateEventsV2(ctx, request)
 				},
-				shard.GetService().GetPayloadSerializer(),
+				shard.GetPayloadSerializer(),
 				config.StandbyTaskReReplicationContextTimeout,
 				logger,
 			)
@@ -118,16 +120,17 @@ func newTransferQueueProcessor(
 				clusterName,
 				shard,
 				historyService,
-				matchingClient,
 				taskAllocator,
 				nDCHistoryResender,
 				logger,
+				clientBean,
+				matchingClient,
 			)
 		}
 	}
 
 	return &transferQueueProcessorImpl{
-		isGlobalNamespaceEnabled: shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled(),
+		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
 		taskAllocator:            taskAllocator,
@@ -211,7 +214,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 
 	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
-	for clusterName, info := range t.shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+	for clusterName, info := range t.shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}

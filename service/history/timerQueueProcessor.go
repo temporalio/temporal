@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -88,27 +89,28 @@ func newTimerQueueProcessor(
 	historyService *historyEngineImpl,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
+	clientBean client.Bean,
 ) timerQueueProcessor {
 
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
 
 	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
-	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+	for clusterName, info := range shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
 
-		if clusterName != shard.GetService().GetClusterMetadata().GetCurrentClusterName() {
+		if clusterName != shard.GetClusterMetadata().GetCurrentClusterName() {
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
 				shard.GetNamespaceRegistry(),
-				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+				shard.GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 					return historyService.ReplicateEventsV2(ctx, request)
 				},
-				shard.GetService().GetPayloadSerializer(),
+				shard.GetPayloadSerializer(),
 				config.StandbyTaskReReplicationContextTimeout,
 				logger,
 			)
@@ -119,12 +121,13 @@ func newTimerQueueProcessor(
 				taskAllocator,
 				nDCHistoryResender,
 				logger,
+				clientBean,
 			)
 		}
 	}
 
 	return &timerQueueProcessorImpl{
-		isGlobalNamespaceEnabled: shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled(),
+		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
 		taskAllocator:            taskAllocator,
@@ -209,7 +212,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 
 	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
-	for clusterName, info := range t.shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+	for clusterName, info := range t.shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}

@@ -22,57 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package namespace
 
 import (
+	"context"
+
 	"go.uber.org/fx"
-
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resolver"
 )
 
-type (
-	PersistenceMaxQps dynamicconfig.IntPropertyFn
-	ClusterName       string
+var RegistryModule = fx.Options(
+	fx.Provide(NewRegistry),
+	fx.Invoke(RegistryLifetimeHooks),
 )
 
-var Module = fx.Options(
-	FactoryModule,
-	BeanModule,
+var RegistryLifetimeHooksModule = fx.Options(
+	fx.Invoke(RegistryLifetimeHooks),
 )
 
-var FactoryModule = fx.Options(
-	fx.Provide(ClusterNameProvider),
-	fx.Provide(NewFactoryImplProvider),
-	fx.Provide(BindFactory),
-)
-
-func BindFactory(f *factoryImpl) Factory {
-	return f
-}
-
-func ClusterNameProvider(config *cluster.Config) ClusterName {
-	return ClusterName(config.CurrentClusterName)
-}
-
-func NewFactoryImplProvider(
-	cfg *config.Persistence,
-	r resolver.ServiceResolver,
-	persistenceMaxQPS PersistenceMaxQps,
-	abstractDataStoreFactory AbstractDataStoreFactory,
-	clusterName ClusterName,
-	metricsClient metrics.Client,
-	logger log.Logger,
-) *factoryImpl {
-	return NewFactoryImpl(cfg,
-		r,
-		dynamicconfig.IntPropertyFn(persistenceMaxQPS),
-		abstractDataStoreFactory,
-		string(clusterName),
-		metricsClient,
-		logger)
+func RegistryLifetimeHooks(
+	lc fx.Lifecycle,
+	registry Registry,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				registry.Start()
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				registry.Stop()
+				return nil
+			},
+		},
+	)
 }

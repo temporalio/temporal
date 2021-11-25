@@ -25,6 +25,7 @@
 package host
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net"
@@ -44,6 +45,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -66,7 +68,6 @@ import (
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
-	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/replicator"
 )
@@ -84,10 +85,19 @@ type Temporal interface {
 
 type (
 	temporalImpl struct {
-		frontendService resource.Resource
-		matchingService resource.Resource
-		historyServices []resource.Resource
+		frontendService *frontend.Service
+		matchingService *matching.Service
+		historyServices []*history.Service
 		workerService   resource.Resource
+
+		frontendApp *fx.App
+		matchingApp *fx.App
+		historyApps []*fx.App
+
+		matchingNamespaceRegistry  namespace.Registry
+		frontendNamespaceRegistry  namespace.Registry
+		historyNamespaceRegistries []namespace.Registry
+		workerNamespaceRegistry    namespace.Registry
 
 		adminClient                      adminservice.AdminServiceClient
 		frontendClient                   workflowservice.WorkflowServiceClient
@@ -223,11 +233,14 @@ func (c *temporalImpl) Stop() {
 	} else {
 		c.shutdownWG.Add(3)
 	}
-	c.frontendService.Stop()
+	c.frontendApp.Stop(context.Background())
 	for _, historyService := range c.historyServices {
 		historyService.Stop()
 	}
-	c.matchingService.Stop()
+	for _, historyApp := range c.historyApps {
+		historyApp.Stop(context.Background())
+	}
+	c.matchingApp.Stop(context.Background())
 	if c.workerConfig.EnableReplicator {
 		c.replicator.Stop()
 	}
@@ -397,6 +410,8 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 
 	stoppedCh := make(chan struct{})
 	var frontendService *frontend.Service
+	var clientBean client.Bean
+	var namespaceRegistry namespace.Registry
 	feApp := fx.New(
 		fx.Supply(
 			params,
@@ -417,7 +432,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		frontend.Module,
-		fx.Populate(&frontendService),
+		fx.Populate(&frontendService, &clientBean, &namespaceRegistry),
 		fx.NopLogger,
 	)
 	err = feApp.Err()
@@ -426,7 +441,6 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	}
 
 	if c.mockAdminClient != nil {
-		clientBean := frontendService.GetClientBean()
 		if clientBean != nil {
 			for serviceName, client := range c.mockAdminClient {
 				clientBean.SetRemoteAdminClient(serviceName, client)
@@ -434,11 +448,14 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		}
 	}
 
+	c.frontendApp = feApp
 	c.frontendService = frontendService
+	c.frontendNamespaceRegistry = namespaceRegistry
 	connection := params.RPCFactory.CreateFrontendGRPCConnection(c.FrontendGRPCAddress())
 	c.frontendClient = NewFrontendClient(connection)
 	c.adminClient = NewAdminClient(connection)
-	go frontendService.Start()
+
+	go feApp.Start(context.Background())
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -495,6 +512,8 @@ func (c *temporalImpl) startHistory(
 
 		stoppedCh := make(chan struct{})
 		var historyService *history.Service
+		var clientBean client.Bean
+		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
 				params,
@@ -512,7 +531,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			history.Module,
-			fx.Populate(&historyService),
+			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
 			fx.NopLogger)
 		err = app.Err()
 		if err != nil {
@@ -520,7 +539,6 @@ func (c *temporalImpl) startHistory(
 		}
 
 		if c.mockAdminClient != nil {
-			clientBean := historyService.GetClientBean()
 			if clientBean != nil {
 				for serviceName, client := range c.mockAdminClient {
 					clientBean.SetRemoteAdminClient(serviceName, client)
@@ -537,10 +555,12 @@ func (c *temporalImpl) startHistory(
 			c.logger.Fatal("Failed to create connection for history", tag.Error(err))
 		}
 
+		c.historyApps = append(c.historyApps, app)
 		c.historyClient = NewHistoryClient(historyConnection)
 		c.historyServices = append(c.historyServices, historyService)
+		c.historyNamespaceRegistries = append(c.historyNamespaceRegistries, namespaceRegistry)
 
-		go historyService.Start()
+		go app.Start(context.Background())
 	}
 
 	startWG.Done()
@@ -570,6 +590,8 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 
 	stoppedCh := make(chan struct{})
 	var matchingService *matching.Service
+	var clientBean client.Bean
+	var namespaceRegistry namespace.Registry
 	app := fx.New(
 		fx.Supply(
 			stoppedCh,
@@ -583,7 +605,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		matching.Module,
-		fx.Populate(&matchingService),
+		fx.Populate(&matchingService, &clientBean, &namespaceRegistry),
 		fx.NopLogger,
 	)
 	err = app.Err()
@@ -591,15 +613,16 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		c.logger.Fatal("unable to start matching service", tag.Error(err))
 	}
 	if c.mockAdminClient != nil {
-		clientBean := matchingService.GetClientBean()
 		if clientBean != nil {
 			for serviceName, client := range c.mockAdminClient {
 				clientBean.SetRemoteAdminClient(serviceName, client)
 			}
 		}
 	}
+	c.matchingApp = app
 	c.matchingService = matchingService
-	go c.matchingService.Start()
+	c.matchingNamespaceRegistry = namespaceRegistry
+	go app.Start(context.Background())
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -607,6 +630,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 }
 
 func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
+
 	params := &resource.BootstrapParams{}
 	params.Name = common.WorkerServiceName
 	params.ThrottledLogger = c.logger
@@ -755,13 +779,13 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 }
 
 func (c *temporalImpl) RefreshNamespaceCache() {
-	c.frontendService.GetNamespaceRegistry().Refresh()
-	c.matchingService.GetNamespaceRegistry().Refresh()
-	for _, r := range c.historyServices {
-		r.GetNamespaceRegistry().Refresh()
+	c.frontendNamespaceRegistry.Refresh()
+	c.matchingNamespaceRegistry.Refresh()
+	for _, r := range c.historyNamespaceRegistries {
+		r.Refresh()
 	}
-	if c.workerService != nil {
-		c.workerService.GetNamespaceRegistry().Refresh()
+	if c.workerNamespaceRegistry != nil {
+		c.workerNamespaceRegistry.Refresh()
 	}
 }
 

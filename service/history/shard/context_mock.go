@@ -34,7 +34,9 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
-	v10 "go.temporal.io/server/api/historyservice/v1"
+	v10 "go.temporal.io/server/api/adminservice/v1"
+	v11 "go.temporal.io/server/api/historyservice/v1"
+	archiver "go.temporal.io/server/common/archiver"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
@@ -42,7 +44,8 @@ import (
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
-	resource "go.temporal.io/server/common/resource"
+	serialization "go.temporal.io/server/common/persistence/serialization"
+	searchattribute "go.temporal.io/server/common/searchattribute"
 	configs "go.temporal.io/server/service/history/configs"
 	events "go.temporal.io/server/service/history/events"
 )
@@ -229,6 +232,20 @@ func (mr *MockContextMockRecorder) GetAllTransferFailoverLevels() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllTransferFailoverLevels", reflect.TypeOf((*MockContext)(nil).GetAllTransferFailoverLevels))
 }
 
+// GetArchivalMetadata mocks base method.
+func (m *MockContext) GetArchivalMetadata() archiver.ArchivalMetadata {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetArchivalMetadata")
+	ret0, _ := ret[0].(archiver.ArchivalMetadata)
+	return ret0
+}
+
+// GetArchivalMetadata indicates an expected call of GetArchivalMetadata.
+func (mr *MockContextMockRecorder) GetArchivalMetadata() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetArchivalMetadata", reflect.TypeOf((*MockContext)(nil).GetArchivalMetadata))
+}
+
 // GetClusterMetadata mocks base method.
 func (m *MockContext) GetClusterMetadata() cluster.Metadata {
 	m.ctrl.T.Helper()
@@ -328,6 +345,20 @@ func (mr *MockContextMockRecorder) GetExecutionManager() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecutionManager", reflect.TypeOf((*MockContext)(nil).GetExecutionManager))
 }
 
+// GetHistoryClient mocks base method.
+func (m *MockContext) GetHistoryClient() v11.HistoryServiceClient {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryClient")
+	ret0, _ := ret[0].(v11.HistoryServiceClient)
+	return ret0
+}
+
+// GetHistoryClient indicates an expected call of GetHistoryClient.
+func (mr *MockContextMockRecorder) GetHistoryClient() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockContext)(nil).GetHistoryClient))
+}
+
 // GetLastUpdatedTime mocks base method.
 func (m *MockContext) GetLastUpdatedTime() time.Time {
 	m.ctrl.T.Helper()
@@ -398,11 +429,39 @@ func (mr *MockContextMockRecorder) GetNamespaceRegistry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceRegistry", reflect.TypeOf((*MockContext)(nil).GetNamespaceRegistry))
 }
 
+// GetPayloadSerializer mocks base method.
+func (m *MockContext) GetPayloadSerializer() serialization.Serializer {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPayloadSerializer")
+	ret0, _ := ret[0].(serialization.Serializer)
+	return ret0
+}
+
+// GetPayloadSerializer indicates an expected call of GetPayloadSerializer.
+func (mr *MockContextMockRecorder) GetPayloadSerializer() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPayloadSerializer", reflect.TypeOf((*MockContext)(nil).GetPayloadSerializer))
+}
+
+// GetRemoteAdminClient mocks base method.
+func (m *MockContext) GetRemoteAdminClient(cluster string) v10.AdminServiceClient {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRemoteAdminClient", cluster)
+	ret0, _ := ret[0].(v10.AdminServiceClient)
+	return ret0
+}
+
+// GetRemoteAdminClient indicates an expected call of GetRemoteAdminClient.
+func (mr *MockContextMockRecorder) GetRemoteAdminClient(cluster interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteAdminClient", reflect.TypeOf((*MockContext)(nil).GetRemoteAdminClient), cluster)
+}
+
 // GetRemoteClusterAckInfo mocks base method.
-func (m *MockContext) GetRemoteClusterAckInfo(cluster []string) (map[string]*v10.ShardReplicationStatusPerCluster, error) {
+func (m *MockContext) GetRemoteClusterAckInfo(cluster []string) (map[string]*v11.ShardReplicationStatusPerCluster, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteClusterAckInfo", cluster)
-	ret0, _ := ret[0].(map[string]*v10.ShardReplicationStatusPerCluster)
+	ret0, _ := ret[0].(map[string]*v11.ShardReplicationStatusPerCluster)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -441,18 +500,32 @@ func (mr *MockContextMockRecorder) GetReplicatorDLQAckLevel(sourceCluster interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicatorDLQAckLevel", reflect.TypeOf((*MockContext)(nil).GetReplicatorDLQAckLevel), sourceCluster)
 }
 
-// GetService mocks base method.
-func (m *MockContext) GetService() resource.Resource {
+// GetSearchAttributesMapper mocks base method.
+func (m *MockContext) GetSearchAttributesMapper() searchattribute.Mapper {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetService")
-	ret0, _ := ret[0].(resource.Resource)
+	ret := m.ctrl.Call(m, "GetSearchAttributesMapper")
+	ret0, _ := ret[0].(searchattribute.Mapper)
 	return ret0
 }
 
-// GetService indicates an expected call of GetService.
-func (mr *MockContextMockRecorder) GetService() *gomock.Call {
+// GetSearchAttributesMapper indicates an expected call of GetSearchAttributesMapper.
+func (mr *MockContextMockRecorder) GetSearchAttributesMapper() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetService", reflect.TypeOf((*MockContext)(nil).GetService))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributesMapper", reflect.TypeOf((*MockContext)(nil).GetSearchAttributesMapper))
+}
+
+// GetSearchAttributesProvider mocks base method.
+func (m *MockContext) GetSearchAttributesProvider() searchattribute.Provider {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSearchAttributesProvider")
+	ret0, _ := ret[0].(searchattribute.Provider)
+	return ret0
+}
+
+// GetSearchAttributesProvider indicates an expected call of GetSearchAttributesProvider.
+func (mr *MockContextMockRecorder) GetSearchAttributesProvider() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributesProvider", reflect.TypeOf((*MockContext)(nil).GetSearchAttributesProvider))
 }
 
 // GetShardID mocks base method.

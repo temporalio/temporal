@@ -69,6 +69,7 @@ func newTransferQueueTaskExecutorBase(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
 		shard:                    shard,
@@ -76,9 +77,9 @@ func newTransferQueueTaskExecutorBase(
 		cache:                    historyEngine.historyCache,
 		logger:                   logger,
 		metricsClient:            metricsClient,
-		matchingClient:           shard.GetService().GetMatchingClient(),
+		matchingClient:           matchingClient,
 		config:                   config,
-		searchAttributesProvider: shard.GetService().GetSearchAttributesProvider(),
+		searchAttributesProvider: shard.GetSearchAttributesProvider(),
 	}
 }
 
@@ -159,7 +160,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		return err
 	}
 
-	clusterConfiguredForVisibilityArchival := t.shard.GetService().GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
+	clusterConfiguredForVisibilityArchival := t.shard.GetArchivalMetadata().GetVisibilityConfig().ClusterConfiguredForArchival()
 	namespaceConfiguredForVisibilityArchival := namespaceEntry.VisibilityArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveVisibility := clusterConfiguredForVisibilityArchival && namespaceConfiguredForVisibilityArchival
 

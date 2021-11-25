@@ -155,7 +155,25 @@ func (s *workflowHandlerSuite) TearDownTest() {
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
-	return NewWorkflowHandler(s.mockResource, config, s.mockProducer, s.mockVisibilityMgr)
+	return NewWorkflowHandler(
+		config,
+		s.mockProducer,
+		s.mockVisibilityMgr,
+		s.mockResource.Logger,
+		s.mockResource.GetThrottledLogger(),
+		s.mockResource.GetExecutionManager(),
+		s.mockResource.GetClusterMetadataManager(),
+		s.mockResource.GetMetadataManager(),
+		s.mockResource.GetHistoryClient(),
+		s.mockResource.GetMatchingClient(),
+		s.mockResource.GetArchiverProvider(),
+		s.mockResource.GetPayloadSerializer(),
+		s.mockResource.GetNamespaceRegistry(),
+		s.mockResource.GetSearchAttributesMapper(),
+		s.mockResource.GetSearchAttributesProvider(),
+		s.mockResource.GetClusterMetadata(),
+		s.mockResource.GetArchivalMetadata(),
+	)
 }
 
 func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {

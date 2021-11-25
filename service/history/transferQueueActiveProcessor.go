@@ -81,7 +81,7 @@ func newTransferQueueActiveProcessor(
 		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	transferTaskFilter := func(task tasks.Task) (bool, error) {
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
@@ -109,6 +109,7 @@ func newTransferQueueActiveProcessor(
 			logger,
 			historyEngine.metricsClient,
 			config,
+			matchingClient,
 			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
@@ -175,7 +176,7 @@ func newTransferQueueFailoverProcessor(
 		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	failoverUUID := uuid.New()
 	logger = log.With(
 		logger,
@@ -219,6 +220,7 @@ func newTransferQueueFailoverProcessor(
 			logger,
 			historyEngine.metricsClient,
 			config,
+			matchingClient,
 			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(

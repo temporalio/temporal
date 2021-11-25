@@ -58,6 +58,7 @@ func newTieredStorageQueueTaskExecutor(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *tieredStorageQueueTaskExecutor {
 	return &tieredStorageQueueTaskExecutor{
 		shard:          shard,
@@ -65,9 +66,9 @@ func newTieredStorageQueueTaskExecutor(
 		cache:          historyService.historyCache,
 		logger:         logger,
 		metricsClient:  metricsClient,
-		matchingClient: shard.GetService().GetMatchingClient(),
+		matchingClient: matchingClient,
 		config:         config,
-		historyClient:  shard.GetService().GetHistoryClient(),
+		historyClient:  shard.GetHistoryClient(),
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsClient(),
 			shard.GetLogger(),

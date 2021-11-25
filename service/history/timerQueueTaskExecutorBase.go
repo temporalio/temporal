@@ -70,7 +70,7 @@ func newTimerQueueTaskExecutorBase(
 		logger:                   logger,
 		metricsClient:            metricsClient,
 		config:                   config,
-		searchAttributesProvider: shard.GetService().GetSearchAttributesProvider(),
+		searchAttributesProvider: shard.GetSearchAttributesProvider(),
 	}
 }
 
@@ -116,7 +116,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	clusterConfiguredForHistoryArchival := t.shard.GetService().GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
+	clusterConfiguredForHistoryArchival := t.shard.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
 	namespaceConfiguredForHistoryArchival := namespaceRegistryEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
 

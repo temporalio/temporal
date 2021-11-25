@@ -22,57 +22,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package membership
 
 import (
+	"context"
+
 	"go.uber.org/fx"
-
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resolver"
 )
 
-type (
-	PersistenceMaxQps dynamicconfig.IntPropertyFn
-	ClusterName       string
+var MonitorLifetimeHooksModule = fx.Options(
+	fx.Invoke(MonitorLifetimeHooks),
 )
 
-var Module = fx.Options(
-	FactoryModule,
-	BeanModule,
-)
-
-var FactoryModule = fx.Options(
-	fx.Provide(ClusterNameProvider),
-	fx.Provide(NewFactoryImplProvider),
-	fx.Provide(BindFactory),
-)
-
-func BindFactory(f *factoryImpl) Factory {
-	return f
-}
-
-func ClusterNameProvider(config *cluster.Config) ClusterName {
-	return ClusterName(config.CurrentClusterName)
-}
-
-func NewFactoryImplProvider(
-	cfg *config.Persistence,
-	r resolver.ServiceResolver,
-	persistenceMaxQPS PersistenceMaxQps,
-	abstractDataStoreFactory AbstractDataStoreFactory,
-	clusterName ClusterName,
-	metricsClient metrics.Client,
-	logger log.Logger,
-) *factoryImpl {
-	return NewFactoryImpl(cfg,
-		r,
-		dynamicconfig.IntPropertyFn(persistenceMaxQPS),
-		abstractDataStoreFactory,
-		string(clusterName),
-		metricsClient,
-		logger)
+func MonitorLifetimeHooks(
+	lc fx.Lifecycle,
+	monitor Monitor,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				monitor.Start()
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				monitor.Stop()
+				return nil
+			},
+		},
+	)
 }

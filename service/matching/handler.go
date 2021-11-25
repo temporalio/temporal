@@ -33,24 +33,28 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
 	// Handler - gRPC handler interface for matchingservice
 	Handler struct {
-		resource.Resource
-
-		engine        Engine
-		config        *Config
-		metricsClient metrics.Client
-		logger        log.Logger
-		startWG       sync.WaitGroup
+		engine                  Engine
+		config                  *Config
+		metricsClient           metrics.Client
+		logger                  log.Logger
+		startWG                 sync.WaitGroup
+		throttledLogger         log.Logger
+		matchingServiceResolver membership.ServiceResolver
+		namespaceRegistry       namespace.Registry
 	}
 )
 
@@ -66,25 +70,34 @@ var (
 
 // NewHandler creates a gRPC handler for the matchingservice
 func NewHandler(
-	resource resource.Resource,
 	config *Config,
+	logger log.Logger,
+	throttledLogger log.Logger,
+	taskManager persistence.TaskManager,
+	historyClient historyservice.HistoryServiceClient,
+	matchingRawClient matchingservice.MatchingServiceClient,
+	matchingServiceResolver membership.ServiceResolver,
+	metricsClient metrics.Client,
+	namespaceRegistry namespace.Registry,
+	clusterMetadata cluster.Metadata,
 ) *Handler {
 	handler := &Handler{
-		Resource:      resource,
-		config:        config,
-		metricsClient: resource.GetMetricsClient(),
-		logger:        resource.GetLogger(),
+		config:          config,
+		metricsClient:   metricsClient,
+		logger:          logger,
+		throttledLogger: throttledLogger,
 		engine: NewEngine(
-			resource.GetTaskManager(),
-			resource.GetHistoryClient(),
-			resource.GetMatchingRawClient(), // Use non retry client inside matching
+			taskManager,
+			historyClient,
+			matchingRawClient, // Use non retry client inside matching
 			config,
-			resource.GetLogger(),
-			resource.GetMetricsClient(),
-			resource.GetNamespaceRegistry(),
-			resource.GetMatchingServiceResolver(),
-			resource.GetClusterMetadata(),
+			logger,
+			metricsClient,
+			namespaceRegistry,
+			matchingServiceResolver,
+			clusterMetadata,
 		),
+		namespaceRegistry: namespaceRegistry,
 	}
 
 	// prevent from serving requests before matching engine is started and ready
@@ -105,7 +118,7 @@ func (h *Handler) Stop() {
 
 // Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
 func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.GetLogger().Debug("Matching service health check endpoint (gRPC) reached.")
+	h.logger.Debug("Matching service health check endpoint (gRPC) reached.")
 
 	h.startWG.Wait()
 
@@ -145,7 +158,7 @@ func (h *Handler) AddActivityTask(
 	ctx context.Context,
 	request *matchingservice.AddActivityTaskRequest,
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -171,7 +184,7 @@ func (h *Handler) AddWorkflowTask(
 	ctx context.Context,
 	request *matchingservice.AddWorkflowTaskRequest,
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	startT := time.Now().UTC()
 	hCtx := h.newHandlerContext(
 		ctx,
@@ -196,7 +209,7 @@ func (h *Handler) PollActivityTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollActivityTaskQueueRequest,
 ) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
@@ -211,7 +224,7 @@ func (h *Handler) PollActivityTaskQueue(
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
 		"PollActivityTaskQueue",
-		h.Resource.GetThrottledLogger(),
+		h.throttledLogger,
 	); err != nil {
 		return nil, err
 	}
@@ -225,7 +238,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
 ) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
@@ -240,7 +253,7 @@ func (h *Handler) PollWorkflowTaskQueue(
 	if _, err := common.ValidateLongPollContextTimeoutIsSet(
 		ctx,
 		"PollWorkflowTaskQueue",
-		h.Resource.GetThrottledLogger(),
+		h.throttledLogger,
 	); err != nil {
 		return nil, err
 	}
@@ -254,7 +267,7 @@ func (h *Handler) QueryWorkflow(
 	ctx context.Context,
 	request *matchingservice.QueryWorkflowRequest,
 ) (_ *matchingservice.QueryWorkflowResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
@@ -275,7 +288,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
 ) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
@@ -290,7 +303,7 @@ func (h *Handler) RespondQueryTaskCompleted(
 // CancelOutstandingPoll is used to cancel outstanding pollers
 func (h *Handler) CancelOutstandingPoll(ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
@@ -309,7 +322,7 @@ func (h *Handler) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
 ) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := h.newHandlerContext(
 		ctx,
 		namespace.ID(request.GetNamespaceId()),
@@ -326,7 +339,7 @@ func (h *Handler) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
 ) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	hCtx := newHandlerContext(
 		ctx,
 		namespace.Name(request.GetNamespace()),
@@ -341,7 +354,7 @@ func (h *Handler) ListTaskQueuePartitions(
 }
 
 func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
-	entry, err := h.GetNamespaceRegistry().GetNamespaceByID(id)
+	entry, err := h.namespaceRegistry.GetNamespaceByID(id)
 	if err != nil {
 		return ""
 	}
@@ -350,7 +363,7 @@ func (h *Handler) namespaceName(id namespace.ID) namespace.Name {
 
 func (h *Handler) reportForwardedPerTaskQueueCounter(hCtx *handlerContext, namespaceId namespace.ID) {
 	hCtx.scope.IncCounter(metrics.ForwardedPerTaskQueueCounter)
-	h.GetMetricsClient().
+	h.metricsClient.
 		Scope(metrics.MatchingAddWorkflowTaskScope).
 		Tagged(metrics.NamespaceTag(h.namespaceName(namespaceId).String())).
 		Tagged(metrics.ServiceRoleTag(metrics.MatchingRoleTagValue)).

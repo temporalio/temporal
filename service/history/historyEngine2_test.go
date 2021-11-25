@@ -115,7 +115,7 @@ func (s *engine2Suite) SetupTest() {
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
-	s.mockShard = shard.NewTestContext(
+	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -125,10 +125,11 @@ func (s *engine2Suite) SetupTest() {
 			}},
 		s.config,
 	)
-
+	s.mockShard = mockShard
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
+
 	s.mockEventsCache = s.mockShard.MockEventsCache
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: tests.NamespaceID.String()}, &persistencespb.NamespaceConfig{}, "",

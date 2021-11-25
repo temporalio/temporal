@@ -26,10 +26,13 @@ package frontend
 
 import (
 	"math"
+	"math/rand"
+	"net"
 	"os"
 	"sync/atomic"
 	"time"
 
+	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -38,12 +41,13 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/resource"
 )
 
 // Config represents configuration for frontend service
@@ -178,8 +182,6 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 
 // Service represents the frontend service
 type Service struct {
-	resource.Resource
-
 	status int32
 	config *Config
 
@@ -189,28 +191,38 @@ type Service struct {
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
 
-	serverMetricsReporter metrics.Reporter
-	sdkMetricsReporter    metrics.Reporter
+	serverMetricsReporter          metrics.Reporter
+	sdkMetricsReporter             metrics.Reporter
+	logger                         log.Logger
+	grpcListener                   net.Listener
+	metricsScope                   tally.Scope
+	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 }
 
 func NewService(
-	serviceResource resource.Resource,
 	serviceConfig *Config,
 	server *grpc.Server,
 	handler Handler,
 	adminHandler *AdminHandler,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
+	logger log.Logger,
+	grpcListener net.Listener,
+	metricsScope tally.Scope,
+	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{
-		Resource:          serviceResource,
-		status:            common.DaemonStatusInitialized,
-		config:            serviceConfig,
-		server:            server,
-		handler:           handler,
-		adminHandler:      adminHandler,
-		versionChecker:    versionChecker,
-		visibilityManager: visibilityMgr,
+		status:                         common.DaemonStatusInitialized,
+		config:                         serviceConfig,
+		server:                         server,
+		handler:                        handler,
+		adminHandler:                   adminHandler,
+		versionChecker:                 versionChecker,
+		visibilityManager:              visibilityMgr,
+		logger:                         logger,
+		grpcListener:                   grpcListener,
+		metricsScope:                   metricsScope,
+		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 	}
 }
 
@@ -220,7 +232,7 @@ func (s *Service) Start() {
 		return
 	}
 
-	logger := s.GetLogger()
+	logger := s.logger
 	logger.Info("frontend starting")
 
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
@@ -231,11 +243,13 @@ func (s *Service) Start() {
 	reflection.Register(s.server)
 
 	// must start resource first
-	s.Resource.Start()
+	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	rand.Seed(time.Now().UnixNano())
+
 	s.adminHandler.Start()
 	s.versionChecker.Start()
 
-	listener := s.GetGRPCListener()
+	listener := s.grpcListener
 	logger.Info("Starting to serve on frontend listener")
 	if err := s.server.Serve(listener); err != nil {
 		logger.Fatal("Failed to serve on frontend listener", tag.Error(err))
@@ -244,7 +258,7 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
-	logger := s.GetLogger()
+	logger := s.logger
 
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
@@ -275,7 +289,6 @@ func (s *Service) Stop() {
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
-	s.Resource.Stop()
 
 	if s.serverMetricsReporter != nil {
 		s.serverMetricsReporter.Stop(logger)
@@ -315,4 +328,8 @@ func numFrontendHosts(
 		return defaultHosts
 	}
 	return ringSize
+}
+
+func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
+	return s.faultInjectionDataStoreFactory
 }

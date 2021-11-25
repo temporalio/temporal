@@ -34,7 +34,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/workflowservice/v1"
-	resource "go.temporal.io/server/common/resource"
 	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
 )
 
@@ -178,20 +177,6 @@ func (m *MockHandler) GetConfig() *Config {
 func (mr *MockHandlerMockRecorder) GetConfig() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MockHandler)(nil).GetConfig))
-}
-
-// GetResource mocks base method.
-func (m *MockHandler) GetResource() resource.Resource {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetResource")
-	ret0, _ := ret[0].(resource.Resource)
-	return ret0
-}
-
-// GetResource indicates an expected call of GetResource.
-func (mr *MockHandlerMockRecorder) GetResource() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetResource", reflect.TypeOf((*MockHandler)(nil).GetResource))
 }
 
 // GetSearchAttributes mocks base method.

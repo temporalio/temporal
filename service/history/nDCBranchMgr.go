@@ -81,7 +81,7 @@ func newNDCBranchMgr(
 	return &nDCBranchMgrImpl{
 		shard:             shard,
 		namespaceRegistry: shard.GetNamespaceRegistry(),
-		clusterMetadata:   shard.GetService().GetClusterMetadata(),
+		clusterMetadata:   shard.GetClusterMetadata(),
 		executionMgr:      shard.GetExecutionManager(),
 
 		context:      context,

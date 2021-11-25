@@ -111,7 +111,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
 	config := tests.NewDynamicConfig()
-	s.mockShard = shard.NewTestContext(
+	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -120,6 +120,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 				TransferAckLevel: 0,
 			}},
 		config,
+		s.timeSource,
 	)
 	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
@@ -131,8 +132,6 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
 	))
-
-	s.mockShard.Resource.TimeSource = s.timeSource
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
@@ -149,7 +148,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 
 	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
@@ -177,6 +176,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		s.logger,
 		s.mockShard.GetMetricsClient(),
 		config,
+		s.mockShard.Resource.GetMatchingClient(),
 	).(*timerQueueActiveTaskExecutor)
 }
 
@@ -186,7 +186,6 @@ func (s *timerQueueActiveTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
-
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),

@@ -25,98 +25,62 @@
 package matching
 
 import (
+	"math/rand"
+	"net"
 	"sync/atomic"
 	"time"
 
+	"github.com/uber-go/tally/v4"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/rpc"
-	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/matching/configs"
 )
 
 // Service represents the matching service
 type Service struct {
-	resource.Resource
-
 	status  int32
 	handler *Handler
 	config  *Config
 
-	server *grpc.Server
+	server                         *grpc.Server
+	logger                         resource.SnTaggedLogger
+	membershipMonitor              membership.Monitor
+	grpcListener                   net.Listener
+	runtimeMetricsReporter         *metrics.RuntimeMetricsReporter
+	metricsScope                   tally.Scope
+	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 }
 
-// NewService builds a new matching service
 func NewService(
-	logger log.Logger,
-	dcClient dynamicconfig.Client,
-	params *resource.BootstrapParams,
-	customDataStoreFactory client.AbstractDataStoreFactory,
-	persistenceServiceResolver resolver.ServiceResolver,
-	searchAttributesMapper searchattribute.Mapper,
-) (*Service, error) {
-	serviceConfig := NewConfig(dynamicconfig.NewCollection(dcClient, logger))
-	serviceResource, err := resource.New(
-		logger,
-		params,
-		common.MatchingServiceName,
-		dcClient,
-		serviceConfig.PersistenceMaxQPS,
-		serviceConfig.PersistenceGlobalMaxQPS,
-		serviceConfig.ThrottledLogRPS,
-		customDataStoreFactory,
-		persistenceServiceResolver,
-		searchAttributesMapper,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	metricsInterceptor := interceptor.NewTelemetryInterceptor(
-		serviceResource.GetNamespaceRegistry(),
-		serviceResource.GetMetricsClient(),
-		metrics.MatchingAPIMetricsScopes(),
-		logger,
-	)
-	rateLimiterInterceptor := interceptor.NewRateLimitInterceptor(
-		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }),
-		map[string]int{},
-	)
-
-	grpcServerOptions, err := params.RPCFactory.GetInternodeGRPCServerOptions()
-	if err != nil {
-		logger.Fatal("creating gRPC server options failed", tag.Error(err))
-	}
-
-	grpcServerOptions = append(
-		grpcServerOptions,
-		grpc.ChainUnaryInterceptor(
-			rpc.ServiceErrorInterceptor,
-			metrics.NewServerMetricsContextInjectorInterceptor(),
-			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
-			metricsInterceptor.Intercept,
-			rateLimiterInterceptor.Intercept,
-		),
-	)
-
+	grpcServerOptions []grpc.ServerOption,
+	serviceConfig *Config,
+	logger resource.SnTaggedLogger,
+	membershipMonitor membership.Monitor,
+	grpcListener net.Listener,
+	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
+	handler *Handler,
+	metricsScope tally.Scope,
+	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
+) *Service {
 	return &Service{
-		Resource: serviceResource,
-		status:   common.DaemonStatusInitialized,
-		config:   serviceConfig,
-		server:   grpc.NewServer(grpcServerOptions...),
-		handler:  NewHandler(serviceResource, serviceConfig),
-	}, nil
+		status:                         common.DaemonStatusInitialized,
+		config:                         serviceConfig,
+		server:                         grpc.NewServer(grpcServerOptions...),
+		handler:                        handler,
+		logger:                         logger,
+		membershipMonitor:              membershipMonitor,
+		grpcListener:                   grpcListener,
+		runtimeMetricsReporter:         runtimeMetricsReporter,
+		metricsScope:                   metricsScope,
+		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
+	}
 }
 
 // Start starts the service
@@ -125,20 +89,20 @@ func (s *Service) Start() {
 		return
 	}
 
-	logger := s.GetLogger()
-	logger.Info("matching starting")
+	s.logger.Info("matching starting")
 
 	// must start base service first
-	s.Resource.Start()
+	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	rand.Seed(time.Now().UnixNano())
+
 	s.handler.Start()
 
 	matchingservice.RegisterMatchingServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
 
-	listener := s.GetGRPCListener()
-	logger.Info("Starting to serve on matching listener")
-	if err := s.server.Serve(listener); err != nil {
-		logger.Fatal("Failed to serve on matching listener", tag.Error(err))
+	s.logger.Info("Starting to serve on matching listener")
+	if err := s.server.Serve(s.grpcListener); err != nil {
+		s.logger.Fatal("Failed to serve on matching listener", tag.Error(err))
 	}
 }
 
@@ -149,16 +113,19 @@ func (s *Service) Stop() {
 	}
 
 	// remove self from membership ring and wait for traffic to drain
-	s.GetLogger().Info("ShutdownHandler: Evicting self from membership ring")
-	s.GetMembershipMonitor().EvictSelf()
-	s.GetLogger().Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
+	s.logger.Info("ShutdownHandler: Evicting self from membership ring")
+	s.membershipMonitor.EvictSelf()
+	s.logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(s.config.ShutdownDrainDuration())
 
 	// TODO: Change this to GracefulStop when integration tests are refactored.
 	s.server.Stop()
 
 	s.handler.Stop()
-	s.Resource.Stop()
 
-	s.GetLogger().Info("matching stopped")
+	s.logger.Info("matching stopped")
+}
+
+func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
+	return s.faultInjectionDataStoreFactory
 }

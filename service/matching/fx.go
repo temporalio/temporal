@@ -28,12 +28,16 @@ import (
 	"context"
 
 	"go.uber.org/fx"
-	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -49,9 +53,11 @@ var Module = fx.Options(
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(TelemetryInterceptorProvider),
 	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(HandlerProvider),
 	fx.Provide(service.GrpcServerOptionsProvider),
 	resource.Module,
-	fx.Provide(ServiceProvider),
+	fx.Provide(ServiceResolverProvider),
+	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 
@@ -61,11 +67,12 @@ func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
 
 func TelemetryInterceptorProvider(
 	logger log.Logger,
-	resource resource.Resource,
+	namespaceRegistry namespace.Registry,
+	metricsClient metrics.Client,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
-		resource.GetNamespaceRegistry(),
-		resource.GetMetricsClient(),
+		namespaceRegistry,
+		metricsClient,
 		metrics.MatchingAPIMetricsScopes(),
 		logger,
 	)
@@ -92,18 +99,34 @@ func PersistenceMaxQpsProvider(
 	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
 }
 
-func ServiceProvider(
-	serviceResource resource.Resource,
-	grpcServerOptions []grpc.ServerOption,
-	serviceConfig *Config,
-) *Service {
-	return &Service{
-		Resource: serviceResource,
-		status:   common.DaemonStatusInitialized,
-		config:   serviceConfig,
-		server:   grpc.NewServer(grpcServerOptions...),
-		handler:  NewHandler(serviceResource, serviceConfig),
-	}
+func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
+	return membershipMonitor.GetResolver(common.MatchingServiceName)
+}
+
+func HandlerProvider(
+	config *Config,
+	logger resource.SnTaggedLogger,
+	throttledLogger resource.ThrottledLogger,
+	taskManager persistence.TaskManager,
+	historyClient historyservice.HistoryServiceClient,
+	matchingRawClient resource.MatchingRawClient,
+	matchingServiceResolver membership.ServiceResolver,
+	metricsClient metrics.Client,
+	namespaceRegistry namespace.Registry,
+	clusterMetadata cluster.Metadata,
+) *Handler {
+	return NewHandler(
+		config,
+		logger,
+		throttledLogger,
+		taskManager,
+		historyClient,
+		matchingRawClient,
+		matchingServiceResolver,
+		metricsClient,
+		namespaceRegistry,
+		clusterMetadata,
+	)
 }
 
 func ServiceLifetimeHooks(

@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
@@ -76,6 +77,7 @@ func newTransferQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	matchingClient matchingservice.MatchingServiceClient,
 	registry namespace.Registry,
 ) queueTaskExecutor {
 	return &transferQueueActiveTaskExecutor{
@@ -85,8 +87,9 @@ func newTransferQueueActiveTaskExecutor(
 			logger,
 			metricsClient,
 			config,
+			matchingClient,
 		),
-		historyClient: shard.GetService().GetHistoryClient(),
+		historyClient: shard.GetHistoryClient(),
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsClient(),
 			shard.GetLogger(),
