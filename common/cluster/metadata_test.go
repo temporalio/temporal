@@ -43,7 +43,7 @@ type (
 
 		controller               *gomock.Controller
 		mockClusterMetadataStore *persistence.MockClusterMetadataManager
-		metadata                 *dynamicMetadataImpl
+		metadata                 *metadataImpl
 
 		isGlobalNamespaceEnabled bool
 		failoverVersionIncrement int64
@@ -88,7 +88,7 @@ func (s *metadataSuite) SetupTest() {
 			version:                1,
 		},
 	}
-	s.metadata = NewDynamicMetadata(
+	s.metadata = NewMetadata(
 		s.isGlobalNamespaceEnabled,
 		s.failoverVersionIncrement,
 		s.clusterName,
@@ -96,7 +96,7 @@ func (s *metadataSuite) SetupTest() {
 		clusterInfo,
 		s.mockClusterMetadataStore,
 		log.NewNoopLogger(),
-	).(*dynamicMetadataImpl)
+	).(*metadataImpl)
 }
 
 func (s *metadataSuite) TearDownTest() {

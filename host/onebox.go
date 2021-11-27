@@ -658,7 +658,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	c.workerService = service
 	service.Start()
 
-	clusterMetadata := cluster.NewMetadataFromConfig(c.clusterMetadataConfig)
+	clusterMetadata := cluster.NewMetadataFromConfig(c.clusterMetadataConfig, c.clusterMetadataMgr, c.logger)
 	var replicatorNamespaceCache namespace.Registry
 	if c.workerConfig.EnableReplicator {
 		metadataManager := persistence.NewMetadataPersistenceMetricsClient(c.metadataMgr, service.GetMetricsClient(), c.logger)

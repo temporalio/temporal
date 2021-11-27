@@ -1066,14 +1066,11 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	scope, sw := adh.startRequestProfile(metrics.AdminAddOrUpdateRemoteClusterScope)
 	defer sw.Stop()
 
-	adminClient, err := adh.Resource.GetClientFactory().NewAdminClientWithTimeout(
+	adminClient := adh.Resource.GetClientFactory().NewAdminClientWithTimeout(
 		request.GetFrontendAddress(),
 		admin.DefaultTimeout,
 		admin.DefaultLargeTimeout,
 	)
-	if err != nil {
-		return nil, adh.error(err, scope)
-	}
 
 	// Fetch cluster metadata from remote cluster
 	resp, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})

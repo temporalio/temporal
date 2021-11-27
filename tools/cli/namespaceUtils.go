@@ -296,12 +296,15 @@ func initializeClusterMetadata(
 ) cluster.Metadata {
 
 	clusterMetadata := serviceConfig.ClusterMetadata
+	// Initialize static metadata without cluster metadata store
 	return cluster.NewMetadata(
 		clusterMetadata.EnableGlobalNamespace,
 		clusterMetadata.FailoverVersionIncrement,
 		clusterMetadata.MasterClusterName,
 		clusterMetadata.CurrentClusterName,
 		clusterMetadata.ClusterInformation,
+		nil,
+		log.NewNoopLogger(),
 	)
 }
 

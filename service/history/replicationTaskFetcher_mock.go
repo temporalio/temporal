@@ -58,18 +58,18 @@ func (m *MockReplicationTaskFetchers) EXPECT() *MockReplicationTaskFetchersMockR
 	return m.recorder
 }
 
-// GetFetchers mocks base method.
-func (m *MockReplicationTaskFetchers) GetFetchers() []ReplicationTaskFetcher {
+// GetOrCreateFetcher mocks base method.
+func (m *MockReplicationTaskFetchers) GetOrCreateFetcher(clusterName string) ReplicationTaskFetcher {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetFetchers")
-	ret0, _ := ret[0].([]ReplicationTaskFetcher)
+	ret := m.ctrl.Call(m, "GetOrCreateFetcher", clusterName)
+	ret0, _ := ret[0].(ReplicationTaskFetcher)
 	return ret0
 }
 
-// GetFetchers indicates an expected call of GetFetchers.
-func (mr *MockReplicationTaskFetchersMockRecorder) GetFetchers() *gomock.Call {
+// GetOrCreateFetcher indicates an expected call of GetOrCreateFetcher.
+func (mr *MockReplicationTaskFetchersMockRecorder) GetOrCreateFetcher(clusterName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetFetchers", reflect.TypeOf((*MockReplicationTaskFetchers)(nil).GetFetchers))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateFetcher", reflect.TypeOf((*MockReplicationTaskFetchers)(nil).GetOrCreateFetcher), clusterName)
 }
 
 // Start mocks base method.

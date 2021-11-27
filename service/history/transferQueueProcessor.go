@@ -29,8 +29,12 @@ package history
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/xdc"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -41,14 +45,14 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 var (
-	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
+	errUnknownTransferTask  = serviceerror.NewInternal("Unknown transfer task")
+	transferQueueCallbackID = "transferQueue-%v"
 )
 
 type (
@@ -63,22 +67,23 @@ type (
 	taskFilter func(task tasks.Task) (bool, error)
 
 	transferQueueProcessorImpl struct {
-		isGlobalNamespaceEnabled bool
-		currentClusterName       string
-		shard                    shard.Context
-		taskAllocator            taskAllocator
-		config                   *configs.Config
-		metricsClient            metrics.Client
-		historyService           *historyEngineImpl
-		matchingClient           matchingservice.MatchingServiceClient
-		historyClient            historyservice.HistoryServiceClient
-		ackLevel                 int64
-		logger                   log.Logger
-		isStarted                int32
-		isStopped                int32
-		shutdownChan             chan struct{}
-		activeTaskProcessor      *transferQueueActiveProcessorImpl
-		standbyTaskProcessors    map[string]*transferQueueStandbyProcessorImpl
+		isGlobalNamespaceEnabled  bool
+		currentClusterName        string
+		shard                     shard.Context
+		taskAllocator             taskAllocator
+		config                    *configs.Config
+		metricsClient             metrics.Client
+		historyService            *historyEngineImpl
+		matchingClient            matchingservice.MatchingServiceClient
+		historyClient             historyservice.HistoryServiceClient
+		ackLevel                  int64
+		logger                    log.Logger
+		isStarted                 int32
+		isStopped                 int32
+		shutdownChan              chan struct{}
+		activeTaskProcessor       *transferQueueActiveProcessorImpl
+		standbyTaskProcessorsLock sync.RWMutex
+		standbyTaskProcessors     map[string]*transferQueueStandbyProcessorImpl
 	}
 )
 
@@ -94,34 +99,6 @@ func newTransferQueueProcessor(
 	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 	taskAllocator := newTaskAllocator(shard)
-	standbyTaskProcessors := make(map[string]*transferQueueStandbyProcessorImpl)
-	for clusterName, info := range shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-
-		if clusterName != currentClusterName {
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				shard.GetNamespaceRegistry(),
-				shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return historyService.ReplicateEventsV2(ctx, request)
-				},
-				shard.GetService().GetPayloadSerializer(),
-				config.StandbyTaskReReplicationContextTimeout,
-				logger,
-			)
-			standbyTaskProcessors[clusterName] = newTransferQueueStandbyProcessor(
-				clusterName,
-				shard,
-				historyService,
-				matchingClient,
-				taskAllocator,
-				nDCHistoryResender,
-				logger,
-			)
-		}
-	}
 
 	return &transferQueueProcessorImpl{
 		isGlobalNamespaceEnabled: shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled(),
@@ -144,7 +121,7 @@ func newTransferQueueProcessor(
 			taskAllocator,
 			logger,
 		),
-		standbyTaskProcessors: standbyTaskProcessors,
+		standbyTaskProcessors: make(map[string]*transferQueueStandbyProcessorImpl),
 	}
 }
 
@@ -154,9 +131,7 @@ func (t *transferQueueProcessorImpl) Start() {
 	}
 	t.activeTaskProcessor.Start()
 	if t.isGlobalNamespaceEnabled {
-		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
-			standbyTaskProcessor.Start()
-		}
+		t.listenToClusterMetadataChange()
 	}
 
 	go t.completeTransferLoop()
@@ -168,9 +143,12 @@ func (t *transferQueueProcessorImpl) Stop() {
 	}
 	t.activeTaskProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
+		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(fmt.Sprintf(transferQueueCallbackID, t.shard.GetShardID()))
+		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			standbyTaskProcessor.Stop()
 		}
+		t.standbyTaskProcessorsLock.RUnlock()
 	}
 	close(t.shutdownChan)
 }
@@ -190,7 +168,9 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(
 		return
 	}
 
+	t.standbyTaskProcessorsLock.RLock()
 	standbyTaskProcessor, ok := t.standbyTaskProcessors[clusterName]
+	t.standbyTaskProcessorsLock.RUnlock()
 	if !ok {
 		panic(fmt.Sprintf("Cannot find transfer processor for %s.", clusterName))
 	}
@@ -236,9 +216,11 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		t.logger,
 	)
 
+	t.standbyTaskProcessorsLock.RLock()
 	for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 		standbyTaskProcessor.retryTasks()
 	}
+	t.standbyTaskProcessorsLock.RUnlock()
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
@@ -297,12 +279,14 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	upperAckLevel := t.activeTaskProcessor.queueAckMgr.getQueueAckLevel()
 
 	if t.isGlobalNamespaceEnabled {
+		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			ackLevel := standbyTaskProcessor.queueAckMgr.getQueueAckLevel()
 			if upperAckLevel > ackLevel {
 				upperAckLevel = ackLevel
 			}
 		}
+		t.standbyTaskProcessorsLock.RUnlock()
 
 		for _, failoverInfo := range t.shard.GetAllTransferFailoverLevels() {
 			if upperAckLevel > failoverInfo.MinLevel {
@@ -332,4 +316,46 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	t.ackLevel = upperAckLevel
 
 	return t.shard.UpdateTransferAckLevel(upperAckLevel)
+}
+
+func (t *transferQueueProcessorImpl) listenToClusterMetadataChange() {
+	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
+		fmt.Sprintf(transferQueueCallbackID, t.shard.GetShardID()),
+		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
+			t.standbyTaskProcessorsLock.Lock()
+			defer t.standbyTaskProcessorsLock.Unlock()
+			for clusterName := range oldClusterMetadata {
+				if clusterName == t.currentClusterName {
+					continue
+				}
+				if processor, ok := t.standbyTaskProcessors[clusterName]; ok {
+					processor.Stop()
+					delete(t.standbyTaskProcessors, clusterName)
+				}
+				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+					nDCHistoryResender := xdc.NewNDCHistoryResender(
+						t.shard.GetNamespaceRegistry(),
+						t.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+						func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+							return t.historyService.ReplicateEventsV2(ctx, request)
+						},
+						t.shard.GetService().GetPayloadSerializer(),
+						t.config.StandbyTaskReReplicationContextTimeout,
+						t.logger,
+					)
+					processor := newTransferQueueStandbyProcessor(
+						clusterName,
+						t.shard,
+						t.historyService,
+						t.matchingClient,
+						t.taskAllocator,
+						nDCHistoryResender,
+						t.logger,
+					)
+					processor.Start()
+					t.standbyTaskProcessors[clusterName] = processor
+				}
+			}
+		},
+	)
 }

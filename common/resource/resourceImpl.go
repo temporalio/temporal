@@ -203,6 +203,8 @@ func New(
 		params.ClusterMetadataConfig.MasterClusterName,
 		params.ClusterMetadataConfig.CurrentClusterName,
 		params.ClusterMetadataConfig.ClusterInformation,
+		persistenceBean.GetClusterMetadataManager(),
+		logger,
 	)
 
 	membershipFactory, err := params.MembershipFactoryInitializer(persistenceBean, logger)
@@ -391,6 +393,7 @@ func (h *Impl) Start() {
 	h.metricsScope.Counter(metrics.RestartCount).Inc(1)
 	h.runtimeMetricsReporter.Start()
 
+	h.clusterMetadata.Start()
 	h.membershipMonitor.Start()
 	h.namespaceRegistry.Start()
 
@@ -419,6 +422,7 @@ func (h *Impl) Stop() {
 
 	h.namespaceRegistry.Stop()
 	h.membershipMonitor.Stop()
+	h.clusterMetadata.Stop()
 	h.ringpopChannel.Close()
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()

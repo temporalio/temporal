@@ -161,19 +161,26 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		}
 	}
 
-	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
-		ClusterMetadata: persistencespb.ClusterMetadata{
-			HistoryShardCount: options.HistoryConfig.NumHistoryShards,
-			ClusterName:       clusterMetadataConfig.CurrentClusterName,
-			ClusterId:         uuid.New(),
-		}})
-	if err != nil {
-		return nil, err
+	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
+		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+			ClusterMetadata: persistencespb.ClusterMetadata{
+				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
+				ClusterName:              clusterName,
+				ClusterId:                uuid.New(),
+				IsConnectionEnabled:      clusterInfo.Enabled,
+				IsGlobalNamespaceEnabled: clusterMetadataConfig.EnableGlobalNamespace,
+				FailoverVersionIncrement: clusterMetadataConfig.FailoverVersionIncrement,
+				ClusterAddress:           clusterInfo.RPCAddress,
+				InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
+			}})
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// This will save custom test search attributes to cluster metadata.
 	// Actual Elasticsearch fields are created from index template (testdata/es_v7_index_template.json).
-	err = testBase.SearchAttributesManager.SaveSearchAttributes(
+	err := testBase.SearchAttributesManager.SaveSearchAttributes(
 		options.ESConfig.GetVisibilityIndex(),
 		searchattribute.TestNameTypeMap.Custom(),
 	)
