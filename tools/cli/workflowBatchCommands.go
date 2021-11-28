@@ -158,6 +158,7 @@ func StartBatchJob(c *cli.Context) {
 		sigVal = getRequiredOption(c, FlagInput)
 	}
 	rps := c.Int(FlagRPS)
+	concurrency := c.Int(FlagConcurrency)
 
 	client := cFactory.SDKClient(c, common.SystemLocalNamespace)
 	tcCtx, cancel := newContext(c)
@@ -169,7 +170,8 @@ func StartBatchJob(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Failed to count impacting workflows for starting a batch job", err)
 	}
-	fmt.Printf("This batch job will be operating on %v workflows.\n", resp.GetCount())
+	fmt.Printf("This batch job will be operating on %v workflows, with max RPS of %v and concurrency of %v.\n",
+		resp.GetCount(), rps, concurrency)
 	if !c.Bool(FlagYes) {
 		reader := bufio.NewReader(os.Stdin)
 		for {
@@ -214,7 +216,8 @@ func StartBatchJob(c *cli.Context) {
 			SignalName: sigName,
 			Input:      sigInput,
 		},
-		RPS: rps,
+		RPS:         rps,
+		Concurrency: concurrency,
 	}
 	wf, err := client.ExecuteWorkflow(tcCtx, options, batcher.BatchWFTypeName, params)
 	if err != nil {

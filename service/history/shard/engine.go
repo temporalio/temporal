@@ -28,6 +28,7 @@ package shard
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -69,7 +70,7 @@ type (
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error
-		GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
+		GetReplicationMessages(ctx context.Context, pollingCluster string, ackMessageID int64, ackTimestamp time.Time, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
 		GetDLQReplicationMessages(ctx context.Context, taskInfos []*replicationspb.ReplicationTaskInfo) ([]*replicationspb.ReplicationTask, error)
 		QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (*historyservice.QueryWorkflowResponse, error)
 		ReapplyEvents(ctx context.Context, namespaceUUID namespace.ID, workflowID string, runID string, events []*historypb.HistoryEvent) error
@@ -78,6 +79,7 @@ type (
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution commonpb.WorkflowExecution) error
 		GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error)
+		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTransferTasks(tasks []tasks.Task)

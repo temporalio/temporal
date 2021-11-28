@@ -28,6 +28,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"net/url"
 	"os"
 	"strconv"
 	"time"
@@ -37,6 +38,8 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	replicationpb "go.temporal.io/api/replication/v1"
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -47,7 +50,6 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
@@ -64,41 +66,43 @@ const maxEventID = 9999
 
 // AdminShowWorkflow shows history
 func AdminShowWorkflow(c *cli.Context) {
-	tid := c.String(FlagTreeID)
-	bid := c.String(FlagBranchID)
-	sid := int32(c.Int(FlagShardID))
+	namespace := c.String(FlagNamespace)
+	wid := getRequiredOption(c, FlagWorkflowID)
+	rid := getRequiredOption(c, FlagRunID)
+	startEventId := c.Int64(FlagMinEventID)
+	endEventId := c.Int64(FlagMaxEventID)
+	startEventVerion := int64(c.Int(FlagMinEventVersion))
+	endEventVersion := int64(c.Int(FlagMaxEventVersion))
 	outputFileName := c.String(FlagOutputFilename)
 
-	session := connectToCassandra(c)
+	client := cFactory.AdminClient(c)
+
 	serializer := serialization.NewSerializer()
 	var history []*commonpb.DataBlob
-	if len(tid) != 0 {
-		histV2 := cassandra.NewHistoryStore(session, log.NewNoopLogger())
-		resp, err := histV2.ReadHistoryBranch(&persistence.InternalReadHistoryBranchRequest{
-			TreeID:    tid,
-			BranchID:  bid,
-			MinNodeID: 1,
-			MaxNodeID: maxEventID,
-			PageSize:  maxEventID,
-			ShardID:   sid,
-		})
-		if err != nil {
-			ErrorAndExit("ReadHistoryBranch err", err)
-		}
 
-		for _, node := range resp.Nodes {
-			history = append(history, node.Events)
-		}
-	} else {
-		ErrorAndExit("need to specify TreeId/BranchId/ShardId", nil)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	resp, err := client.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		Namespace: namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+		StartEventId:      startEventId,
+		EndEventId:        endEventId,
+		StartEventVersion: startEventVerion,
+		EndEventVersion:   endEventVersion,
+		MaximumPageSize:   100,
+		NextPageToken:     nil,
+	})
+	if err != nil {
+		ErrorAndExit("ReadHistoryBranch err", err)
 	}
 
-	if len(history) == 0 {
-		ErrorAndExit("no events", nil)
-	}
 	allEvents := &historypb.History{}
 	totalSize := 0
-	for idx, b := range history {
+	for idx, b := range resp.HistoryBatches {
 		totalSize += len(b.Data)
 		fmt.Printf("======== batch %v, blob len: %v ======\n", idx+1, len(b.Data))
 		historyBatchThrift, err := serializer.DeserializeEvents(b)
@@ -184,30 +188,121 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeMutableStateResp
 	return resp
 }
 
-// AdminListNamespaces outputs a list of all namespaces
-func AdminListNamespaces(c *cli.Context) {
-	pFactory := CreatePersistenceFactory(c)
-	metadataManager, err := pFactory.NewMetadataManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize metadata manager", err)
+// RegisterNamespace register a namespace
+func RegisterNamespace(c *cli.Context) error {
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
+
+	description := c.String(FlagDescription)
+	ownerEmail := c.String(FlagOwnerEmail)
+
+	client := cFactory.AdminClient(c)
+
+	var err error
+	retention := defaultNamespaceRetention
+	if c.IsSet(FlagRetention) {
+		retention, err = timestamp.ParseDurationDefaultDays(c.String(FlagRetention))
+		if err != nil {
+			return fmt.Errorf("option %s format is invalid: %s", FlagRetention, err)
+		}
 	}
 
-	req := &persistence.ListNamespacesRequest{
-		PageSize: c.Int(FlagPageSize),
+	var isGlobalNamespace bool
+	if c.IsSet(FlagIsGlobalNamespace) {
+		isGlobalNamespace, err = strconv.ParseBool(c.String(FlagIsGlobalNamespace))
+		if err != nil {
+			return fmt.Errorf("option %s format is invalid: %w.", FlagIsGlobalNamespace, err)
+		}
+	}
+
+	namespaceData := map[string]string{}
+	if c.IsSet(FlagNamespaceData) {
+		namespaceDataStr := c.String(FlagNamespaceData)
+		namespaceData, err = parseNamespaceDataKVs(namespaceDataStr)
+		if err != nil {
+			return fmt.Errorf("option %s format is invalid: %s", FlagNamespaceData, err)
+		}
+	}
+	if len(requiredNamespaceDataKeys) > 0 {
+		err = checkRequiredNamespaceDataKVs(namespaceData)
+		if err != nil {
+			return fmt.Errorf("namespace data missed required data: %s", err)
+		}
+	}
+
+	var activeClusterName string
+	if c.IsSet(FlagActiveClusterName) {
+		activeClusterName = c.String(FlagActiveClusterName)
+	}
+
+	var clusters []*replicationpb.ClusterReplicationConfig
+	if c.IsSet(FlagClusters) {
+		clusterStr := c.String(FlagClusters)
+		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
+			ClusterName: clusterStr,
+		})
+		for _, clusterStr := range c.Args() {
+			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
+				ClusterName: clusterStr,
+			})
+		}
+	}
+
+	archState := archivalState(c, FlagHistoryArchivalState)
+	archVisState := archivalState(c, FlagVisibilityArchivalState)
+
+	req := &adminservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		Description:                      description,
+		OwnerEmail:                       ownerEmail,
+		Data:                             namespaceData,
+		WorkflowExecutionRetentionPeriod: &retention,
+		Clusters:                         clusters,
+		ActiveClusterName:                activeClusterName,
+		HistoryArchivalState:             archState,
+		HistoryArchivalUri:               c.String(FlagHistoryArchivalURI),
+		VisibilityArchivalState:          archVisState,
+		VisibilityArchivalUri:            c.String(FlagVisibilityArchivalURI),
+		IsGlobalNamespace:                isGlobalNamespace,
+	}
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	_, err = client.RegisterNamespace(ctx, req)
+	if err != nil {
+		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); !ok {
+			return fmt.Errorf("namespace registration failed: %s", err)
+		} else {
+			return fmt.Errorf("namespace %s is already registered: %s", namespace, err)
+		}
+	} else {
+		fmt.Printf("Namespace %s successfully registered.\n", namespace)
+	}
+
+	return nil
+}
+
+// AdminListNamespaces outputs a list of all namespaces
+func AdminListNamespaces(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &adminservice.ListNamespacesRequest{
+		PageSize: int32(c.Int(FlagPageSize)),
 	}
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		req.NextPageToken = paginationToken
-		response, err := metadataManager.ListNamespaces(req)
+
+		resp, err := adminClient.ListNamespaces(ctx, req)
 		if err != nil {
 			return nil, nil, err
 		}
-		token := response.NextPageToken
 
 		var items []interface{}
-		for _, task := range response.Namespaces {
+		for _, task := range resp.Namespaces {
 			items = append(items, task)
 		}
-		return items, token, nil
+		return items, resp.NextPageToken, nil
 	}
 	paginate(c, paginationFunc)
 }
@@ -292,11 +387,11 @@ func AdminDeleteWorkflow(c *cli.Context) {
 }
 
 func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) {
-	if !c.IsSet(FlagIndex) {
+	if !c.IsSet(FlagElasticsearchIndex) {
 		prompt("Elasticsearch index name is not specified. Continue without visibility document deletion?", c.GlobalBool(FlagAutoConfirm))
 	}
 
-	indexName := getRequiredOption(c, FlagIndex)
+	indexName := getRequiredOption(c, FlagElasticsearchIndex)
 	esClient := newESClient(c)
 
 	query := elastic.NewBoolQuery().
@@ -307,7 +402,7 @@ func adminDeleteVisibilityDocument(c *cli.Context, namespaceID string) {
 		query = query.Filter(elastic.NewTermQuery(searchattribute.RunID, c.String(FlagRunID)))
 	}
 	searchParams := &esclient.SearchParameters{
-		Index:    c.String(FlagIndex),
+		Index:    c.String(FlagElasticsearchIndex),
 		Query:    query,
 		PageSize: 10000,
 	}
@@ -367,6 +462,31 @@ func connectToCassandra(c *cli.Context) gocql.Session {
 		ErrorAndExit("connect to Cassandra failed", err)
 	}
 	return session
+}
+
+func newESClient(c *cli.Context) esclient.CLIClient {
+	esUrl := getRequiredOption(c, FlagElasticsearchURL)
+	parsedESUrl, err := url.Parse(esUrl)
+	if err != nil {
+		ErrorAndExit("Unable to parse URL.", err)
+	}
+
+	esConfig := &esclient.Config{
+		URL:      *parsedESUrl,
+		Username: c.String(FlagElasticsearchUsername),
+		Password: c.String(FlagElasticsearchPassword),
+	}
+
+	if c.IsSet(FlagVersion) {
+		esConfig.Version = c.String(FlagVersion)
+	}
+
+	client, err := esclient.NewCLIClient(esConfig, log.NewCLILogger())
+	if err != nil {
+		ErrorAndExit("Unable to create Elasticsearch client", err)
+	}
+
+	return client
 }
 
 // AdminGetNamespaceIDOrName map namespace
@@ -480,8 +600,8 @@ func AdminDescribeTask(c *cli.Context) {
 	}
 }
 
-// AdminListTasks outputs a list of a tasks for given Shard and Task Type
-func AdminListTasks(c *cli.Context) {
+// AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
+func AdminListShardTasks(c *cli.Context) {
 	sid := int32(getRequiredIntOption(c, FlagShardID))
 	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
 	if err != nil {
@@ -492,18 +612,16 @@ func AdminListTasks(c *cli.Context) {
 		ErrorAndExit(fmt.Sprintf("Task type %s is currently not supported", category), nil)
 	}
 
-	pFactory := CreatePersistenceFactory(c)
-	executionManager, err := pFactory.NewExecutionManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize execution manager", err)
-	}
+	client := cFactory.AdminClient(c)
 
+	ctx, cancel := newContext(c)
+	defer cancel()
 	if category == enumsspb.TASK_CATEGORY_TRANSFER {
-		req := &persistence.GetTransferTasksRequest{ShardID: sid}
+		req := &adminservice.ListTransferTasksRequest{ShardId: sid}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetTransferTasks(req)
+			response, err := client.ListTransferTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -517,11 +635,11 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_VISIBILITY {
-		req := &persistence.GetVisibilityTasksRequest{ShardID: sid}
+		req := &adminservice.ListVisibilityTasksRequest{ShardId: sid}
 
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetVisibilityTasks(req)
+			response, err := client.ListVisibilityTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -538,14 +656,14 @@ func AdminListTasks(c *cli.Context) {
 		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
 		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
 
-		req := &persistence.GetTimerTasksRequest{
-			ShardID:      sid,
-			MinTimestamp: minVis,
-			MaxTimestamp: maxVis,
+		req := &adminservice.ListTimerTasksRequest{
+			ShardId: sid,
+			MinTime: &minVis,
+			MaxTime: &maxVis,
 		}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetTimerTasks(req)
+			response, err := client.ListTimerTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -559,10 +677,10 @@ func AdminListTasks(c *cli.Context) {
 		}
 		paginate(c, paginationFunc)
 	} else if category == enumsspb.TASK_CATEGORY_REPLICATION {
-		req := &persistence.GetReplicationTasksRequest{}
+		req := &adminservice.ListReplicationTasksRequest{ShardId: sid}
 		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
 			req.NextPageToken = paginationToken
-			response, err := executionManager.GetReplicationTasks(req)
+			response, err := client.ListReplicationTasks(ctx, req)
 			if err != nil {
 				return nil, nil, err
 			}
@@ -673,31 +791,28 @@ func AdminListGossipMembers(c *cli.Context) {
 	prettyPrintJSONObject(members)
 }
 
-// AdminListClusterMembership outputs a list of cluster membership items
-func AdminListClusterMembership(c *cli.Context) {
-	roleFlag := c.String(FlagClusterMembershipRole)
-	role, err := membership.ServiceNameToServiceTypeEnum(roleFlag)
-	if err != nil {
-		ErrorAndExit("Failed to map membership role", err)
-	}
+// AdminListClusterMembers outputs a list of cluster members
+func AdminListClusterMembers(c *cli.Context) {
+	role, _ := stringToEnum(c.String(FlagClusterMembershipRole), enumsspb.ClusterMemberRole_value)
 	// TODO: refactor this: parseTime shouldn't be used for duration.
 	heartbeatFlag := parseTime(c.String(FlagEarliestTime), time.Time{}, time.Now().UTC()).UnixNano()
 	heartbeat := time.Duration(heartbeatFlag)
 
-	pFactory := CreatePersistenceFactory(c)
-	manager, err := pFactory.NewClusterMetadataManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize cluster metadata manager", err)
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	req := &adminservice.ListClusterMembersRequest{
+		Role:                enumsspb.ClusterMemberRole(role),
+		LastHeartbeatWithin: &heartbeat,
 	}
 
-	req := &persistence.GetClusterMembersRequest{
-		RoleEquals:          role,
-		LastHeartbeatWithin: heartbeat,
-	}
-	members, err := manager.GetClusterMembers(req)
+	resp, err := adminClient.ListClusterMembers(ctx, req)
 	if err != nil {
-		ErrorAndExit("Failed to get cluster members", err)
+		ErrorAndExit("unable to list cluster members", err)
 	}
+
+	members := resp.ActiveMembers
 
 	prettyPrintJSONObject(members)
 }

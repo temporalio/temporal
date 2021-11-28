@@ -61,6 +61,9 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
 
 	// Send a signal to non-exist workflow
+	header := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
+	}
 	_, err0 := s.engine.SignalWorkflowExecution(NewContext(), &workflowservice.SignalWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -70,6 +73,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		SignalName: "failed signal",
 		Input:      nil,
 		Identity:   identity,
+		Header:     header,
 	})
 	s.NotNil(err0)
 	s.IsType(&serviceerror.NotFound{}, err0)
@@ -171,6 +175,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 		SignalName: signalName,
 		Input:      signalInput,
 		Identity:   identity,
+		Header:     header,
 	})
 	s.NoError(err)
 
@@ -184,6 +189,7 @@ func (s *integrationSuite) TestSignalWorkflow() {
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
 	s.Equal(identity, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
+	s.Equal(header, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
 
 	// Send another signal without RunID
 	signalName = "another signal"
@@ -425,6 +431,9 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 	activityCounter := int32(0)
 	signalName := "my signal"
 	signalInput := payloads.EncodeString("my signal input")
+	signalHeader := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
+	}
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType,
 		previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		if activityCounter < activityCount {
@@ -457,6 +466,7 @@ func (s *integrationSuite) TestSignalExternalWorkflowCommand() {
 				},
 				SignalName: signalName,
 				Input:      signalInput,
+				Header:     signalHeader,
 			}},
 		}}, nil
 	}
@@ -592,6 +602,7 @@ CheckHistoryLoopForSignalSent:
 	s.True(signalEvent != nil)
 	s.Equal(signalName, signalEvent.GetWorkflowExecutionSignaledEventAttributes().SignalName)
 	s.Equal(signalInput, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Input)
+	s.Equal(signalHeader, signalEvent.GetWorkflowExecutionSignaledEventAttributes().Header)
 	s.Equal("history-service", signalEvent.GetWorkflowExecutionSignaledEventAttributes().Identity)
 }
 

@@ -87,9 +87,10 @@ type (
 		// send side
 		minTxAckedTaskID int64
 		// recv side
-		maxRxProcessedTaskID int64
-		maxRxReceivedTaskID  int64
-		rxTaskBackoff        time.Duration
+		maxRxProcessedTaskID    int64
+		maxRxProcessedTimestamp time.Time
+		maxRxReceivedTaskID     int64
+		rxTaskBackoff           time.Duration
 
 		requestChan   chan<- *replicationTaskRequest
 		syncShardChan chan *replicationspb.SyncShardStatus
@@ -261,6 +262,7 @@ func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError e
 			return err
 		}
 		p.maxRxProcessedTaskID = replicationTask.GetSourceTaskId()
+		p.maxRxProcessedTimestamp = timestamp.TimeValue(replicationTask.GetVisibilityTime())
 	}
 
 	if !p.isStopped() {
@@ -425,9 +427,10 @@ func (p *ReplicationTaskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	p.requestChan <- &replicationTaskRequest{
 		token: &replicationspb.ReplicationToken{
-			ShardId:                p.shard.GetShardID(),
-			LastProcessedMessageId: p.maxRxProcessedTaskID,
-			LastRetrievedMessageId: p.maxRxReceivedTaskID,
+			ShardId:                     p.shard.GetShardID(),
+			LastProcessedMessageId:      p.maxRxProcessedTaskID,
+			LastProcessedVisibilityTime: &p.maxRxProcessedTimestamp,
+			LastRetrievedMessageId:      p.maxRxReceivedTaskID,
 		},
 		respChan: respChan,
 	}

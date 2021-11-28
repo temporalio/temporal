@@ -94,6 +94,27 @@ const (
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
+	templateGetTieredStorageTaskQuery = `SELECT tiered_storage_task_data, tiered_storage_task_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ? `
+
+	templateGetTieredStorageTasksQuery = `SELECT tiered_storage_task_data, tiered_storage_task_encoding ` +
+		`FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id > ? ` +
+		`and task_id <= ?`
+
 	templateGetReplicationTaskQuery = `SELECT replication, replication_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -143,7 +164,26 @@ const (
 		`and visibility_ts = ? ` +
 		`and task_id = ?`
 
+	templateCompleteTieredStorageTaskQuery = `DELETE FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id = ?`
+
 	templateRangeCompleteVisibilityTaskQuery = `DELETE FROM executions ` +
+		`WHERE shard_id = ? ` +
+		`and type = ? ` +
+		`and namespace_id = ? ` +
+		`and workflow_id = ? ` +
+		`and run_id = ? ` +
+		`and visibility_ts = ? ` +
+		`and task_id > ? ` +
+		`and task_id <= ?`
+
+	templateRangeCompleteTieredStorageTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ? ` +
 		`and namespace_id = ? ` +
@@ -807,6 +847,100 @@ func (d *MutableStateTaskStore) RangeCompleteVisibilityTask(
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeCompleteVisibilityTask", err)
+}
+
+func (d *MutableStateTaskStore) GetTieredStorageTask(
+	request *p.GetTieredStorageTaskRequest,
+) (*p.InternalGetTieredStorageTaskResponse, error) {
+	shardID := request.ShardID
+	taskID := request.TaskID
+	query := d.Session.Query(templateGetTieredStorageTaskQuery,
+		shardID,
+		rowTypeTieredStorageTask,
+		rowTypeTieredStorageTaskNamespaceID,
+		rowTypeTieredStorageTaskWorkflowID,
+		rowTypeTieredStorageTaskRunID,
+		defaultTieredStorageTimestamp,
+		taskID)
+
+	var data []byte
+	var encoding string
+	if err := query.Scan(&data, &encoding); err != nil {
+		return nil, gocql.ConvertError("GetTieredStorageTask", err)
+	}
+	return &p.InternalGetTieredStorageTaskResponse{Task: *p.NewDataBlob(data, encoding)}, nil
+}
+
+func (d *MutableStateTaskStore) GetTieredStorageTasks(
+	request *p.GetTieredStorageTasksRequest,
+) (*p.InternalGetTieredStorageTasksResponse, error) {
+
+	// Reading TieredStorage tasks need to be quorum level consistent, otherwise we could lose task
+	query := d.Session.Query(templateGetTieredStorageTasksQuery,
+		request.ShardID,
+		rowTypeTieredStorageTask,
+		rowTypeTieredStorageTaskNamespaceID,
+		rowTypeTieredStorageTaskWorkflowID,
+		rowTypeTieredStorageTaskRunID,
+		defaultTieredStorageTimestamp,
+		request.MinTaskID,
+		request.MaxTaskID,
+	)
+	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
+
+	response := &p.InternalGetTieredStorageTasksResponse{}
+	var data []byte
+	var encoding string
+
+	for iter.Scan(&data, &encoding) {
+		response.Tasks = append(response.Tasks, *p.NewDataBlob(data, encoding))
+
+		data = nil
+		encoding = ""
+	}
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
+	}
+
+	if err := iter.Close(); err != nil {
+		return nil, gocql.ConvertError("GetTieredStorageTasks", err)
+	}
+
+	return response, nil
+}
+
+func (d *MutableStateTaskStore) CompleteTieredStorageTask(
+	request *p.CompleteTieredStorageTaskRequest,
+) error {
+	query := d.Session.Query(templateCompleteTieredStorageTaskQuery,
+		request.ShardID,
+		rowTypeTieredStorageTask,
+		rowTypeTieredStorageTaskNamespaceID,
+		rowTypeTieredStorageTaskWorkflowID,
+		rowTypeTieredStorageTaskRunID,
+		defaultTieredStorageTimestamp,
+		request.TaskID)
+
+	err := query.Exec()
+	return gocql.ConvertError("CompleteTieredStorageTask", err)
+}
+
+func (d *MutableStateTaskStore) RangeCompleteTieredStorageTask(
+	request *p.RangeCompleteTieredStorageTaskRequest,
+) error {
+	query := d.Session.Query(templateRangeCompleteTieredStorageTaskQuery,
+		request.ShardID,
+		rowTypeTieredStorageTask,
+		rowTypeTieredStorageTaskNamespaceID,
+		rowTypeTieredStorageTaskWorkflowID,
+		rowTypeTieredStorageTaskRunID,
+		defaultTieredStorageTimestamp,
+		request.ExclusiveBeginTaskID,
+		request.InclusiveEndTaskID,
+	)
+
+	err := query.Exec()
+	return gocql.ConvertError("RangeCompleteTieredStorageTask", err)
 }
 
 func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(

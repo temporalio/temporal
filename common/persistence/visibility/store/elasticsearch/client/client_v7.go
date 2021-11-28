@@ -118,22 +118,6 @@ func newClientV7(cfg *Config, httpClient *http.Client, logger log.Logger) (*clie
 	}, nil
 }
 
-func newSimpleClientV7(url string) (*clientV7, error) {
-	retrier := elastic.NewBackoffRetrier(elastic.NewExponentialBackoff(128*time.Millisecond, 513*time.Millisecond))
-	var client *elastic.Client
-	var err error
-	if client, err = elastic.NewClient(
-		elastic.SetURL(url),
-		elastic.SetSniff(false),
-		elastic.SetHealthcheck(false),
-		elastic.SetRetrier(retrier),
-	); err != nil {
-		return nil, err
-	}
-
-	return &clientV7{esClient: client}, nil
-}
-
 func (c *clientV7) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
 	searchSource := elastic.NewSearchSource().
 		Query(p.Query).

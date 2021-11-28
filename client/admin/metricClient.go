@@ -174,6 +174,78 @@ func (c *metricClient) GetShard(
 	return resp, err
 }
 
+func (c *metricClient) ListTimerTasks(
+	ctx context.Context,
+	request *adminservice.ListTimerTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListTimerTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListTimerTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListTimerTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListTimerTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListTimerTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ListReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListReplicationTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListReplicationTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListReplicationTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListReplicationTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListReplicationTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListTransferTasks(
+	ctx context.Context,
+	request *adminservice.ListTransferTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListTransferTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListTransferTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListTransferTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListTransferTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListTransferTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListVisibilityTasks(
+	ctx context.Context,
+	request *adminservice.ListVisibilityTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListVisibilityTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListVisibilityTasksScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListVisibilityTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListVisibilityTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListVisibilityTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) DescribeMutableState(
 	ctx context.Context,
 	request *adminservice.DescribeMutableStateRequest,
@@ -228,6 +300,60 @@ func (c *metricClient) DescribeCluster(
 	return resp, err
 }
 
+func (c *metricClient) ListClusterMembers(
+	ctx context.Context,
+	request *adminservice.ListClusterMembersRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListClusterMembersResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListClusterMembersScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListClusterMembersScope, metrics.ClientLatency)
+	resp, err := c.client.ListClusterMembers(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListClusterMembersScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientLatency)
+	resp, err := c.client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientAddOrUpdateRemoteClusterScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) RemoveRemoteCluster(
+	ctx context.Context,
+	request *adminservice.RemoveRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RemoveRemoteClusterResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientRemoveRemoteClusterScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRemoveRemoteClusterScope, metrics.ClientLatency)
+	resp, err := c.client.RemoveRemoteCluster(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientRemoveRemoteClusterScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
@@ -241,6 +367,60 @@ func (c *metricClient) GetReplicationMessages(
 
 	if err != nil {
 		c.metricsClient.IncCounter(metrics.FrontendClientGetReplicationTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) ListNamespaces(
+	ctx context.Context,
+	request *adminservice.ListNamespacesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListNamespacesResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientListNamespacesScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListNamespacesScope, metrics.ClientLatency)
+	resp, err := c.client.ListNamespaces(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientListNamespacesScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) RegisterNamespace(
+	ctx context.Context,
+	request *adminservice.RegisterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RegisterNamespaceResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientRegisterNamespaceScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRegisterNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.RegisterNamespace(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientRegisterNamespaceScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) UpdateNamespace(
+	ctx context.Context,
+	request *adminservice.UpdateNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateNamespaceResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientUpdateNamespaceScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientUpdateNamespaceScope, metrics.ClientLatency)
+	resp, err := c.client.UpdateNamespace(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientUpdateNamespaceScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -373,6 +553,23 @@ func (c *metricClient) ResendReplicationTasks(
 	c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientRequests)
 	sw := c.metricsClient.StartTimer(metrics.AdminClientResendReplicationTasksScope, metrics.ClientLatency)
 	resp, err := c.client.ResendReplicationTasks(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
+func (c *metricClient) GetTaskQueueTasks(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueTasksResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientResendReplicationTasksScope, metrics.ClientRequests)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientResendReplicationTasksScope, metrics.ClientLatency)
+	resp, err := c.client.GetTaskQueueTasks(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {

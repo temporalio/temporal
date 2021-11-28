@@ -104,20 +104,6 @@ func (mr *MockShardManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockShardManager)(nil).Close))
 }
 
-// CreateShard mocks base method.
-func (m *MockShardManager) CreateShard(request *CreateShardRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateShard", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateShard indicates an expected call of CreateShard.
-func (mr *MockShardManagerMockRecorder) CreateShard(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateShard", reflect.TypeOf((*MockShardManager)(nil).CreateShard), request)
-}
-
 // GetName mocks base method.
 func (m *MockShardManager) GetName() string {
 	m.ctrl.T.Helper()
@@ -132,19 +118,19 @@ func (mr *MockShardManagerMockRecorder) GetName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockShardManager)(nil).GetName))
 }
 
-// GetShard mocks base method.
-func (m *MockShardManager) GetShard(request *GetShardRequest) (*GetShardResponse, error) {
+// GetOrCreateShard mocks base method.
+func (m *MockShardManager) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetShard", request)
-	ret0, _ := ret[0].(*GetShardResponse)
+	ret := m.ctrl.Call(m, "GetOrCreateShard", request)
+	ret0, _ := ret[0].(*GetOrCreateShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetShard indicates an expected call of GetShard.
-func (mr *MockShardManagerMockRecorder) GetShard(request interface{}) *gomock.Call {
+// GetOrCreateShard indicates an expected call of GetOrCreateShard.
+func (mr *MockShardManagerMockRecorder) GetOrCreateShard(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockShardManager)(nil).GetShard), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateShard", reflect.TypeOf((*MockShardManager)(nil).GetOrCreateShard), request)
 }
 
 // UpdateShard mocks base method.
@@ -237,6 +223,20 @@ func (m *MockExecutionManager) CompleteReplicationTask(request *CompleteReplicat
 func (mr *MockExecutionManagerMockRecorder) CompleteReplicationTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteReplicationTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteReplicationTask), request)
+}
+
+// CompleteTieredStorageTask mocks base method.
+func (m *MockExecutionManager) CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteTieredStorageTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CompleteTieredStorageTask indicates an expected call of CompleteTieredStorageTask.
+func (mr *MockExecutionManagerMockRecorder) CompleteTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTieredStorageTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteTieredStorageTask), request)
 }
 
 // CompleteTimerTask mocks base method.
@@ -486,6 +486,36 @@ func (mr *MockExecutionManagerMockRecorder) GetReplicationTasksFromDLQ(request i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).GetReplicationTasksFromDLQ), request)
 }
 
+// GetTieredStorageTask mocks base method.
+func (m *MockExecutionManager) GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*GetTieredStorageTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTieredStorageTask", request)
+	ret0, _ := ret[0].(*GetTieredStorageTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTieredStorageTask indicates an expected call of GetTieredStorageTask.
+func (mr *MockExecutionManagerMockRecorder) GetTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTieredStorageTask", reflect.TypeOf((*MockExecutionManager)(nil).GetTieredStorageTask), request)
+}
+
+// GetTieredStorageTasks mocks base method.
+func (m *MockExecutionManager) GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*GetTieredStorageTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTieredStorageTasks", request)
+	ret0, _ := ret[0].(*GetTieredStorageTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTieredStorageTasks indicates an expected call of GetTieredStorageTasks.
+func (mr *MockExecutionManagerMockRecorder) GetTieredStorageTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTieredStorageTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetTieredStorageTasks), request)
+}
+
 // GetTimerTask mocks base method.
 func (m *MockExecutionManager) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -632,6 +662,20 @@ func (m *MockExecutionManager) RangeCompleteReplicationTask(request *RangeComple
 func (mr *MockExecutionManagerMockRecorder) RangeCompleteReplicationTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteReplicationTask", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteReplicationTask), request)
+}
+
+// RangeCompleteTieredStorageTask mocks base method.
+func (m *MockExecutionManager) RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeCompleteTieredStorageTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeCompleteTieredStorageTask indicates an expected call of RangeCompleteTieredStorageTask.
+func (mr *MockExecutionManagerMockRecorder) RangeCompleteTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTieredStorageTask", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteTieredStorageTask), request)
 }
 
 // RangeCompleteTimerTask mocks base method.
@@ -1132,6 +1176,20 @@ func (mr *MockClusterMetadataManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockClusterMetadataManager)(nil).Close))
 }
 
+// DeleteClusterMetadata mocks base method.
+func (m *MockClusterMetadataManager) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteClusterMetadata", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteClusterMetadata indicates an expected call of DeleteClusterMetadata.
+func (mr *MockClusterMetadataManagerMockRecorder) DeleteClusterMetadata(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).DeleteClusterMetadata), request)
+}
+
 // GetClusterMembers mocks base method.
 func (m *MockClusterMetadataManager) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
 	m.ctrl.T.Helper()
@@ -1148,18 +1206,48 @@ func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMembers(request inte
 }
 
 // GetClusterMetadata mocks base method.
-func (m *MockClusterMetadataManager) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+func (m *MockClusterMetadataManager) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterMetadata")
+	ret := m.ctrl.Call(m, "GetClusterMetadata", request)
 	ret0, _ := ret[0].(*GetClusterMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterMetadata indicates an expected call of GetClusterMetadata.
-func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadata() *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadata(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadata))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadata), request)
+}
+
+// GetClusterMetadataV1 mocks base method.
+func (m *MockClusterMetadataManager) GetClusterMetadataV1() (*GetClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterMetadataV1")
+	ret0, _ := ret[0].(*GetClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterMetadataV1 indicates an expected call of GetClusterMetadataV1.
+func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadataV1() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadataV1", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadataV1))
+}
+
+// GetCurrentClusterMetadata mocks base method.
+func (m *MockClusterMetadataManager) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentClusterMetadata")
+	ret0, _ := ret[0].(*GetClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentClusterMetadata indicates an expected call of GetCurrentClusterMetadata.
+func (mr *MockClusterMetadataManagerMockRecorder) GetCurrentClusterMetadata() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetCurrentClusterMetadata))
 }
 
 // GetName mocks base method.
@@ -1174,6 +1262,21 @@ func (m *MockClusterMetadataManager) GetName() string {
 func (mr *MockClusterMetadataManagerMockRecorder) GetName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetName))
+}
+
+// ListClusterMetadata mocks base method.
+func (m *MockClusterMetadataManager) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListClusterMetadata", request)
+	ret0, _ := ret[0].(*ListClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListClusterMetadata indicates an expected call of ListClusterMetadata.
+func (mr *MockClusterMetadataManagerMockRecorder) ListClusterMetadata(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).ListClusterMetadata), request)
 }
 
 // PruneClusterMembership mocks base method.

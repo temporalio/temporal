@@ -65,7 +65,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 		&persistence,
 		resolver.NewNoopResolver(),
 		GetQPS,
-		params.AbstractDatastoreFactory,
+		nil,
 		c.String(FlagTargetCluster),
 		nil, // MetricsClient
 		log.NewNoopLogger(),

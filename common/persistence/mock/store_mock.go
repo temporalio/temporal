@@ -71,20 +71,6 @@ func (mr *MockShardStoreMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockShardStore)(nil).Close))
 }
 
-// CreateShard mocks base method.
-func (m *MockShardStore) CreateShard(request *persistence.InternalCreateShardRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateShard", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CreateShard indicates an expected call of CreateShard.
-func (mr *MockShardStoreMockRecorder) CreateShard(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateShard", reflect.TypeOf((*MockShardStore)(nil).CreateShard), request)
-}
-
 // GetClusterName mocks base method.
 func (m *MockShardStore) GetClusterName() string {
 	m.ctrl.T.Helper()
@@ -113,19 +99,19 @@ func (mr *MockShardStoreMockRecorder) GetName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockShardStore)(nil).GetName))
 }
 
-// GetShard mocks base method.
-func (m *MockShardStore) GetShard(request *persistence.InternalGetShardRequest) (*persistence.InternalGetShardResponse, error) {
+// GetOrCreateShard mocks base method.
+func (m *MockShardStore) GetOrCreateShard(request *persistence.InternalGetOrCreateShardRequest) (*persistence.InternalGetOrCreateShardResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetShard", request)
-	ret0, _ := ret[0].(*persistence.InternalGetShardResponse)
+	ret := m.ctrl.Call(m, "GetOrCreateShard", request)
+	ret0, _ := ret[0].(*persistence.InternalGetOrCreateShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GetShard indicates an expected call of GetShard.
-func (mr *MockShardStoreMockRecorder) GetShard(request interface{}) *gomock.Call {
+// GetOrCreateShard indicates an expected call of GetOrCreateShard.
+func (mr *MockShardStoreMockRecorder) GetOrCreateShard(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShard", reflect.TypeOf((*MockShardStore)(nil).GetShard), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateShard", reflect.TypeOf((*MockShardStore)(nil).GetOrCreateShard), request)
 }
 
 // UpdateShard mocks base method.
@@ -523,6 +509,20 @@ func (mr *MockClusterMetadataStoreMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockClusterMetadataStore)(nil).Close))
 }
 
+// DeleteClusterMetadata mocks base method.
+func (m *MockClusterMetadataStore) DeleteClusterMetadata(request *persistence.InternalDeleteClusterMetadataRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteClusterMetadata", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteClusterMetadata indicates an expected call of DeleteClusterMetadata.
+func (mr *MockClusterMetadataStoreMockRecorder) DeleteClusterMetadata(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).DeleteClusterMetadata), request)
+}
+
 // GetClusterMembers mocks base method.
 func (m *MockClusterMetadataStore) GetClusterMembers(request *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
 	m.ctrl.T.Helper()
@@ -539,18 +539,33 @@ func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMembers(request interf
 }
 
 // GetClusterMetadata mocks base method.
-func (m *MockClusterMetadataStore) GetClusterMetadata() (*persistence.InternalGetClusterMetadataResponse, error) {
+func (m *MockClusterMetadataStore) GetClusterMetadata(request *persistence.InternalGetClusterMetadataRequest) (*persistence.InternalGetClusterMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterMetadata")
+	ret := m.ctrl.Call(m, "GetClusterMetadata", request)
 	ret0, _ := ret[0].(*persistence.InternalGetClusterMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterMetadata indicates an expected call of GetClusterMetadata.
-func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMetadata() *gomock.Call {
+func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMetadata(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetClusterMetadata))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetClusterMetadata), request)
+}
+
+// GetClusterMetadataV1 mocks base method.
+func (m *MockClusterMetadataStore) GetClusterMetadataV1() (*persistence.InternalGetClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterMetadataV1")
+	ret0, _ := ret[0].(*persistence.InternalGetClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetClusterMetadataV1 indicates an expected call of GetClusterMetadataV1.
+func (mr *MockClusterMetadataStoreMockRecorder) GetClusterMetadataV1() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadataV1", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetClusterMetadataV1))
 }
 
 // GetName mocks base method.
@@ -565,6 +580,21 @@ func (m *MockClusterMetadataStore) GetName() string {
 func (mr *MockClusterMetadataStoreMockRecorder) GetName() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockClusterMetadataStore)(nil).GetName))
+}
+
+// ListClusterMetadata mocks base method.
+func (m *MockClusterMetadataStore) ListClusterMetadata(request *persistence.InternalListClusterMetadataRequest) (*persistence.InternalListClusterMetadataResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListClusterMetadata", request)
+	ret0, _ := ret[0].(*persistence.InternalListClusterMetadataResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListClusterMetadata indicates an expected call of ListClusterMetadata.
+func (mr *MockClusterMetadataStoreMockRecorder) ListClusterMetadata(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).ListClusterMetadata), request)
 }
 
 // PruneClusterMembership mocks base method.
@@ -594,6 +624,21 @@ func (m *MockClusterMetadataStore) SaveClusterMetadata(request *persistence.Inte
 func (mr *MockClusterMetadataStoreMockRecorder) SaveClusterMetadata(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveClusterMetadata", reflect.TypeOf((*MockClusterMetadataStore)(nil).SaveClusterMetadata), request)
+}
+
+// SaveClusterMetadataV1 mocks base method.
+func (m *MockClusterMetadataStore) SaveClusterMetadataV1(request *persistence.InternalSaveClusterMetadataRequest) (bool, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SaveClusterMetadataV1", request)
+	ret0, _ := ret[0].(bool)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SaveClusterMetadataV1 indicates an expected call of SaveClusterMetadataV1.
+func (mr *MockClusterMetadataStoreMockRecorder) SaveClusterMetadataV1(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveClusterMetadataV1", reflect.TypeOf((*MockClusterMetadataStore)(nil).SaveClusterMetadataV1), request)
 }
 
 // UpsertClusterMembership mocks base method.
@@ -685,6 +730,20 @@ func (m *MockExecutionStore) CompleteReplicationTask(request *persistence.Comple
 func (mr *MockExecutionStoreMockRecorder) CompleteReplicationTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteReplicationTask", reflect.TypeOf((*MockExecutionStore)(nil).CompleteReplicationTask), request)
+}
+
+// CompleteTieredStorageTask mocks base method.
+func (m *MockExecutionStore) CompleteTieredStorageTask(request *persistence.CompleteTieredStorageTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CompleteTieredStorageTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// CompleteTieredStorageTask indicates an expected call of CompleteTieredStorageTask.
+func (mr *MockExecutionStoreMockRecorder) CompleteTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTieredStorageTask", reflect.TypeOf((*MockExecutionStore)(nil).CompleteTieredStorageTask), request)
 }
 
 // CompleteTimerTask mocks base method.
@@ -946,6 +1005,36 @@ func (mr *MockExecutionStoreMockRecorder) GetReplicationTasksFromDLQ(request int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionStore)(nil).GetReplicationTasksFromDLQ), request)
 }
 
+// GetTieredStorageTask mocks base method.
+func (m *MockExecutionStore) GetTieredStorageTask(request *persistence.GetTieredStorageTaskRequest) (*persistence.InternalGetTieredStorageTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTieredStorageTask", request)
+	ret0, _ := ret[0].(*persistence.InternalGetTieredStorageTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTieredStorageTask indicates an expected call of GetTieredStorageTask.
+func (mr *MockExecutionStoreMockRecorder) GetTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTieredStorageTask", reflect.TypeOf((*MockExecutionStore)(nil).GetTieredStorageTask), request)
+}
+
+// GetTieredStorageTasks mocks base method.
+func (m *MockExecutionStore) GetTieredStorageTasks(request *persistence.GetTieredStorageTasksRequest) (*persistence.InternalGetTieredStorageTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTieredStorageTasks", request)
+	ret0, _ := ret[0].(*persistence.InternalGetTieredStorageTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetTieredStorageTasks indicates an expected call of GetTieredStorageTasks.
+func (mr *MockExecutionStoreMockRecorder) GetTieredStorageTasks(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTieredStorageTasks", reflect.TypeOf((*MockExecutionStore)(nil).GetTieredStorageTasks), request)
+}
+
 // GetTimerTask mocks base method.
 func (m *MockExecutionStore) GetTimerTask(request *persistence.GetTimerTaskRequest) (*persistence.InternalGetTimerTaskResponse, error) {
 	m.ctrl.T.Helper()
@@ -1092,6 +1181,20 @@ func (m *MockExecutionStore) RangeCompleteReplicationTask(request *persistence.R
 func (mr *MockExecutionStoreMockRecorder) RangeCompleteReplicationTask(request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteReplicationTask", reflect.TypeOf((*MockExecutionStore)(nil).RangeCompleteReplicationTask), request)
+}
+
+// RangeCompleteTieredStorageTask mocks base method.
+func (m *MockExecutionStore) RangeCompleteTieredStorageTask(request *persistence.RangeCompleteTieredStorageTaskRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RangeCompleteTieredStorageTask", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RangeCompleteTieredStorageTask indicates an expected call of RangeCompleteTieredStorageTask.
+func (mr *MockExecutionStoreMockRecorder) RangeCompleteTieredStorageTask(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTieredStorageTask", reflect.TypeOf((*MockExecutionStore)(nil).RangeCompleteTieredStorageTask), request)
 }
 
 // RangeCompleteTimerTask mocks base method.

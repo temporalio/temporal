@@ -27,6 +27,21 @@ import "temporal/server/api/adminservice/v1/request_response.proto";
 
 // AdminService provides advanced APIs for debugging and analysis with admin privilege
 service AdminService {
+    // ListNamespaces returns the information and configuration for all namespaces.
+    rpc ListNamespaces (ListNamespacesRequest) returns (ListNamespacesResponse) {
+    }
+
+    // RegisterNamespace creates a new namespace.
+    rpc RegisterNamespace (RegisterNamespaceRequest) returns (RegisterNamespaceResponse) {
+    }
+
+    // (-- api-linter: core::0134::method-signature=disabled
+    //     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+    // (-- api-linter: core::0134::response-message-name=disabled
+    //     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+    // UpdateNamespace is used to update the information and configuration for a registered namespace.
+    rpc UpdateNamespace (UpdateNamespaceRequest) returns (UpdateNamespaceResponse) {
+    }
 
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
@@ -40,6 +55,18 @@ service AdminService {
     }
 
     rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
+    }
+
+    rpc ListTransferTasks (ListTransferTasksRequest) returns (ListTransferTasksResponse) {
+    }
+
+    rpc ListTimerTasks (ListTimerTasksRequest) returns (ListTimerTasksResponse) {
+    }
+
+    rpc ListReplicationTasks (ListReplicationTasksRequest) returns (ListReplicationTasksResponse) {
+    }
+
+    rpc ListVisibilityTasks (ListVisibilityTasksRequest) returns (ListVisibilityTasksResponse) {
     }
 
     rpc RemoveTask (RemoveTaskRequest) returns (RemoveTaskResponse) {
@@ -84,6 +111,18 @@ service AdminService {
     rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
     }
 
+    // ListClusterMembers returns information about Temporal cluster members.
+    rpc ListClusterMembers(ListClusterMembersRequest) returns (ListClusterMembersResponse) {
+    }
+
+    // AddOrUpdateRemoteCluster adds or updates remote cluster.
+    rpc AddOrUpdateRemoteCluster(AddOrUpdateRemoteClusterRequest) returns (AddOrUpdateRemoteClusterResponse) {
+    }
+
+    // RemoveRemoteCluster removes remote cluster.
+    rpc RemoveRemoteCluster(RemoveRemoteClusterRequest) returns (RemoveRemoteClusterResponse) {
+    }
+
     // GetDLQMessages returns messages from DLQ.
     rpc GetDLQMessages(GetDLQMessagesRequest) returns (GetDLQMessagesResponse) {
     }
@@ -104,6 +143,10 @@ service AdminService {
 
     // ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
     rpc ResendReplicationTasks(ResendReplicationTasksRequest) returns (ResendReplicationTasksResponse) {
+    }
+
+    // GetTaskQueueTasks returns tasks from task queue.
+    rpc GetTaskQueueTasks(GetTaskQueueTasksRequest) returns (GetTaskQueueTasksResponse) {
     }
 }
 

@@ -22,14 +22,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
-
 package tasks
 
 import (
 	"go.temporal.io/server/common"
 )
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination processor_mock.go
 type (
 	// Processor is the generic goroutine pool for task processing
 	Processor interface {

@@ -161,6 +161,62 @@ func (c *clientImpl) GetShard(
 	return client.GetShard(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListTimerTasks(
+	ctx context.Context,
+	request *adminservice.ListTimerTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListTimerTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListTimerTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListReplicationTasks(
+	ctx context.Context,
+	request *adminservice.ListReplicationTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListReplicationTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListReplicationTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListTransferTasks(
+	ctx context.Context,
+	request *adminservice.ListTransferTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListTransferTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListTransferTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListVisibilityTasks(
+	ctx context.Context,
+	request *adminservice.ListVisibilityTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListVisibilityTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListVisibilityTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) DescribeMutableState(
 	ctx context.Context,
 	request *adminservice.DescribeMutableStateRequest,
@@ -203,6 +259,48 @@ func (c *clientImpl) DescribeCluster(
 	return client.DescribeCluster(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListClusterMembers(
+	ctx context.Context,
+	request *adminservice.ListClusterMembersRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListClusterMembersResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListClusterMembers(ctx, request, opts...)
+}
+
+func (c *clientImpl) AddOrUpdateRemoteCluster(
+	ctx context.Context,
+	request *adminservice.AddOrUpdateRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.AddOrUpdateRemoteCluster(ctx, request, opts...)
+}
+
+func (c *clientImpl) RemoveRemoteCluster(
+	ctx context.Context,
+	request *adminservice.RemoveRemoteClusterRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RemoveRemoteClusterResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RemoveRemoteCluster(ctx, request, opts...)
+}
+
 func (c *clientImpl) GetReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetReplicationMessagesRequest,
@@ -215,6 +313,48 @@ func (c *clientImpl) GetReplicationMessages(
 	ctx, cancel := c.createContextWithLargeTimeout(ctx)
 	defer cancel()
 	return client.GetReplicationMessages(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListNamespaces(
+	ctx context.Context,
+	request *adminservice.ListNamespacesRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListNamespacesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListNamespaces(ctx, request, opts...)
+}
+
+func (c *clientImpl) RegisterNamespace(
+	ctx context.Context,
+	request *adminservice.RegisterNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RegisterNamespaceResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.RegisterNamespace(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateNamespace(
+	ctx context.Context,
+	request *adminservice.UpdateNamespaceRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.UpdateNamespaceResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateNamespace(ctx, request, opts...)
 }
 
 func (c *clientImpl) GetNamespaceReplicationMessages(
@@ -328,6 +468,20 @@ func (c *clientImpl) ResendReplicationTasks(
 	ctx, cancel := c.createContext(ctx)
 	defer cancel()
 	return client.ResendReplicationTasks(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetTaskQueueTasks(
+	ctx context.Context,
+	request *adminservice.GetTaskQueueTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.GetTaskQueueTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetTaskQueueTasks(ctx, request, opts...)
 }
 
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {

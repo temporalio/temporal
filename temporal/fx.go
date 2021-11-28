@@ -29,12 +29,19 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/common/collection"
+
+	"go.temporal.io/api/serviceerror"
+	"google.golang.org/grpc"
+
 	"github.com/uber-go/tally/v4"
 	"go.uber.org/fx"
 
 	"github.com/pborman/uuid"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -51,6 +58,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
@@ -105,7 +113,17 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Provide(FrontendServiceProvider),
 		fx.Provide(WorkerServiceProvider),
 		fx.Provide(ApplyClusterMetadataConfigProvider),
+		fx.Provide(MetricsClientProvider),
+		fx.Provide(ServiceNamesProvider),
+		fx.Provide(AbstractDatastoreFactoryProvider),
+		fx.Provide(ClientFactoryProvider),
+		fx.Provide(SearchAttributeMapperProvider),
+		fx.Provide(UnaryInterceptorsProvider),
+		fx.Provide(AuthorizerProvider),
+		fx.Provide(ClaimMapperProvider),
+		fx.Provide(JWTAudienceMapperProvider),
 		fx.Invoke(ServerLifetimeHooks),
+		fx.NopLogger,
 	)
 	s := &ServerFx{
 		app,
@@ -167,26 +185,79 @@ func ESConfigAndClientProvider(so *serverOptions, logger log.Logger) (*esclient.
 	return advancedVisibilityStore.Elasticsearch, esClient, nil
 }
 
+func ServiceNamesProvider(so *serverOptions) ServiceNames {
+	return so.serviceNames
+}
+
+func AbstractDatastoreFactoryProvider(so *serverOptions) persistenceClient.AbstractDataStoreFactory {
+	return so.customDataStoreFactory
+}
+
+func ClientFactoryProvider(so *serverOptions) client.FactoryProvider {
+	factoryProvider := so.clientFactoryProvider
+	if factoryProvider == nil {
+		factoryProvider = client.NewFactoryProvider()
+	}
+	return factoryProvider
+}
+
+func SearchAttributeMapperProvider(so *serverOptions) searchattribute.Mapper {
+	return so.searchAttributesMapper
+}
+
+func UnaryInterceptorsProvider(so *serverOptions) []grpc.UnaryServerInterceptor {
+	return so.customInterceptors
+}
+
+func AuthorizerProvider(so *serverOptions) authorization.Authorizer {
+	return so.authorizer
+}
+
+func ClaimMapperProvider(so *serverOptions) authorization.ClaimMapper {
+	return so.claimMapper
+}
+
+func JWTAudienceMapperProvider(so *serverOptions) authorization.JWTAudienceMapper {
+	return so.audienceGetter
+}
+
+type (
+	ServiceProviderParamsCommon struct {
+		fx.In
+
+		Cfg                        *config.Config
+		ServiceNames               ServiceNames
+		Logger                     log.Logger
+		NamespaceLogger            NamespaceLogger
+		DynamicConfigClient        dynamicconfig.Client
+		ServerReporter             ServerReporter
+		SdkReporter                SdkReporter
+		EsConfig                   *esclient.Config
+		EsClient                   esclient.Client
+		TlsConfigProvider          encryption.TLSConfigProvider
+		PersistenceConfig          config.Persistence
+		ClusterMetadata            *cluster.Config
+		ClientFactoryProvider      client.FactoryProvider
+		AudienceGetter             authorization.JWTAudienceMapper
+		PersistenceServiceResolver resolver.ServiceResolver
+		SearchAttributesMapper     searchattribute.Mapper
+		CustomInterceptors         []grpc.UnaryServerInterceptor
+		Authorizer                 authorization.Authorizer
+		ClaimMapper                authorization.ClaimMapper
+		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
+	}
+)
+
 func HistoryServiceProvider(
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	so *serverOptions,
-	dynamicConfigClient dynamicconfig.Client,
-	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
-	esConfig *esclient.Config,
-	esClient esclient.Client,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
+	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.HistoryService
 
-	if _, ok := so.serviceNames[serviceName]; !ok {
-		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
+	if _, ok := params.ServiceNames[serviceName]; !ok {
+		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -197,24 +268,33 @@ func HistoryServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			so,
-			esConfig,
-			persistenceConfig,
-			clusterMetadata,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
 		),
-		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
+		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
-		fx.Provide(func() log.Logger { return logger }),
-		fx.Provide(func() ServerReporter { return serverReporter }),
-		fx.Provide(func() SdkReporter { return sdkReporter }),
-		fx.Provide(func() NamespaceLogger { return namespaceLogger }), // resolves untyped nil error
-		fx.Provide(func() esclient.Client { return esClient }),
+		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() SdkReporter { return params.SdkReporter }),
+		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
 		history.Module,
+		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
+	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -225,25 +305,15 @@ func HistoryServiceProvider(
 }
 
 func MatchingServiceProvider(
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	so *serverOptions,
-	dynamicConfigClient dynamicconfig.Client,
-	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
-	esConfig *esclient.Config,
-	esClient esclient.Client,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
+	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.MatchingService
 
-	if _, ok := so.serviceNames[serviceName]; !ok {
-		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
+	if _, ok := params.ServiceNames[serviceName]; !ok {
+		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -254,24 +324,33 @@ func MatchingServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			so,
-			esConfig,
-			persistenceConfig,
-			clusterMetadata,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
 		),
-		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
+		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
-		fx.Provide(func() log.Logger { return logger }),
-		fx.Provide(func() ServerReporter { return serverReporter }),
-		fx.Provide(func() SdkReporter { return sdkReporter }),
-		fx.Provide(func() NamespaceLogger { return namespaceLogger }), // resolves untyped nil error
-		fx.Provide(func() esclient.Client { return esClient }),
+		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() SdkReporter { return params.SdkReporter }),
+		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
 		matching.Module,
+		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
+	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -282,25 +361,15 @@ func MatchingServiceProvider(
 }
 
 func FrontendServiceProvider(
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	so *serverOptions,
-	dynamicConfigClient dynamicconfig.Client,
-	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
-	esConfig *esclient.Config,
-	esClient esclient.Client,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
+	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.FrontendService
 
-	if _, ok := so.serviceNames[serviceName]; !ok {
-		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
+	if _, ok := params.ServiceNames[serviceName]; !ok {
+		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -311,24 +380,33 @@ func FrontendServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			so,
-			esConfig,
-			persistenceConfig,
-			clusterMetadata,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
 		),
-		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
+		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
-		fx.Provide(func() log.Logger { return logger }),
-		fx.Provide(func() ServerReporter { return serverReporter }),
-		fx.Provide(func() SdkReporter { return sdkReporter }),
-		fx.Provide(func() NamespaceLogger { return namespaceLogger }), // resolves untyped nil error
-		fx.Provide(func() esclient.Client { return esClient }),
+		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() SdkReporter { return params.SdkReporter }),
+		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
 		frontend.Module,
+		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
+	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -339,25 +417,15 @@ func FrontendServiceProvider(
 }
 
 func WorkerServiceProvider(
-	logger log.Logger,
-	namespaceLogger NamespaceLogger,
-	so *serverOptions,
-	dynamicConfigClient dynamicconfig.Client,
-	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
-	esConfig *esclient.Config,
-	esClient esclient.Client,
-	tlsConfigProvider encryption.TLSConfigProvider,
-	persistenceConfig config.Persistence,
-	clusterMetadata *cluster.Config,
+	params ServiceProviderParamsCommon,
 ) (ServicesGroupOut, error) {
 	serviceName := primitives.WorkerService
 
-	if _, ok := so.serviceNames[serviceName]; !ok {
-		logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
+	if _, ok := params.ServiceNames[serviceName]; !ok {
+		params.Logger.Info("Service is not requested, skipping initialization.", tag.Service(serviceName))
 		return ServicesGroupOut{
 			Services: &ServicesMetadata{
-				App:           fx.New(),
+				App:           fx.New(fx.NopLogger),
 				ServiceName:   serviceName,
 				ServiceStopFn: func() {},
 			},
@@ -368,24 +436,33 @@ func WorkerServiceProvider(
 	app := fx.New(
 		fx.Supply(
 			stopChan,
-			so,
-			esConfig,
-			persistenceConfig,
-			clusterMetadata,
+			params.EsConfig,
+			params.PersistenceConfig,
+			params.ClusterMetadata,
+			params.Cfg,
 		),
-		fx.Provide(func() encryption.TLSConfigProvider { return tlsConfigProvider }),
-		fx.Provide(func() dynamicconfig.Client { return dynamicConfigClient }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return params.DataStoreFactory }),
+		fx.Provide(func() client.FactoryProvider { return params.ClientFactoryProvider }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return params.AudienceGetter }),
+		fx.Provide(func() resolver.ServiceResolver { return params.PersistenceServiceResolver }),
+		fx.Provide(func() searchattribute.Mapper { return params.SearchAttributesMapper }),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return params.CustomInterceptors }),
+		fx.Provide(func() authorization.Authorizer { return params.Authorizer }),
+		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
+		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
+		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
-		fx.Provide(func() log.Logger { return logger }),
-		fx.Provide(func() ServerReporter { return serverReporter }),
-		fx.Provide(func() SdkReporter { return sdkReporter }),
-		fx.Provide(func() NamespaceLogger { return namespaceLogger }), // resolves untyped nil error
-		fx.Provide(func() esclient.Client { return esClient }),
+		fx.Provide(func() log.Logger { return params.Logger }),
+		fx.Provide(func() ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() SdkReporter { return params.SdkReporter }),
+		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
 		worker.Module,
+		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(logger, app, serviceName, stopChan) }
+	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -401,9 +478,8 @@ func SoExpander(so *serverOptions) (
 	*config.PProf,
 	*config.Config,
 	resolver.ServiceResolver,
-	persistenceClient.AbstractDataStoreFactory,
 ) {
-	return &so.config.Global.PProf, so.config, so.persistenceServiceResolver, so.customDataStoreFactory
+	return &so.config.Global.PProf, so.config, so.persistenceServiceResolver
 }
 
 func DynamicConfigClientProvider(so *serverOptions, logger log.Logger, stoppedCh chan interface{}) dynamicconfig.Client {
@@ -481,47 +557,174 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
-	applied, err := clusterMetadataManager.SaveClusterMetadata(
-		&persistence.SaveClusterMetadataRequest{
-			ClusterMetadata: persistencespb.ClusterMetadata{
-				HistoryShardCount: config.Persistence.NumHistoryShards,
-				ClusterName:       config.ClusterMetadata.CurrentClusterName,
-				ClusterId:         uuid.New(),
-			}})
+	/**
+	 * 1. Create cluster metadata info in both cluster_metadata and cluster_metadata_info tables.
+	 * 2. For non current clusters, the initialization will be succeeded in the first time but fails in the following due to version conditional update.
+	 * 3. For current cluster, 1) initialize in both tables (applied == true), 2) migrate data from cluster_metadata to cluster_metadata_info (applied == false)
+	 */
+	clusterData := config.ClusterMetadata
+	for clusterName, clusterInfo := range clusterData.ClusterInformation {
+		var clusterId = ""
+		if clusterName == clusterData.CurrentClusterName {
+			// Only set current cluster Id as we don't know the remote cluster Id.
+			clusterId = uuid.New()
+		}
+		//Case 1: initialize cluster metadata config
+		// We assume the existing remote cluster info is correct.
+		applied, err := clusterMetadataManager.SaveClusterMetadata(
+			&persistence.SaveClusterMetadataRequest{
+				ClusterMetadata: persistencespb.ClusterMetadata{
+					HistoryShardCount:        config.Persistence.NumHistoryShards,
+					ClusterName:              clusterName,
+					ClusterId:                clusterId,
+					ClusterAddress:           clusterInfo.RPCAddress,
+					FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
+					InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
+					IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
+					IsConnectionEnabled:      clusterInfo.Enabled,
+				}})
+		if err != nil {
+			logger.Warn("Failed to save cluster metadata.", tag.Error(err), tag.ClusterName(clusterName))
+		}
+		if applied {
+			logger.Info("Successfully saved cluster metadata.", tag.ClusterName(clusterName))
+			continue
+		}
+
+		resp, err := clusterMetadataManager.GetClusterMetadata(&persistence.GetClusterMetadataRequest{
+			ClusterName: clusterName,
+		})
+		switch err.(type) {
+		case nil:
+			// Verify current cluster metadata
+			if clusterName == clusterData.CurrentClusterName {
+				var persistedShardCount = resp.HistoryShardCount
+				if config.Persistence.NumHistoryShards != persistedShardCount {
+					logger.Error(
+						mismatchLogMessage,
+						tag.Key("persistence.numHistoryShards"),
+						tag.IgnoredValue(config.Persistence.NumHistoryShards),
+						tag.Value(persistedShardCount))
+					config.Persistence.NumHistoryShards = persistedShardCount
+				}
+				if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
+					logger.Error(
+						mismatchLogMessage,
+						tag.Key("clusterMetadata.EnableGlobalNamespace"),
+						tag.IgnoredValue(clusterData.EnableGlobalNamespace),
+						tag.Value(resp.IsGlobalNamespaceEnabled))
+					config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
+				}
+				if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
+					logger.Error(
+						mismatchLogMessage,
+						tag.Key("clusterMetadata.FailoverVersionIncrement"),
+						tag.IgnoredValue(clusterData.FailoverVersionIncrement),
+						tag.Value(resp.FailoverVersionIncrement))
+					config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
+				}
+			}
+		case *serviceerror.NotFound:
+			if clusterName == clusterData.CurrentClusterName {
+				// Case 3: data exists in cluster metadata but not in cluster metadata info. Back fill data.
+				oldClusterMetadata, err := clusterMetadataManager.GetClusterMetadataV1()
+				if err != nil {
+					return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while getting old cluster metadata: %w", err)
+				}
+				applied, err = clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+					ClusterMetadata: persistencespb.ClusterMetadata{
+						HistoryShardCount:        oldClusterMetadata.HistoryShardCount,
+						ClusterName:              oldClusterMetadata.ClusterName,
+						ClusterId:                oldClusterMetadata.ClusterId,
+						VersionInfo:              oldClusterMetadata.VersionInfo,
+						IndexSearchAttributes:    oldClusterMetadata.IndexSearchAttributes,
+						ClusterAddress:           clusterInfo.RPCAddress,
+						FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
+						InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
+						IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
+						IsConnectionEnabled:      clusterInfo.Enabled,
+					}})
+				if err != nil || !applied {
+					return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while backfiling cluster metadata: %w", err)
+				}
+			} else {
+				return config.ClusterMetadata,
+					config.Persistence,
+					fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
+			}
+		default:
+			return config.ClusterMetadata,
+				config.Persistence,
+				fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
+		}
+	}
+	err = loadClusterInformationFromStore(config, clusterMetadataManager, logger)
 	if err != nil {
-		logger.Warn("Failed to save cluster metadata.", tag.Error(err))
+		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
-	if applied {
-		logger.Info("Successfully saved cluster metadata.")
-		return config.ClusterMetadata, config.Persistence, nil
-	}
-
-	resp, err := clusterMetadataManager.GetClusterMetadata()
-	if err != nil {
-		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
-	}
-
-	if config.ClusterMetadata.CurrentClusterName != resp.ClusterName {
-		logger.Error(
-			mismatchLogMessage,
-			tag.Key("clusterMetadata.currentClusterName"),
-			tag.IgnoredValue(config.ClusterMetadata.CurrentClusterName),
-			tag.Value(resp.ClusterName))
-
-		config.ClusterMetadata.CurrentClusterName = resp.ClusterName
-	}
-
-	var persistedShardCount = resp.HistoryShardCount
-	if config.Persistence.NumHistoryShards != persistedShardCount {
-		logger.Error(
-			mismatchLogMessage,
-			tag.Key("persistence.numHistoryShards"),
-			tag.IgnoredValue(config.Persistence.NumHistoryShards),
-			tag.Value(persistedShardCount))
-		config.Persistence.NumHistoryShards = persistedShardCount
-	}
-
 	return config.ClusterMetadata, config.Persistence, nil
+}
+
+func loadClusterInformationFromStore(config *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
+	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
+		request := &persistence.ListClusterMetadataRequest{
+			PageSize:      100,
+			NextPageToken: nil,
+		}
+		resp, err := clusterMsg.ListClusterMetadata(request)
+		if err != nil {
+			return nil, nil, err
+		}
+		var pageItem []interface{}
+		for _, metadata := range resp.ClusterMetadata {
+			pageItem = append(pageItem, metadata)
+		}
+		return pageItem, resp.NextPageToken, nil
+	})
+
+	for iter.HasNext() {
+		item, err := iter.Next()
+		if err != nil {
+			return err
+		}
+		metadata := item.(*persistence.GetClusterMetadataResponse)
+		newMetadata := cluster.ClusterInformation{
+			Enabled:                metadata.IsConnectionEnabled,
+			InitialFailoverVersion: metadata.InitialFailoverVersion,
+			RPCAddress:             metadata.ClusterAddress,
+		}
+		if staticMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
+			if staticMetadata.Enabled != metadata.IsConnectionEnabled {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("clusterInformation.Enabled"),
+					tag.IgnoredValue(staticMetadata),
+					tag.Value(newMetadata))
+			}
+			if staticMetadata.RPCAddress != metadata.ClusterAddress {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("clusterInformation.RPCAddress"),
+					tag.IgnoredValue(staticMetadata),
+					tag.Value(newMetadata))
+			}
+			if staticMetadata.InitialFailoverVersion != metadata.InitialFailoverVersion {
+				logger.Error(
+					mismatchLogMessage,
+					tag.Key("clusterInformation.InitialFailoverVersion"),
+					tag.IgnoredValue(staticMetadata),
+					tag.Value(newMetadata))
+			}
+		} else {
+			logger.Error(
+				mismatchLogMessage,
+				tag.Key("clusterInformation"),
+				tag.IgnoredValue(config.ClusterMetadata.ClusterInformation),
+				tag.Value(newMetadata))
+		}
+		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata
+	}
+	return nil
 }
 
 func LoggerProvider(so *serverOptions) log.Logger {
@@ -554,16 +757,24 @@ func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReport
 	return serverReporter, sdkReporter, globalMetricsScope, nil
 }
 
+func MetricsClientProvider(logger log.Logger, serverReporter ServerReporter) (metrics.Client, error) {
+	// todo: remove after deprecating per-service metrics config.
+	if serverReporter == nil {
+		return metrics.NewNoopMetricsClient(), nil
+	}
+	return serverReporter.NewClient(logger, metrics.Server)
+}
+
 func TlsConfigProviderProvider(
 	logger log.Logger,
 	so *serverOptions,
-	globalMetricsScope tally.Scope,
+	metricsClient metrics.Client,
 ) (encryption.TLSConfigProvider, error) {
 	if so.tlsConfigProvider != nil {
 		return so.tlsConfigProvider, nil
 	}
 
-	return encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, globalMetricsScope, logger, nil)
+	return encryption.NewTLSConfigProviderFromConfig(so.config.Global.TLS, metricsClient.Scope(metrics.ServerTlsScope), logger, nil)
 }
 
 func ServerLifetimeHooks(

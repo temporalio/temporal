@@ -36,10 +36,43 @@ func AdminDescribeCluster(c *cli.Context) {
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{})
+	clusterName := c.String(FlagCluster)
+	response, err := adminClient.DescribeCluster(ctx, &adminservice.DescribeClusterRequest{
+		ClusterName: clusterName,
+	})
 	if err != nil {
 		ErrorAndExit("Operation DescribeCluster failed.", err)
 	}
 
 	prettyPrintJSONObject(response)
+}
+
+// AdminAddOrUpdateRemoteCluster is used to add or update remote cluster information
+func AdminAddOrUpdateRemoteCluster(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+	ctx, cancel := newContext(c)
+	defer cancel()
+
+	_, err := adminClient.AddOrUpdateRemoteCluster(ctx, &adminservice.AddOrUpdateRemoteClusterRequest{
+		FrontendAddress:               getRequiredOption(c, FlagFrontendAddress),
+		EnableRemoteClusterConnection: c.BoolT(FlagConnectionEnable),
+	})
+	if err != nil {
+		ErrorAndExit("Operation AddOrUpdateRemoteCluster failed.", err)
+	}
+}
+
+// AdminRemoveRemoteCluster is used to remove remote cluster information from the cluster
+func AdminRemoveRemoteCluster(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+
+	ctx, cancel := newContext(c)
+	defer cancel()
+	clusterName := getRequiredOption(c, FlagCluster)
+	_, err := adminClient.RemoveRemoteCluster(ctx, &adminservice.RemoveRemoteClusterRequest{
+		ClusterName: clusterName,
+	})
+	if err != nil {
+		ErrorAndExit("Operation RemoveRemoteCluster failed.", err)
+	}
 }

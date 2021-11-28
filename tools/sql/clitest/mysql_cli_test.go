@@ -25,7 +25,6 @@
 package clitest
 
 import (
-	"os"
 	"strconv"
 	"testing"
 
@@ -93,10 +92,10 @@ func TestMySQLHandlerTestSuite(t *testing.T) {
 }
 
 func TestMySQLSetupSchemaTestSuite(t *testing.T) {
-	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
-	os.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
-	os.Setenv("SQL_USER", testUser)
-	os.Setenv("SQL_PASSWORD", testPassword)
+	t.Setenv("SQL_HOST", environment.GetMySQLAddress())
+	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
+	t.Setenv("SQL_USER", testUser)
+	t.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewSetupSchemaTestSuite(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),
@@ -106,10 +105,10 @@ func TestMySQLSetupSchemaTestSuite(t *testing.T) {
 }
 
 func TestMySQLUpdateSchemaTestSuite(t *testing.T) {
-	os.Setenv("SQL_HOST", environment.GetMySQLAddress())
-	os.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
-	os.Setenv("SQL_USER", testUser)
-	os.Setenv("SQL_PASSWORD", testPassword)
+	t.Setenv("SQL_HOST", environment.GetMySQLAddress())
+	t.Setenv("SQL_PORT", strconv.Itoa(environment.GetMySQLPort()))
+	t.Setenv("SQL_USER", testUser)
+	t.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewUpdateSchemaTestSuite(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),
@@ -123,8 +122,8 @@ func TestMySQLUpdateSchemaTestSuite(t *testing.T) {
 }
 
 func TestMySQLVersionTestSuite(t *testing.T) {
-	os.Setenv("SQL_USER", testUser)
-	os.Setenv("SQL_PASSWORD", testPassword)
+	t.Setenv("SQL_USER", testUser)
+	t.Setenv("SQL_PASSWORD", testPassword)
 	suite.Run(t, NewVersionTestSuite(
 		environment.GetMySQLAddress(),
 		strconv.Itoa(environment.GetMySQLPort()),

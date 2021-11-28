@@ -51,19 +51,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-// validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
-func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
-	min := MinRetentionLocal
-	max := common.MaxWorkflowRetentionPeriod
-	if isGlobalNamespace {
-		min = MinRetentionGlobal
-	}
-	if retention < min || retention > max {
-		return errInvalidRetentionPeriod
-	}
-	return nil
-}
-
 type (
 	// Handler is the namespace operation handler
 	Handler interface {
@@ -102,6 +89,7 @@ type (
 	}
 )
 
+var ErrInvalidNamespaceStateUpdate = serviceerror.NewInvalidArgument("invalid namespace state update")
 var _ Handler = (*HandlerImpl)(nil)
 
 // NewHandler create a new namespace handler
@@ -455,6 +443,13 @@ func (d *HandlerImpl) UpdateNamespace(
 			// only do merging
 			info.Data = d.mergeNamespaceData(info.Data, updatedInfo.Data)
 		}
+		if updatedInfo.State != enumspb.NAMESPACE_STATE_UNSPECIFIED && info.State != updatedInfo.State {
+			configurationChanged = true
+			if err := validateStateUpdate(getResponse, updateRequest); err != nil {
+				return nil, err
+			}
+			info.State = updatedInfo.State
+		}
 	}
 	if updateRequest.Config != nil {
 		updatedConfig := updateRequest.Config
@@ -786,4 +781,74 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	}
 
 	return archiver.ValidateURI(URI)
+}
+
+// validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
+func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
+	min := MinRetentionLocal
+	max := common.MaxWorkflowRetentionPeriod
+	if isGlobalNamespace {
+		min = MinRetentionGlobal
+	}
+	if retention < min || retention > max {
+		return errInvalidRetentionPeriod
+	}
+	return nil
+}
+
+func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, nsUpdateRequest *workflowservice.UpdateNamespaceRequest) error {
+	if nsUpdateRequest.UpdateInfo == nil {
+		return nil // no change
+	}
+	oldState := existingNamespace.Namespace.Info.State
+	newState := nsUpdateRequest.UpdateInfo.State
+	if newState == enumspb.NAMESPACE_STATE_UNSPECIFIED || oldState == newState {
+		return nil // no change
+	}
+
+	switch oldState {
+	case enumspb.NAMESPACE_STATE_REGISTERED:
+		switch newState {
+		case enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_DEPRECATED:
+			return nil
+		case enumspb.NAMESPACE_STATE_HANDOVER:
+			// verify this is global namespace
+			isGlobalNamespace := existingNamespace.IsGlobalNamespace || nsUpdateRequest.PromoteNamespace
+			if !isGlobalNamespace {
+				return serviceerror.NewInvalidArgument("namespace state Handover is only valid for global namespace")
+			}
+			// verify namespace has more than 1 replication clusters
+			replicationClusterCount := len(existingNamespace.Namespace.ReplicationConfig.Clusters)
+			if nsUpdateRequest.ReplicationConfig != nil && len(nsUpdateRequest.ReplicationConfig.Clusters) > 0 {
+				replicationClusterCount = len(nsUpdateRequest.ReplicationConfig.Clusters)
+			}
+			if replicationClusterCount < 2 {
+				return serviceerror.NewInvalidArgument("namespace state Handover require more than one replication clusters")
+			}
+			return nil
+		default:
+			return ErrInvalidNamespaceStateUpdate
+		}
+
+	case enumspb.NAMESPACE_STATE_DEPRECATED:
+		switch newState {
+		case enumspb.NAMESPACE_STATE_DELETED:
+			return nil
+		default:
+			return ErrInvalidNamespaceStateUpdate
+		}
+
+	case enumspb.NAMESPACE_STATE_HANDOVER:
+		switch newState {
+		case enumspb.NAMESPACE_STATE_REGISTERED:
+			return nil
+		default:
+			return ErrInvalidNamespaceStateUpdate
+		}
+
+	default:
+		return ErrInvalidNamespaceStateUpdate
+	}
+
+	return nil
 }

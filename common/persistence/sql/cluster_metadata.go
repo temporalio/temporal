@@ -43,10 +43,70 @@ type sqlClusterMetadataManager struct {
 
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
-func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterMetadataResponse, error) {
+func (s *sqlClusterMetadataManager) ListClusterMetadata(
+	request *p.InternalListClusterMetadataRequest,
+) (*p.InternalListClusterMetadataResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	row, err := s.Db.GetClusterMetadata(ctx)
+	var clusterName string
+	if request.NextPageToken != nil {
+		err := gobDeserialize(request.NextPageToken, &clusterName)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing page token: %v", err))
+		}
+	}
+
+	rows, err := s.Db.ListClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: clusterName, PageSize: &request.PageSize})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return &p.InternalListClusterMetadataResponse{}, nil
+		}
+		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListClusterMetadata operation failed. Failed to get cluster metadata rows. Error: %v", err))
+	}
+
+	var clusterMetadata []*p.InternalGetClusterMetadataResponse
+	for _, row := range rows {
+		resp := &p.InternalGetClusterMetadataResponse{
+			ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
+			Version:         row.Version,
+		}
+		if err != nil {
+			return nil, err
+		}
+		clusterMetadata = append(clusterMetadata, resp)
+	}
+
+	resp := &p.InternalListClusterMetadataResponse{ClusterMetadata: clusterMetadata}
+	if len(rows) >= request.PageSize {
+		nextPageToken, err := gobSerialize(rows[len(rows)-1].ClusterName)
+		if err != nil {
+			return nil, serviceerror.NewInternal(fmt.Sprintf("error serializing page token: %v", err))
+		}
+		resp.NextPageToken = nextPageToken
+	}
+	return resp, nil
+}
+
+func (s *sqlClusterMetadataManager) GetClusterMetadataV1() (*p.InternalGetClusterMetadataResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	row, err := s.Db.GetClusterMetadataV1(ctx)
+
+	if err != nil {
+		return nil, convertCommonErrors("GetClusterMetadataV1", err)
+	}
+	return &p.InternalGetClusterMetadataResponse{
+		ClusterMetadata: p.NewDataBlob(row.Data, row.DataEncoding),
+		Version:         row.Version,
+	}, nil
+}
+
+func (s *sqlClusterMetadataManager) GetClusterMetadata(
+	request *p.InternalGetClusterMetadataRequest,
+) (*p.InternalGetClusterMetadataResponse, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	row, err := s.Db.GetClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
 
 	if err != nil {
 		return nil, convertCommonErrors("GetClusterMetadata", err)
@@ -58,11 +118,47 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata() (*p.InternalGetClusterM
 	}, nil
 }
 
+func (s *sqlClusterMetadataManager) SaveClusterMetadataV1(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	err := s.txExecute(ctx, "SaveClusterMetadataV1", func(tx sqlplugin.Tx) error {
+		oldClusterMetadata, err := tx.WriteLockGetClusterMetadataV1(ctx)
+		var lastVersion int64
+		if err != nil {
+			if err != sql.ErrNoRows {
+				return serviceerror.NewUnavailable(fmt.Sprintf("SaveClusterMetadataV1 operation failed. Error %v", err))
+			}
+		} else {
+			lastVersion = oldClusterMetadata.Version
+		}
+		if request.Version != lastVersion {
+			return serviceerror.NewUnavailable(fmt.Sprintf("SaveClusterMetadataV1 encountered version mismatch, expected %v but got %v.",
+				request.Version, oldClusterMetadata.Version))
+		}
+		_, err = tx.SaveClusterMetadataV1(ctx, &sqlplugin.ClusterMetadataRow{
+			Data:         request.ClusterMetadata.Data,
+			DataEncoding: request.ClusterMetadata.EncodingType.String(),
+			Version:      request.Version,
+		})
+		if err != nil {
+			return convertCommonErrors("SaveClusterMetadataV1", err)
+		}
+		return nil
+	})
+
+	if err != nil {
+		return false, serviceerror.NewUnavailable(err.Error())
+	}
+	return true, nil
+}
+
 func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	err := s.txExecute(ctx, "SaveClusterMetadata", func(tx sqlplugin.Tx) error {
-		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata(ctx)
+		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata(
+			ctx,
+			&sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
 		var lastVersion int64
 		if err != nil {
 			if err != sql.ErrNoRows {
@@ -76,6 +172,7 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 				request.Version, oldClusterMetadata.Version))
 		}
 		_, err = tx.SaveClusterMetadata(ctx, &sqlplugin.ClusterMetadataRow{
+			ClusterName:  request.ClusterName,
 			Data:         request.ClusterMetadata.Data,
 			DataEncoding: request.ClusterMetadata.EncodingType.String(),
 			Version:      request.Version,
@@ -90,6 +187,19 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 		return false, serviceerror.NewUnavailable(err.Error())
 	}
 	return true, nil
+}
+
+func (s *sqlClusterMetadataManager) DeleteClusterMetadata(
+	request *p.InternalDeleteClusterMetadataRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	_, err := s.Db.DeleteClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
+
+	if err != nil {
+		return convertCommonErrors("DeleteClusterMetadata", err)
+	}
+	return nil
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {

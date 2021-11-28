@@ -37,11 +37,13 @@ const (
 	FlagKeyspace                              = "keyspace"
 	FlagAddress                               = "address"
 	FlagAddressWithAlias                      = FlagAddress + ", ad"
-	FlagHistoryAddress                        = "history_address"
 	FlagDBEngine                              = "db_engine"
 	FlagDBAddress                             = "db_address"
 	FlagDBPort                                = "db_port"
+	FlagHistoryAddress                        = "history_address"
 	FlagHistoryAddressWithAlias               = FlagHistoryAddress + ", had"
+	FlagFrontendAddress                       = "frontend_address"
+	FlagFrontendAddressWithAlias              = FlagFrontendAddress + ", fad"
 	FlagNamespaceID                           = "namespace_id"
 	FlagNamespace                             = "namespace"
 	FlagNamespaceWithAlias                    = FlagNamespace + ", ns"
@@ -57,7 +59,8 @@ const (
 	FlagTargetCluster                         = "target_cluster"
 	FlagMinEventID                            = "min_event_id"
 	FlagMaxEventID                            = "max_event_id"
-	FlagStartEventVersion                     = "start_event_version"
+	FlagMinEventVersion                       = "min_event_version"
+	FlagMaxEventVersion                       = "max_event_version"
 	FlagTaskQueue                             = "taskqueue"
 	FlagTaskQueueWithAlias                    = FlagTaskQueue + ", tq"
 	FlagTaskQueueType                         = "taskqueuetype"
@@ -88,14 +91,7 @@ const (
 	FlagSkipBaseIsNotCurrent                  = "skip_base_is_not_current"
 	FlagDryRun                                = "dry_run"
 	FlagNonDeterministicOnly                  = "only_non_deterministic"
-	FlagInputTopic                            = "input_topic"
-	FlagInputTopicWithAlias                   = FlagInputTopic + ", it"
-	FlagHostFile                              = "host_file"
 	FlagCluster                               = "cluster"
-	FlagInputCluster                          = "input_cluster"
-	FlagStartOffset                           = "start_offset"
-	FlagTopic                                 = "topic"
-	FlagGroup                                 = "group"
 	FlagResult                                = "result"
 	FlagIdentity                              = "identity"
 	FlagDetail                                = "detail"
@@ -133,6 +129,7 @@ const (
 	FlagDescriptionWithAlias                  = FlagDescription + ", desc"
 	FlagOwnerEmail                            = "owner_email"
 	FlagOwnerEmailWithAlias                   = FlagOwnerEmail + ", oe"
+	FlagState                                 = "state"
 	FlagRetention                             = "retention"
 	FlagRetentionWithAlias                    = FlagRetention + ", rd"
 	FlagHistoryArchivalState                  = "history_archival_state"
@@ -174,20 +171,15 @@ const (
 	FlagMaxFieldLengthWithAlias               = FlagMaxFieldLength + ", maxl"
 	FlagSkipErrorMode                         = "skip_errors"
 	FlagSkipErrorModeWithAlias                = FlagSkipErrorMode + ", serr"
-	FlagHeadersMode                           = "headers"
-	FlagHeadersModeWithAlias                  = FlagHeadersMode + ", he"
-	FlagMessageType                           = "message_type"
-	FlagMessageTypeWithAlias                  = FlagMessageType + ", mt"
-	FlagURL                                   = "url"
-	FlagIndex                                 = "index"
-	FlagBatchSize                             = "batch_size"
-	FlagBatchSizeWithAlias                    = FlagBatchSize + ", bs"
+	FlagElasticsearchURL                      = "url"
+	FlagElasticsearchUsername                 = "es-username"
+	FlagElasticsearchPassword                 = "es-password"
+	FlagElasticsearchIndex                    = "index"
 	FlagMemoKey                               = "memo_key"
 	FlagMemo                                  = "memo"
 	FlagMemoFile                              = "memo_file"
 	FlagSearchAttributeKey                    = "search_attr_key"
 	FlagSearchAttributeValue                  = "search_attr_value"
-	FlagSearchAttributeType                   = "search_attr_type"
 	FlagAddBadBinary                          = "add_bad_binary"
 	FlagRemoveBadBinary                       = "remove_bad_binary"
 	FlagResetType                             = "reset_type"
@@ -202,8 +194,8 @@ const (
 	FlagSignalNameWithAlias                   = FlagSignalName + ", sig"
 	FlagTaskID                                = "task_id"
 	FlagTaskType                              = "task_type"
-	FlagMinReadLevel                          = "min_read_level"
-	FlagMaxReadLevel                          = "max_read_level"
+	FlagMinTaskID                             = "min_task_id"
+	FlagMaxTaskID                             = "max_task_id"
 	FlagTaskVisibilityTimestamp               = "task_timestamp"
 	FlagMinVisibilityTimestamp                = "min_visibility_ts"
 	FlagMaxVisibilityTimestamp                = "max_visibility_ts"
@@ -224,6 +216,8 @@ const (
 	FlagTLSCaPath                             = "tls_ca_path"
 	FlagTLSDisableHostVerification            = "tls_disable_host_verification"
 	FlagTLSServerName                         = "tls_server_name"
+	FlagTLSRootCaData                         = "tls_ca_data"
+	FlagTLSForceEnable                        = "tls_force_enable"
 	FlagDLQType                               = "dlq_type"
 	FlagDLQTypeWithAlias                      = FlagDLQType + ", dt"
 	FlagMaxMessageCount                       = "max_message_count"
@@ -246,6 +240,8 @@ const (
 	FlagTypeWithAlias                         = FlagType + ", t"
 	FlagVersion                               = "version"
 	FlagPort                                  = "port"
+	FlagConnectionEnable                      = "enable_connection"
+	FlagConnectionEnableWithAlias             = FlagConnectionEnable + ", ec"
 
 	FlagProtoType  = "type"
 	FlagHexData    = "hex_data"
@@ -672,9 +668,19 @@ func getDBFlags() []cli.Flag {
 func getESFlags(index bool) []cli.Flag {
 	flags := []cli.Flag{
 		cli.StringFlag{
-			Name:  FlagURL,
+			Name:  FlagElasticsearchURL,
 			Value: "http://127.0.0.1:9200",
 			Usage: "URL of Elasticsearch cluster",
+		},
+		cli.StringFlag{
+			Name:  FlagElasticsearchUsername,
+			Value: "",
+			Usage: "Username for Elasticsearch cluster",
+		},
+		cli.StringFlag{
+			Name:  FlagElasticsearchPassword,
+			Value: "",
+			Usage: "Password for Elasticsearch cluster",
 		},
 		cli.StringFlag{
 			Name:  FlagVersion,
@@ -685,7 +691,7 @@ func getESFlags(index bool) []cli.Flag {
 	if index {
 		flags = append(flags,
 			cli.StringFlag{
-				Name:  FlagIndex,
+				Name:  FlagElasticsearchIndex,
 				Usage: "Elasticsearch index name",
 			},
 		)

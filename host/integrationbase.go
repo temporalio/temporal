@@ -36,7 +36,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"

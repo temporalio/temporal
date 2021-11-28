@@ -144,8 +144,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	}
 
 	testBase := persistencetests.NewTestBase(&options.Persistence)
-	testBase.Setup(nil)
-	setupShards(testBase, options.HistoryConfig.NumHistoryShards, logger)
+	testBase.Setup(clusterMetadataConfig)
 	archiverBase := newArchiverBase(options.EnableArchival, logger)
 
 	pConfig := testBase.DefaultTestCluster.Config()
@@ -165,7 +164,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			HistoryShardCount: options.HistoryConfig.NumHistoryShards,
-			ClusterName:       options.ClusterMetadata.CurrentClusterName,
+			ClusterName:       clusterMetadataConfig.CurrentClusterName,
 			ClusterId:         uuid.New(),
 		}})
 	if err != nil {
@@ -222,15 +221,6 @@ func newPProfInitializerImpl(logger log.Logger, port int) *pprof.PProfInitialize
 			Port: port,
 		},
 		Logger: logger,
-	}
-}
-
-func setupShards(testBase persistencetests.TestBase, numHistoryShards int32, logger log.Logger) {
-	for shardID := int32(1); shardID <= numHistoryShards; shardID++ {
-		err := testBase.CreateShard(int32(shardID), "", 0)
-		if err != nil {
-			logger.Fatal("Failed to create shard", tag.Error(err))
-		}
 	}
 }
 

@@ -6,7 +6,7 @@ version: "3.5"
 
 services:
   mysql:
-    image: mysql:5.7
+    image: mysql:8.0.19
     container_name: temporal-dev-mysql
     ports:
       - "3306:3306"
@@ -26,7 +26,7 @@ services:
     networks:
       - temporal-dev-network
   postgresql:
-    image: postgres:9.6
+    image: postgres:13.5
     container_name: temporal-dev-postgresql
     ports:
       - "5432:5432"

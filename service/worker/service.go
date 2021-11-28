@@ -32,6 +32,7 @@ import (
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -108,7 +109,7 @@ type (
 )
 
 func NewService(
-	logger log.Logger,
+	logger resource.SnTaggedLogger,
 	serviceConfig *Config,
 	sdkClient sdkclient.Client,
 	esClient esclient.Client,

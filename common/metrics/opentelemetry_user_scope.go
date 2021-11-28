@@ -28,22 +28,26 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type opentelemetryUserScope struct {
 	reporter *OpentelemetryReporter
-	labels   []label.KeyValue
+	labels   []attribute.KeyValue
 	tags     map[string]string
+
+	gaugeCache OtelGaugeCache
 }
 
 func newOpentelemetryUserScope(
 	reporter *OpentelemetryReporter,
 	tags map[string]string,
+	gaugeCache OtelGaugeCache,
 ) *opentelemetryUserScope {
 	result := &opentelemetryUserScope{
-		reporter: reporter,
-		tags:     tags,
+		reporter:   reporter,
+		tags:       tags,
+		gaugeCache: gaugeCache,
 	}
 	result.labels = tagMapToLabelArray(tags)
 	return result
@@ -60,25 +64,24 @@ func (o opentelemetryUserScope) AddCounter(counter string, delta int64) {
 
 func (o opentelemetryUserScope) StartTimer(timer string) Stopwatch {
 	metric := newOpenTelemetryStopwatchMetric(
-		o.reporter.GetMeterMust().NewFloat64ValueRecorder(timer),
+		o.reporter.GetMeterMust().NewInt64Histogram(timer),
 		o.labels)
 	return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{metric})
 }
 
 func (o opentelemetryUserScope) RecordTimer(timer string, d time.Duration) {
 	ctx := context.Background()
-	o.reporter.GetMeterMust().NewInt64ValueRecorder(timer).Record(ctx, d.Nanoseconds(), o.labels...)
+	o.reporter.GetMeterMust().NewInt64Histogram(timer).Record(ctx, d.Nanoseconds(), o.labels...)
 }
 
 func (o opentelemetryUserScope) RecordDistribution(id string, d int) {
 	value := int64(d)
 	ctx := context.Background()
-	o.reporter.GetMeterMust().NewInt64ValueRecorder(id).Record(ctx, value, o.labels...)
+	o.reporter.GetMeterMust().NewInt64Histogram(id).Record(ctx, value, o.labels...)
 }
 
 func (o opentelemetryUserScope) UpdateGauge(gauge string, value float64) {
-	ctx := context.Background()
-	o.reporter.GetMeterMust().NewFloat64ValueRecorder(gauge).Record(ctx, value, o.labels...)
+	o.gaugeCache.Set(gauge, o.tags, value)
 }
 
 // Tagged provides new scope with added and/or overriden tags values.
@@ -91,5 +94,5 @@ func (o opentelemetryUserScope) Tagged(tags map[string]string) UserScope {
 	for key, value := range tags {
 		tagMap[key] = value
 	}
-	return newOpentelemetryUserScope(o.reporter, tagMap)
+	return newOpentelemetryUserScope(o.reporter, tagMap, o.gaugeCache)
 }

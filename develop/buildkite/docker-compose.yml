@@ -9,7 +9,7 @@ services:
           - cassandra
 
   mysql:
-    image: mysql:5.7
+    image: mysql:8.0.19
     environment:
       MYSQL_ROOT_PASSWORD: root
     volumes:
@@ -20,7 +20,7 @@ services:
           - mysql
 
   postgresql:
-    image: postgres:9.6
+    image: postgres:13.5
     environment:
       POSTGRES_USER: temporal
       POSTGRES_PASSWORD: temporal

@@ -37,17 +37,19 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
+	"google.golang.org/grpc"
+
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/persistence/visibility"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-
-	"google.golang.org/grpc"
+	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -378,14 +380,12 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
-	params.Authorizer = authorization.NewNoopAuthorizer()
 
 	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for frontend", tag.Error(err))
 	}
-	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
@@ -404,12 +404,21 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			params.ClusterMetadataConfig,
 			params.PersistenceConfig,
 		),
+		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
+		fx.Provide(func() authorization.Authorizer { return nil }),
+		fx.Provide(func() authorization.ClaimMapper { return nil }),
+		fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
+		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+		fx.Provide(func() searchattribute.Mapper { return nil }),
+		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() *esclient.Config { return c.esConfig }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
 		frontend.Module,
 		fx.Populate(&frontendService),
+		fx.NopLogger,
 	)
 	err = feApp.Err()
 	if err != nil {
@@ -475,7 +484,6 @@ func (c *temporalImpl) startHistory(
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
 		}
-		params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 		if c.esConfig != nil {
 			esDataStoreName := "es-visibility"
@@ -495,12 +503,17 @@ func (c *temporalImpl) startHistory(
 				params.ClusterMetadataConfig,
 				params.PersistenceConfig,
 			),
+			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+			fx.Provide(func() searchattribute.Mapper { return nil }),
+			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
+			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 			fx.Provide(func() dynamicconfig.Client { return integrationClient }),
 			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
 			history.Module,
-			fx.Populate(&historyService))
+			fx.Populate(&historyService),
+			fx.NopLogger)
 		err = app.Err()
 		if err != nil {
 			c.logger.Fatal("unable to construct history service", tag.Error(err))
@@ -536,7 +549,6 @@ func (c *temporalImpl) startHistory(
 }
 
 func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
-
 	params := &resource.BootstrapParams{}
 	params.Name = common.MatchingServiceName
 	params.ThrottledLogger = c.logger
@@ -555,7 +567,6 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
 	}
-	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 	stoppedCh := make(chan struct{})
 	var matchingService *matching.Service
@@ -565,10 +576,15 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 			params,
 			params.ClusterMetadataConfig,
 		),
+		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
+		fx.Provide(func() searchattribute.Mapper { return nil }),
+		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
+		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		matching.Module,
 		fx.Populate(&matchingService),
+		fx.NopLogger,
 	)
 	err = app.Err()
 	if err != nil {
@@ -609,7 +625,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
-	params.PersistenceServiceResolver = resolver.NewNoopResolver()
 
 	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
 		HostPort:     c.FrontendGRPCAddress(),
@@ -632,7 +647,11 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(5000),
 		dynamicconfig.GetIntPropertyFn(10000),
+		nil,
+		resolver.NewNoopResolver(),
+		nil,
 	)
+
 	if err != nil {
 		c.logger.Fatal("unable to create worker service", tag.Error(err))
 	}

@@ -163,3 +163,158 @@ func (mr *MockTaskMockRecorder) State() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "State", reflect.TypeOf((*MockTask)(nil).State))
 }
+
+// MockPriorityTask is a mock of PriorityTask interface.
+type MockPriorityTask struct {
+	ctrl     *gomock.Controller
+	recorder *MockPriorityTaskMockRecorder
+}
+
+// MockPriorityTaskMockRecorder is the mock recorder for MockPriorityTask.
+type MockPriorityTaskMockRecorder struct {
+	mock *MockPriorityTask
+}
+
+// NewMockPriorityTask creates a new mock instance.
+func NewMockPriorityTask(ctrl *gomock.Controller) *MockPriorityTask {
+	mock := &MockPriorityTask{ctrl: ctrl}
+	mock.recorder = &MockPriorityTaskMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPriorityTask) EXPECT() *MockPriorityTaskMockRecorder {
+	return m.recorder
+}
+
+// Ack mocks base method.
+func (m *MockPriorityTask) Ack() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Ack")
+}
+
+// Ack indicates an expected call of Ack.
+func (mr *MockPriorityTaskMockRecorder) Ack() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ack", reflect.TypeOf((*MockPriorityTask)(nil).Ack))
+}
+
+// Execute mocks base method.
+func (m *MockPriorityTask) Execute() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Execute")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Execute indicates an expected call of Execute.
+func (mr *MockPriorityTaskMockRecorder) Execute() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockPriorityTask)(nil).Execute))
+}
+
+// GetPriority mocks base method.
+func (m *MockPriorityTask) GetPriority() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPriority")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// GetPriority indicates an expected call of GetPriority.
+func (mr *MockPriorityTaskMockRecorder) GetPriority() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPriority", reflect.TypeOf((*MockPriorityTask)(nil).GetPriority))
+}
+
+// HandleErr mocks base method.
+func (m *MockPriorityTask) HandleErr(err error) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HandleErr", err)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// HandleErr indicates an expected call of HandleErr.
+func (mr *MockPriorityTaskMockRecorder) HandleErr(err interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HandleErr", reflect.TypeOf((*MockPriorityTask)(nil).HandleErr), err)
+}
+
+// IsRetryableError mocks base method.
+func (m *MockPriorityTask) IsRetryableError(err error) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsRetryableError", err)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsRetryableError indicates an expected call of IsRetryableError.
+func (mr *MockPriorityTaskMockRecorder) IsRetryableError(err interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsRetryableError", reflect.TypeOf((*MockPriorityTask)(nil).IsRetryableError), err)
+}
+
+// Nack mocks base method.
+func (m *MockPriorityTask) Nack() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Nack")
+}
+
+// Nack indicates an expected call of Nack.
+func (mr *MockPriorityTaskMockRecorder) Nack() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Nack", reflect.TypeOf((*MockPriorityTask)(nil).Nack))
+}
+
+// Reschedule mocks base method.
+func (m *MockPriorityTask) Reschedule() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Reschedule")
+}
+
+// Reschedule indicates an expected call of Reschedule.
+func (mr *MockPriorityTaskMockRecorder) Reschedule() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Reschedule", reflect.TypeOf((*MockPriorityTask)(nil).Reschedule))
+}
+
+// RetryPolicy mocks base method.
+func (m *MockPriorityTask) RetryPolicy() backoff.RetryPolicy {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RetryPolicy")
+	ret0, _ := ret[0].(backoff.RetryPolicy)
+	return ret0
+}
+
+// RetryPolicy indicates an expected call of RetryPolicy.
+func (mr *MockPriorityTaskMockRecorder) RetryPolicy() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RetryPolicy", reflect.TypeOf((*MockPriorityTask)(nil).RetryPolicy))
+}
+
+// SetPriority mocks base method.
+func (m *MockPriorityTask) SetPriority(arg0 int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPriority", arg0)
+}
+
+// SetPriority indicates an expected call of SetPriority.
+func (mr *MockPriorityTaskMockRecorder) SetPriority(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPriority", reflect.TypeOf((*MockPriorityTask)(nil).SetPriority), arg0)
+}
+
+// State mocks base method.
+func (m *MockPriorityTask) State() State {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "State")
+	ret0, _ := ret[0].(State)
+	return ret0
+}
+
+// State indicates an expected call of State.
+func (mr *MockPriorityTaskMockRecorder) State() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "State", reflect.TypeOf((*MockPriorityTask)(nil).State))
+}

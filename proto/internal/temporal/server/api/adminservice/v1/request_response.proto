@@ -24,22 +24,86 @@ package temporal.server.api.adminservice.v1;
 option go_package = "go.temporal.io/server/api/adminservice/v1;adminservice";
 
 import "google/protobuf/timestamp.proto";
+import "google/protobuf/duration.proto";
 
 import "dependencies/gogoproto/gogo.proto";
 
 import "temporal/api/enums/v1/common.proto";
+import "temporal/api/enums/v1/namespace.proto";
+import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/common/v1/message.proto";
 import "temporal/api/version/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
+import "temporal/api/replication/v1/message.proto";
+import "temporal/api/namespace/v1/message.proto";
 
 import "temporal/server/api/cluster/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
+import "temporal/server/api/enums/v1/cluster.proto";
 import "temporal/server/api/enums/v1/task.proto";
-import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
-import "temporal/server/api/persistence/v1/executions.proto";
+import "temporal/server/api/namespace/v1/message.proto";
 import "temporal/server/api/replication/v1/message.proto";
+import "temporal/server/api/persistence/v1/executions.proto";
+import "temporal/server/api/persistence/v1/namespaces.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
+import "temporal/server/api/persistence/v1/tasks.proto";
+
+message ListNamespacesRequest {
+    int32 page_size = 1;
+    bytes next_page_token = 2;
+}
+
+message ListNamespacesResponse {
+    repeated DescribeNamespaceResponse namespaces = 1;
+    bytes next_page_token = 2;
+}
+
+message DescribeNamespaceResponse {
+    temporal.server.api.persistence.v1.NamespaceDetail namespace = 1;
+    int64 notification_version= 2;
+    bool is_global_namespace = 3;
+}
+
+message RegisterNamespaceRequest {
+    string namespace = 1;
+    string description = 2;
+    string owner_email = 3;
+    google.protobuf.Duration workflow_execution_retention_period = 4 [(gogoproto.stdduration) = true];
+    repeated temporal.api.replication.v1.ClusterReplicationConfig clusters = 5;
+    string active_cluster_name = 6;
+    // A key-value map for any customized purpose.
+    map<string, string> data = 7;
+    string security_token = 8;
+    bool is_global_namespace = 9;
+    // If unspecified (ARCHIVAL_STATE_UNSPECIFIED) then default server configuration is used.
+    temporal.api.enums.v1.ArchivalState history_archival_state = 10;
+    string history_archival_uri = 11;
+    // If unspecified (ARCHIVAL_STATE_UNSPECIFIED) then default server configuration is used.
+    temporal.api.enums.v1.ArchivalState visibility_archival_state = 12;
+    string visibility_archival_uri = 13;
+}
+
+message RegisterNamespaceResponse {
+}
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+message UpdateNamespaceRequest {
+    string namespace = 1;
+    temporal.api.namespace.v1.UpdateNamespaceInfo update_info = 2;
+    temporal.api.namespace.v1.NamespaceConfig config = 3;
+    temporal.api.replication.v1.NamespaceReplicationConfig replication_config = 4;
+    string security_token = 5;
+    string delete_bad_binary = 6;
+    // promote local namespace to global namespace. Ignored if namespace is already global namespace.
+    bool promote_namespace = 7;
+}
+
+message UpdateNamespaceResponse {
+}
 
 message DescribeMutableStateRequest {
     string namespace = 1;
@@ -83,6 +147,69 @@ message GetShardRequest {
 
 message GetShardResponse {
     temporal.server.api.persistence.v1.ShardInfo shard_info = 1;
+}
+
+message ListTransferTasksRequest{ 
+    int32 shard_id = 1;
+    int64 min_task_id = 2;
+    int64 max_task_id = 4;
+    int32 batch_size = 5;
+    bytes next_page_token = 6;
+}
+
+message ListTransferTasksResponse {
+    repeated Task tasks = 1;
+    bytes next_page_token = 2;
+}
+
+message ListVisibilityTasksRequest{
+    int32 shard_id = 1;
+    int64 read_level = 2;
+    int64 max_read_level = 4;
+    int32 batch_size = 5;
+    bytes next_page_token = 6;
+}
+
+ message ListVisibilityTasksResponse {
+    repeated Task tasks = 1;
+    bytes next_page_token = 2;
+}
+
+message ListTimerTasksRequest{ 
+    int32 shard_id = 1;
+    google.protobuf.Timestamp min_time = 2 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp max_time = 3 [(gogoproto.stdtime) = true];
+    int32 batch_size = 4;
+    bytes next_page_token = 5;
+}
+
+
+message ListTimerTasksResponse {
+    repeated Task tasks = 1;
+    bytes next_page_token = 2;
+}
+
+message ListReplicationTasksRequest {
+    int32 shard_id = 1;
+    int64 min_task_id = 2;
+    int64 max_task_id = 3;
+    int32 batch_size = 4;
+    bytes next_page_token = 5;
+}
+
+message ListReplicationTasksResponse {
+    repeated Task tasks = 1;
+    bytes next_page_token = 2;
+}
+
+message Task {
+    string namespace_id = 1;
+    string workflow_id = 2;
+    string run_id = 3;
+    int64 task_id = 4;
+    temporal.server.api.enums.v1.TaskType task_type = 5;
+    google.protobuf.Timestamp fire_time = 6 [(gogoproto.stdtime) = true];
+    int64 version = 7;
 }
 
 message RemoveTaskRequest {
@@ -187,6 +314,7 @@ message GetSearchAttributesResponse {
 }
 
 message DescribeClusterRequest {
+    string cluster_name = 1;
 }
 
 message DescribeClusterResponse {
@@ -199,6 +327,43 @@ message DescribeClusterResponse {
     string persistence_store = 7;
     string visibility_store = 8;
     temporal.api.version.v1.VersionInfo version_info = 9;
+    int64 failover_version_increment = 10;
+    int64 initial_failover_version = 11;
+    bool is_global_namespace_enabled = 12;
+}
+
+message AddOrUpdateRemoteClusterRequest {
+    string frontend_address = 1;
+    bool enable_remote_cluster_connection = 2;
+}
+
+message AddOrUpdateRemoteClusterResponse {
+}
+
+message RemoveRemoteClusterRequest {
+    string cluster_name = 1;
+}
+
+message RemoveRemoteClusterResponse {
+}
+
+message ListClusterMembersRequest {
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "within" is used to indicate a time range. --)
+    google.protobuf.Duration last_heartbeat_within = 1 [(gogoproto.stdduration) = true];
+    string rpc_address = 2;
+    string host_id = 3;
+    temporal.server.api.enums.v1.ClusterMemberRole role = 4;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "after" is used to indicate a time range. --)
+    google.protobuf.Timestamp session_started_after_time = 5 [(gogoproto.stdtime) = true];
+    int32 page_size = 6;
+    bytes next_page_token = 7;
+}
+
+message ListClusterMembersResponse {
+    repeated temporal.server.api.cluster.v1.ClusterMember active_members = 1;
+    bytes next_page_token = 2;
 }
 
 message GetDLQMessagesRequest {
@@ -259,4 +424,17 @@ message ResendReplicationTasksRequest {
 }
 
 message ResendReplicationTasksResponse {
+}
+
+message GetTaskQueueTasksRequest {
+    string namespace = 1;
+    string task_queue = 2;
+    temporal.api.enums.v1.TaskQueueType task_queue_type = 3;
+    int64 min_task_id = 4;
+    int64 max_task_id = 5;
+    int32 batch_size = 6;
+}
+
+message GetTaskQueueTasksResponse {
+    repeated temporal.server.api.persistence.v1.AllocatedTaskInfo tasks = 1;
 }

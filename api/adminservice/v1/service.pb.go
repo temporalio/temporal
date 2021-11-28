@@ -54,50 +54,64 @@ func init() {
 }
 
 var fileDescriptor_cf5ca5e0c737570d = []byte{
-	// 681 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x97, 0x3f, 0x6f, 0x13, 0x3f,
-	0x18, 0xc7, 0xcf, 0xcb, 0x4f, 0x3f, 0x59, 0xfc, 0xd3, 0x81, 0x40, 0x74, 0x30, 0x08, 0xf6, 0x8b,
-	0x5a, 0xa0, 0x88, 0x16, 0x44, 0xd3, 0xb4, 0xa4, 0x12, 0x0d, 0x82, 0x04, 0x81, 0xc4, 0x82, 0x9c,
-	0xe4, 0x69, 0x7b, 0xea, 0x25, 0x3e, 0x6c, 0x27, 0xa5, 0x13, 0x8c, 0x48, 0x48, 0x08, 0xd6, 0x4a,
-	0x4c, 0x2c, 0x0c, 0xbc, 0x06, 0x24, 0x36, 0xc6, 0x8e, 0x1d, 0xe9, 0x75, 0x61, 0xec, 0x4b, 0x40,
-	0xc7, 0xc5, 0xee, 0x25, 0x35, 0x91, 0x7d, 0xe9, 0x96, 0x93, 0xfc, 0xf9, 0x3e, 0x9f, 0x73, 0xf4,
-	0x3c, 0xf6, 0xe1, 0x69, 0x09, 0x9d, 0x98, 0x71, 0x1a, 0x95, 0x04, 0xf0, 0x3e, 0xf0, 0x12, 0x8d,
-	0xc3, 0x12, 0x6d, 0x77, 0xc2, 0x6e, 0xfa, 0x1c, 0xb6, 0xa0, 0xd4, 0x9f, 0x2e, 0x0d, 0x7e, 0x06,
-	0x31, 0x67, 0x92, 0xf9, 0xd7, 0x15, 0x12, 0x64, 0x48, 0x40, 0xe3, 0x30, 0xc8, 0x23, 0x41, 0x7f,
-	0x7a, 0x6a, 0xce, 0x26, 0x97, 0xc3, 0xab, 0x1e, 0x08, 0xf9, 0x92, 0x83, 0x88, 0x59, 0x57, 0x0c,
-	0x0a, 0xcc, 0xec, 0x5c, 0xc2, 0xa7, 0xca, 0xe9, 0xd2, 0x46, 0xb6, 0xd4, 0xff, 0x8c, 0xf0, 0x85,
-	0x25, 0x10, 0x2d, 0x1e, 0x36, 0xa1, 0xd6, 0x93, 0xb4, 0x19, 0x41, 0x43, 0x52, 0x09, 0xfe, 0x42,
-	0x60, 0xe1, 0x12, 0x98, 0xd0, 0x7a, 0x56, 0x7a, 0xaa, 0x3c, 0x41, 0x42, 0x26, 0x7d, 0xcd, 0xf3,
-	0x77, 0x10, 0x3e, 0xaf, 0x96, 0xac, 0x84, 0x42, 0x32, 0xbe, 0xbd, 0xc2, 0x84, 0xf4, 0xef, 0x3b,
-	0x85, 0xe7, 0x48, 0x65, 0xb7, 0x50, 0x3c, 0x40, 0xcb, 0x6d, 0xe3, 0xff, 0xab, 0x20, 0x1b, 0x1b,
-	0x94, 0xb7, 0xfd, 0x9b, 0x56, 0x79, 0x6a, 0xb9, 0xb2, 0xb8, 0xe5, 0x48, 0xe9, 0xd2, 0x6f, 0x30,
-	0xae, 0x44, 0x4c, 0x40, 0x56, 0x7c, 0xd6, 0x2a, 0xe6, 0x08, 0x50, 0xe5, 0x6f, 0x3b, 0x73, 0x79,
-	0x81, 0x3a, 0x74, 0x58, 0x1f, 0x9e, 0x52, 0xb1, 0x69, 0x29, 0x70, 0x04, 0xb8, 0x09, 0xe4, 0x39,
-	0x2d, 0xf0, 0x03, 0xe1, 0xab, 0x55, 0x90, 0xcf, 0x19, 0xdf, 0x5c, 0x8b, 0xd8, 0xd6, 0xf2, 0x6b,
-	0x68, 0xf5, 0x64, 0xc8, 0xba, 0x75, 0xba, 0x35, 0xf8, 0xb7, 0x9e, 0xcd, 0xf8, 0xab, 0xb6, 0xfb,
-	0x3b, 0x36, 0x46, 0xd9, 0xd6, 0x4e, 0x28, 0x4d, 0xbf, 0xc3, 0x17, 0x84, 0x2f, 0x56, 0x41, 0xd6,
-	0x21, 0x8e, 0xc2, 0x16, 0x4d, 0x17, 0xd6, 0x40, 0x08, 0xba, 0x0e, 0xc2, 0x5f, 0xb4, 0xad, 0x65,
-	0x80, 0x95, 0x6f, 0x65, 0xa2, 0x0c, 0x6d, 0xf9, 0x1d, 0xe1, 0x2b, 0x55, 0x90, 0x8f, 0x68, 0x07,
-	0x44, 0x4c, 0x5b, 0x60, 0xd2, 0x7d, 0x68, 0x5b, 0x6a, 0x5c, 0x8a, 0xf2, 0x5e, 0x3d, 0x99, 0x30,
-	0xfd, 0x02, 0xdf, 0x10, 0xbe, 0x5c, 0x05, 0xb9, 0xb4, 0xfa, 0xc4, 0xa4, 0xbe, 0x6c, 0x5b, 0xcd,
-	0xcc, 0x2b, 0xe9, 0x07, 0x93, 0xc6, 0x68, 0xdd, 0x77, 0x08, 0x9f, 0xae, 0x03, 0x8d, 0xe3, 0x68,
-	0x7b, 0xb9, 0x0f, 0x5d, 0x29, 0xfc, 0x3b, 0x96, 0x6d, 0x92, 0x63, 0x94, 0xd6, 0x5c, 0x11, 0x74,
-	0x68, 0xfc, 0x96, 0xdb, 0xed, 0x06, 0x50, 0xde, 0xda, 0x28, 0x4b, 0xc9, 0xc3, 0x66, 0x4f, 0x82,
-	0xb0, 0x1c, 0xbf, 0x06, 0xd2, 0x6d, 0xfc, 0x1a, 0x03, 0x86, 0xba, 0x27, 0x1b, 0x0d, 0xc7, 0xfc,
-	0x16, 0x1d, 0xe6, 0xca, 0xbf, 0x14, 0x2b, 0x13, 0x65, 0x0c, 0x6d, 0x61, 0x3a, 0xc0, 0x8b, 0x6d,
-	0xa1, 0x81, 0x74, 0xdb, 0x42, 0x63, 0x80, 0x96, 0xfb, 0x80, 0xf0, 0x59, 0x75, 0xc6, 0x55, 0xa2,
-	0x9e, 0x90, 0xc0, 0xfd, 0x79, 0xa7, 0x93, 0x71, 0x40, 0x29, 0xa9, 0xbb, 0xc5, 0x60, 0x2d, 0xf4,
-	0x1e, 0xe1, 0x33, 0x59, 0x8f, 0xe8, 0xfe, 0x9c, 0x73, 0x68, 0xac, 0xd1, 0xa6, 0x9c, 0x2f, 0xc4,
-	0x6a, 0x9b, 0x4f, 0x08, 0x9f, 0x7b, 0xdc, 0xe3, 0xeb, 0x90, 0xf7, 0xb1, 0x7b, 0xc5, 0x51, 0x4c,
-	0x19, 0xdd, 0x2b, 0x48, 0x0f, 0x39, 0xd5, 0xa0, 0x90, 0xd3, 0x28, 0xe6, 0xe6, 0x74, 0x9c, 0xd6,
-	0x4e, 0xe9, 0x2d, 0xb2, 0x0e, 0x6b, 0x1c, 0xc4, 0x86, 0x3a, 0xfa, 0xd2, 0xd3, 0x5a, 0x58, 0xde,
-	0x22, 0x4d, 0xa8, 0xdb, 0x2d, 0xd2, 0x9c, 0x30, 0x32, 0x29, 0x04, 0x74, 0xdb, 0xb9, 0xc9, 0x9b,
-	0x19, 0xda, 0x4e, 0x0a, 0x13, 0xec, 0x3a, 0x29, 0xcc, 0x19, 0xca, 0x72, 0x31, 0xda, 0xdd, 0x27,
-	0xde, 0xde, 0x3e, 0xf1, 0x0e, 0xf7, 0x09, 0x7a, 0x9b, 0x10, 0xf4, 0x35, 0x21, 0xe8, 0x67, 0x42,
-	0xd0, 0x6e, 0x42, 0xd0, 0xaf, 0x84, 0xa0, 0xdf, 0x09, 0xf1, 0x0e, 0x13, 0x82, 0x3e, 0x1e, 0x10,
-	0x6f, 0xf7, 0x80, 0x78, 0x7b, 0x07, 0xc4, 0x7b, 0x31, 0xbb, 0xce, 0x8e, 0xca, 0x87, 0x6c, 0xcc,
-	0x47, 0xc1, 0x7c, 0xfe, 0xb9, 0xf9, 0xdf, 0xdf, 0x2f, 0x82, 0x1b, 0x7f, 0x02, 0x00, 0x00, 0xff,
-	0xff, 0x4c, 0xa4, 0x6a, 0x5f, 0xa7, 0x0c, 0x00, 0x00,
+	// 908 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x98, 0xcf, 0x6b, 0x33, 0x45,
+	0x18, 0xc7, 0x33, 0x17, 0x91, 0xc1, 0x9f, 0xab, 0x88, 0xbe, 0x87, 0x55, 0xd4, 0x73, 0x42, 0xab,
+	0x56, 0x4c, 0xad, 0x49, 0x9a, 0xc6, 0x14, 0x4c, 0xd4, 0x26, 0xb5, 0x82, 0x17, 0x99, 0x64, 0x9f,
+	0xa6, 0x43, 0x37, 0xd9, 0x75, 0x66, 0x36, 0x35, 0x27, 0x3d, 0x0a, 0x82, 0x28, 0x08, 0x82, 0xe0,
+	0xc9, 0x8b, 0x42, 0xff, 0x06, 0xc1, 0x9b, 0xc7, 0x1e, 0x7b, 0xb4, 0xe9, 0xc5, 0x63, 0xff, 0x04,
+	0x59, 0x37, 0x33, 0xd9, 0x1f, 0x63, 0x99, 0xd9, 0xf4, 0xf6, 0xe6, 0xcd, 0x7c, 0xbe, 0xf3, 0xd9,
+	0xed, 0x3c, 0xcf, 0x3e, 0x1b, 0xbc, 0x25, 0x60, 0x1a, 0x06, 0x8c, 0xf8, 0x35, 0x0e, 0x6c, 0x0e,
+	0xac, 0x46, 0x42, 0x5a, 0x23, 0xde, 0x94, 0xce, 0xe2, 0xcf, 0x74, 0x0c, 0xb5, 0xf9, 0x56, 0x6d,
+	0xf5, 0xcf, 0x6a, 0xc8, 0x02, 0x11, 0x38, 0xaf, 0x49, 0xa4, 0x9a, 0x20, 0x55, 0x12, 0xd2, 0x6a,
+	0x1a, 0xa9, 0xce, 0xb7, 0x1e, 0xd5, 0x4d, 0x72, 0x19, 0x7c, 0x11, 0x01, 0x17, 0x9f, 0x33, 0xe0,
+	0x61, 0x30, 0xe3, 0xab, 0x0d, 0xb6, 0x2f, 0x5f, 0xc7, 0x4f, 0xb4, 0xe2, 0xa5, 0xc3, 0x64, 0xa9,
+	0xf3, 0x2d, 0xc2, 0x4f, 0xf5, 0x28, 0x17, 0x1f, 0x92, 0x29, 0xf0, 0x90, 0x8c, 0x81, 0x3b, 0xf5,
+	0xaa, 0x81, 0x45, 0x35, 0x0b, 0x0d, 0x92, 0xed, 0x1e, 0xed, 0x96, 0x62, 0x13, 0xc5, 0x57, 0x2b,
+	0xce, 0x8f, 0x08, 0x3f, 0x3b, 0x80, 0x09, 0xe5, 0x02, 0x98, 0x5a, 0xe0, 0xec, 0x19, 0x85, 0x16,
+	0x38, 0xe9, 0xf4, 0x5e, 0x59, 0x5c, 0x69, 0x7d, 0x87, 0xf0, 0xd3, 0x9f, 0x84, 0x1e, 0x11, 0xb0,
+	0x96, 0x32, 0xbb, 0xd2, 0x1c, 0x25, 0x95, 0xde, 0x2d, 0x07, 0x2b, 0xa1, 0x5f, 0x10, 0x7e, 0xfe,
+	0x00, 0xf8, 0x98, 0xd1, 0x11, 0xf4, 0x23, 0x41, 0x46, 0x3e, 0x0c, 0x05, 0x11, 0xe0, 0x34, 0x8d,
+	0x82, 0x75, 0xa8, 0x54, 0x6b, 0x6d, 0x90, 0xa0, 0xfc, 0x7e, 0x46, 0xf8, 0x39, 0xb9, 0xe4, 0x90,
+	0x72, 0x11, 0xb0, 0xc5, 0x61, 0xc0, 0x85, 0xd3, 0xb0, 0x0a, 0x4f, 0x91, 0xd2, 0xae, 0x59, 0x3e,
+	0x40, 0xc9, 0x2d, 0xf0, 0xe3, 0x5d, 0x10, 0xc3, 0x33, 0xc2, 0x3c, 0xe7, 0x4d, 0xa3, 0x3c, 0xb9,
+	0x5c, 0x5a, 0xbc, 0x65, 0x49, 0xa9, 0xad, 0xbf, 0xc2, 0xb8, 0xed, 0x07, 0x1c, 0x92, 0xcd, 0x77,
+	0x8c, 0x62, 0xd6, 0x80, 0xdc, 0xfe, 0x6d, 0x6b, 0x2e, 0x53, 0x60, 0x71, 0xf5, 0x1d, 0x33, 0x32,
+	0xe3, 0xa7, 0xc0, 0x8e, 0x09, 0x3f, 0xe7, 0x86, 0x05, 0x56, 0xe0, 0xec, 0x0a, 0x4c, 0x83, 0x2b,
+	0x2d, 0xd9, 0x85, 0x8e, 0xe9, 0x54, 0x3a, 0x99, 0x77, 0xa1, 0x35, 0x64, 0xdf, 0x85, 0xd2, 0x6c,
+	0xa6, 0xba, 0xe2, 0x2f, 0x07, 0x10, 0xfa, 0x74, 0x4c, 0x04, 0x0d, 0x66, 0x89, 0x53, 0xd3, 0x38,
+	0x37, 0x8f, 0xda, 0x55, 0x97, 0x3e, 0x21, 0x53, 0x5d, 0xf1, 0x92, 0x13, 0xca, 0xe9, 0x88, 0xfa,
+	0x54, 0x2c, 0x12, 0xbd, 0x86, 0x71, 0x78, 0x8e, 0xb4, 0xab, 0x2e, 0x6d, 0x40, 0xfa, 0x88, 0x0f,
+	0x60, 0x1a, 0xcc, 0x21, 0xfe, 0xc2, 0xf0, 0x88, 0xaf, 0x01, 0xbb, 0x23, 0x9e, 0xe6, 0x94, 0xc0,
+	0x9f, 0x08, 0xbf, 0xd2, 0x05, 0xf1, 0x69, 0xc0, 0xce, 0x4f, 0xfd, 0xe0, 0xa2, 0xf3, 0x25, 0x8c,
+	0xa3, 0xf8, 0x2e, 0x0e, 0xc8, 0xc5, 0xaa, 0x1f, 0x9c, 0x6c, 0x3b, 0x3d, 0xd3, 0x0a, 0xbe, 0x37,
+	0x46, 0xda, 0xf6, 0x1f, 0x28, 0x4d, 0x5d, 0xc3, 0xaf, 0x08, 0xbf, 0xd0, 0x85, 0xf4, 0x19, 0xe8,
+	0x03, 0xe7, 0x64, 0x02, 0xdc, 0xd9, 0x37, 0xdd, 0x4b, 0x03, 0x4b, 0xdf, 0xf6, 0x46, 0x19, 0xca,
+	0xf2, 0x0f, 0x84, 0x5f, 0xee, 0x82, 0x48, 0x3d, 0xa0, 0x8a, 0xba, 0x1f, 0x98, 0x6e, 0x75, 0x5f,
+	0x8a, 0xf4, 0xee, 0x3d, 0x4c, 0x98, 0xba, 0x80, 0x4b, 0x84, 0x5f, 0xea, 0x82, 0x38, 0xe8, 0x1d,
+	0xe9, 0xd4, 0x3b, 0xa6, 0xbb, 0xe9, 0x79, 0x29, 0xfd, 0xfe, 0xa6, 0x31, 0x4a, 0xf7, 0x1b, 0x84,
+	0x9f, 0x1c, 0x00, 0x09, 0x43, 0x7f, 0xd1, 0x99, 0xc3, 0x4c, 0x70, 0xe7, 0x1d, 0xc3, 0x32, 0x49,
+	0x31, 0x52, 0xab, 0x5e, 0x06, 0xcd, 0xb4, 0xa0, 0x96, 0xe7, 0x0d, 0x81, 0xb0, 0xf1, 0x59, 0x4b,
+	0x08, 0x46, 0x47, 0x91, 0x00, 0xd3, 0x16, 0xa4, 0x21, 0xed, 0x5a, 0x90, 0x36, 0x20, 0x53, 0x3d,
+	0x49, 0x6b, 0x28, 0xf8, 0xed, 0x5b, 0xf4, 0x95, 0xff, 0x53, 0x6c, 0x6f, 0x94, 0x91, 0xb9, 0x85,
+	0xf1, 0x88, 0x50, 0xee, 0x16, 0x6a, 0x48, 0xbb, 0x5b, 0xa8, 0x0d, 0xc8, 0x4c, 0xbc, 0x72, 0x8a,
+	0x6a, 0xfb, 0x51, 0x3c, 0x18, 0x1b, 0x4e, 0xbc, 0x39, 0xca, 0x6e, 0xe2, 0x2d, 0xc0, 0x4a, 0xe8,
+	0x27, 0x84, 0x9d, 0xf8, 0xc1, 0xb3, 0xfa, 0xa6, 0x0f, 0xd3, 0x11, 0x30, 0xee, 0x98, 0x8f, 0x1e,
+	0x59, 0x50, 0x6a, 0x35, 0x4a, 0xf3, 0xca, 0xec, 0x77, 0x84, 0x5f, 0x6c, 0x79, 0xde, 0x47, 0x2c,
+	0x19, 0xd7, 0xe3, 0xbf, 0xbb, 0x50, 0xf7, 0xec, 0xc0, 0xf4, 0x38, 0x6b, 0x71, 0x69, 0xd9, 0xd9,
+	0x30, 0x25, 0x73, 0xe6, 0x92, 0x83, 0x99, 0xd5, 0x6c, 0x58, 0x1c, 0x69, 0xad, 0x61, 0xb3, 0x7c,
+	0x40, 0x66, 0x08, 0x4c, 0xda, 0xa0, 0x6a, 0xc1, 0x75, 0x8b, 0xde, 0x99, 0xef, 0xbb, 0xbb, 0xa5,
+	0x58, 0x65, 0xf3, 0x03, 0xc2, 0xcf, 0x7c, 0x1c, 0xb1, 0x09, 0xa4, 0x7d, 0xcc, 0x4e, 0x71, 0x1e,
+	0x93, 0x46, 0x7b, 0x25, 0xe9, 0x8c, 0x53, 0x1f, 0x4a, 0x39, 0xe5, 0x31, 0x3b, 0xa7, 0x22, 0x9d,
+	0x19, 0x96, 0x07, 0x70, 0xca, 0x80, 0x9f, 0xc9, 0xe9, 0xc6, 0x66, 0x58, 0xd6, 0xa1, 0x76, 0xc3,
+	0xb2, 0x3e, 0x21, 0xf7, 0x30, 0xe0, 0x30, 0xf3, 0x0a, 0xe3, 0xbc, 0xe9, 0xc3, 0x40, 0x07, 0xdb,
+	0x3e, 0x0c, 0xf4, 0x19, 0x99, 0xf7, 0xb2, 0x2e, 0x88, 0xf8, 0xbf, 0x8f, 0x22, 0x88, 0xc0, 0xe6,
+	0xbd, 0xac, 0xc0, 0xd9, 0xbd, 0x97, 0x69, 0x70, 0xa9, 0xb5, 0xef, 0x5f, 0xdd, 0xb8, 0x95, 0xeb,
+	0x1b, 0xb7, 0x72, 0x77, 0xe3, 0xa2, 0xaf, 0x97, 0x2e, 0xfa, 0x6d, 0xe9, 0xa2, 0xbf, 0x96, 0x2e,
+	0xba, 0x5a, 0xba, 0xe8, 0xef, 0xa5, 0x8b, 0xfe, 0x59, 0xba, 0x95, 0xbb, 0xa5, 0x8b, 0xbe, 0xbf,
+	0x75, 0x2b, 0x57, 0xb7, 0x6e, 0xe5, 0xfa, 0xd6, 0xad, 0x7c, 0xb6, 0x33, 0x09, 0xd6, 0x3b, 0xd3,
+	0xe0, 0x9e, 0x9f, 0xa9, 0x76, 0xd3, 0x9f, 0x47, 0x8f, 0xfd, 0xf7, 0x1b, 0xd5, 0x1b, 0xff, 0x06,
+	0x00, 0x00, 0xff, 0xff, 0x17, 0x4c, 0x3a, 0xc6, 0x39, 0x13, 0x00, 0x00,
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -112,12 +126,26 @@ const _ = grpc.SupportPackageIsVersion4
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://godoc.org/google.golang.org/grpc#ClientConn.NewStream.
 type AdminServiceClient interface {
+	// ListNamespaces returns the information and configuration for all namespaces.
+	ListNamespaces(ctx context.Context, in *ListNamespacesRequest, opts ...grpc.CallOption) (*ListNamespacesResponse, error)
+	// RegisterNamespace creates a new namespace.
+	RegisterNamespace(ctx context.Context, in *RegisterNamespaceRequest, opts ...grpc.CallOption) (*RegisterNamespaceResponse, error)
+	// (-- api-linter: core::0134::method-signature=disabled
+	//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+	// UpdateNamespace is used to update the information and configuration for a registered namespace.
+	UpdateNamespace(ctx context.Context, in *UpdateNamespaceRequest, opts ...grpc.CallOption) (*UpdateNamespaceResponse, error)
 	// DescribeWorkflowExecution returns information about the internal states of workflow execution.
 	DescribeMutableState(ctx context.Context, in *DescribeMutableStateRequest, opts ...grpc.CallOption) (*DescribeMutableStateResponse, error)
 	// DescribeHistoryHost returns information about the internal states of a history host
 	DescribeHistoryHost(ctx context.Context, in *DescribeHistoryHostRequest, opts ...grpc.CallOption) (*DescribeHistoryHostResponse, error)
 	GetShard(ctx context.Context, in *GetShardRequest, opts ...grpc.CallOption) (*GetShardResponse, error)
 	CloseShard(ctx context.Context, in *CloseShardRequest, opts ...grpc.CallOption) (*CloseShardResponse, error)
+	ListTransferTasks(ctx context.Context, in *ListTransferTasksRequest, opts ...grpc.CallOption) (*ListTransferTasksResponse, error)
+	ListTimerTasks(ctx context.Context, in *ListTimerTasksRequest, opts ...grpc.CallOption) (*ListTimerTasksResponse, error)
+	ListReplicationTasks(ctx context.Context, in *ListReplicationTasksRequest, opts ...grpc.CallOption) (*ListReplicationTasksResponse, error)
+	ListVisibilityTasks(ctx context.Context, in *ListVisibilityTasksRequest, opts ...grpc.CallOption) (*ListVisibilityTasksResponse, error)
 	RemoveTask(ctx context.Context, in *RemoveTaskRequest, opts ...grpc.CallOption) (*RemoveTaskResponse, error)
 	// Returns the raw history of specified workflow execution.  It fails with 'NotFound' if specified workflow
 	// execution in unknown to the service.
@@ -140,6 +168,12 @@ type AdminServiceClient interface {
 	GetSearchAttributes(ctx context.Context, in *GetSearchAttributesRequest, opts ...grpc.CallOption) (*GetSearchAttributesResponse, error)
 	// DescribeCluster returns information about Temporal cluster.
 	DescribeCluster(ctx context.Context, in *DescribeClusterRequest, opts ...grpc.CallOption) (*DescribeClusterResponse, error)
+	// ListClusterMembers returns information about Temporal cluster members.
+	ListClusterMembers(ctx context.Context, in *ListClusterMembersRequest, opts ...grpc.CallOption) (*ListClusterMembersResponse, error)
+	// AddOrUpdateRemoteCluster adds or updates remote cluster.
+	AddOrUpdateRemoteCluster(ctx context.Context, in *AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*AddOrUpdateRemoteClusterResponse, error)
+	// RemoveRemoteCluster removes remote cluster.
+	RemoveRemoteCluster(ctx context.Context, in *RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*RemoveRemoteClusterResponse, error)
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
@@ -152,6 +186,8 @@ type AdminServiceClient interface {
 	RefreshWorkflowTasks(ctx context.Context, in *RefreshWorkflowTasksRequest, opts ...grpc.CallOption) (*RefreshWorkflowTasksResponse, error)
 	// ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
 	ResendReplicationTasks(ctx context.Context, in *ResendReplicationTasksRequest, opts ...grpc.CallOption) (*ResendReplicationTasksResponse, error)
+	// GetTaskQueueTasks returns tasks from task queue.
+	GetTaskQueueTasks(ctx context.Context, in *GetTaskQueueTasksRequest, opts ...grpc.CallOption) (*GetTaskQueueTasksResponse, error)
 }
 
 type adminServiceClient struct {
@@ -160,6 +196,33 @@ type adminServiceClient struct {
 
 func NewAdminServiceClient(cc *grpc.ClientConn) AdminServiceClient {
 	return &adminServiceClient{cc}
+}
+
+func (c *adminServiceClient) ListNamespaces(ctx context.Context, in *ListNamespacesRequest, opts ...grpc.CallOption) (*ListNamespacesResponse, error) {
+	out := new(ListNamespacesResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/ListNamespaces", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) RegisterNamespace(ctx context.Context, in *RegisterNamespaceRequest, opts ...grpc.CallOption) (*RegisterNamespaceResponse, error) {
+	out := new(RegisterNamespaceResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/RegisterNamespace", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) UpdateNamespace(ctx context.Context, in *UpdateNamespaceRequest, opts ...grpc.CallOption) (*UpdateNamespaceResponse, error) {
+	out := new(UpdateNamespaceResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/UpdateNamespace", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func (c *adminServiceClient) DescribeMutableState(ctx context.Context, in *DescribeMutableStateRequest, opts ...grpc.CallOption) (*DescribeMutableStateResponse, error) {
@@ -192,6 +255,42 @@ func (c *adminServiceClient) GetShard(ctx context.Context, in *GetShardRequest, 
 func (c *adminServiceClient) CloseShard(ctx context.Context, in *CloseShardRequest, opts ...grpc.CallOption) (*CloseShardResponse, error) {
 	out := new(CloseShardResponse)
 	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/CloseShard", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListTransferTasks(ctx context.Context, in *ListTransferTasksRequest, opts ...grpc.CallOption) (*ListTransferTasksResponse, error) {
+	out := new(ListTransferTasksResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/ListTransferTasks", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListTimerTasks(ctx context.Context, in *ListTimerTasksRequest, opts ...grpc.CallOption) (*ListTimerTasksResponse, error) {
+	out := new(ListTimerTasksResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/ListTimerTasks", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListReplicationTasks(ctx context.Context, in *ListReplicationTasksRequest, opts ...grpc.CallOption) (*ListReplicationTasksResponse, error) {
+	out := new(ListReplicationTasksResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/ListReplicationTasks", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) ListVisibilityTasks(ctx context.Context, in *ListVisibilityTasksRequest, opts ...grpc.CallOption) (*ListVisibilityTasksResponse, error) {
+	out := new(ListVisibilityTasksResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/ListVisibilityTasks", in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -288,6 +387,33 @@ func (c *adminServiceClient) DescribeCluster(ctx context.Context, in *DescribeCl
 	return out, nil
 }
 
+func (c *adminServiceClient) ListClusterMembers(ctx context.Context, in *ListClusterMembersRequest, opts ...grpc.CallOption) (*ListClusterMembersResponse, error) {
+	out := new(ListClusterMembersResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) AddOrUpdateRemoteCluster(ctx context.Context, in *AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*AddOrUpdateRemoteClusterResponse, error) {
+	out := new(AddOrUpdateRemoteClusterResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *adminServiceClient) RemoveRemoteCluster(ctx context.Context, in *RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*RemoveRemoteClusterResponse, error) {
+	out := new(RemoveRemoteClusterResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *adminServiceClient) GetDLQMessages(ctx context.Context, in *GetDLQMessagesRequest, opts ...grpc.CallOption) (*GetDLQMessagesResponse, error) {
 	out := new(GetDLQMessagesResponse)
 	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/GetDLQMessages", in, out, opts...)
@@ -333,14 +459,37 @@ func (c *adminServiceClient) ResendReplicationTasks(ctx context.Context, in *Res
 	return out, nil
 }
 
+func (c *adminServiceClient) GetTaskQueueTasks(ctx context.Context, in *GetTaskQueueTasksRequest, opts ...grpc.CallOption) (*GetTaskQueueTasksResponse, error) {
+	out := new(GetTaskQueueTasksResponse)
+	err := c.cc.Invoke(ctx, "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AdminServiceServer is the server API for AdminService service.
 type AdminServiceServer interface {
+	// ListNamespaces returns the information and configuration for all namespaces.
+	ListNamespaces(context.Context, *ListNamespacesRequest) (*ListNamespacesResponse, error)
+	// RegisterNamespace creates a new namespace.
+	RegisterNamespace(context.Context, *RegisterNamespaceRequest) (*RegisterNamespaceResponse, error)
+	// (-- api-linter: core::0134::method-signature=disabled
+	//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+	// (-- api-linter: core::0134::response-message-name=disabled
+	//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
+	// UpdateNamespace is used to update the information and configuration for a registered namespace.
+	UpdateNamespace(context.Context, *UpdateNamespaceRequest) (*UpdateNamespaceResponse, error)
 	// DescribeWorkflowExecution returns information about the internal states of workflow execution.
 	DescribeMutableState(context.Context, *DescribeMutableStateRequest) (*DescribeMutableStateResponse, error)
 	// DescribeHistoryHost returns information about the internal states of a history host
 	DescribeHistoryHost(context.Context, *DescribeHistoryHostRequest) (*DescribeHistoryHostResponse, error)
 	GetShard(context.Context, *GetShardRequest) (*GetShardResponse, error)
 	CloseShard(context.Context, *CloseShardRequest) (*CloseShardResponse, error)
+	ListTransferTasks(context.Context, *ListTransferTasksRequest) (*ListTransferTasksResponse, error)
+	ListTimerTasks(context.Context, *ListTimerTasksRequest) (*ListTimerTasksResponse, error)
+	ListReplicationTasks(context.Context, *ListReplicationTasksRequest) (*ListReplicationTasksResponse, error)
+	ListVisibilityTasks(context.Context, *ListVisibilityTasksRequest) (*ListVisibilityTasksResponse, error)
 	RemoveTask(context.Context, *RemoveTaskRequest) (*RemoveTaskResponse, error)
 	// Returns the raw history of specified workflow execution.  It fails with 'NotFound' if specified workflow
 	// execution in unknown to the service.
@@ -363,6 +512,12 @@ type AdminServiceServer interface {
 	GetSearchAttributes(context.Context, *GetSearchAttributesRequest) (*GetSearchAttributesResponse, error)
 	// DescribeCluster returns information about Temporal cluster.
 	DescribeCluster(context.Context, *DescribeClusterRequest) (*DescribeClusterResponse, error)
+	// ListClusterMembers returns information about Temporal cluster members.
+	ListClusterMembers(context.Context, *ListClusterMembersRequest) (*ListClusterMembersResponse, error)
+	// AddOrUpdateRemoteCluster adds or updates remote cluster.
+	AddOrUpdateRemoteCluster(context.Context, *AddOrUpdateRemoteClusterRequest) (*AddOrUpdateRemoteClusterResponse, error)
+	// RemoveRemoteCluster removes remote cluster.
+	RemoveRemoteCluster(context.Context, *RemoveRemoteClusterRequest) (*RemoveRemoteClusterResponse, error)
 	// GetDLQMessages returns messages from DLQ.
 	GetDLQMessages(context.Context, *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error)
 	// (-- api-linter: core::0165::response-message-name=disabled
@@ -375,12 +530,23 @@ type AdminServiceServer interface {
 	RefreshWorkflowTasks(context.Context, *RefreshWorkflowTasksRequest) (*RefreshWorkflowTasksResponse, error)
 	// ResendReplicationTasks requests replication tasks from remote cluster and apply tasks to current cluster.
 	ResendReplicationTasks(context.Context, *ResendReplicationTasksRequest) (*ResendReplicationTasksResponse, error)
+	// GetTaskQueueTasks returns tasks from task queue.
+	GetTaskQueueTasks(context.Context, *GetTaskQueueTasksRequest) (*GetTaskQueueTasksResponse, error)
 }
 
 // UnimplementedAdminServiceServer can be embedded to have forward compatible implementations.
 type UnimplementedAdminServiceServer struct {
 }
 
+func (*UnimplementedAdminServiceServer) ListNamespaces(ctx context.Context, req *ListNamespacesRequest) (*ListNamespacesResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListNamespaces not implemented")
+}
+func (*UnimplementedAdminServiceServer) RegisterNamespace(ctx context.Context, req *RegisterNamespaceRequest) (*RegisterNamespaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RegisterNamespace not implemented")
+}
+func (*UnimplementedAdminServiceServer) UpdateNamespace(ctx context.Context, req *UpdateNamespaceRequest) (*UpdateNamespaceResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method UpdateNamespace not implemented")
+}
 func (*UnimplementedAdminServiceServer) DescribeMutableState(ctx context.Context, req *DescribeMutableStateRequest) (*DescribeMutableStateResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeMutableState not implemented")
 }
@@ -392,6 +558,18 @@ func (*UnimplementedAdminServiceServer) GetShard(ctx context.Context, req *GetSh
 }
 func (*UnimplementedAdminServiceServer) CloseShard(ctx context.Context, req *CloseShardRequest) (*CloseShardResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CloseShard not implemented")
+}
+func (*UnimplementedAdminServiceServer) ListTransferTasks(ctx context.Context, req *ListTransferTasksRequest) (*ListTransferTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTransferTasks not implemented")
+}
+func (*UnimplementedAdminServiceServer) ListTimerTasks(ctx context.Context, req *ListTimerTasksRequest) (*ListTimerTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListTimerTasks not implemented")
+}
+func (*UnimplementedAdminServiceServer) ListReplicationTasks(ctx context.Context, req *ListReplicationTasksRequest) (*ListReplicationTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListReplicationTasks not implemented")
+}
+func (*UnimplementedAdminServiceServer) ListVisibilityTasks(ctx context.Context, req *ListVisibilityTasksRequest) (*ListVisibilityTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListVisibilityTasks not implemented")
 }
 func (*UnimplementedAdminServiceServer) RemoveTask(ctx context.Context, req *RemoveTaskRequest) (*RemoveTaskResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RemoveTask not implemented")
@@ -423,6 +601,15 @@ func (*UnimplementedAdminServiceServer) GetSearchAttributes(ctx context.Context,
 func (*UnimplementedAdminServiceServer) DescribeCluster(ctx context.Context, req *DescribeClusterRequest) (*DescribeClusterResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DescribeCluster not implemented")
 }
+func (*UnimplementedAdminServiceServer) ListClusterMembers(ctx context.Context, req *ListClusterMembersRequest) (*ListClusterMembersResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListClusterMembers not implemented")
+}
+func (*UnimplementedAdminServiceServer) AddOrUpdateRemoteCluster(ctx context.Context, req *AddOrUpdateRemoteClusterRequest) (*AddOrUpdateRemoteClusterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method AddOrUpdateRemoteCluster not implemented")
+}
+func (*UnimplementedAdminServiceServer) RemoveRemoteCluster(ctx context.Context, req *RemoveRemoteClusterRequest) (*RemoveRemoteClusterResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RemoveRemoteCluster not implemented")
+}
 func (*UnimplementedAdminServiceServer) GetDLQMessages(ctx context.Context, req *GetDLQMessagesRequest) (*GetDLQMessagesResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetDLQMessages not implemented")
 }
@@ -438,9 +625,66 @@ func (*UnimplementedAdminServiceServer) RefreshWorkflowTasks(ctx context.Context
 func (*UnimplementedAdminServiceServer) ResendReplicationTasks(ctx context.Context, req *ResendReplicationTasksRequest) (*ResendReplicationTasksResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ResendReplicationTasks not implemented")
 }
+func (*UnimplementedAdminServiceServer) GetTaskQueueTasks(ctx context.Context, req *GetTaskQueueTasksRequest) (*GetTaskQueueTasksResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetTaskQueueTasks not implemented")
+}
 
 func RegisterAdminServiceServer(s *grpc.Server, srv AdminServiceServer) {
 	s.RegisterService(&_AdminService_serviceDesc, srv)
+}
+
+func _AdminService_ListNamespaces_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListNamespacesRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListNamespaces(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/ListNamespaces",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListNamespaces(ctx, req.(*ListNamespacesRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_RegisterNamespace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RegisterNamespaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).RegisterNamespace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/RegisterNamespace",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).RegisterNamespace(ctx, req.(*RegisterNamespaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_UpdateNamespace_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(UpdateNamespaceRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).UpdateNamespace(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/UpdateNamespace",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).UpdateNamespace(ctx, req.(*UpdateNamespaceRequest))
+	}
+	return interceptor(ctx, in, info, handler)
 }
 
 func _AdminService_DescribeMutableState_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -511,6 +755,78 @@ func _AdminService_CloseShard_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(AdminServiceServer).CloseShard(ctx, req.(*CloseShardRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListTransferTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTransferTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListTransferTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/ListTransferTasks",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListTransferTasks(ctx, req.(*ListTransferTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListTimerTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListTimerTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListTimerTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/ListTimerTasks",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListTimerTasks(ctx, req.(*ListTimerTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListReplicationTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListReplicationTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListReplicationTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/ListReplicationTasks",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListReplicationTasks(ctx, req.(*ListReplicationTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_ListVisibilityTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListVisibilityTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListVisibilityTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/ListVisibilityTasks",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListVisibilityTasks(ctx, req.(*ListVisibilityTasksRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -695,6 +1011,60 @@ func _AdminService_DescribeCluster_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_ListClusterMembers_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListClusterMembersRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).ListClusterMembers(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/ListClusterMembers",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).ListClusterMembers(ctx, req.(*ListClusterMembersRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_AddOrUpdateRemoteCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AddOrUpdateRemoteClusterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).AddOrUpdateRemoteCluster(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/AddOrUpdateRemoteCluster",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).AddOrUpdateRemoteCluster(ctx, req.(*AddOrUpdateRemoteClusterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _AdminService_RemoveRemoteCluster_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RemoveRemoteClusterRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).RemoveRemoteCluster(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/RemoveRemoteCluster",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).RemoveRemoteCluster(ctx, req.(*RemoveRemoteClusterRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _AdminService_GetDLQMessages_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(GetDLQMessagesRequest)
 	if err := dec(in); err != nil {
@@ -785,10 +1155,40 @@ func _AdminService_ResendReplicationTasks_Handler(srv interface{}, ctx context.C
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AdminService_GetTaskQueueTasks_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetTaskQueueTasksRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AdminServiceServer).GetTaskQueueTasks(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/temporal.server.api.adminservice.v1.AdminService/GetTaskQueueTasks",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AdminServiceServer).GetTaskQueueTasks(ctx, req.(*GetTaskQueueTasksRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _AdminService_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "temporal.server.api.adminservice.v1.AdminService",
 	HandlerType: (*AdminServiceServer)(nil),
 	Methods: []grpc.MethodDesc{
+		{
+			MethodName: "ListNamespaces",
+			Handler:    _AdminService_ListNamespaces_Handler,
+		},
+		{
+			MethodName: "RegisterNamespace",
+			Handler:    _AdminService_RegisterNamespace_Handler,
+		},
+		{
+			MethodName: "UpdateNamespace",
+			Handler:    _AdminService_UpdateNamespace_Handler,
+		},
 		{
 			MethodName: "DescribeMutableState",
 			Handler:    _AdminService_DescribeMutableState_Handler,
@@ -804,6 +1204,22 @@ var _AdminService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CloseShard",
 			Handler:    _AdminService_CloseShard_Handler,
+		},
+		{
+			MethodName: "ListTransferTasks",
+			Handler:    _AdminService_ListTransferTasks_Handler,
+		},
+		{
+			MethodName: "ListTimerTasks",
+			Handler:    _AdminService_ListTimerTasks_Handler,
+		},
+		{
+			MethodName: "ListReplicationTasks",
+			Handler:    _AdminService_ListReplicationTasks_Handler,
+		},
+		{
+			MethodName: "ListVisibilityTasks",
+			Handler:    _AdminService_ListVisibilityTasks_Handler,
 		},
 		{
 			MethodName: "RemoveTask",
@@ -846,6 +1262,18 @@ var _AdminService_serviceDesc = grpc.ServiceDesc{
 			Handler:    _AdminService_DescribeCluster_Handler,
 		},
 		{
+			MethodName: "ListClusterMembers",
+			Handler:    _AdminService_ListClusterMembers_Handler,
+		},
+		{
+			MethodName: "AddOrUpdateRemoteCluster",
+			Handler:    _AdminService_AddOrUpdateRemoteCluster_Handler,
+		},
+		{
+			MethodName: "RemoveRemoteCluster",
+			Handler:    _AdminService_RemoveRemoteCluster_Handler,
+		},
+		{
 			MethodName: "GetDLQMessages",
 			Handler:    _AdminService_GetDLQMessages_Handler,
 		},
@@ -864,6 +1292,10 @@ var _AdminService_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ResendReplicationTasks",
 			Handler:    _AdminService_ResendReplicationTasks_Handler,
+		},
+		{
+			MethodName: "GetTaskQueueTasks",
+			Handler:    _AdminService_GetTaskQueueTasks_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

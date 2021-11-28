@@ -31,7 +31,7 @@ import (
 	"strings"
 	"time"
 
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"

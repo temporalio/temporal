@@ -48,7 +48,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -124,7 +124,7 @@ func (s *esCrossDCTestSuite) SetupSuite() {
 	s.Require().NoError(err)
 	s.cluster2 = c
 
-	s.esClient = host.CreateESClient(s.Suite, s.clusterConfigs[0].ESConfig.URL.String(), s.clusterConfigs[0].ESConfig.Version)
+	s.esClient = host.CreateESClient(s.Suite, s.clusterConfigs[0].ESConfig, s.logger)
 	host.PutIndexTemplate(s.Suite, s.esClient, fmt.Sprintf("../testdata/es_%s_index_template.json", s.clusterConfigs[0].ESConfig.Version), "test-visibility-template")
 	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[0].ESConfig.GetVisibilityIndex())
 	host.CreateIndex(s.Suite, s.esClient, s.clusterConfigs[1].ESConfig.GetVisibilityIndex())
@@ -158,14 +158,14 @@ func (s *esCrossDCTestSuite) TestSearchAttributes() {
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 
+	// Wait for namespace cache to pick the change
+	time.Sleep(cacheRefreshInterval)
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.NoError(err)
 	s.NotNil(resp)
-	// Wait for namespace cache to pick the change
-	time.Sleep(cacheRefreshInterval)
 
 	client2 := s.cluster2.GetFrontendClient() // standby
 	resp2, err := client2.DescribeNamespace(host.NewContext(), descReq)

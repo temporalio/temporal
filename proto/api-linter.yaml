@@ -22,6 +22,7 @@
     - 'core::0132::request-parent-required'
     - 'core::0132::request-unknown-fields'
     - 'core::0132::response-unknown-fields'
+    - 'core::0134::request-unknown-fields'
     - 'core::0158::response-next-page-token-field'
     - 'core::0158::response-plural-first-field'
     - 'core::0158::response-repeated-first-field'

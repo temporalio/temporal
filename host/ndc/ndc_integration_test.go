@@ -56,7 +56,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
-	"gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -1626,6 +1626,8 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	})
 	s.Require().NoError(err)
+	// Wait for namespace cache to pick the change
+	time.Sleep(2 * namespace.CacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace,
@@ -1634,8 +1636,6 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 	s.Require().NoError(err)
 	s.Require().NotNil(resp)
 	s.namespaceID = resp.GetNamespaceInfo().GetId()
-	// Wait for namespace cache to pick the change
-	time.Sleep(2 * namespace.CacheRefreshInterval)
 
 	s.logger.Info("Registered namespace", tag.WorkflowNamespace(s.namespace), tag.WorkflowNamespaceID(s.namespaceID))
 }

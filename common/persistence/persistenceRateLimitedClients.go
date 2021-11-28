@@ -140,21 +140,12 @@ func (p *shardRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *shardRateLimitedPersistenceClient) CreateShard(request *CreateShardRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.CreateShard(request)
-	return err
-}
-
-func (p *shardRateLimitedPersistenceClient) GetShard(request *GetShardRequest) (*GetShardResponse, error) {
+func (p *shardRateLimitedPersistenceClient) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.GetShard(request)
+	response, err := p.persistence.GetOrCreateShard(request)
 	return response, err
 }
 
@@ -292,6 +283,24 @@ func (p *executionRateLimitedPersistenceClient) GetVisibilityTasks(request *GetV
 	return response, err
 }
 
+func (p *executionRateLimitedPersistenceClient) GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*GetTieredStorageTaskResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetTieredStorageTask(request)
+	return response, err
+}
+
+func (p *executionRateLimitedPersistenceClient) GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*GetTieredStorageTasksResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+
+	response, err := p.persistence.GetTieredStorageTasks(request)
+	return response, err
+}
+
 func (p *executionRateLimitedPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
@@ -343,6 +352,24 @@ func (p *executionRateLimitedPersistenceClient) RangeCompleteVisibilityTask(requ
 	}
 
 	err := p.persistence.RangeCompleteVisibilityTask(request)
+	return err
+}
+
+func (p *executionRateLimitedPersistenceClient) CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.CompleteTieredStorageTask(request)
+	return err
+}
+
+func (p *executionRateLimitedPersistenceClient) RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RangeCompleteTieredStorageTask(request)
 	return err
 }
 
@@ -792,11 +819,32 @@ func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(req
 	return c.persistence.PruneClusterMembership(request)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata() (*GetClusterMetadataResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.persistence.GetClusterMetadata()
+	return c.persistence.ListClusterMetadata(request)
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.persistence.GetCurrentClusterMetadata()
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadataV1() (*GetClusterMetadataResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.persistence.GetClusterMetadataV1()
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return c.persistence.GetClusterMetadata(request)
 }
 
 func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
@@ -804,6 +852,13 @@ func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(reques
 		return false, ErrPersistenceLimitExceeded
 	}
 	return c.persistence.SaveClusterMetadata(request)
+}
+
+func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+	if ok := c.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+	return c.persistence.DeleteClusterMetadata(request)
 }
 
 func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {

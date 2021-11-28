@@ -240,6 +240,26 @@ func (mr *MockHistoryServiceClientMockRecorder) GetReplicationMessages(ctx, in i
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetReplicationMessages), varargs...)
 }
 
+// GetReplicationStatus mocks base method.
+func (m *MockHistoryServiceClient) GetReplicationStatus(ctx context.Context, in *historyservice.GetReplicationStatusRequest, opts ...grpc.CallOption) (*historyservice.GetReplicationStatusResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetReplicationStatus", varargs...)
+	ret0, _ := ret[0].(*historyservice.GetReplicationStatusResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReplicationStatus indicates an expected call of GetReplicationStatus.
+func (mr *MockHistoryServiceClientMockRecorder) GetReplicationStatus(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationStatus", reflect.TypeOf((*MockHistoryServiceClient)(nil).GetReplicationStatus), varargs...)
+}
+
 // GetShard mocks base method.
 func (m *MockHistoryServiceClient) GetShard(ctx context.Context, in *historyservice.GetShardRequest, opts ...grpc.CallOption) (*historyservice.GetShardResponse, error) {
 	m.ctrl.T.Helper()
@@ -976,6 +996,21 @@ func (m *MockHistoryServiceServer) GetReplicationMessages(arg0 context.Context, 
 func (mr *MockHistoryServiceServerMockRecorder) GetReplicationMessages(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetReplicationMessages), arg0, arg1)
+}
+
+// GetReplicationStatus mocks base method.
+func (m *MockHistoryServiceServer) GetReplicationStatus(arg0 context.Context, arg1 *historyservice.GetReplicationStatusRequest) (*historyservice.GetReplicationStatusResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetReplicationStatus", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.GetReplicationStatusResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetReplicationStatus indicates an expected call of GetReplicationStatus.
+func (mr *MockHistoryServiceServerMockRecorder) GetReplicationStatus(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationStatus", reflect.TypeOf((*MockHistoryServiceServer)(nil).GetReplicationStatus), arg0, arg1)
 }
 
 // GetShard mocks base method.

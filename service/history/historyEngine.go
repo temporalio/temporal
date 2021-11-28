@@ -95,6 +95,7 @@ type (
 		txProcessor               transferQueueProcessor
 		timerProcessor            timerQueueProcessor
 		visibilityProcessor       visibilityQueueProcessor
+		tieredStorageProcessor    tieredStorageQueueProcessor
 		nDCReplicator             nDCHistoryReplicator
 		nDCActivityReplicator     nDCActivityReplicator
 		replicatorProcessor       *replicatorQueueProcessorImpl
@@ -166,6 +167,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
 	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
+	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -1836,7 +1838,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				request.GetSignalName(),
 				request.GetInput(),
-				request.GetIdentity()); err != nil {
+				request.GetIdentity(),
+				request.GetHeader()); err != nil {
 				return nil, err
 			}
 
@@ -1905,7 +1908,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				sRequest.GetSignalName(),
 				sRequest.GetSignalInput(),
-				sRequest.GetIdentity()); err != nil {
+				sRequest.GetIdentity(),
+				sRequest.GetHeader()); err != nil {
 				return nil, err
 			}
 
@@ -2020,7 +2024,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	if _, err := mutableState.AddWorkflowExecutionSignaled(
 		sRequest.GetSignalName(),
 		sRequest.GetSignalInput(),
-		sRequest.GetIdentity()); err != nil {
+		sRequest.GetIdentity(),
+		sRequest.GetHeader()); err != nil {
 		return nil, err
 	}
 
@@ -2864,6 +2869,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 	ctx context.Context,
 	pollingCluster string,
 	ackMessageID int64,
+	ackTimestampe time.Time,
 	queryMessageID int64,
 ) (*replicationspb.ReplicationMessages, error) {
 
@@ -2871,6 +2877,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 		if err := e.shard.UpdateClusterReplicationLevel(
 			pollingCluster,
 			ackMessageID,
+			ackTimestampe,
 		); err != nil {
 			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
 		}
@@ -3216,6 +3223,27 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 	return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
+}
+
+func (h *historyEngineImpl) GetReplicationStatus(
+	ctx context.Context,
+	request *historyservice.GetReplicationStatusRequest,
+) (_ *historyservice.ShardReplicationStatus, retError error) {
+
+	resp := &historyservice.ShardReplicationStatus{
+		ShardId:        h.shard.GetShardID(),
+		ShardLocalTime: timestamp.TimePtr(h.shard.GetTimeSource().Now()),
+	}
+	if h.replicatorProcessor.maxTaskID != nil {
+		resp.MaxReplicationTaskId = *h.replicatorProcessor.maxTaskID
+	}
+
+	remoteClusters, err := h.shard.GetRemoteClusterAckInfo(request.RemoteClusters)
+	if err != nil {
+		return nil, err
+	}
+	resp.RemoteClusters = remoteClusters
+	return resp, nil
 }
 
 func (e *historyEngineImpl) loadWorkflowOnce(

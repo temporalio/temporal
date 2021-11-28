@@ -92,6 +92,7 @@ type (
 		RemoteAdminClient    *adminservicemock.MockAdminServiceClient
 		RemoteFrontendClient *workflowservicemock.MockWorkflowServiceClient
 		ClientBean           *client.MockBean
+		ClientFactory        *client.MockFactory
 		ESClient             *esclient.MockClient
 
 		// persistence clients
@@ -138,6 +139,7 @@ func NewTest(
 	clientBean.EXPECT().GetHistoryClient().Return(historyClient).AnyTimes()
 	clientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(remoteAdminClient).AnyTimes()
 	clientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(remoteFrontendClient).AnyTimes()
+	clientFactory := client.NewMockFactory(controller)
 
 	metadataMgr := persistence.NewMockMetadataManager(controller)
 	taskMgr := persistence.NewMockTaskManager(controller)
@@ -199,6 +201,7 @@ func NewTest(
 		RemoteAdminClient:    remoteAdminClient,
 		RemoteFrontendClient: remoteFrontendClient,
 		ClientBean:           clientBean,
+		ClientFactory:        clientFactory,
 		ESClient:             esclient.NewMockClient(controller),
 
 		// persistence clients
@@ -364,6 +367,11 @@ func (s *Test) GetRemoteFrontendClient(
 // GetClientBean for testing
 func (s *Test) GetClientBean() client.Bean {
 	return s.ClientBean
+}
+
+// GetClientFactory for testing
+func (s *Test) GetClientFactory() client.Factory {
+	return s.ClientFactory
 }
 
 // persistence clients

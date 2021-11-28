@@ -69,6 +69,7 @@ const (
 	History
 	Matching
 	Worker
+	Server
 	NumServices
 )
 
@@ -147,10 +148,8 @@ const (
 
 	// -- Common Operation scopes --
 
-	// PersistenceCreateShardScope tracks CreateShard calls made by service to persistence layer
-	PersistenceCreateShardScope
-	// PersistenceGetShardScope tracks GetShard calls made by service to persistence layer
-	PersistenceGetShardScope
+	// PersistenceGetOrCreateShardScope tracks GetOrCreateShard calls made by service to persistence layer
+	PersistenceGetOrCreateShardScope
 	// PersistenceUpdateShardScope tracks UpdateShard calls made by service to persistence layer
 	PersistenceUpdateShardScope
 	// PersistenceCreateWorkflowExecutionScope tracks CreateWorkflowExecution calls made by service to persistence layer
@@ -190,6 +189,15 @@ const (
 	PersistenceCompleteVisibilityTaskScope
 	// PersistenceRangeCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
 	PersistenceRangeCompleteVisibilityTaskScope
+
+	// PersistenceGetTieredStorageTaskScope tracks GetTieredStorageTask calls made by service to persistence layer
+	PersistenceGetTieredStorageTaskScope
+	// PersistenceGetTieredStorageTasksScope tracks GetTieredStorageTasks calls made by service to persistence layer
+	PersistenceGetTieredStorageTasksScope
+	// PersistenceCompleteTieredStorageTaskScope tracks CompleteTieredStorageTasks calls made by service to persistence layer
+	PersistenceCompleteTieredStorageTaskScope
+	// PersistenceRangeCompleteTieredStorageTaskScope tracks CompleteTieredStorageTasks calls made by service to persistence layer
+	PersistenceRangeCompleteTieredStorageTaskScope
 
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetReplicationTaskScope
@@ -305,10 +313,14 @@ const (
 	PersistenceUpdateDLQAckLevelScope
 	// PersistenceGetDLQAckLevelScope tracks GetDLQAckLevel calls made by service to persistence layer
 	PersistenceGetDLQAckLevelScope
+	// PersistenceListClusterMetadataScope tracks ListClusterMetadata calls made by service to persistence layer
+	PersistenceListClusterMetadataScope
 	// PersistenceGetClusterMetadataScope tracks GetClusterMetadata calls made by service to persistence layer
 	PersistenceGetClusterMetadataScope
 	// PersistenceSaveClusterMetadataScope tracks SaveClusterMetadata calls made by service to persistence layer
 	PersistenceSaveClusterMetadataScope
+	// PersistenceDeleteClusterMetadataScope tracks DeleteClusterMetadata calls made by service to persistence layer
+	PersistenceDeleteClusterMetadataScope
 	// PersistenceUpsertClusterMembershipScope tracks UpsertClusterMembership calls made by service to persistence layer
 	PersistenceUpsertClusterMembershipScope
 	// PersistencePruneClusterMembershipScope tracks PruneClusterMembership calls made by service to persistence layer
@@ -381,6 +393,8 @@ const (
 	HistoryClientRefreshWorkflowTasksScope
 	// HistoryClientGenerateLastHistoryReplicationTasksScope tracks RPC calls to history service
 	HistoryClientGenerateLastHistoryReplicationTasksScope
+	// HistoryClientGetReplicationStatusScope tracks RPC calls to history service
+	HistoryClientGetReplicationStatusScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
@@ -497,6 +511,14 @@ const (
 	AdminClientCloseShardScope
 	// AdminClientGetShardScope tracks RPC calls to admin service
 	AdminClientGetShardScope
+	// AdminClientListTransferTasksScope tracks RPC calls to admin service
+	AdminClientListTransferTasksScope
+	// AdminClientListTimerTasksScope tracks RPC calls to admin service
+	AdminClientListTimerTasksScope
+	// AdminClientListReplicationTasksScope tracks RPC calls to admin service
+	AdminClientListReplicationTasksScope
+	// AdminClientListVisibilityTasksScope tracks RPC calls to admin service
+	AdminClientListVisibilityTasksScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
 	// AdminClientDescribeWorkflowMutableStateScope tracks RPC calls to admin service
@@ -507,16 +529,30 @@ const (
 	AdminClientGetWorkflowExecutionRawHistoryV2Scope
 	// AdminClientDescribeClusterScope tracks RPC calls to admin service
 	AdminClientDescribeClusterScope
+	// AdminClientListClusterMembersScope tracks RPC calls to admin service
+	AdminClientListClusterMembersScope
+	// AdminClientAddOrUpdateRemoteClusterScope tracks RPC calls to admin service
+	AdminClientAddOrUpdateRemoteClusterScope
+	// AdminClientRemoveRemoteClusterScope tracks RPC calls to admin service
+	AdminClientRemoveRemoteClusterScope
 	// AdminClientGetDLQMessagesScope tracks RPC calls to admin service
 	AdminClientGetDLQMessagesScope
+	// AdminClientRegisterNamespaceScope tracks RPC calls to admin service
+	AdminClientRegisterNamespaceScope
+	// AdminClientUpdateNamespaceScope tracks RPC calls to admin service
+	AdminClientUpdateNamespaceScope
 	// AdminClientPurgeDLQMessagesScope tracks RPC calls to admin service
 	AdminClientPurgeDLQMessagesScope
+	// AdminClientListNamespacesScope tracks RPC calls to admin service
+	AdminClientListNamespacesScope
 	// AdminClientMergeDLQMessagesScope tracks RPC calls to admin service
 	AdminClientMergeDLQMessagesScope
 	// AdminClientRefreshWorkflowTasksScope tracks RPC calls to admin service
 	AdminClientRefreshWorkflowTasksScope
 	// AdminClientResendReplicationTasksScope tracks RPC calls to admin service
 	AdminClientResendReplicationTasksScope
+	// AdminClientGetTaskQueueTasksScope tracks RPC calls to admin service
+	AdminClientGetTaskQueueTasksScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -674,6 +710,9 @@ const (
 
 	DynamicConfigScope
 
+	// TieredStorageQueueProcessorScope is the scope used by all metric emitted by tiered storage queue processor
+	TieredStorageQueueProcessorScope
+
 	NumCommonScopes
 )
 
@@ -705,18 +744,42 @@ const (
 	AdminRefreshWorkflowTasksScope
 	// AdminResendReplicationTasksScope is the metric scope for admin.ResendReplicationTasks
 	AdminResendReplicationTasksScope
+	// AdminGetTaskQueueTasksScope is the metric scope for admin.GetTaskQueueTasks
+	AdminGetTaskQueueTasksScope
 	// AdminRemoveTaskScope is the metric scope for admin.AdminRemoveTaskScope
 	AdminRemoveTaskScope
 	// AdminCloseShardScope is the metric scope for admin.AdminCloseShardScope
 	AdminCloseShardScope
 	// AdminGetShardScope is the metric scope for admin.AdminGetShardScope
 	AdminGetShardScope
+	// AdminListTransferTasksScope is the metric scope for admin.ListTransferTasksScope
+	AdminListTransferTasksScope
+	// AdminListTimerTasksScope is the metric scope for admin.ListTimerTasksScope
+	AdminListTimerTasksScope
+	// AdminListReplicationTasksScope is the metric scope for admin.ListReplicationTasksScope
+	AdminListReplicationTasksScope
+	// AdminListVisibilityTasksScope is the metric scope for admin.ListVisibilityTasksScope
+	AdminListVisibilityTasksScope
 	// AdminReadDLQMessagesScope is the metric scope for admin.AdminReadDLQMessagesScope
 	AdminReadDLQMessagesScope
 	// AdminPurgeDLQMessagesScope is the metric scope for admin.AdminPurgeDLQMessagesScope
 	AdminPurgeDLQMessagesScope
+	// AdminListNamespacesScope is the metric scope for admin.AdminListNamespacesScope
+	AdminListNamespacesScope
+	// AdminRegisterNamespaceScope is the metric scope for admin.AdminRegisterNamespaceScope
+	AdminRegisterNamespaceScope
+	// AdminUpdateNamespaceScope is the metric scope for admin.AdminUpdateNamespaceScope
+	AdminUpdateNamespaceScope
 	// AdminMergeDLQMessagesScope is the metric scope for admin.AdminMergeDLQMessagesScope
 	AdminMergeDLQMessagesScope
+	// AdminListClusterMembersScope is the metric scope for admin.AdminListClusterMembersScope
+	AdminListClusterMembersScope
+	// AdminDescribeClusterScope is the metric scope for admin.AdminDescribeClusterScope
+	AdminDescribeClusterScope
+	// AdminAddOrUpdateRemoteClusterScope is the metric scope for admin.AdminAddOrUpdateRemoteClusterScope
+	AdminAddOrUpdateRemoteClusterScope
+	// AdminRemoveRemoteClusterScope is the metric scope for admin.AdminRemoveRemoteClusterScope
+	AdminRemoveRemoteClusterScope
 
 	NumAdminScopes
 )
@@ -880,6 +943,8 @@ const (
 	HistoryRefreshWorkflowTasksScope
 	// HistoryGenerateLastHistoryReplicationTasksScope is the scope used by generate last replication tasks API
 	HistoryGenerateLastHistoryReplicationTasksScope
+	// HistoryGetReplicationStatusScope is the scope used by GetReplicationStatus API
+	HistoryGetReplicationStatusScope
 	// HistoryHistoryRemoveTaskScope is the scope used by remove task API
 	HistoryHistoryRemoveTaskScope
 	// HistoryCloseShard is the scope used by close shard API
@@ -1104,13 +1169,19 @@ const (
 	NumWorkerScopes
 )
 
+// -- Scopes for Server --
+const (
+	ServerTlsScope = iota + NumWorkerScopes
+
+	NumServerScopes
+)
+
 // ScopeDefs record the scopes for all services
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
 	Common: {
 		UnknownScope:                                      {operation: "Unknown"},
-		PersistenceCreateShardScope:                       {operation: "CreateShard"},
-		PersistenceGetShardScope:                          {operation: "GetShard"},
+		PersistenceGetOrCreateShardScope:                  {operation: "GetOrCreateShard"},
 		PersistenceUpdateShardScope:                       {operation: "UpdateShard"},
 		PersistenceCreateWorkflowExecutionScope:           {operation: "CreateWorkflowExecution"},
 		PersistenceGetWorkflowExecutionScope:              {operation: "GetWorkflowExecution"},
@@ -1130,6 +1201,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetVisibilityTasksScope:                {operation: "GetVisibilityTasks"},
 		PersistenceCompleteVisibilityTaskScope:            {operation: "CompleteVisibilityTask"},
 		PersistenceRangeCompleteVisibilityTaskScope:       {operation: "RangeCompleteVisibilityTask"},
+		PersistenceGetTieredStorageTaskScope:              {operation: "GetTieredStorageTask"},
+		PersistenceGetTieredStorageTasksScope:             {operation: "GetTieredStorageTasks"},
+		PersistenceCompleteTieredStorageTaskScope:         {operation: "CompleteTieredStorageTask"},
+		PersistenceRangeCompleteTieredStorageTaskScope:    {operation: "RangeCompleteTieredStorageTask"},
 		PersistenceGetReplicationTaskScope:                {operation: "GetReplicationTask"},
 		PersistenceGetReplicationTasksScope:               {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:           {operation: "CompleteReplicationTask"},
@@ -1198,8 +1273,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceUpdateDLQAckLevelScope:          {operation: "UpdateDLQAckLevel"},
 		PersistenceGetDLQAckLevelScope:             {operation: "GetDLQAckLevel"},
 		PersistenceNamespaceReplicationQueueScope:  {operation: "NamespaceReplicationQueue"},
+		PersistenceListClusterMetadataScope:        {operation: "ListClusterMetadata"},
 		PersistenceGetClusterMetadataScope:         {operation: "GetClusterMetadata"},
 		PersistenceSaveClusterMetadataScope:        {operation: "SaveClusterMetadata"},
+		PersistenceDeleteClusterMetadataScope:      {operation: "DeleteClusterMetadata"},
 		PersistencePruneClusterMembershipScope:     {operation: "PruneClusterMembership"},
 		PersistenceGetClusterMembersScope:          {operation: "GetClusterMembership"},
 		PersistenceUpsertClusterMembershipScope:    {operation: "UpsertClusterMembership"},
@@ -1239,6 +1316,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientMergeDLQMessagesScope:                    {operation: "HistoryClientMergeDLQMessagesScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRefreshWorkflowTasksScope:                {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGenerateLastHistoryReplicationTasksScope: {operation: "HistoryClientGenerateLastHistoryReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientGetReplicationStatusScope:                {operation: "HistoryClientGetReplicationStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		MatchingClientPollWorkflowTaskQueueScope:              {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollActivityTaskQueueScope:              {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientAddActivityTaskScope:                    {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
@@ -1300,10 +1378,21 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientGetWorkflowExecutionRawHistoryScope:        {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope:      {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeClusterScope:                       {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientAddOrUpdateRemoteClusterScope:              {operation: "AdminClientAddOrUpdateRemoteCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRemoveRemoteClusterScope:                   {operation: "AdminClientRemoveRemoteCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRegisterNamespaceScope:                     {operation: "AdminClientRegisterNamespace", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientUpdateNamespaceScope:                       {operation: "AdminClientUpdateNamespace", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRefreshWorkflowTasksScope:                  {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListNamespacesScope:                        {operation: "AdminClientListNamespaces", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientResendReplicationTasksScope:                {operation: "AdminClientResendReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetTaskQueueTasksScope:                     {operation: "AdminClientGetTaskQueueTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListClusterMembersScope:                    {operation: "AdminClientListClusterMembers", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetShardScope:                              {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListTransferTasksScope:                     {operation: "AdminClientListTransferTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListTimerTasksScope:                        {operation: "AdminClientListTimerTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListReplicationTasksScope:                  {operation: "AdminClientListReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListVisibilityTasksScope:                   {operation: "AdminClientListVisibilityTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetDLQMessagesScope:                        {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1374,7 +1463,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 
-		DynamicConfigScope: {operation: "DynamicConfig"},
+		DynamicConfigScope:               {operation: "DynamicConfig"},
+		TieredStorageQueueProcessorScope: {operation: "TieredStorageQueueProcessor"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -1382,6 +1472,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
 		AdminCloseShardScope:                       {operation: "AdminCloseShard"},
 		AdminGetShardScope:                         {operation: "AdminGetShard"},
+		AdminListTransferTasksScope:                {operation: "AdminListTransferTasks"},
+		AdminListTimerTasksScope:                   {operation: "AdminListTimerTasks"},
+		AdminListReplicationTasksScope:             {operation: "AdminListReplicationTasks"},
+		AdminListVisibilityTasksScope:              {operation: "AdminListTimerTasks"},
 		AdminReadDLQMessagesScope:                  {operation: "AdminReadDLQMessages"},
 		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
 		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
@@ -1393,11 +1487,19 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},
 		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "GetWorkflowExecutionRawHistoryV2"},
 		AdminGetReplicationMessagesScope:           {operation: "GetReplicationMessages"},
+		AdminListClusterMembersScope:               {operation: "AdminListClusterMembers"},
 		AdminGetNamespaceReplicationMessagesScope:  {operation: "GetNamespaceReplicationMessages"},
+		AdminListNamespacesScope:                   {operation: "AdminListNamespaces"},
+		AdminRegisterNamespaceScope:                {operation: "AdminRegisterNamespace"},
+		AdminUpdateNamespaceScope:                  {operation: "AdminUpdateNamespace"},
 		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
 		AdminReapplyEventsScope:                    {operation: "ReapplyEvents"},
 		AdminRefreshWorkflowTasksScope:             {operation: "RefreshWorkflowTasks"},
 		AdminResendReplicationTasksScope:           {operation: "ResendReplicationTasks"},
+		AdminGetTaskQueueTasksScope:                {operation: "GetTaskQueueTasks"},
+		AdminDescribeClusterScope:                  {operation: "AdminDescribeCluster"},
+		AdminAddOrUpdateRemoteClusterScope:         {operation: "AdminAddOrUpdateRemoteCluster"},
+		AdminRemoveRemoteClusterScope:              {operation: "AdminRemoveRemoteCluster"},
 
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
@@ -1480,6 +1582,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryReapplyEventsScope:                       {operation: "EventReapplication"},
 		HistoryRefreshWorkflowTasksScope:                {operation: "RefreshWorkflowTasks"},
 		HistoryGenerateLastHistoryReplicationTasksScope: {operation: "GenerateLastHistoryReplicationTasks"},
+		HistoryGetReplicationStatusScope:                {operation: "GetReplicationStatus"},
 		HistoryHistoryRemoveTaskScope:                   {operation: "RemoveTask"},
 		HistoryCloseShard:                               {operation: "CloseShard"},
 		HistoryGetShard:                                 {operation: "GetShard"},
@@ -1593,6 +1696,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BatcherScope:                           {operation: "batcher"},
 		ParentClosePolicyProcessorScope:        {operation: "ParentClosePolicyProcessor"},
 		AddSearchAttributesWorkflowScope:       {operation: "AddSearchAttributesWorkflow"},
+	},
+	Server: {
+		ServerTlsScope: {operation: "ServerTls"},
 	},
 }
 
@@ -2038,6 +2144,14 @@ const (
 	AddSearchAttributesFailuresCount
 
 	NumWorkerMetrics
+)
+
+// Server metrics enum
+const (
+	TlsCertsExpired = iota + NumWorkerMetrics
+	TlsCertsExpiring
+
+	NumServerMetrics
 )
 
 // MetricDefs record the metrics for all services
@@ -2491,6 +2605,10 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ScavengerValidationRequestsCount:              {metricName: "scavenger_validation_requests", metricType: Counter},
 		ScavengerValidationFailuresCount:              {metricName: "scavenger_validation_failures", metricType: Counter},
 		AddSearchAttributesFailuresCount:              {metricName: "add_search_attributes_failures", metricType: Counter},
+	},
+	Server: {
+		TlsCertsExpired:  {metricName: "certificates_expired", metricType: Gauge},
+		TlsCertsExpiring: {metricName: "certificates_expiring", metricType: Gauge},
 	},
 }
 

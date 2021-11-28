@@ -191,18 +191,16 @@ type (
 		TaskType    enumspb.TaskQueueType
 	}
 
-	// CreateShardRequest is used to create a shard in executions table
-	CreateShardRequest struct {
-		ShardInfo *persistencespb.ShardInfo
+	// GetOrCreateShardRequest is used to get shard information, or supply
+	// initial information to create a shard in executions table
+	GetOrCreateShardRequest struct {
+		ShardID          int32
+		CreateIfMissing  bool
+		InitialShardInfo *persistencespb.ShardInfo
 	}
 
-	// GetShardRequest is used to get shard information
-	GetShardRequest struct {
-		ShardID int32
-	}
-
-	// GetShardResponse is the response to GetShard
-	GetShardResponse struct {
+	// GetOrCreateShardResponse is the response to GetOrCreateShard
+	GetOrCreateShardResponse struct {
 		ShardInfo *persistencespb.ShardInfo
 	}
 
@@ -470,6 +468,32 @@ type (
 		NextPageToken []byte
 	}
 
+	// GetTieredStorageTaskRequest is the request for GetTieredStorageTask
+	GetTieredStorageTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// GetTieredStorageTaskResponse is the response to GetTieredStorageTask
+	GetTieredStorageTaskResponse struct {
+		Task tasks.Task
+	}
+
+	// GetTieredStorageTasksRequest is used to read tasks from the TieredStorage task queue
+	GetTieredStorageTasksRequest struct {
+		ShardID       int32
+		MinTaskID     int64
+		MaxTaskID     int64
+		BatchSize     int
+		NextPageToken []byte
+	}
+
+	// GetTieredStorageTasksResponse is the response to GetTieredStorageTasksRequest
+	GetTieredStorageTasksResponse struct {
+		Tasks         []tasks.Task
+		NextPageToken []byte
+	}
+
 	// GetReplicationTaskRequest is the request for GetReplicationTask
 	GetReplicationTaskRequest struct {
 		ShardID int32
@@ -517,6 +541,19 @@ type (
 
 	// RangeCompleteVisibilityTaskRequest is used to complete a range of tasks in the visibility task queue
 	RangeCompleteVisibilityTaskRequest struct {
+		ShardID              int32
+		ExclusiveBeginTaskID int64
+		InclusiveEndTaskID   int64
+	}
+
+	// CompleteTieredStorageTaskRequest is used to complete a task in the TieredStorage task queue
+	CompleteTieredStorageTaskRequest struct {
+		ShardID int32
+		TaskID  int64
+	}
+
+	// RangeCompleteTieredStorageTaskRequest is used to complete a range of tasks in the TieredStorage task queue
+	RangeCompleteTieredStorageTaskRequest struct {
 		ShardID              int32
 		ExclusiveBeginTaskID int64
 		InclusiveEndTaskID   int64
@@ -956,18 +993,41 @@ type (
 		Branches []HistoryBranchDetail
 	}
 
+	// ListClusterMetadataRequest is the request to ListClusterMetadata
+	ListClusterMetadataRequest struct {
+		PageSize      int
+		NextPageToken []byte
+	}
+
+	// ListClusterMetadataResponse is the response to ListClusterMetadata
+	ListClusterMetadataResponse struct {
+		ClusterMetadata []*GetClusterMetadataResponse
+		NextPageToken   []byte
+	}
+
+	// GetClusterMetadataRequest is the request to GetClusterMetadata
+	GetClusterMetadataRequest struct {
+		ClusterName string
+	}
+
 	// GetClusterMetadataResponse is the response to GetClusterMetadata
 	GetClusterMetadataResponse struct {
 		persistencespb.ClusterMetadata
 		Version int64
 	}
 
+	// SaveClusterMetadataRequest is the request to SaveClusterMetadata
 	SaveClusterMetadataRequest struct {
 		persistencespb.ClusterMetadata
 		Version int64
 	}
 
-	// GetClusterMembersRequest is the response to GetClusterMembers
+	// DeleteClusterMetadataRequest is the request to DeleteClusterMetadata
+	DeleteClusterMetadataRequest struct {
+		ClusterName string
+	}
+
+	// GetClusterMembersRequest is the request to GetClusterMembers
 	GetClusterMembersRequest struct {
 		LastHeartbeatWithin time.Duration
 		RPCAddressEquals    net.IP
@@ -1019,8 +1079,7 @@ type (
 	ShardManager interface {
 		Closeable
 		GetName() string
-		CreateShard(request *CreateShardRequest) error
-		GetShard(request *GetShardRequest) (*GetShardResponse, error)
+		GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
 		UpdateShard(request *UpdateShardRequest) error
 	}
 
@@ -1076,6 +1135,11 @@ type (
 		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
+
+		GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*GetTieredStorageTaskResponse, error)
+		GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*GetTieredStorageTasksResponse, error)
+		CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error
+		RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
@@ -1147,8 +1211,12 @@ type (
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
-		GetClusterMetadata() (*GetClusterMetadataResponse, error)
+		ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error)
+		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
+		GetClusterMetadataV1() (*GetClusterMetadataResponse, error) //TODO: deprecate this after 1.15+
+		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error
 	}
 )
 

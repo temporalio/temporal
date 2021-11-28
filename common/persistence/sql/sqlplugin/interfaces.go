@@ -79,6 +79,7 @@ type (
 		HistoryReplicationTask
 		HistoryReplicationDLQTask
 		HistoryVisibilityTask
+		HistoryTieredStorageTask
 	}
 
 	// AdminCRUD defines admin operations for CLI and test suites

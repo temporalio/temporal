@@ -30,7 +30,7 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 
 	"go.temporal.io/server/common/clock"
@@ -49,14 +49,14 @@ type (
 	}
 
 	openTelemetryStopwatchMetricImpl struct {
-		timer  metric.Float64ValueRecorder
-		labels []label.KeyValue
+		timer  metric.Int64Histogram
+		labels []attribute.KeyValue
 	}
 )
 
 func newOpenTelemetryStopwatchMetric(
-	timer metric.Float64ValueRecorder,
-	labels []label.KeyValue,
+	timer metric.Int64Histogram,
+	labels []attribute.KeyValue,
 ) *openTelemetryStopwatchMetricImpl {
 	return &openTelemetryStopwatchMetricImpl{
 		timer:  timer,
@@ -89,5 +89,5 @@ func (o *opentelemetryStopwatch) Subtract(toSubstract time.Duration) {
 }
 
 func (om *openTelemetryStopwatchMetricImpl) Record(ctx context.Context, d time.Duration) {
-	om.timer.Record(ctx, float64(d.Nanoseconds()), om.labels...)
+	om.timer.Record(ctx, d.Nanoseconds(), om.labels...)
 }

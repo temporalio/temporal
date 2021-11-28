@@ -620,6 +620,40 @@ func (e *FaultInjectionExecutionStore) RangeCompleteVisibilityTask(request *pers
 	return e.baseExecutionStore.RangeCompleteVisibilityTask(request)
 }
 
+func (e *FaultInjectionExecutionStore) GetTieredStorageTask(request *persistence.GetTieredStorageTaskRequest) (
+	*persistence.InternalGetTieredStorageTaskResponse,
+	error,
+) {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return e.baseExecutionStore.GetTieredStorageTask(request)
+}
+
+func (e *FaultInjectionExecutionStore) GetTieredStorageTasks(request *persistence.GetTieredStorageTasksRequest) (
+	*persistence.InternalGetTieredStorageTasksResponse,
+	error,
+) {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return e.baseExecutionStore.GetTieredStorageTasks(request)
+}
+
+func (e *FaultInjectionExecutionStore) CompleteTieredStorageTask(request *persistence.CompleteTieredStorageTaskRequest) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.CompleteTieredStorageTask(request)
+}
+
+func (e *FaultInjectionExecutionStore) RangeCompleteTieredStorageTask(request *persistence.RangeCompleteTieredStorageTaskRequest) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.RangeCompleteTieredStorageTask(request)
+}
+
 func (e *FaultInjectionExecutionStore) AppendHistoryNodes(request *persistence.InternalAppendHistoryNodesRequest) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
@@ -701,24 +735,58 @@ func (c *FaultInjectionClusterMetadataStore) GetName() string {
 	return c.baseCMStore.GetName()
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata() (
+func (c *FaultInjectionClusterMetadataStore) ListClusterMetadata(request *persistence.InternalListClusterMetadataRequest) (
+	*persistence.InternalListClusterMetadataResponse,
+	error,
+) {
+	if err := c.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return c.baseCMStore.ListClusterMetadata(request)
+}
+
+func (c *FaultInjectionClusterMetadataStore) GetClusterMetadataV1() (*persistence.InternalGetClusterMetadataResponse, error) {
+	if err := c.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return c.baseCMStore.GetClusterMetadataV1()
+}
+
+func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(request *persistence.InternalGetClusterMetadataRequest) (
 	*persistence.InternalGetClusterMetadataResponse,
 	error,
 ) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return c.baseCMStore.GetClusterMetadata()
+	return c.baseCMStore.GetClusterMetadata(request)
 }
 
-func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(request *persistence.InternalSaveClusterMetadataRequest) (
-	bool,
-	error,
-) {
+func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadataV1(
+	request *persistence.InternalSaveClusterMetadataRequest,
+) (bool, error) {
+	if err := c.ErrorGenerator.Generate(); err != nil {
+		return false, err
+	}
+	return c.baseCMStore.SaveClusterMetadataV1(request)
+}
+
+func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(
+	request *persistence.InternalSaveClusterMetadataRequest,
+) (bool, error) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return false, err
 	}
 	return c.baseCMStore.SaveClusterMetadata(request)
+}
+
+func (c *FaultInjectionClusterMetadataStore) DeleteClusterMetadata(
+	request *persistence.InternalDeleteClusterMetadataRequest,
+) error {
+	if err := c.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return c.baseCMStore.DeleteClusterMetadata(request)
 }
 
 func (c *FaultInjectionClusterMetadataStore) GetClusterMembers(request *persistence.GetClusterMembersRequest) (
@@ -977,21 +1045,14 @@ func (s *FaultInjectionShardStore) GetClusterName() string {
 	return s.baseShardStore.GetClusterName()
 }
 
-func (s *FaultInjectionShardStore) CreateShard(request *persistence.InternalCreateShardRequest) error {
-	if err := s.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return s.baseShardStore.CreateShard(request)
-}
-
-func (s *FaultInjectionShardStore) GetShard(request *persistence.InternalGetShardRequest) (
-	*persistence.InternalGetShardResponse,
+func (s *FaultInjectionShardStore) GetOrCreateShard(request *persistence.InternalGetOrCreateShardRequest) (
+	*persistence.InternalGetOrCreateShardResponse,
 	error,
 ) {
 	if err := s.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return s.baseShardStore.GetShard(request)
+	return s.baseShardStore.GetOrCreateShard(request)
 }
 
 func (s *FaultInjectionShardStore) UpdateShard(request *persistence.InternalUpdateShardRequest) error {

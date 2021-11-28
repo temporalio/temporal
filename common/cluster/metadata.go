@@ -52,6 +52,8 @@ type (
 		GetAllClusterInfo() map[string]ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
 		ClusterNameForFailoverVersion(failoverVersion int64) string
+		// GetFailoverVersionIncrement return the Failover version increment value
+		GetFailoverVersionIncrement() int64
 	}
 
 	metadataImpl struct {
@@ -68,28 +70,6 @@ type (
 		clusterInfo map[string]ClusterInformation
 		// versionToClusterName contains all initial version -> corresponding cluster name
 		versionToClusterName map[int64]string
-	}
-
-	// ClusterMetadata contains the all cluster which participated in cross DC
-	Config struct {
-		EnableGlobalNamespace bool `yaml:"enableGlobalNamespace"`
-		// FailoverVersionIncrement is the increment of each cluster version when failover happens
-		FailoverVersionIncrement int64 `yaml:"failoverVersionIncrement"`
-		// MasterClusterName is the master cluster name, only the master cluster can register / update namespace
-		// all clusters can do namespace failover
-		MasterClusterName string `yaml:"masterClusterName"`
-		// CurrentClusterName is the name of the current cluster
-		CurrentClusterName string `yaml:"currentClusterName"`
-		// ClusterInformation contains all cluster names to corresponding information about that cluster
-		ClusterInformation map[string]ClusterInformation `yaml:"clusterInformation"`
-	}
-
-	// ClusterInformation contains the information about each cluster which participated in cross DC
-	ClusterInformation struct {
-		Enabled                bool  `yaml:"enabled"`
-		InitialFailoverVersion int64 `yaml:"initialFailoverVersion"`
-		// Address indicate the remote service address(Host:Port). Host can be DNS name.
-		RPCAddress string `yaml:"rpcAddress"`
 	}
 )
 
@@ -230,4 +210,9 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int64) stri
 		))
 	}
 	return clusterName
+}
+
+// GetFailoverVersionIncrement return the Failover version increment value
+func (m *metadataImpl) GetFailoverVersionIncrement() int64 {
+	return m.failoverVersionIncrement
 }

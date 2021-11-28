@@ -34,8 +34,10 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
+	v10 "go.temporal.io/server/api/historyservice/v1"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
+	definition "go.temporal.io/server/common/definition"
 	log "go.temporal.io/server/common/log"
 	metrics "go.temporal.io/server/common/metrics"
 	namespace "go.temporal.io/server/common/namespace"
@@ -153,6 +155,20 @@ func (m *MockContext) DeleteTransferFailoverLevel(failoverID string) error {
 func (mr *MockContextMockRecorder) DeleteTransferFailoverLevel(failoverID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTransferFailoverLevel", reflect.TypeOf((*MockContext)(nil).DeleteTransferFailoverLevel), failoverID)
+}
+
+// DeleteWorkflowExecution mocks base method.
+func (m *MockContext) DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", workflowKey, branchToken, version)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
+func (mr *MockContextMockRecorder) DeleteWorkflowExecution(workflowKey, branchToken, version interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), workflowKey, branchToken, version)
 }
 
 // GenerateTransferTaskID mocks base method.
@@ -382,6 +398,21 @@ func (mr *MockContextMockRecorder) GetNamespaceRegistry() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceRegistry", reflect.TypeOf((*MockContext)(nil).GetNamespaceRegistry))
 }
 
+// GetRemoteClusterAckInfo mocks base method.
+func (m *MockContext) GetRemoteClusterAckInfo(cluster []string) (map[string]*v10.ShardReplicationStatusPerCluster, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRemoteClusterAckInfo", cluster)
+	ret0, _ := ret[0].(map[string]*v10.ShardReplicationStatusPerCluster)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRemoteClusterAckInfo indicates an expected call of GetRemoteClusterAckInfo.
+func (mr *MockContextMockRecorder) GetRemoteClusterAckInfo(cluster interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteClusterAckInfo", reflect.TypeOf((*MockContext)(nil).GetRemoteClusterAckInfo), cluster)
+}
+
 // GetReplicatorAckLevel mocks base method.
 func (m *MockContext) GetReplicatorAckLevel() int64 {
 	m.ctrl.T.Helper()
@@ -450,6 +481,20 @@ func (m *MockContext) GetThrottledLogger() log.Logger {
 func (mr *MockContextMockRecorder) GetThrottledLogger() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetThrottledLogger", reflect.TypeOf((*MockContext)(nil).GetThrottledLogger))
+}
+
+// GetTieredStorageAckLevel mocks base method.
+func (m *MockContext) GetTieredStorageAckLevel() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetTieredStorageAckLevel")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetTieredStorageAckLevel indicates an expected call of GetTieredStorageAckLevel.
+func (mr *MockContextMockRecorder) GetTieredStorageAckLevel() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTieredStorageAckLevel", reflect.TypeOf((*MockContext)(nil).GetTieredStorageAckLevel))
 }
 
 // GetTimeSource mocks base method.
@@ -577,17 +622,17 @@ func (mr *MockContextMockRecorder) SetCurrentTime(cluster, currentTime interface
 }
 
 // UpdateClusterReplicationLevel mocks base method.
-func (m *MockContext) UpdateClusterReplicationLevel(cluster string, ackTaskID int64) error {
+func (m *MockContext) UpdateClusterReplicationLevel(cluster string, ackTaskID int64, ackTimestamp time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateClusterReplicationLevel", cluster, ackTaskID)
+	ret := m.ctrl.Call(m, "UpdateClusterReplicationLevel", cluster, ackTaskID, ackTimestamp)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateClusterReplicationLevel indicates an expected call of UpdateClusterReplicationLevel.
-func (mr *MockContextMockRecorder) UpdateClusterReplicationLevel(cluster, ackTaskID interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateClusterReplicationLevel(cluster, ackTaskID, ackTimestamp interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClusterReplicationLevel", reflect.TypeOf((*MockContext)(nil).UpdateClusterReplicationLevel), cluster, ackTaskID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClusterReplicationLevel", reflect.TypeOf((*MockContext)(nil).UpdateClusterReplicationLevel), cluster, ackTaskID, ackTimestamp)
 }
 
 // UpdateNamespaceNotificationVersion mocks base method.
@@ -630,6 +675,20 @@ func (m *MockContext) UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel i
 func (mr *MockContextMockRecorder) UpdateReplicatorDLQAckLevel(sourCluster, ackLevel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReplicatorDLQAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateReplicatorDLQAckLevel), sourCluster, ackLevel)
+}
+
+// UpdateTieredStorageAckLevel mocks base method.
+func (m *MockContext) UpdateTieredStorageAckLevel(ackLevel int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateTieredStorageAckLevel", ackLevel)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateTieredStorageAckLevel indicates an expected call of UpdateTieredStorageAckLevel.
+func (mr *MockContextMockRecorder) UpdateTieredStorageAckLevel(ackLevel interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTieredStorageAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateTieredStorageAckLevel), ackLevel)
 }
 
 // UpdateTimerAckLevel mocks base method.

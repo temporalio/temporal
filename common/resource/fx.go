@@ -55,7 +55,6 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -69,8 +68,12 @@ type (
 )
 
 var Module = fx.Options(
-	persistenceClient.Module,
+	DepsModule,
+	fx.Provide(NewFromDI),
+)
 
+var DepsModule = fx.Options(
+	persistenceClient.Module,
 	fx.Provide(SnTaggedLoggerProvider),
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(PersistenceConfigProvider),
@@ -80,12 +83,9 @@ var Module = fx.Options(
 	fx.Provide(cluster.NewMetadataFromConfig),
 	fx.Provide(TimeSourceProvider),
 	fx.Provide(ClusterMetadataManagerProvider),
-	fx.Provide(PersistenceServiceResolverProvider),
-	fx.Provide(AbstractDatastoreFactoryProvider),
 	fx.Provide(MetricsClientProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
-	fx.Provide(SearchAttributeMapperProvider),
 	fx.Provide(MetadataManagerProvider),
 	fx.Provide(NamespaceCacheProvider),
 	fx.Provide(serialization.NewSerializer),
@@ -105,7 +105,6 @@ var Module = fx.Options(
 	fx.Provide(InstanceIDProvider),
 	fx.Provide(RingpopChannelProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
-	fx.Provide(NewFromDI),
 	fx.Invoke(RegisterBootstrapContainer),
 )
 
@@ -148,14 +147,6 @@ func HostNameProvider() (HostName, error) {
 	return HostName(hn), err
 }
 
-func PersistenceServiceResolverProvider(params *BootstrapParams) resolver.ServiceResolver {
-	return params.PersistenceServiceResolver
-}
-
-func AbstractDatastoreFactoryProvider(params *BootstrapParams) persistenceClient.AbstractDataStoreFactory {
-	return params.AbstractDatastoreFactory
-}
-
 func TimeSourceProvider() clock.TimeSource {
 	return clock.NewRealTimeSource()
 }
@@ -176,10 +167,6 @@ func SearchAttributeManagerProvider(
 	cmMgr persistence.ClusterMetadataManager,
 ) searchattribute.Manager {
 	return searchattribute.NewManager(timeSource, cmMgr)
-}
-
-func SearchAttributeMapperProvider(params *BootstrapParams) searchattribute.Mapper {
-	return params.SearchAttributesMapper
 }
 
 func MetadataManagerProvider(factory persistenceClient.Factory) (persistence.MetadataManager, error) {
@@ -208,15 +195,7 @@ func ArchiverProviderProvider(params *BootstrapParams) provider.ArchiverProvider
 	return params.ArchiverProvider
 }
 
-func ClientFactoryProvider(params *BootstrapParams) client.FactoryProvider {
-	factoryProvider := params.ClientFactoryProvider
-	if factoryProvider == nil {
-		factoryProvider = client.NewFactoryProvider()
-	}
-	return factoryProvider
-}
-
-func ClientBeanProvider(
+func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
 	membershipMonitor membership.Monitor,
@@ -224,17 +203,23 @@ func ClientBeanProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
 	logger SnTaggedLogger,
+) client.Factory {
+	return factoryProvider.NewFactory(
+		rpcFactory,
+		membershipMonitor,
+		metricsClient,
+		dynamicCollection,
+		persistenceConfig.NumHistoryShards,
+		logger,
+	)
+}
+
+func ClientBeanProvider(
+	clientFactory client.Factory,
 	clusterMetadata cluster.Metadata,
 ) (client.Bean, error) {
 	return client.NewClientBean(
-		factoryProvider.NewFactory(
-			rpcFactory,
-			membershipMonitor,
-			metricsClient,
-			dynamicCollection,
-			persistenceConfig.NumHistoryShards,
-			logger,
-		),
+		clientFactory,
 		clusterMetadata,
 	)
 }
@@ -353,6 +338,7 @@ func NewFromDI(
 	membershipMonitor membership.Monitor,
 	sdkClient sdkclient.Client,
 	frontendClient workflowservice.WorkflowServiceClient,
+	clientFactory client.Factory,
 	clientBean client.Bean,
 	persistenceBean persistenceClient.Bean,
 	persistenceFaultInjection *persistenceClient.FaultInjectionDataStoreFactory,
@@ -434,6 +420,7 @@ func NewFromDI(
 		matchingClient:    matchingClient,
 		historyRawClient:  historyRawClient,
 		historyClient:     historyClient,
+		clientFactory:     clientFactory,
 		clientBean:        clientBean,
 
 		persistenceBean:           persistenceBean,

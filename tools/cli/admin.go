@@ -37,25 +37,41 @@ func newAdminWorkflowCommands() []cli.Command {
 			Name:    "show",
 			Aliases: []string{"show"},
 			Usage:   "show workflow history from database",
-			Flags: append(getDBFlags(),
-				// v2 history events
+			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagTreeID,
-					Usage: "TreeId",
+					Name:  FlagNamespace,
+					Usage: "Namespace of the workflow",
+					Value: "default",
 				},
 				cli.StringFlag{
-					Name:  FlagBranchID,
-					Usage: "BranchId",
+					Name:  FlagWorkflowIDWithAlias,
+					Usage: "WorkflowId",
+				},
+				cli.StringFlag{
+					Name:  FlagRunIDWithAlias,
+					Usage: "RunId",
+				},
+				cli.Int64Flag{
+					Name:  FlagMinEventID,
+					Usage: "Minimum event ID to be included in the history",
+				},
+				cli.Int64Flag{
+					Name:  FlagMaxEventID,
+					Usage: "Maximum event ID to be included in the history",
+					Value: 1<<63 - 1,
+				},
+				cli.Int64Flag{
+					Name:  FlagMinEventVersion,
+					Usage: "Start event version to be included in the history",
+				},
+				cli.Int64Flag{
+					Name:  FlagMaxEventVersion,
+					Usage: "End event version to be included in the history",
 				},
 				cli.StringFlag{
 					Name:  FlagOutputFilenameWithAlias,
 					Usage: "output file",
-				},
-				// support mysql query
-				cli.IntFlag{
-					Name:  FlagShardIDWithAlias,
-					Usage: "ShardId",
-				}),
+				}},
 			Action: func(c *cli.Context) {
 				AdminShowWorkflow(c)
 			},
@@ -173,9 +189,8 @@ func newAdminShardManagementCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks for given shard Id and task type",
-			Flags: append(append(
-				getDBFlags(),
-				flagsForPagination...),
+			Flags: append(
+				flagsForPagination,
 				cli.StringFlag{
 					Name:  FlagTargetCluster,
 					Value: "active",
@@ -188,7 +203,7 @@ func newAdminShardManagementCommands() []cli.Command {
 				cli.StringFlag{
 					Name:  FlagTaskType,
 					Value: "transfer",
-					Usage: "Task type: transfer (default), timer, replication",
+					Usage: "Task type: transfer (default), timer, replication, visibility",
 				},
 				cli.StringFlag{
 					Name:  FlagMinVisibilityTimestamp,
@@ -206,7 +221,7 @@ func newAdminShardManagementCommands() []cli.Command {
 				},
 			),
 			Action: func(c *cli.Context) {
-				AdminListTasks(c)
+				AdminListShardTasks(c)
 			},
 		},
 		{
@@ -272,8 +287,7 @@ func newAdminMembershipCommands() []cli.Command {
 		{
 			Name:  "list_db",
 			Usage: "List cluster membership items",
-			Flags: append(
-				getDBFlags(),
+			Flags: []cli.Flag{
 				cli.StringFlag{
 					Name:  FlagHeartbeatedWithin,
 					Value: "15m",
@@ -286,9 +300,9 @@ func newAdminMembershipCommands() []cli.Command {
 					Value: "all",
 					Usage: "Membership role filter: all (default), frontend, history, matching, worker",
 				},
-			),
+			},
 			Action: func(c *cli.Context) {
-				AdminListClusterMembership(c)
+				AdminListClusterMembers(c)
 			},
 		},
 	}
@@ -352,7 +366,7 @@ func newAdminNamespaceCommands() []cli.Command {
 		{
 			Name:  "list",
 			Usage: "List namespaces",
-			Flags: append(getDBFlags(), getFlagsForList()...),
+			Flags: flagsForPagination,
 			Action: func(c *cli.Context) {
 				AdminListNamespaces(c)
 			},
@@ -361,9 +375,12 @@ func newAdminNamespaceCommands() []cli.Command {
 			Name:    "register",
 			Aliases: []string{"re"},
 			Usage:   "Register workflow namespace",
-			Flags:   adminRegisterNamespaceFlags,
+			Flags:   registerNamespaceFlags,
 			Action: func(c *cli.Context) {
-				newNamespaceCLI(c, true).RegisterNamespace(c)
+				err := RegisterNamespace(c)
+				if err != nil {
+					ErrorAndExit("unable to register namespace", err)
+				}
 			},
 		},
 		{
@@ -404,66 +421,6 @@ func newAdminNamespaceCommands() []cli.Command {
 	}
 }
 
-func newAdminElasticSearchCommands() []cli.Command {
-	return []cli.Command{
-		{
-			Name:    "catIndex",
-			Aliases: []string{"cind"},
-			Usage:   "Cat Indices on Elasticsearch",
-			Flags:   getESFlags(false),
-			Action: func(c *cli.Context) {
-				AdminCatIndices(c)
-			},
-		},
-		{
-			Name:    "index",
-			Aliases: []string{"ind"},
-			Usage:   "Index docs on Elasticsearch",
-			Flags: append(
-				getESFlags(true),
-				cli.StringFlag{
-					Name:  FlagInputFileWithAlias,
-					Usage: "Input file of indexerspb.Message in json format, separated by newline",
-				},
-				cli.IntFlag{
-					Name:  FlagBatchSizeWithAlias,
-					Usage: "Optional batch size of actions for bulk operations",
-					Value: 10,
-				},
-			),
-			Action: func(c *cli.Context) {
-				AdminIndex(c)
-			},
-		},
-		{
-			Name:    "delete",
-			Aliases: []string{"del"},
-			Usage:   "Delete docs on Elasticsearch",
-			Flags: append(
-				getESFlags(true),
-				cli.StringFlag{
-					Name: FlagInputFileWithAlias,
-					Usage: "Input file name. Redirect temporal wf list result (with table format) to a file and use as delete input. " +
-						"First line should be table header like WORKFLOW TYPE | WORKFLOW ID | RUN ID | ...",
-				},
-				cli.IntFlag{
-					Name:  FlagBatchSizeWithAlias,
-					Usage: "Optional batch size of actions for bulk operations",
-					Value: 1000,
-				},
-				cli.IntFlag{
-					Name:  FlagRPS,
-					Usage: "Optional batch request rate per second",
-					Value: 30,
-				},
-			),
-			Action: func(c *cli.Context) {
-				AdminDelete(c)
-			},
-		},
-	}
-}
-
 func newAdminTaskQueueCommands() []cli.Command {
 	return []cli.Command{
 		{
@@ -488,30 +445,31 @@ func newAdminTaskQueueCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks of a task queue",
-			Flags: append(append(append(getDBFlags(), flagsForExecution...),
-				flagsForPagination...),
+			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagNamespaceID,
-					Usage: "Namespace Id",
+					Name:  FlagNamespace,
+					Usage: "Namespace name",
+					Value: "default",
 				},
 				cli.StringFlag{
 					Name:  FlagTaskQueueType,
 					Value: "activity",
-					Usage: "Taskqueue type: activity, workflow",
+					Usage: "Task Queue type: activity, workflow",
 				},
 				cli.StringFlag{
 					Name:  FlagTaskQueue,
-					Usage: "Taskqueue name",
+					Usage: "Task Queue name",
 				},
 				cli.Int64Flag{
-					Name:  FlagMinReadLevel,
-					Usage: "Lower bound of read level",
+					Name:  FlagMinTaskID,
+					Usage: "Minimum task Id",
+					Value: -12346, // include default task id
 				},
 				cli.Int64Flag{
-					Name:  FlagMaxReadLevel,
-					Usage: "Upper bound of read level",
+					Name:  FlagMaxTaskID,
+					Usage: "Maximum task Id",
 				},
-			),
+			},
 			Action: func(c *cli.Context) {
 				AdminListTaskQueueTasks(c)
 			},
@@ -532,7 +490,7 @@ func newAdminClusterCommands() []cli.Command {
 					Required: false,
 				},
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
@@ -555,7 +513,7 @@ func newAdminClusterCommands() []cli.Command {
 			Usage:   "Remove custom search attributes metadata only (Elasticsearch index schema is not modified)",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
@@ -578,7 +536,7 @@ func newAdminClusterCommands() []cli.Command {
 					Usage: "Output in JSON format",
 				},
 				cli.StringFlag{
-					Name:   FlagIndex,
+					Name:   FlagElasticsearchIndex,
 					Usage:  "Elasticsearch index name (optional)",
 					Hidden: true, // don't show it for now
 				},
@@ -591,8 +549,49 @@ func newAdminClusterCommands() []cli.Command {
 			Name:    "describe",
 			Aliases: []string{"d"},
 			Usage:   "Describe cluster information",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:  FlagCluster,
+					Value: "",
+					Usage: "Remote cluster name (optional, default to return current cluster information)",
+				},
+			},
 			Action: func(c *cli.Context) {
 				AdminDescribeCluster(c)
+			},
+		},
+		{
+			Name:    "upsert-remote-cluster",
+			Aliases: []string{"urc"},
+			Usage:   "Add or update remote cluster information in the current cluster",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:     FlagFrontendAddressWithAlias,
+					Usage:    "Remote cluster frontend address",
+					Required: true,
+				},
+				cli.BoolTFlag{
+					Name:  FlagConnectionEnableWithAlias,
+					Usage: "Optional: default ture. Enable remote cluster connection",
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminAddOrUpdateRemoteCluster(c)
+			},
+		},
+		{
+			Name:    "remove-remote-cluster",
+			Aliases: []string{"rrc"},
+			Usage:   "Remove remote cluster information from the current cluster",
+			Flags: []cli.Flag{
+				cli.StringFlag{
+					Name:     FlagCluster,
+					Usage:    "Remote cluster name",
+					Required: true,
+				},
+			},
+			Action: func(c *cli.Context) {
+				AdminRemoveRemoteCluster(c)
 			},
 		},
 	}

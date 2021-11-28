@@ -29,6 +29,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -42,6 +43,7 @@ type (
 		ExecutionManager  persistence.ExecutionManager
 		NamespaceRegistry namespace.Registry
 		HistoryClient     historyservice.HistoryServiceClient
+		Logger            log.Logger
 	}
 
 	fxResult struct {
@@ -68,7 +70,7 @@ func NewResult(params initParams) fxResult {
 }
 
 func (wc *replicationWorkerComponent) Register(worker sdkworker.Worker) {
-	worker.RegisterWorkflowWithOptions(GenReplicationWorkflow, workflow.RegisterOptions{Name: genReplicationWorkflowName})
+	worker.RegisterWorkflowWithOptions(GenReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
 	worker.RegisterActivity(wc.activities())
 }
 
@@ -83,5 +85,6 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		executionManager:  wc.ExecutionManager,
 		namespaceRegistry: wc.NamespaceRegistry,
 		historyClient:     wc.HistoryClient,
+		logger:            wc.Logger,
 	}
 }

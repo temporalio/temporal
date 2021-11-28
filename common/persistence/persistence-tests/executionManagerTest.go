@@ -2806,6 +2806,9 @@ func (s *ExecutionManagerSuite) TestWorkflowMutableStateSignalInfo() {
 		Name:                  "my signal",
 		Input:                 payloads.EncodeString("test signal input"),
 		Control:               uuid.New(),
+		Header: &commonpb.Header{
+			Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
+		},
 	}
 	err2 := s.UpsertSignalInfoState(updatedInfo, updatedState, int64(5), int64(3), []*persistencespb.SignalInfo{signalInfo})
 	s.NoError(err2)
@@ -3146,10 +3149,17 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 		ClusterReplicationLevel: map[string]int64{},
 		ReplicationDlqAckLevel:  map[string]int64{},
 	}
-	createRequest := &p.CreateShardRequest{
-		ShardInfo: shardInfo,
+	request := &p.GetOrCreateShardRequest{
+		ShardID:          shardID,
+		CreateIfMissing:  false,
+		InitialShardInfo: shardInfo,
 	}
-	s.Nil(s.ShardMgr.CreateShard(createRequest))
+	resp, err := s.ShardMgr.GetOrCreateShard(request)
+	s.Error(err) // initially missing
+
+	request.CreateIfMissing = true
+	resp, err = s.ShardMgr.GetOrCreateShard(request)
+	s.NoError(err) // now it's created
 
 	shardInfo.ClusterTransferAckLevel = map[string]int64{
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTransferAck,
@@ -3157,7 +3167,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	shardInfo.ClusterTimerAckLevel = map[string]*time.Time{
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTimerAck,
 	}
-	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
+	resp, err = s.ShardMgr.GetOrCreateShard(&p.GetOrCreateShardRequest{ShardID: shardID})
 	s.NoError(err)
 	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
@@ -3202,11 +3212,12 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		ClusterReplicationLevel:      map[string]int64{},
 		ReplicationDlqAckLevel:       map[string]int64{},
 	}
-	createRequest := &p.CreateShardRequest{
-		ShardInfo: shardInfo,
+	createRequest := &p.GetOrCreateShardRequest{
+		ShardID:          shardID,
+		InitialShardInfo: shardInfo,
+		CreateIfMissing:  true,
 	}
-	s.Nil(s.ShardMgr.CreateShard(createRequest))
-	resp, err := s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
+	resp, err := s.ShardMgr.GetOrCreateShard(createRequest)
 	s.NoError(err)
 	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
@@ -3251,7 +3262,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	}
 	s.Nil(s.ShardMgr.UpdateShard(updateRequest))
 
-	resp, err = s.ShardMgr.GetShard(&p.GetShardRequest{ShardID: shardID})
+	resp, err = s.ShardMgr.GetOrCreateShard(&p.GetOrCreateShardRequest{ShardID: shardID})
 	s.NoError(err)
 	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))

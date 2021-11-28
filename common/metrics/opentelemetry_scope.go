@@ -28,18 +28,20 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/label"
+	"go.opentelemetry.io/otel/attribute"
 )
 
 type (
 	opentelemetryScope struct {
 		serviceIdx        ServiceIdx
 		reporter          *OpentelemetryReporter
-		labels            []label.KeyValue
+		labels            []attribute.KeyValue
 		tags              map[string]string
 		rootScope         *opentelemetryScope
 		defs              map[int]metricDefinition
 		isNamespaceTagged bool
+
+		gaugeCache OtelGaugeCache
 	}
 )
 
@@ -50,6 +52,7 @@ func newOpentelemetryScope(
 	tags map[string]string,
 	defs map[int]metricDefinition,
 	isNamespace bool,
+	gaugeCache OtelGaugeCache,
 ) *opentelemetryScope {
 	result := &opentelemetryScope{
 		serviceIdx:        serviceIdx,
@@ -58,6 +61,7 @@ func newOpentelemetryScope(
 		rootScope:         rootScope,
 		defs:              defs,
 		isNamespaceTagged: isNamespace,
+		gaugeCache:        gaugeCache,
 	}
 	result.labels = tagMapToLabelArray(tags)
 	return result
@@ -81,13 +85,9 @@ func (m *opentelemetryScope) AddCounter(id int, delta int64) {
 
 func (m *opentelemetryScope) UpdateGauge(id int, value float64) {
 	def := m.defs[id]
-	ctx := context.Background()
-	m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()).Record(ctx, value, m.labels...)
-
+	m.gaugeCache.Set(def.metricName.String(), m.tags, value)
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricRollupName.String()).Record(
-			ctx, value, m.rootScope.labels...,
-		)
+		m.gaugeCache.Set(def.metricRollupName.String(), m.rootScope.tags, value)
 	}
 }
 
@@ -95,18 +95,18 @@ func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
 	def := m.defs[id]
 
 	timer := newOpenTelemetryStopwatchMetric(
-		m.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()),
 		m.labels)
 	switch {
 	case !def.metricRollupName.Empty():
 		timerRollup := newOpenTelemetryStopwatchMetric(
-			m.rootScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+			m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()),
 			m.rootScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerRollup})
 	case m.isNamespaceTagged:
 		allScope := m.taggedString(map[string]string{namespace: namespaceAllValue})
 		timerAll := newOpenTelemetryStopwatchMetric(
-			allScope.reporter.GetMeterMust().NewFloat64ValueRecorder(def.metricName.String()),
+			allScope.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()),
 			allScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerAll})
 	default:
@@ -117,21 +117,21 @@ func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
 func (m *opentelemetryScope) RecordTimer(id int, d time.Duration) {
 	def := m.defs[id]
 	ctx := context.Background()
-	m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(ctx, d.Nanoseconds(), m.labels...)
+	m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(ctx, d.Nanoseconds(), m.labels...)
 
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, d.Nanoseconds(), m.rootScope.labels...,
 		)
 	}
 
 	switch {
 	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, d.Nanoseconds(), m.rootScope.labels...,
 		)
 	case m.isNamespaceTagged:
-		m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(
+		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(
 			ctx,
 			d.Nanoseconds(),
 			m.taggedString(map[string]string{namespace: namespaceAllValue}).labels...,
@@ -144,21 +144,21 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	def := m.defs[id]
 
 	ctx := context.Background()
-	m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(ctx, value, m.labels...)
+	m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(ctx, value, m.labels...)
 
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	}
 
 	switch {
 	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		m.rootScope.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	case m.isNamespaceTagged:
-		m.reporter.GetMeterMust().NewInt64ValueRecorder(def.metricName.String()).Record(
+		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(
 			ctx,
 			value,
 			m.taggedString(map[string]string{namespace: namespaceAllValue}).labels...,
@@ -179,7 +179,7 @@ func (m *opentelemetryScope) taggedString(tags map[string]string) *opentelemetry
 		}
 		tagMap[k] = v
 	}
-	return newOpentelemetryScope(m.serviceIdx, m.reporter, m.rootScope, tagMap, m.defs, namespaceTagged)
+	return newOpentelemetryScope(m.serviceIdx, m.reporter, m.rootScope, tagMap, m.defs, namespaceTagged, m.gaugeCache)
 }
 
 func (m *opentelemetryScope) Tagged(tags ...Tag) Scope {
@@ -196,7 +196,7 @@ func (m *opentelemetryScope) namespaceTagged(key string, value string) bool {
 }
 
 func (m *opentelemetryScope) userScope() UserScope {
-	return newOpentelemetryUserScope(m.reporter, m.tags)
+	return newOpentelemetryUserScope(m.reporter, m.tags, m.gaugeCache)
 }
 
 func (m *opentelemetryScope) AddCounterInternal(name string, delta int64) {

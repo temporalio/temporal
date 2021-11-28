@@ -27,6 +27,8 @@ package worker
 import (
 	"context"
 
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
@@ -38,13 +40,12 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/scanner/replication"
-	"go.uber.org/fx"
 )
 
 var Module = fx.Options(
 	replication.Module,
 	addsearchattributes.Module,
-	resource.Module,
+	resource.DepsModule,
 	fx.Provide(ParamsExpandProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),

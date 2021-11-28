@@ -274,29 +274,43 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipUpsertInvalidExpiry()
 // 3 - Get, data persisted
 // 4 - Init, data persisted
 // 5 - Update, add version info and make sure it's persisted and can be retrieved.
+// 6 - Delete, no data persisted
 func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
+	clusterNameToPersist := "testing"
+	historyShardsToPersist := int32(43)
+	clusterIdToPersist := "12345"
+	clusterAddress := "cluster-address"
+	failoverVersionIncrement := int64(10)
+	initialFailoverVersion := int64(1)
+
 	// Case 1 - Get, mo data persisted
 	// Fetch the persisted values, there should be nothing on start.
 	// This doesn't error on no row found, but returns an empty record.
-	getResp, err := s.ClusterMetadataManager.GetClusterMetadata()
+	getResp, err := s.ClusterMetadataManager.GetClusterMetadata(&p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 
 	// Validate they match our initializations
 	s.NotNil(err)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Nil(getResp)
 
-	var clusterNameToPersist = "testing"
-	var historyShardsToPersist int32 = 43
-	var clusterIdToPersist = "12345"
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadataV1()
+	s.NotNil(err)
+	s.IsType(&serviceerror.NotFound{}, err)
+	s.Nil(getResp)
 
 	// Case 2 - Init, no data persisted yet
 	// First commit, this should be persisted
 	initialResp, err := s.ClusterMetadataManager.SaveClusterMetadata(
 		&p.SaveClusterMetadataRequest{
 			ClusterMetadata: persistencespb.ClusterMetadata{
-				ClusterName:       clusterNameToPersist,
-				HistoryShardCount: historyShardsToPersist,
-				ClusterId:         clusterIdToPersist,
+				ClusterName:              clusterNameToPersist,
+				HistoryShardCount:        historyShardsToPersist,
+				ClusterId:                clusterIdToPersist,
+				ClusterAddress:           clusterAddress,
+				FailoverVersionIncrement: failoverVersionIncrement,
+				InitialFailoverVersion:   initialFailoverVersion,
+				IsGlobalNamespaceEnabled: true,
+				IsConnectionEnabled:      true,
 			}})
 
 	s.Nil(err)
@@ -304,7 +318,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 
 	// Case 3 - Get, data persisted
 	// Fetch the persisted values
-	getResp, err = s.ClusterMetadataManager.GetClusterMetadata()
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(&p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 
 	// Validate they match our initializations
 	s.Nil(err)
@@ -312,13 +326,23 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	s.Equal(clusterNameToPersist, getResp.ClusterName)
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
 	s.Equal(clusterIdToPersist, getResp.ClusterId)
+	s.Equal(clusterAddress, getResp.ClusterAddress)
+	s.Equal(failoverVersionIncrement, getResp.FailoverVersionIncrement)
+	s.Equal(initialFailoverVersion, getResp.InitialFailoverVersion)
+	s.True(getResp.IsGlobalNamespaceEnabled)
+	s.True(getResp.IsConnectionEnabled)
+
+	// not persist non current cluster
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadataV1()
+	s.NotNil(err)
+	s.IsType(&serviceerror.NotFound{}, err)
+	s.Nil(getResp)
 
 	// Case 4 - Init, data persisted
 	// Attempt to overwrite with new values
-	var wrongClusterName = "overWriteClusterName"
 	secondResp, err := s.ClusterMetadataManager.SaveClusterMetadata(&p.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
-			ClusterName:       wrongClusterName,
+			ClusterName:       clusterNameToPersist,
 			HistoryShardCount: int32(77),
 		}})
 
@@ -326,7 +350,7 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	s.False(secondResp) // Should not have applied, and should match values from first request
 
 	// Refetch persisted
-	getResp, err = s.ClusterMetadataManager.GetClusterMetadata()
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(&p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 
 	// Validate they match our initial values
 	s.Nil(err)
@@ -334,6 +358,12 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	s.Equal(clusterNameToPersist, getResp.ClusterName)
 	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
 	s.Equal(clusterIdToPersist, getResp.ClusterId)
+	s.Equal(clusterAddress, getResp.ClusterAddress)
+	s.Equal(failoverVersionIncrement, getResp.FailoverVersionIncrement)
+	s.Equal(initialFailoverVersion, getResp.InitialFailoverVersion)
+	s.True(getResp.IsGlobalNamespaceEnabled)
+	s.True(getResp.IsConnectionEnabled)
+
 	// Case 5 - Update version info
 	getResp.VersionInfo = &versionpb.VersionInfo{
 		Current: &versionpb.ReleaseInfo{
@@ -346,8 +376,106 @@ func (s *ClusterMetadataManagerSuite) TestInitImmutableMetadataReadWrite() {
 	})
 	s.Nil(err)
 	s.True(thirdResp)
-	getResp, err = s.ClusterMetadataManager.GetClusterMetadata()
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(&p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
 	s.Nil(err)
 	s.NotNil(getResp)
 	s.Equal("1.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
+
+	// Case 6 - Delete Cluster Metadata
+	err = s.ClusterMetadataManager.DeleteClusterMetadata(&p.DeleteClusterMetadataRequest{ClusterName: clusterNameToPersist})
+	s.Nil(err)
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(&p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
+
+	// Validate they match our initializations
+	s.NotNil(err)
+	s.IsType(&serviceerror.NotFound{}, err)
+	s.Nil(getResp)
+
+	// Case 7 - Update current cluster metadata
+	clusterNameToPersist = "active"
+	initialResp, err = s.ClusterMetadataManager.SaveClusterMetadata(
+		&p.SaveClusterMetadataRequest{
+			ClusterMetadata: persistencespb.ClusterMetadata{
+				ClusterName:              clusterNameToPersist,
+				HistoryShardCount:        historyShardsToPersist,
+				ClusterId:                clusterIdToPersist,
+				ClusterAddress:           clusterAddress,
+				FailoverVersionIncrement: failoverVersionIncrement,
+				InitialFailoverVersion:   initialFailoverVersion,
+				IsGlobalNamespaceEnabled: true,
+				IsConnectionEnabled:      true,
+			}})
+	s.Nil(err)
+	s.True(initialResp)
+
+	// Case 8 - Get, data persisted
+	// Fetch the persisted values
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(&p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
+
+	// Validate they match our initializations
+	s.Nil(err)
+	s.True(getResp != nil)
+	s.Equal(clusterNameToPersist, getResp.ClusterName)
+	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
+	s.Equal(clusterIdToPersist, getResp.ClusterId)
+	s.Equal(clusterAddress, getResp.ClusterAddress)
+	s.Equal(failoverVersionIncrement, getResp.FailoverVersionIncrement)
+	s.Equal(initialFailoverVersion, getResp.InitialFailoverVersion)
+	s.True(getResp.IsGlobalNamespaceEnabled)
+	s.True(getResp.IsConnectionEnabled)
+
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadataV1()
+	s.Nil(err)
+	s.True(getResp != nil)
+	s.Equal(clusterNameToPersist, getResp.ClusterName)
+	s.Equal(historyShardsToPersist, getResp.HistoryShardCount)
+	s.Equal(clusterIdToPersist, getResp.ClusterId)
+	s.Equal(clusterAddress, getResp.ClusterAddress)
+	s.Equal(failoverVersionIncrement, getResp.FailoverVersionIncrement)
+	s.Equal(initialFailoverVersion, getResp.InitialFailoverVersion)
+	s.True(getResp.IsGlobalNamespaceEnabled)
+	s.True(getResp.IsConnectionEnabled)
+
+	// Case 9 - Update current cluster metadata
+	getResp.VersionInfo = &versionpb.VersionInfo{
+		Current: &versionpb.ReleaseInfo{
+			Version: "2.0",
+		},
+	}
+	applied, err := s.ClusterMetadataManager.SaveClusterMetadata(&p.SaveClusterMetadataRequest{
+		ClusterMetadata: getResp.ClusterMetadata,
+		Version:         getResp.Version,
+	})
+	s.True(applied)
+	s.NoError(err)
+
+	// Case 10 - Get, data persisted
+	// Fetch the persisted values
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadata(&p.GetClusterMetadataRequest{ClusterName: clusterNameToPersist})
+	s.Equal("2.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
+
+	getResp, err = s.ClusterMetadataManager.GetClusterMetadataV1()
+	s.Equal("2.0", getResp.ClusterMetadata.VersionInfo.Current.Version)
+
+	// Case 11 - List
+	_, err = s.ClusterMetadataManager.SaveClusterMetadata(
+		&p.SaveClusterMetadataRequest{
+			ClusterMetadata: persistencespb.ClusterMetadata{
+				ClusterName:              clusterNameToPersist + "2",
+				HistoryShardCount:        historyShardsToPersist,
+				ClusterId:                clusterIdToPersist,
+				ClusterAddress:           clusterAddress,
+				FailoverVersionIncrement: failoverVersionIncrement,
+				InitialFailoverVersion:   initialFailoverVersion,
+				IsGlobalNamespaceEnabled: true,
+				IsConnectionEnabled:      true,
+			}})
+	s.NoError(err)
+
+	resp, err := s.ClusterMetadataManager.ListClusterMetadata(&p.ListClusterMetadataRequest{PageSize: 1})
+	s.NoError(err)
+	s.Equal(1, len(resp.ClusterMetadata))
+	resp, err = s.ClusterMetadataManager.ListClusterMetadata(&p.ListClusterMetadataRequest{PageSize: 1, NextPageToken: resp.NextPageToken})
+	s.NoError(err)
+	s.Equal(1, len(resp.ClusterMetadata))
 }

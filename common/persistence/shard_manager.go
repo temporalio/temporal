@@ -25,7 +25,9 @@
 package persistence
 
 import (
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
@@ -53,25 +55,26 @@ func (m *shardManagerImpl) GetName() string {
 	return m.shardStore.GetName()
 }
 
-func (m *shardManagerImpl) CreateShard(request *CreateShardRequest) error {
-	shardInfo := request.ShardInfo
-	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
-	data, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
-	if err != nil {
-		return err
+func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
+	var createShardInfo func() (int64, *commonpb.DataBlob, error)
+	if request.CreateIfMissing {
+		createShardInfo = func() (int64, *commonpb.DataBlob, error) {
+			shardInfo := request.InitialShardInfo
+			if shardInfo == nil {
+				shardInfo = &persistencespb.ShardInfo{}
+			}
+			shardInfo.ShardId = request.ShardID
+			shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
+			data, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+			if err != nil {
+				return 0, nil, err
+			}
+			return shardInfo.GetRangeId(), data, nil
+		}
 	}
-
-	internalRequest := &InternalCreateShardRequest{
-		ShardID:   shardInfo.GetShardId(),
-		RangeID:   shardInfo.GetRangeId(),
-		ShardInfo: data,
-	}
-	return m.shardStore.CreateShard(internalRequest)
-}
-
-func (m *shardManagerImpl) GetShard(request *GetShardRequest) (*GetShardResponse, error) {
-	internalResp, err := m.shardStore.GetShard(&InternalGetShardRequest{
-		ShardID: request.ShardID,
+	internalResp, err := m.shardStore.GetOrCreateShard(&InternalGetOrCreateShardRequest{
+		ShardID:         request.ShardID,
+		CreateShardInfo: createShardInfo,
 	})
 	if err != nil {
 		return nil, err
@@ -80,7 +83,7 @@ func (m *shardManagerImpl) GetShard(request *GetShardRequest) (*GetShardResponse
 	if err != nil {
 		return nil, err
 	}
-	return &GetShardResponse{
+	return &GetOrCreateShardResponse{
 		ShardInfo: shardInfo,
 	}, nil
 }

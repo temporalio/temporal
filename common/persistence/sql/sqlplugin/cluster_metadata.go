@@ -35,6 +35,7 @@ import (
 type (
 	// ClusterMetadataRow represents a row in the cluster_metadata table
 	ClusterMetadataRow struct {
+		ClusterName  string
 		Data         []byte
 		DataEncoding string
 		Version      int64
@@ -50,6 +51,11 @@ type (
 		LastHeartbeat  time.Time
 		RecordExpiry   time.Time
 		InsertionOrder uint64
+	}
+
+	ClusterMetadataFilter struct {
+		ClusterName string
+		PageSize    *int
 	}
 
 	// ClusterMembershipFilter is used for GetClusterMembership queries
@@ -72,9 +78,14 @@ type (
 
 	// ClusterMetadata is the SQL persistence interface for cluster metadata
 	ClusterMetadata interface {
+		SaveClusterMetadataV1(ctx context.Context, row *ClusterMetadataRow) (sql.Result, error) // TODO: deprecate this after 1.15+
 		SaveClusterMetadata(ctx context.Context, row *ClusterMetadataRow) (sql.Result, error)
-		GetClusterMetadata(ctx context.Context) (*ClusterMetadataRow, error)
-		WriteLockGetClusterMetadata(ctx context.Context) (*ClusterMetadataRow, error)
+		GetClusterMetadataV1(ctx context.Context) (*ClusterMetadataRow, error) // TODO: deprecate this after 1.15+
+		GetClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (*ClusterMetadataRow, error)
+		ListClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) ([]ClusterMetadataRow, error)
+		DeleteClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (sql.Result, error)
+		WriteLockGetClusterMetadataV1(ctx context.Context) (*ClusterMetadataRow, error) // TODO: deprecate this after 1.15+
+		WriteLockGetClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (*ClusterMetadataRow, error)
 		GetClusterMembers(ctx context.Context, filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
 		UpsertClusterMembership(ctx context.Context, row *ClusterMembershipRow) (sql.Result, error)
 		PruneClusterMembership(ctx context.Context, filter *PruneClusterMembershipFilter) (sql.Result, error)

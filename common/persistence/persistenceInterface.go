@@ -55,8 +55,7 @@ type (
 		Closeable
 		GetName() string
 		GetClusterName() string
-		CreateShard(request *InternalCreateShardRequest) error
-		GetShard(request *InternalGetShardRequest) (*InternalGetShardResponse, error)
+		GetOrCreateShard(request *InternalGetOrCreateShardRequest) (*InternalGetOrCreateShardResponse, error)
 		UpdateShard(request *InternalUpdateShardRequest) error
 	}
 
@@ -94,8 +93,12 @@ type (
 	ClusterMetadataStore interface {
 		Closeable
 		GetName() string
-		GetClusterMetadata() (*InternalGetClusterMetadataResponse, error)
+		ListClusterMetadata(request *InternalListClusterMetadataRequest) (*InternalListClusterMetadataResponse, error)
+		GetClusterMetadataV1() (*InternalGetClusterMetadataResponse, error) //TODO: deprecate this after 1.15+
+		GetClusterMetadata(request *InternalGetClusterMetadataRequest) (*InternalGetClusterMetadataResponse, error)
+		SaveClusterMetadataV1(request *InternalSaveClusterMetadataRequest) (bool, error) //TODO: deprecate this after 1.15+
 		SaveClusterMetadata(request *InternalSaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(request *InternalDeleteClusterMetadataRequest) error
 		// Membership APIs
 		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
 		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
@@ -150,6 +153,12 @@ type (
 		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
 		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 
+		// TieredStorage tasks
+		GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*InternalGetTieredStorageTaskResponse, error)
+		GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*InternalGetTieredStorageTasksResponse, error)
+		CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error
+		RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error
+
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 
@@ -200,20 +209,16 @@ type (
 		Version int64
 	}
 
-	// InternalCreateShardRequest is used by ShardStore to create new shard
-	InternalCreateShardRequest struct {
-		ShardID   int32
-		RangeID   int64
-		ShardInfo *commonpb.DataBlob
+	// InternalGetOrCreateShardRequest is used by ShardStore to retrieve or create a shard.
+	// GetOrCreateShard should: if shard exists, return it. If not, and CreateShardInfo != nil,
+	// call it and create the shard with the initial shardInfo and rangeID. Otherwise return error.
+	InternalGetOrCreateShardRequest struct {
+		ShardID         int32
+		CreateShardInfo func() (rangeID int64, shardInfo *commonpb.DataBlob, err error)
 	}
 
-	// InternalGetShardRequest is used by ShardStore to retrieve a shard
-	InternalGetShardRequest struct {
-		ShardID int32
-	}
-
-	// InternalGetShardResponse is the response to GetShard
-	InternalGetShardResponse struct {
+	// InternalGetOrCreateShardResponse is the response to GetShard
+	InternalGetOrCreateShardResponse struct {
 		ShardInfo *commonpb.DataBlob
 	}
 
@@ -531,6 +536,15 @@ type (
 		NextPageToken []byte
 	}
 
+	InternalGetTieredStorageTaskResponse struct {
+		Task commonpb.DataBlob
+	}
+
+	InternalGetTieredStorageTasksResponse struct {
+		Tasks         []commonpb.DataBlob
+		NextPageToken []byte
+	}
+
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
 		// The base branch to fork from
@@ -673,37 +687,41 @@ type (
 		NextPageToken []byte
 	}
 
-	// InternalInitializeImmutableClusterMetadataRequest is a request of InitializeImmutableClusterMetadata
-	// These values can only be set a single time upon cluster initialization.
-	InternalInitializeImmutableClusterMetadataRequest struct {
-		// Serialized ImmutableCusterMetadata to persist.
-		ImmutableClusterMetadata *commonpb.DataBlob
+	// InternalListClusterMetadataRequest is the request for ListClusterMetadata
+	InternalListClusterMetadataRequest struct {
+		PageSize      int
+		NextPageToken []byte
 	}
 
-	// InternalInitializeImmutableClusterMetadataResponse is a request of InitializeImmutableClusterMetadata
-	InternalInitializeImmutableClusterMetadataResponse struct {
-		// Serialized ImmutableCusterMetadata that is currently persisted.
-		PersistedImmutableMetadata *commonpb.DataBlob
-		RequestApplied             bool
+	// InternalListClusterMetadataResponse is the response for ListClusterMetadata
+	InternalListClusterMetadataResponse struct {
+		ClusterMetadata []*InternalGetClusterMetadataResponse
+		NextPageToken   []byte
 	}
 
-	// InternalGetImmutableClusterMetadataResponse is the response to GetImmutableClusterMetadata
-	// These values are set a single time upon cluster initialization.
-	InternalGetImmutableClusterMetadataResponse struct {
-		// Serialized ImmutableCusterMetadata.
-		ImmutableClusterMetadata *commonpb.DataBlob
+	// InternalGetClusterMetadataRequest is the request for GetClusterMetadata
+	InternalGetClusterMetadataRequest struct {
+		ClusterName string
 	}
 
+	// InternalGetClusterMetadataResponse is the response for GetClusterMetadata
 	InternalGetClusterMetadataResponse struct {
 		// Serialized MutableCusterMetadata.
 		ClusterMetadata *commonpb.DataBlob
 		Version         int64
 	}
 
+	// InternalSaveClusterMetadataRequest is the request for SaveClusterMetadata
 	InternalSaveClusterMetadataRequest struct {
+		ClusterName string
 		// Serialized MutableCusterMetadata.
 		ClusterMetadata *commonpb.DataBlob
 		Version         int64
+	}
+
+	// InternalDeleteClusterMetadataRequest is the request for DeleteClusterMetadata
+	InternalDeleteClusterMetadataRequest struct {
+		ClusterName string
 	}
 
 	// InternalUpsertClusterMembershipRequest is the request to UpsertClusterMembership
