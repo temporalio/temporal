@@ -288,3 +288,78 @@ func (mr *MockVisibilityManagerMockRecorder) UpsertWorkflowExecution(request int
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertWorkflowExecution", reflect.TypeOf((*MockVisibilityManager)(nil).UpsertWorkflowExecution), request)
 }
+
+// MockPaginationListRequest is a mock of PaginationListRequest interface.
+type MockPaginationListRequest struct {
+	ctrl     *gomock.Controller
+	recorder *MockPaginationListRequestMockRecorder
+}
+
+// MockPaginationListRequestMockRecorder is the mock recorder for MockPaginationListRequest.
+type MockPaginationListRequestMockRecorder struct {
+	mock *MockPaginationListRequest
+}
+
+// NewMockPaginationListRequest creates a new mock instance.
+func NewMockPaginationListRequest(ctrl *gomock.Controller) *MockPaginationListRequest {
+	mock := &MockPaginationListRequest{ctrl: ctrl}
+	mock.recorder = &MockPaginationListRequestMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockPaginationListRequest) EXPECT() *MockPaginationListRequestMockRecorder {
+	return m.recorder
+}
+
+// GetPageSize mocks base method.
+func (m *MockPaginationListRequest) GetPageSize() int {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetPageSize")
+	ret0, _ := ret[0].(int)
+	return ret0
+}
+
+// GetPageSize indicates an expected call of GetPageSize.
+func (mr *MockPaginationListRequestMockRecorder) GetPageSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetPageSize", reflect.TypeOf((*MockPaginationListRequest)(nil).GetPageSize))
+}
+
+// GetToken mocks base method.
+func (m *MockPaginationListRequest) GetToken() []byte {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetToken")
+	ret0, _ := ret[0].([]byte)
+	return ret0
+}
+
+// GetToken indicates an expected call of GetToken.
+func (mr *MockPaginationListRequestMockRecorder) GetToken() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetToken", reflect.TypeOf((*MockPaginationListRequest)(nil).GetToken))
+}
+
+// SetPageSize mocks base method.
+func (m *MockPaginationListRequest) SetPageSize(pageSize int) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetPageSize", pageSize)
+}
+
+// SetPageSize indicates an expected call of SetPageSize.
+func (mr *MockPaginationListRequestMockRecorder) SetPageSize(pageSize interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetPageSize", reflect.TypeOf((*MockPaginationListRequest)(nil).SetPageSize), pageSize)
+}
+
+// SetToken mocks base method.
+func (m *MockPaginationListRequest) SetToken(token []byte) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "SetToken", token)
+}
+
+// SetToken indicates an expected call of SetToken.
+func (mr *MockPaginationListRequestMockRecorder) SetToken(token interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetToken", reflect.TypeOf((*MockPaginationListRequest)(nil).SetToken), token)
+}
