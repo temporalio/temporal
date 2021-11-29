@@ -1,15 +1,15 @@
 ############################# Main targets #############################
 # Install all tools and builds binaries.
-install: update-tools bins
+install: bins
 
 # Rebuild binaries (used by Dockerfile).
 bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
-all: update-tools clean proto bins check test
+all: clean proto bins check test
 
 # Used by Buildkite.
-ci-build: bins build-tests update-tools shell-check check proto mocks gomodtidy ensure-no-changes
+ci-build: bins build-tests shell-check check proto mocks gomodtidy ensure-no-changes
 
 # Delete all build artefacts.
 clean: clean-bins clean-test-results
