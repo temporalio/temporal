@@ -207,8 +207,8 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 		newWorkflow.ExecutionState.State,
 		newWorkflow.ExecutionState.Status,
 		newWorkflow.ExecutionState.CreateRequestId,
-		newWorkflow.StartVersion,
-		lastWriteVersion); err != nil {
+		lastWriteVersion,
+	); err != nil {
 		return nil, err
 	}
 
@@ -410,7 +410,6 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 				newWorkflow.ExecutionState.CreateRequestId,
 				newWorkflow.ExecutionState.State,
 				newWorkflow.ExecutionState.Status,
-				newWorkflow.StartVersion,
 				lastWriteVersion,
 			); err != nil {
 				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err))
@@ -428,7 +427,6 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 				updateWorkflow.ExecutionState.CreateRequestId,
 				updateWorkflow.ExecutionState.State,
 				updateWorkflow.ExecutionState.Status,
-				updateWorkflow.StartVersion,
 				lastWriteVersion,
 			); err != nil {
 				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err))
@@ -520,11 +518,9 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 	case p.ConflictResolveWorkflowModeUpdateCurrent:
 		executionState := resetWorkflow.ExecutionState
 		lastWriteVersion := resetWorkflow.LastWriteVersion
-		startVersion := resetWorkflow.StartVersion
 		if newWorkflow != nil {
 			executionState = newWorkflow.ExecutionState
 			lastWriteVersion = newWorkflow.LastWriteVersion
-			startVersion = newWorkflow.StartVersion
 		}
 		runID := primitives.MustParseUUID(executionState.RunId)
 		createRequestID := executionState.CreateRequestId
@@ -544,7 +540,6 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 				createRequestID,
 				state,
 				status,
-				startVersion,
 				lastWriteVersion,
 			); err != nil {
 				return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
@@ -563,7 +558,6 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 				createRequestID,
 				state,
 				status,
-				startVersion,
 				lastWriteVersion,
 			); err != nil {
 				return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))

@@ -1,0 +1,1 @@
+ALTER TABLE current_executions DROP start_version;
