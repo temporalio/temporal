@@ -66,9 +66,6 @@ const (
 	// CreateWorkflowModeWorkflowIDReuse update current record only if workflow is closed
 	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeWorkflowIDReuse
-	// CreateWorkflowModeContinueAsNew update current record only if workflow is open
-	// Only applicable for UpdateWorkflowExecution
-	CreateWorkflowModeContinueAsNew
 	// CreateWorkflowModeZombie do not update current record since workflow is in zombie state
 	// applicable for CreateWorkflowExecution, UpdateWorkflowExecution
 	CreateWorkflowModeZombie
