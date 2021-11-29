@@ -72,7 +72,6 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_UpdateCurrent()
 	creatModes := []CreateWorkflowMode{
 		CreateWorkflowModeBrandNew,
 		CreateWorkflowModeWorkflowIDReuse,
-		CreateWorkflowModeContinueAsNew,
 	}
 
 	for state, expectError := range stateToError {

@@ -629,20 +629,6 @@ func createOrUpdateCurrentExecution(
 	}
 
 	switch createMode {
-	case p.CreateWorkflowModeContinueAsNew:
-		if err := updateCurrentExecution(ctx,
-			tx,
-			shardID,
-			namespaceID,
-			workflowID,
-			runID,
-			createRequestID,
-			state,
-			status,
-			row.StartVersion,
-			row.LastWriteVersion); err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("createOrUpdateCurrentExecution failed. Failed to continue as new. Error: %v", err))
-		}
 	case p.CreateWorkflowModeWorkflowIDReuse:
 		if err := updateCurrentExecution(ctx,
 			tx,

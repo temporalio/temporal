@@ -193,25 +193,6 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 			return nil, err
 		}
 
-	case p.CreateWorkflowModeContinueAsNew:
-		if currentRow == nil {
-			return nil, extractCurrentWorkflowConflictError(currentRow, "")
-		}
-
-		// currentRow
-
-		if currentRow.RunID.String() != request.PreviousRunID {
-			return nil, extractCurrentWorkflowConflictError(
-				currentRow,
-				fmt.Sprintf(
-					"Workflow execution creation condition failed. workflow ID: %v, current run ID: %v, request run ID: %v",
-					workflowID,
-					currentRow.RunID.String(),
-					request.PreviousRunID,
-				),
-			)
-		}
-
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("CreteWorkflowExecution: unknown mode: %v", request.Mode))
 	}
