@@ -728,7 +728,6 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
-
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
 		metrics.CommandTypeChildWorkflowCounter,

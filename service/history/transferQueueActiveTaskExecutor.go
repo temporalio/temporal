@@ -38,6 +38,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
@@ -47,6 +48,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	ns "go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -62,6 +64,7 @@ type (
 	transferQueueActiveTaskExecutor struct {
 		*transferQueueTaskExecutorBase
 
+		registry                namespace.Registry
 		historyClient           historyservice.HistoryServiceClient
 		parentClosePolicyClient parentclosepolicy.Client
 	}
@@ -73,6 +76,7 @@ func newTransferQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	registry namespace.Registry,
 ) queueTaskExecutor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -89,6 +93,7 @@ func newTransferQueueActiveTaskExecutor(
 			historyEngine.publicClient,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
+		registry: registry,
 	}
 }
 
@@ -346,7 +351,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		}
 	}
 
-	return t.processParentClosePolicy(task.NamespaceID, namespaceName.String(), children)
+	return t.processParentClosePolicy(namespaceID.String(), namespaceName.String(), children)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
@@ -1284,10 +1289,17 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 				continue
 			}
 
+			childNamespaceId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
+			if err != nil {
+				return err
+			}
+
 			executions = append(executions, parentclosepolicy.RequestDetail{
-				WorkflowID: childInfo.StartedWorkflowId,
-				RunID:      childInfo.StartedRunId,
-				Policy:     childInfo.ParentClosePolicy,
+				Namespace:   childInfo.Namespace,
+				NamespaceID: string(childNamespaceId),
+				WorkflowID:  childInfo.StartedWorkflowId,
+				RunID:       childInfo.StartedRunId,
+				Policy:      childInfo.ParentClosePolicy,
 			})
 		}
 
@@ -1296,8 +1308,8 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		}
 
 		request := parentclosepolicy.Request{
-			NamespaceID: namespaceID,
 			Namespace:   namespace,
+			NamespaceID: namespaceID,
 			Executions:  executions,
 		}
 		return t.parentClosePolicyClient.SendParentClosePolicyRequest(request)
@@ -1305,8 +1317,6 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 
 	for _, childInfo := range childInfos {
 		if err := t.applyParentClosePolicy(
-			namespaceID,
-			namespace,
 			childInfo,
 		); err != nil {
 			if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -1320,8 +1330,6 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 }
 
 func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
-	namespaceID string,
-	namespace string,
 	childInfo *persistencespb.ChildExecutionInfo,
 ) error {
 
@@ -1334,16 +1342,20 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return nil
 
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-			NamespaceId: namespaceID,
+		childNamespaceId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
+		if err != nil {
+			return err
+		}
+		_, err = t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+			NamespaceId: string(childNamespaceId),
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
-				Namespace: namespace,
+				Namespace: childInfo.GetNamespace(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: childInfo.StartedWorkflowId,
+					WorkflowId: childInfo.GetStartedWorkflowId(),
 				},
 				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be terminated across runs.
 				// If the child does continue as new it still propagates the RunID of first execution.
-				FirstExecutionRunId: childInfo.StartedRunId,
+				FirstExecutionRunId: childInfo.GetStartedRunId(),
 				Reason:              "by parent close policy",
 				Identity:            consts.IdentityHistoryService,
 			},
@@ -1351,16 +1363,21 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
-		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
-			NamespaceId: namespaceID,
+		nsId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
+		if err != nil {
+			return err
+		}
+
+		_, err = t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
+			NamespaceId: string(nsId),
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
-				Namespace: namespace,
+				Namespace: childInfo.GetNamespace(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
-					WorkflowId: childInfo.StartedWorkflowId,
+					WorkflowId: childInfo.GetStartedWorkflowId(),
 				},
 				// Include StartedRunID as FirstExecutionRunID on the request to allow child to be canceled across runs.
 				// If the child does continue as new it still propagates the RunID of first execution.
-				FirstExecutionRunId: childInfo.StartedRunId,
+				FirstExecutionRunId: childInfo.GetStartedRunId(),
 				Identity:            consts.IdentityHistoryService,
 			},
 		})
