@@ -148,7 +148,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 	s.Equal(1, len(resp.Executions))
 	s.assertOpenExecutionEquals(openRecord, resp.Executions[0])
 
-	closedRecord := s.createClosedWorkflowRecord(openRecord, startTime.Add(-10 * time.Millisecond))
+	closedRecord := s.createClosedWorkflowRecord(openRecord, startTime.Add(-10*time.Millisecond))
 
 	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
@@ -175,7 +175,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 
 	startTime := time.Now().UTC()
 	openRecord := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-workflow-test-short-workflow", "visibility-workflow", startTime)
-	closedRecord := s.createClosedWorkflowRecord(openRecord, startTime.Add(10 * time.Millisecond))
+	closedRecord := s.createClosedWorkflowRecord(openRecord, startTime.Add(10*time.Millisecond))
 
 	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
@@ -733,9 +733,9 @@ func (s *VisibilityPersistenceSuite) listWithPagination(namespaceID namespace.ID
 
 	for len(resp.NextPageToken) > 0 {
 		resp, err = s.VisibilityMgr.ListWorkflowExecutions(&manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID: namespaceID,
-			PageSize:    pageSize,
-			Query:       "",
+			NamespaceID:   namespaceID,
+			PageSize:      pageSize,
+			Query:         "",
 			NextPageToken: resp.NextPageToken,
 		})
 		s.Nil(err)

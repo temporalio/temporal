@@ -28,8 +28,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/xwb1989/sqlparser"
 	"testing"
+
+	"github.com/xwb1989/sqlparser"
 
 	"github.com/stretchr/testify/assert"
 )
