@@ -1342,12 +1342,12 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return nil
 
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-		nsId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
+		childNamespaceId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
 		if err != nil {
 			return err
 		}
 		_, err = t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-			NamespaceId: string(nsId),
+			NamespaceId: string(childNamespaceId),
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
