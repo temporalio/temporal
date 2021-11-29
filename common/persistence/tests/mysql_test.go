@@ -71,7 +71,11 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 		testMySQLClusterName,
 		logger,
 	)
-	store, err := factory.NewExecutionStore()
+	shardStore, err := factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	executionStore, err := factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create MySQL DB: %v", err)
 	}
@@ -80,7 +84,7 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 		TearDownMySQLDatabase(cfg)
 	}()
 
-	s := newExecutionMutableStateSuite(t, store, logger)
+	s := newExecutionMutableStateSuite(t, shardStore, executionStore, logger)
 	suite.Run(t, s)
 }
 

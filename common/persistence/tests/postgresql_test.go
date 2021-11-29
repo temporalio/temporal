@@ -71,7 +71,11 @@ func TestPostgreSQLExecutionMutableStateStoreSuite(t *testing.T) {
 		testPostgreSQLClusterName,
 		logger,
 	)
-	store, err := factory.NewExecutionStore()
+	shardStore, err := factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	executionStore, err := factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
@@ -80,7 +84,7 @@ func TestPostgreSQLExecutionMutableStateStoreSuite(t *testing.T) {
 		TearDownPostgreSQLDatabase(cfg)
 	}()
 
-	s := newExecutionMutableStateSuite(t, store, logger)
+	s := newExecutionMutableStateSuite(t, shardStore, executionStore, logger)
 	suite.Run(t, s)
 }
 

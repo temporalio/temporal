@@ -97,7 +97,6 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateRu
 
 func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCompleted() {
 	statuses := []enumspb.WorkflowExecutionStatus{
-		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED,
@@ -106,8 +105,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
+	s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
+		s.Nil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
