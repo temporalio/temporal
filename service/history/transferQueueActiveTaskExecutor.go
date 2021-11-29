@@ -1289,14 +1289,14 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 				continue
 			}
 
-			nsId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
+			childNamespaceId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
 			if err != nil {
 				return err
 			}
 
 			executions = append(executions, parentclosepolicy.RequestDetail{
 				Namespace:   childInfo.Namespace,
-				NamespaceID: string(nsId),
+				NamespaceID: string(childNamespaceId),
 				WorkflowID:  childInfo.StartedWorkflowId,
 				RunID:       childInfo.StartedRunId,
 				Policy:      childInfo.ParentClosePolicy,

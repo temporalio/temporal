@@ -107,18 +107,14 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 	processor := ctx.Value(processorContextKey).(*Processor)
 	client := processor.clientBean.GetHistoryClient()
 	for _, execution := range request.Executions {
-		var namespaceId string
+		namespaceId := execution.NamespaceID
 		if len(execution.NamespaceID) == 0 {
 			namespaceId = request.NamespaceID
-		} else {
-			namespaceId = execution.NamespaceID
 		}
 
-		var namespace string
+		namespace := execution.Namespace
 		if len(execution.Namespace) == 0 {
-			namespaceId = request.Namespace
-		} else {
-			namespaceId = execution.Namespace
+			namespace = request.Namespace
 		}
 
 		var err error
