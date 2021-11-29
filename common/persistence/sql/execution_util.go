@@ -612,7 +612,6 @@ func createOrUpdateCurrentExecution(
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
 	createRequestID string,
-	startVersion int64,
 	lastWriteVersion int64,
 ) error {
 
@@ -624,7 +623,6 @@ func createOrUpdateCurrentExecution(
 		CreateRequestID:  createRequestID,
 		State:            state,
 		Status:           status,
-		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 	}
 
@@ -639,8 +637,8 @@ func createOrUpdateCurrentExecution(
 			createRequestID,
 			state,
 			status,
-			row.StartVersion,
-			row.LastWriteVersion); err != nil {
+			row.LastWriteVersion,
+		); err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("createOrUpdateCurrentExecution failed. Failed to reuse workflow ID. Error: %v", err))
 		}
 	case p.CreateWorkflowModeBrandNew:
@@ -904,7 +902,6 @@ func assertRunIDAndUpdateCurrentExecution(
 	createRequestID string,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
-	startVersion int64,
 	lastWriteVersion int64,
 ) error {
 
@@ -944,7 +941,6 @@ func assertRunIDAndUpdateCurrentExecution(
 		createRequestID,
 		state,
 		status,
-		startVersion,
 		lastWriteVersion,
 	)
 }
@@ -997,7 +993,6 @@ func updateCurrentExecution(
 	createRequestID string,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
-	startVersion int64,
 	lastWriteVersion int64,
 ) error {
 
@@ -1009,7 +1004,6 @@ func updateCurrentExecution(
 		CreateRequestID:  createRequestID,
 		State:            state,
 		Status:           status,
-		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 	})
 	if err != nil {

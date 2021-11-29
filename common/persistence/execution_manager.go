@@ -431,7 +431,6 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
 		NextEventID:     input.NextEventID,
-		StartVersion:    input.ExecutionInfo.StartVersion,
 	}
 
 	result.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
@@ -542,8 +541,6 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
 		NextEventID:     input.NextEventID,
-
-		StartVersion: input.ExecutionInfo.StartVersion,
 	}
 
 	result.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
