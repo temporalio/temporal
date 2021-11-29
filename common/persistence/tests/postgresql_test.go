@@ -60,6 +60,30 @@ const (
 	testPostgreSQLVisibilitySchema = "../../../schema/postgresql/v96/visibility/schema.sql"
 )
 
+func TestPostgreSQLExecutionMutableStateStoreSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testPostgreSQLClusterName,
+		logger,
+	)
+	store, err := factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := newExecutionMutableStateSuite(t, store, logger)
+	suite.Run(t, s)
+}
+
 func TestPostgreSQLHistoryStoreSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)
