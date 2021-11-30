@@ -670,22 +670,22 @@ func lockAndCheckExecution(
 		return err
 	}
 
-	if nextEventID != condition {
-		return &p.WorkflowConditionFailedError{
-			Msg:             fmt.Sprintf("lockAndCheckExecution failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
-			NextEventID:     nextEventID,
-			DBRecordVersion: version,
+	if dbRecordVersion == 0 {
+		if nextEventID != condition {
+			return &p.WorkflowConditionFailedError{
+				Msg:             fmt.Sprintf("lockAndCheckExecution failed. Next_event_id was %v when it should have been %v.", nextEventID, condition),
+				NextEventID:     nextEventID,
+				DBRecordVersion: version,
+			}
 		}
-	}
-
-	if dbRecordVersion != 0 {
+	} else {
 		dbRecordVersion -= 1
-	}
-	if version != dbRecordVersion {
-		return &p.WorkflowConditionFailedError{
-			Msg:             fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbRecordVersion, version),
-			NextEventID:     nextEventID,
-			DBRecordVersion: version,
+		if version != dbRecordVersion {
+			return &p.WorkflowConditionFailedError{
+				Msg:             fmt.Sprintf("lockAndCheckExecution failed. DBRecordVersion expected: %v, actually %v.", dbRecordVersion, version),
+				NextEventID:     nextEventID,
+				DBRecordVersion: version,
+			}
 		}
 	}
 
