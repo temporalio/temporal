@@ -1864,7 +1864,7 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 
 	// Lookup is time-sensitive, hence retry
 	var deleteCheck []tasks.Task
-	for i := 1; i < 4; i++ {
+	for i := 0; i < 3; i++ {
 		deleteCheck, err = s.GetTransferTasks(1, false)
 		if len(deleteCheck) == 0 {
 			break
@@ -2466,7 +2466,7 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 
 	var timerTasks []tasks.Task
 	// Try a couple of times to avoid flakiness
-	for i := 1; i < 4; i++ {
+	for i := 0; i < 3; i++ {
 		timerTasks, err1 = s.GetTimerTasks(1, true) // use page size one to force pagination
 		if len(taskSlice) == len(timerTasks) {
 			break
