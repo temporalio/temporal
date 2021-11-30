@@ -42,9 +42,9 @@ var startTimeRangeFilter = fmt.Sprintf(`StartTime BETWEEN "%v" AND "%v"`, startT
 var supportedQuery = map[string]*sqlplugin.VisibilitySelectFilter{
 	"":                   {},
 	startTimeRangeFilter: {MinTime: &startTimeFrom, MaxTime: &startTimeTo},
-	`WorkflowID = "abc"`: {WorkflowID: convert.StringPtr("abc")},
-	`WorkflowID = "abc" AND ` + startTimeRangeFilter:          {WorkflowID: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
-	startTimeRangeFilter + ` AND WorkflowID = "abc"`:          {WorkflowID: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	`WorkflowId = "abc"`: {WorkflowID: convert.StringPtr("abc")},
+	`WorkflowId = "abc" AND ` + startTimeRangeFilter:          {WorkflowID: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	startTimeRangeFilter + ` AND WorkflowId = "abc"`:          {WorkflowID: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
 	`WorkflowType = "abc"`:                                    {WorkflowTypeName: convert.StringPtr("abc")},
 	`WorkflowType = "abc" AND ` + startTimeRangeFilter:        {WorkflowTypeName: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
 	startTimeRangeFilter + ` AND WorkflowType = "abc"`:        {WorkflowTypeName: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},

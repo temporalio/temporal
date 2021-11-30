@@ -72,7 +72,7 @@ type (
 	comparisonExprConverter struct {
 		fnInterceptor    FieldNameInterceptor
 		fvInterceptor    FieldValuesInterceptor
-		allowedOperators map[string]bool
+		allowedOperators map[string]struct{}
 	}
 
 	isConverter struct {
@@ -160,7 +160,7 @@ func NewRangeCondConverter(
 func NewComparisonExprConverter(
 	fnInterceptor FieldNameInterceptor,
 	fvInterceptor FieldValuesInterceptor,
-	allowedOperators map[string]bool,
+	allowedOperators map[string]struct{},
 ) ExprConverter {
 	if fnInterceptor == nil {
 		fnInterceptor = &NopFieldNameInterceptor{}
@@ -283,7 +283,7 @@ func (w *WhereConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 func (a *andConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 	andExpr, ok := expr.(*sqlparser.AndExpr)
 	if !ok {
-		return nil, NewConverterError("%v is not an AND expression", sqlparser.String(expr))
+		return nil, NewConverterError("%v is not an 'and' expression", sqlparser.String(expr))
 	}
 
 	leftExpr := andExpr.Left
@@ -316,7 +316,7 @@ func (a *andConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 func (o *orConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 	orExpr, ok := expr.(*sqlparser.OrExpr)
 	if !ok {
-		return nil, NewConverterError("%v is not an OR expression", sqlparser.String(expr))
+		return nil, NewConverterError("%v is not an 'or' expression", sqlparser.String(expr))
 	}
 
 	leftExpr := orExpr.Left
@@ -391,7 +391,7 @@ func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error)
 func (i *isConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 	isExpr, ok := expr.(*sqlparser.IsExpr)
 	if !ok {
-		return nil, NewConverterError("%v is not an IS expression", sqlparser.String(expr))
+		return nil, NewConverterError("%v is not an 'is' expression", sqlparser.String(expr))
 	}
 
 	colName, err := convertColName(i.fnInterceptor, isExpr.Expr, FieldNameFilter)
@@ -447,7 +447,7 @@ func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, e
 	}
 
 	if _, ok := c.allowedOperators[comparisonExpr.Operator]; !ok {
-		return nil, NewConverterError("operator %v not allowed in comparison expression", comparisonExpr.Operator)
+		return nil, NewConverterError("operator '%v' not allowed in comparison expression", comparisonExpr.Operator)
 	}
 
 	var query elastic.Query

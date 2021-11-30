@@ -27,6 +27,8 @@ package simple
 import (
 	"time"
 
+	"go.temporal.io/server/common/searchattribute"
+
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -34,7 +36,12 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
-var allowedFilters = []string{"WorkflowID", "WorkflowType", "ExecutionStatus", "StartTime"}
+var allowedFilters = []string{
+	searchattribute.WorkflowID,
+	searchattribute.WorkflowType,
+	searchattribute.ExecutionStatus,
+	searchattribute.StartTime,
+}
 
 type (
 	nameInterceptor   struct{}
@@ -66,31 +73,31 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		}
 	}
 
-	return "", query.NewConverterError("filter %v not supported for Cassandra visibility", name)
+	return "", query.NewConverterError("filter by '%v' not supported for basic visibility", name)
 }
 
 func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]interface{}, error) {
 	switch name {
-	case "WorkflowID":
+	case searchattribute.WorkflowID:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			vi.filter.WorkflowID = convert.StringPtr(values[0].(string))
 		}
 		return values, err
-	case "WorkflowType":
+	case searchattribute.WorkflowType:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			vi.filter.WorkflowTypeName = convert.StringPtr(values[0].(string))
 		}
 		return values, err
-	case "ExecutionStatus":
+	case searchattribute.ExecutionStatus:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			statusStr := values[0].(string)
 			vi.filter.Status = enums.WorkflowExecutionStatus_value[statusStr]
 		}
 		return values, err
-	case "StartTime":
+	case searchattribute.StartTime:
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			minTime, err := time.Parse(time.RFC3339Nano, values[0].(string))
@@ -107,6 +114,6 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 		}
 		return values, err
 	default:
-		return nil, query.NewConverterError("filter %v not supported for Cassandra visibility", name)
+		return nil, query.NewConverterError("filter by '%v' not supported for basic visibility", name)
 	}
 }

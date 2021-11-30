@@ -34,8 +34,8 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
-var allowedComparisonOperators = map[string]bool{
-	sqlparser.EqualStr: true,
+var allowedComparisonOperators = map[string]struct{}{
+	sqlparser.EqualStr: {},
 }
 
 type (

@@ -43,6 +43,13 @@ type (
 		IsForOpen bool
 		Token     []byte
 	}
+
+	listRequest interface {
+		SetToken(token []byte)
+		GetToken() []byte
+		SetPageSize(pageSize int)
+		GetPageSize() int
+	}
 )
 
 var _ store.VisibilityStore = (*simpleStore)(nil)
@@ -169,9 +176,9 @@ func (s *simpleStore) ListWorkflowExecutions(request *manager.ListWorkflowExecut
 }
 
 func (s *simpleStore) listWorkflowExecutionsHelper(
-	request manager.PaginationListRequest,
-	listOpenFunc func(request manager.PaginationListRequest) (*store.InternalListWorkflowExecutionsResponse, error),
-	listCloseFunc func(request manager.PaginationListRequest) (*store.InternalListWorkflowExecutionsResponse, error),
+	request listRequest,
+	listOpenFunc func(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error),
+	listCloseFunc func(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error),
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 
 	var token nextPageToken
@@ -237,67 +244,55 @@ func (s *simpleStore) listWorkflowExecutionsHelper(
 	return resp, nil
 }
 
-func (s *simpleStore) listOpenWorkflowExecutionsByWorkflowID(
-	request manager.PaginationListRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *simpleStore) listOpenWorkflowExecutionsByWorkflowID(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByWorkflowIDRequest)
 	if !ok {
-		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+		panic(fmt.Errorf("wrong request type %v for listOpenWorkflowExecutionsByWorkflowID", reflect.TypeOf(request)))
 	}
 
 	return s.ListOpenWorkflowExecutionsByWorkflowID(actualRequest)
 }
 
-func (s *simpleStore) listOpenWorkflowExecutionsByType(
-	request manager.PaginationListRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *simpleStore) listOpenWorkflowExecutionsByType(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByTypeRequest)
 	if !ok {
-		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+		panic(fmt.Errorf("wrong request type %v for listOpenWorkflowExecutionsByType", reflect.TypeOf(request)))
 	}
 
 	return s.ListOpenWorkflowExecutionsByType(actualRequest)
 }
 
-func (s *simpleStore) listOpenWorkflowExecutions(
-	request manager.PaginationListRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *simpleStore) listOpenWorkflowExecutions(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsRequest)
 	if !ok {
-		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+		panic(fmt.Errorf("wrong request type %v for listOpenWorkflowExecutions", reflect.TypeOf(request)))
 	}
 
 	return s.ListOpenWorkflowExecutions(actualRequest)
 }
 
-func (s *simpleStore) listClosedWorkflowExecutionsByWorkflowID(
-	request manager.PaginationListRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *simpleStore) listClosedWorkflowExecutionsByWorkflowID(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByWorkflowIDRequest)
 	if !ok {
-		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+		panic(fmt.Errorf("wrong request type %v for listClosedWorkflowExecutionsByWorkflowID", reflect.TypeOf(request)))
 	}
 
 	return s.ListClosedWorkflowExecutionsByWorkflowID(actualRequest)
 }
 
-func (s *simpleStore) listClosedWorkflowExecutionsByType(
-	request manager.PaginationListRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *simpleStore) listClosedWorkflowExecutionsByType(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByTypeRequest)
 	if !ok {
-		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+		panic(fmt.Errorf("wrong request type %v for listClosedWorkflowExecutionsByType", reflect.TypeOf(request)))
 	}
 
 	return s.ListClosedWorkflowExecutionsByType(actualRequest)
 }
 
-func (s *simpleStore) listClosedWorkflowExecutions(
-	request manager.PaginationListRequest,
-) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *simpleStore) listClosedWorkflowExecutions(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsRequest)
 	if !ok {
-		return nil, fmt.Errorf("wrong request type %v", reflect.TypeOf(request))
+		panic(fmt.Errorf("wrong request type %v for listClosedWorkflowExecutions", reflect.TypeOf(request)))
 	}
 
 	return s.ListClosedWorkflowExecutions(actualRequest)

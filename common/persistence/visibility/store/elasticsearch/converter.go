@@ -31,17 +31,17 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
-var allowedComparisonOperators = map[string]bool{
-	sqlparser.EqualStr:        true,
-	sqlparser.NotEqualStr:     true,
-	sqlparser.GreaterThanStr:  true,
-	sqlparser.GreaterEqualStr: true,
-	sqlparser.LessThanStr:     true,
-	sqlparser.LessEqualStr:    true,
-	sqlparser.LikeStr:         true,
-	sqlparser.NotLikeStr:      true,
-	sqlparser.InStr:           true,
-	sqlparser.NotInStr:        true,
+var allowedComparisonOperators = map[string]struct{}{
+	sqlparser.EqualStr:        {},
+	sqlparser.NotEqualStr:     {},
+	sqlparser.GreaterThanStr:  {},
+	sqlparser.GreaterEqualStr: {},
+	sqlparser.LessThanStr:     {},
+	sqlparser.LessEqualStr:    {},
+	sqlparser.LikeStr:         {},
+	sqlparser.NotLikeStr:      {},
+	sqlparser.InStr:           {},
+	sqlparser.NotInStr:        {},
 }
 
 func newQueryConverter(
