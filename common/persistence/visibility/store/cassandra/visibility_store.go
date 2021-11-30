@@ -31,7 +31,6 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -539,49 +538,48 @@ func (v *visibilityStore) ListWorkflowExecutions(
 	request *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	converter := newQueryConverter()
-	_, _, err := converter.ConvertWhereOrderBy(request.Query)
+	filter, err := converter.GetFilter(request.Query)
 	if err != nil {
-		return nil, fmt.Errorf("invalid query: %v", err)
+		return nil, err
 	}
 
-	queryFilters := converter.QueryFilters()
 	baseReq := &manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       request.NamespaceID,
 		Namespace:         request.Namespace,
 		PageSize:          request.PageSize,
 		NextPageToken:     request.NextPageToken,
-		EarliestStartTime: queryFilters.StartTimeFrom,
-		LatestStartTime:   queryFilters.StartTimeTo,
+		EarliestStartTime: *filter.MinTime,
+		LatestStartTime:   *filter.MaxTime,
 	}
 
 	// Only a limited query patterns are supported due to the way we set up
 	// visibility tables in Cassandra.
-	// Check QueryFilters validation logic for details.
-	if queryFilters.HasWorkflowIDFilter {
+	// Check validation logic in query interceptor for details.
+	if filter.WorkflowID != nil {
 		request := &manager.ListWorkflowExecutionsByWorkflowIDRequest{
 			ListWorkflowExecutionsRequest: baseReq,
-			WorkflowID:                    queryFilters.WorkflowID,
+			WorkflowID:                    *filter.WorkflowID,
 		}
 		return v.listWorkflowExecutionsHelper(
 			request,
 			v.listOpenWorkflowExecutionsByWorkflowID,
 			v.listClosedWorkflowExecutionsByWorkflowID)
-	} else if queryFilters.HasWorkflowTypeFilter {
+	} else if filter.WorkflowTypeName != nil {
 		request := &manager.ListWorkflowExecutionsByTypeRequest{
 			ListWorkflowExecutionsRequest: baseReq,
-			WorkflowTypeName:              queryFilters.WorkflowType,
+			WorkflowTypeName:              *filter.WorkflowTypeName,
 		}
 		return v.listWorkflowExecutionsHelper(
 			request,
 			v.listOpenWorkflowExecutionsByType,
 			v.listClosedWorkflowExecutionsByType)
-	} else if queryFilters.HasExecutionStatusFilter {
-		if queryFilters.ExecutionStatus == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
+	} else if filter.Status != int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED) {
+		if filter.Status == int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
 			return v.ListOpenWorkflowExecutions(baseReq)
 		} else {
 			request := &manager.ListClosedWorkflowExecutionsByStatusRequest{
 				ListWorkflowExecutionsRequest: baseReq,
-				Status:                        queryFilters.ExecutionStatus,
+				Status:                        enumspb.WorkflowExecutionStatus(filter.Status),
 			}
 			return v.ListClosedWorkflowExecutionsByStatus(request)
 		}

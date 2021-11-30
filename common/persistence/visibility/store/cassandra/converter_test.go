@@ -31,24 +31,26 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 
 var startTimeFrom = time.Now().Add(-time.Hour)
 var startTimeTo = time.Now()
 var startTimeRangeFilter = fmt.Sprintf(`StartTime BETWEEN "%v" AND "%v"`, startTimeFrom.Format(time.RFC3339Nano), startTimeTo.Format(time.RFC3339Nano))
 
-var supportedQuery = map[string]*queryFilters{
+var supportedQuery = map[string]*sqlplugin.VisibilitySelectFilter{
 	"":                   {},
-	startTimeRangeFilter: {HasStartTimeRangeFilter: true, StartTimeFrom: startTimeFrom, StartTimeTo: startTimeTo},
-	`WorkflowID = "abc"`: {HasWorkflowIDFilter: true, WorkflowID: "abc"},
-	`WorkflowID = "abc" AND ` + startTimeRangeFilter:          {HasWorkflowIDFilter: true, WorkflowID: "abc", HasStartTimeRangeFilter: true, StartTimeFrom: startTimeFrom, StartTimeTo: startTimeTo},
-	startTimeRangeFilter + ` AND WorkflowID = "abc"`:          {HasWorkflowIDFilter: true, WorkflowID: "abc", HasStartTimeRangeFilter: true, StartTimeFrom: startTimeFrom, StartTimeTo: startTimeTo},
-	`WorkflowType = "abc"`:                                    {HasWorkflowTypeFilter: true, WorkflowType: "abc"},
-	`WorkflowType = "abc" AND ` + startTimeRangeFilter:        {HasWorkflowTypeFilter: true, WorkflowType: "abc", HasStartTimeRangeFilter: true, StartTimeFrom: startTimeFrom, StartTimeTo: startTimeTo},
-	startTimeRangeFilter + ` AND WorkflowType = "abc"`:        {HasWorkflowTypeFilter: true, WorkflowType: "abc", HasStartTimeRangeFilter: true, StartTimeFrom: startTimeFrom, StartTimeTo: startTimeTo},
-	`ExecutionStatus = "Running"`:                             {HasExecutionStatusFilter: true, ExecutionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING},
-	`ExecutionStatus = "Running" AND ` + startTimeRangeFilter: {HasExecutionStatusFilter: true, ExecutionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, HasStartTimeRangeFilter: true, StartTimeFrom: startTimeFrom, StartTimeTo: startTimeTo},
-	startTimeRangeFilter + ` AND ExecutionStatus = "Running"`: {HasExecutionStatusFilter: true, ExecutionStatus: enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, HasStartTimeRangeFilter: true, StartTimeFrom: startTimeFrom, StartTimeTo: startTimeTo},
+	startTimeRangeFilter: {MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	`WorkflowID = "abc"`: {WorkflowID: convert.StringPtr("abc")},
+	`WorkflowID = "abc" AND ` + startTimeRangeFilter:          {WorkflowID: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	startTimeRangeFilter + ` AND WorkflowID = "abc"`:          {WorkflowID: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	`WorkflowType = "abc"`:                                    {WorkflowTypeName: convert.StringPtr("abc")},
+	`WorkflowType = "abc" AND ` + startTimeRangeFilter:        {WorkflowTypeName: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	startTimeRangeFilter + ` AND WorkflowType = "abc"`:        {WorkflowTypeName: convert.StringPtr("abc"), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	`ExecutionStatus = "Running"`:                             {Status: int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING)},
+	`ExecutionStatus = "Running" AND ` + startTimeRangeFilter: {Status: int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
+	startTimeRangeFilter + ` AND ExecutionStatus = "Running"`: {Status: int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), MinTime: &startTimeFrom, MaxTime: &startTimeTo},
 }
 
 // This is not an exhaustive list.
@@ -62,23 +64,27 @@ var unsupportedQuery = []string{
 }
 
 func TestSupportedQueryFilters(t *testing.T) {
-	for query, expectedFilters := range supportedQuery {
+	for query, expectedFilter := range supportedQuery {
 		converter := newQueryConverter()
-		_, _, err := converter.ConvertWhereOrderBy(query)
+		filter, err := converter.GetFilter(query)
 		assert.NoError(t, err)
 
-		filters := converter.QueryFilters()
-		assert.Equal(t, expectedFilters.HasWorkflowIDFilter, filters.HasWorkflowIDFilter)
-		assert.Equal(t, expectedFilters.WorkflowID, filters.WorkflowID)
-		assert.Equal(t, expectedFilters.HasWorkflowTypeFilter, filters.HasWorkflowTypeFilter)
-		assert.Equal(t, expectedFilters.WorkflowType, filters.WorkflowType)
-		assert.Equal(t, expectedFilters.HasExecutionStatusFilter, filters.HasExecutionStatusFilter)
-		assert.Equal(t, expectedFilters.ExecutionStatus, filters.ExecutionStatus)
-		assert.Equal(t, expectedFilters.HasStartTimeRangeFilter, filters.HasStartTimeRangeFilter)
+		assert.EqualValues(t, expectedFilter.WorkflowID, filter.WorkflowID)
+		assert.EqualValues(t, expectedFilter.WorkflowTypeName, filter.WorkflowTypeName)
+		assert.EqualValues(t, expectedFilter.Status, filter.Status)
 
-		if filters.HasStartTimeRangeFilter {
-			assert.True(t, filters.StartTimeFrom.Equal(expectedFilters.StartTimeFrom))
-			assert.True(t, filters.StartTimeTo.Equal(expectedFilters.StartTimeTo))
+		if expectedFilter.MinTime == nil {
+			assert.True(t, time.Unix(0, 0).Equal(*filter.MinTime))
+		} else {
+			assert.NotNil(t, filter.MinTime)
+			assert.True(t, expectedFilter.MinTime.Equal(*filter.MinTime))
+		}
+
+		if expectedFilter.MaxTime == nil {
+			assert.True(t, filter.MaxTime.After(time.Now()))
+		} else {
+			assert.NotNil(t, filter.MaxTime)
+			assert.True(t, expectedFilter.MaxTime.Equal(*filter.MaxTime))
 		}
 	}
 }
@@ -86,7 +92,7 @@ func TestSupportedQueryFilters(t *testing.T) {
 func TestUnsupportedQueryFilters(t *testing.T) {
 	for _, query := range unsupportedQuery {
 		converter := newQueryConverter()
-		_, _, err := converter.ConvertWhereOrderBy(query)
+		_, err := converter.GetFilter(query)
 		assert.Error(t, err)
 	}
 }

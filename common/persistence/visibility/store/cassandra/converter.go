@@ -25,10 +25,12 @@
 package cassandra
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/xwb1989/sqlparser"
-	"go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 
@@ -40,18 +42,6 @@ type (
 	converter struct {
 		*query.Converter
 		fvInterceptor *valuesInterceptor
-	}
-
-	queryFilters struct {
-		HasWorkflowIDFilter      bool
-		WorkflowID               string
-		HasWorkflowTypeFilter    bool
-		WorkflowType             string
-		HasExecutionStatusFilter bool
-		ExecutionStatus          enums.WorkflowExecutionStatus
-		HasStartTimeRangeFilter  bool
-		StartTimeFrom            time.Time
-		StartTimeTo              time.Time
 	}
 )
 
@@ -76,6 +66,40 @@ func newQueryConverter() *converter {
 	}
 }
 
-func (c *converter) QueryFilters() *queryFilters {
-	return c.fvInterceptor.queryFilters
+func (c *converter) GetFilter(whereOrderBy string) (*sqlplugin.VisibilitySelectFilter, error) {
+	_, _, err := c.ConvertWhereOrderBy(whereOrderBy)
+	if err != nil {
+		return nil, fmt.Errorf("invalid query: %v", err)
+	}
+
+	filter := c.fvInterceptor.filter
+	numPredicates := 0
+
+	if filter.WorkflowID != nil {
+		numPredicates++
+	}
+
+	if filter.WorkflowTypeName != nil {
+		numPredicates++
+	}
+
+	if filter.Status != int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED) {
+		numPredicates++
+	}
+
+	if numPredicates > 1 {
+		return nil, query.NewConverterError("too many filter conditions specified")
+	}
+
+	if filter.MinTime == nil {
+		minTime := time.Unix(0, 0)
+		filter.MinTime = &minTime
+	}
+
+	if filter.MaxTime == nil {
+		maxTime := time.Now().Add(24 * time.Hour)
+		filter.MaxTime = &maxTime
+	}
+
+	return filter, nil
 }

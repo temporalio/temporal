@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
@@ -37,7 +39,7 @@ var allowedFilters = []string{"WorkflowID", "WorkflowType", "ExecutionStatus", "
 type (
 	nameInterceptor   struct{}
 	valuesInterceptor struct {
-		queryFilters    *queryFilters
+		filter          *sqlplugin.VisibilitySelectFilter
 		nextInterceptor query.FieldValuesInterceptor
 	}
 )
@@ -48,10 +50,7 @@ func newNameInterceptor() *nameInterceptor {
 
 func newValuesInterceptor() *valuesInterceptor {
 	return &valuesInterceptor{
-		queryFilters:    &queryFilters{
-			StartTimeFrom: time.Unix(0, 0),
-			StartTimeTo: time.Now().Add(24*time.Hour),
-		},
+		filter:          &sqlplugin.VisibilitySelectFilter{},
 		nextInterceptor: elasticsearch.NewValuesInterceptor(),
 	}
 }
@@ -73,51 +72,38 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]interface{}, error) {
 	switch name {
 	case "WorkflowID":
-		if vi.queryFilters.HasWorkflowTypeFilter || vi.queryFilters.HasExecutionStatusFilter {
-			return nil, query.NewConverterError("too many filter conditions specified")
-		}
-		vi.queryFilters.HasWorkflowIDFilter = true
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
-			vi.queryFilters.WorkflowID = values[0].(string)
+			vi.filter.WorkflowID = convert.StringPtr(values[0].(string))
 		}
 		return values, err
 	case "WorkflowType":
-		if vi.queryFilters.HasWorkflowIDFilter || vi.queryFilters.HasExecutionStatusFilter {
-			return nil, query.NewConverterError("too many filter conditions specified")
-		}
-		vi.queryFilters.HasWorkflowTypeFilter = true
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
-			vi.queryFilters.WorkflowType = values[0].(string)
+			vi.filter.WorkflowTypeName = convert.StringPtr(values[0].(string))
 		}
 		return values, err
 	case "ExecutionStatus":
-		if vi.queryFilters.HasWorkflowIDFilter || vi.queryFilters.HasWorkflowTypeFilter {
-			return nil, query.NewConverterError("too many filter conditions specified")
-		}
-		vi.queryFilters.HasExecutionStatusFilter = true
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			statusStr := values[0].(string)
-			vi.queryFilters.ExecutionStatus = enums.WorkflowExecutionStatus(enums.WorkflowExecutionStatus_value[statusStr])
+			vi.filter.Status = enums.WorkflowExecutionStatus_value[statusStr]
 		}
 		return values, err
 	case "StartTime":
-		vi.queryFilters.HasStartTimeRangeFilter = true
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
-			fromTime := values[0].(string)
-			vi.queryFilters.StartTimeFrom, err = time.Parse(time.RFC3339Nano, fromTime)
+			minTime, err := time.Parse(time.RFC3339Nano, values[0].(string))
 			if err != nil {
-				return nil, query.NewConverterError("invalid StartTime format: %v", fromTime)
+				return nil, query.NewConverterError("invalid StartTime format: %v", minTime)
 			}
+			vi.filter.MinTime = &minTime
 
-			toTime := values[1].(string)
-			vi.queryFilters.StartTimeTo, err = time.Parse(time.RFC3339Nano, toTime)
+			maxTime, err := time.Parse(time.RFC3339Nano, values[1].(string))
 			if err != nil {
-				return nil, query.NewConverterError("invalid StartTime format: %v", toTime)
+				return nil, query.NewConverterError("invalid StartTime format: %v", maxTime)
 			}
+			vi.filter.MaxTime = &maxTime
 		}
 		return values, err
 	default:
