@@ -1,11 +1,6 @@
-ifndef DOCKER_IMAGE_TAG
-DOCKER_IMAGE_TAG := "latest"
-endif
-
-ifndef DOCKER_BUILDX_OUTPUT
+DOCKER_IMAGE_TAG ?= latest
 # Pass "registry" to automatically push image to the docker hub.
-DOCKER_BUILDX_OUTPUT := "image"
-endif
+DOCKER_BUILDX_OUTPUT ?= image
 
 ##### docker build #####
 base-admin-tools:
