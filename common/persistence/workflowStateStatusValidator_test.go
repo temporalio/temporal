@@ -71,7 +71,7 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCr
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
 		s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
@@ -88,7 +88,7 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateRu
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
 		s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
@@ -105,10 +105,10 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateCo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Error(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.Nil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
+		s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
@@ -122,14 +122,12 @@ func (s *workflowStateStatusSuite) TestCreateWorkflowStateStatus_WorkflowStateZo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
+		s.Error(ValidateCreateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }
-
-// TODO
 
 func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCreated() {
 	statuses := []enumspb.WorkflowExecutionStatus{
@@ -141,10 +139,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCr
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
+		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_CREATED, status))
 	}
 }
 
@@ -158,10 +156,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateRu
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
+		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, status))
 	}
 }
 
@@ -175,10 +173,10 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateCo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.NotNil(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.Nil(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
+		s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, status))
 	}
 }
 
@@ -192,9 +190,9 @@ func (s *workflowStateStatusSuite) TestUpdateWorkflowStateStatus_WorkflowStateZo
 		enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT,
 	}
 
-	s.Nil(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
+	s.NoError(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING))
 
 	for _, status := range statuses {
-		s.NotNil(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
+		s.Error(ValidateUpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE, status))
 	}
 }
