@@ -86,6 +86,11 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	if state.ExecutionInfo.ExecutionStats == nil {
+		state.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
+			HistorySize: 0,
+		}
+	}
 
 	newResponse := &GetWorkflowExecutionResponse{
 		State:             state,

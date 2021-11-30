@@ -110,7 +110,7 @@ message WorkflowExecutionInfo {
     reserved 44;
     reserved 45;
     int64 signal_count = 46;
-    int64 history_size = 47 [deprecated = true];
+    reserved 47;
     reserved 48;
     reserved 49;
     reserved 50;
