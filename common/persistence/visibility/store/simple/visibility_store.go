@@ -39,20 +39,23 @@ type (
 		store store.VisibilityStore
 	}
 
+	// We wrap the token with a boolean to indicate if it is from list open workflows or list closed workflows,
+	// so we know where to continue from for the next call.
 	nextPageToken struct {
-		IsForOpen bool
-		Token     []byte
+		ForOpenWorkflows bool `json:"isOpen"`
+		Token            []byte
 	}
 
 	listRequest interface {
-		SetToken(token []byte)
+		OverrideToken(token []byte)
 		GetToken() []byte
-		SetPageSize(pageSize int)
+		OverridePageSize(pageSize int)
 		GetPageSize() int
 	}
 )
 
 var _ store.VisibilityStore = (*simpleStore)(nil)
+var _ listRequest = (*manager.ListWorkflowExecutionsRequest)(nil)
 
 func NewVisibilityStore(store store.VisibilityStore) store.VisibilityStore {
 	return &simpleStore{
@@ -184,26 +187,26 @@ func (s *simpleStore) listWorkflowExecutionsHelper(
 	var token nextPageToken
 	if len(request.GetToken()) == 0 {
 		token = nextPageToken{
-			IsForOpen: true,
+			ForOpenWorkflows: true,
 		}
 	} else {
 		err := json.Unmarshal(request.GetToken(), &token)
 		if err != nil {
 			return nil, fmt.Errorf("invalid next page token: %v", err)
 		}
-		request.SetToken(token.Token)
+		request.OverrideToken(token.Token)
 	}
 
 	resp := &store.InternalListWorkflowExecutionsResponse{}
 
-	if token.IsForOpen {
+	if token.ForOpenWorkflows {
 		listOpenResp, err := listOpenFunc(request)
 		if err != nil {
 			return nil, err
 		}
 
 		if len(listOpenResp.Executions) > 0 {
-			request.SetPageSize(request.GetPageSize() - len(listOpenResp.Executions))
+			request.OverridePageSize(request.GetPageSize() - len(listOpenResp.Executions))
 			resp.Executions = append(resp.Executions, listOpenResp.Executions...)
 		}
 
@@ -218,8 +221,8 @@ func (s *simpleStore) listWorkflowExecutionsHelper(
 			resp.NextPageToken = token
 			return resp, nil
 		} else {
-			token.IsForOpen = false
-			request.SetToken(nil)
+			token.ForOpenWorkflows = false
+			request.OverrideToken(nil)
 		}
 	}
 

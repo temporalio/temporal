@@ -171,14 +171,14 @@ type (
 	}
 )
 
-func (r *ListWorkflowExecutionsRequest) SetToken(token []byte) {
+func (r *ListWorkflowExecutionsRequest) OverrideToken(token []byte) {
 	r.NextPageToken = token
 }
 
 func (r *ListWorkflowExecutionsRequest) GetToken() []byte {
 	return r.NextPageToken
 }
-func (r *ListWorkflowExecutionsRequest) SetPageSize(pageSize int) {
+func (r *ListWorkflowExecutionsRequest) OverridePageSize(pageSize int) {
 	r.PageSize = pageSize
 }
 func (r *ListWorkflowExecutionsRequest) GetPageSize() int {
