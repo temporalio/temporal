@@ -388,24 +388,6 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 	case p.CreateWorkflowModeZombie:
 		// noop
 
-	case p.CreateWorkflowModeContinueAsNew:
-		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-			runID,
-			newWorkflow.ExecutionStateBlob.Data,
-			newWorkflow.ExecutionStateBlob.EncodingType.String(),
-			lastWriteVersion,
-			newWorkflow.ExecutionState.State,
-			shardID,
-			rowTypeExecution,
-			namespaceID,
-			workflowID,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			request.PreviousRunID,
-		)
-		requestCurrentRunID = request.PreviousRunID
-
 	case p.CreateWorkflowModeWorkflowIDReuse:
 		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 			runID,

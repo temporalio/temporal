@@ -52,7 +52,7 @@ CREATE TABLE current_executions(
   create_request_id VARCHAR(64) NOT NULL,
   state INTEGER NOT NULL,
   status INTEGER NOT NULL,
-  start_version BIGINT NOT NULL,
+  start_version BIGINT NOT NULL DEFAULT 0,
   last_write_version BIGINT NOT NULL,
   PRIMARY KEY (shard_id, namespace_id, workflow_id)
 );

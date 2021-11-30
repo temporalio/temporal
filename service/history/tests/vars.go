@@ -44,14 +44,14 @@ var (
 	Version = int64(1234)
 
 	NamespaceID       = namespace.ID("deadbeef-0123-4567-890a-bcdef0123456")
-	Namespace         = namespace.Name("some random namespace name")
+	Namespace         = namespace.Name("mock namespace name")
 	ParentNamespaceID = namespace.ID("deadbeef-0123-4567-890a-bcdef0123457")
-	ParentNamespace   = namespace.Name("some random parent namespace name")
+	ParentNamespace   = namespace.Name("mock parent namespace name")
 	TargetNamespaceID = namespace.ID("deadbeef-0123-4567-890a-bcdef0123458")
-	TargetNamespace   = namespace.Name("some random target namespace name")
+	TargetNamespace   = namespace.Name("mock target namespace name")
 	ChildNamespaceID  = namespace.ID("deadbeef-0123-4567-890a-bcdef0123459")
-	ChildNamespace    = namespace.Name("some random child namespace name")
-	WorkflowID        = "random-workflow-id"
+	ChildNamespace    = namespace.Name("mock child namespace name")
+	WorkflowID        = "mock-workflow-id"
 	RunID             = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 
 	LocalNamespaceEntry = namespace.NewLocalNamespaceForTest(

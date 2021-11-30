@@ -69,6 +69,7 @@ func NewTestContext(
 		maxTransferSequenceNumber: 100000,
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		remoteClusterInfos:        make(map[string]*remoteClusterInfo),
+		handoverNamespaces:        make(map[string]*namespaceHandOverInfo),
 	}
 	return &ContextTest{
 		ContextImpl:     shard,

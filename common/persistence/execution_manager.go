@@ -86,6 +86,11 @@ func (m *executionManagerImpl) GetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
+	if state.ExecutionInfo.ExecutionStats == nil {
+		state.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
+			HistorySize: 0,
+		}
+	}
 
 	newResponse := &GetWorkflowExecutionResponse{
 		State:             state,
@@ -431,7 +436,6 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
 		NextEventID:     input.NextEventID,
-		StartVersion:    input.ExecutionInfo.StartVersion,
 	}
 
 	result.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
@@ -542,8 +546,6 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
 		NextEventID:     input.NextEventID,
-
-		StartVersion: input.ExecutionInfo.StartVersion,
 	}
 
 	result.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)

@@ -282,12 +282,6 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
-		if c.stats == nil {
-			// TODO (alex): This check is for compatibility only and can be removed later
-			c.stats = &persistencespb.ExecutionStats{
-				HistorySize: response.State.ExecutionInfo.GetHistorySize(),
-			}
-		}
 	}
 
 	lastWriteVersion, err := c.MutableState.GetLastWriteVersion()
@@ -356,12 +350,6 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
-		if c.stats == nil {
-			// TODO (alex): This check is for compatibility only and can be removed later
-			c.stats = &persistencespb.ExecutionStats{
-				HistorySize: response.State.ExecutionInfo.GetHistorySize(),
-			}
-		}
 	}
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)

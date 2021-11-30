@@ -187,6 +187,7 @@ func (h *Handler) CreateEngine(
 		h.replicationTaskFetchers,
 		h.GetMatchingRawClient(),
 		h.newCacheFn,
+		h.GetNamespaceRegistry(),
 	)
 }
 

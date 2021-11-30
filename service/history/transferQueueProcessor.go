@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
@@ -79,6 +80,7 @@ type (
 		shutdownChan             chan struct{}
 		activeTaskProcessor      *transferQueueActiveProcessorImpl
 		standbyTaskProcessors    map[string]*transferQueueStandbyProcessorImpl
+		registry                 namespace.Registry
 	}
 )
 
@@ -88,6 +90,7 @@ func newTransferQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	logger log.Logger,
+	registry namespace.Registry,
 ) *transferQueueProcessorImpl {
 
 	logger = log.With(logger, tag.ComponentTransferQueue)
@@ -143,8 +146,10 @@ func newTransferQueueProcessor(
 			historyClient,
 			taskAllocator,
 			logger,
+			registry,
 		),
 		standbyTaskProcessors: standbyTaskProcessors,
+		registry:              registry,
 	}
 }
 
@@ -234,6 +239,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		maxLevel,
 		t.taskAllocator,
 		t.logger,
+		t.registry,
 	)
 
 	for _, standbyTaskProcessor := range t.standbyTaskProcessors {
