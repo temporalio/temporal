@@ -48,7 +48,10 @@ func newNameInterceptor() *nameInterceptor {
 
 func newValuesInterceptor() *valuesInterceptor {
 	return &valuesInterceptor{
-		queryFilters:    &queryFilters{},
+		queryFilters:    &queryFilters{
+			StartTimeFrom: time.Unix(0, 0),
+			StartTimeTo: time.Now().Add(24*time.Hour),
+		},
 		nextInterceptor: elasticsearch.NewValuesInterceptor(),
 	}
 }
