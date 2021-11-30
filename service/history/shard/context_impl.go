@@ -1646,7 +1646,7 @@ func newContext(
 		clusterMetadata:         clusterMetadata,
 		archivalMetadata:        archivalMetadata,
 		hostInfoProvider:        hostInfoProvider,
-		handoverNamespaces: make(map[string]*namespaceHandOverInfo),
+		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),
