@@ -33,9 +33,9 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/persistence/visibility/store/simple"
-	"go.temporal.io/server/common/persistence/visibility/store/simple/cassandra"
-	"go.temporal.io/server/common/persistence/visibility/store/simple/sql"
+	"go.temporal.io/server/common/persistence/visibility/store/standard"
+	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
+	"go.temporal.io/server/common/persistence/visibility/store/standard/sql"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -230,7 +230,7 @@ func newStandardVisibilityStore(
 		return nil, nil
 	}
 
-	return simple.NewVisibilityStore(store), nil
+	return standard.NewVisibilityStore(store), nil
 }
 
 func newAdvancedVisibilityStore(

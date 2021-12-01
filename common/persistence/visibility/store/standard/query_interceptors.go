@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package simple
+package standard
 
 import (
 	"time"
@@ -64,7 +64,7 @@ func newValuesInterceptor() *valuesInterceptor {
 
 func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string, error) {
 	if usage == query.FieldNameSorter {
-		return "", query.NewConverterError("order by not allowed for basic visibility")
+		return "", query.NewConverterError("order by not allowed for standard visibility")
 	}
 
 	for _, filter := range allowedFilters {
@@ -73,7 +73,7 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 		}
 	}
 
-	return "", query.NewConverterError("filter by '%v' not supported for basic visibility", name)
+	return "", query.NewConverterError("filter by '%v' not supported for standard visibility", name)
 }
 
 func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]interface{}, error) {
@@ -114,6 +114,6 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 		}
 		return values, err
 	default:
-		return nil, query.NewConverterError("filter by '%v' not supported for basic visibility", name)
+		return nil, query.NewConverterError("filter by '%v' not supported for standard visibility", name)
 	}
 }
