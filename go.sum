@@ -418,8 +418,9 @@ github.com/twmb/murmur3 v1.1.6/go.mod h1:Qq/R7NUyOfr65zD+6Q5IHKsJLwP7exErjN6lyyq
 github.com/uber-common/bark v1.0.0/go.mod h1:g0ZuPcD7XiExKHynr93Q742G/sbrdVQkghrqLGOoFuY=
 github.com/uber-common/bark v1.3.0 h1:DkuZCBaQS9LWuNAPrCO6yQVANckIX3QI0QwLemUnzCo=
 github.com/uber-common/bark v1.3.0/go.mod h1:5fDe/YcIVP55XhFF9hUihX2lDsDcpFrTZEAwAVwtPDw=
-github.com/uber-go/tally/v4 v4.0.1 h1:Gb78H57b/dEn9zkGmSfSaIR1SjLMB4z38N0quvJ5ERo=
 github.com/uber-go/tally/v4 v4.0.1/go.mod h1:mcbhHhuBx59QTSR77pXGWYyB0XgxO6OI9JKAgWDOiNY=
+github.com/uber-go/tally/v4 v4.1.1 h1:jhy6WOZp4nHyCqeV43x3Wz370LXUGBhgW2JmzOIHCWI=
+github.com/uber-go/tally/v4 v4.1.1/go.mod h1:aXeSTDMl4tNosyf6rdU8jlgScHyjEGGtfJ/uwCIf/vM=
 github.com/uber/jaeger-client-go v2.22.1+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
 github.com/uber/jaeger-client-go v2.29.1+incompatible h1:R9ec3zO3sGpzs0abd43Y+fBZRJ9uiH6lXyR/+u6brW4=
 github.com/uber/jaeger-client-go v2.29.1+incompatible/go.mod h1:WVhlPFC8FDjOFMMWRy2pZqQJSXxYSwNYOkTr/Z6d3Kk=
@@ -471,8 +472,11 @@ go.opentelemetry.io/proto/otlp v0.7.0/go.mod h1:PqfVotwruBrMGOCsRd/89rSnXhoiJIqe
 go.temporal.io/api v1.5.0/go.mod h1:BqKxEJJYdxb5dqf0ODfzfMxh8UEQ5L3zKS51FiIYYkA=
 go.temporal.io/api v1.6.1-0.20211123053254-cae1d6470032 h1:NWqyrKZjNtZMWaisvqswD+wZ+cjACm42Z12c1Ns0978=
 go.temporal.io/api v1.6.1-0.20211123053254-cae1d6470032/go.mod h1:Ip5fOBxBedzcDrqxa2RBbMVcUFkKUgUIhrrhokF8ocg=
-go.temporal.io/sdk v1.11.0 h1:KMulQdR67ZL8M30m60LQVfGL0bUNd2TgjHplM/RUk5M=
-go.temporal.io/sdk v1.11.0/go.mod h1:YPiw910FVnuF0/j4qHgqxGEB3kNCOD7ZQY3fOmZltnw=
+go.temporal.io/sdk v1.11.1/go.mod h1:YPiw910FVnuF0/j4qHgqxGEB3kNCOD7ZQY3fOmZltnw=
+go.temporal.io/sdk v1.11.2 h1:5uaN3Q8RI3wmA8KfUM1kLqUlTyeJPzwyPJfDqALat5k=
+go.temporal.io/sdk v1.11.2/go.mod h1:lSp3lH1lI0TyOsus0arnO3FYvjVXBZGi/G7DjnAnm6o=
+go.temporal.io/sdk/contrib/tally v0.1.0 h1:s8q9NU4sqKA4z15Bc61dDPQlf9oPT+QuiKO7KhYoeOA=
+go.temporal.io/sdk/contrib/tally v0.1.0/go.mod h1:UQecTexayWPXL59/yaqRHBicBx2NJ/DQNhzzdZIFQfE=
 go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193 h1:jhIqHkAE74DnEXipymFTzmTxyboMYmv6iVkkCFC1pas=
 go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193/go.mod h1:UA9S8/1LaKYae6TyD9NaPMJTZb911JcbqghI2CBSP78=
 go.uber.org/atomic v1.4.0/go.mod h1:gD2HeocX3+yG+ygLZcrzQJaqmWj9AIm7n08wl/qW/PE=

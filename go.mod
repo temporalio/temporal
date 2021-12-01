@@ -34,7 +34,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/stretchr/testify v1.7.0
 	github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95
-	github.com/uber-go/tally/v4 v4.0.1
+	github.com/uber-go/tally/v4 v4.1.1
 	github.com/uber/tchannel-go v1.22.0
 	github.com/urfave/cli v1.22.5
 	github.com/urfave/cli/v2 v2.3.0
@@ -45,7 +45,8 @@ require (
 	go.opentelemetry.io/otel/sdk/export/metric v0.24.0
 	go.opentelemetry.io/otel/sdk/metric v0.24.0
 	go.temporal.io/api v1.6.1-0.20211123053254-cae1d6470032
-	go.temporal.io/sdk v1.11.0
+	go.temporal.io/sdk v1.11.2
+	go.temporal.io/sdk/contrib/tally v0.1.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.9.0
 	go.uber.org/fx v1.14.2
