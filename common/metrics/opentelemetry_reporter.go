@@ -32,10 +32,9 @@ import (
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	export "go.opentelemetry.io/otel/sdk/export/metric"
-	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
 	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
 	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	selector "go.opentelemetry.io/otel/sdk/metric/selector/simple"
+	"go.opentelemetry.io/otel/sdk/resource"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -69,12 +68,14 @@ func newOpentelemeteryReporter(
 
 	c := controller.New(
 		processor.NewFactory(
-			selector.NewWithHistogramDistribution(
-				histogram.WithExplicitBoundaries(histogramBoundaries),
+			NewOtelAggregatorSelector(
+				histogramBoundaries,
+				clientConfig.PerUnitHistogramBoundaries,
 			),
 			export.CumulativeExportKindSelector(),
 			processor.WithMemory(true),
 		),
+		controller.WithResource(resource.Empty()),
 	)
 	exporter, err := prometheus.New(
 		prometheus.Config{DefaultHistogramBoundaries: histogramBoundaries}, c)
