@@ -2083,7 +2083,9 @@ const (
 	LocalToRemoteMatchPerTaskQueueCounter
 	RemoteToLocalMatchPerTaskQueueCounter
 	RemoteToRemoteMatchPerTaskQueueCounter
-	TaskQueueGauge
+	LoadedTaskQueueGauge
+	TaskQueueStartedCounter
+	TaskQueueStoppedCounter
 
 	NumMatchingMetrics
 )
@@ -2550,7 +2552,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		LocalToRemoteMatchPerTaskQueueCounter:     {metricName: "local_to_remote_matches_per_tl", metricRollupName: "local_to_remote_matches"},
 		RemoteToLocalMatchPerTaskQueueCounter:     {metricName: "remote_to_local_matches_per_tl", metricRollupName: "remote_to_local_matches"},
 		RemoteToRemoteMatchPerTaskQueueCounter:    {metricName: "remote_to_remote_matches_per_tl", metricRollupName: "remote_to_remote_matches"},
-		TaskQueueGauge:                            {metricName: "loaded_task_queue_count", metricType: Gauge},
+		LoadedTaskQueueGauge:                      {metricName: "loaded_task_queue_count", metricType: Gauge},
+		TaskQueueStartedCounter:                   {metricName: "task_queue_started"},
+		TaskQueueStoppedCounter:                   {metricName: "task_queue_stopped"},
 	},
 	Worker: {
 		ReplicatorMessages:                            {metricName: "replicator_messages"},

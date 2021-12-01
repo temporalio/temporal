@@ -68,7 +68,7 @@ func (t *MatcherTestSuite) SetupTest() {
 	t.client = matchingservicemock.NewMockMatchingServiceClient(t.controller)
 	cfg := NewConfig(dynamicconfig.NewNoopCollection())
 	t.taskQueue = newTestTaskQueueID(namespace.ID(uuid.New()), taskQueuePartitionPrefix+"tl0/1", enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	tlCfg, err := newTaskQueueConfig(t.taskQueue, cfg, t.newNamespaceCache())
+	tlCfg, err := newTaskQueueConfig(t.taskQueue, cfg, "test-namespace")
 	t.NoError(err)
 	tlCfg.forwarderConfig = forwarderConfig{
 		ForwarderMaxOutstandingPolls: func() int { return 1 },
@@ -78,12 +78,12 @@ func (t *MatcherTestSuite) SetupTest() {
 	}
 	t.cfg = tlCfg
 	t.fwdr = newForwarder(&t.cfg.forwarderConfig, t.taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL, t.client)
-	t.matcher = newTaskMatcher(tlCfg, t.fwdr, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
+	t.matcher = newTaskMatcher(tlCfg, t.fwdr, metrics.NoopScope(metrics.Matching))
 
 	rootTaskQueue := newTestTaskQueueID(t.taskQueue.namespaceID, t.taskQueue.Parent(20), enumspb.TASK_QUEUE_TYPE_WORKFLOW)
-	rootTaskqueueCfg, err := newTaskQueueConfig(rootTaskQueue, cfg, t.newNamespaceCache())
+	rootTaskqueueCfg, err := newTaskQueueConfig(rootTaskQueue, cfg, "test-namespace")
 	t.NoError(err)
-	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, func() metrics.Scope { return metrics.NoopScope(metrics.Matching) })
+	t.rootMatcher = newTaskMatcher(rootTaskqueueCfg, nil, metrics.NoopScope(metrics.Matching))
 }
 
 func (t *MatcherTestSuite) TearDownTest() {

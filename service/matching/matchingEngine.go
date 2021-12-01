@@ -741,7 +741,7 @@ func (e *matchingEngineImpl) updateTaskQueueGauge(countKey taskQueueCounterKey, 
 		metrics.NamespaceTag(namespace.String()),
 		metrics.TaskTypeTag(countKey.taskType.String()),
 		metrics.QueueTypeTag(countKey.queueType.String()),
-	).UpdateGauge(metrics.TaskQueueGauge, float64(taskQueueCount))
+	).UpdateGauge(metrics.LoadedTaskQueueGauge, float64(taskQueueCount))
 }
 
 // Populate the workflow task response based on context and scheduled/started events.
