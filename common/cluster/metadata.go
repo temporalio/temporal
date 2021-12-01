@@ -43,7 +43,7 @@ import (
 
 const (
 	defaultClusterMetadataPageSize = 100
-	refreshInterval                = time.Minute * 5
+	refreshInterval                = time.Minute
 	refreshFailureInterval         = time.Second * 30
 )
 
