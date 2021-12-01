@@ -82,7 +82,6 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(ServiceNameProvider),
 	fx.Provide(TimeSourceProvider),
-	fx.Provide(ClusterMetadataManagerProvider),
 	fx.Provide(cluster.NewMetadataFromConfig),
 	fx.Provide(MetricsClientProvider),
 	fx.Provide(SearchAttributeProviderProvider),
@@ -156,10 +155,6 @@ func HostNameProvider() (HostName, error) {
 
 func TimeSourceProvider() clock.TimeSource {
 	return clock.NewRealTimeSource()
-}
-
-func ClusterMetadataManagerProvider(factory persistenceClient.Factory) (persistence.ClusterMetadataManager, error) {
-	return factory.NewClusterMetadataManager()
 }
 
 func SearchAttributeProviderProvider(

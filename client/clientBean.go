@@ -53,7 +53,6 @@ type (
 		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
 		SetRemoteAdminClient(cluster string, client adminservice.AdminServiceClient)
 		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
-		SetRemoteFrontendClient(cluster string, client workflowservice.WorkflowServiceClient)
 	}
 
 	clientBeanImpl struct {
@@ -212,16 +211,6 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice
 		}
 	}
 	return client
-}
-
-func (h *clientBeanImpl) SetRemoteFrontendClient(
-	cluster string,
-	client workflowservice.WorkflowServiceClient,
-) {
-	h.remoteFrontendClientsLock.Lock()
-	defer h.remoteFrontendClientsLock.Unlock()
-
-	h.setRemoteFrontendClientLocked(cluster, client)
 }
 
 func (h *clientBeanImpl) setRemoteFrontendClientLocked(

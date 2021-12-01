@@ -132,9 +132,7 @@ func (t *timerQueueProcessorImpl) Start() {
 	}
 	t.activeTimerProcessor.Start()
 	if t.isGlobalNamespaceEnabled {
-		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
-			standbyTimerProcessor.Start()
-		}
+		t.listenToClusterMetadataChange()
 	}
 
 	t.shutdownWG.Add(1)
