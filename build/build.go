@@ -28,8 +28,6 @@ import (
 	"embed"
 	_ "embed"
 	"encoding/json"
-	"errors"
-	"os"
 )
 
 const (
@@ -58,16 +56,8 @@ func init() {
 	}
 
 	lastBuildInfoJson, err := buildInfoFS.ReadFile(lastBuildInfoFile)
-	// If lastBuildInfoFile wasn't created by script during build, use default values.
-	if errors.Is(err, os.ErrNotExist) {
+	if err != nil {
 		return
 	}
-	if err != nil {
-		// Should never happen.
-		panic(err)
-	}
-	err = json.Unmarshal(lastBuildInfoJson, &LastBuildInfo)
-	if err != nil {
-		panic(err)
-	}
+	_ = json.Unmarshal(lastBuildInfoJson, &LastBuildInfo)
 }

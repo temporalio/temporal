@@ -27,12 +27,12 @@ package main
 import (
 	"fmt"
 	stdlog "log"
+	"os"
 	"path"
 	"strings"
 
 	"github.com/urfave/cli/v2"
 
-	"go.temporal.io/server/build"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -46,9 +46,8 @@ import (
 
 // main entry point for the temporal server
 func main() {
-	fmt.Println(build.LastBuildInfo)
-	//app := buildCLI()
-	//_ = app.Run(os.Args)
+	app := buildCLI()
+	_ = app.Run(os.Args)
 }
 
 // buildCLI is the main entry point for the temporal server
