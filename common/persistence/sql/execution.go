@@ -412,7 +412,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 				newWorkflow.ExecutionState.Status,
 				lastWriteVersion,
 			); err != nil {
-				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: failed to continue as new current execution. Error: %v", err))
+				return err
 			}
 		} else {
 			lastWriteVersion := updateWorkflow.LastWriteVersion
@@ -429,7 +429,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 				updateWorkflow.ExecutionState.Status,
 				lastWriteVersion,
 			); err != nil {
-				return serviceerror.NewUnavailable(fmt.Sprintf("UpdateWorkflowExecution: failed to update current execution. Error: %v", err))
+				return err
 			}
 		}
 
