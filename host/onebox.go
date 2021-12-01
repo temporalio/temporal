@@ -234,9 +234,6 @@ func (c *temporalImpl) Stop() {
 		c.shutdownWG.Add(3)
 	}
 	c.frontendApp.Stop(context.Background())
-	for _, historyService := range c.historyServices {
-		historyService.Stop()
-	}
 	for _, historyApp := range c.historyApps {
 		historyApp.Stop(context.Background())
 	}
@@ -455,7 +452,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	c.frontendClient = NewFrontendClient(connection)
 	c.adminClient = NewAdminClient(connection)
 
-	go feApp.Start(context.Background())
+	feApp.Start(context.Background())
 
 	startWG.Done()
 	<-c.shutdownCh
@@ -560,7 +557,7 @@ func (c *temporalImpl) startHistory(
 		c.historyServices = append(c.historyServices, historyService)
 		c.historyNamespaceRegistries = append(c.historyNamespaceRegistries, namespaceRegistry)
 
-		go app.Start(context.Background())
+		app.Start(context.Background())
 	}
 
 	startWG.Done()
@@ -622,7 +619,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	c.matchingApp = app
 	c.matchingService = matchingService
 	c.matchingNamespaceRegistry = namespaceRegistry
-	go app.Start(context.Background())
+	app.Start(context.Background())
 
 	startWG.Done()
 	<-c.shutdownCh
