@@ -25,8 +25,15 @@
 package build
 
 import (
+	"embed"
 	_ "embed"
 	"encoding/json"
+	"errors"
+	"os"
+)
+
+const (
+	lastBuildInfoFile = "info/last.json"
 )
 
 type (
@@ -39,13 +46,27 @@ type (
 )
 
 var (
-	//go:embed last_build_info.json
-	lastBuildInfoJson []byte
-	LastBuildInfo     Info
+	//go:embed info
+	buildInfoFS   embed.FS
+	LastBuildInfo Info
 )
 
 func init() {
-	err := json.Unmarshal(lastBuildInfoJson, &LastBuildInfo)
+	LastBuildInfo = Info{
+		GitRevision:   "unknown",
+		BuildTimeUnix: 0,
+	}
+
+	lastBuildInfoJson, err := buildInfoFS.ReadFile(lastBuildInfoFile)
+	// If lastBuildInfoFile wasn't created by script during build, use default values.
+	if errors.Is(err, os.ErrNotExist) {
+		return
+	}
+	if err != nil {
+		// Should never happen.
+		panic(err)
+	}
+	err = json.Unmarshal(lastBuildInfoJson, &LastBuildInfo)
 	if err != nil {
 		panic(err)
 	}
