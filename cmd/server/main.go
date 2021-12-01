@@ -29,9 +29,12 @@ import (
 	stdlog "log"
 	"os"
 	"path"
+	"runtime"
 	"strings"
 
 	"github.com/urfave/cli/v2"
+
+	"go.temporal.io/server/build"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -129,6 +132,13 @@ func buildCLI() *cli.App {
 				}
 
 				logger := log.NewZapLogger(log.BuildZapLogger(cfg.Log))
+				logger.Info("Build info",
+					tag.Timestamp(build.InfoData.BuildTime()),
+					tag.NewStringTag("git-revision", build.InfoData.GitRevision),
+					tag.NewStringTag("platform", runtime.GOARCH),
+					tag.NewStringTag("go-version", runtime.Version()),
+					tag.NewStringTag("server-version", headers.ServerVersion),
+				)
 
 				var dynamicConfigClient dynamicconfig.Client
 				if cfg.DynamicConfigClient != nil {
