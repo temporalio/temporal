@@ -57,6 +57,34 @@ const (
 	testCassandraVisibilitySchema = "../../../schema/cassandra/visibility/schema.cql"
 )
 
+func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
+	cfg := NewCassandraConfig()
+	SetupCassandraDatabase(cfg)
+	SetupCassandraSchema(cfg)
+	logger := log.NewNoopLogger()
+	factory := cassandra.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testCassandraClusterName,
+		logger,
+	)
+	shardStore, err := factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+	executionStore, err := factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+		TearDownCassandraKeyspace(cfg)
+	}()
+
+	s := newExecutionMutableStateSuite(t, shardStore, executionStore, logger)
+	suite.Run(t, s)
+}
+
 func TestCassandraHistoryStoreSuite(t *testing.T) {
 	cfg := NewCassandraConfig()
 	SetupCassandraDatabase(cfg)

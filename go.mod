@@ -6,6 +6,7 @@ require (
 	cloud.google.com/go/storage v1.18.2
 	github.com/aws/aws-sdk-go v1.41.10
 	github.com/blang/semver/v4 v4.0.0
+	github.com/brianvoe/gofakeit/v6 v6.10.0
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
 	github.com/dgrijalva/jwt-go/v4 v4.0.0-preview1
 	github.com/dgryski/go-farm v0.0.0-20200201041132-a6ae2369ad13

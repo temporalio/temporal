@@ -60,6 +60,34 @@ const (
 	testMySQLVisibilitySchema = "../../../schema/mysql/v57/visibility/schema.sql"
 )
 
+func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
+	cfg := NewMySQLConfig()
+	SetupMySQLDatabase(cfg)
+	SetupMySQLSchema(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testMySQLClusterName,
+		logger,
+	)
+	shardStore, err := factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	executionStore, err := factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create MySQL DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+		TearDownMySQLDatabase(cfg)
+	}()
+
+	s := newExecutionMutableStateSuite(t, shardStore, executionStore, logger)
+	suite.Run(t, s)
+}
+
 func TestMySQLHistoryStoreSuite(t *testing.T) {
 	cfg := NewMySQLConfig()
 	SetupMySQLDatabase(cfg)
