@@ -51,8 +51,8 @@ import (
 )
 
 var (
-	errUnknownTimerTask  = serviceerror.NewInternal("unknown timer task")
-	timerQueueCallbackID = "timerQueue-%v"
+	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
+	timerComponentName  = "timer-queue"
 )
 
 type (
@@ -142,7 +142,8 @@ func (t *timerQueueProcessorImpl) Stop() {
 	}
 	t.activeTimerProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
-		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(fmt.Sprintf(timerQueueCallbackID, t.shard.GetShardID()))
+		callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
+		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			standbyTimerProcessor.Stop()
@@ -319,42 +320,53 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 }
 
 func (t *timerQueueProcessorImpl) listenToClusterMetadataChange() {
+	callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
 	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
-		fmt.Sprintf(timerQueueCallbackID, t.shard.GetShardID()),
-		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
-			t.standbyTimerProcessorsLock.Lock()
-			defer t.standbyTimerProcessorsLock.Unlock()
-			for clusterName := range oldClusterMetadata {
-				if clusterName == t.currentClusterName {
-					continue
-				}
-				if processor, ok := t.standbyTimerProcessors[clusterName]; ok {
-					processor.Stop()
-					delete(t.standbyTimerProcessors, clusterName)
-				}
-				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-					nDCHistoryResender := xdc.NewNDCHistoryResender(
-						t.shard.GetNamespaceRegistry(),
-						t.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
-						func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-							return t.historyService.ReplicateEventsV2(ctx, request)
-						},
-						t.shard.GetService().GetPayloadSerializer(),
-						t.config.StandbyTaskReReplicationContextTimeout,
-						t.logger,
-					)
-					processor := newTimerQueueStandbyProcessor(
-						t.shard,
-						t.historyService,
-						clusterName,
-						t.taskAllocator,
-						nDCHistoryResender,
-						t.logger,
-					)
-					processor.Start()
-					t.standbyTimerProcessors[clusterName] = processor
-				}
-			}
-		},
+		callbackID,
+		t.handleClusterMetadataUpdate,
 	)
+}
+
+func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
+	oldClusterMetadata map[string]*cluster.ClusterInformation,
+	newClusterMetadata map[string]*cluster.ClusterInformation,
+) {
+	t.standbyTimerProcessorsLock.Lock()
+	defer t.standbyTimerProcessorsLock.Unlock()
+	for clusterName := range oldClusterMetadata {
+		if clusterName == t.currentClusterName {
+			continue
+		}
+		// The metadata triggers a update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
+		// The callback covers three cases:
+		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
+		if processor, ok := t.standbyTimerProcessors[clusterName]; ok {
+			// Case 1 and Case 3
+			processor.Stop()
+			delete(t.standbyTimerProcessors, clusterName)
+		}
+		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+			// Case 2 and Case 3
+			nDCHistoryResender := xdc.NewNDCHistoryResender(
+				t.shard.GetNamespaceRegistry(),
+				t.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+					return t.historyService.ReplicateEventsV2(ctx, request)
+				},
+				t.shard.GetService().GetPayloadSerializer(),
+				t.config.StandbyTaskReReplicationContextTimeout,
+				t.logger,
+			)
+			processor := newTimerQueueStandbyProcessor(
+				t.shard,
+				t.historyService,
+				clusterName,
+				t.taskAllocator,
+				nDCHistoryResender,
+				t.logger,
+			)
+			processor.Start()
+			t.standbyTimerProcessors[clusterName] = processor
+		}
+	}
 }

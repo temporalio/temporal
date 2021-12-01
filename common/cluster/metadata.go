@@ -450,7 +450,7 @@ func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failo
 			))
 		}
 		if len(clusterName) == 0 {
-			panic("Cluster name in all cluster names is empty")
+			panic("Cluster name needs to be defined in Cluster Information")
 		}
 		versionToClusterName[info.InitialFailoverVersion] = clusterName
 

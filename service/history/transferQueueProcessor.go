@@ -51,8 +51,8 @@ import (
 )
 
 var (
-	errUnknownTransferTask  = serviceerror.NewInternal("Unknown transfer task")
-	transferQueueCallbackID = "transferQueue-%v"
+	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
+	transferComponentName  = "transfer-queue"
 )
 
 type (
@@ -143,7 +143,8 @@ func (t *transferQueueProcessorImpl) Stop() {
 	}
 	t.activeTaskProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
-		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(fmt.Sprintf(transferQueueCallbackID, t.shard.GetShardID()))
+		callbackID := getMetadataChangeCallbackID(transferComponentName, t.shard.GetShardID())
+		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			standbyTaskProcessor.Stop()
@@ -319,43 +320,54 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 }
 
 func (t *transferQueueProcessorImpl) listenToClusterMetadataChange() {
+	callbackID := getMetadataChangeCallbackID(transferComponentName, t.shard.GetShardID())
 	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
-		fmt.Sprintf(transferQueueCallbackID, t.shard.GetShardID()),
-		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
-			t.standbyTaskProcessorsLock.Lock()
-			defer t.standbyTaskProcessorsLock.Unlock()
-			for clusterName := range oldClusterMetadata {
-				if clusterName == t.currentClusterName {
-					continue
-				}
-				if processor, ok := t.standbyTaskProcessors[clusterName]; ok {
-					processor.Stop()
-					delete(t.standbyTaskProcessors, clusterName)
-				}
-				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-					nDCHistoryResender := xdc.NewNDCHistoryResender(
-						t.shard.GetNamespaceRegistry(),
-						t.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
-						func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-							return t.historyService.ReplicateEventsV2(ctx, request)
-						},
-						t.shard.GetService().GetPayloadSerializer(),
-						t.config.StandbyTaskReReplicationContextTimeout,
-						t.logger,
-					)
-					processor := newTransferQueueStandbyProcessor(
-						clusterName,
-						t.shard,
-						t.historyService,
-						t.matchingClient,
-						t.taskAllocator,
-						nDCHistoryResender,
-						t.logger,
-					)
-					processor.Start()
-					t.standbyTaskProcessors[clusterName] = processor
-				}
-			}
-		},
+		callbackID,
+		t.handleClusterMetadataUpdate,
 	)
+}
+
+func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
+	oldClusterMetadata map[string]*cluster.ClusterInformation,
+	newClusterMetadata map[string]*cluster.ClusterInformation,
+) {
+	t.standbyTaskProcessorsLock.Lock()
+	defer t.standbyTaskProcessorsLock.Unlock()
+	for clusterName := range oldClusterMetadata {
+		if clusterName == t.currentClusterName {
+			continue
+		}
+		// The metadata triggers a update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
+		// The callback covers three cases:
+		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
+		if processor, ok := t.standbyTaskProcessors[clusterName]; ok {
+			// Case 1 and Case 3
+			processor.Stop()
+			delete(t.standbyTaskProcessors, clusterName)
+		}
+		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+			// Case 2 and Case 3
+			nDCHistoryResender := xdc.NewNDCHistoryResender(
+				t.shard.GetNamespaceRegistry(),
+				t.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+					return t.historyService.ReplicateEventsV2(ctx, request)
+				},
+				t.shard.GetService().GetPayloadSerializer(),
+				t.config.StandbyTaskReReplicationContextTimeout,
+				t.logger,
+			)
+			processor := newTransferQueueStandbyProcessor(
+				clusterName,
+				t.shard,
+				t.historyService,
+				t.matchingClient,
+				t.taskAllocator,
+				nDCHistoryResender,
+				t.logger,
+			)
+			processor.Start()
+			t.standbyTaskProcessors[clusterName] = processor
+		}
+	}
 }

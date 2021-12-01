@@ -82,8 +82,6 @@ import (
 const (
 	conditionalRetryCount                     = 5
 	activityCancellationMsgActivityNotStarted = "ACTIVITY_ID_NOT_STARTED"
-
-	historyServiceCallbackID = common.HistoryServiceName + "-%v"
 )
 
 type (
@@ -269,8 +267,8 @@ func (e *historyEngineImpl) Stop() {
 	if e.visibilityProcessor != nil {
 		e.visibilityProcessor.Stop()
 	}
-
-	e.clusterMetadata.UnRegisterMetadataChangeCallback(fmt.Sprintf(historyServiceCallbackID, e.shard.GetShardID()))
+	callbackID := getMetadataChangeCallbackID(common.HistoryServiceName, e.shard.GetShardID())
+	e.clusterMetadata.UnRegisterMetadataChangeCallback(callbackID)
 	e.replicationTaskProcessorsLock.Lock()
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Stop()
@@ -362,68 +360,80 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 }
 
 func (e *historyEngineImpl) listenToClusterMetadataChange() {
+	callbackID := getMetadataChangeCallbackID(common.HistoryServiceName, e.shard.GetShardID())
 	e.clusterMetadata.RegisterMetadataChangeCallback(
-		fmt.Sprintf(historyServiceCallbackID, e.shard.GetShardID()),
-		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
-			e.replicationTaskProcessorsLock.Lock()
-			defer e.replicationTaskProcessorsLock.Unlock()
-
-			for clusterName := range newClusterMetadata {
-				if clusterName == e.currentClusterName {
-					continue
-				}
-				if processor, ok := e.replicationTaskProcessors[clusterName]; ok {
-					processor.Stop()
-					delete(e.replicationTaskProcessors, clusterName)
-				}
-				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-					fetcher := e.replicationTaskFetchers.GetOrCreateFetcher(clusterName)
-					adminClient := e.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName)
-					adminRetryableClient := admin.NewRetryableClient(
-						adminClient,
-						common.CreateReplicationServiceBusyRetryPolicy(),
-						common.IsResourceExhausted,
-					)
-					// Intentionally use the raw client to create its own retry policy
-					historyClient := e.shard.GetService().GetClientBean().GetHistoryClient()
-					historyRetryableClient := history.NewRetryableClient(
-						historyClient,
-						common.CreateReplicationServiceBusyRetryPolicy(),
-						common.IsResourceExhausted,
-					)
-					nDCHistoryResender := xdc.NewNDCHistoryResender(
-						e.shard.GetNamespaceRegistry(),
-						adminRetryableClient,
-						func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-							_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
-							return err
-						},
-						e.shard.GetService().GetPayloadSerializer(),
-						e.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-						e.shard.GetLogger(),
-					)
-					replicationTaskExecutor := newReplicationTaskExecutor(
-						e.shard,
-						e.shard.GetNamespaceRegistry(),
-						nDCHistoryResender,
-						e,
-						e.shard.GetMetricsClient(),
-						e.shard.GetLogger(),
-					)
-					replicationTaskProcessor := NewReplicationTaskProcessor(
-						e.shard,
-						e,
-						e.config,
-						e.shard.GetMetricsClient(),
-						fetcher,
-						replicationTaskExecutor,
-					)
-					replicationTaskProcessor.Start()
-					e.replicationTaskProcessors[clusterName] = replicationTaskProcessor
-				}
-			}
-		},
+		callbackID,
+		e.handleClusterMetadataUpdate,
 	)
+}
+
+func (e *historyEngineImpl) handleClusterMetadataUpdate(
+	oldClusterMetadata map[string]*cluster.ClusterInformation,
+	newClusterMetadata map[string]*cluster.ClusterInformation,
+) {
+	e.replicationTaskProcessorsLock.Lock()
+	defer e.replicationTaskProcessorsLock.Unlock()
+
+	for clusterName := range oldClusterMetadata {
+		if clusterName == e.currentClusterName {
+			continue
+		}
+		// The metadata triggers a update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
+		// The callback covers three cases:
+		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
+
+		if processor, ok := e.replicationTaskProcessors[clusterName]; ok {
+			// Case 1 and Case 3
+			processor.Stop()
+			delete(e.replicationTaskProcessors, clusterName)
+		}
+		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+			// Case 2 and Case 3
+			fetcher := e.replicationTaskFetchers.GetOrCreateFetcher(clusterName)
+			adminClient := e.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName)
+			adminRetryableClient := admin.NewRetryableClient(
+				adminClient,
+				common.CreateReplicationServiceBusyRetryPolicy(),
+				common.IsResourceExhausted,
+			)
+			// Intentionally use the raw client to create its own retry policy
+			historyClient := e.shard.GetService().GetClientBean().GetHistoryClient()
+			historyRetryableClient := history.NewRetryableClient(
+				historyClient,
+				common.CreateReplicationServiceBusyRetryPolicy(),
+				common.IsResourceExhausted,
+			)
+			nDCHistoryResender := xdc.NewNDCHistoryResender(
+				e.shard.GetNamespaceRegistry(),
+				adminRetryableClient,
+				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+					_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
+					return err
+				},
+				e.shard.GetService().GetPayloadSerializer(),
+				e.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
+				e.shard.GetLogger(),
+			)
+			replicationTaskExecutor := newReplicationTaskExecutor(
+				e.shard,
+				e.shard.GetNamespaceRegistry(),
+				nDCHistoryResender,
+				e,
+				e.shard.GetMetricsClient(),
+				e.shard.GetLogger(),
+			)
+			replicationTaskProcessor := NewReplicationTaskProcessor(
+				e.shard,
+				e,
+				e.config,
+				e.shard.GetMetricsClient(),
+				fetcher,
+				replicationTaskExecutor,
+			)
+			replicationTaskProcessor.Start()
+			e.replicationTaskProcessors[clusterName] = replicationTaskProcessor
+		}
+	}
 }
 
 func createMutableState(
@@ -3247,20 +3257,20 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	return &historyservice.GenerateLastHistoryReplicationTasksResponse{}, nil
 }
 
-func (h *historyEngineImpl) GetReplicationStatus(
+func (e *historyEngineImpl) GetReplicationStatus(
 	ctx context.Context,
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.ShardReplicationStatus, retError error) {
 
 	resp := &historyservice.ShardReplicationStatus{
-		ShardId:        h.shard.GetShardID(),
-		ShardLocalTime: timestamp.TimePtr(h.shard.GetTimeSource().Now()),
+		ShardId:        e.shard.GetShardID(),
+		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),
 	}
-	if h.replicatorProcessor.maxTaskID != nil {
-		resp.MaxReplicationTaskId = *h.replicatorProcessor.maxTaskID
+	if e.replicatorProcessor.maxTaskID != nil {
+		resp.MaxReplicationTaskId = *e.replicatorProcessor.maxTaskID
 	}
 
-	remoteClusters, err := h.shard.GetRemoteClusterAckInfo(request.RemoteClusters)
+	remoteClusters, err := e.shard.GetRemoteClusterAckInfo(request.RemoteClusters)
 	if err != nil {
 		return nil, err
 	}
@@ -3343,4 +3353,8 @@ func (e *historyEngineImpl) loadWorkflow(
 
 func (e *historyEngineImpl) metricsScope(ctx context.Context) metrics.Scope {
 	return interceptor.MetricsScope(ctx, e.logger)
+}
+
+func getMetadataChangeCallbackID(componentName string, shardId int32) string {
+	return fmt.Sprintf("%s-%d", componentName, shardId)
 }
