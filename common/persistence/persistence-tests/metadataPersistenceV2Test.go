@@ -832,7 +832,16 @@ func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	err3 := m.DeleteNamespace("", name)
 	m.NoError(err3)
 
-	resp4, err4 := m.GetNamespace("", name)
+	// May need to loop here to avoid potential inconsistent read-after-write in cassandra
+	var err4 error
+	var resp4 *p.GetNamespaceResponse
+	for i := 0; i < 3; i++ {
+		resp4, err4 = m.GetNamespace("", name)
+		if err4 != nil {
+			break
+		}
+		time.Sleep(time.Second * time.Duration(i))
+	}
 	m.Error(err4)
 	m.IsType(&serviceerror.NotFound{}, err4)
 	m.Nil(resp4)

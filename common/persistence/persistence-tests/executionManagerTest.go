@@ -1846,7 +1846,16 @@ func (s *ExecutionManagerSuite) TestCancelTransferTaskTasks() {
 	err = s.CompleteTransferTask(taskD[0].GetTaskID())
 	s.NoError(err)
 
-	deleteCheck, err := s.GetTransferTasks(1, false)
+	// Lookup is time-sensitive, hence retry
+	var deleteCheck []tasks.Task
+	for i := 0; i < 3; i++ {
+		deleteCheck, err = s.GetTransferTasks(1, false)
+		if len(deleteCheck) == 0 {
+			break
+		}
+		time.Sleep(time.Second * time.Duration(i))
+	}
+	s.NoError(err)
 	s.Equal(0, len(deleteCheck), "Expected no workflow task.")
 
 	state1, err := s.GetWorkflowMutableState(namespaceID, workflowExecution)
@@ -2371,9 +2380,17 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), taskSlice, nil, nil, nil, nil)
 	s.NoError(err2)
 
-	timerTasks, err1 := s.GetTimerTasks(1, true) // use page size one to force pagination
-	s.NoError(err1)
-	s.NotNil(timerTasks, "expected valid list of tasks.")
+	// try the following a couple of times to give cassandra time to catch up
+	var timerTasks []tasks.Task
+	for i := 0; i < 3; i++ {
+		timerTasks, err1 = s.GetTimerTasks(1, true) // use page size one to force pagination
+		s.NoError(err1)
+		s.NotNil(timerTasks, "expected valid list of tasks.")
+		if len(taskSlice)+len(initialTasks) == len(timerTasks) {
+			break
+		}
+		time.Sleep(time.Second * time.Duration(i))
+	}
 	s.Equal(len(taskSlice)+len(initialTasks), len(timerTasks))
 	s.IsType(&tasks.WorkflowTaskTimeoutTask{}, timerTasks[0])
 	s.IsType(&tasks.WorkflowTimeoutTask{}, timerTasks[1])
@@ -2431,7 +2448,16 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), taskSlice, nil, nil, nil, nil)
 	s.NoError(err2)
 
-	timerTasks, err1 := s.GetTimerTasks(1, true) // use page size one to force pagination
+	var timerTasks []tasks.Task
+	// Try a couple of times to avoid flakiness
+	for i := 0; i < 3; i++ {
+		timerTasks, err1 = s.GetTimerTasks(1, true) // use page size one to force pagination
+		if len(taskSlice) == len(timerTasks) {
+			break
+		}
+		time.Sleep(time.Second * time.Duration(i))
+	}
+
 	s.NoError(err1)
 	s.NotNil(timerTasks, "expected valid list of tasks.")
 	s.Equal(len(taskSlice), len(timerTasks))
