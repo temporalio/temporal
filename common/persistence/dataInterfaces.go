@@ -194,7 +194,7 @@ type (
 	GetOrCreateShardRequest struct {
 		ShardID          int32
 		InitialShardInfo *persistencespb.ShardInfo // optional, zero value will be used if missing
-		LifetimeContext  context.Context           // cancelled when shard is unloaded
+		LifecycleContext context.Context           // cancelled when shard is unloaded
 	}
 
 	// GetOrCreateShardResponse is the response to GetOrCreateShard

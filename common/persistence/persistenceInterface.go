@@ -214,9 +214,9 @@ type (
 	// GetOrCreateShard should: if shard exists, return it. If not, call CreateShardInfo and
 	// create the shard with the returned value.
 	InternalGetOrCreateShardRequest struct {
-		ShardID         int32
-		CreateShardInfo func() (rangeID int64, shardInfo *commonpb.DataBlob, err error)
-		LifetimeContext context.Context // cancelled when shard is unloaded
+		ShardID          int32
+		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error)
+		LifecycleContext context.Context // cancelled when shard is unloaded
 	}
 
 	// InternalGetOrCreateShardResponse is the response to GetShard

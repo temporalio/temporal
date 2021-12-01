@@ -112,8 +112,8 @@ type (
 		hostInfoProvider        resource.HostInfoProvider
 
 		// Context that lives for the lifetime of the shard context
-		lifetimeCtx    context.Context
-		lifetimeCancel context.CancelFunc
+		lifecycleCtx    context.Context
+		lifecycleCancel context.CancelFunc
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                    sync.RWMutex
@@ -1261,8 +1261,8 @@ func (s *ContextImpl) stop() {
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
 	}
 
-	// Cancel lifetime context after engine is stopped
-	s.lifetimeCancel()
+	// Cancel lifecycle context after engine is stopped
+	s.lifecycleCancel()
 }
 
 func (s *ContextImpl) isValid() bool {
@@ -1443,8 +1443,8 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
 	resp, err := s.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
-		ShardID:         s.shardID,
-		LifetimeContext: s.lifetimeCtx,
+		ShardID:          s.shardID,
+		LifecycleContext: s.lifecycleCtx,
 	})
 	if err != nil {
 		s.contextTaggedLogger.Error("Failed to load shard", tag.Error(err))
@@ -1640,7 +1640,7 @@ func newContext(
 
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
 
-	lifetimeCtx, lifetimeCancel := context.WithCancel(context.Background())
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 
 	shardContext := &ContextImpl{
 		state:                   contextStateInitialized,
@@ -1664,8 +1664,8 @@ func newContext(
 		archivalMetadata:        archivalMetadata,
 		hostInfoProvider:        hostInfoProvider,
 		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
-		lifetimeCtx:             lifetimeCtx,
-		lifetimeCancel:          lifetimeCancel,
+		lifecycleCtx:            lifecycleCtx,
+		lifecycleCancel:         lifecycleCancel,
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),

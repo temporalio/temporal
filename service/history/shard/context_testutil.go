@@ -67,7 +67,7 @@ func NewTestContext(
 ) *ContextTest {
 	resource := resource.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
-	lifetimeCtx, lifetimeCancel := context.WithCancel(context.Background())
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		executionManager:    resource.ExecutionMgr,
@@ -76,8 +76,8 @@ func NewTestContext(
 		config:              config,
 		contextTaggedLogger: resource.GetLogger(),
 		throttledLogger:     resource.GetThrottledLogger(),
-		lifetimeCtx:         lifetimeCtx,
-		lifetimeCancel:      lifetimeCancel,
+		lifecycleCtx:        lifecycleCtx,
+		lifecycleCancel:     lifecycleCancel,
 
 		state:                     contextStateAcquired,
 		shardInfo:                 shardInfo,
