@@ -542,7 +542,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 				status,
 				lastWriteVersion,
 			); err != nil {
-				return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
+				return err
 			}
 		} else {
 			// reset workflow is current
@@ -560,7 +560,7 @@ func (m *sqlExecutionStore) conflictResolveWorkflowExecutionTx(
 				status,
 				lastWriteVersion,
 			); err != nil {
-				return serviceerror.NewUnavailable(fmt.Sprintf("ConflictResolveWorkflowExecution. Failed to comare and swap the current record. Error: %v", err))
+				return err
 			}
 		}
 
