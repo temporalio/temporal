@@ -29,10 +29,9 @@ package frontend
 import (
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/resource"
-
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+
+	"go.temporal.io/server/common"
 )
 
 type (
@@ -47,7 +46,6 @@ type (
 		// This health status will be used within the rpc health check handler
 		UpdateHealthStatus(status HealthStatus)
 
-		GetResource() resource.Resource
 		GetConfig() *Config
 	}
 )

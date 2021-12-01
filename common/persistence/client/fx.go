@@ -25,8 +25,6 @@
 package client
 
 import (
-	"context"
-
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common/cluster"
@@ -77,27 +75,4 @@ func NewFactoryImplProvider(
 		string(clusterName),
 		metricsClient,
 		logger)
-}
-
-var BeanModule = fx.Options(
-	fx.Provide(PersistenceBeanProvider),
-	fx.Invoke(BeanLifetimeHooks),
-)
-
-func PersistenceBeanProvider(factory Factory) (Bean, error) {
-	return NewBeanFromFactory(factory)
-}
-
-func BeanLifetimeHooks(
-	lc fx.Lifecycle,
-	bean Bean,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStop: func(ctx context.Context) error {
-				bean.Close()
-				return nil
-			},
-		},
-	)
 }

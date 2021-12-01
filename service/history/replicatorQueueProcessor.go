@@ -83,7 +83,7 @@ func newReplicatorQueueProcessor(
 	logger log.Logger,
 ) *replicatorQueueProcessorImpl {
 
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
@@ -125,6 +125,21 @@ func (p *replicatorQueueProcessorImpl) NotifyNewTasks(
 	if p.maxTaskID == nil || *p.maxTaskID < maxTaskID {
 		p.maxTaskID = &maxTaskID
 	}
+}
+
+func (p *replicatorQueueProcessorImpl) GetMaxReplicationTaskID() int64 {
+	p.Lock()
+	defer p.Unlock()
+
+	if p.maxTaskID == nil {
+		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
+		// use TransferMaxReadLevel which is the max task id of any transfer/visibility/replication queues.
+		// TransferMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
+		// a few seconds) ack to the latest TransferMaxReadLevel if there is no replication tasks at all.
+		return p.shard.GetTransferMaxReadLevel()
+	}
+
+	return *p.maxTaskID
 }
 
 func (p *replicatorQueueProcessorImpl) paginateTasks(

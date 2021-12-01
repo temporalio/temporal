@@ -289,7 +289,7 @@ func (h *namespaceReplicationTaskExecutorImpl) convertClusterReplicationConfigFr
 
 func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceStatus(input enumspb.NamespaceState) error {
 	switch input {
-	case enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED:
+	case enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER:
 		return nil
 	default:
 		return ErrInvalidNamespaceState

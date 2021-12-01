@@ -62,6 +62,7 @@ func newTransferQueueActiveProcessor(
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
+	registry namespace.Registry,
 ) *transferQueueActiveProcessorImpl {
 
 	config := shard.GetConfig()
@@ -80,7 +81,7 @@ func newTransferQueueActiveProcessor(
 		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	transferTaskFilter := func(task tasks.Task) (bool, error) {
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
@@ -108,6 +109,8 @@ func newTransferQueueActiveProcessor(
 			logger,
 			historyEngine.metricsClient,
 			config,
+			matchingClient,
+			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
@@ -154,6 +157,7 @@ func newTransferQueueFailoverProcessor(
 	maxLevel int64,
 	taskAllocator taskAllocator,
 	logger log.Logger,
+	registry namespace.Registry,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
 	config := shard.GetConfig()
@@ -172,7 +176,7 @@ func newTransferQueueFailoverProcessor(
 		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.TransferActiveQueueProcessorScope,
 	}
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	failoverUUID := uuid.New()
 	logger = log.With(
 		logger,
@@ -216,6 +220,8 @@ func newTransferQueueFailoverProcessor(
 			logger,
 			historyEngine.metricsClient,
 			config,
+			matchingClient,
+			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,

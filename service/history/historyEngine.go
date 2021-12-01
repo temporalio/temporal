@@ -43,6 +43,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/tasks"
 
@@ -126,7 +128,7 @@ type (
 func NewEngineWithShardContext(
 	shard shard.Context,
 	visibilityMgr manager.VisibilityManager,
-	matching matchingservice.MatchingServiceClient,
+	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	publicClient sdkclient.Client,
 	eventNotifier events.Notifier,
@@ -134,8 +136,11 @@ func NewEngineWithShardContext(
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
+	clientBean client.Bean,
+	archiverProvider provider.ArchiverProvider,
+	registry namespace.Registry,
 ) *historyEngineImpl {
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
@@ -160,19 +165,23 @@ func NewEngineWithShardContext(
 			publicClient,
 			shard.GetConfig().NumArchiveSystemWorkflows,
 			shard.GetConfig().ArchiveRequestRPS,
-			shard.GetService().GetArchiverProvider(),
+			archiverProvider,
 		),
 		publicClient:              publicClient,
-		matchingClient:            matching,
+		matchingClient:            matchingClient,
 		rawMatchingClient:         rawMatchingClient,
 		replicationTaskProcessors: make(map[string]ReplicationTaskProcessor),
 		replicationTaskFetchers:   replicationTaskFetchers,
 	}
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
-	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
-	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
+	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl,
+		matchingClient, historyClient, logger, clientBean, registry)
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl,
+		matchingClient, logger, clientBean)
+	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr,
+		matchingClient, historyClient, logger)
+	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl,
+		matchingClient, historyClient, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -201,18 +210,17 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
-		shard.GetService().GetSearchAttributesProvider(),
-		shard.GetService().GetSearchAttributesMapper(),
+		shard.GetSearchAttributesProvider(),
+		shard.GetSearchAttributesMapper(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
 	)
 
-	historyEngImpl.searchAttributesMapper = shard.GetService().GetSearchAttributesMapper()
+	historyEngImpl.searchAttributesMapper = shard.GetSearchAttributesMapper()
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
-	replicationMessageHandler := newLazyReplicationDLQHandler(shard)
-	historyEngImpl.replicationDLQHandler = replicationMessageHandler
+	historyEngImpl.replicationDLQHandler = newLazyReplicationDLQHandler(shard)
 
 	return historyEngImpl
 }
@@ -314,7 +322,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 	// first set the failover callback
 	e.shard.GetNamespaceRegistry().RegisterNamespaceChangeCallback(
 		e.shard.GetShardID(),
-		e.shard.GetNamespaceNotificationVersion(),
+		0, /* always want callback so UpdateHandoverNamespaces() can be called after shard reload */
 		func() {
 			e.txProcessor.LockTaskProcessing()
 			e.timerProcessor.LockTaskProcessing()
@@ -329,9 +337,19 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				return
 			}
 
-			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
-			failoverNamespaceIDs := map[string]struct{}{}
+			if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
+				e.shard.UpdateHandoverNamespaces(nextNamespaces, e.replicatorProcessor.GetMaxReplicationTaskID())
+			}
 
+			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
+			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
+			if newNotificationVersion <= shardNotificationVersion {
+				// skip if this is known version. this could happen once after shard reload because we use
+				// 0 as initialNotificationVersion when RegisterNamespaceChangeCallback.
+				return
+			}
+
+			failoverNamespaceIDs := map[string]struct{}{}
 			for _, nextNamespace := range nextNamespaces {
 				failoverPredicate(shardNotificationVersion, nextNamespace, func() {
 					failoverNamespaceIDs[nextNamespace.ID().String()] = struct{}{}
@@ -354,7 +372,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			}
 
 			// nolint:errcheck
-			e.shard.UpdateNamespaceNotificationVersion(nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1)
+			e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
 		},
 	)
 }
@@ -390,14 +408,14 @@ func (e *historyEngineImpl) handleClusterMetadataUpdate(
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 			// Case 2 and Case 3
 			fetcher := e.replicationTaskFetchers.GetOrCreateFetcher(clusterName)
-			adminClient := e.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName)
+			adminClient := e.shard.GetRemoteAdminClient(clusterName)
 			adminRetryableClient := admin.NewRetryableClient(
 				adminClient,
 				common.CreateReplicationServiceBusyRetryPolicy(),
 				common.IsResourceExhausted,
 			)
 			// Intentionally use the raw client to create its own retry policy
-			historyClient := e.shard.GetService().GetClientBean().GetHistoryClient()
+			historyClient := e.shard.GetHistoryClient()
 			historyRetryableClient := history.NewRetryableClient(
 				historyClient,
 				common.CreateReplicationServiceBusyRetryPolicy(),
@@ -410,7 +428,7 @@ func (e *historyEngineImpl) handleClusterMetadataUpdate(
 					_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
 					return err
 				},
-				e.shard.GetService().GetPayloadSerializer(),
+				e.shard.GetPayloadSerializer(),
 				e.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 				e.shard.GetLogger(),
 			)
@@ -517,7 +535,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
-	clusterMetadata := e.shard.GetService().GetClusterMetadata()
+	clusterMetadata := e.shard.GetClusterMetadata()
 	mutableState, err := createMutableState(e.shard, namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
@@ -2018,7 +2036,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		RunId:      uuid.New(),
 	}
 
-	clusterMetadata := e.shard.GetService().GetClusterMetadata()
+	clusterMetadata := e.shard.GetClusterMetadata()
 	mutableState, err := createMutableState(e.shard, namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
@@ -2160,7 +2178,6 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	ctx context.Context,
 	terminateRequest *historyservice.TerminateWorkflowExecutionRequest,
 ) error {
-
 	namespaceEntry, err := e.getActiveNamespaceEntry(namespace.ID(terminateRequest.GetNamespaceId()))
 	if err != nil {
 		return err
@@ -2197,6 +2214,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 			}
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()
+
 			return updateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 				mutableState,
 				eventBatchFirstEventID,

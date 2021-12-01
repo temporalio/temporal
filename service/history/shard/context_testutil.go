@@ -29,6 +29,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
@@ -39,11 +40,24 @@ import (
 type ContextTest struct {
 	*ContextImpl
 
-	Resource        *resource.Test
+	Resource *resource.Test
+
 	MockEventsCache *events.MockCache
 }
 
 var _ Context = (*ContextTest)(nil)
+
+func NewTestContextWithTimeSource(
+	ctrl *gomock.Controller,
+	shardInfo *persistence.ShardInfoWithFailover,
+	config *configs.Config,
+	timeSource clock.TimeSource,
+) *ContextTest {
+	result := NewTestContext(ctrl, shardInfo, config)
+	result.timeSource = timeSource
+	result.Resource.TimeSource = timeSource
+	return result
+}
 
 func NewTestContext(
 	ctrl *gomock.Controller,
@@ -53,14 +67,13 @@ func NewTestContext(
 	resource := resource.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
 	shard := &ContextImpl{
-		Resource:         resource,
-		shardID:          shardInfo.GetShardId(),
-		executionManager: resource.ExecutionMgr,
-		metricsClient:    resource.MetricsClient,
-		eventsCache:      eventsCache,
-		config:           config,
-		logger:           resource.GetLogger(),
-		throttledLogger:  resource.GetThrottledLogger(),
+		shardID:             shardInfo.GetShardId(),
+		executionManager:    resource.ExecutionMgr,
+		metricsClient:       resource.MetricsClient,
+		eventsCache:         eventsCache,
+		config:              config,
+		contextTaggedLogger: resource.GetLogger(),
+		throttledLogger:     resource.GetThrottledLogger(),
 
 		state:                     contextStateAcquired,
 		shardInfo:                 shardInfo,
@@ -69,10 +82,20 @@ func NewTestContext(
 		maxTransferSequenceNumber: 100000,
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		remoteClusterInfos:        make(map[string]*remoteClusterInfo),
+		handoverNamespaces:        make(map[string]*namespaceHandOverInfo),
+
+		clusterMetadata:         resource.ClusterMetadata,
+		timeSource:              resource.TimeSource,
+		namespaceRegistry:       resource.GetNamespaceRegistry(),
+		persistenceShardManager: resource.GetShardManager(),
+		clientBean:              resource.GetClientBean(),
+		saProvider:              resource.GetSearchAttributesProvider(),
+		historyClient:           resource.GetHistoryClient(),
+		archivalMetadata:        resource.GetArchivalMetadata(),
 	}
 	return &ContextTest{
-		ContextImpl:     shard,
 		Resource:        resource,
+		ContextImpl:     shard,
 		MockEventsCache: eventsCache,
 	}
 }

@@ -383,7 +383,7 @@ func (r *workflowResetterImpl) persistToDB(
 
 	return resetWorkflow.getContext().CreateWorkflowExecution(
 		now,
-		persistence.CreateWorkflowModeContinueAsNew,
+		persistence.CreateWorkflowModeWorkflowIDReuse,
 		currentRunID,
 		currentLastWriteVersion,
 		resetWorkflow.getMutableState(),

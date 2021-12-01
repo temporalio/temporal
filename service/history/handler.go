@@ -34,23 +34,34 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	sdkclient "go.temporal.io/sdk/client"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
@@ -63,17 +74,62 @@ type (
 
 	// Handler - gRPC handler interface for historyservice
 	Handler struct {
-		resource.Resource
 		status int32
 
-		controller              *shard.ControllerImpl
-		tokenSerializer         common.TaskTokenSerializer
-		startWG                 sync.WaitGroup
-		config                  *configs.Config
-		eventNotifier           events.Notifier
-		replicationTaskFetchers ReplicationTaskFetchers
-		visibilityMrg           manager.VisibilityManager
-		newCacheFn              workflow.NewCacheFn
+		controller                  *shard.ControllerImpl
+		tokenSerializer             common.TaskTokenSerializer
+		startWG                     sync.WaitGroup
+		config                      *configs.Config
+		eventNotifier               events.Notifier
+		replicationTaskFetchers     ReplicationTaskFetchers
+		visibilityMrg               manager.VisibilityManager
+		newCacheFn                  workflow.NewCacheFn
+		logger                      log.Logger
+		throttledLogger             log.Logger
+		persistenceExecutionManager persistence.ExecutionManager
+		persistenceShardManager     persistence.ShardManager
+		clientBean                  client.Bean
+		historyClient               historyservice.HistoryServiceClient
+		matchingRawClient           matchingservice.MatchingServiceClient
+		matchingClient              matchingservice.MatchingServiceClient
+		sdkClient                   sdkclient.Client
+		historyServiceResolver      membership.ServiceResolver
+		archiverProvider            provider.ArchiverProvider
+		metricsClient               metrics.Client
+		payloadSerializer           serialization.Serializer
+		timeSource                  clock.TimeSource
+		namespaceRegistry           namespace.Registry
+		saProvider                  searchattribute.Provider
+		saMapper                    searchattribute.Mapper
+		clusterMetadata             cluster.Metadata
+		archivalMetadata            archiver.ArchivalMetadata
+		hostInfoProvider            resource.HostInfoProvider
+	}
+
+	NewHandlerArgs struct {
+		Config                      *configs.Config
+		VisibilityMrg               manager.VisibilityManager
+		NewCacheFn                  workflow.NewCacheFn
+		Logger                      log.Logger
+		ThrottledLogger             log.Logger
+		PersistenceExecutionManager persistence.ExecutionManager
+		PersistenceShardManager     persistence.ShardManager
+		ClientBean                  client.Bean
+		HistoryClient               historyservice.HistoryServiceClient
+		MatchingRawClient           matchingservice.MatchingServiceClient
+		MatchingClient              matchingservice.MatchingServiceClient
+		SdkClient                   sdkclient.Client
+		HistoryServiceResolver      membership.ServiceResolver
+		MetricsClient               metrics.Client
+		PayloadSerializer           serialization.Serializer
+		TimeSource                  clock.TimeSource
+		NamespaceRegistry           namespace.Registry
+		SaProvider                  searchattribute.Provider
+		SaMapper                    searchattribute.Mapper
+		ClusterMetadata             cluster.Metadata
+		ArchivalMetadata            archiver.ArchivalMetadata
+		HostInfoProvider            resource.HostInfoProvider
+		ArchiverProvider            provider.ArchiverProvider
 	}
 )
 
@@ -101,19 +157,33 @@ var (
 )
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(
-	resource resource.Resource,
-	config *configs.Config,
-	visibilityMrg manager.VisibilityManager,
-	newCacheFn workflow.NewCacheFn,
-) *Handler {
+func NewHandler(args NewHandlerArgs) *Handler {
 	handler := &Handler{
-		Resource:        resource,
-		status:          common.DaemonStatusInitialized,
-		config:          config,
-		tokenSerializer: common.NewProtoTaskTokenSerializer(),
-		visibilityMrg:   visibilityMrg,
-		newCacheFn:      newCacheFn,
+		status:                      common.DaemonStatusInitialized,
+		config:                      args.Config,
+		tokenSerializer:             common.NewProtoTaskTokenSerializer(),
+		visibilityMrg:               args.VisibilityMrg,
+		newCacheFn:                  args.NewCacheFn,
+		logger:                      args.Logger,
+		throttledLogger:             args.ThrottledLogger,
+		persistenceExecutionManager: args.PersistenceExecutionManager,
+		persistenceShardManager:     args.PersistenceShardManager,
+		clientBean:                  args.ClientBean,
+		historyClient:               args.HistoryClient,
+		matchingRawClient:           args.MatchingRawClient,
+		matchingClient:              args.MatchingClient,
+		sdkClient:                   args.SdkClient,
+		historyServiceResolver:      args.HistoryServiceResolver,
+		metricsClient:               args.MetricsClient,
+		payloadSerializer:           args.PayloadSerializer,
+		timeSource:                  args.TimeSource,
+		namespaceRegistry:           args.NamespaceRegistry,
+		saProvider:                  args.SaProvider,
+		saMapper:                    args.SaMapper,
+		clusterMetadata:             args.ClusterMetadata,
+		archivalMetadata:            args.ArchivalMetadata,
+		hostInfoProvider:            args.HostInfoProvider,
+		archiverProvider:            args.ArchiverProvider,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -132,20 +202,35 @@ func (h *Handler) Start() {
 	}
 
 	h.replicationTaskFetchers = NewReplicationTaskFetchers(
-		h.GetLogger(),
+		h.logger,
 		h.config,
-		h.GetClusterMetadata(),
-		h.GetClientBean(),
+		h.clusterMetadata,
+		h.clientBean,
 	)
 
 	h.replicationTaskFetchers.Start()
 
 	h.controller = shard.NewController(
-		h.Resource,
 		h,
 		h.config,
+		h.logger,
+		h.throttledLogger,
+		h.persistenceExecutionManager,
+		h.persistenceShardManager,
+		h.clientBean,
+		h.historyClient,
+		h.historyServiceResolver,
+		h.metricsClient,
+		h.payloadSerializer,
+		h.timeSource,
+		h.namespaceRegistry,
+		h.saProvider,
+		h.saMapper,
+		h.clusterMetadata,
+		h.archivalMetadata,
+		h.hostInfoProvider,
 	)
-	h.eventNotifier = events.NewNotifier(h.GetTimeSource(), h.GetMetricsClient(), h.config.GetShardID)
+	h.eventNotifier = events.NewNotifier(h.timeSource, h.metricsClient, h.config.GetShardID)
 	// events notifier must starts before controller
 	h.eventNotifier.Start()
 	h.controller.Start()
@@ -179,20 +264,23 @@ func (h *Handler) CreateEngine(
 	return NewEngineWithShardContext(
 		shardContext,
 		h.visibilityMrg,
-		h.GetMatchingClient(),
-		h.GetHistoryClient(),
-		h.GetSDKClient(),
+		h.matchingClient,
+		h.historyClient,
+		h.sdkClient,
 		h.eventNotifier,
 		h.config,
 		h.replicationTaskFetchers,
-		h.GetMatchingRawClient(),
+		h.matchingRawClient,
 		h.newCacheFn,
+		h.clientBean,
+		h.archiverProvider,
+		h.namespaceRegistry,
 	)
 }
 
 // Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
 func (h *Handler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	h.GetLogger().Debug("History service health check endpoint (gRPC) reached.")
+	h.logger.Debug("History service health check endpoint (gRPC) reached.")
 
 	h.startWG.Wait()
 
@@ -213,7 +301,7 @@ func (h *Handler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServe
 
 // RecordActivityTaskHeartbeat - Record Activity Task Heart beat.
 func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *historyservice.RecordActivityTaskHeartbeatRequest) (_ *historyservice.RecordActivityTaskHeartbeatResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -248,7 +336,7 @@ func (h *Handler) RecordActivityTaskHeartbeat(ctx context.Context, request *hist
 
 // RecordActivityTaskStarted - Record Activity Task started.
 func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *historyservice.RecordActivityTaskStartedRequest) (_ *historyservice.RecordActivityTaskStartedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -273,7 +361,7 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 
 // RecordWorkflowTaskStarted - Record Workflow Task started.
 func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *historyservice.RecordWorkflowTaskStartedRequest) (_ *historyservice.RecordWorkflowTaskStartedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -289,7 +377,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 
 	engine, err1 := h.controller.GetEngine(ctx, namespaceID, workflowID)
 	if err1 != nil {
-		h.GetLogger().Error("RecordWorkflowTaskStarted failed.",
+		h.logger.Error("RecordWorkflowTaskStarted failed.",
 			tag.Error(err1),
 			tag.WorkflowID(request.WorkflowExecution.GetWorkflowId()),
 			tag.WorkflowRunID(request.WorkflowExecution.GetRunId()),
@@ -308,7 +396,7 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 
 // RespondActivityTaskCompleted - records completion of an activity task
 func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *historyservice.RespondActivityTaskCompletedRequest) (_ *historyservice.RespondActivityTaskCompletedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -343,7 +431,7 @@ func (h *Handler) RespondActivityTaskCompleted(ctx context.Context, request *his
 
 // RespondActivityTaskFailed - records failure of an activity task
 func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *historyservice.RespondActivityTaskFailedRequest) (_ *historyservice.RespondActivityTaskFailedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -378,7 +466,7 @@ func (h *Handler) RespondActivityTaskFailed(ctx context.Context, request *histor
 
 // RespondActivityTaskCanceled - records failure of an activity task
 func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *historyservice.RespondActivityTaskCanceledRequest) (_ *historyservice.RespondActivityTaskCanceledResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -413,7 +501,7 @@ func (h *Handler) RespondActivityTaskCanceled(ctx context.Context, request *hist
 
 // RespondWorkflowTaskCompleted - records completion of a workflow task
 func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *historyservice.RespondWorkflowTaskCompletedRequest) (_ *historyservice.RespondWorkflowTaskCompletedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -427,7 +515,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
 	}
 
-	h.GetLogger().Debug("RespondWorkflowTaskCompleted",
+	h.logger.Debug("RespondWorkflowTaskCompleted",
 		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunID(token.GetRunId()),
@@ -454,7 +542,7 @@ func (h *Handler) RespondWorkflowTaskCompleted(ctx context.Context, request *his
 
 // RespondWorkflowTaskFailed - failed response to workflow task
 func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *historyservice.RespondWorkflowTaskFailedRequest) (_ *historyservice.RespondWorkflowTaskFailedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -468,7 +556,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 		return nil, h.convertError(serviceerror.NewInvalidArgument(fmt.Sprintf(errDeserializeTaskTokenMessage, err0)))
 	}
 
-	h.GetLogger().Debug("RespondWorkflowTaskFailed",
+	h.logger.Debug("RespondWorkflowTaskFailed",
 		tag.WorkflowNamespaceID(token.GetNamespaceId()),
 		tag.WorkflowID(token.GetWorkflowId()),
 		tag.WorkflowRunID(token.GetRunId()),
@@ -495,7 +583,7 @@ func (h *Handler) RespondWorkflowTaskFailed(ctx context.Context, request *histor
 
 // StartWorkflowExecution - creates a new workflow execution
 func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyservice.StartWorkflowExecutionRequest) (_ *historyservice.StartWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -520,10 +608,10 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 
 // DescribeHistoryHost returns information about the internal states of a history host
 func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.DescribeHistoryHostRequest) (_ *historyservice.DescribeHistoryHostResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
-	itemsInCacheByIDCount, itemsInCacheByNameCount := h.GetNamespaceRegistry().GetCacheSize()
+	itemsInCacheByIDCount, itemsInCacheByNameCount := h.namespaceRegistry.GetCacheSize()
 	status := ""
 	switch h.controller.Status() {
 	case common.DaemonStatusInitialized:
@@ -542,14 +630,14 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 			ItemsInCacheByNameCount: itemsInCacheByNameCount,
 		},
 		ShardControllerStatus: status,
-		Address:               h.GetHostInfo().GetAddress(),
+		Address:               h.hostInfoProvider.HostInfo().GetAddress(),
 	}
 	return resp, nil
 }
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	executionMgr := h.GetExecutionManager()
+	executionMgr := h.persistenceExecutionManager
 
 	var err error
 	switch request.GetCategory() {
@@ -583,15 +671,15 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 
 // CloseShard closes a shard hosted by this instance
 func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseShardRequest) (_ *historyservice.CloseShardResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.controller.CloseShardByID(request.GetShardId())
 	return &historyservice.CloseShardResponse{}, nil
 }
 
 // GetShard gets a shard hosted by this instance
 func (h *Handler) GetShard(_ context.Context, request *historyservice.GetShardRequest) (_ *historyservice.GetShardResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
-	resp, err := h.controller.GetShardManager().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+	defer log.CapturePanic(h.logger, &retError)
+	resp, err := h.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID: request.ShardId,
 	})
 	if err != nil {
@@ -602,7 +690,7 @@ func (h *Handler) GetShard(_ context.Context, request *historyservice.GetShardRe
 
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (_ *historyservice.DescribeMutableStateResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -626,7 +714,7 @@ func (h *Handler) DescribeMutableState(ctx context.Context, request *historyserv
 
 // GetMutableState - returns the id of the next event in the execution's history
 func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.GetMutableStateRequest) (_ *historyservice.GetMutableStateResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -650,7 +738,7 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 
 // PollMutableState - returns the id of the next event in the execution's history
 func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.PollMutableStateRequest) (_ *historyservice.PollMutableStateResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -674,7 +762,7 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 
 // DescribeWorkflowExecution returns information about the specified workflow execution.
 func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
@@ -698,7 +786,7 @@ func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *histor
 
 // RequestCancelWorkflowExecution - requests cancellation of a workflow
 func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest) (_ *historyservice.RequestCancelWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -711,7 +799,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 	}
 
 	cancelRequest := request.CancelRequest
-	h.GetLogger().Debug("RequestCancelWorkflowExecution",
+	h.logger.Debug("RequestCancelWorkflowExecution",
 		tag.WorkflowNamespace(cancelRequest.GetNamespace()),
 		tag.WorkflowNamespaceID(request.GetNamespaceId()),
 		tag.WorkflowID(cancelRequest.WorkflowExecution.GetWorkflowId()),
@@ -734,7 +822,7 @@ func (h *Handler) RequestCancelWorkflowExecution(ctx context.Context, request *h
 // SignalWorkflowExecution is used to send a signal event to running workflow execution.  This results in
 // WorkflowExecutionSignaled event recorded in the history and a workflow task being created for the execution.
 func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historyservice.SignalWorkflowExecutionRequest) (_ *historyservice.SignalWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -767,7 +855,7 @@ func (h *Handler) SignalWorkflowExecution(ctx context.Context, request *historys
 // If workflow is not running or not found, this results in WorkflowExecutionStarted and WorkflowExecutionSignaled
 // event recorded in history, and a workflow task being created for the execution
 func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request *historyservice.SignalWithStartWorkflowExecutionRequest) (_ *historyservice.SignalWithStartWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -820,7 +908,7 @@ func (h *Handler) SignalWithStartWorkflowExecution(ctx context.Context, request 
 // RemoveSignalMutableState is used to remove a signal request ID that was previously recorded.  This is currently
 // used to clean execution info when signal workflow task finished.
 func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *historyservice.RemoveSignalMutableStateRequest) (_ *historyservice.RemoveSignalMutableStateResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -850,7 +938,7 @@ func (h *Handler) RemoveSignalMutableState(ctx context.Context, request *history
 // TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 // in the history and immediately terminating the execution instance.
 func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *historyservice.TerminateWorkflowExecutionRequest) (_ *historyservice.TerminateWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -880,7 +968,7 @@ func (h *Handler) TerminateWorkflowExecution(ctx context.Context, request *histo
 // ResetWorkflowExecution reset an existing workflow execution
 // in the history and immediately terminating the execution instance.
 func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyservice.ResetWorkflowExecutionRequest) (_ *historyservice.ResetWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -909,7 +997,7 @@ func (h *Handler) ResetWorkflowExecution(ctx context.Context, request *historyse
 
 // QueryWorkflow queries a workflow.
 func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.QueryWorkflowRequest) (_ *historyservice.QueryWorkflowResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -948,7 +1036,7 @@ func (h *Handler) QueryWorkflow(ctx context.Context, request *historyservice.Que
 // child execution without creating the workflow task and then calls this API after updating the mutable state of
 // parent execution.
 func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) (_ *historyservice.ScheduleWorkflowTaskResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -982,7 +1070,7 @@ func (h *Handler) ScheduleWorkflowTask(ctx context.Context, request *historyserv
 // RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
 // This is mainly called by transfer queue processor during the processing of DeleteExecution task.
 func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) (_ *historyservice.RecordChildExecutionCompletedResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1019,7 +1107,7 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 // 2. StickyScheduleToStartTimeout
 func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyservice.ResetStickyTaskQueueRequest) (_ *historyservice.ResetStickyTaskQueueResponse, retError error) {
 
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1047,7 +1135,7 @@ func (h *Handler) ResetStickyTaskQueue(ctx context.Context, request *historyserv
 
 // ReplicateEventsV2 is called by processor to replicate history events for passive namespaces
 func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) (_ *historyservice.ReplicateEventsV2Response, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1076,7 +1164,7 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 
 // SyncShardStatus is called by processor to sync history shard information from another cluster
 func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) (_ *historyservice.SyncShardStatusResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1111,7 +1199,7 @@ func (h *Handler) SyncShardStatus(ctx context.Context, request *historyservice.S
 
 // SyncActivity is called by processor to sync activity
 func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) (_ *historyservice.SyncActivityResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1147,7 +1235,7 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 
 // GetReplicationMessages is called by remote peers to get replicated messages for cross DC replication
 func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyservice.GetReplicationMessagesRequest) (_ *historyservice.GetReplicationMessagesResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1164,7 +1252,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 			engine, err := h.controller.GetEngineForShard(ctx, token.GetShardId())
 			if err != nil {
-				h.GetLogger().Warn("History engine not found for shard", tag.Error(err))
+				h.logger.Warn("History engine not found for shard", tag.Error(err))
 				return
 			}
 			tasks, err := engine.GetReplicationMessages(
@@ -1175,7 +1263,7 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 				token.GetLastRetrievedMessageId(),
 			)
 			if err != nil {
-				h.GetLogger().Warn("Failed to get replication tasks for shard", tag.Error(err))
+				h.logger.Warn("Failed to get replication tasks for shard", tag.Error(err))
 				return
 			}
 
@@ -1193,14 +1281,14 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 		return true
 	})
 
-	h.GetLogger().Debug("GetReplicationMessages succeeded.")
+	h.logger.Debug("GetReplicationMessages succeeded.")
 
 	return &historyservice.GetReplicationMessagesResponse{ShardMessages: messagesByShard}, nil
 }
 
 // GetDLQReplicationMessages is called by remote peers to get replicated messages for DLQ merging
 func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *historyservice.GetDLQReplicationMessagesRequest) (_ *historyservice.GetDLQReplicationMessagesResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1235,7 +1323,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 			taskInfos[0].GetWorkflowId(),
 		)
 		if err != nil {
-			h.GetLogger().Warn("History engine not found for workflow ID.", tag.Error(err))
+			h.logger.Warn("History engine not found for workflow ID.", tag.Error(err))
 			return
 		}
 
@@ -1244,7 +1332,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 			taskInfos,
 		)
 		if err != nil {
-			h.GetLogger().Error("Failed to get dlq replication tasks.", tag.Error(err))
+			h.logger.Error("Failed to get dlq replication tasks.", tag.Error(err))
 			return
 		}
 
@@ -1270,7 +1358,7 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 
 // ReapplyEvents applies stale events to the current workflow and the current run
 func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.ReapplyEventsRequest) (_ *historyservice.ReapplyEventsResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1284,7 +1372,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 		return nil, h.convertError(err)
 	}
 	// deserialize history event object
-	historyEvents, err := h.GetPayloadSerializer().DeserializeEvents(&commonpb.DataBlob{
+	historyEvents, err := h.payloadSerializer.DeserializeEvents(&commonpb.DataBlob{
 		EncodingType: enumspb.ENCODING_TYPE_PROTO3,
 		Data:         request.GetRequest().GetEvents().GetData(),
 	})
@@ -1306,7 +1394,7 @@ func (h *Handler) ReapplyEvents(ctx context.Context, request *historyservice.Rea
 }
 
 func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.GetDLQMessagesRequest) (_ *historyservice.GetDLQMessagesResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1329,7 +1417,7 @@ func (h *Handler) GetDLQMessages(ctx context.Context, request *historyservice.Ge
 }
 
 func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.PurgeDLQMessagesRequest) (_ *historyservice.PurgeDLQMessagesResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1351,7 +1439,7 @@ func (h *Handler) PurgeDLQMessages(ctx context.Context, request *historyservice.
 }
 
 func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.MergeDLQMessagesRequest) (_ *historyservice.MergeDLQMessagesResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1374,7 +1462,7 @@ func (h *Handler) MergeDLQMessages(ctx context.Context, request *historyservice.
 }
 
 func (h *Handler) RefreshWorkflowTasks(ctx context.Context, request *historyservice.RefreshWorkflowTasksRequest) (_ *historyservice.RefreshWorkflowTasksResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1411,7 +1499,7 @@ func (h *Handler) GenerateLastHistoryReplicationTasks(
 	ctx context.Context,
 	request *historyservice.GenerateLastHistoryReplicationTasksRequest,
 ) (_ *historyservice.GenerateLastHistoryReplicationTasksResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1439,7 +1527,7 @@ func (h *Handler) GetReplicationStatus(
 	ctx context.Context,
 	request *historyservice.GetReplicationStatusRequest,
 ) (_ *historyservice.GetReplicationStatusResponse, retError error) {
-	defer log.CapturePanic(h.GetLogger(), &retError)
+	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
 	if h.isStopped() {
@@ -1467,10 +1555,11 @@ func (h *Handler) GetReplicationStatus(
 func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
-		if info, err := h.GetHistoryServiceResolver().Lookup(convert.Int32ToString(err.ShardID)); err == nil {
-			return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), info.GetAddress())
+		hostInfo := h.hostInfoProvider.HostInfo()
+		if info, err := h.historyServiceResolver.Lookup(convert.Int32ToString(err.ShardID)); err == nil {
+			return serviceerrors.NewShardOwnershipLost(hostInfo.GetAddress(), info.GetAddress())
 		}
-		return serviceerrors.NewShardOwnershipLost(h.GetHostInfo().GetAddress(), "<unknown>")
+		return serviceerrors.NewShardOwnershipLost(hostInfo.GetAddress(), "<unknown>")
 	case *persistence.WorkflowConditionFailedError:
 		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:

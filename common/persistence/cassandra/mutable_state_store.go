@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -387,24 +388,6 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 	switch request.Mode {
 	case p.CreateWorkflowModeZombie:
 		// noop
-
-	case p.CreateWorkflowModeContinueAsNew:
-		batch.Query(templateUpdateCurrentWorkflowExecutionQuery,
-			runID,
-			newWorkflow.ExecutionStateBlob.Data,
-			newWorkflow.ExecutionStateBlob.EncodingType.String(),
-			lastWriteVersion,
-			newWorkflow.ExecutionState.State,
-			shardID,
-			rowTypeExecution,
-			namespaceID,
-			workflowID,
-			permanentRunID,
-			defaultVisibilityTimestamp,
-			rowTypeExecutionTaskID,
-			request.PreviousRunID,
-		)
-		requestCurrentRunID = request.PreviousRunID
 
 	case p.CreateWorkflowModeWorkflowIDReuse:
 		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
@@ -893,8 +876,13 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 		}
 		return err
 	} else if resp.RunID == runID {
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
+		return &p.CurrentWorkflowConditionFailedError{
+			Msg:              fmt.Sprintf("Assertion on current record failed. Current run ID is not expected: %v", resp.RunID),
+			RequestID:        "",
+			RunID:            "",
+			State:            enumsspb.WORKFLOW_EXECUTION_STATE_UNSPECIFIED,
+			Status:           enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED,
+			LastWriteVersion: 0,
 		}
 	}
 

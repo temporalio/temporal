@@ -145,7 +145,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	}
 	pageToken = resp.NextPageToken
 
-	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
+	remoteAdminClient := r.shard.GetRemoteAdminClient(sourceCluster)
 	taskInfo := make([]*replicationspb.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
 		switch task := task.(type) {
@@ -285,13 +285,13 @@ func (r *replicationDLQHandlerImpl) getOrCreateTaskExecutor(clusterName string) 
 	if err != nil {
 		return nil, err
 	}
-	adminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName)
+	adminClient := r.shard.GetRemoteAdminClient(clusterName)
 	adminRetryableClient := admin.NewRetryableClient(
 		adminClient,
 		common.CreateReplicationServiceBusyRetryPolicy(),
 		common.IsResourceExhausted,
 	)
-	historyClient := r.shard.GetService().GetClientBean().GetHistoryClient()
+	historyClient := r.shard.GetHistoryClient()
 	historyRetryableClient := history.NewRetryableClient(
 		historyClient,
 		common.CreateReplicationServiceBusyRetryPolicy(),
@@ -304,7 +304,7 @@ func (r *replicationDLQHandlerImpl) getOrCreateTaskExecutor(clusterName string) 
 			_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
 			return err
 		},
-		r.shard.GetService().GetPayloadSerializer(),
+		r.shard.GetPayloadSerializer(),
 		r.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 		r.shard.GetLogger(),
 	)

@@ -282,12 +282,6 @@ func (c *ContextImpl) LoadWorkflowExecutionForReplication(
 		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
-		if c.stats == nil {
-			// TODO (alex): This check is for compatibility only and can be removed later
-			c.stats = &persistencespb.ExecutionStats{
-				HistorySize: response.State.ExecutionInfo.GetHistorySize(),
-			}
-		}
 	}
 
 	lastWriteVersion, err := c.MutableState.GetLastWriteVersion()
@@ -356,12 +350,6 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 		}
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
-		if c.stats == nil {
-			// TODO (alex): This check is for compatibility only and can be removed later
-			c.stats = &persistencespb.ExecutionStats{
-				HistorySize: response.State.ExecutionInfo.GetHistorySize(),
-			}
-		}
 	}
 
 	flushBeforeReady, err := c.MutableState.StartTransaction(namespaceEntry)
@@ -835,8 +823,7 @@ func (c *ContextImpl) ReapplyEvents(
 		RunId:      runID,
 	}
 	namespaceRegistry := c.shard.GetNamespaceRegistry()
-	clientBean := c.shard.GetService().GetClientBean()
-	serializer := c.shard.GetService().GetPayloadSerializer()
+	serializer := c.shard.GetPayloadSerializer()
 	namespaceEntry, err := namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -869,7 +856,7 @@ func (c *ContextImpl) ReapplyEvents(
 	// The active cluster of the namespace is differ from the current cluster
 	// Use frontend client to route this request to the active cluster
 	// Reapplication only happens in active cluster
-	sourceCluster := clientBean.GetRemoteAdminClient(activeCluster)
+	sourceCluster := c.shard.GetRemoteAdminClient(activeCluster)
 	if sourceCluster == nil {
 		return serviceerror.NewInternal(fmt.Sprintf("cannot find cluster config %v to do reapply", activeCluster))
 	}

@@ -12,7 +12,7 @@ For example:
 make base-builder DOCKER_IMAGE_TAG=1.3.0
 ```
 
-### Build and push base docker images for `linux/arm64` using `docker buildx`
+### Build base docker images for `linux/arm64` using `docker buildx`
 
 Learn more about `docker buildx` from the official [doc](https://docs.docker.com/buildx/working-with-buildx/).
 
@@ -28,11 +28,16 @@ For example:
 make base-builder-x DOCKER_IMAGE_TAG=1.3.0
 ```
 
+Pass `DOCKER_BUILDX_OUTPUT=registry` to automatically push image to the docker hub:
+```bash
+make base-builder-x DOCKER_IMAGE_TAG=1.3.0 DOCKER_BUILDX_OUTPUT=registry
+```
+
 Run:
 ```bash
 docker manifest inspect temporalio/base-builder:1.3.0
 ```
-to verify that published base image was built for two architecures.
+to verify that published base image was built for two architectures.
 
 ### Run base docker images for `linux/arm64` on `linux/amd64`
 
@@ -46,9 +51,22 @@ Then run base image. For example:
 docker run --rm -it --platform linux/arm64 temporalio/base-server:1.1.0 uname -m
 ```
 
-### FAQ
+### Troubleshooting
 1. If there is an error during build for docker-x like this:
-    ```text
-    error: failed to solve: process "/dev/.buildkit_qemu_emulator /bin/sh -c apk add --update --no-cache     ca-certificates     tzdata     bash     curl     vim     jq     mysql-client     postgresql-client     python2     && curl https://bootstrap.pypa.io/pip/2.7/get-pip.py | python     && pip install cqlsh" did not complete successfully: exit code: 1
-    ```
-    run `docker run --rm --privileged linuxkit/binfmt:v0.8` first.
+   ```text
+   error: failed to solve: process "/dev/.buildkit_qemu_emulator /bin/sh -c apk add --update --no-cache     ca-certificates     tzdata     bash     curl     vim     jq     mysql-client     postgresql-client     python2     && curl https://bootstrap.pypa.io/pip/2.7/get-pip.py | python     && pip install cqlsh" did not complete successfully: exit code: 1
+   ```
+   run `docker run --rm --privileged linuxkit/binfmt:v0.8` first.
+2. In case of this error:
+   ```text
+   #5 2.181 (4/31) Installing bash (5.1.0-r0)
+   #5 2.370 Executing bash-5.1.0-r0.post-install
+   #5 2.380 ERROR: bash-5.1.0-r0.post-install: script exited with error 1
+   ```
+   run:
+   ```bash
+   docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+   docker buildx rm builder-x
+   make docker-buildx-container
+   docker buildx inspect --bootstrap
+   ```

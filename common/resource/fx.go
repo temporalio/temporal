@@ -25,6 +25,7 @@
 package resource
 
 import (
+	"context"
 	"net"
 	"os"
 	"time"
@@ -35,6 +36,8 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/frontend"
 	"go.temporal.io/server/client/history"
@@ -65,14 +68,12 @@ type (
 	ServiceName          string
 	HostName             string
 	InstanceID           string
+
+	MatchingRawClient matchingservice.MatchingServiceClient
+	MatchingClient    matchingservice.MatchingServiceClient
 )
 
 var Module = fx.Options(
-	DepsModule,
-	fx.Provide(NewFromDI),
-)
-
-var DepsModule = fx.Options(
 	persistenceClient.Module,
 	fx.Provide(SnTaggedLoggerProvider),
 	fx.Provide(ThrottledLoggerProvider),
@@ -86,16 +87,16 @@ var DepsModule = fx.Options(
 	fx.Provide(MetricsClientProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
-	fx.Provide(MetadataManagerProvider),
-	fx.Provide(NamespaceCacheProvider),
+	fx.Provide(NamespaceRegistryProvider),
+	namespace.RegistryLifetimeHooksModule,
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
-	fx.Provide(PersistenceExecutionManagerProvider),
 	fx.Provide(MembershipFactoryProvider),
 	fx.Provide(MembershipMonitorProvider),
+	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(SdkClientProvider),
@@ -104,7 +105,13 @@ var DepsModule = fx.Options(
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(InstanceIDProvider),
 	fx.Provide(RingpopChannelProvider),
+	fx.Invoke(RingpopChannelLifetimeHooks),
 	fx.Provide(RuntimeMetricsReporterProvider),
+	metrics.RuntimeMetricsReporterLifetimeHooksModule,
+	fx.Provide(HistoryClientProvider),
+	fx.Provide(MatchingRawClientProvider),
+	fx.Provide(MatchingClientProvider),
+	HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
 )
 
@@ -169,11 +176,7 @@ func SearchAttributeManagerProvider(
 	return searchattribute.NewManager(timeSource, cmMgr)
 }
 
-func MetadataManagerProvider(factory persistenceClient.Factory) (persistence.MetadataManager, error) {
-	return factory.NewMetadataManager()
-}
-
-func NamespaceCacheProvider(
+func NamespaceRegistryProvider(
 	logger SnTaggedLogger,
 	metricsClient metrics.Client,
 	clusterMetadata cluster.Metadata,
@@ -258,6 +261,20 @@ func RingpopChannelProvider(rpcFactory common.RPCFactory) *tchannel.Channel {
 	return rpcFactory.GetRingpopChannel()
 }
 
+func RingpopChannelLifetimeHooks(
+	lc fx.Lifecycle,
+	ch *tchannel.Channel,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStop: func(context.Context) error {
+				ch.Close()
+				return nil
+			},
+		},
+	)
+}
+
 func InstanceIDProvider(params *BootstrapParams) InstanceID {
 	return InstanceID(params.InstanceID)
 }
@@ -287,12 +304,6 @@ func VisibilityBootstrapContainerProvider(
 	}
 }
 
-func PersistenceExecutionManagerProvider(
-	persistenceBean persistenceClient.Bean,
-) persistence.ExecutionManager {
-	return persistenceBean.GetExecutionManager()
-}
-
 func HistoryBootstrapContainerProvider(
 	logger SnTaggedLogger,
 	metricsClient metrics.Client,
@@ -320,120 +331,27 @@ func RegisterBootstrapContainer(
 	)
 }
 
-func NewFromDI(
-	persistenceConf *config.Persistence,
-	svcName ServiceName,
-	metricsScope tally.Scope,
-	hostName HostName,
-	clusterMetadata cluster.Metadata,
-	saProvider searchattribute.Provider,
-	saManager searchattribute.Manager,
-	saMapper searchattribute.Mapper,
-	namespaceRegistry namespace.Registry,
-	timeSource clock.TimeSource,
-	payloadSerializer serialization.Serializer,
-	metricsClient metrics.Client,
-	archivalMetadata archiver.ArchivalMetadata,
-	archiverProvider provider.ArchiverProvider,
-	membershipMonitor membership.Monitor,
-	sdkClient sdkclient.Client,
-	frontendClient workflowservice.WorkflowServiceClient,
-	clientFactory client.Factory,
-	clientBean client.Bean,
-	persistenceBean persistenceClient.Bean,
-	persistenceFaultInjection *persistenceClient.FaultInjectionDataStoreFactory,
-	logger SnTaggedLogger,
-	throttledLogger ThrottledLogger,
-	grpcListener net.Listener,
-	ringpopChannel *tchannel.Channel,
-	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
-	rpcFactory common.RPCFactory,
-) (Resource, error) {
-
-	frontendServiceResolver, err := membershipMonitor.GetResolver(common.FrontendServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	matchingServiceResolver, err := membershipMonitor.GetResolver(common.MatchingServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	historyServiceResolver, err := membershipMonitor.GetResolver(common.HistoryServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	matchingRawClient, err := clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
-	if err != nil {
-		return nil, err
-	}
-	matchingClient := matching.NewRetryableClient(
-		matchingRawClient,
-		common.CreateMatchingServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
-
+func HistoryClientProvider(clientBean client.Bean) historyservice.HistoryServiceClient {
 	historyRawClient := clientBean.GetHistoryClient()
 	historyClient := history.NewRetryableClient(
 		historyRawClient,
 		common.CreateHistoryServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
+	return historyClient
+}
 
-	return &Impl{
-		status: common.DaemonStatusInitialized,
+func MatchingRawClientProvider(clientBean client.Bean, namespaceRegistry namespace.Registry) (
+	MatchingRawClient,
+	error,
+) {
+	return clientBean.GetMatchingClient(namespaceRegistry.GetNamespaceName)
+}
 
-		numShards:       persistenceConf.NumHistoryShards,
-		serviceName:     string(svcName),
-		hostName:        string(hostName),
-		metricsScope:    metricsScope,
-		clusterMetadata: clusterMetadata,
-		saProvider:      saProvider,
-		saManager:       saManager,
-		saMapper:        saMapper,
-
-		namespaceRegistry: namespaceRegistry,
-		timeSource:        timeSource,
-		payloadSerializer: payloadSerializer,
-		metricsClient:     metricsClient,
-		archivalMetadata:  archivalMetadata,
-		archiverProvider:  archiverProvider,
-
-		// membership infos
-
-		membershipMonitor:       membershipMonitor,
-		frontendServiceResolver: frontendServiceResolver,
-		matchingServiceResolver: matchingServiceResolver,
-		historyServiceResolver:  historyServiceResolver,
-		workerServiceResolver:   workerServiceResolver,
-
-		sdkClient:         sdkClient,
-		frontendClient:    frontendClient,
-		matchingRawClient: matchingRawClient,
-		matchingClient:    matchingClient,
-		historyRawClient:  historyRawClient,
-		historyClient:     historyClient,
-		clientFactory:     clientFactory,
-		clientBean:        clientBean,
-
-		persistenceBean:           persistenceBean,
-		persistenceFaultInjection: persistenceFaultInjection,
-
-		logger:          logger,
-		throttledLogger: throttledLogger,
-
-		grpcListener: grpcListener,
-
-		ringpopChannel: ringpopChannel,
-
-		runtimeMetricsReporter: runtimeMetricsReporter,
-		rpcFactory:             rpcFactory,
-	}, nil
+func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient {
+	return matching.NewRetryableClient(
+		matchingRawClient,
+		common.CreateMatchingServiceRetryPolicy(),
+		common.IsWhitelistServiceTransientError,
+	)
 }

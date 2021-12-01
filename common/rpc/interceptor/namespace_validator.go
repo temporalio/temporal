@@ -65,6 +65,9 @@ var (
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
 		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_HANDOVER},
 		"UpdateNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
+		"GetReplicationMessages":           {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
+		"ReplicateEventsV2":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
+		"GetWorkflowExecutionRawHistoryV2": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}

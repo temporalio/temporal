@@ -79,7 +79,7 @@ type (
 func newTieredStorageQueueProcessor(
 	shard shard.Context,
 	historyEngine *historyEngineImpl,
-	_ matchingservice.MatchingServiceClient,
+	matchingClient matchingservice.MatchingServiceClient,
 	_ historyservice.HistoryServiceClient,
 	logger log.Logger,
 ) *tieredStorageQueueProcessorImpl {
@@ -131,6 +131,7 @@ func newTieredStorageQueueProcessor(
 			logger,
 			historyEngine.metricsClient,
 			config,
+			matchingClient,
 		),
 
 		config:       config,
@@ -151,7 +152,7 @@ func newTieredStorageQueueProcessor(
 	)
 
 	queueProcessorBase := newQueueProcessorBase(
-		shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard.GetClusterMetadata().GetCurrentClusterName(),
 		shard,
 		options,
 		retProcessor,

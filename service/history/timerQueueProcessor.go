@@ -33,13 +33,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/cluster"
-
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -84,6 +84,7 @@ type (
 		activeTimerProcessor       *timerQueueActiveProcessorImpl
 		standbyTimerProcessorsLock sync.RWMutex
 		standbyTimerProcessors     map[string]*timerQueueStandbyProcessorImpl
+		clientBean                 client.Bean
 	}
 )
 
@@ -92,15 +93,16 @@ func newTimerQueueProcessor(
 	historyService *historyEngineImpl,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
+	clientBean client.Bean,
 ) timerQueueProcessor {
 
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
 
 	return &timerQueueProcessorImpl{
-		isGlobalNamespaceEnabled: shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled(),
+		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
 		taskAllocator:            taskAllocator,
@@ -120,6 +122,7 @@ func newTimerQueueProcessor(
 			logger,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
+		clientBean:             clientBean,
 	}
 }
 
@@ -129,7 +132,9 @@ func (t *timerQueueProcessorImpl) Start() {
 	}
 	t.activeTimerProcessor.Start()
 	if t.isGlobalNamespaceEnabled {
-		t.listenToClusterMetadataChange()
+		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
+			standbyTimerProcessor.Start()
+		}
 	}
 
 	t.shutdownWG.Add(1)
@@ -189,7 +194,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 
 	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
-	for clusterName, info := range t.shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+	for clusterName, info := range t.shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
@@ -349,11 +354,11 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 			// Case 2 and Case 3
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
 				t.shard.GetNamespaceRegistry(),
-				t.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+				t.shard.GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 					return t.historyService.ReplicateEventsV2(ctx, request)
 				},
-				t.shard.GetService().GetPayloadSerializer(),
+				t.shard.GetPayloadSerializer(),
 				t.config.StandbyTaskReReplicationContextTimeout,
 				t.logger,
 			)
@@ -364,6 +369,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.taskAllocator,
 				nDCHistoryResender,
 				t.logger,
+				t.clientBean,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor

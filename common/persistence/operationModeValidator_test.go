@@ -65,14 +65,13 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_UpdateCurrent()
 	stateToError := map[enumsspb.WorkflowExecutionState]bool{
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED:   false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:   false,
-		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: true,
+		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: false,
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    true,
 	}
 
 	creatModes := []CreateWorkflowMode{
 		CreateWorkflowModeBrandNew,
 		CreateWorkflowModeWorkflowIDReuse,
-		CreateWorkflowModeContinueAsNew,
 	}
 
 	for state, expectError := range stateToError {

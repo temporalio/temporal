@@ -101,10 +101,9 @@ func (s *historyCurrentExecutionSuite) TestInsert_Success() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -118,17 +117,16 @@ func (s *historyCurrentExecutionSuite) TestInsert_Fail_Duplicate() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	_, err = s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.Error(err) // TODO persistence layer should do proper error translation
 }
@@ -139,10 +137,9 @@ func (s *historyCurrentExecutionSuite) TestInsertSelect() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -166,17 +163,16 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdate_Success() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, primitives.NewUUID().String(), rand.Int63(), rand.Int63())
+	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, primitives.NewUUID().String(), rand.Int63())
 	result, err = s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
@@ -190,10 +186,9 @@ func (s *historyCurrentExecutionSuite) TestUpdate_Fail() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -207,17 +202,16 @@ func (s *historyCurrentExecutionSuite) TestInsertUpdateSelect() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
 	s.NoError(err)
 	s.Equal(1, int(rowsAffected))
 
-	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, primitives.NewUUID().String(), rand.Int63(), rand.Int63())
+	currentExecution = s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, primitives.NewUUID().String(), rand.Int63())
 	result, err = s.store.UpdateCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err = result.RowsAffected()
@@ -241,10 +235,9 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Success() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -274,10 +267,9 @@ func (s *historyCurrentExecutionSuite) TestInsertDeleteSelect_Fail() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -308,10 +300,9 @@ func (s *historyCurrentExecutionSuite) TestLock() {
 	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
 	runID := primitives.NewUUID()
 	requestID := primitives.NewUUID().String()
-	startVersion := rand.Int63()
 	lastWriteVersion := rand.Int63()
 
-	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, startVersion, lastWriteVersion)
+	currentExecution := s.newRandomCurrentExecutionRow(shardID, namespaceID, workflowID, runID, requestID, lastWriteVersion)
 	result, err := s.store.InsertIntoCurrentExecutions(newExecutionContext(), &currentExecution)
 	s.NoError(err)
 	rowsAffected, err := result.RowsAffected()
@@ -337,7 +328,6 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 	workflowID string,
 	runID primitives.UUID,
 	requestID string,
-	startVersion int64,
 	lastWriteVersion int64,
 ) sqlplugin.CurrentExecutionsRow {
 	state := testHistoryExecutionStates[rand.Intn(len(testHistoryExecutionStates))]
@@ -348,7 +338,6 @@ func (s *historyCurrentExecutionSuite) newRandomCurrentExecutionRow(
 		WorkflowID:       workflowID,
 		RunID:            runID,
 		CreateRequestID:  requestID,
-		StartVersion:     startVersion,
 		LastWriteVersion: lastWriteVersion,
 		State:            state,
 		Status:           status,

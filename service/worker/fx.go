@@ -29,12 +29,8 @@ import (
 
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service"
@@ -45,15 +41,12 @@ import (
 var Module = fx.Options(
 	replication.Module,
 	addsearchattributes.Module,
-	resource.DepsModule,
+	resource.Module,
 	fx.Provide(ParamsExpandProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(NewConfig),
 	fx.Provide(PersistenceMaxQpsProvider),
-	fx.Provide(NamespaceReplicationQueueProvider),
-	fx.Provide(PersistenceTaskManagerProvider),
-	fx.Provide(HistoryServiceClientProvider),
 	fx.Provide(NewService),
 	fx.Provide(NewWorkerManager),
 	fx.Invoke(ServiceLifetimeHooks),
@@ -71,24 +64,6 @@ func PersistenceMaxQpsProvider(
 	serviceConfig *Config,
 ) persistenceClient.PersistenceMaxQps {
 	return service.PersistenceMaxQpsFn(serviceConfig.PersistenceMaxQPS, serviceConfig.PersistenceGlobalMaxQPS)
-}
-
-func NamespaceReplicationQueueProvider(bean persistenceClient.Bean) persistence.NamespaceReplicationQueue {
-	return bean.GetNamespaceReplicationQueue()
-}
-
-func PersistenceTaskManagerProvider(bean persistenceClient.Bean) persistence.TaskManager {
-	return bean.GetTaskManager()
-}
-
-func HistoryServiceClientProvider(bean client.Bean) historyservice.HistoryServiceClient {
-	historyRawClient := bean.GetHistoryClient()
-	return history.NewRetryableClient(
-		historyRawClient,
-		common.CreateHistoryServiceRetryPolicy(),
-		common.IsWhitelistServiceTransientError,
-	)
-
 }
 
 func ServiceLifetimeHooks(

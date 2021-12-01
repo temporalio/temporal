@@ -73,6 +73,7 @@ func newVisibilityQueueTaskExecutor(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
 		shard:          shard,
@@ -80,10 +81,10 @@ func newVisibilityQueueTaskExecutor(
 		cache:          historyService.historyCache,
 		logger:         logger,
 		metricsClient:  metricsClient,
-		matchingClient: shard.GetService().GetMatchingClient(),
+		matchingClient: matchingClient,
 		visibilityMgr:  visibilityMgr,
 		config:         config,
-		historyClient:  shard.GetService().GetHistoryClient(),
+		historyClient:  shard.GetHistoryClient(),
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsClient(),
 			shard.GetLogger(),

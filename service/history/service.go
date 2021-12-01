@@ -25,28 +25,31 @@
 package history
 
 import (
+	"math/rand"
+	"net"
 	"sync/atomic"
 	"time"
 
+	"github.com/uber-go/tally/v4"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/migration"
+	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 // Service represents the history service
 type (
 	Service struct {
-		resource.Resource
-
 		self *fx.App
 
 		status            int32
@@ -54,24 +57,37 @@ type (
 		visibilityManager manager.VisibilityManager
 		config            *configs.Config
 
-		server *grpc.Server
+		server                         *grpc.Server
+		logger                         log.Logger
+		grpcListener                   net.Listener
+		membershipMonitor              membership.Monitor
+		metricsScope                   tally.Scope
+		faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 	}
 )
 
 func NewService(
-	serviceResource resource.Resource,
 	grpcServerOptions []grpc.ServerOption,
 	serviceConfig *configs.Config,
 	visibilityMgr manager.VisibilityManager,
-	newCacheFn workflow.NewCacheFn,
+	handler *Handler,
+	logger log.Logger,
+	grpcListener net.Listener,
+	membershipMonitor membership.Monitor,
+	metricsScope tally.Scope,
+	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{
-		Resource:          serviceResource,
-		status:            common.DaemonStatusInitialized,
-		server:            grpc.NewServer(grpcServerOptions...),
-		handler:           NewHandler(serviceResource, serviceConfig, visibilityMgr, newCacheFn),
-		visibilityManager: visibilityMgr,
-		config:            serviceConfig,
+		status:                         common.DaemonStatusInitialized,
+		server:                         grpc.NewServer(grpcServerOptions...),
+		handler:                        handler,
+		visibilityManager:              visibilityMgr,
+		config:                         serviceConfig,
+		logger:                         logger,
+		grpcListener:                   grpcListener,
+		membershipMonitor:              membershipMonitor,
+		metricsScope:                   metricsScope,
+		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 	}
 }
 
@@ -84,17 +100,18 @@ func (s *Service) Start() {
 	// TODO remove this dynamic flag in 1.14.x
 	migration.SetDBVersionFlag(s.config.EnableDBRecordVersion())
 
-	logger := s.GetLogger()
+	logger := s.logger
 	logger.Info("history starting")
 
-	// must start resource first
-	s.Resource.Start()
+	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	rand.Seed(time.Now().UnixNano())
+
 	s.handler.Start()
 
 	historyservice.RegisterHistoryServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
 
-	listener := s.GetGRPCListener()
+	listener := s.grpcListener
 	logger.Info("Starting to serve on history listener")
 	if err := s.server.Serve(listener); err != nil {
 		logger.Fatal("Failed to serve on history listener", tag.Error(err))
@@ -103,7 +120,7 @@ func (s *Service) Start() {
 
 // Stop stops the service
 func (s *Service) Stop() {
-	logger := s.GetLogger()
+	logger := s.logger
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusStarted, common.DaemonStatusStopped) {
 		return
 	}
@@ -126,7 +143,7 @@ func (s *Service) Stop() {
 	remainingTime := s.config.ShutdownDrainDuration()
 
 	logger.Info("ShutdownHandler: Evicting self from membership ring")
-	_ = s.GetMembershipMonitor().EvictSelf()
+	_ = s.membershipMonitor.EvictSelf()
 
 	logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	remainingTime = s.sleep(gossipPropagationDelay, remainingTime)
@@ -144,7 +161,6 @@ func (s *Service) Stop() {
 
 	s.handler.Stop()
 	s.visibilityManager.Close()
-	s.Resource.Stop()
 
 	logger.Info("history stopped")
 }
@@ -157,4 +173,8 @@ func (s *Service) sleep(desired time.Duration, available time.Duration) time.Dur
 		time.Sleep(d)
 	}
 	return available - d
+}
+
+func (s *Service) GetFaultInjection() *client.FaultInjectionDataStoreFactory {
+	return s.faultInjectionDataStoreFactory
 }

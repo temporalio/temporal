@@ -263,22 +263,6 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, info.ExecutionState.Status)
 	s.assertChecksumsEqual(csum, info.Checksum)
 
-	workflowExecutionStatusCompleted := commonpb.WorkflowExecution{
-		WorkflowId: "create-workflow-test-state-completed",
-		RunId:      uuid.New(),
-	}
-	req.NewWorkflowSnapshot.ExecutionInfo.WorkflowId = workflowExecutionStatusCompleted.GetWorkflowId()
-	req.NewWorkflowSnapshot.ExecutionState.RunId = workflowExecutionStatusCompleted.GetRunId()
-	req.NewWorkflowSnapshot.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
-	for _, invalidStatus := range invalidStatuses {
-		req.NewWorkflowSnapshot.ExecutionState.Status = invalidStatus
-		_, err := s.ExecutionManager.CreateWorkflowExecution(req)
-		s.IsType(&serviceerror.Internal{}, err)
-	}
-	req.NewWorkflowSnapshot.ExecutionState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
-	_, err = s.ExecutionManager.CreateWorkflowExecution(req)
-	s.IsType(&serviceerror.Internal{}, err)
-
 	// for zombie workflow creation, we must use existing workflow ID which got created
 	// since we do not allow creation of zombie workflow without current record
 	workflowExecutionStatusZombie := commonpb.WorkflowExecution{

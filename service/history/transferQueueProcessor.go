@@ -33,18 +33,20 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/client"
 
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -84,6 +86,8 @@ type (
 		activeTaskProcessor       *transferQueueActiveProcessorImpl
 		standbyTaskProcessorsLock sync.RWMutex
 		standbyTaskProcessors     map[string]*transferQueueStandbyProcessorImpl
+		clientBean                client.Bean
+		registry                  namespace.Registry
 	}
 )
 
@@ -93,15 +97,17 @@ func newTransferQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	logger log.Logger,
+	clientBean client.Bean,
+	registry namespace.Registry,
 ) *transferQueueProcessorImpl {
 
 	logger = log.With(logger, tag.ComponentTransferQueue)
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 	taskAllocator := newTaskAllocator(shard)
 
 	return &transferQueueProcessorImpl{
-		isGlobalNamespaceEnabled: shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled(),
+		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
 		taskAllocator:            taskAllocator,
@@ -120,8 +126,11 @@ func newTransferQueueProcessor(
 			historyClient,
 			taskAllocator,
 			logger,
+			registry,
 		),
 		standbyTaskProcessors: make(map[string]*transferQueueStandbyProcessorImpl),
+		clientBean:            clientBean,
+		registry:              registry,
 	}
 }
 
@@ -169,9 +178,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(
 		return
 	}
 
-	t.standbyTaskProcessorsLock.RLock()
 	standbyTaskProcessor, ok := t.standbyTaskProcessors[clusterName]
-	t.standbyTaskProcessorsLock.RUnlock()
 	if !ok {
 		panic(fmt.Sprintf("Cannot find transfer processor for %s.", clusterName))
 	}
@@ -187,7 +194,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 
 	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
 	standbyClusterName := t.currentClusterName
-	for clusterName, info := range t.shard.GetService().GetClusterMetadata().GetAllClusterInfo() {
+	for clusterName, info := range t.shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
@@ -215,6 +222,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		maxLevel,
 		t.taskAllocator,
 		t.logger,
+		t.registry,
 	)
 
 	t.standbyTaskProcessorsLock.RLock()
@@ -349,11 +357,11 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 			// Case 2 and Case 3
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
 				t.shard.GetNamespaceRegistry(),
-				t.shard.GetService().GetClientBean().GetRemoteAdminClient(clusterName),
+				t.shard.GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 					return t.historyService.ReplicateEventsV2(ctx, request)
 				},
-				t.shard.GetService().GetPayloadSerializer(),
+				t.shard.GetPayloadSerializer(),
 				t.config.StandbyTaskReReplicationContextTimeout,
 				t.logger,
 			)
@@ -361,10 +369,11 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 				clusterName,
 				t.shard,
 				t.historyService,
-				t.matchingClient,
 				t.taskAllocator,
 				nDCHistoryResender,
 				t.logger,
+				t.clientBean,
+				t.matchingClient,
 			)
 			processor.Start()
 			t.standbyTaskProcessors[clusterName] = processor

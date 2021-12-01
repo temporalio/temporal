@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -92,6 +93,7 @@ type (
 		discardDuration      time.Duration
 
 		transferQueueStandbyTaskExecutor *transferQueueStandbyTaskExecutor
+		mockBean                         *client.MockBean
 	}
 )
 
@@ -121,7 +123,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockNDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 
-	s.mockShard = shard.NewTestContext(
+	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -129,6 +131,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 				TransferAckLevel: 0,
 			}},
 		config,
+		s.timeSource,
 	)
 	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
@@ -140,7 +143,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
 	))
-	s.mockShard.Resource.TimeSource = s.timeSource
 
 	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
@@ -166,7 +168,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
@@ -177,6 +179,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.clusterName = cluster.TestAlternativeClusterName
+	s.mockBean = client.NewMockBean(s.controller)
+	s.mockBean.EXPECT().GetRemoteAdminClient("standby").Return(s.mockAdminClient)
+
 	s.transferQueueStandbyTaskExecutor = newTransferQueueStandbyTaskExecutor(
 		s.mockShard,
 		h,
@@ -185,6 +190,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetMetricsClient(),
 		s.clusterName,
 		config,
+		s.mockBean,
+		s.mockShard.Resource.GetMatchingClient(),
 	).(*transferQueueStandbyTaskExecutor)
 }
 
@@ -194,7 +201,6 @@ func (s *transferQueueStandbyTaskExecutorSuite) TearDownTest() {
 }
 
 func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending() {
-
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),
