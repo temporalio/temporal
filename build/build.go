@@ -27,10 +27,11 @@ package build
 import (
 	"embed"
 	"encoding/json"
+	"time"
 )
 
 const (
-	lastBuildInfoFile = "info/last.json"
+	buildInfoDataFile = "info/data.json"
 )
 
 type (
@@ -44,19 +45,23 @@ type (
 
 var (
 	//go:embed info
-	buildInfoFS   embed.FS
-	LastBuildInfo Info
+	buildInfoFs embed.FS
+	InfoData    Info
 )
 
 func init() {
-	LastBuildInfo = Info{
+	InfoData = Info{
 		GitRevision:   "unknown",
 		BuildTimeUnix: 0,
 	}
 
-	lastBuildInfoJson, err := buildInfoFS.ReadFile(lastBuildInfoFile)
+	buildInfoDataJson, err := buildInfoFs.ReadFile(buildInfoDataFile)
 	if err != nil {
 		return
 	}
-	_ = json.Unmarshal(lastBuildInfoJson, &LastBuildInfo)
+	_ = json.Unmarshal(buildInfoDataJson, &InfoData)
+}
+
+func (i Info) BuildTime() time.Time {
+	return time.Unix(i.BuildTimeUnix, 0)
 }

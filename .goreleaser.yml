@@ -1,7 +1,7 @@
 before:
   hooks:
     - go mod download
-    - ./develop/scripts/update_last_build_info.sh
+    - ./develop/scripts/create_build_info_data.sh
 builds:
   - id: "temporal-server"
     dir: cmd/server

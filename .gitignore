@@ -30,5 +30,5 @@
 .fossa.yml
 
 # Build info
-build/info/last.json
+build/info/data.json
 

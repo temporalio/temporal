@@ -69,19 +69,17 @@ func NewRuntimeMetricsReporter(
 	var memstats runtime.MemStats
 	runtime.ReadMemStats(&memstats)
 
-	buildTime := time.Unix(build.LastBuildInfo.BuildTimeUnix, 0)
-
 	return &RuntimeMetricsReporter{
 		scope:          scope,
 		reportInterval: reportInterval,
 		logger:         logger,
 		lastNumGC:      memstats.NumGC,
 		quit:           make(chan struct{}),
-		buildTime:      buildTime,
+		buildTime:      build.InfoData.BuildTime(),
 		buildInfoScope: scope.Tagged(
 			map[string]string{
-				gitRevisionTag:   build.LastBuildInfo.GitRevision,
-				buildDateTag:     buildTime.Format(time.RFC3339),
+				gitRevisionTag:   build.InfoData.GitRevision,
+				buildDateTag:     build.InfoData.BuildTime().Format(time.RFC3339),
 				buildPlatformTag: runtime.GOARCH,
 				goVersionTag:     runtime.Version(),
 				buildVersionTag:  headers.ServerVersion,
