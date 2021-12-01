@@ -1444,7 +1444,6 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
 	resp, err := s.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID:         s.shardID,
-		CreateIfMissing: true,
 		LifetimeContext: s.lifetimeCtx,
 	})
 	if err != nil {

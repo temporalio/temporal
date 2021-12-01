@@ -26,7 +26,6 @@ package persistencetests
 
 import (
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
@@ -63,11 +62,9 @@ func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
 	shardID := int32(20)
 	owner := "test_get_shard"
 	rangeID := int64(131)
-	_, err0 := s.GetOrCreateShard(shardID, owner, rangeID, true)
-	s.Nil(err0, "No error expected.")
 
-	shardInfo, err1 := s.GetOrCreateShard(shardID, "", 0, false)
-	s.Nil(err1)
+	shardInfo, err := s.GetOrCreateShard(shardID, owner, rangeID)
+	s.NoError(err)
 	s.NotNil(shardInfo)
 	s.Equal(shardID, shardInfo.GetShardId())
 	s.Equal(owner, shardInfo.Owner)
@@ -75,16 +72,12 @@ func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
 	s.Equal(int32(0), shardInfo.StolenSinceRenew)
 
 	// should not set any info
-	shardInfo, err1 = s.GetOrCreateShard(shardID, "new_owner", 567, true)
-	s.Nil(err1)
+	shardInfo, err = s.GetOrCreateShard(shardID, "new_owner", 567)
+	s.NoError(err)
 	s.NotNil(shardInfo)
 	s.Equal(shardID, shardInfo.GetShardId())
 	s.Equal(owner, shardInfo.Owner)
 	s.Equal(rangeID, shardInfo.GetRangeId())
-
-	_, err2 := s.GetOrCreateShard(4766, "", 0, false)
-	s.NotNil(err2)
-	s.IsType(&serviceerror.NotFound{}, err2)
 }
 
 // TestUpdateShard test
@@ -92,11 +85,9 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	shardID := int32(30)
 	owner := "test_update_shard"
 	rangeID := int64(141)
-	_, err0 := s.GetOrCreateShard(shardID, owner, rangeID, true)
-	s.Nil(err0, "No error expected.")
 
-	shardInfo, err1 := s.GetOrCreateShard(shardID, "", 0, false)
-	s.Nil(err1)
+	shardInfo, err1 := s.GetOrCreateShard(shardID, owner, rangeID)
+	s.NoError(err1)
 	s.NotNil(shardInfo)
 	s.Equal(shardID, shardInfo.GetShardId())
 	s.Equal(owner, shardInfo.Owner)
@@ -119,7 +110,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	err2 := s.UpdateShard(updatedInfo, shardInfo.GetRangeId())
 	s.Nil(err2)
 
-	info1, err3 := s.GetOrCreateShard(shardID, "", 0, false)
+	info1, err3 := s.GetOrCreateShard(shardID, "", 0)
 	s.Nil(err3)
 	s.NotNil(info1)
 	s.Equal(updatedOwner, info1.Owner)
@@ -138,7 +129,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.NotNil(err4)
 	s.IsType(&p.ShardOwnershipLostError{}, err4)
 
-	info2, err5 := s.GetOrCreateShard(shardID, "", 0, false)
+	info2, err5 := s.GetOrCreateShard(shardID, "", 0)
 	s.Nil(err5)
 	s.NotNil(info2)
 	s.Equal(updatedOwner, info2.Owner)

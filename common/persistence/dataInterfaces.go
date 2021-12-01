@@ -193,9 +193,8 @@ type (
 	// initial information to create a shard in executions table
 	GetOrCreateShardRequest struct {
 		ShardID          int32
-		CreateIfMissing  bool
-		InitialShardInfo *persistencespb.ShardInfo
-		LifetimeContext  context.Context // cancelled when shard is unloaded
+		InitialShardInfo *persistencespb.ShardInfo // optional, zero value will be used if missing
+		LifetimeContext  context.Context           // cancelled when shard is unloaded
 	}
 
 	// GetOrCreateShardResponse is the response to GetOrCreateShard
