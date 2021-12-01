@@ -26,7 +26,6 @@ package build
 
 import (
 	"embed"
-	_ "embed"
 	"encoding/json"
 )
 
