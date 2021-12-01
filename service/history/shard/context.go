@@ -28,8 +28,10 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -37,7 +39,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 )
@@ -48,7 +51,6 @@ type (
 	// Context represents a history engine shard
 	Context interface {
 		GetShardID() int32
-		GetService() resource.Resource
 		GetExecutionManager() persistence.ExecutionManager
 		GetNamespaceRegistry() namespace.Registry
 		GetClusterMetadata() cluster.Metadata
@@ -118,5 +120,13 @@ type (
 		DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64) error
 		AddTasks(request *persistence.AddTasksRequest) error
 		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
+
+		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
+		GetHistoryClient() historyservice.HistoryServiceClient
+		GetPayloadSerializer() serialization.Serializer
+
+		GetSearchAttributesProvider() searchattribute.Provider
+		GetSearchAttributesMapper() searchattribute.Mapper
+		GetArchivalMetadata() archiver.ArchivalMetadata
 	}
 )

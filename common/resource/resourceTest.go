@@ -109,8 +109,6 @@ type (
 	}
 )
 
-var _ Resource = (*Test)(nil)
-
 const (
 	testHostName = "test_host"
 )

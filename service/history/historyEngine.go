@@ -42,6 +42,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/tasks"
 
@@ -123,7 +125,7 @@ type (
 func NewEngineWithShardContext(
 	shard shard.Context,
 	visibilityMgr manager.VisibilityManager,
-	matching matchingservice.MatchingServiceClient,
+	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	publicClient sdkclient.Client,
 	eventNotifier events.Notifier,
@@ -131,9 +133,11 @@ func NewEngineWithShardContext(
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
+	clientBean client.Bean,
+	archiverProvider provider.ArchiverProvider,
 	registry namespace.Registry,
 ) *historyEngineImpl {
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
@@ -158,17 +162,21 @@ func NewEngineWithShardContext(
 			publicClient,
 			shard.GetConfig().NumArchiveSystemWorkflows,
 			shard.GetConfig().ArchiveRequestRPS,
-			shard.GetService().GetArchiverProvider(),
+			archiverProvider,
 		),
 		publicClient:      publicClient,
-		matchingClient:    matching,
+		matchingClient:    matchingClient,
 		rawMatchingClient: rawMatchingClient,
 	}
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl, matching, historyClient, logger, registry)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl, matching, logger)
-	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr, matching, historyClient, logger)
-	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl, matching, historyClient, logger)
+	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl,
+		matchingClient, historyClient, logger, clientBean, registry)
+	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl,
+		matchingClient, logger, clientBean)
+	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr,
+		matchingClient, historyClient, logger)
+	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl,
+		matchingClient, historyClient, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -197,14 +205,14 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.searchAttributesValidator = searchattribute.NewValidator(
-		shard.GetService().GetSearchAttributesProvider(),
-		shard.GetService().GetSearchAttributesMapper(),
+		shard.GetSearchAttributesProvider(),
+		shard.GetSearchAttributesMapper(),
 		config.SearchAttributesNumberOfKeysLimit,
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
 	)
 
-	historyEngImpl.searchAttributesMapper = shard.GetService().GetSearchAttributesMapper()
+	historyEngImpl.searchAttributesMapper = shard.GetSearchAttributesMapper()
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 
@@ -213,14 +221,14 @@ func NewEngineWithShardContext(
 	for _, replicationTaskFetcher := range replicationTaskFetchers.GetFetchers() {
 		sourceCluster := replicationTaskFetcher.GetSourceCluster()
 		// Intentionally use the raw client to create its own retry policy
-		adminClient := shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
+		adminClient := shard.GetRemoteAdminClient(sourceCluster)
 		adminRetryableClient := admin.NewRetryableClient(
 			adminClient,
 			common.CreateReplicationServiceBusyRetryPolicy(),
 			common.IsResourceExhausted,
 		)
 		// Intentionally use the raw client to create its own retry policy
-		historyClient := shard.GetService().GetClientBean().GetHistoryClient()
+		historyClient := clientBean.GetHistoryClient()
 		historyRetryableClient := history.NewRetryableClient(
 			historyClient,
 			common.CreateReplicationServiceBusyRetryPolicy(),
@@ -233,7 +241,7 @@ func NewEngineWithShardContext(
 				_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
 				return err
 			},
-			shard.GetService().GetPayloadSerializer(),
+			shard.GetPayloadSerializer(),
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 			shard.GetLogger(),
 		)
@@ -496,7 +504,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		WorkflowId: workflowID,
 		RunId:      uuid.New(),
 	}
-	clusterMetadata := e.shard.GetService().GetClusterMetadata()
+	clusterMetadata := e.shard.GetClusterMetadata()
 	mutableState, err := createMutableState(e.shard, namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err
@@ -1997,7 +2005,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		RunId:      uuid.New(),
 	}
 
-	clusterMetadata := e.shard.GetService().GetClusterMetadata()
+	clusterMetadata := e.shard.GetClusterMetadata()
 	mutableState, err := createMutableState(e.shard, namespaceEntry, execution.GetRunId())
 	if err != nil {
 		return nil, err

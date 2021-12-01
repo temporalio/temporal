@@ -88,7 +88,7 @@ func newNDCStateRebuilder(
 		shard:             shard,
 		namespaceRegistry: shard.GetNamespaceRegistry(),
 		eventsCache:       shard.GetEventsCache(),
-		clusterMetadata:   shard.GetService().GetClusterMetadata(),
+		clusterMetadata:   shard.GetClusterMetadata(),
 		executionMgr:      shard.GetExecutionManager(),
 		taskRefresher: workflow.NewTaskRefresher(
 			shard.GetConfig(),

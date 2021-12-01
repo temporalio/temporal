@@ -36,13 +36,12 @@ import (
 	"go.temporal.io/api/workflowservicemock/v1"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/namespace"
-
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/resource"
 )
 
@@ -108,10 +107,38 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 
 	s.config = NewConfig(dynamicconfig.NewCollection(dynamicconfig.NewNoopClient(), s.mockResource.GetLogger()), 0, "", false)
 
-	frontendHandlerGRPC := NewWorkflowHandler(s.mockResource, s.config, nil, nil)
+	frontendHandlerGRPC := NewWorkflowHandler(
+		s.config,
+		nil,
+		nil,
+		s.mockResource.Logger,
+		s.mockResource.GetThrottledLogger(),
+		s.mockResource.GetExecutionManager(),
+		s.mockResource.GetClusterMetadataManager(),
+		s.mockResource.GetMetadataManager(),
+		s.mockResource.GetHistoryClient(),
+		s.mockResource.GetMatchingClient(),
+		s.mockResource.GetArchiverProvider(),
+		s.mockResource.GetPayloadSerializer(),
+		s.mockResource.GetNamespaceRegistry(),
+		s.mockResource.GetSearchAttributesMapper(),
+		s.mockResource.GetSearchAttributesProvider(),
+		s.mockResource.GetClusterMetadata(),
+		s.mockResource.GetArchivalMetadata(),
+	)
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
-	s.handler = NewDCRedirectionHandler(frontendHandlerGRPC, config.DCRedirectionPolicy{})
+	s.handler = NewDCRedirectionHandler(
+		frontendHandlerGRPC,
+		config.DCRedirectionPolicy{},
+		s.mockResource.Logger,
+		s.mockResource.GetClientBean(),
+		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetTimeSource(),
+		s.mockResource.GetNamespaceRegistry(),
+		s.mockResource.GetClusterMetadata(),
+	)
+
 	s.handler.frontendHandler = newTestServerHandler(s.mockFrontendHandler)
 	s.handler.redirectionPolicy = s.mockDCRedirectionPolicy
 }
@@ -884,10 +911,6 @@ func (serverHandler *testServerHandler) Watch(*healthpb.HealthCheckRequest, heal
 }
 
 func (serverHandler *testServerHandler) UpdateHealthStatus(status HealthStatus) {
-}
-
-func (serverHandler *testServerHandler) GetResource() resource.Resource {
-	return nil
 }
 
 func (serverHandler *testServerHandler) GetConfig() *Config {

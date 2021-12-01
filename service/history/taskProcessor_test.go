@@ -86,7 +86,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockShard = shard.NewTestContext(
+	mockShard := shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -96,6 +96,7 @@ func (s *taskProcessorSuite) SetupTest() {
 			}},
 		tests.NewDynamicConfig(),
 	)
+	s.mockShard = mockShard
 
 	s.mockProcessor = NewMocktimerProcessor(s.controller)
 

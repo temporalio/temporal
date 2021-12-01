@@ -72,9 +72,10 @@ type (
 		mockShardManager  *persistence.MockShardManager
 		mockEngineFactory *MockEngineFactory
 
-		config          *configs.Config
-		logger          log.Logger
-		shardController *ControllerImpl
+		config               *configs.Config
+		logger               log.Logger
+		shardController      *ControllerImpl
+		mockHostInfoProvider *resource.MockHostInfoProvider
 	}
 )
 
@@ -95,11 +96,32 @@ func (s *controllerSuite) SetupTest() {
 	s.mockServiceResolver = s.mockResource.HistoryServiceResolver
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.hostInfo = s.mockResource.GetHostInfo()
+	s.mockHostInfoProvider = resource.NewMockHostInfoProvider(s.controller)
+	s.mockHostInfoProvider.EXPECT().HostInfo().Return(s.hostInfo).AnyTimes()
 
 	s.logger = s.mockResource.Logger
 	s.config = tests.NewDynamicConfig()
 
-	s.shardController = NewController(s.mockResource, s.mockEngineFactory, s.config)
+	s.shardController = NewController(
+		s.mockEngineFactory,
+		s.config,
+		s.mockResource.Logger,
+		s.mockResource.GetThrottledLogger(),
+		s.mockResource.GetExecutionManager(),
+		s.mockResource.GetShardManager(),
+		s.mockResource.GetClientBean(),
+		s.mockResource.GetHistoryClient(),
+		s.mockResource.GetHistoryServiceResolver(),
+		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetPayloadSerializer(),
+		s.mockResource.GetTimeSource(),
+		s.mockResource.GetNamespaceRegistry(),
+		s.mockResource.GetSearchAttributesProvider(),
+		s.mockResource.GetSearchAttributesMapper(),
+		s.mockResource.GetClusterMetadata(),
+		s.mockResource.GetArchivalMetadata(),
+		s.mockHostInfoProvider,
+	)
 }
 
 func (s *controllerSuite) TearDownTest() {
@@ -454,7 +476,26 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 func (s *controllerSuite) TestHistoryEngineClosed() {
 	numShards := int32(4)
 	s.config.NumberOfShards = numShards
-	s.shardController = NewController(s.mockResource, s.mockEngineFactory, s.config)
+	s.shardController = NewController(
+		s.mockEngineFactory,
+		s.config,
+		s.mockResource.Logger,
+		s.mockResource.GetThrottledLogger(),
+		s.mockResource.GetExecutionManager(),
+		s.mockResource.GetShardManager(),
+		s.mockResource.GetClientBean(),
+		s.mockResource.GetHistoryClient(),
+		s.mockResource.GetHistoryServiceResolver(),
+		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetPayloadSerializer(),
+		s.mockResource.GetTimeSource(),
+		s.mockResource.GetNamespaceRegistry(),
+		s.mockResource.GetSearchAttributesProvider(),
+		s.mockResource.GetSearchAttributesMapper(),
+		s.mockResource.GetClusterMetadata(),
+		s.mockResource.GetArchivalMetadata(),
+		s.mockHostInfoProvider,
+	)
 	historyEngines := make(map[int32]*MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		mockEngine := NewMockEngine(s.controller)
@@ -545,7 +586,27 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 func (s *controllerSuite) TestShardControllerClosed() {
 	numShards := int32(4)
 	s.config.NumberOfShards = numShards
-	s.shardController = NewController(s.mockResource, s.mockEngineFactory, s.config)
+	s.shardController = NewController(
+		s.mockEngineFactory,
+		s.config,
+		s.mockResource.Logger,
+		s.mockResource.GetThrottledLogger(),
+		s.mockResource.GetExecutionManager(),
+		s.mockResource.GetShardManager(),
+		s.mockResource.GetClientBean(),
+		s.mockResource.GetHistoryClient(),
+		s.mockResource.GetHistoryServiceResolver(),
+		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetPayloadSerializer(),
+		s.mockResource.GetTimeSource(),
+		s.mockResource.GetNamespaceRegistry(),
+		s.mockResource.GetSearchAttributesProvider(),
+		s.mockResource.GetSearchAttributesMapper(),
+		s.mockResource.GetClusterMetadata(),
+		s.mockResource.GetArchivalMetadata(),
+		s.mockHostInfoProvider,
+	)
+
 	historyEngines := make(map[int32]*MockEngine)
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		mockEngine := NewMockEngine(s.controller)

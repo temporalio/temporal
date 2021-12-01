@@ -62,7 +62,7 @@ func newTimerQueueActiveProcessor(
 	logger log.Logger,
 ) *timerQueueActiveProcessorImpl {
 
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
 	}
@@ -102,6 +102,7 @@ func newTimerQueueActiveProcessor(
 		logger,
 		historyService.metricsClient,
 		shard.GetConfig(),
+		matchingClient,
 	)
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
@@ -131,7 +132,7 @@ func newTimerQueueFailoverProcessor(
 	logger log.Logger,
 ) (func(ackLevel timerKey) error, *timerQueueActiveProcessorImpl) {
 
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
 		// should use current cluster's time when doing namespace failover
 		return shard.GetCurrentTime(currentClusterName)
@@ -193,6 +194,7 @@ func newTimerQueueFailoverProcessor(
 		logger,
 		historyService.metricsClient,
 		shard.GetConfig(),
+		matchingClient,
 	)
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(

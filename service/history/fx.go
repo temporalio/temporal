@@ -26,15 +26,29 @@ package history
 
 import (
 	"context"
+	"net"
 
+	"github.com/uber-go/tally/v4"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
+	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"
@@ -61,9 +75,92 @@ var Module = fx.Options(
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceMaxQpsProvider),
-	fx.Provide(NewService),
+	fx.Provide(ServiceResolverProvider),
+	fx.Provide(HandlerProvider),
+	fx.Provide(ServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
 )
+
+func ServiceProvider(
+	grpcServerOptions []grpc.ServerOption,
+	serviceConfig *configs.Config,
+	visibilityMgr manager.VisibilityManager,
+	handler *Handler,
+	logger resource.SnTaggedLogger,
+	grpcListener net.Listener,
+	membershipMonitor membership.Monitor,
+	metricsScope tally.Scope,
+	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
+) *Service {
+	return NewService(
+		grpcServerOptions,
+		serviceConfig,
+		visibilityMgr,
+		handler,
+		logger,
+		grpcListener,
+		membershipMonitor,
+		metricsScope,
+		faultInjectionDataStoreFactory,
+	)
+}
+
+func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.ServiceResolver, error) {
+	return membershipMonitor.GetResolver(common.HistoryServiceName)
+}
+
+func HandlerProvider(
+	config *configs.Config,
+	visibilityMrg manager.VisibilityManager,
+	newCacheFn workflow.NewCacheFn,
+	logger resource.SnTaggedLogger,
+	throttledLogger resource.ThrottledLogger,
+	persistenceExecutionManager persistence.ExecutionManager,
+	persistenceShardManager persistence.ShardManager,
+	clientBean client.Bean,
+	historyClient historyservice.HistoryServiceClient,
+	matchingRawClient resource.MatchingRawClient,
+	matchingClient resource.MatchingClient,
+	sdkClient sdkclient.Client,
+	historyServiceResolver membership.ServiceResolver,
+	metricsClient metrics.Client,
+	payloadSerializer serialization.Serializer,
+	timeSource clock.TimeSource,
+	namespaceRegistry namespace.Registry,
+	saProvider searchattribute.Provider,
+	saMapper searchattribute.Mapper,
+	clusterMetadata cluster.Metadata,
+	archivalMetadata archiver.ArchivalMetadata,
+	hostInfoProvider resource.HostInfoProvider,
+	archiverProvider provider.ArchiverProvider,
+) *Handler {
+	args := NewHandlerArgs{
+		config,
+		visibilityMrg,
+		newCacheFn,
+		logger,
+		throttledLogger,
+		persistenceExecutionManager,
+		persistenceShardManager,
+		clientBean,
+		historyClient,
+		matchingRawClient,
+		matchingClient,
+		sdkClient,
+		historyServiceResolver,
+		metricsClient,
+		payloadSerializer,
+		timeSource,
+		namespaceRegistry,
+		saProvider,
+		saMapper,
+		clusterMetadata,
+		archivalMetadata,
+		hostInfoProvider,
+		archiverProvider,
+	}
+	return NewHandler(args)
+}
 
 func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
 	return params.RPCFactory
@@ -86,11 +183,12 @@ func ThrottledLoggerRpsFnProvider(serviceConfig *configs.Config) resource.Thrott
 
 func TelemetryInterceptorProvider(
 	logger log.Logger,
-	resource resource.Resource,
+	namespaceRegistry namespace.Registry,
+	metricsClient metrics.Client,
 ) *interceptor.TelemetryInterceptor {
 	return interceptor.NewTelemetryInterceptor(
-		resource.GetNamespaceRegistry(),
-		resource.GetMetricsClient(),
+		namespaceRegistry,
+		metricsClient,
 		metrics.HistoryAPIMetricsScopes(),
 		logger,
 	)
@@ -128,12 +226,12 @@ func VisibilityManagerProvider(
 	logger log.Logger,
 	params *resource.BootstrapParams,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
-	serviceResource resource.Resource,
 	serviceConfig *configs.Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	persistenceServiceResolver resolver.ServiceResolver,
 	searchAttributesMapper searchattribute.Mapper,
+	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
 		params.PersistenceConfig,
@@ -141,7 +239,7 @@ func VisibilityManagerProvider(
 		esConfig.GetVisibilityIndex(),
 		esClient,
 		esProcessorConfig,
-		serviceResource.GetSearchAttributesProvider(),
+		saProvider,
 		searchAttributesMapper,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,
 		serviceConfig.StandardVisibilityPersistenceMaxWriteQPS,

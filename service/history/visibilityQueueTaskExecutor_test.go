@@ -151,7 +151,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 
 	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
@@ -170,6 +170,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		s.logger,
 		s.mockShard.GetMetricsClient(),
 		config,
+		s.mockShard.Resource.GetMatchingClient(),
 	)
 }
 

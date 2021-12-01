@@ -282,6 +282,7 @@ func (tc *TestCluster) SetFaultInjectionRate(rate float64) {
 	if tc.host.frontendService.GetFaultInjection() != nil {
 		tc.host.frontendService.GetFaultInjection().UpdateRate(rate)
 	}
+
 	if tc.host.workerService != nil && tc.host.workerService.GetFaultInjection() != nil {
 		tc.host.workerService.GetFaultInjection().UpdateRate(rate)
 	}

@@ -84,7 +84,7 @@ func NewMutableStateRebuilder(
 
 	return &MutableStateRebuilderImpl{
 		shard:                 shard,
-		clusterMetadata:       shard.GetService().GetClusterMetadata(),
+		clusterMetadata:       shard.GetClusterMetadata(),
 		namespaceRegistry:     shard.GetNamespaceRegistry(),
 		logger:                logger,
 		mutableState:          mutableState,

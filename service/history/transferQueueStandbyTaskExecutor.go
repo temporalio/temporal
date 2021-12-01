@@ -33,6 +33,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -65,6 +67,8 @@ func newTransferQueueStandbyTaskExecutor(
 	metricsClient metrics.Client,
 	clusterName string,
 	config *configs.Config,
+	clientBean client.Bean,
+	matchingClient matchingservice.MatchingServiceClient,
 ) queueTaskExecutor {
 	return &transferQueueStandbyTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
@@ -73,9 +77,10 @@ func newTransferQueueStandbyTaskExecutor(
 			logger,
 			metricsClient,
 			config,
+			matchingClient,
 		),
 		clusterName:        clusterName,
-		adminClient:        shard.GetService().GetRemoteAdminClient(clusterName),
+		adminClient:        clientBean.GetRemoteAdminClient(clusterName),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }

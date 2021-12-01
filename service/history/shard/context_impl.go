@@ -32,7 +32,14 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/searchattribute"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -82,16 +89,27 @@ type (
 
 	ContextImpl struct {
 		// These fields are constant:
-		resource.Resource
-		shardID          int32
-		executionManager persistence.ExecutionManager
-		metricsClient    metrics.Client
-		eventsCache      events.Cache
-		closeCallback    func(*ContextImpl)
-		config           *configs.Config
-		logger           log.Logger
-		throttledLogger  log.Logger
-		engineFactory    EngineFactory
+		shardID             int32
+		executionManager    persistence.ExecutionManager
+		metricsClient       metrics.Client
+		eventsCache         events.Cache
+		closeCallback       func(*ContextImpl)
+		config              *configs.Config
+		contextTaggedLogger log.Logger
+		throttledLogger     log.Logger
+		engineFactory       EngineFactory
+
+		persistenceShardManager persistence.ShardManager
+		clientBean              client.Bean
+		historyClient           historyservice.HistoryServiceClient
+		payloadSerializer       serialization.Serializer
+		timeSource              clock.TimeSource
+		namespaceRegistry       namespace.Registry
+		saProvider              searchattribute.Provider
+		saMapper                searchattribute.Mapper
+		clusterMetadata         cluster.Metadata
+		archivalMetadata        archiver.ArchivalMetadata
+		hostInfoProvider        resource.HostInfoProvider
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                    sync.RWMutex
@@ -144,11 +162,6 @@ const (
 func (s *ContextImpl) GetShardID() int32 {
 	// constant from initialization, no need for locks
 	return s.shardID
-}
-
-func (s *ContextImpl) GetService() resource.Resource {
-	// constant from initialization, no need for locks
-	return s.Resource
 }
 
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
@@ -498,7 +511,7 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 	s.wLock()
 	defer s.wUnlock()
 
-	currentTime := s.GetTimeSource().Now()
+	currentTime := s.timeSource.Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
 		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
@@ -833,7 +846,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
 			// TaskID is set by addTasksLocked
 			WorkflowKey:         key,
-			VisibilityTimestamp: s.GetTimeSource().Now(),
+			VisibilityTimestamp: s.timeSource.Now(),
 			Version:             version,
 		}},
 	}
@@ -857,7 +870,7 @@ func (s *ContextImpl) GetEventsCache() events.Cache {
 
 func (s *ContextImpl) GetLogger() log.Logger {
 	// constant from initialization, no need for locks
-	return s.logger
+	return s.contextTaggedLogger
 }
 
 func (s *ContextImpl) GetThrottledLogger() log.Logger {
@@ -914,12 +927,12 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		updatedShardInfo.StolenSinceRenew++
 	}
 
-	err := s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
+	err := s.persistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId()})
 	if err != nil {
 		// Failure in updating shard to grab new RangeID
-		s.logger.Error("Persistent store operation failure",
+		s.contextTaggedLogger.Error("Persistent store operation failure",
 			tag.StoreOperationUpdateShard,
 			tag.Error(err),
 			tag.ShardRangeID(updatedShardInfo.GetRangeId()),
@@ -929,7 +942,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
-	s.logger.Info("Range updated for shardID",
+	s.contextTaggedLogger.Info("Range updated for shardID",
 		tag.ShardRangeID(updatedShardInfo.RangeId),
 		tag.PreviousShardRangeID(s.shardInfo.RangeId),
 		tag.Number(s.transferSequenceNumber),
@@ -946,7 +959,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 
 func (s *ContextImpl) updateMaxReadLevelLocked(rl int64) {
 	if rl > s.transferMaxReadLevel {
-		s.logger.Debug("Updating MaxTaskID", tag.MaxLevel(rl))
+		s.contextTaggedLogger.Debug("Updating MaxTaskID", tag.MaxLevel(rl))
 		s.transferMaxReadLevel = rl
 	}
 }
@@ -964,7 +977,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 	s.emitShardInfoMetricsLogsLocked()
 
-	err = s.GetShardManager().UpdateShard(&persistence.UpdateShardRequest{
+	err = s.persistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
@@ -1017,7 +1030,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 			logWarnTransferLevelDiff < transferLag ||
 			logWarnTimerLevelDiff < timerLag) {
 
-		s.logger.Warn("Shard ack levels diff exceeds warn threshold.",
+		s.contextTaggedLogger.Warn("Shard ack levels diff exceeds warn threshold.",
 			tag.ShardReplicationAck(s.shardInfo.ReplicationAckLevel),
 			tag.ShardTimerAcks(s.shardInfo.ClusterTimerAckLevel),
 			tag.ShardTransferAcks(s.shardInfo.ClusterTransferAckLevel))
@@ -1075,7 +1088,7 @@ func (s *ContextImpl) allocateTransferIDsLocked(
 		if err != nil {
 			return err
 		}
-		s.logger.Debug("Assigning task ID", tag.TaskID(id))
+		s.contextTaggedLogger.Debug("Assigning task ID", tag.TaskID(id))
 		task.SetTaskID(id)
 		*transferMaxReadLevel = id
 	}
@@ -1105,7 +1118,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 		if ts.Before(readCursorTS) {
 			// This can happen if shard move and new host have a time SKU, or there is db write delay.
 			// We generate a new timer ID using timerMaxReadLevel.
-			s.logger.Debug("New timer generated is less than read level",
+			s.contextTaggedLogger.Debug("New timer generated is less than read level",
 				tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
 				tag.WorkflowID(workflowID),
 				tag.Timestamp(ts),
@@ -1120,7 +1133,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 		}
 		task.SetTaskID(seqNum)
 		visibilityTs := task.GetVisibilityTime()
-		s.logger.Debug("Assigning new timer",
+		s.contextTaggedLogger.Debug("Assigning new timer",
 			tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevelTime))
 	}
 	return nil
@@ -1145,7 +1158,7 @@ func (s *ContextImpl) GetCurrentTime(cluster string) time.Time {
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
 		return s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
-	return s.GetTimeSource().Now().UTC()
+	return s.timeSource.Now().UTC()
 }
 
 func (s *ContextImpl) GetLastUpdatedTime() time.Time {
@@ -1189,10 +1202,10 @@ func (s *ContextImpl) maybeRecordShardAcquisitionLatency(ownershipChanged bool) 
 }
 
 func (s *ContextImpl) createEngine() Engine {
-	s.logger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
+	s.contextTaggedLogger.Info("", tag.LifeCycleStarting, tag.ComponentShardEngine)
 	engine := s.engineFactory.CreateEngine(s)
 	engine.Start()
-	s.logger.Info("", tag.LifeCycleStarted, tag.ComponentShardEngine)
+	s.contextTaggedLogger.Info("", tag.LifeCycleStarted, tag.ComponentShardEngine)
 	return engine
 }
 
@@ -1239,9 +1252,9 @@ func (s *ContextImpl) stop() {
 
 	// Stop the engine if it was running (outside the lock but before returning)
 	if engine != nil {
-		s.logger.Info("", tag.LifeCycleStopping, tag.ComponentShardEngine)
+		s.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardEngine)
 		engine.Stop()
-		s.logger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
+		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
 	}
 }
 
@@ -1400,7 +1413,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 			return
 		}
 	}
-	s.logger.Warn("invalid state transition request",
+	s.contextTaggedLogger.Warn("invalid state transition request",
 		tag.ShardContextState(int(s.state)),
 		tag.ShardContextStateRequest(int(request)),
 	)
@@ -1422,12 +1435,12 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.rUnlock()
 
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
-	resp, err := s.GetShardManager().GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+	resp, err := s.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID:         s.shardID,
 		CreateIfMissing: true,
 	})
 	if err != nil {
-		s.logger.Error("Failed to load shard", tag.Error(err))
+		s.contextTaggedLogger.Error("Failed to load shard", tag.Error(err))
 		return err
 	}
 	shardInfo := &persistence.ShardInfoWithFailover{ShardInfo: resp.ShardInfo}
@@ -1435,8 +1448,8 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// shardInfo is a fresh value, so we don't really need to copy, but
 	// copyShardInfo also ensures that all maps are non-nil
 	updatedShardInfo := copyShardInfo(shardInfo)
-	*ownershipChanged = shardInfo.Owner != s.GetHostInfo().Identity()
-	updatedShardInfo.Owner = s.GetHostInfo().Identity()
+	*ownershipChanged = shardInfo.Owner != s.hostInfoProvider.HostInfo().Identity()
+	updatedShardInfo.Owner = s.hostInfoProvider.HostInfo().Identity()
 
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
@@ -1546,7 +1559,7 @@ func (s *ContextImpl) acquireShard() {
 			return err
 		}
 
-		s.logger.Info("Acquired shard")
+		s.contextTaggedLogger.Info("Acquired shard")
 
 		// The first time we get the shard, we have to create the engine. We have to release the lock to
 		// create the engine, and then reacquire it. This is safe because:
@@ -1575,7 +1588,7 @@ func (s *ContextImpl) acquireShard() {
 		return
 	} else if err != nil {
 		// We got an unretryable error (perhaps ShardOwnershipLostError) or timed out.
-		s.logger.Error("Couldn't acquire shard", tag.Error(err))
+		s.contextTaggedLogger.Error("Couldn't acquire shard", tag.Error(err))
 
 		// If there's been another state change since we started (e.g. to Stopping), then don't do anything
 		// here. But if not (i.e. timed out or error), initiate shutting down the shard.
@@ -1589,28 +1602,51 @@ func (s *ContextImpl) acquireShard() {
 }
 
 func newContext(
-	resource resource.Resource,
 	shardID int32,
 	factory EngineFactory,
 	config *configs.Config,
 	closeCallback func(*ContextImpl),
+	logger log.Logger,
+	throttledLogger log.Logger,
+	persistenceExecutionManager persistence.ExecutionManager,
+	persistenceShardManager persistence.ShardManager,
+	clientBean client.Bean,
+	historyClient historyservice.HistoryServiceClient,
+	metricsClient metrics.Client,
+	payloadSerializer serialization.Serializer,
+	timeSource clock.TimeSource,
+	namespaceRegistry namespace.Registry,
+	saProvider searchattribute.Provider,
+	saMapper searchattribute.Mapper,
+	clusterMetadata cluster.Metadata,
+	archivalMetadata archiver.ArchivalMetadata,
+	hostInfoProvider resource.HostInfoProvider,
 ) (*ContextImpl, error) {
 
-	hostIdentity := resource.GetHostInfo().Identity()
+	hostIdentity := hostInfoProvider.HostInfo().Identity()
 
 	shardContext := &ContextImpl{
-		Resource:         resource,
-		state:            contextStateInitialized,
-		shardID:          shardID,
-		executionManager: resource.GetExecutionManager(),
-		metricsClient:    resource.GetMetricsClient(),
-		closeCallback:    closeCallback,
-		config:           config,
-		logger:           log.With(resource.GetLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
-		throttledLogger:  log.With(resource.GetThrottledLogger(), tag.ShardID(shardID), tag.Address(hostIdentity)),
-		engineFactory:    factory,
-
-		handoverNamespaces: make(map[string]*namespaceHandOverInfo),
+		state:                   contextStateInitialized,
+		shardID:                 shardID,
+		executionManager:        persistenceExecutionManager,
+		metricsClient:           metricsClient,
+		closeCallback:           closeCallback,
+		config:                  config,
+		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
+		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
+		engineFactory:           factory,
+		persistenceShardManager: persistenceShardManager,
+		clientBean:              clientBean,
+		historyClient:           historyClient,
+		payloadSerializer:       payloadSerializer,
+		timeSource:              timeSource,
+		namespaceRegistry:       namespaceRegistry,
+		saProvider:              saProvider,
+		saMapper:                saMapper,
+		clusterMetadata:         clusterMetadata,
+		archivalMetadata:        archivalMetadata,
+		hostInfoProvider:        hostInfoProvider,
+		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),
@@ -1679,4 +1715,41 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	}
 
 	return shardInfoCopy
+}
+
+func (s *ContextImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
+	return s.clientBean.GetRemoteAdminClient(cluster)
+}
+func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {
+	return s.payloadSerializer
+}
+
+func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
+	return s.historyClient
+}
+
+func (s *ContextImpl) GetMetricsClient() metrics.Client {
+	return s.metricsClient
+}
+
+func (s *ContextImpl) GetTimeSource() clock.TimeSource {
+	return s.timeSource
+}
+
+func (s *ContextImpl) GetNamespaceRegistry() namespace.Registry {
+	return s.namespaceRegistry
+}
+
+func (s *ContextImpl) GetSearchAttributesProvider() searchattribute.Provider {
+	return s.saProvider
+}
+func (s *ContextImpl) GetSearchAttributesMapper() searchattribute.Mapper {
+	return s.saMapper
+}
+func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
+	return s.clusterMetadata
+}
+
+func (h *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
+	return h.archivalMetadata
 }

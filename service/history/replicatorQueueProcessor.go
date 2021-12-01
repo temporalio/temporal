@@ -83,7 +83,7 @@ func newReplicatorQueueProcessor(
 	logger log.Logger,
 ) *replicatorQueueProcessorImpl {
 
-	currentClusterName := shard.GetService().GetClusterMetadata().GetCurrentClusterName()
+	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)

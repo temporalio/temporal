@@ -117,7 +117,33 @@ func (s *adminHandlerSuite) SetupTest() {
 		},
 	}
 	config := &Config{}
-	s.handler = NewAdminHandler(s.mockResource, params, config, s.mockProducer, nil, s.mockResource.ESClient, s.mockVisibilityMgr)
+	args := NewAdminHandlerArgs{
+		params,
+		config,
+		s.mockResource.GetNamespaceReplicationQueue(),
+		s.mockProducer,
+		nil,
+		s.mockResource.ESClient,
+		s.mockVisibilityMgr,
+		s.mockResource.Logger,
+		s.mockResource.GetExecutionManager(),
+		s.mockResource.GetTaskManager(),
+		s.mockResource.GetClusterMetadataManager(),
+		s.mockResource.GetMetadataManager(),
+		s.mockResource.GetClientFactory(),
+		s.mockResource.GetClientBean(),
+		s.mockResource.GetHistoryClient(),
+		s.mockResource.GetSDKClient(),
+		s.mockResource.GetMembershipMonitor(),
+		s.mockResource.GetArchiverProvider(),
+		s.mockResource.GetMetricsClient(),
+		s.mockResource.GetNamespaceRegistry(),
+		s.mockResource.GetSearchAttributesProvider(),
+		s.mockResource.GetSearchAttributesManager(),
+		s.mockMetadata,
+		s.mockResource.GetArchivalMetadata(),
+	}
+	s.handler = NewAdminHandler(args)
 	s.handler.Start()
 }
 
@@ -127,7 +153,6 @@ func (s *adminHandlerSuite) TearDownTest() {
 }
 
 func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2_FailedOnInvalidWorkflowID() {
-
 	ctx := context.Background()
 	_, err := s.handler.GetWorkflowExecutionRawHistoryV2(ctx,
 		&adminservice.GetWorkflowExecutionRawHistoryV2Request{

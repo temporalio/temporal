@@ -56,6 +56,7 @@ type (
 		*timerQueueTaskExecutorBase
 
 		queueProcessor *timerQueueActiveProcessorImpl
+		matchingClient matchingservice.MatchingServiceClient
 	}
 )
 
@@ -66,6 +67,7 @@ func newTimerQueueActiveTaskExecutor(
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
+	matchingClient matchingservice.MatchingServiceClient,
 ) queueTaskExecutor {
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
@@ -76,6 +78,7 @@ func newTimerQueueActiveTaskExecutor(
 			config,
 		),
 		queueProcessor: queueProcessor,
+		matchingClient: matchingClient,
 	}
 }
 
@@ -460,7 +463,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 
 	ctx, cancel = context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
-	_, retError = t.shard.GetService().GetMatchingClient().AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+	_, retError = t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            targetNamespaceID,
 		SourceNamespaceId:      namespaceID.String(),
 		Execution:              &execution,

@@ -132,7 +132,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	}
 	pageToken = resp.NextPageToken
 
-	remoteAdminClient := r.shard.GetService().GetClientBean().GetRemoteAdminClient(sourceCluster)
+	remoteAdminClient := r.shard.GetRemoteAdminClient(sourceCluster)
 	taskInfo := make([]*replicationspb.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
 		switch task := task.(type) {

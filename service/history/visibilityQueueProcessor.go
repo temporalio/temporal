@@ -134,6 +134,7 @@ func newVisibilityQueueProcessor(
 			logger,
 			historyEngine.metricsClient,
 			config,
+			matchingClient,
 		),
 
 		config:       config,
@@ -154,7 +155,7 @@ func newVisibilityQueueProcessor(
 	)
 
 	queueProcessorBase := newQueueProcessorBase(
-		shard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		shard.GetClusterMetadata().GetCurrentClusterName(),
 		shard,
 		options,
 		retProcessor,

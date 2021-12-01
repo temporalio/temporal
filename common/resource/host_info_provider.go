@@ -22,57 +22,57 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package resource
 
 import (
+	"context"
+
 	"go.uber.org/fx"
 
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/membership"
+)
+
+var HostInfoProviderModule = fx.Options(
+	fx.Provide(NewHostInfoProvider),
+	fx.Invoke(HostInfoProviderLifetimeHooks),
 )
 
 type (
-	PersistenceMaxQps dynamicconfig.IntPropertyFn
-	ClusterName       string
+	CachingHostInfoProvider struct {
+		hostInfo          *membership.HostInfo
+		membershipMonitor membership.Monitor
+	}
 )
 
-var Module = fx.Options(
-	FactoryModule,
-	BeanModule,
-)
-
-var FactoryModule = fx.Options(
-	fx.Provide(ClusterNameProvider),
-	fx.Provide(NewFactoryImplProvider),
-	fx.Provide(BindFactory),
-)
-
-func BindFactory(f *factoryImpl) Factory {
-	return f
+func NewHostInfoProvider(membershipMonitor membership.Monitor) HostInfoProvider {
+	return &CachingHostInfoProvider{
+		membershipMonitor: membershipMonitor,
+	}
 }
 
-func ClusterNameProvider(config *cluster.Config) ClusterName {
-	return ClusterName(config.CurrentClusterName)
+func (hip *CachingHostInfoProvider) Start() error {
+	var err error
+	hip.hostInfo, err = hip.membershipMonitor.WhoAmI()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
-func NewFactoryImplProvider(
-	cfg *config.Persistence,
-	r resolver.ServiceResolver,
-	persistenceMaxQPS PersistenceMaxQps,
-	abstractDataStoreFactory AbstractDataStoreFactory,
-	clusterName ClusterName,
-	metricsClient metrics.Client,
-	logger log.Logger,
-) *factoryImpl {
-	return NewFactoryImpl(cfg,
-		r,
-		dynamicconfig.IntPropertyFn(persistenceMaxQPS),
-		abstractDataStoreFactory,
-		string(clusterName),
-		metricsClient,
-		logger)
+func (hip *CachingHostInfoProvider) HostInfo() *membership.HostInfo {
+	return hip.hostInfo
+}
+
+func HostInfoProviderLifetimeHooks(
+	lc fx.Lifecycle,
+	provider HostInfoProvider,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				return provider.Start()
+			},
+		},
+	)
+
 }

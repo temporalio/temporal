@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -58,10 +59,11 @@ func newTransferQueueStandbyProcessor(
 	clusterName string,
 	shard shard.Context,
 	historyEngine *historyEngineImpl,
-	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
+	clientBean client.Bean,
+	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
 
 	config := shard.GetConfig()
@@ -110,6 +112,8 @@ func newTransferQueueStandbyProcessor(
 			historyEngine.metricsClient,
 			clusterName,
 			config,
+			clientBean,
+			matchingClient,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,

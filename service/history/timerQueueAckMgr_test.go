@@ -587,7 +587,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		s.minLevel,
 		s.maxLevel,
 		func() time.Time {
-			return s.mockShard.GetCurrentTime(s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName())
+			return s.mockShard.GetCurrentTime(s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName())
 		},
 		func(ackLevel timerKey) error {
 			return s.mockShard.UpdateTimerFailoverLevel(
@@ -613,7 +613,7 @@ func (s *timerQueueFailoverAckMgrSuite) TearDownTest() {
 
 func (s *timerQueueFailoverAckMgrSuite) TestIsProcessNow() {
 	// failover test to process whether to process a timer is use the current cluster's time
-	now := s.mockShard.GetCurrentTime(s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName())
+	now := s.mockShard.GetCurrentTime(s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName())
 	s.True(s.timerQueueFailoverAckMgr.isProcessNow(time.Time{}))
 	s.True(s.timerQueueFailoverAckMgr.isProcessNow(now))
 

@@ -89,8 +89,11 @@ func (s *contextSuite) SetupTest() {
 	s.namespaceID = "namespace-Id"
 	s.namespaceEntry = namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID.String()}, &persistencespb.NamespaceConfig{}, "")
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
+	shardContext.namespaceRegistry = s.mockResource.NamespaceCache
 
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
+	shardContext.clusterMetadata = s.mockClusterMetadata
+
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
 	s.mockHistoryEngine = NewMockEngine(s.controller)
 	shardContext.engine = s.mockHistoryEngine

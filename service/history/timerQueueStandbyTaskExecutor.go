@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -65,6 +66,7 @@ func newTimerQueueStandbyTaskExecutor(
 	metricsClient metrics.Client,
 	clusterName string,
 	config *configs.Config,
+	clientBean client.Bean,
 ) queueTaskExecutor {
 	return &timerQueueStandbyTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
@@ -75,7 +77,7 @@ func newTimerQueueStandbyTaskExecutor(
 			config,
 		),
 		clusterName:        clusterName,
-		adminClient:        shard.GetService().GetRemoteAdminClient(clusterName),
+		adminClient:        clientBean.GetRemoteAdminClient(clusterName),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }

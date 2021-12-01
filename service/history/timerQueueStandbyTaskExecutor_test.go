@@ -43,6 +43,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -89,6 +90,7 @@ type (
 		discardDuration      time.Duration
 
 		timerQueueStandbyTaskExecutor *timerQueueStandbyTaskExecutor
+		mockBean                      *client.MockBean
 	}
 )
 
@@ -124,7 +126,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
 
-	s.mockShard = shard.NewTestContext(
+	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -133,6 +135,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 				TransferAckLevel: 0,
 			}},
 		config,
+		s.timeSource,
 	)
 	s.mockShard.SetEventsCacheForTesting(events.NewEventsCache(
 		s.mockShard.GetShardID(),
@@ -144,7 +147,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetLogger(),
 		s.mockShard.GetMetricsClient(),
 	))
-	s.mockShard.Resource.TimeSource = s.timeSource
 
 	// ack manager will use the namespace information
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
@@ -161,7 +163,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.GetService().GetClusterMetadata().GetCurrentClusterName(),
+		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
@@ -174,6 +176,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		timerProcessor:     s.mockTimerProcessor,
 	}
 	s.mockShard.SetEngineForTesting(h)
+	s.mockBean = client.NewMockBean(s.controller)
+	s.mockBean.EXPECT().GetRemoteAdminClient("standby").Return(s.mockAdminClient)
 
 	s.timerQueueStandbyTaskExecutor = newTimerQueueStandbyTaskExecutor(
 		s.mockShard,
@@ -183,8 +187,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockShard.GetMetricsClient(),
 		s.clusterName,
 		config,
-		// newTaskAllocator(s.mockShard),
+		s.mockBean,
 	).(*timerQueueStandbyTaskExecutor)
+
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TearDownTest() {
@@ -1192,7 +1197,6 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Success(
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TestProcessRetryTimeout() {
-
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: "some random workflow ID",
 		RunId:      uuid.New(),

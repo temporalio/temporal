@@ -52,7 +52,7 @@ func verifyTaskVersion(
 	task interface{},
 ) (bool, error) {
 
-	if !shard.GetService().GetClusterMetadata().IsGlobalNamespaceEnabled() {
+	if !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
 		return true, nil
 	}
 
