@@ -67,7 +67,7 @@ var (
 	// ErrConsistentQueryBufferExceeded is error indicating that too many consistent queries have been buffered and until buffered queries are finished new consistent queries cannot be buffered
 	ErrConsistentQueryBufferExceeded = serviceerror.NewUnavailable("consistent query buffer is full, cannot accept new consistent queries")
 	// ErrEmptyHistoryRawEventBatch indicate that one single batch of history raw events is of size 0
-	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encounter empty history batch")
+	ErrEmptyHistoryRawEventBatch = serviceerror.NewInvalidArgument("encountered empty history batch")
 	// ErrSizeExceedsLimit is error indicating workflow execution has exceeded system defined limit
 	ErrSizeExceedsLimit = serviceerror.NewResourceExhausted(common.FailureReasonSizeExceedsLimit)
 	// ErrUnknownCluster is error indicating unknown cluster

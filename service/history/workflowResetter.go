@@ -276,7 +276,7 @@ func (r *workflowResetterImpl) prepareResetWorkflow(
 	}
 
 	if resetMutableState.GetCurrentVersion() > resetWorkflowVersion {
-		return nil, serviceerror.NewInternal("workflowResetter encounter version mismatch.")
+		return nil, serviceerror.NewInternal("workflowResetter encountered version mismatch.")
 	}
 	if err := resetMutableState.UpdateCurrentVersion(
 		resetWorkflowVersion,
@@ -607,7 +607,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		// noop
 	case *serviceerror.DataLoss:
 		// log event
-		r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(workflowID), tag.WorkflowRunID(baseRunID))
+		r.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(workflowID), tag.WorkflowRunID(baseRunID))
 		return "", err
 	default:
 		return "", err

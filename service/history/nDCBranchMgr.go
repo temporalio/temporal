@@ -263,7 +263,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 		return 0, err
 	}
 	if branchChanged {
-		return 0, serviceerror.NewInvalidArgument("nDCBranchMgr encounter branch change during conflict resolution")
+		return 0, serviceerror.NewInvalidArgument("nDCBranchMgr encountered branch change during conflict resolution")
 	}
 
 	return newIndex, nil

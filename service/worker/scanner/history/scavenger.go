@@ -270,7 +270,7 @@ func (s *Scavenger) handleTask(
 	var branchToken []byte
 	branchToken, err = persistence.NewHistoryBranchTokenByBranchID(task.treeID, task.branchID)
 	if err != nil {
-		s.logger.Error("encounter error when creating branch token", getTaskLoggingTags(err, task)...)
+		s.logger.Error("encountered error when creating branch token", getTaskLoggingTags(err, task)...)
 		return err
 	}
 
@@ -279,7 +279,7 @@ func (s *Scavenger) handleTask(
 		BranchToken: branchToken,
 	})
 	if err != nil {
-		s.logger.Error("encounter error when deleting garbage history branch", getTaskLoggingTags(err, task)...)
+		s.logger.Error("encountered error when deleting garbage history branch", getTaskLoggingTags(err, task)...)
 	} else {
 		s.logger.Info("deleted history garbage", getTaskLoggingTags(nil, task)...)
 	}

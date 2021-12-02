@@ -275,7 +275,7 @@ func ValidateConflictResolveWorkflowModeState(
 
 		// precondition
 		if currentWorkflowMutation != nil {
-			return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow conflict resolve mode %v, encounter current workflow", mode))
+			return serviceerror.NewInternal(fmt.Sprintf("Invalid workflow conflict resolve mode %v, encountered current workflow", mode))
 		}
 
 		// case 1

@@ -136,7 +136,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 			// noop
 		case *serviceerror.DataLoss:
 			// log event
-			r.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(baseWorkflowIdentifier.NamespaceID), tag.WorkflowID(baseWorkflowIdentifier.WorkflowID), tag.WorkflowRunID(baseWorkflowIdentifier.RunID))
+			r.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(baseWorkflowIdentifier.NamespaceID), tag.WorkflowID(baseWorkflowIdentifier.WorkflowID), tag.WorkflowRunID(baseWorkflowIdentifier.RunID))
 			return nil, 0, err
 		default:
 			return nil, 0, err

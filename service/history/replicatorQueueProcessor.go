@@ -510,7 +510,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	}
 
 	if len(eventBatchBlobs) != 1 {
-		return nil, serviceerror.NewInternal("replicatorQueueProcessor encounter more than 1 NDC raw event batch")
+		return nil, serviceerror.NewInternal("replicatorQueueProcessor encountered more than 1 NDC raw event batch")
 	}
 
 	return eventBatchBlobs[0], nil

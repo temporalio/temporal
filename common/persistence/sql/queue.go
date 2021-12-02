@@ -160,7 +160,7 @@ func (q *sqlQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) e
 			return fmt.Errorf("rowsAffected returned error for queue metadata %v: %v", q.queueType, err)
 		}
 		if rowsAffected != 1 {
-			return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encounter concurrent write."}
+			return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encountered concurrent write."}
 		}
 		return nil
 	})

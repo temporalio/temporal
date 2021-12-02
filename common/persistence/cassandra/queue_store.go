@@ -328,7 +328,7 @@ func (q *QueueStore) updateAckLevel(
 		gocql.ConvertError("updateAckLevel", err)
 	}
 	if !applied {
-		return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encounter concurrent write."}
+		return &persistence.ConditionFailedError{Msg: "UpdateAckLevel operation encountered concurrent write."}
 	}
 
 	return nil

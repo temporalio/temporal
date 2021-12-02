@@ -803,7 +803,7 @@ func (c *ContextImpl) ReapplyEvents(
 	for _, events := range eventBatches {
 		if namespace.ID(events.NamespaceID) != namespaceID ||
 			events.WorkflowID != workflowID {
-			return serviceerror.NewInternal("Context encounter mismatch namespaceID / workflowID in events reapplication.")
+			return serviceerror.NewInternal("Context encountered mismatch namespaceID / workflowID in events reapplication.")
 		}
 
 		for _, e := range events.Events {

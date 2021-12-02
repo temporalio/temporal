@@ -58,7 +58,7 @@ var (
 	// ErrInvalidNamespaceState is the error to indicate invalid namespace state
 	ErrInvalidNamespaceState = serviceerror.NewInvalidArgument("invalid namespace state attribute")
 	// ErrNameUUIDCollision is the error to indicate namespace name / UUID collision
-	ErrNameUUIDCollision = serviceerror.NewInvalidArgument("namespace replication encounter name / UUID collision")
+	ErrNameUUIDCollision = serviceerror.NewInvalidArgument("namespace replication encountered name / UUID collision")
 )
 
 // NOTE: the counterpart of namespace replication transmission logic is in service/fropntend package

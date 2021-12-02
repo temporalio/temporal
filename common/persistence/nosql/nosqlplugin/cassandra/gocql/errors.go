@@ -43,21 +43,21 @@ func ConvertError(
 	case nil:
 		return nil
 	case context.DeadlineExceeded, gocql.ErrTimeoutNoResponse, gocql.ErrConnectionClosed:
-		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encounter %v", operation, err.Error())}
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, err.Error())}
 	case gocql.ErrNotFound:
-		return serviceerror.NewNotFound(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+		return serviceerror.NewNotFound(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 	}
 
 	switch v := err.(type) {
 	case *gocql.RequestErrWriteTimeout:
-		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encounter %v", operation, err.Error())}
+		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, err.Error())}
 	case gocql.RequestError:
 		if v.Code() == 0x1001 {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+			return serviceerror.NewResourceExhausted(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 		}
-		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 	default:
-		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encounter %v", operation, err.Error()))
+		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 	}
 }
 
