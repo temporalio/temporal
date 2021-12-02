@@ -71,6 +71,7 @@ func updateSchema(cli *cli.Context, logger log.Logger) error {
 	conn, err := NewConnection(cfg)
 	if err != nil {
 		logger.Error("Unable to connect to SQL database.", tag.Error(err))
+		return err
 	}
 	defer conn.Close()
 	if err := schema.Update(cli, conn, logger); err != nil {
@@ -125,6 +126,7 @@ func dropDatabase(cli *cli.Context, logger log.Logger) error {
 	err = DoDropDatabase(cfg, database)
 	if err != nil {
 		logger.Error("Unable to drop SQL database.", tag.Error(err))
+		return err
 	}
 	return nil
 }
