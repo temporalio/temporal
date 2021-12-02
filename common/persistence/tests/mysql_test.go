@@ -84,7 +84,7 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 		TearDownMySQLDatabase(cfg)
 	}()
 
-	s := newExecutionMutableStateSuite(t, shardStore, executionStore, logger)
+	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, logger)
 	suite.Run(t, s)
 }
 
@@ -108,7 +108,7 @@ func TestMySQLHistoryStoreSuite(t *testing.T) {
 		TearDownMySQLDatabase(cfg)
 	}()
 
-	s := newHistoryEventsSuite(t, store, logger)
+	s := NewHistoryEventsSuite(t, store, logger)
 	suite.Run(t, s)
 }
 

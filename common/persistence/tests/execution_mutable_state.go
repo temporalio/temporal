@@ -46,7 +46,7 @@ import (
 )
 
 type (
-	executionMutableStateSuite struct {
+	ExecutionMutableStateSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -62,13 +62,13 @@ type (
 	}
 )
 
-func newExecutionMutableStateSuite(
+func NewExecutionMutableStateSuite(
 	t *testing.T,
 	shardStore p.ShardStore,
 	executionStore p.ExecutionStore,
 	logger log.Logger,
-) *executionMutableStateSuite {
-	return &executionMutableStateSuite{
+) *ExecutionMutableStateSuite {
+	return &ExecutionMutableStateSuite{
 		Assertions:   require.New(t),
 		shardManager: p.NewShardManager(shardStore),
 		executionManager: p.NewExecutionManager(
@@ -80,15 +80,15 @@ func newExecutionMutableStateSuite(
 	}
 }
 
-func (s *executionMutableStateSuite) SetupSuite() {
+func (s *ExecutionMutableStateSuite) SetupSuite() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func (s *executionMutableStateSuite) TearDownSuite() {
+func (s *ExecutionMutableStateSuite) TearDownSuite() {
 
 }
 
-func (s *executionMutableStateSuite) SetupTest() {
+func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.shardID = rand.Int31()
@@ -108,11 +108,11 @@ func (s *executionMutableStateSuite) SetupTest() {
 	s.runID = uuid.New().String()
 }
 
-func (s *executionMutableStateSuite) TearDownTest() {
+func (s *ExecutionMutableStateSuite) TearDownTest() {
 
 }
 
-func (s *executionMutableStateSuite) TestCreate_BrandNew() {
+func (s *ExecutionMutableStateSuite) TestCreate_BrandNew() {
 	newSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -123,7 +123,7 @@ func (s *executionMutableStateSuite) TestCreate_BrandNew() {
 	s.assertEqualWithDB(newSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	lastWriteVersion := rand.Int63()
 	newSnapshot := s.createWorkflow(
 		lastWriteVersion,
@@ -158,7 +158,7 @@ func (s *executionMutableStateSuite) TestCreate_BrandNew_CurrentConflict() {
 	s.assertEqualWithDB(newSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestCreate_Reuse() {
+func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 	prevLastWriteVersion := rand.Int63()
 	prevSnapshot := s.createWorkflow(
 		prevLastWriteVersion,
@@ -193,7 +193,7 @@ func (s *executionMutableStateSuite) TestCreate_Reuse() {
 	s.assertEqualWithDB(newSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	prevLastWriteVersion := rand.Int63()
 	prevSnapshot := s.createWorkflow(
 		prevLastWriteVersion,
@@ -228,7 +228,7 @@ func (s *executionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	s.assertEqualWithDB(prevSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestCreate_Zombie() {
+func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 	prevLastWriteVersion := rand.Int63()
 	_ = s.createWorkflow(
 		prevLastWriteVersion,
@@ -263,7 +263,7 @@ func (s *executionMutableStateSuite) TestCreate_Zombie() {
 	s.assertEqualWithDB(newSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestCreate_Conflict() {
+func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 	lastWriteVersion := rand.Int63()
 	newSnapshot := s.createWorkflow(
 		lastWriteVersion,
@@ -286,7 +286,7 @@ func (s *executionMutableStateSuite) TestCreate_Conflict() {
 	s.IsType(&p.WorkflowConditionFailedError{}, err)
 }
 
-func (s *executionMutableStateSuite) TestUpdate_NotZombie() {
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -319,7 +319,7 @@ func (s *executionMutableStateSuite) TestUpdate_NotZombie() {
 	s.assertEqualWithDB(currentSnapshot, currentMutation)
 }
 
-func (s *executionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -356,7 +356,7 @@ func (s *executionMutableStateSuite) TestUpdate_NotZombie_CurrentConflict() {
 	)
 }
 
-func (s *executionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -389,7 +389,7 @@ func (s *executionMutableStateSuite) TestUpdate_NotZombie_Conflict() {
 	s.assertEqualWithDB(currentSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
+func (s *ExecutionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -432,7 +432,7 @@ func (s *executionMutableStateSuite) TestUpdate_NotZombie_WithNew() {
 	s.assertEqualWithDB(newSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestUpdate_Zombie() {
+func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -487,7 +487,7 @@ func (s *executionMutableStateSuite) TestUpdate_Zombie() {
 	s.assertEqualWithDB(zombieSnapshot, zombieMutation)
 }
 
-func (s *executionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -520,7 +520,7 @@ func (s *executionMutableStateSuite) TestUpdate_Zombie_CurrentConflict() {
 	s.assertEqualWithDB(currentSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestUpdate_Zombie_Conflict() {
+func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -575,7 +575,7 @@ func (s *executionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 	s.assertEqualWithDB(zombieSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestUpdate_Zombie_WithNew() {
+func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -640,7 +640,7 @@ func (s *executionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 	s.assertEqualWithDB(newZombieSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -709,7 +709,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 	s.assertEqualWithDB(currentSnapshot, currentMutation)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_CurrentConflict() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -778,7 +778,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 	s.assertEqualWithDB(currentSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflict_Case1() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflict_Case1() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -847,7 +847,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	s.assertEqualWithDB(currentSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflict_Case2() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflict_Case2() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -916,7 +916,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	s.assertEqualWithDB(currentSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew() {
 	currentSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -995,7 +995,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 	s.assertEqualWithDB(currentSnapshot, currentMutation)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_ResetCurrent() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent() {
 	baseSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1031,7 +1031,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_ResetCurrent() {
 	s.assertEqualWithDB(resetSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentConflict() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1089,7 +1089,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 	s.assertEqualWithDB(baseSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict() {
 	baseSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1125,7 +1125,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_ResetCurrent_Conflict()
 	s.assertEqualWithDB(baseSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() {
 	baseSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1171,7 +1171,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_ResetCurrent_WithNew() 
 	s.assertEqualWithDB(newSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_Zombie() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1229,7 +1229,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_Zombie() {
 	s.assertEqualWithDB(resetSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict() {
 	baseSnapshot := s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1265,7 +1265,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_Zombie_CurrentConflict(
 	s.assertEqualWithDB(baseSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1323,7 +1323,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 	s.assertEqualWithDB(baseSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
+func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1391,7 +1391,7 @@ func (s *executionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 	s.assertEqualWithDB(newSnapshot)
 }
 
-func (s *executionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
+func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1415,7 +1415,7 @@ func (s *executionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *executionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
+func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 	err := s.executionManager.DeleteCurrentWorkflowExecution(&p.DeleteCurrentWorkflowExecutionRequest{
 		ShardID:     s.shardID,
 		NamespaceID: s.namespaceID,
@@ -1432,7 +1432,7 @@ func (s *executionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *executionMutableStateSuite) TestDelete_Exists() {
+func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
 	_ = s.createWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
@@ -1451,7 +1451,7 @@ func (s *executionMutableStateSuite) TestDelete_Exists() {
 	s.assertMissingFromDB(s.namespaceID, s.workflowID, s.runID)
 }
 
-func (s *executionMutableStateSuite) TestDelete_NotExists() {
+func (s *ExecutionMutableStateSuite) TestDelete_NotExists() {
 	err := s.executionManager.DeleteWorkflowExecution(&p.DeleteWorkflowExecutionRequest{
 		ShardID:     s.shardID,
 		NamespaceID: s.namespaceID,
@@ -1463,7 +1463,7 @@ func (s *executionMutableStateSuite) TestDelete_NotExists() {
 	s.assertMissingFromDB(s.namespaceID, s.workflowID, s.runID)
 }
 
-func (s *executionMutableStateSuite) createWorkflow(
+func (s *ExecutionMutableStateSuite) createWorkflow(
 	lastWriteVersion int64,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
@@ -1493,7 +1493,7 @@ func (s *executionMutableStateSuite) createWorkflow(
 	return snapshot
 }
 
-func (s *executionMutableStateSuite) assertMissingFromDB(
+func (s *ExecutionMutableStateSuite) assertMissingFromDB(
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -1507,7 +1507,7 @@ func (s *executionMutableStateSuite) assertMissingFromDB(
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
-func (s *executionMutableStateSuite) assertEqualWithDB(
+func (s *ExecutionMutableStateSuite) assertEqualWithDB(
 	snapshot *p.WorkflowSnapshot,
 	mutations ...*p.WorkflowMutation,
 ) {
@@ -1536,7 +1536,7 @@ func (s *executionMutableStateSuite) assertEqualWithDB(
 	s.Equal(expectedMutableState, actualMutableState)
 }
 
-func (s *executionMutableStateSuite) accumulate(
+func (s *ExecutionMutableStateSuite) accumulate(
 	snapshot *p.WorkflowSnapshot,
 	mutations ...*p.WorkflowMutation,
 ) (*persistencespb.WorkflowMutableState, int64) {

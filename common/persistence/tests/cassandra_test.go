@@ -81,7 +81,7 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 		TearDownCassandraKeyspace(cfg)
 	}()
 
-	s := newExecutionMutableStateSuite(t, shardStore, executionStore, logger)
+	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, logger)
 	suite.Run(t, s)
 }
 
@@ -105,7 +105,7 @@ func TestCassandraHistoryStoreSuite(t *testing.T) {
 		TearDownCassandraKeyspace(cfg)
 	}()
 
-	s := newHistoryEventsSuite(t, store, logger)
+	s := NewHistoryEventsSuite(t, store, logger)
 	suite.Run(t, s)
 }
 

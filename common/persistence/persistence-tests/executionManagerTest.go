@@ -134,6 +134,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionDeDup() {
 				LastWorkflowTaskStartId:    lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -210,6 +211,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionStateStatus() {
 				LastWorkflowTaskStartId:    lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -317,6 +319,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionWithZombieState() {
 				LastWorkflowTaskStartId:    lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -407,6 +410,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionStateStatus() {
 				LastWorkflowTaskStartId:    lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -596,6 +600,7 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflowExecutionWithZombieState() {
 				LastWorkflowTaskStartId:    lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -735,6 +740,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionBrandNew() {
 				LastWorkflowTaskStartId:    lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -790,6 +796,7 @@ func (s *ExecutionManagerSuite) TestUpsertWorkflowActivity() {
 				LastWorkflowTaskStartId:    lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -921,6 +928,7 @@ func (s *ExecutionManagerSuite) TestCreateWorkflowExecutionRunIDReuseWithoutRepl
 				LastWorkflowTaskStartId:    lastProcessedEventID,
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: nextEventID,
 			ExecutionState: &persistencespb.WorkflowExecutionState{
@@ -1038,6 +1046,7 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),
@@ -1130,7 +1139,8 @@ func (s *ExecutionManagerSuite) TestGetWorkflow() {
 				ExecutionStats: &persistencespb.ExecutionStats{
 					HistorySize: int64(rand.Int31()),
 				},
-				StartTime: timestamp.TimeNowPtrUtc(),
+				StartTime:      timestamp.TimeNowPtrUtc(),
+				LastUpdateTime: timestamp.TimeNowPtrUtc(),
 			},
 			NextEventID: rand.Int63(),
 			ExecutionState: &persistencespb.WorkflowExecutionState{

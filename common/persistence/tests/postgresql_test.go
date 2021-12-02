@@ -84,7 +84,7 @@ func TestPostgreSQLExecutionMutableStateStoreSuite(t *testing.T) {
 		TearDownPostgreSQLDatabase(cfg)
 	}()
 
-	s := newExecutionMutableStateSuite(t, shardStore, executionStore, logger)
+	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, logger)
 	suite.Run(t, s)
 }
 
@@ -108,7 +108,7 @@ func TestPostgreSQLHistoryStoreSuite(t *testing.T) {
 		TearDownPostgreSQLDatabase(cfg)
 	}()
 
-	s := newHistoryEventsSuite(t, store, logger)
+	s := NewHistoryEventsSuite(t, store, logger)
 	suite.Run(t, s)
 }
 
