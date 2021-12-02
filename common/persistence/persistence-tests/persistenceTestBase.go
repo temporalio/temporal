@@ -301,6 +301,7 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				WorkflowTaskTimeout:        timestamp.DurationFromSeconds(1),
 				ExecutionStats:             &persistencespb.ExecutionStats{},
 				StartTime:                  timestamp.TimeNowPtrUtc(),
+				LastUpdateTime:             timestamp.TimeNowPtrUtc(),
 			},
 			ExecutionState: &persistencespb.WorkflowExecutionState{
 				RunId:           workflowExecution.GetRunId(),

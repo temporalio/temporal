@@ -37,7 +37,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 type (
@@ -308,7 +307,6 @@ func (m *executionManagerImpl) CreateWorkflowExecution(
 		return nil, err
 	}
 
-	snapshot.ExecutionInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&snapshot)
 	if err != nil {
 		return nil, err

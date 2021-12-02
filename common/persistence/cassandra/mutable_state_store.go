@@ -541,7 +541,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 		signalInfos[key] = p.NewDataBlob(value, sMapEncoding)
 	}
 	state.SignalInfos = signalInfos
-	state.SignalRequestedIDs = gocql.UUIDsToStrings(result["signal_requested"])
+	state.SignalRequestedIDs = gocql.UUIDsToStringSlice(result["signal_requested"])
 
 	eList := result["buffered_events_list"].([]map[string]interface{})
 	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))
