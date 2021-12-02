@@ -230,10 +230,8 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      runID,
-		},
+		WorkflowID:  workflowID,
+		RunID:       runID,
 	}).Return(nil, serviceerror.NewNotFound(""))
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(namespaceID).Return(namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: namespaceID.String(), Name: namespaceName.String()},

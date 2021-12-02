@@ -460,7 +460,8 @@ func (s *TestBase) GetWorkflowMutableState(namespaceID string, workflowExecution
 	response, err := s.ExecutionManager.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.ShardInfo.GetShardId(),
 		NamespaceID: namespaceID,
-		Execution:   workflowExecution,
+		WorkflowID:  workflowExecution.GetWorkflowId(),
+		RunID:       workflowExecution.GetRunId(),
 	})
 	if err != nil {
 		return nil, err

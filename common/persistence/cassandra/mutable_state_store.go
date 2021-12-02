@@ -483,13 +483,12 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 func (d *MutableStateStore) GetWorkflowExecution(
 	request *p.GetWorkflowExecutionRequest,
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
-	execution := request.Execution
 	query := d.Session.Query(templateGetWorkflowExecutionQuery,
 		request.ShardID,
 		rowTypeExecution,
 		request.NamespaceID,
-		execution.WorkflowId,
-		execution.GetRunId(),
+		request.WorkflowID,
+		request.RunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
 

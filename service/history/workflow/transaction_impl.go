@@ -436,8 +436,8 @@ func getWorkflowExecutionWithRetry(
 		shard.GetLogger().Error(
 			"Persistent fetch operation Failure",
 			tag.WorkflowNamespaceID(request.NamespaceID),
-			tag.WorkflowID(request.Execution.WorkflowId),
-			tag.WorkflowRunID(request.Execution.RunId),
+			tag.WorkflowID(request.WorkflowID),
+			tag.WorkflowRunID(request.RunID),
 			tag.StoreOperationGetWorkflowExecution,
 			tag.Error(err),
 		)

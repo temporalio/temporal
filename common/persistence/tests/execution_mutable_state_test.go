@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -1328,9 +1329,89 @@ func (s *executionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 	s.NoError(err)
 }
 
-func (s *executionMutableStateSuite) TestDeleteCurrent() {}
+func (s *executionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
+	_ = s.createWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		int64(1),
+	)
 
-func (s *executionMutableStateSuite) TestDelete() {}
+	err := s.executionManager.DeleteCurrentWorkflowExecution(&p.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	})
+	s.NoError(err)
+
+	_, err = s.executionManager.GetCurrentExecution(&p.GetCurrentExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+	})
+	s.IsType(&serviceerror.NotFound{}, err)
+}
+
+func (s *executionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
+	err := s.executionManager.DeleteCurrentWorkflowExecution(&p.DeleteCurrentWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	})
+	s.NoError(err)
+
+	_, err = s.executionManager.GetCurrentExecution(&p.GetCurrentExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+	})
+	s.IsType(&serviceerror.NotFound{}, err)
+}
+
+func (s *executionMutableStateSuite) TestDelete_Exists() {
+	_ = s.createWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		int64(1),
+	)
+
+	err := s.executionManager.DeleteWorkflowExecution(&p.DeleteWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	})
+	s.NoError(err)
+
+	_, err = s.executionManager.GetWorkflowExecution(&p.GetWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	})
+	s.IsType(&serviceerror.NotFound{}, err)
+}
+
+func (s *executionMutableStateSuite) TestDelete_NotExists() {
+	err := s.executionManager.DeleteWorkflowExecution(&p.DeleteWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	})
+	s.NoError(err)
+
+	_, err = s.executionManager.GetWorkflowExecution(&p.GetWorkflowExecutionRequest{
+		ShardID:     s.shardID,
+		NamespaceID: s.namespaceID,
+		WorkflowID:  s.workflowID,
+		RunID:       s.runID,
+	})
+	s.IsType(&serviceerror.NotFound{}, err)
+}
 
 func (s *executionMutableStateSuite) createWorkflow(
 	lastWriteVersion int64,

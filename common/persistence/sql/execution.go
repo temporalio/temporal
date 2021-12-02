@@ -229,19 +229,19 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	namespaceID := primitives.MustParseUUID(request.NamespaceID)
-	runID := primitives.MustParseUUID(request.Execution.RunId)
-	wfID := request.Execution.WorkflowId
+	workflowID := request.WorkflowID
+	runID := primitives.MustParseUUID(request.RunID)
 	executionsRow, err := m.Db.SelectFromExecutions(ctx, sqlplugin.ExecutionsFilter{
 		ShardID:     request.ShardID,
 		NamespaceID: namespaceID,
-		WorkflowID:  wfID,
+		WorkflowID:  workflowID,
 		RunID:       runID,
 	})
 	switch err {
 	case nil:
 		// noop
 	case sql.ErrNoRows:
-		return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v", request.Execution.GetWorkflowId(), request.Execution.GetRunId()))
+		return nil, serviceerror.NewNotFound(fmt.Sprintf("Workflow executionsRow not found.  WorkflowId: %v, RunId: %v", workflowID, runID))
 	default:
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetWorkflowExecution: failed. Error: %v", err))
 	}
@@ -258,7 +258,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		m.Db,
 		request.ShardID,
 		namespaceID,
-		wfID,
+		workflowID,
 		runID,
 	)
 	if err != nil {
@@ -269,7 +269,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		m.Db,
 		request.ShardID,
 		namespaceID,
-		wfID,
+		workflowID,
 		runID,
 	)
 	if err != nil {
@@ -280,7 +280,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		m.Db,
 		request.ShardID,
 		namespaceID,
-		wfID,
+		workflowID,
 		runID,
 	)
 	if err != nil {
@@ -291,7 +291,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		m.Db,
 		request.ShardID,
 		namespaceID,
-		wfID,
+		workflowID,
 		runID,
 	)
 	if err != nil {
@@ -302,7 +302,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		m.Db,
 		request.ShardID,
 		namespaceID,
-		wfID,
+		workflowID,
 		runID,
 	)
 	if err != nil {
@@ -313,7 +313,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		m.Db,
 		request.ShardID,
 		namespaceID,
-		wfID,
+		workflowID,
 		runID,
 	)
 	if err != nil {
@@ -324,7 +324,7 @@ func (m *sqlExecutionStore) GetWorkflowExecution(
 		m.Db,
 		request.ShardID,
 		namespaceID,
-		wfID,
+		workflowID,
 		runID,
 	)
 	if err != nil {

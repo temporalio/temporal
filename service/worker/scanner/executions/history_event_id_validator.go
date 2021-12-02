@@ -25,7 +25,6 @@
 package executions
 
 import (
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -89,10 +88,8 @@ func (v *historyEventIDValidator) Validate(
 		_, err = v.executionManager.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
 			ShardID:     v.shardID,
 			NamespaceID: mutableState.GetExecutionInfo().NamespaceId,
-			Execution: commonpb.WorkflowExecution{
-				WorkflowId: mutableState.GetExecutionInfo().WorkflowId,
-				RunId:      mutableState.GetExecutionState().RunId,
-			},
+			WorkflowID:  mutableState.GetExecutionInfo().WorkflowId,
+			RunID:       mutableState.GetExecutionState().RunId,
 		})
 		switch err.(type) {
 		case nil:

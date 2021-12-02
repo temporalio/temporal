@@ -245,7 +245,8 @@ type (
 	GetWorkflowExecutionRequest struct {
 		ShardID     int32
 		NamespaceID string
-		Execution   commonpb.WorkflowExecution
+		WorkflowID  string
+		RunID       string
 	}
 
 	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
