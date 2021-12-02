@@ -59,12 +59,9 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/payload"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/tools/cli/dataconverter"
 	"go.temporal.io/server/tools/cli/stringify"
 )
 
@@ -119,7 +116,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 				}
 				prevEvent = *e
 			}
-			fmt.Println(stringify.AnyToString(e, true, maxFieldLength, dataconverter.GetCurrent()))
+			fmt.Println(stringify.AnyToString(e, true, maxFieldLength, customDataConverter()))
 		}
 	} else if c.IsSet(FlagEventID) { // only dump that event
 		eventID := c.Int(FlagEventID)
@@ -127,7 +124,7 @@ func showHistoryHelper(c *cli.Context, wid, rid string) {
 			ErrorAndExit("EventId out of range.", fmt.Errorf("number should be 1 - %d inclusive", len(history.Events)))
 		}
 		e := history.Events[eventID-1]
-		fmt.Println(stringify.AnyToString(e, true, 0, dataconverter.GetCurrent()))
+		fmt.Println(stringify.AnyToString(e, true, 0, customDataConverter()))
 	} else { // use table to pretty output, will trim long text
 		table := tablewriter.NewWriter(os.Stdout)
 		table.SetBorder(false)
@@ -384,7 +381,7 @@ func getPrintableMemo(memo *commonpb.Memo) string {
 	buf := new(bytes.Buffer)
 	for k, v := range memo.Fields {
 		var memo string
-		err := payload.Decode(v, &memo)
+		err := defaultDataConverter().FromPayload(v, &memo)
 		if err != nil {
 			memo = "Memo is not a string"
 		}
@@ -592,7 +589,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	if queryResponse.QueryRejected != nil {
 		fmt.Printf("Query was rejected, workflow has status: %v\n", queryResponse.QueryRejected.GetStatus())
 	} else {
-		queryResult := payloads.ToString(queryResponse.QueryResult)
+		queryResult := stringify.AnyToString(queryResponse.QueryResult, true, 0, customDataConverter())
 		fmt.Printf("Query result:\n%v\n", queryResult)
 	}
 }
@@ -952,7 +949,7 @@ func convertDescribeWorkflowExecutionResponse(resp *workflowservice.DescribeWork
 		}
 
 		if pendingActivity.GetHeartbeatDetails() != nil {
-			pendingActivityStr.HeartbeatDetails = payloads.ToString(pendingActivity.GetHeartbeatDetails())
+			pendingActivityStr.HeartbeatDetails = stringify.AnyToString(pendingActivity.GetHeartbeatDetails(), true, 0, customDataConverter())
 		}
 		pendingActivitiesStr = append(pendingActivitiesStr, pendingActivityStr)
 	}
@@ -1122,7 +1119,7 @@ func printRunStatus(event *historypb.HistoryEvent) {
 	switch event.GetEventType() {
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 		fmt.Printf("  Status: %s\n", colorGreen("COMPLETED"))
-		result := payloads.ToString(event.GetWorkflowExecutionCompletedEventAttributes().GetResult())
+		result := stringify.AnyToString(event.GetWorkflowExecutionCompletedEventAttributes().GetResult(), true, 0, customDataConverter())
 		fmt.Printf("  Output: %s\n", result)
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 		fmt.Printf("  Status: %s\n", colorRed("FAILED"))
@@ -1132,7 +1129,7 @@ func printRunStatus(event *historypb.HistoryEvent) {
 		fmt.Printf("  Retry status: %s\n", event.GetWorkflowExecutionTimedOutEventAttributes().GetRetryState())
 	case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 		fmt.Printf("  Status: %s\n", colorRed("CANCELED"))
-		details := payloads.ToString(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails())
+		details := stringify.AnyToString(event.GetWorkflowExecutionCanceledEventAttributes().GetDetails(), true, 0, customDataConverter())
 		fmt.Printf("  Detail: %s\n", details)
 	}
 }
@@ -1396,9 +1393,9 @@ func printListResults(executions []*workflowpb.WorkflowExecutionInfo, inJSON boo
 			}
 		} else {
 			if more || i < len(executions)-1 {
-				fmt.Println(stringify.AnyToString(execution, true, 0, dataconverter.GetCurrent()) + ",")
+				fmt.Println(stringify.AnyToString(execution, true, 0, customDataConverter()) + ",")
 			} else {
-				fmt.Println(stringify.AnyToString(execution, true, 0, dataconverter.GetCurrent()))
+				fmt.Println(stringify.AnyToString(execution, true, 0, customDataConverter()))
 			}
 		}
 	}
@@ -1975,13 +1972,15 @@ func CompleteActivity(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
+	resultPayloads, _ := customDataConverter().ToPayloads(result)
+
 	frontendClient := cFactory.FrontendClient(c)
 	_, err := frontendClient.RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
 		Namespace:  namespace,
 		WorkflowId: wid,
 		RunId:      rid,
 		ActivityId: activityID,
-		Result:     payloads.EncodeString(result),
+		Result:     resultPayloads,
 		Identity:   identity,
 	})
 	if err != nil {
@@ -2006,6 +2005,8 @@ func FailActivity(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
+	detailsPayloads, _ := customDataConverter().ToPayloads(detail)
+
 	frontendClient := cFactory.FrontendClient(c)
 	_, err := frontendClient.RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
 		Namespace:  namespace,
@@ -2017,7 +2018,7 @@ func FailActivity(c *cli.Context) {
 			Source:  "CLI",
 			FailureInfo: &failurepb.Failure_ApplicationFailureInfo{ApplicationFailureInfo: &failurepb.ApplicationFailureInfo{
 				NonRetryable: true,
-				Details:      payloads.EncodeString(detail),
+				Details:      detailsPayloads,
 			}},
 		},
 		Identity: identity,

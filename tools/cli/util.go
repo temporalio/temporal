@@ -45,6 +45,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/converter"
 
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/collection"
@@ -75,7 +76,7 @@ func GetHistory(ctx context.Context, workflowClient sdkclient.Client, workflowID
 // HistoryEventToString convert HistoryEvent to string
 func HistoryEventToString(e *historypb.HistoryEvent, printFully bool, maxFieldLength int) string {
 	data := getEventAttributes(e)
-	return stringify.AnyToString(data, printFully, maxFieldLength, dataconverter.GetCurrent())
+	return stringify.AnyToString(data, printFully, maxFieldLength, customDataConverter())
 }
 
 // ColorEvent takes an event and return string with color
@@ -811,4 +812,12 @@ func prompt(msg string, autoConfirm bool) {
 	if textLower != "y" && textLower != "yes" {
 		os.Exit(1)
 	}
+}
+
+func defaultDataConverter() converter.DataConverter {
+	return converter.GetDefaultDataConverter()
+}
+
+func customDataConverter() converter.DataConverter {
+	return dataconverter.GetCurrent()
 }

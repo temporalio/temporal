@@ -35,7 +35,6 @@ import (
 	"github.com/urfave/cli"
 
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/server/tools/cli/dataconverter"
 )
 
 const dataConverterURL = "%s/data-converter/%d"
@@ -70,7 +69,7 @@ func processMessage(c *websocket.Conn) error {
 
 	payloadResponse := PayloadResponse{
 		RequestID: payloadRequest.RequestID,
-		Content:   dataconverter.GetCurrent().ToString(&payload),
+		Content:   customDataConverter().ToString(&payload),
 	}
 
 	var response []byte
