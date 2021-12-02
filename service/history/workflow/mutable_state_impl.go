@@ -56,7 +56,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/migration"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -222,7 +221,7 @@ func NewMutableState(
 		bufferEventsInDB: nil,
 		stateInDB:        enumsspb.WORKFLOW_EXECUTION_STATE_VOID,
 		nextEventIDInDB:  common.FirstEventID,
-		dbRecordVersion:  0,
+		dbRecordVersion:  1,
 		namespaceEntry:   namespaceEntry,
 		appliedEvents:    make(map[string]struct{}),
 
@@ -235,11 +234,6 @@ func NewMutableState(
 		timeSource:      shard.GetTimeSource(),
 		logger:          logger,
 		metricsClient:   shard.GetMetricsClient(),
-	}
-
-	// making new workflow to use db record version for CAS instead of next event ID
-	if migration.IsDBVersionEnabled() {
-		s.dbRecordVersion = 1
 	}
 
 	s.executionInfo = &persistencespb.WorkflowExecutionInfo{

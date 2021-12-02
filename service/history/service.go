@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/migration"
 	"go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
@@ -96,9 +95,6 @@ func (s *Service) Start() {
 	if !atomic.CompareAndSwapInt32(&s.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
-
-	// TODO remove this dynamic flag in 1.14.x
-	migration.SetDBVersionFlag(s.config.EnableDBRecordVersion())
 
 	logger := s.logger
 	logger.Info("history starting")

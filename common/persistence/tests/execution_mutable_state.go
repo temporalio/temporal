@@ -91,7 +91,7 @@ func (s *ExecutionMutableStateSuite) TearDownSuite() {
 func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
-	s.shardID = rand.Int31()
+	s.shardID = 1 + rand.Int31n(16)
 	resp, err := s.shardManager.GetOrCreateShard(&p.GetOrCreateShardRequest{
 		ShardID: s.shardID,
 		InitialShardInfo: &persistencespb.ShardInfo{
