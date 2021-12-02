@@ -338,6 +338,7 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 // DeprecateNamespace us used to update status of a registered namespace to DEPRECATED.  Once the namespace is deprecated
 // it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
 // deprecated namespaces.
+// Deprecated.
 func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *workflowservice.DeprecateNamespaceRequest) (_ *workflowservice.DeprecateNamespaceResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
@@ -354,30 +355,6 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 	}
 
 	resp, err := wh.namespaceHandler.DeprecateNamespace(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-	return resp, err
-}
-
-// DeleteNamespace is used to delete namespace. Once the namespace is deleted it cannot be used to start new workflow executions.
-// All existing workflow executions will be also deleted asynchronously.
-func (wh *WorkflowHandler) DeleteNamespace(ctx context.Context, request *workflowservice.DeleteNamespaceRequest) (_ *workflowservice.DeleteNamespaceResponse, retError error) {
-	defer log.CapturePanic(wh.GetLogger(), &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	resp, err := wh.namespaceHandler.DeleteNamespace(ctx, request)
 	if err != nil {
 		return nil, err
 	}

@@ -137,22 +137,6 @@ func (handler *DCRedirectionHandlerImpl) DeprecateNamespace(
 	return handler.frontendHandler.DeprecateNamespace(ctx, request)
 }
 
-// DeleteNamespace API call
-func (handler *DCRedirectionHandlerImpl) DeleteNamespace(
-	ctx context.Context,
-	request *workflowservice.DeleteNamespaceRequest,
-) (resp *workflowservice.DeleteNamespaceResponse, retError error) {
-
-	var cluster = handler.currentClusterName
-
-	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeleteNamespaceScope)
-	defer func() {
-		handler.afterCall(scope, startTime, cluster, &retError)
-	}()
-
-	return handler.frontendHandler.DeleteNamespace(ctx, request)
-}
-
 // DescribeNamespace API call
 func (handler *DCRedirectionHandlerImpl) DescribeNamespace(
 	ctx context.Context,

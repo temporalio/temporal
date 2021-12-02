@@ -65,21 +65,6 @@ func (c *retryableClient) DeprecateNamespace(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) DeleteNamespace(
-	ctx context.Context,
-	request *workflowservice.DeleteNamespaceRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.DeleteNamespaceResponse, error) {
-	var resp *workflowservice.DeleteNamespaceResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.DeleteNamespace(ctx, request, opts...)
-		return err
-	}
-
-	return resp, backoff.Retry(op, c.policy, c.isRetryable)
-}
-
 func (c *retryableClient) DescribeNamespace(
 	ctx context.Context,
 	request *workflowservice.DescribeNamespaceRequest,

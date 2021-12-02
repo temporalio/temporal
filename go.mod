@@ -126,5 +126,3 @@ require (
 // at that tag it no longer provides github.com/cactus/go-statsd-client/statsd
 // thereby removing the import.
 replace github.com/cactus/go-statsd-client => github.com/cactus/go-statsd-client v3.2.1+incompatible
-
-replace go.temporal.io/api v1.6.1-0.20211110205628-60c98e9cbfe2 => ../temporal-api-go

@@ -77,20 +77,6 @@ func (c *clientImpl) DeprecateNamespace(
 	return client.DeprecateNamespace(ctx, request, opts...)
 }
 
-func (c *clientImpl) DeleteNamespace(
-	ctx context.Context,
-	request *workflowservice.DeleteNamespaceRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.DeleteNamespaceResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.DeleteNamespace(ctx, request, opts...)
-}
-
 func (c *clientImpl) DescribeNamespace(
 	ctx context.Context,
 	request *workflowservice.DescribeNamespaceRequest,

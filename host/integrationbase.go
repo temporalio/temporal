@@ -185,8 +185,11 @@ func (s *IntegrationBase) deleteNamespace(
 ) error {
 	ctx, cancel := rpc.NewContextWithTimeoutAndHeaders(10000 * time.Second)
 	defer cancel()
-	_, err := s.engine.DeleteNamespace(ctx, &workflowservice.DeleteNamespaceRequest{
+	_, err := s.engine.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
+		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
+			State: enumspb.NAMESPACE_STATE_DELETED,
+		},
 	})
 
 	return err
