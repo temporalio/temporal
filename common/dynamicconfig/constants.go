@@ -64,9 +64,6 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
-	// TODO remove this dynamic flag in 1.14.x
-	EnableDBRecordVersion: "system.enableDBRecordVersion",
-
 	// system settings
 	StandardVisibilityPersistenceMaxReadQPS:  "system.standardVisibilityPersistenceMaxReadQPS",
 	StandardVisibilityPersistenceMaxWriteQPS: "system.standardVisibilityPersistenceMaxWriteQPS",
@@ -375,11 +372,6 @@ const (
 	AdminMatchingNamespaceToPartitionDispatchRate
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate
-
-	// TODO remove this dynamic flag in 1.14.x
-
-	// EnableDBRecordVersion is key for enable db version
-	EnableDBRecordVersion
 
 	// StandardVisibilityPersistenceMaxReadQPS is the max QPC system host can query standard visibility DB (SQL or Cassandra) for read.
 	StandardVisibilityPersistenceMaxReadQPS
