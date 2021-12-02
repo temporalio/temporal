@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -51,6 +52,7 @@ import (
 
 var (
 	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
+	timerComponentName  = "timer-queue"
 )
 
 type (
@@ -66,21 +68,23 @@ type (
 	updateTimerAckLevel     func(timerKey) error
 	timerQueueShutdown      func() error
 	timerQueueProcessorImpl struct {
-		isGlobalNamespaceEnabled bool
-		currentClusterName       string
-		shard                    shard.Context
-		taskAllocator            taskAllocator
-		config                   *configs.Config
-		metricsClient            metrics.Client
-		historyService           *historyEngineImpl
-		ackLevel                 timerKey
-		logger                   log.Logger
-		matchingClient           matchingservice.MatchingServiceClient
-		status                   int32
-		shutdownChan             chan struct{}
-		shutdownWG               sync.WaitGroup
-		activeTimerProcessor     *timerQueueActiveProcessorImpl
-		standbyTimerProcessors   map[string]*timerQueueStandbyProcessorImpl
+		isGlobalNamespaceEnabled   bool
+		currentClusterName         string
+		shard                      shard.Context
+		taskAllocator              taskAllocator
+		config                     *configs.Config
+		metricsClient              metrics.Client
+		historyService             *historyEngineImpl
+		ackLevel                   timerKey
+		logger                     log.Logger
+		matchingClient             matchingservice.MatchingServiceClient
+		status                     int32
+		shutdownChan               chan struct{}
+		shutdownWG                 sync.WaitGroup
+		activeTimerProcessor       *timerQueueActiveProcessorImpl
+		standbyTimerProcessorsLock sync.RWMutex
+		standbyTimerProcessors     map[string]*timerQueueStandbyProcessorImpl
+		clientBean                 client.Bean
 	}
 )
 
@@ -96,35 +100,6 @@ func newTimerQueueProcessor(
 	config := shard.GetConfig()
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
-
-	standbyTimerProcessors := make(map[string]*timerQueueStandbyProcessorImpl)
-	for clusterName, info := range shard.GetClusterMetadata().GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-
-		if clusterName != shard.GetClusterMetadata().GetCurrentClusterName() {
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				shard.GetNamespaceRegistry(),
-				shard.GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return historyService.ReplicateEventsV2(ctx, request)
-				},
-				shard.GetPayloadSerializer(),
-				config.StandbyTaskReReplicationContextTimeout,
-				logger,
-			)
-			standbyTimerProcessors[clusterName] = newTimerQueueStandbyProcessor(
-				shard,
-				historyService,
-				clusterName,
-				taskAllocator,
-				nDCHistoryResender,
-				logger,
-				clientBean,
-			)
-		}
-	}
 
 	return &timerQueueProcessorImpl{
 		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
@@ -146,7 +121,8 @@ func newTimerQueueProcessor(
 			taskAllocator,
 			logger,
 		),
-		standbyTimerProcessors: standbyTimerProcessors,
+		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
+		clientBean:             clientBean,
 	}
 }
 
@@ -156,9 +132,7 @@ func (t *timerQueueProcessorImpl) Start() {
 	}
 	t.activeTimerProcessor.Start()
 	if t.isGlobalNamespaceEnabled {
-		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
-			standbyTimerProcessor.Start()
-		}
+		t.listenToClusterMetadataChange()
 	}
 
 	t.shutdownWG.Add(1)
@@ -171,9 +145,13 @@ func (t *timerQueueProcessorImpl) Stop() {
 	}
 	t.activeTimerProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
+		callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
+		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
+		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			standbyTimerProcessor.Stop()
 		}
+		t.standbyTimerProcessorsLock.RUnlock()
 	}
 	close(t.shutdownChan)
 	common.AwaitWaitGroup(&t.shutdownWG, time.Minute)
@@ -191,7 +169,9 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(
 		return
 	}
 
+	t.standbyTimerProcessorsLock.RLock()
 	standbyTimerProcessor, ok := t.standbyTimerProcessors[clusterName]
+	t.standbyTimerProcessorsLock.RUnlock()
 	if !ok {
 		panic(fmt.Sprintf("Cannot find timer processor for %s.", clusterName))
 	}
@@ -242,9 +222,11 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		t.logger,
 	)
 
+	t.standbyTimerProcessorsLock.RLock()
 	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 		standbyTimerProcessor.retryTasks()
 	}
+	t.standbyTimerProcessorsLock.RUnlock()
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
@@ -301,12 +283,14 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	upperAckLevel := t.activeTimerProcessor.getAckLevel()
 
 	if t.isGlobalNamespaceEnabled {
+		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			ackLevel := standbyTimerProcessor.getAckLevel()
 			if !compareTimerIDLess(&upperAckLevel, &ackLevel) {
 				upperAckLevel = ackLevel
 			}
 		}
+		t.standbyTimerProcessorsLock.RUnlock()
 
 		for _, failoverInfo := range t.shard.GetAllTimerFailoverLevels() {
 			if !upperAckLevel.VisibilityTimestamp.Before(failoverInfo.MinLevel) {
@@ -336,4 +320,57 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	t.ackLevel = upperAckLevel
 
 	return t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)
+}
+
+func (t *timerQueueProcessorImpl) listenToClusterMetadataChange() {
+	callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
+	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
+		callbackID,
+		t.handleClusterMetadataUpdate,
+	)
+}
+
+func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
+	oldClusterMetadata map[string]*cluster.ClusterInformation,
+	newClusterMetadata map[string]*cluster.ClusterInformation,
+) {
+	t.standbyTimerProcessorsLock.Lock()
+	defer t.standbyTimerProcessorsLock.Unlock()
+	for clusterName := range oldClusterMetadata {
+		if clusterName == t.currentClusterName {
+			continue
+		}
+		// The metadata triggers a update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
+		// The callback covers three cases:
+		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
+		if processor, ok := t.standbyTimerProcessors[clusterName]; ok {
+			// Case 1 and Case 3
+			processor.Stop()
+			delete(t.standbyTimerProcessors, clusterName)
+		}
+		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+			// Case 2 and Case 3
+			nDCHistoryResender := xdc.NewNDCHistoryResender(
+				t.shard.GetNamespaceRegistry(),
+				t.shard.GetRemoteAdminClient(clusterName),
+				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+					return t.historyService.ReplicateEventsV2(ctx, request)
+				},
+				t.shard.GetPayloadSerializer(),
+				t.config.StandbyTaskReReplicationContextTimeout,
+				t.logger,
+			)
+			processor := newTimerQueueStandbyProcessor(
+				t.shard,
+				t.historyService,
+				clusterName,
+				t.taskAllocator,
+				nDCHistoryResender,
+				t.logger,
+				t.clientBean,
+			)
+			processor.Start()
+			t.standbyTimerProcessors[clusterName] = processor
+		}
+	}
 }

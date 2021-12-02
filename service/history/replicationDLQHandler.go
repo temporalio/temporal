@@ -29,6 +29,13 @@ package history
 import (
 	"context"
 	"fmt"
+	"sync"
+
+	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/xdc"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -70,11 +77,16 @@ type (
 	}
 
 	replicationDLQHandlerImpl struct {
-		taskExecutors map[string]replicationTaskExecutor
-		shard         shard.Context
-		logger        log.Logger
+		taskExecutorsLock sync.Mutex
+		taskExecutors     map[string]replicationTaskExecutor
+		shard             shard.Context
+		logger            log.Logger
 	}
 )
+
+func newLazyReplicationDLQHandler(shard shard.Context) replicationDLQHandler {
+	return newReplicationDLQHandler(shard, make(map[string]replicationTaskExecutor))
+}
 
 func newReplicationDLQHandler(
 	shard shard.Context,
@@ -90,6 +102,7 @@ func newReplicationDLQHandler(
 		logger:        shard.GetLogger(),
 	}
 }
+
 func (r *replicationDLQHandlerImpl) getMessages(
 	ctx context.Context,
 	sourceCluster string,
@@ -218,10 +231,6 @@ func (r *replicationDLQHandlerImpl) mergeMessages(
 	pageToken []byte,
 ) ([]byte, error) {
 
-	if _, ok := r.taskExecutors[sourceCluster]; !ok {
-		return nil, errInvalidCluster
-	}
-
 	tasks, ackLevel, token, err := r.readMessagesWithAckLevel(
 		ctx,
 		sourceCluster,
@@ -230,8 +239,13 @@ func (r *replicationDLQHandlerImpl) mergeMessages(
 		pageToken,
 	)
 
+	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, task := range tasks {
-		if _, err := r.taskExecutors[sourceCluster].execute(
+		if _, err := taskExecutor.execute(
 			task,
 			true,
 		); err != nil {
@@ -259,4 +273,49 @@ func (r *replicationDLQHandlerImpl) mergeMessages(
 		// The update ack level should not block the call. Ignore the error.
 	}
 	return token, nil
+}
+
+func (r *replicationDLQHandlerImpl) getOrCreateTaskExecutor(clusterName string) (replicationTaskExecutor, error) {
+	r.taskExecutorsLock.Lock()
+	defer r.taskExecutorsLock.Unlock()
+	if executor, ok := r.taskExecutors[clusterName]; ok {
+		return executor, nil
+	}
+	engine, err := r.shard.GetEngine()
+	if err != nil {
+		return nil, err
+	}
+	adminClient := r.shard.GetRemoteAdminClient(clusterName)
+	adminRetryableClient := admin.NewRetryableClient(
+		adminClient,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsResourceExhausted,
+	)
+	historyClient := r.shard.GetHistoryClient()
+	historyRetryableClient := history.NewRetryableClient(
+		historyClient,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsResourceExhausted,
+	)
+	resender := xdc.NewNDCHistoryResender(
+		r.shard.GetNamespaceRegistry(),
+		adminRetryableClient,
+		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+			_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
+			return err
+		},
+		r.shard.GetPayloadSerializer(),
+		r.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
+		r.shard.GetLogger(),
+	)
+	taskExecutor := newReplicationTaskExecutor(
+		r.shard,
+		r.shard.GetNamespaceRegistry(),
+		resender,
+		engine,
+		r.shard.GetMetricsClient(),
+		r.shard.GetLogger(),
+	)
+	r.taskExecutors[clusterName] = taskExecutor
+	return taskExecutor, nil
 }

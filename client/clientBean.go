@@ -53,17 +53,19 @@ type (
 		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
 		SetRemoteAdminClient(cluster string, client adminservice.AdminServiceClient)
 		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
-		SetRemoteFrontendClient(cluster string, client workflowservice.WorkflowServiceClient)
 	}
 
 	clientBeanImpl struct {
 		sync.Mutex
-		currentCluster        string
-		historyClient         historyservice.HistoryServiceClient
-		matchingClient        atomic.Value
-		remoteAdminClients    map[string]adminservice.AdminServiceClient
-		remoteFrontendClients map[string]workflowservice.WorkflowServiceClient
-		factory               Factory
+		historyClient  historyservice.HistoryServiceClient
+		matchingClient atomic.Value
+		clusterMetdata cluster.Metadata
+		factory        Factory
+
+		remoteAdminClientsLock    sync.RWMutex
+		remoteAdminClients        map[string]adminservice.AdminServiceClient
+		remoteFrontendClientsLock sync.RWMutex
+		remoteFrontendClients     map[string]workflowservice.WorkflowServiceClient
 	}
 )
 
@@ -83,32 +85,26 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 			continue
 		}
 
-		adminClient, err := factory.NewAdminClientWithTimeout(
+		adminClient := factory.NewAdminClientWithTimeout(
 			info.RPCAddress,
 			admin.DefaultTimeout,
 			admin.DefaultLargeTimeout,
 		)
-		if err != nil {
-			return nil, err
-		}
 
-		remoteFrontendClient, err := factory.NewFrontendClientWithTimeout(
+		remoteFrontendClient := factory.NewFrontendClientWithTimeout(
 			info.RPCAddress,
 			frontend.DefaultTimeout,
 			frontend.DefaultLongPollTimeout,
 		)
-		if err != nil {
-			return nil, err
-		}
 
 		remoteAdminClients[clusterName] = adminClient
 		remoteFrontendClients[clusterName] = remoteFrontendClient
 	}
 
 	return &clientBeanImpl{
-		currentCluster:        clusterMetadata.GetCurrentClusterName(),
 		factory:               factory,
 		historyClient:         historyClient,
+		clusterMetdata:        clusterMetadata,
 		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
 	}, nil
@@ -138,23 +134,41 @@ func (h *clientBeanImpl) SetMatchingClient(
 }
 
 func (h *clientBeanImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
-	return h.remoteFrontendClients[h.currentCluster]
+	return h.remoteFrontendClients[h.clusterMetdata.GetCurrentClusterName()]
 }
 
 func (h *clientBeanImpl) SetFrontendClient(
 	client workflowservice.WorkflowServiceClient,
 ) {
-	h.remoteFrontendClients[h.currentCluster] = client
+	h.remoteFrontendClients[h.clusterMetdata.GetCurrentClusterName()] = client
 }
 
 func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
+	h.remoteAdminClientsLock.RLock()
 	client, ok := h.remoteAdminClients[cluster]
+	h.remoteAdminClientsLock.RUnlock()
+
 	if !ok {
-		panic(fmt.Sprintf(
-			"Unknown cluster name: %v with given cluster client map: %v.",
-			cluster,
-			h.remoteAdminClients,
-		))
+		clusterInfo, clusterFound := h.clusterMetdata.GetAllClusterInfo()[cluster]
+		if !clusterFound {
+			panic(fmt.Sprintf(
+				"Unknown cluster name: %v with given cluster information map: %v.",
+				cluster,
+				clusterInfo,
+			))
+		}
+
+		h.remoteAdminClientsLock.Lock()
+		defer h.remoteAdminClientsLock.Unlock()
+		client, ok = h.remoteAdminClients[cluster]
+		if !ok {
+			client = h.factory.NewAdminClientWithTimeout(
+				clusterInfo.RPCAddress,
+				admin.DefaultTimeout,
+				admin.DefaultLargeTimeout,
+			)
+			h.setRemoteAdminClientLocked(cluster, client)
+		}
 	}
 	return client
 }
@@ -163,26 +177,54 @@ func (h *clientBeanImpl) SetRemoteAdminClient(
 	cluster string,
 	client adminservice.AdminServiceClient,
 ) {
-	h.remoteAdminClients[cluster] = client
+	h.remoteAdminClientsLock.Lock()
+	defer h.remoteAdminClientsLock.Unlock()
+
+	h.setRemoteAdminClientLocked(cluster, client)
 }
 
 func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient {
+	h.remoteFrontendClientsLock.RLock()
 	client, ok := h.remoteFrontendClients[cluster]
+	h.remoteFrontendClientsLock.RUnlock()
+
 	if !ok {
-		panic(fmt.Sprintf(
-			"Unknown cluster name: %v with given cluster client map: %v.",
-			cluster,
-			h.remoteFrontendClients,
-		))
+		clusterInfo, clusterFound := h.clusterMetdata.GetAllClusterInfo()[cluster]
+		if !clusterFound {
+			panic(fmt.Sprintf(
+				"Unknown cluster name: %v with given cluster information map: %v.",
+				cluster,
+				clusterInfo,
+			))
+		}
+
+		h.remoteFrontendClientsLock.Lock()
+		defer h.remoteFrontendClientsLock.Unlock()
+		client, ok = h.remoteFrontendClients[cluster]
+		if !ok {
+			client = h.factory.NewFrontendClientWithTimeout(
+				clusterInfo.RPCAddress,
+				frontend.DefaultTimeout,
+				frontend.DefaultLongPollTimeout,
+			)
+			h.setRemoteFrontendClientLocked(cluster, client)
+		}
 	}
 	return client
 }
 
-func (h *clientBeanImpl) SetRemoteFrontendClient(
+func (h *clientBeanImpl) setRemoteFrontendClientLocked(
 	cluster string,
 	client workflowservice.WorkflowServiceClient,
 ) {
 	h.remoteFrontendClients[cluster] = client
+}
+
+func (h *clientBeanImpl) setRemoteAdminClientLocked(
+	cluster string,
+	client adminservice.AdminServiceClient,
+) {
+	h.remoteAdminClients[cluster] = client
 }
 
 func (h *clientBeanImpl) lazyInitMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error) {

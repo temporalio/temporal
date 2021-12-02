@@ -182,3 +182,51 @@ func (mr *MockMetadataMockRecorder) IsVersionFromSameCluster(version1, version2 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsVersionFromSameCluster", reflect.TypeOf((*MockMetadata)(nil).IsVersionFromSameCluster), version1, version2)
 }
+
+// RegisterMetadataChangeCallback mocks base method.
+func (m *MockMetadata) RegisterMetadataChangeCallback(callbackId string, cb CallbackFn) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "RegisterMetadataChangeCallback", callbackId, cb)
+}
+
+// RegisterMetadataChangeCallback indicates an expected call of RegisterMetadataChangeCallback.
+func (mr *MockMetadataMockRecorder) RegisterMetadataChangeCallback(callbackId, cb interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterMetadataChangeCallback", reflect.TypeOf((*MockMetadata)(nil).RegisterMetadataChangeCallback), callbackId, cb)
+}
+
+// Start mocks base method.
+func (m *MockMetadata) Start() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Start")
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockMetadataMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockMetadata)(nil).Start))
+}
+
+// Stop mocks base method.
+func (m *MockMetadata) Stop() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Stop")
+}
+
+// Stop indicates an expected call of Stop.
+func (mr *MockMetadataMockRecorder) Stop() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockMetadata)(nil).Stop))
+}
+
+// UnRegisterMetadataChangeCallback mocks base method.
+func (m *MockMetadata) UnRegisterMetadataChangeCallback(callbackId string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "UnRegisterMetadataChangeCallback", callbackId)
+}
+
+// UnRegisterMetadataChangeCallback indicates an expected call of UnRegisterMetadataChangeCallback.
+func (mr *MockMetadataMockRecorder) UnRegisterMetadataChangeCallback(callbackId interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UnRegisterMetadataChangeCallback", reflect.TypeOf((*MockMetadata)(nil).UnRegisterMetadataChangeCallback), callbackId)
+}

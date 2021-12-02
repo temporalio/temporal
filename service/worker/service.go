@@ -316,6 +316,7 @@ func (s *Service) Start() {
 	// todo: introduce proper counter (same in resource.go)
 	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
 
+	s.clusterMetadata.Start()
 	s.membershipMonitor.Start()
 	s.namespaceRegistry.Start()
 
@@ -373,6 +374,7 @@ func (s *Service) Stop() {
 	s.manager.Stop()
 	s.namespaceRegistry.Stop()
 	s.membershipMonitor.Stop()
+	s.clusterMetadata.Stop()
 	s.persistenceBean.Close()
 
 	s.logger.Info(

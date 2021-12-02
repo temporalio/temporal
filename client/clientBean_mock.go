@@ -179,15 +179,3 @@ func (mr *MockBeanMockRecorder) SetRemoteAdminClient(cluster, client interface{}
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRemoteAdminClient", reflect.TypeOf((*MockBean)(nil).SetRemoteAdminClient), cluster, client)
 }
-
-// SetRemoteFrontendClient mocks base method.
-func (m *MockBean) SetRemoteFrontendClient(cluster string, client v1.WorkflowServiceClient) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "SetRemoteFrontendClient", cluster, client)
-}
-
-// SetRemoteFrontendClient indicates an expected call of SetRemoteFrontendClient.
-func (mr *MockBeanMockRecorder) SetRemoteFrontendClient(cluster, client interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetRemoteFrontendClient", reflect.TypeOf((*MockBean)(nil).SetRemoteFrontendClient), cluster, client)
-}

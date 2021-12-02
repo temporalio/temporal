@@ -27,6 +27,7 @@
 package history
 
 import (
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -54,7 +55,7 @@ type (
 	ReplicationTaskFetchers interface {
 		common.Daemon
 
-		GetFetchers() []ReplicationTaskFetcher
+		GetOrCreateFetcher(clusterName string) ReplicationTaskFetcher
 	}
 
 	// ReplicationTaskFetcher is responsible for fetching replication messages from remote DC.
@@ -68,9 +69,14 @@ type (
 
 	// ReplicationTaskFetchersImpl is a group of fetchers, one per source DC.
 	ReplicationTaskFetchersImpl struct {
-		status   int32
-		logger   log.Logger
-		fetchers []ReplicationTaskFetcher
+		status          int32
+		config          *configs.Config
+		clientBean      client.Bean
+		clusterMetadata cluster.Metadata
+		logger          log.Logger
+
+		fetchersLock sync.Mutex
+		fetchers     map[string]ReplicationTaskFetcher
 	}
 
 	// ReplicationTaskFetcherImpl is the implementation of fetching replication messages.
@@ -110,32 +116,15 @@ func NewReplicationTaskFetchers(
 	config *configs.Config,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
-) *ReplicationTaskFetchersImpl {
-
-	var fetchers []ReplicationTaskFetcher
-	currentCluster := clusterMetadata.GetCurrentClusterName()
-	for clusterName, info := range clusterMetadata.GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-
-		if clusterName != currentCluster {
-			remoteFrontendClient := clientBean.GetRemoteAdminClient(clusterName)
-			fetcher := newReplicationTaskFetcher(
-				logger,
-				clusterName,
-				currentCluster,
-				config,
-				remoteFrontendClient,
-			)
-			fetchers = append(fetchers, fetcher)
-		}
-	}
+) ReplicationTaskFetchers {
 
 	return &ReplicationTaskFetchersImpl{
-		fetchers: fetchers,
-		status:   common.DaemonStatusInitialized,
-		logger:   logger,
+		clusterMetadata: clusterMetadata,
+		clientBean:      clientBean,
+		config:          config,
+		fetchers:        make(map[string]ReplicationTaskFetcher),
+		status:          common.DaemonStatusInitialized,
+		logger:          logger,
 	}
 }
 
@@ -149,9 +138,7 @@ func (f *ReplicationTaskFetchersImpl) Start() {
 		return
 	}
 
-	for _, fetcher := range f.fetchers {
-		fetcher.Start()
-	}
+	f.listenClusterMetadataChange()
 	f.logger.Info("Replication task fetchers started.")
 }
 
@@ -165,15 +152,64 @@ func (f *ReplicationTaskFetchersImpl) Stop() {
 		return
 	}
 
+	currentCluster := f.clusterMetadata.GetCurrentClusterName()
+	f.clusterMetadata.UnRegisterMetadataChangeCallback(currentCluster)
+	f.fetchersLock.Lock()
+	defer f.fetchersLock.Unlock()
 	for _, fetcher := range f.fetchers {
 		fetcher.Stop()
 	}
 	f.logger.Info("Replication task fetchers stopped.")
 }
 
-// GetFetchers returns all the fetchers
-func (f *ReplicationTaskFetchersImpl) GetFetchers() []ReplicationTaskFetcher {
-	return f.fetchers
+func (f *ReplicationTaskFetchersImpl) GetOrCreateFetcher(clusterName string) ReplicationTaskFetcher {
+	f.fetchersLock.Lock()
+	defer f.fetchersLock.Unlock()
+
+	fetcher, ok := f.fetchers[clusterName]
+	if ok {
+		return fetcher
+	}
+	return f.createReplicationFetcherLocked(clusterName)
+}
+
+func (f *ReplicationTaskFetchersImpl) createReplicationFetcherLocked(clusterName string) ReplicationTaskFetcher {
+	currentCluster := f.clusterMetadata.GetCurrentClusterName()
+	remoteAdminClient := f.clientBean.GetRemoteAdminClient(clusterName)
+	fetcher := newReplicationTaskFetcher(
+		f.logger,
+		clusterName,
+		currentCluster,
+		f.config,
+		remoteAdminClient,
+	)
+	fetcher.Start()
+	f.fetchers[clusterName] = fetcher
+	return fetcher
+}
+
+func (f *ReplicationTaskFetchersImpl) listenClusterMetadataChange() {
+	currentCluster := f.clusterMetadata.GetCurrentClusterName()
+	f.clusterMetadata.RegisterMetadataChangeCallback(
+		currentCluster,
+		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
+			f.fetchersLock.Lock()
+			defer f.fetchersLock.Unlock()
+
+			for clusterName := range newClusterMetadata {
+				if clusterName == currentCluster {
+					continue
+				}
+				if fetcher, ok := f.fetchers[clusterName]; ok {
+					fetcher.Stop()
+					delete(f.fetchers, clusterName)
+				}
+				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+					f.createReplicationFetcherLocked(clusterName)
+				}
+			}
+		},
+	)
 }
 
 // newReplicationTaskFetcher creates a new fetcher.
