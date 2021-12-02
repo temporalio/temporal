@@ -426,6 +426,7 @@ func (h *Impl) Stop() {
 	h.ringpopChannel.Close()
 	h.runtimeMetricsReporter.Stop()
 	h.persistenceBean.Close()
+	h.grpcListener.Close()
 }
 
 // GetServiceName return service name
