@@ -1977,14 +1977,6 @@ func CompleteActivity(c *cli.Context) {
 	resultPayloads, _ := defaultDataConverter().ToPayloads(result)
 
 	frontendClient := cFactory.FrontendClient(c)
-	fmt.Printf("%v\n", workflowservice.RespondActivityTaskCompletedByIdRequest{
-		Namespace:  namespace,
-		WorkflowId: wid,
-		RunId:      rid,
-		ActivityId: activityID,
-		Result:     resultPayloads,
-		Identity:   identity,
-	})
 	_, err := frontendClient.RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
 		Namespace:  namespace,
 		WorkflowId: wid,
