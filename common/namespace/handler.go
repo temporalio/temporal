@@ -428,7 +428,6 @@ func (d *HandlerImpl) UpdateNamespace(
 	activeClusterChanged := false
 	// whether anything other than active cluster is changed
 	configurationChanged := false
-	namespaceDeleted := false
 
 	if updateRequest.UpdateInfo != nil {
 		updatedInfo := updateRequest.UpdateInfo
@@ -451,9 +450,6 @@ func (d *HandlerImpl) UpdateNamespace(
 				return nil, err
 			}
 			info.State = updatedInfo.State
-			if updatedInfo.State == enumspb.NAMESPACE_STATE_DELETED {
-				namespaceDeleted = true
-			}
 		}
 	}
 	if updateRequest.Config != nil {
@@ -589,10 +585,6 @@ func (d *HandlerImpl) UpdateNamespace(
 		if err != nil {
 			return nil, err
 		}
-	}
-
-	if namespaceDeleted {
-		// TODO: Start workflow to delete namespace resources.
 	}
 
 	response := &workflowservice.UpdateNamespaceResponse{
