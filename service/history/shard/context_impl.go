@@ -1488,14 +1488,16 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	return nil
 }
 
-func (s *ContextImpl) GetRemoteClusterAckInfo(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, error) {
-	resp := make(map[string]*historyservice.ShardReplicationStatusPerCluster)
+func (s *ContextImpl) GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error) {
+	remoteClusters := make(map[string]*historyservice.ShardReplicationStatusPerCluster)
+	handoverNamespaces := make(map[string]*historyservice.HandoverNamespaceInfo)
 	s.rLock()
 	defer s.rUnlock()
+
 	if len(cluster) == 0 {
 		// remote acked info for all known remote clusters
 		for k, v := range s.remoteClusterInfos {
-			resp[k] = &historyservice.ShardReplicationStatusPerCluster{
+			remoteClusters[k] = &historyservice.ShardReplicationStatusPerCluster{
 				AckedTaskId:             v.AckedReplicationTaskID,
 				AckedTaskVisibilityTime: timestamp.TimePtr(v.AckedReplicationTimestamp),
 			}
@@ -1503,7 +1505,7 @@ func (s *ContextImpl) GetRemoteClusterAckInfo(cluster []string) (map[string]*his
 	} else {
 		for _, k := range cluster {
 			if v, ok := s.remoteClusterInfos[k]; ok {
-				resp[k] = &historyservice.ShardReplicationStatusPerCluster{
+				remoteClusters[k] = &historyservice.ShardReplicationStatusPerCluster{
 					AckedTaskId:             v.AckedReplicationTaskID,
 					AckedTaskVisibilityTime: timestamp.TimePtr(v.AckedReplicationTimestamp),
 				}
@@ -1511,7 +1513,13 @@ func (s *ContextImpl) GetRemoteClusterAckInfo(cluster []string) (map[string]*his
 		}
 	}
 
-	return resp, nil
+	for k, v := range s.handoverNamespaces {
+		handoverNamespaces[k] = &historyservice.HandoverNamespaceInfo{
+			HandoverReplicationTaskId: v.MaxReplicationTaskID,
+		}
+	}
+
+	return remoteClusters, handoverNamespaces, nil
 }
 
 func (s *ContextImpl) getRemoteClusterInfoLocked(clusterName string) *remoteClusterInfo {

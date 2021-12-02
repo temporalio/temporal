@@ -74,7 +74,7 @@ type (
 		GetLastUpdatedTime() time.Time
 		GetTimerMaxReadLevel(cluster string) time.Time
 
-		GetRemoteClusterAckInfo(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, error)
+		GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error)
 
 		GetTransferAckLevel() int64
 		UpdateTransferAckLevel(ackLevel int64) error

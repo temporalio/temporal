@@ -526,6 +526,12 @@ message ShardReplicationStatus {
     // Local time on this shard
     google.protobuf.Timestamp shard_local_time = 3 [(gogoproto.stdtime) = true];
     map<string, ShardReplicationStatusPerCluster> remote_clusters = 4;
+    map<string, HandoverNamespaceInfo> handover_namespaces = 5;
+}
+
+message HandoverNamespaceInfo {
+    // max replication task id when namespace transition to Handover state
+    int64 handover_replication_task_id = 1;
 }
 
 message ShardReplicationStatusPerCluster {

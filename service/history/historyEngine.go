@@ -3288,11 +3288,12 @@ func (e *historyEngineImpl) GetReplicationStatus(
 		resp.MaxReplicationTaskId = *e.replicatorProcessor.maxTaskID
 	}
 
-	remoteClusters, err := e.shard.GetRemoteClusterAckInfo(request.RemoteClusters)
+	remoteClusters, handoverNamespaces, err := e.shard.GetReplicationStatus(request.RemoteClusters)
 	if err != nil {
 		return nil, err
 	}
 	resp.RemoteClusters = remoteClusters
+	resp.HandoverNamespaces = handoverNamespaces
 	return resp, nil
 }
 
