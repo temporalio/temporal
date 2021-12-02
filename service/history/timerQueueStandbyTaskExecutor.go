@@ -504,7 +504,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			common.EmptyVersion,
 		)
 	} else {
-		err = serviceerror.NewInternal("timerQueueStandbyProcessor encounter empty historyResendInfo")
+		err = serviceerror.NewInternal("timerQueueStandbyProcessor encountered empty historyResendInfo")
 	}
 
 	if err != nil {

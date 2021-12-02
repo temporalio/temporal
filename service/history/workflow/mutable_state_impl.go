@@ -4122,7 +4122,7 @@ func (e *MutableStateImpl) validateNoEventsAfterWorkflowFinish(
 
 	default:
 		e.logError(
-			"encounter case where events appears after workflow finish.",
+			"encountered case where events appears after workflow finish.",
 			tag.WorkflowNamespaceID(e.executionInfo.NamespaceId),
 			tag.WorkflowID(e.executionInfo.WorkflowId),
 			tag.WorkflowRunID(e.executionState.RunId),
@@ -4170,7 +4170,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 		return false, err
 	}
 	if lastWriteVersion != workflowTask.Version {
-		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encounter mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
+		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
 	}
 
 	lastWriteSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
@@ -4190,7 +4190,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 	if lastWriteSourceCluster != currentCluster && currentVersionCluster != currentCluster {
 		// do a sanity check on buffered events
 		if e.HasBufferedEvents() {
-			return false, serviceerror.NewInternal("MutableStateImpl encounter previous passive workflow with buffered events")
+			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")
 		}
 		return false, nil
 	}

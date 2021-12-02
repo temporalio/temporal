@@ -107,7 +107,7 @@ func (r *nDCConflictResolverImpl) prepareMutableState(
 	}
 
 	if incomingVersion == currentLastItem.GetVersion() {
-		return nil, false, serviceerror.NewInvalidArgument("nDCConflictResolver encounter replication task version == current branch last write version")
+		return nil, false, serviceerror.NewInvalidArgument("nDCConflictResolver encountered replication task version == current branch last write version")
 	}
 
 	// task.getVersion() > currentLastItem

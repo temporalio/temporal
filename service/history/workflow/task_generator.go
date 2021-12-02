@@ -529,7 +529,7 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	firstEvent := events[0]
 	lastEvent := events[len(events)-1]
 	if firstEvent.GetVersion() != lastEvent.GetVersion() {
-		return serviceerror.NewInternal("TaskGeneratorImpl encounter contradicting versions")
+		return serviceerror.NewInternal("TaskGeneratorImpl encountered contradicting versions")
 	}
 	version := firstEvent.GetVersion()
 

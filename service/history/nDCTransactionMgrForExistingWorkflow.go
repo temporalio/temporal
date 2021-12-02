@@ -114,7 +114,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) dispatchForExistingWorkflow(
 
 	if currentRunID == targetRunID {
 		if !isWorkflowRebuilt {
-			return serviceerror.NewInternal("nDCTransactionMgr: encounter workflow not rebuilt & current workflow not guaranteed")
+			return serviceerror.NewInternal("nDCTransactionMgr: encountered workflow not rebuilt & current workflow not guaranteed")
 		}
 
 		// update to current record, since target workflow is pointed by current record
@@ -259,7 +259,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 		return err
 	}
 	if targetPolicy != workflow.TransactionPolicyPassive {
-		return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow updateAsZombie encounter target workflow policy not being passive")
+		return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow updateAsZombie encountered target workflow policy not being passive")
 	}
 
 	var newContext workflow.Context
@@ -273,7 +273,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) updateAsZombie(
 			return err
 		}
 		if newWorkflowPolicy != workflow.TransactionPolicyPassive {
-			return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow updateAsZombie encounter new workflow policy not being passive")
+			return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow updateAsZombie encountered new workflow policy not being passive")
 		}
 
 		// sanity check if new workflow is already created
@@ -403,7 +403,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 		return err
 	}
 	if targetWorkflowPolicy != workflow.TransactionPolicyPassive {
-		return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter target workflow policy not being passive")
+		return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encountered target workflow policy not being passive")
 	}
 
 	var newContext workflow.Context
@@ -416,7 +416,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) conflictResolveAsZombie(
 			return err
 		}
 		if newWorkflowPolicy != workflow.TransactionPolicyPassive {
-			return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encounter new workflow policy not being passive")
+			return serviceerror.NewInternal("nDCTransactionMgrForExistingWorkflow conflictResolveAsZombie encountered new workflow policy not being passive")
 		}
 
 		// sanity check if new workflow is already created
@@ -523,7 +523,7 @@ func (r *nDCTransactionMgrForExistingWorkflowImpl) executeTransaction(
 		)
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy))
+		return serviceerror.NewInternal(fmt.Sprintf("nDCTransactionMgr: encountered unknown transaction type: %v", transactionPolicy))
 	}
 }
 

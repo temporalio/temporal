@@ -216,7 +216,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 	if targetWorkflowPolicy != workflow.TransactionPolicyPassive {
-		return serviceerror.NewInternal("nDCTransactionMgrForNewWorkflow createAsZombie encounter target workflow policy not being passive")
+		return serviceerror.NewInternal("nDCTransactionMgrForNewWorkflow createAsZombie encountered target workflow policy not being passive")
 	}
 
 	// release lock on current workflow, since current cluster maybe the active cluster
@@ -334,7 +334,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) executeTransaction(
 		)
 
 	default:
-		return serviceerror.NewInternal(fmt.Sprintf("nDCTransactionMgr: encounter unknown transaction type: %v", transactionPolicy))
+		return serviceerror.NewInternal(fmt.Sprintf("nDCTransactionMgr: encountered unknown transaction type: %v", transactionPolicy))
 	}
 }
 

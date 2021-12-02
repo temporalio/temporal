@@ -120,7 +120,7 @@ type (
 	}
 )
 
-var errPanic = serviceerror.NewInternal("encounter panic")
+var errPanic = serviceerror.NewInternal("encountered panic")
 
 func newNDCHistoryReplicator(
 	shard shard.Context,

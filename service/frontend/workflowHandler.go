@@ -2911,7 +2911,7 @@ func (wh *WorkflowHandler) getHistory(
 		// noop
 	case *serviceerror.DataLoss:
 		// log event
-		wh.logger.Error("encounter data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
+		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
 		return nil, nil, err
 	default:
 		return nil, nil, err
