@@ -483,13 +483,12 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 func (d *MutableStateStore) GetWorkflowExecution(
 	request *p.GetWorkflowExecutionRequest,
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
-	execution := request.Execution
 	query := d.Session.Query(templateGetWorkflowExecutionQuery,
 		request.ShardID,
 		rowTypeExecution,
 		request.NamespaceID,
-		execution.WorkflowId,
-		execution.GetRunId(),
+		request.WorkflowID,
+		request.RunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID)
 
@@ -542,7 +541,7 @@ func (d *MutableStateStore) GetWorkflowExecution(
 		signalInfos[key] = p.NewDataBlob(value, sMapEncoding)
 	}
 	state.SignalInfos = signalInfos
-	state.SignalRequestedIDs = gocql.UUIDsToStrings(result["signal_requested"])
+	state.SignalRequestedIDs = gocql.UUIDsToStringSlice(result["signal_requested"])
 
 	eList := result["buffered_events_list"].([]map[string]interface{})
 	bufferedEventsBlobs := make([]*commonpb.DataBlob, 0, len(eList))

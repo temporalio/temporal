@@ -34,7 +34,7 @@ func UUIDToString(
 	return item.(gocql.UUID).String()
 }
 
-func UUIDsToStrings(
+func UUIDsToStringSlice(
 	item interface{},
 ) []string {
 	uuids := item.([]gocql.UUID)

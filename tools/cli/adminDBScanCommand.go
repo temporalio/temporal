@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/urfave/cli"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -719,10 +718,8 @@ func concreteExecutionStillExists(
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: executionInfo.NamespaceId,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.WorkflowId,
-			RunId:      executionState.GetRunId(),
-		},
+		WorkflowID:  executionInfo.WorkflowId,
+		RunID:       executionState.GetRunId(),
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
 	_, err := executionStore.GetWorkflowExecution(getConcreteExecution)
@@ -756,10 +753,8 @@ func concreteExecutionStillOpen(
 	getConcreteExecution := &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: executionInfo.NamespaceId,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: executionInfo.WorkflowId,
-			RunId:      executionState.GetRunId(),
-		},
+		WorkflowID:  executionInfo.WorkflowId,
+		RunID:       executionState.GetRunId(),
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
 	ce, err := execMan.GetWorkflowExecution(getConcreteExecution)

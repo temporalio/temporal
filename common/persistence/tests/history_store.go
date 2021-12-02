@@ -47,14 +47,14 @@ import (
 //  * GetAllHistoryTreeBranches
 
 type (
-	historyEventsPacket struct {
+	HistoryEventsPacket struct {
 		nodeID            int64
 		transactionID     int64
 		prevTransactionID int64
 		events            []*historypb.HistoryEvent
 	}
 
-	historyEventsSuite struct {
+	HistoryEventsSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -63,12 +63,12 @@ type (
 	}
 )
 
-func newHistoryEventsSuite(
+func NewHistoryEventsSuite(
 	t *testing.T,
 	store p.ExecutionStore,
 	logger log.Logger,
-) *historyEventsSuite {
-	return &historyEventsSuite{
+) *HistoryEventsSuite {
+	return &HistoryEventsSuite{
 		Assertions: require.New(t),
 		store: p.NewExecutionManager(
 			store,
@@ -79,23 +79,23 @@ func newHistoryEventsSuite(
 	}
 }
 
-func (s *historyEventsSuite) SetupSuite() {
+func (s *HistoryEventsSuite) SetupSuite() {
 
 }
 
-func (s *historyEventsSuite) TearDownSuite() {
+func (s *HistoryEventsSuite) TearDownSuite() {
 
 }
 
-func (s *historyEventsSuite) SetupTest() {
+func (s *HistoryEventsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 }
 
-func (s *historyEventsSuite) TearDownTest() {
+func (s *HistoryEventsSuite) TearDownTest() {
 
 }
 
-func (s *historyEventsSuite) TestAppendSelect_First() {
+func (s *HistoryEventsSuite) TestAppendSelect_First() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -113,7 +113,7 @@ func (s *historyEventsSuite) TestAppendSelect_First() {
 	s.Equal(eventsPacket.events, s.listAllHistoryEvents(shardID, branchToken))
 }
 
-func (s *historyEventsSuite) TestAppendSelect_NonShadowing() {
+func (s *HistoryEventsSuite) TestAppendSelect_NonShadowing() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -142,7 +142,7 @@ func (s *historyEventsSuite) TestAppendSelect_NonShadowing() {
 	s.Equal(events, s.listAllHistoryEvents(shardID, branchToken))
 }
 
-func (s *historyEventsSuite) TestAppendSelect_Shadowing() {
+func (s *HistoryEventsSuite) TestAppendSelect_Shadowing() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -183,7 +183,7 @@ func (s *historyEventsSuite) TestAppendSelect_Shadowing() {
 	s.Equal(events1, s.listAllHistoryEvents(shardID, branchToken))
 }
 
-func (s *historyEventsSuite) TestAppendForkSelect_NoShadowing() {
+func (s *HistoryEventsSuite) TestAppendForkSelect_NoShadowing() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -226,7 +226,7 @@ func (s *historyEventsSuite) TestAppendForkSelect_NoShadowing() {
 	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
-func (s *historyEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
+func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -286,7 +286,7 @@ func (s *historyEventsSuite) TestAppendForkSelect_Shadowing_NonLastBranch() {
 	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
-func (s *historyEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
+func (s *HistoryEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -336,7 +336,7 @@ func (s *historyEventsSuite) TestAppendForkSelect_Shadowing_LastBranch() {
 	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
-func (s *historyEventsSuite) TestAppendSelectTrim() {
+func (s *HistoryEventsSuite) TestAppendSelectTrim() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -371,7 +371,7 @@ func (s *historyEventsSuite) TestAppendSelectTrim() {
 	s.Equal(events, s.listAllHistoryEvents(shardID, branchToken))
 }
 
-func (s *historyEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
+func (s *HistoryEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -431,7 +431,7 @@ func (s *historyEventsSuite) TestAppendForkSelectTrim_NonLastBranch() {
 	s.Equal(events1, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
-func (s *historyEventsSuite) TestAppendForkSelectTrim_LastBranch() {
+func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -473,7 +473,7 @@ func (s *historyEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 	s.Equal(events, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
-func (s *historyEventsSuite) TestForkDeleteBranch() {
+func (s *HistoryEventsSuite) TestForkDeleteBranch() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
 	branchID := uuid.New()
@@ -540,10 +540,10 @@ func (s *historyEventsSuite) TestForkDeleteBranch() {
 	s.Error(err, "Workflow execution history not found.")
 }
 
-func (s *historyEventsSuite) appendHistoryEvents(
+func (s *HistoryEventsSuite) appendHistoryEvents(
 	shardID int32,
 	branchToken []byte,
-	packet historyEventsPacket,
+	packet HistoryEventsPacket,
 ) {
 	_, err := s.store.AppendHistoryNodes(&p.AppendHistoryNodesRequest{
 		ShardID:           shardID,
@@ -557,7 +557,7 @@ func (s *historyEventsSuite) appendHistoryEvents(
 	s.NoError(err)
 }
 
-func (s *historyEventsSuite) forkHistoryBranch(
+func (s *HistoryEventsSuite) forkHistoryBranch(
 	shardID int32,
 	branchToken []byte,
 	newNodeID int64,
@@ -572,7 +572,7 @@ func (s *historyEventsSuite) forkHistoryBranch(
 	return resp.NewBranchToken
 }
 
-func (s *historyEventsSuite) trimHistoryBranch(
+func (s *HistoryEventsSuite) trimHistoryBranch(
 	shardID int32,
 	branchToken []byte,
 	nodeID int64,
@@ -587,7 +587,7 @@ func (s *historyEventsSuite) trimHistoryBranch(
 	s.NoError(err)
 }
 
-func (s *historyEventsSuite) listHistoryEvents(
+func (s *HistoryEventsSuite) listHistoryEvents(
 	shardID int32,
 	branchToken []byte,
 	startEventID int64,
@@ -611,7 +611,7 @@ func (s *historyEventsSuite) listHistoryEvents(
 	return events
 }
 
-func (s *historyEventsSuite) listAllHistoryEvents(
+func (s *HistoryEventsSuite) listAllHistoryEvents(
 	shardID int32,
 	branchToken []byte,
 ) []*historypb.HistoryEvent {
@@ -633,11 +633,11 @@ func (s *historyEventsSuite) listAllHistoryEvents(
 	return events
 }
 
-func (s *historyEventsSuite) newHistoryEvents(
+func (s *HistoryEventsSuite) newHistoryEvents(
 	eventIDs []int64,
 	transactionID int64,
 	prevTransactionID int64,
-) historyEventsPacket {
+) HistoryEventsPacket {
 
 	events := make([]*historypb.HistoryEvent, len(eventIDs))
 	for index, eventID := range eventIDs {
@@ -647,7 +647,7 @@ func (s *historyEventsSuite) newHistoryEvents(
 		}
 	}
 
-	return historyEventsPacket{
+	return HistoryEventsPacket{
 		nodeID:            eventIDs[0],
 		transactionID:     transactionID,
 		prevTransactionID: prevTransactionID,

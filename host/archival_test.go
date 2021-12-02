@@ -209,10 +209,8 @@ func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *
 	request := &persistence.GetWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
-		Execution: commonpb.WorkflowExecution{
-			WorkflowId: execution.WorkflowId,
-			RunId:      execution.RunId,
-		},
+		WorkflowID:  execution.WorkflowId,
+		RunID:       execution.RunId,
 	}
 
 	for i := 0; i < retryLimit; i++ {
