@@ -1972,9 +1972,19 @@ func CompleteActivity(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	resultPayloads, _ := customDataConverter().ToPayloads(result)
+	// TODO: This should use customDataConverter once the plugin interface
+	// supports the full DataConverter API.
+	resultPayloads, _ := defaultDataConverter().ToPayloads(result)
 
 	frontendClient := cFactory.FrontendClient(c)
+	fmt.Printf("%v\n", workflowservice.RespondActivityTaskCompletedByIdRequest{
+		Namespace:  namespace,
+		WorkflowId: wid,
+		RunId:      rid,
+		ActivityId: activityID,
+		Result:     resultPayloads,
+		Identity:   identity,
+	})
 	_, err := frontendClient.RespondActivityTaskCompletedById(ctx, &workflowservice.RespondActivityTaskCompletedByIdRequest{
 		Namespace:  namespace,
 		WorkflowId: wid,
@@ -2005,7 +2015,9 @@ func FailActivity(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 
-	detailsPayloads, _ := customDataConverter().ToPayloads(detail)
+	// TODO: This should use customDataConverter once the plugin interface
+	// supports the full DataConverter API.
+	detailsPayloads, _ := defaultDataConverter().ToPayloads(detail)
 
 	frontendClient := cFactory.FrontendClient(c)
 	_, err := frontendClient.RespondActivityTaskFailedById(ctx, &workflowservice.RespondActivityTaskFailedByIdRequest{
