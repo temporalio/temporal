@@ -457,19 +457,20 @@ func (mr *MockContextMockRecorder) GetRemoteAdminClient(cluster interface{}) *go
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteAdminClient", reflect.TypeOf((*MockContext)(nil).GetRemoteAdminClient), cluster)
 }
 
-// GetRemoteClusterAckInfo mocks base method.
-func (m *MockContext) GetRemoteClusterAckInfo(cluster []string) (map[string]*v11.ShardReplicationStatusPerCluster, error) {
+// GetReplicationStatus mocks base method.
+func (m *MockContext) GetReplicationStatus(cluster []string) (map[string]*v11.ShardReplicationStatusPerCluster, map[string]*v11.HandoverNamespaceInfo, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetRemoteClusterAckInfo", cluster)
+	ret := m.ctrl.Call(m, "GetReplicationStatus", cluster)
 	ret0, _ := ret[0].(map[string]*v11.ShardReplicationStatusPerCluster)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret1, _ := ret[1].(map[string]*v11.HandoverNamespaceInfo)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
-// GetRemoteClusterAckInfo indicates an expected call of GetRemoteClusterAckInfo.
-func (mr *MockContextMockRecorder) GetRemoteClusterAckInfo(cluster interface{}) *gomock.Call {
+// GetReplicationStatus indicates an expected call of GetReplicationStatus.
+func (mr *MockContextMockRecorder) GetReplicationStatus(cluster interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRemoteClusterAckInfo", reflect.TypeOf((*MockContext)(nil).GetRemoteClusterAckInfo), cluster)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationStatus", reflect.TypeOf((*MockContext)(nil).GetReplicationStatus), cluster)
 }
 
 // GetReplicatorAckLevel mocks base method.
