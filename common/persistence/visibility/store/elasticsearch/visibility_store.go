@@ -39,7 +39,6 @@ import (
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -47,7 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/query"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -634,9 +633,9 @@ func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID nam
 	if err != nil {
 		return nil, nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to read search attribute types: %v", err))
 	}
-	queryConverter := query.NewConverter(
+	queryConverter := newQueryConverter(
 		newNameInterceptor(namespace, s.index, saTypeMap, s.searchAttributesMapper),
-		newValuesInterceptor(),
+		NewValuesInterceptor(),
 	)
 	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {

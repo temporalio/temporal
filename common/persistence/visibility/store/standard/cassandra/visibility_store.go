@@ -28,7 +28,6 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
-
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -70,9 +69,9 @@ const (
 	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
 		`WHERE namespace_id = ? ` +
-		`AND namespace_partition IN (?) ` +
+		`AND namespace_partition = ? ` +
 		`AND start_time >= ? ` +
-		`AND start_time <= ? `
+		`AND start_time <= ? ORDER BY start_time desc`
 
 	templateGetOpenWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
@@ -93,9 +92,9 @@ const (
 	templateGetClosedWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +
 		`WHERE namespace_id = ? ` +
-		`AND namespace_partition IN (?) ` +
+		`AND namespace_partition = ? ` +
 		`AND close_time >= ? ` +
-		`AND close_time <= ? `
+		`AND close_time <= ? ORDER BY close_time desc`
 
 	templateGetClosedWorkflowExecutionsByType = `SELECT workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue ` +
 		`FROM closed_executions ` +

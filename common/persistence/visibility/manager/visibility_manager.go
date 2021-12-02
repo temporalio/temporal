@@ -170,3 +170,17 @@ type (
 		TaskID      int64
 	}
 )
+
+func (r *ListWorkflowExecutionsRequest) OverrideToken(token []byte) {
+	r.NextPageToken = token
+}
+
+func (r *ListWorkflowExecutionsRequest) GetToken() []byte {
+	return r.NextPageToken
+}
+func (r *ListWorkflowExecutionsRequest) OverridePageSize(pageSize int) {
+	r.PageSize = pageSize
+}
+func (r *ListWorkflowExecutionsRequest) GetPageSize() int {
+	return r.PageSize
+}

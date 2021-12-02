@@ -32,7 +32,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/query"
+	"go.temporal.io/server/common/persistence/visibility/store/query"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -61,7 +61,7 @@ func newNameInterceptor(
 	}
 }
 
-func newValuesInterceptor() *valuesInterceptor {
+func NewValuesInterceptor() *valuesInterceptor {
 	return &valuesInterceptor{}
 }
 
@@ -77,12 +77,12 @@ func (ni *nameInterceptor) Name(name string, usage query.FieldNameUsage) (string
 
 	fieldType, err := ni.searchAttributesTypeMap.GetType(fieldName)
 	if err != nil {
-		return "", query.NewConverterError(fmt.Sprintf("invalid search attribute: %s", name))
+		return "", query.NewConverterError("invalid search attribute: %s", name)
 	}
 
 	if usage == query.FieldNameSorter {
 		if fieldType == enumspb.INDEXED_VALUE_TYPE_TEXT {
-			return "", query.NewConverterError(fmt.Sprintf("unable to sort by field of %s type, use field of type %s", enumspb.INDEXED_VALUE_TYPE_TEXT.String(), enumspb.INDEXED_VALUE_TYPE_KEYWORD.String()))
+			return "", query.NewConverterError("unable to sort by field of %s type, use field of type %s", enumspb.INDEXED_VALUE_TYPE_TEXT.String(), enumspb.INDEXED_VALUE_TYPE_KEYWORD.String())
 		}
 	}
 

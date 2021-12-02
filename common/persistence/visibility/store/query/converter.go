@@ -38,26 +38,151 @@ import (
 )
 
 type (
-	Converter struct {
-		fnInterceptor FieldNameInterceptor
-		fvInterceptor FieldValuesInterceptor
+	ExprConverter interface {
+		Convert(expr sqlparser.Expr) (elastic.Query, error)
 	}
+
+	Converter struct {
+		fnInterceptor  FieldNameInterceptor
+		whereConverter ExprConverter
+	}
+
+	WhereConverter struct {
+		And            ExprConverter
+		Or             ExprConverter
+		RangeCond      ExprConverter
+		ComparisonExpr ExprConverter
+		Is             ExprConverter
+	}
+
+	andConverter struct {
+		where ExprConverter
+	}
+
+	orConverter struct {
+		where ExprConverter
+	}
+
+	rangeCondConverter struct {
+		fnInterceptor       FieldNameInterceptor
+		fvInterceptor       FieldValuesInterceptor
+		notBetweenSupported bool
+	}
+
+	comparisonExprConverter struct {
+		fnInterceptor    FieldNameInterceptor
+		fvInterceptor    FieldValuesInterceptor
+		allowedOperators map[string]struct{}
+	}
+
+	isConverter struct {
+		fnInterceptor FieldNameInterceptor
+	}
+
+	notSupportedExprConverter struct{}
 )
 
-func NewConverter(fnInterceptor FieldNameInterceptor, fvInterceptor FieldValuesInterceptor) *Converter {
-	cvt := &Converter{
+func NewConverter(fnInterceptor FieldNameInterceptor, whereConverter ExprConverter) *Converter {
+	if fnInterceptor == nil {
+		fnInterceptor = &NopFieldNameInterceptor{}
+	}
+	return &Converter{
+		fnInterceptor:  fnInterceptor,
+		whereConverter: whereConverter,
+	}
+}
+
+func NewWhereConverter(
+	and ExprConverter,
+	or ExprConverter,
+	rangeCond ExprConverter,
+	comparisonExpr ExprConverter,
+	is ExprConverter) ExprConverter {
+	if and == nil {
+		and = &notSupportedExprConverter{}
+	}
+
+	if or == nil {
+		or = &notSupportedExprConverter{}
+	}
+
+	if rangeCond == nil {
+		rangeCond = &notSupportedExprConverter{}
+	}
+
+	if comparisonExpr == nil {
+		comparisonExpr = &notSupportedExprConverter{}
+	}
+
+	if is == nil {
+		is = &notSupportedExprConverter{}
+	}
+
+	return &WhereConverter{
+		And:            and,
+		Or:             or,
+		RangeCond:      rangeCond,
+		ComparisonExpr: comparisonExpr,
+		Is:             is,
+	}
+}
+
+func NewAndConverter(whereConverter ExprConverter) ExprConverter {
+	return &andConverter{
+		where: whereConverter,
+	}
+}
+
+func NewOrConverter(whereConverter ExprConverter) ExprConverter {
+	return &orConverter{
+		where: whereConverter,
+	}
+}
+
+func NewRangeCondConverter(
+	fnInterceptor FieldNameInterceptor,
+	fvInterceptor FieldValuesInterceptor,
+	notBetweenSupported bool,
+) ExprConverter {
+	if fnInterceptor == nil {
+		fnInterceptor = &NopFieldNameInterceptor{}
+	}
+	if fvInterceptor == nil {
+		fvInterceptor = &NopFieldValuesInterceptor{}
+	}
+	return &rangeCondConverter{
+		fnInterceptor:       fnInterceptor,
+		fvInterceptor:       fvInterceptor,
+		notBetweenSupported: notBetweenSupported,
+	}
+}
+
+func NewComparisonExprConverter(
+	fnInterceptor FieldNameInterceptor,
+	fvInterceptor FieldValuesInterceptor,
+	allowedOperators map[string]struct{},
+) ExprConverter {
+	if fnInterceptor == nil {
+		fnInterceptor = &NopFieldNameInterceptor{}
+	}
+	if fvInterceptor == nil {
+		fvInterceptor = &NopFieldValuesInterceptor{}
+	}
+	return &comparisonExprConverter{
+		fnInterceptor:    fnInterceptor,
+		fvInterceptor:    fvInterceptor,
+		allowedOperators: allowedOperators,
+	}
+}
+
+func NewIsConverter(fnInterceptor FieldNameInterceptor) ExprConverter {
+	return &isConverter{
 		fnInterceptor: fnInterceptor,
-		fvInterceptor: fvInterceptor,
 	}
+}
 
-	if cvt.fnInterceptor == nil {
-		cvt.fnInterceptor = &nopFieldNameInterceptor{}
-	}
-	if cvt.fvInterceptor == nil {
-		cvt.fvInterceptor = &nopFieldValuesInterceptor{}
-	}
-
-	return cvt
+func NewNotSupportedExprConverter() ExprConverter {
+	return &notSupportedExprConverter{}
 }
 
 // ConvertWhereOrderBy transforms WHERE SQL statement to Elasticsearch query.
@@ -70,19 +195,19 @@ func (c *Converter) ConvertWhereOrderBy(whereOrderBy string) (*elastic.BoolQuery
 	}
 	// sqlparser can't parse just WHERE clause but instead accepts only valid SQL statement.
 	sql := fmt.Sprintf("select * from table1 %s", whereOrderBy)
-	return c.convertSql(sql)
+	return c.ConvertSql(sql)
 }
 
-// convertSql transforms SQL to Elasticsearch query.
-func (c *Converter) convertSql(sql string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
+// ConvertSql transforms SQL to Elasticsearch query.
+func (c *Converter) ConvertSql(sql string) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
 	stmt, err := sqlparser.Parse(sql)
 	if err != nil {
-		return nil, nil, NewConverterError(fmt.Sprintf("%s: %v", malformedSqlQueryErrMessage, err))
+		return nil, nil, NewConverterError("%s: %v", MalformedSqlQueryErrMessage, err)
 	}
 
 	selectStmt, isSelect := stmt.(*sqlparser.Select)
 	if !isSelect {
-		return nil, nil, NewConverterError(fmt.Sprintf("%s: statement must be 'select' not %T", notSupportedErrMessage, stmt))
+		return nil, nil, NewConverterError("%s: statement must be 'select' not %T", NotSupportedErrMessage, stmt)
 	}
 
 	return c.convertSelect(selectStmt)
@@ -90,16 +215,16 @@ func (c *Converter) convertSql(sql string) (*elastic.BoolQuery, []*elastic.Field
 
 func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []*elastic.FieldSort, error) {
 	if sel.GroupBy != nil {
-		return nil, nil, NewConverterError(fmt.Sprintf("%s: 'group by' clause", notSupportedErrMessage))
+		return nil, nil, NewConverterError("%s: 'group by' clause", NotSupportedErrMessage)
 	}
 
 	if sel.Limit != nil {
-		return nil, nil, NewConverterError(fmt.Sprintf("%s: 'limit' clause", notSupportedErrMessage))
+		return nil, nil, NewConverterError("%s: 'limit' clause", NotSupportedErrMessage)
 	}
 
 	var query *elastic.BoolQuery
 	if sel.Where != nil {
-		q, err := c.convertWhere(sel.Where.Expr)
+		q, err := c.whereConverter.Convert(sel.Where.Expr)
 		if err != nil {
 			return nil, nil, wrapConverterError("unable to convert filter expression", err)
 		}
@@ -112,7 +237,7 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []
 
 	var fieldSorts []*elastic.FieldSort
 	for _, orderByExpr := range sel.OrderBy {
-		colName, err := c.convertColName(orderByExpr.Expr, FieldNameSorter)
+		colName, err := convertColName(c.fnInterceptor, orderByExpr.Expr, FieldNameSorter)
 		if err != nil {
 			return nil, nil, wrapConverterError("unable to convert 'order by' column name", err)
 		}
@@ -126,43 +251,48 @@ func (c *Converter) convertSelect(sel *sqlparser.Select) (*elastic.BoolQuery, []
 	return query, fieldSorts, nil
 }
 
-func (c *Converter) convertWhere(expr sqlparser.Expr) (elastic.Query, error) {
+func (w *WhereConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
 	if expr == nil {
 		return nil, errors.New("cannot be nil")
 	}
 
 	switch e := (expr).(type) {
 	case *sqlparser.AndExpr:
-		return c.convertAndExpr(e)
+		return w.And.Convert(e)
 	case *sqlparser.OrExpr:
-		return c.convertOrExpr(e)
+		return w.Or.Convert(e)
 	case *sqlparser.ComparisonExpr:
-		return c.convertComparisonExpr(e)
+		return w.ComparisonExpr.Convert(e)
 	case *sqlparser.RangeCond:
-		return c.convertRangeCondExpr(e)
+		return w.RangeCond.Convert(e)
 	case *sqlparser.ParenExpr:
-		return c.convertWhere(e.Expr)
+		return w.Convert(e.Expr)
 	case *sqlparser.IsExpr:
-		return c.convertIsExpr(e)
+		return w.Is.Convert(e)
 	case *sqlparser.NotExpr:
-		return nil, NewConverterError(fmt.Sprintf("%s: 'not' expression", notSupportedErrMessage))
+		return nil, NewConverterError("%s: 'not' expression", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
-		return nil, NewConverterError(fmt.Sprintf("%s: function expression", notSupportedErrMessage))
+		return nil, NewConverterError("%s: function expression", NotSupportedErrMessage)
 	case *sqlparser.ColName:
 		return nil, NewConverterError("incomplete expression")
 	default:
-		return nil, NewConverterError(fmt.Sprintf("%s: expression of type %T", notSupportedErrMessage, expr))
+		return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
 	}
 }
 
-func (c *Converter) convertAndExpr(expr *sqlparser.AndExpr) (elastic.Query, error) {
-	leftExpr := expr.Left
-	rightExpr := expr.Right
-	leftQuery, err := c.convertWhere(leftExpr)
+func (a *andConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+	andExpr, ok := expr.(*sqlparser.AndExpr)
+	if !ok {
+		return nil, NewConverterError("%v is not an 'and' expression", sqlparser.String(expr))
+	}
+
+	leftExpr := andExpr.Left
+	rightExpr := andExpr.Right
+	leftQuery, err := a.where.Convert(leftExpr)
 	if err != nil {
 		return nil, err
 	}
-	rightQuery, err := c.convertWhere(rightExpr)
+	rightQuery, err := a.where.Convert(rightExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -183,14 +313,19 @@ func (c *Converter) convertAndExpr(expr *sqlparser.AndExpr) (elastic.Query, erro
 	return elastic.NewBoolQuery().Filter(leftQuery, rightQuery), nil
 }
 
-func (c *Converter) convertOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error) {
-	leftExpr := expr.Left
-	rightExpr := expr.Right
-	leftQuery, err := c.convertWhere(leftExpr)
+func (o *orConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+	orExpr, ok := expr.(*sqlparser.OrExpr)
+	if !ok {
+		return nil, NewConverterError("%v is not an 'or' expression", sqlparser.String(expr))
+	}
+
+	leftExpr := orExpr.Left
+	rightExpr := orExpr.Right
+	leftQuery, err := o.where.Convert(leftExpr)
 	if err != nil {
 		return nil, err
 	}
-	rightQuery, err := c.convertWhere(rightExpr)
+	rightQuery, err := o.where.Convert(rightExpr)
 	if err != nil {
 		return nil, err
 	}
@@ -211,22 +346,27 @@ func (c *Converter) convertOrExpr(expr *sqlparser.OrExpr) (elastic.Query, error)
 	return elastic.NewBoolQuery().Should(leftQuery, rightQuery), nil
 }
 
-func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Query, error) {
-	colName, err := c.convertColName(expr.Left, FieldNameFilter)
+func (r *rangeCondConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+	rangeCond, ok := expr.(*sqlparser.RangeCond)
+	if !ok {
+		return nil, NewConverterError("%v is not a range condition", sqlparser.String(expr))
+	}
+
+	colName, err := convertColName(r.fnInterceptor, rangeCond.Left, FieldNameFilter)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert left part of 'between' expression", err)
 	}
 
-	fromValue, err := c.parseSqlValue(sqlparser.String(expr.From))
+	fromValue, err := parseSqlValue(sqlparser.String(rangeCond.From))
 	if err != nil {
 		return nil, err
 	}
-	toValue, err := c.parseSqlValue(sqlparser.String(expr.To))
+	toValue, err := parseSqlValue(sqlparser.String(rangeCond.To))
 	if err != nil {
 		return nil, err
 	}
 
-	values, err := c.fvInterceptor.Values(colName, fromValue, toValue)
+	values, err := r.fvInterceptor.Values(colName, fromValue, toValue)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert values of 'between' expression", err)
 	}
@@ -234,49 +374,62 @@ func (c *Converter) convertRangeCondExpr(expr *sqlparser.RangeCond) (elastic.Que
 	toValue = values[1]
 
 	var query elastic.Query
-	switch expr.Operator {
+	switch rangeCond.Operator {
 	case "between":
 		query = elastic.NewRangeQuery(colName).Gte(fromValue).Lte(toValue)
 	case "not between":
+		if !r.notBetweenSupported {
+			return nil, NewConverterError("%s: 'not between' expression", NotSupportedErrMessage)
+		}
 		query = elastic.NewBoolQuery().MustNot(elastic.NewRangeQuery(colName).Gte(fromValue).Lte(toValue))
 	default:
-		return nil, NewConverterError(fmt.Sprintf("%s: range condition operator must be 'between' or 'not between'", invalidExpressionErrMessage))
+		return nil, NewConverterError("%s: range condition operator must be 'between' or 'not between'", InvalidExpressionErrMessage)
 	}
 	return query, nil
 }
 
-func (c *Converter) convertIsExpr(expr *sqlparser.IsExpr) (elastic.Query, error) {
-	colName, err := c.convertColName(expr.Expr, FieldNameFilter)
+func (i *isConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+	isExpr, ok := expr.(*sqlparser.IsExpr)
+	if !ok {
+		return nil, NewConverterError("%v is not an 'is' expression", sqlparser.String(expr))
+	}
+
+	colName, err := convertColName(i.fnInterceptor, isExpr.Expr, FieldNameFilter)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert left part of 'is' expression", err)
 	}
 
 	var query elastic.Query
-	switch expr.Operator {
+	switch isExpr.Operator {
 	case "is null":
 		query = elastic.NewBoolQuery().MustNot(elastic.NewExistsQuery(colName))
 	case "is not null":
 		query = elastic.NewExistsQuery(colName)
 	default:
-		return nil, NewConverterError(fmt.Sprintf("%s: 'is' operator can be used with 'null' and 'not null' only", invalidExpressionErrMessage))
+		return nil, NewConverterError("%s: 'is' operator can be used with 'null' and 'not null' only", InvalidExpressionErrMessage)
 	}
 
 	return query, nil
 }
 
-func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elastic.Query, error) {
-	colName, err := c.convertColName(expr.Left, FieldNameFilter)
+func (c *comparisonExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+	comparisonExpr, ok := expr.(*sqlparser.ComparisonExpr)
+	if !ok {
+		return nil, NewConverterError("%v is not a comparison expression", sqlparser.String(expr))
+	}
+
+	colName, err := convertColName(c.fnInterceptor, comparisonExpr.Left, FieldNameFilter)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert left part of comparison expression", err)
 	}
 
-	colValue, err := c.convertComparisonExprValue(expr.Right)
+	colValue, err := convertComparisonExprValue(comparisonExpr.Right)
 	if err != nil {
 		return nil, wrapConverterError("unable to convert right part of comparison expression", err)
 	}
 
-	if expr.Operator == "like" || expr.Operator == "not like" {
-		colValue, err = c.cleanLikeValue(colValue)
+	if comparisonExpr.Operator == "like" || comparisonExpr.Operator == "not like" {
+		colValue, err = cleanLikeValue(colValue)
 		if err != nil {
 			return nil, err
 		}
@@ -293,8 +446,12 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 		return nil, wrapConverterError("unable to convert values of comparison expression", err)
 	}
 
+	if _, ok := c.allowedOperators[comparisonExpr.Operator]; !ok {
+		return nil, NewConverterError("operator '%v' not allowed in comparison expression", comparisonExpr.Operator)
+	}
+
 	var query elastic.Query
-	switch expr.Operator {
+	switch comparisonExpr.Operator {
 	case ">=":
 		query = elastic.NewRangeQuery(colName).Gte(colValues[0])
 	case "<=":
@@ -318,10 +475,10 @@ func (c *Converter) convertComparisonExpr(expr *sqlparser.ComparisonExpr) (elast
 	return query, nil
 }
 
-func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
+func convertComparisonExprValue(expr sqlparser.Expr) (interface{}, error) {
 	switch e := expr.(type) {
 	case *sqlparser.SQLVal:
-		v, err := c.parseSqlValue(sqlparser.String(e))
+		v, err := parseSqlValue(sqlparser.String(e))
 		if err != nil {
 			return nil, err
 		}
@@ -333,7 +490,7 @@ func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}
 		exprs := []sqlparser.Expr(e)
 		var result []interface{}
 		for _, expr := range exprs {
-			v, err := c.convertComparisonExprValue(expr)
+			v, err := convertComparisonExprValue(expr)
 			if err != nil {
 				return nil, err
 			}
@@ -341,25 +498,29 @@ func (c *Converter) convertComparisonExprValue(expr sqlparser.Expr) (interface{}
 		}
 		return result, nil
 	case *sqlparser.GroupConcatExpr:
-		return nil, NewConverterError(fmt.Sprintf("%s: 'group_concat'", notSupportedErrMessage))
+		return nil, NewConverterError("%s: 'group_concat'", NotSupportedErrMessage)
 	case *sqlparser.FuncExpr:
-		return nil, NewConverterError(fmt.Sprintf("%s: nested func", notSupportedErrMessage))
+		return nil, NewConverterError("%s: nested func", NotSupportedErrMessage)
 	case *sqlparser.ColName:
-		return nil, NewConverterError(fmt.Sprintf("%s: column name on the right side of comparison expression", notSupportedErrMessage))
+		return nil, NewConverterError("%s: column name on the right side of comparison expression", NotSupportedErrMessage)
 	default:
-		return nil, NewConverterError(fmt.Sprintf("%s: unexpected value type %T", invalidExpressionErrMessage, expr))
+		return nil, NewConverterError("%s: unexpected value type %T", InvalidExpressionErrMessage, expr)
 	}
 }
 
-func (c *Converter) cleanLikeValue(colValue interface{}) (string, error) {
+func cleanLikeValue(colValue interface{}) (string, error) {
 	colValueStr, isString := colValue.(string)
 	if !isString {
-		return "", NewConverterError(fmt.Sprintf("%s: 'like' operator value must be a string but was %T", invalidExpressionErrMessage, colValue))
+		return "", NewConverterError("%s: 'like' operator value must be a string but was %T", InvalidExpressionErrMessage, colValue)
 	}
 	return strings.ReplaceAll(colValueStr, "%", ""), nil
 }
 
-func (c *Converter) parseSqlValue(sqlValue string) (interface{}, error) {
+func (n *notSupportedExprConverter) Convert(expr sqlparser.Expr) (elastic.Query, error) {
+	return nil, NewConverterError("%s: expression of type %T", NotSupportedErrMessage, expr)
+}
+
+func parseSqlValue(sqlValue string) (interface{}, error) {
 	if sqlValue == "" {
 		return "", nil
 	}
@@ -379,16 +540,16 @@ func (c *Converter) parseSqlValue(sqlValue string) (interface{}, error) {
 		return floatValue, nil
 	}
 
-	return nil, NewConverterError(fmt.Sprintf("%s: unable to parse %s", invalidExpressionErrMessage, sqlValue))
+	return nil, NewConverterError("%s: unable to parse %s", InvalidExpressionErrMessage, sqlValue)
 }
 
-func (c *Converter) convertColName(colNameExpr sqlparser.Expr, usage FieldNameUsage) (string, error) {
+func convertColName(fnInterceptor FieldNameInterceptor, colNameExpr sqlparser.Expr, usage FieldNameUsage) (string, error) {
 	colName, isColName := colNameExpr.(*sqlparser.ColName)
 	if !isColName {
-		return "", NewConverterError(fmt.Sprintf("%s: must be a column name but was %T", invalidExpressionErrMessage, colNameExpr))
+		return "", NewConverterError("%s: must be a column name but was %T", InvalidExpressionErrMessage, colNameExpr)
 	}
 
 	colNameStr := sqlparser.String(colName)
 	colNameStr = strings.ReplaceAll(colNameStr, "`", "")
-	return c.fnInterceptor.Name(colNameStr, usage)
+	return fnInterceptor.Name(colNameStr, usage)
 }

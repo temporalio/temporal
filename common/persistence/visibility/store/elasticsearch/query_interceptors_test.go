@@ -56,7 +56,7 @@ func (s *QueryInterceptorSuite) TearDownTest() {
 }
 
 func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
-	vi := newValuesInterceptor()
+	vi := NewValuesInterceptor()
 
 	cases := []struct {
 		key   string
@@ -90,7 +90,7 @@ func (s *QueryInterceptorSuite) TestTimeProcessFunc() {
 }
 
 func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
-	vi := newValuesInterceptor()
+	vi := NewValuesInterceptor()
 
 	cases := []struct {
 		key   string
@@ -130,7 +130,7 @@ func (s *QueryInterceptorSuite) TestStatusProcessFunc() {
 }
 
 func (s *QueryInterceptorSuite) TestDurationProcessFunc() {
-	vi := newValuesInterceptor()
+	vi := NewValuesInterceptor()
 
 	cases := []struct {
 		key   string
