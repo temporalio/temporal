@@ -55,8 +55,8 @@ type TaskMatcher struct {
 	rateLimiter quotas.RateLimiter
 
 	fwdr          *Forwarder
-	scope         func() metrics.Scope // namespace metric scope
-	numPartitions func() int           // number of task queue partitions
+	scope         metrics.Scope // namespace metric scope
+	numPartitions func() int    // number of task queue partitions
 }
 
 const (
@@ -67,7 +67,7 @@ const (
 // newTaskMatcher returns an task matcher instance. The returned instance can be
 // used by task producers and consumers to find a match. Both sync matches and non-sync
 // matches should use this implementation
-func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() metrics.Scope) *TaskMatcher {
+func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scope metrics.Scope) *TaskMatcher {
 	dynamicRateBurst := quotas.NewMutableRateBurst(
 		defaultTaskDispatchRPS,
 		int(defaultTaskDispatchRPS),
@@ -88,7 +88,7 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() m
 		config:           config,
 		dynamicRateBurst: dynamicRateBurst,
 		rateLimiter:      limiter,
-		scope:            scopeFunc,
+		scope:            scope,
 		fwdr:             fwdr,
 		taskC:            make(chan *internalTask),
 		queryTaskC:       make(chan *internalTask),
@@ -128,7 +128,7 @@ func newTaskMatcher(config *taskQueueConfig, fwdr *Forwarder, scopeFunc func() m
 func (tm *TaskMatcher) Offer(ctx context.Context, task *internalTask) (bool, error) {
 	if !task.isForwarded() {
 		if err := tm.rateLimiter.Wait(ctx); err != nil {
-			tm.scope().IncCounter(metrics.SyncThrottlePerTaskQueueCounter)
+			tm.scope.IncCounter(metrics.SyncThrottlePerTaskQueueCounter)
 			return false, err
 		}
 	}
@@ -249,7 +249,7 @@ forLoop:
 			err := tm.fwdr.ForwardTask(childCtx, task)
 			token.release()
 			if err != nil {
-				tm.scope().IncCounter(metrics.ForwardTaskErrorsPerTaskQueue)
+				tm.scope.IncCounter(metrics.ForwardTaskErrorsPerTaskQueue)
 				// forwarder returns error only when the call is rate limited. To
 				// avoid a busy loop on such rate limiting events, we only attempt to make
 				// the next forwarded call after this childCtx expires. Till then, we block
@@ -339,7 +339,7 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 	// 1. ctx.Done
 	select {
 	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
 		return nil, ErrNoTasks
 	default:
 	}
@@ -348,13 +348,13 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 	select {
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+			tm.scope.IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	default:
 	}
@@ -362,17 +362,17 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 	// 3. forwarding (and all other clauses repeated again)
 	select {
 	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
 		return nil, ErrNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+			tm.scope.IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case token := <-tm.fwdrPollReqTokenC():
 		if task, err := tm.fwdr.ForwardPoll(ctx); err == nil {
@@ -385,17 +385,17 @@ func (tm *TaskMatcher) poll(ctx context.Context, queryOnly bool) (*internalTask,
 	// 4. blocking local poll
 	select {
 	case <-ctx.Done():
-		tm.scope().IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollTimeoutPerTaskQueueCounter)
 		return nil, ErrNoTasks
 	case task := <-taskC:
 		if task.responseC != nil {
-			tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+			tm.scope.IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
 		}
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	case task := <-queryTaskC:
-		tm.scope().IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
-		tm.scope().IncCounter(metrics.PollSuccessPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessWithSyncPerTaskQueueCounter)
+		tm.scope.IncCounter(metrics.PollSuccessPerTaskQueueCounter)
 		return task, nil
 	}
 }

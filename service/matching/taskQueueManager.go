@@ -119,8 +119,8 @@ type (
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 		metricsClient     metrics.Client
-		namespaceValue    atomic.Value // of namespace.Name
-		metricScopeValue  atomic.Value // namespace/taskqueue tagged metric scope
+		namespace         namespace.Name
+		metricScope       metrics.Scope // namespace/taskqueue tagged metric scope
 		// pollerHistory stores poller which poll from this taskqueue in last few minutes
 		pollerHistory *pollerHistory
 		// outstandingPollsMap is needed to keep track of all outstanding pollers for a
@@ -153,21 +153,35 @@ func newTaskQueueManager(
 	clusterMeta cluster.Metadata,
 	opts ...taskQueueManagerOpt,
 ) (taskQueueManager, error) {
+	namespaceEntry, err := e.namespaceRegistry.GetNamespaceByID(taskQueue.namespaceID)
+	if err != nil {
+		return nil, err
+	}
+	nsName := namespaceEntry.Name()
 
-	taskQueueConfig, err := newTaskQueueConfig(taskQueue, config, e.namespaceRegistry)
+	taskQueueConfig, err := newTaskQueueConfig(taskQueue, config, nsName)
 	if err != nil {
 		return nil, err
 	}
 
 	db := newTaskQueueDB(e.taskManager, taskQueue.namespaceID, taskQueue.name, taskQueue.taskType, taskQueueKind, e.logger)
-
+	logger := log.With(e.logger,
+		tag.WorkflowTaskQueueName(taskQueue.name),
+		tag.WorkflowTaskQueueType(taskQueue.taskType),
+		tag.WorkflowNamespace(nsName.String()))
+	metricsScope := metrics.GetPerTaskQueueScope(
+		e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
+		nsName.String(),
+		taskQueue.name,
+		taskQueueKind,
+	)
 	tlMgr := &taskQueueManagerImpl{
 		status:              common.DaemonStatusInitialized,
 		namespaceRegistry:   e.namespaceRegistry,
 		metricsClient:       e.metricsClient,
 		taskQueueID:         taskQueue,
 		taskQueueKind:       taskQueueKind,
-		logger:              log.With(e.logger, tag.WorkflowTaskQueueName(taskQueue.name), tag.WorkflowTaskQueueType(taskQueue.taskType)),
+		logger:              logger,
 		db:                  db,
 		taskAckManager:      newAckManager(e.logger),
 		taskGC:              newTaskGC(db, taskQueueConfig),
@@ -176,18 +190,8 @@ func newTaskQueueManager(
 		outstandingPollsMap: make(map[string]context.CancelFunc),
 		signalFatalProblem:  e.unloadTaskQueue,
 		clusterMeta:         clusterMeta,
-	}
-
-	tlMgr.namespaceValue.Store(namespace.EmptyName)
-	if tlMgr.metricScope() == nil { // namespace name lookup failed
-		// metric scope to use when namespace lookup fails
-		tlMgr.metricScopeValue.Store(
-			metrics.GetPerTaskQueueScope(
-				e.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope),
-				"",
-				tlMgr.taskQueueID.name,
-				tlMgr.taskQueueKind,
-			))
+		namespace:           nsName,
+		metricScope:         metricsScope,
 	}
 
 	tlMgr.liveness = newLiveness(
@@ -219,7 +223,7 @@ func (c *taskQueueManagerImpl) signalIfFatal(err error) bool {
 	}
 	var condfail *persistence.ConditionFailedError
 	if errors.As(err, &condfail) {
-		c.metricScope().IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
+		c.metricScope.IncCounter(metrics.ConditionFailedErrorPerTaskQueueCounter)
 		c.signalFatalProblem(c)
 		return true
 	}
@@ -236,11 +240,11 @@ func (c *taskQueueManagerImpl) Start() {
 	) {
 		return
 	}
-	c.logger.Info("", tag.LifeCycleStarting)
 	c.liveness.Start()
 	c.taskWriter.Start()
 	c.taskReader.Start()
 	c.logger.Info("", tag.LifeCycleStarted)
+	c.metricScope.IncCounter(metrics.TaskQueueStartedCounter)
 }
 
 // Stop pump that fills up taskBuffer from persistence.
@@ -252,13 +256,13 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	c.logger.Info("", tag.LifeCycleStopping)
 	_ = c.db.UpdateState(c.taskAckManager.getAckLevel())
 	c.taskGC.RunNow(c.taskAckManager.getAckLevel())
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
 	c.logger.Info("", tag.LifeCycleStopped)
+	c.metricScope.IncCounter(metrics.TaskQueueStoppedCounter)
 }
 
 // AddTask adds a task to the task queue. This method will first attempt a synchronous
@@ -366,7 +370,7 @@ func (c *taskQueueManagerImpl) GetTask(
 		return nil, err
 	}
 
-	task.namespace = c.namespace()
+	task.namespace = c.namespace
 	task.backlogCountHint = c.taskAckManager.getBacklogCountHint()
 	return task, nil
 }
@@ -557,40 +561,6 @@ func (c *taskQueueManagerImpl) newChildContext(
 
 func (c *taskQueueManagerImpl) isFowardingAllowed(taskQueue *taskQueueID, kind enumspb.TaskQueueKind) bool {
 	return !taskQueue.IsRoot() && kind != enumspb.TASK_QUEUE_KIND_STICKY
-}
-
-func (c *taskQueueManagerImpl) metricScope() metrics.Scope {
-	c.tryInitNamespaceAndScope()
-	return c.metricScopeValue.Load().(metrics.Scope)
-}
-
-func (c *taskQueueManagerImpl) namespace() namespace.Name {
-	name := c.namespaceValue.Load().(namespace.Name)
-	if !name.IsEmpty() {
-		return name
-	}
-	c.tryInitNamespaceAndScope()
-	return c.namespaceValue.Load().(namespace.Name)
-}
-
-// reload from namespaceRegistry in case it got empty result during construction
-func (c *taskQueueManagerImpl) tryInitNamespaceAndScope() {
-	name := c.namespaceValue.Load().(namespace.Name)
-	if !name.IsEmpty() {
-		return
-	}
-
-	entry, err := c.namespaceRegistry.GetNamespaceByID(c.taskQueueID.namespaceID)
-	if err != nil {
-		return
-	}
-
-	name = entry.Name()
-
-	scope := metrics.GetPerTaskQueueScope(c.metricsClient.Scope(metrics.MatchingTaskQueueMgrScope), name.String(), c.taskQueueID.name, c.taskQueueKind)
-
-	c.metricScopeValue.Store(scope)
-	c.namespaceValue.Store(name)
 }
 
 func (c *taskQueueManagerImpl) QueueID() *taskQueueID {

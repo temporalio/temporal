@@ -133,13 +133,7 @@ func NewConfig(dc *dynamicconfig.Collection) *Config {
 	}
 }
 
-func newTaskQueueConfig(id *taskQueueID, config *Config, namespaceRegistry namespace.Registry) (*taskQueueConfig, error) {
-	namespaceEntry, err := namespaceRegistry.GetNamespaceByID(id.namespaceID)
-	if err != nil {
-		return nil, err
-	}
-
-	namespace := namespaceEntry.Name()
+func newTaskQueueConfig(id *taskQueueID, config *Config, namespace namespace.Name) (*taskQueueConfig, error) {
 	taskQueueName := id.name
 	taskType := id.taskType
 
