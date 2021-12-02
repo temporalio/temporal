@@ -239,7 +239,6 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	_, err = s.ShardMgr.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID:          shardID,
 		InitialShardInfo: s.ShardInfo,
-		CreateIfMissing:  true,
 	})
 	s.fatalOnError("CreateShard", err)
 
@@ -255,7 +254,7 @@ func (s *TestBase) fatalOnError(msg string, err error) {
 }
 
 // GetOrCreateShard is a utility method to get/create the shard using persistence layer
-func (s *TestBase) GetOrCreateShard(shardID int32, owner string, rangeID int64, createIfMissing bool) (*persistencespb.ShardInfo, error) {
+func (s *TestBase) GetOrCreateShard(shardID int32, owner string, rangeID int64) (*persistencespb.ShardInfo, error) {
 	info := &persistencespb.ShardInfo{
 		ShardId: shardID,
 		Owner:   owner,
@@ -263,7 +262,6 @@ func (s *TestBase) GetOrCreateShard(shardID int32, owner string, rangeID int64, 
 	}
 	resp, err := s.ShardMgr.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID:          shardID,
-		CreateIfMissing:  createIfMissing,
 		InitialShardInfo: info,
 	})
 	if err != nil {

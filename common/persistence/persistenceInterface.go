@@ -27,6 +27,7 @@
 package persistence
 
 import (
+	"context"
 	"math"
 	"time"
 
@@ -210,11 +211,12 @@ type (
 	}
 
 	// InternalGetOrCreateShardRequest is used by ShardStore to retrieve or create a shard.
-	// GetOrCreateShard should: if shard exists, return it. If not, and CreateShardInfo != nil,
-	// call it and create the shard with the initial shardInfo and rangeID. Otherwise return error.
+	// GetOrCreateShard should: if shard exists, return it. If not, call CreateShardInfo and
+	// create the shard with the returned value.
 	InternalGetOrCreateShardRequest struct {
-		ShardID         int32
-		CreateShardInfo func() (rangeID int64, shardInfo *commonpb.DataBlob, err error)
+		ShardID          int32
+		CreateShardInfo  func() (rangeID int64, shardInfo *commonpb.DataBlob, err error)
+		LifecycleContext context.Context // cancelled when shard is unloaded
 	}
 
 	// InternalGetOrCreateShardResponse is the response to GetShard

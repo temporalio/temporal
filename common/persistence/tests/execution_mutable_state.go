@@ -93,8 +93,7 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 
 	s.shardID = rand.Int31()
 	resp, err := s.shardManager.GetOrCreateShard(&p.GetOrCreateShardRequest{
-		ShardID:         s.shardID,
-		CreateIfMissing: true,
+		ShardID: s.shardID,
 		InitialShardInfo: &persistencespb.ShardInfo{
 			ShardId: s.shardID,
 			RangeId: 1,

@@ -57,24 +57,23 @@ func (m *shardManagerImpl) GetName() string {
 
 func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
 	var createShardInfo func() (int64, *commonpb.DataBlob, error)
-	if request.CreateIfMissing {
-		createShardInfo = func() (int64, *commonpb.DataBlob, error) {
-			shardInfo := request.InitialShardInfo
-			if shardInfo == nil {
-				shardInfo = &persistencespb.ShardInfo{}
-			}
-			shardInfo.ShardId = request.ShardID
-			shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
-			data, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
-			if err != nil {
-				return 0, nil, err
-			}
-			return shardInfo.GetRangeId(), data, nil
+	createShardInfo = func() (int64, *commonpb.DataBlob, error) {
+		shardInfo := request.InitialShardInfo
+		if shardInfo == nil {
+			shardInfo = &persistencespb.ShardInfo{}
 		}
+		shardInfo.ShardId = request.ShardID
+		shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
+		data, err := m.serializer.ShardInfoToBlob(shardInfo, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return 0, nil, err
+		}
+		return shardInfo.GetRangeId(), data, nil
 	}
 	internalResp, err := m.shardStore.GetOrCreateShard(&InternalGetOrCreateShardRequest{
-		ShardID:         request.ShardID,
-		CreateShardInfo: createShardInfo,
+		ShardID:          request.ShardID,
+		CreateShardInfo:  createShardInfo,
+		LifecycleContext: request.LifecycleContext,
 	})
 	if err != nil {
 		return nil, err

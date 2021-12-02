@@ -27,6 +27,7 @@
 package persistence
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"strings"
@@ -192,8 +193,8 @@ type (
 	// initial information to create a shard in executions table
 	GetOrCreateShardRequest struct {
 		ShardID          int32
-		CreateIfMissing  bool
-		InitialShardInfo *persistencespb.ShardInfo
+		InitialShardInfo *persistencespb.ShardInfo // optional, zero value will be used if missing
+		LifecycleContext context.Context           // cancelled when shard is unloaded
 	}
 
 	// GetOrCreateShardResponse is the response to GetOrCreateShard

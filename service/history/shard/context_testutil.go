@@ -25,6 +25,7 @@
 package shard
 
 import (
+	"context"
 	"time"
 
 	"github.com/golang/mock/gomock"
@@ -66,6 +67,7 @@ func NewTestContext(
 ) *ContextTest {
 	resource := resource.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
+	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		executionManager:    resource.ExecutionMgr,
@@ -74,6 +76,8 @@ func NewTestContext(
 		config:              config,
 		contextTaggedLogger: resource.GetLogger(),
 		throttledLogger:     resource.GetThrottledLogger(),
+		lifecycleCtx:        lifecycleCtx,
+		lifecycleCancel:     lifecycleCancel,
 
 		state:                     contextStateAcquired,
 		shardInfo:                 shardInfo,

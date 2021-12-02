@@ -3145,15 +3145,10 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	}
 	request := &p.GetOrCreateShardRequest{
 		ShardID:          shardID,
-		CreateIfMissing:  false,
 		InitialShardInfo: shardInfo,
 	}
 	resp, err := s.ShardMgr.GetOrCreateShard(request)
-	s.Error(err) // initially missing
-
-	request.CreateIfMissing = true
-	resp, err = s.ShardMgr.GetOrCreateShard(request)
-	s.NoError(err) // now it's created
+	s.NoError(err)
 
 	shardInfo.ClusterTransferAckLevel = map[string]int64{
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTransferAck,
@@ -3209,7 +3204,6 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 	createRequest := &p.GetOrCreateShardRequest{
 		ShardID:          shardID,
 		InitialShardInfo: shardInfo,
-		CreateIfMissing:  true,
 	}
 	resp, err := s.ShardMgr.GetOrCreateShard(createRequest)
 	s.NoError(err)
