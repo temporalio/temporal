@@ -361,66 +361,6 @@ func newAdminHistoryHostCommands() []cli.Command {
 	}
 }
 
-func newAdminNamespaceCommands() []cli.Command {
-	return []cli.Command{
-		{
-			Name:  "list",
-			Usage: "List namespaces",
-			Flags: flagsForPagination,
-			Action: func(c *cli.Context) {
-				AdminListNamespaces(c)
-			},
-		},
-		{
-			Name:    "register",
-			Aliases: []string{"re"},
-			Usage:   "Register workflow namespace",
-			Flags:   registerNamespaceFlags,
-			Action: func(c *cli.Context) {
-				err := RegisterNamespace(c)
-				if err != nil {
-					ErrorAndExit("unable to register namespace", err)
-				}
-			},
-		},
-		{
-			Name:    "update",
-			Aliases: []string{"up", "u"},
-			Usage:   "Update existing workflow namespace",
-			Flags:   adminUpdateNamespaceFlags,
-			Action: func(c *cli.Context) {
-				newNamespaceCLI(c, true).UpdateNamespace(c)
-			},
-		},
-		{
-			Name:    "describe",
-			Aliases: []string{"desc"},
-			Usage:   "Describe existing workflow namespace",
-			Flags:   adminDescribeNamespaceFlags,
-			Action: func(c *cli.Context) {
-				newNamespaceCLI(c, true).DescribeNamespace(c)
-			},
-		},
-		{
-			Name:    "get_namespaceidorname",
-			Aliases: []string{"getdn"},
-			Usage:   "Get namespaceId or namespace",
-			Flags: append(getDBFlags(),
-				cli.StringFlag{
-					Name:  FlagNamespace,
-					Usage: "Namespace",
-				},
-				cli.StringFlag{
-					Name:  FlagNamespaceID,
-					Usage: "Namespace Id(uuid)",
-				}),
-			Action: func(c *cli.Context) {
-				AdminGetNamespaceIDOrName(c)
-			},
-		},
-	}
-}
-
 func newAdminTaskQueueCommands() []cli.Command {
 	return []cli.Command{
 		{

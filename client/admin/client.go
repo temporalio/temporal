@@ -315,48 +315,6 @@ func (c *clientImpl) GetReplicationMessages(
 	return client.GetReplicationMessages(ctx, request, opts...)
 }
 
-func (c *clientImpl) ListNamespaces(
-	ctx context.Context,
-	request *adminservice.ListNamespacesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListNamespacesResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.ListNamespaces(ctx, request, opts...)
-}
-
-func (c *clientImpl) RegisterNamespace(
-	ctx context.Context,
-	request *adminservice.RegisterNamespaceRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RegisterNamespaceResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.RegisterNamespace(ctx, request, opts...)
-}
-
-func (c *clientImpl) UpdateNamespace(
-	ctx context.Context,
-	request *adminservice.UpdateNamespaceRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.UpdateNamespaceResponse, error) {
-	client, err := c.getRandomClient()
-	if err != nil {
-		return nil, err
-	}
-	ctx, cancel := c.createContext(ctx)
-	defer cancel()
-	return client.UpdateNamespace(ctx, request, opts...)
-}
-
 func (c *clientImpl) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,
