@@ -403,6 +403,12 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		}
 	}
 
+	params.SdkClientFactory = sdk.NewClientFactory(
+		c.FrontendGRPCAddress(),
+		nil,
+		params.MetricsScope,
+	)
+
 	stoppedCh := make(chan struct{})
 	var frontendService *frontend.Service
 	var clientBean client.Bean

@@ -31,8 +31,6 @@ import (
 	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
-	sdkclient "go.temporal.io/sdk/client"
-	sdkmocks "go.temporal.io/sdk/mocks"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
@@ -54,6 +52,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -85,7 +84,7 @@ type (
 
 		// internal services clients
 
-		SDKClient            *sdkmocks.Client
+		SDKClientFactory     *sdk.MockClientFactory
 		FrontendClient       *workflowservicemock.MockWorkflowServiceClient
 		MatchingClient       *matchingservicemock.MockMatchingServiceClient
 		HistoryClient        *historyservicemock.MockHistoryServiceClient
@@ -192,7 +191,7 @@ func NewTest(
 
 		// internal services clients
 
-		SDKClient:            &sdkmocks.Client{},
+		SDKClientFactory:     sdk.NewMockClientFactory(controller),
 		FrontendClient:       frontendClient,
 		MatchingClient:       matchingClient,
 		HistoryClient:        historyClient,
@@ -316,9 +315,9 @@ func (s *Test) GetWorkerServiceResolver() membership.ServiceResolver {
 
 // internal services clients
 
-// GetSDKClient for testing
-func (s *Test) GetSDKClient() sdkclient.Client {
-	return s.SDKClient
+// GetSDKClientFactory for testing
+func (s *Test) GetSDKClientFactory() sdk.ClientFactory {
+	return s.SDKClientFactory
 }
 
 // GetFrontendClient for testing

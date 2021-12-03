@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -118,7 +119,7 @@ type (
 		HistoryClient               historyservice.HistoryServiceClient
 		MatchingRawClient           matchingservice.MatchingServiceClient
 		MatchingClient              matchingservice.MatchingServiceClient
-		SdkClient                   sdkclient.Client
+		SdkClientFactory            sdk.ClientFactory
 		HistoryServiceResolver      membership.ServiceResolver
 		MetricsClient               metrics.Client
 		PayloadSerializer           serialization.Serializer
@@ -157,7 +158,12 @@ var (
 )
 
 // NewHandler creates a thrift handler for the history service
-func NewHandler(args NewHandlerArgs) *Handler {
+func NewHandler(args NewHandlerArgs) (*Handler, error) {
+	sdkSystemClient, err := args.SdkClientFactory.NewSystemClient(args.Logger)
+	if err != nil {
+		return nil, err
+	}
+
 	handler := &Handler{
 		status:                      common.DaemonStatusInitialized,
 		config:                      args.Config,
@@ -172,7 +178,7 @@ func NewHandler(args NewHandlerArgs) *Handler {
 		historyClient:               args.HistoryClient,
 		matchingRawClient:           args.MatchingRawClient,
 		matchingClient:              args.MatchingClient,
-		sdkClient:                   args.SdkClient,
+		sdkClient:                   sdkSystemClient,
 		historyServiceResolver:      args.HistoryServiceResolver,
 		metricsClient:               args.MetricsClient,
 		payloadSerializer:           args.PayloadSerializer,
@@ -188,7 +194,7 @@ func NewHandler(args NewHandlerArgs) *Handler {
 
 	// prevent us from trying to serve requests before shard controller is started and ready
 	handler.startWG.Add(1)
-	return handler
+	return handler, nil
 }
 
 // Start starts the handler

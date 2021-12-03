@@ -29,11 +29,12 @@ import (
 
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	workercommon "go.temporal.io/server/service/worker/common"
-	"go.uber.org/fx"
 )
 
 const DefaultWorkerTaskQueue = "default-worker-tq"
@@ -51,7 +52,7 @@ type (
 	initParams struct {
 		fx.In
 		Logger           log.Logger
-		SdkClient        sdkclient.Client
+		SdkSystemClient  sdkclient.Client
 		WorkerComponents []workercommon.WorkerComponent `group:"workerComponent"`
 	}
 )
@@ -59,7 +60,7 @@ type (
 func NewWorkerManager(params initParams) *workerManager {
 	return &workerManager{
 		logger:           params.Logger,
-		sdkClient:        params.SdkClient,
+		sdkClient:        params.SdkSystemClient,
 		workerComponents: params.WorkerComponents,
 	}
 }

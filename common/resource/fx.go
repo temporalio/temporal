@@ -33,7 +33,6 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -100,7 +99,6 @@ var Module = fx.Options(
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(SdkClientFactoryProvider),
-	fx.Provide(SdkSystemClientProvider),
 	fx.Provide(FrontedClientProvider),
 	fx.Provide(PersistenceFaultInjectionFactoryProvider),
 	fx.Provide(GrpcListenerProvider),
@@ -235,10 +233,6 @@ func MembershipFactoryProvider(
 // TODO: Seems that this factory mostly handles singleton logic. We should be able to handle it via IOC.
 func MembershipMonitorProvider(membershipFactory MembershipMonitorFactory) (membership.Monitor, error) {
 	return membershipFactory.GetMembershipMonitor()
-}
-
-func SdkSystemClientProvider(clientFactory sdk.ClientFactory, logger SnTaggedLogger) (sdkclient.Client, error) {
-	return clientFactory.NewSystemClient(logger)
 }
 
 func SdkClientFactoryProvider(params *BootstrapParams) sdk.ClientFactory {

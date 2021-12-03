@@ -29,7 +29,6 @@ import (
 	"net"
 
 	"github.com/uber-go/tally/v4"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -56,6 +55,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
@@ -121,7 +121,7 @@ func HandlerProvider(
 	historyClient historyservice.HistoryServiceClient,
 	matchingRawClient resource.MatchingRawClient,
 	matchingClient resource.MatchingClient,
-	sdkClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	historyServiceResolver membership.ServiceResolver,
 	metricsClient metrics.Client,
 	payloadSerializer serialization.Serializer,
@@ -133,7 +133,7 @@ func HandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider resource.HostInfoProvider,
 	archiverProvider provider.ArchiverProvider,
-) *Handler {
+) (*Handler, error) {
 	args := NewHandlerArgs{
 		config,
 		visibilityMrg,
@@ -146,7 +146,7 @@ func HandlerProvider(
 		historyClient,
 		matchingRawClient,
 		matchingClient,
-		sdkClient,
+		sdkClientFactory,
 		historyServiceResolver,
 		metricsClient,
 		payloadSerializer,

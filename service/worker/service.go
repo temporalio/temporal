@@ -114,6 +114,7 @@ func NewService(
 	logger resource.SnTaggedLogger,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
+	sdkSystemClient sdkclient.Client,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
@@ -133,11 +134,6 @@ func NewService(
 	manager *workerManager,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
-	if err != nil {
-		return nil, err
-	}
-
-	sdkSystemClient, err := sdkClientFactory.NewSystemClient(logger)
 	if err != nil {
 		return nil, err
 	}
