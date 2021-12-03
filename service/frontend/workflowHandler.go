@@ -338,6 +338,7 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 // DeprecateNamespace us used to update status of a registered namespace to DEPRECATED.  Once the namespace is deprecated
 // it cannot be used to start new workflow executions.  Existing workflow executions will continue to run on
 // deprecated namespaces.
+// Deprecated.
 func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *workflowservice.DeprecateNamespaceRequest) (_ *workflowservice.DeprecateNamespaceResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 

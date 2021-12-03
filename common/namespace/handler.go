@@ -54,6 +54,7 @@ import (
 type (
 	// Handler is the namespace operation handler
 	Handler interface {
+		// Deprecated.
 		DeprecateNamespace(
 			ctx context.Context,
 			deprecateRequest *workflowservice.DeprecateNamespaceRequest,
@@ -600,6 +601,7 @@ func (d *HandlerImpl) UpdateNamespace(
 }
 
 // DeprecateNamespace deprecates a namespace
+// Deprecated.
 func (d *HandlerImpl) DeprecateNamespace(
 	ctx context.Context,
 	deprecateRequest *workflowservice.DeprecateNamespaceRequest,
@@ -837,6 +839,9 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 		default:
 			return ErrInvalidNamespaceStateUpdate
 		}
+
+	case enumspb.NAMESPACE_STATE_DELETED:
+		return ErrInvalidNamespaceStateUpdate
 
 	case enumspb.NAMESPACE_STATE_HANDOVER:
 		switch newState {

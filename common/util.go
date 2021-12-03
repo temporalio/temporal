@@ -282,8 +282,8 @@ func WorkflowIDToHistoryShard(
 
 // PrettyPrintHistory prints history in human readable format
 func PrettyPrintHistory(history *historypb.History, logger log.Logger) {
-	fmt.Println("******************************************")
-	fmt.Println("History", proto.MarshalTextString(history))
+	fmt.Println("************** History *******************")
+	fmt.Println(proto.MarshalTextString(history))
 	fmt.Println("******************************************")
 }
 
