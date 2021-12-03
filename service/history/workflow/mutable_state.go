@@ -147,6 +147,7 @@ type (
 		GetWorkflowTaskInfo(int64) (*WorkflowTaskInfo, bool)
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent() (*historypb.HistoryEvent, error)
+		GetSignalExternalInitiatedEvent(int64) (*historypb.HistoryEvent, error)
 		GetFirstRunID() (string, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetCurrentVersion() int64

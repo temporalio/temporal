@@ -1362,6 +1362,21 @@ func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(failure interfac
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRetryBackoffDuration", reflect.TypeOf((*MockMutableState)(nil).GetRetryBackoffDuration), failure)
 }
 
+// GetSignalExternalInitiatedEvent mocks base method.
+func (m *MockMutableState) GetSignalExternalInitiatedEvent(arg0 int64) (*v13.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSignalExternalInitiatedEvent", arg0)
+	ret0, _ := ret[0].(*v13.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSignalExternalInitiatedEvent indicates an expected call of GetSignalExternalInitiatedEvent.
+func (mr *MockMutableStateMockRecorder) GetSignalExternalInitiatedEvent(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSignalExternalInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetSignalExternalInitiatedEvent), arg0)
+}
+
 // GetSignalInfo mocks base method.
 func (m *MockMutableState) GetSignalInfo(arg0 int64) (*v19.SignalInfo, bool) {
 	m.ctrl.T.Helper()

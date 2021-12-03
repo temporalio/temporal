@@ -481,6 +481,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		return err
 	}
 
+	initiatedEvent, err := mutableState.GetSignalExternalInitiatedEvent(task.InitiatedID)
+	if err != nil {
+		return err
+	}
+
 	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
 	if err != nil {
 		return err
@@ -500,10 +505,12 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		)
 	}
 
+	attributes := initiatedEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	if err = t.signalExternalExecutionWithRetry(
 		task,
 		targetNamespace,
 		signalInfo,
+		attributes,
 	); err != nil {
 		t.logger.Debug("Failed to signal external workflow execution", tag.Error(err))
 
@@ -1106,6 +1113,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 	task *tasks.SignalExecutionTask,
 	targetNamespace namespace.Name,
 	signalInfo *persistencespb.SignalInfo,
+	attributes *historypb.SignalExternalWorkflowExecutionInitiatedEventAttributes,
 ) error {
 
 	request := &historyservice.SignalWorkflowExecutionRequest{
@@ -1117,12 +1125,12 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 				RunId:      task.TargetRunID,
 			},
 			Identity:   consts.IdentityHistoryService,
-			SignalName: signalInfo.Name,
-			Input:      signalInfo.Input,
+			SignalName: attributes.SignalName,
+			Input:      attributes.Input,
 			// Use same request ID to deduplicate SignalWorkflowExecution calls
 			RequestId: signalInfo.GetRequestId(),
-			Control:   signalInfo.Control,
-			Header:    signalInfo.Header,
+			Control:   attributes.Control,
+			Header:    attributes.Header,
 		},
 		ExternalWorkflowExecution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
