@@ -35,6 +35,7 @@ type tallyScope struct {
 	rootScope         internalScope
 	defs              map[int]metricDefinition
 	isNamespaceTagged bool
+	perUnitBuckets    map[MetricUnit]tally.Buckets
 }
 
 func newTallyScopeInternal(
@@ -42,12 +43,17 @@ func newTallyScopeInternal(
 	scope tally.Scope,
 	defs map[int]metricDefinition,
 	isNamespace bool,
+	perUnitBuckets map[MetricUnit]tally.Buckets,
 ) internalScope {
+	if perUnitBuckets == nil {
+		perUnitBuckets = make(map[MetricUnit]tally.Buckets)
+	}
 	return &tallyScope{
 		scope:             scope,
 		rootScope:         rootScope,
 		defs:              defs,
 		isNamespaceTagged: isNamespace,
+		perUnitBuckets:    perUnitBuckets,
 	}
 }
 
@@ -109,20 +115,22 @@ func (m *tallyScope) RecordTimerInternal(name string, d time.Duration) {
 }
 
 func (m *tallyScope) RecordDistribution(id int, d int) {
-	dist := time.Duration(d * distributionToTimerRatio)
 	def := m.defs[id]
-	m.scope.Timer(def.metricName.String()).Record(dist)
+	m.RecordDistributionInternal(def.metricName.String(), def.unit, d)
+
 	switch {
 	case !def.metricRollupName.Empty():
-		m.rootScope.RecordDistributionInternal(def.metricRollupName.String(), d)
+		m.rootScope.RecordDistributionInternal(def.metricRollupName.String(), def.unit, d)
 	case m.isNamespaceTagged:
-		m.rootScope.RecordDistributionInternal(def.metricName.String()+totalMetricSuffix, d)
+		m.rootScope.RecordDistributionInternal(def.metricName.String()+totalMetricSuffix, def.unit, d)
 	}
 }
 
-func (m *tallyScope) RecordDistributionInternal(name string, d int) {
+func (m *tallyScope) RecordDistributionInternal(name string, unit MetricUnit, d int) {
 	dist := time.Duration(d * distributionToTimerRatio)
-	m.scope.Timer(name).Record(dist)
+	buckets := m.perUnitBuckets[unit]
+	// if buckets == nil, Histogram will fall back to default buckets
+	m.scope.Histogram(name, buckets).RecordValue(float64(dist))
 }
 
 func (m *tallyScope) Tagged(tags ...Tag) Scope {
@@ -138,7 +146,7 @@ func (m *tallyScope) TaggedInternal(tags ...Tag) internalScope {
 		}
 		tagMap[tag.Key()] = tag.Value()
 	}
-	return newTallyScopeInternal(m.rootScope, m.scope.Tagged(tagMap), m.defs, namespaceTagged)
+	return newTallyScopeInternal(m.rootScope, m.scope.Tagged(tagMap), m.defs, namespaceTagged, m.perUnitBuckets)
 }
 
 // todo: Add root service definition in metrics and remove after. See use in server.go.
@@ -146,13 +154,6 @@ func (m *tallyScope) TaggedInternal(tags ...Tag) internalScope {
 // Should be generalized with OpenTelemetry after SDK supports OpenTelemetry.
 func (m *tallyScope) GetScope() tally.Scope {
 	return m.scope
-}
-
-func (m *tallyScope) getBuckets(id int) tally.Buckets {
-	if m.defs[id].buckets != nil {
-		return m.defs[id].buckets
-	}
-	return tally.DefaultBuckets
 }
 
 func isNamespaceTagged(tag Tag) bool {

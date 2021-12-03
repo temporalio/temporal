@@ -42,6 +42,7 @@ require (
 	go.opentelemetry.io/otel v1.1.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.24.0
 	go.opentelemetry.io/otel/metric v0.24.0
+	go.opentelemetry.io/otel/sdk v1.0.1
 	go.opentelemetry.io/otel/sdk/export/metric v0.24.0
 	go.opentelemetry.io/otel/sdk/metric v0.24.0
 	go.temporal.io/api v1.6.1-0.20211123053254-cae1d6470032
@@ -103,7 +104,6 @@ require (
 	github.com/uber-common/bark v1.3.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/otel/internal/metric v0.24.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.0.1 // indirect
 	go.opentelemetry.io/otel/trace v1.1.0 // indirect
 	go.uber.org/dig v1.13.0 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
