@@ -200,7 +200,6 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 		description := resp.NamespaceInfo.GetDescription()
 		ownerEmail := resp.NamespaceInfo.GetOwnerEmail()
 		retention := timestamp.DurationValue(resp.Config.GetWorkflowExecutionRetentionTtl())
-		state := enumspb.NAMESPACE_STATE_UNSPECIFIED
 		var clusters []*replicationpb.ClusterReplicationConfig
 
 		if c.IsSet(FlagDescription) {
@@ -208,14 +207,6 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 		}
 		if c.IsSet(FlagOwnerEmail) {
 			ownerEmail = c.String(FlagOwnerEmail)
-		}
-		if c.IsSet(FlagState) {
-			stateStr := c.String(FlagState)
-			if stateInt, ok := enumspb.NamespaceState_value[stateStr]; !ok {
-				ErrorAndExit(fmt.Sprintf("Unknown namespace state: %s. Supported states: [Registered, Deprecated, Deleted, Handover].", stateStr), nil)
-			} else {
-				state = enumspb.NamespaceState(stateInt)
-			}
 		}
 		namespaceData := map[string]string{}
 		if c.IsSet(FlagNamespaceData) {
@@ -270,7 +261,6 @@ func (d *namespaceCLIImpl) UpdateNamespace(c *cli.Context) {
 			Description: description,
 			OwnerEmail:  ownerEmail,
 			Data:        namespaceData,
-			State:       state,
 		}
 		updateConfig := &namespacepb.NamespaceConfig{
 			WorkflowExecutionRetentionTtl: &retention,
