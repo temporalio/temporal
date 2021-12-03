@@ -93,14 +93,19 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.adminClient = s.testCluster.GetAdminClient()
 	}
 
-	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
 	s.namespace = s.randomizeStr("integration-test-namespace")
-	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
-	s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
 	s.Require().NoError(s.registerNamespace(s.namespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+
+	s.testRawHistoryNamespaceName = "TestRawHistoryNamespace"
 	s.Require().NoError(s.registerNamespace(s.testRawHistoryNamespaceName, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
+
+	s.foreignNamespace = s.randomizeStr("integration-foreign-test-namespace")
 	s.Require().NoError(s.registerNamespace(s.foreignNamespace, 24*time.Hour, enumspb.ARCHIVAL_STATE_DISABLED, "", enumspb.ARCHIVAL_STATE_DISABLED, ""))
-	s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
+
+	if clusterConfig.EnableArchival {
+		s.archivalNamespace = s.randomizeStr("integration-archival-enabled-namespace")
+		s.Require().NoError(s.registerArchivalNamespace(s.archivalNamespace))
+	}
 
 	if clusterConfig.FrontendAddress == "" {
 		// Poke all the in-process namespace caches to refresh without waiting for the usual refresh interval.
@@ -146,7 +151,9 @@ func (s *IntegrationBase) tearDownSuite() {
 	s.Require().NoError(s.deleteNamespace(s.namespace))
 	s.Require().NoError(s.deleteNamespace(s.testRawHistoryNamespaceName))
 	s.Require().NoError(s.deleteNamespace(s.foreignNamespace))
-	s.Require().NoError(s.deleteNamespace(s.archivalNamespace))
+	if s.archivalNamespace != "" {
+		s.Require().NoError(s.deleteNamespace(s.archivalNamespace))
+	}
 
 	if s.testCluster != nil {
 		s.testCluster.TearDownCluster()
