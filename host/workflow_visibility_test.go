@@ -140,6 +140,11 @@ func (s *integrationSuite) TestVisibility() {
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{
+				TypeFilter: &filterpb.WorkflowTypeFilter{
+					Name: wt,
+				},
+			},
 		})
 		s.NoError(err3)
 		closedCount = len(resp.Executions)
@@ -159,6 +164,11 @@ func (s *integrationSuite) TestVisibility() {
 			Namespace:       s.namespace,
 			MaximumPageSize: 100,
 			StartTimeFilter: startFilter,
+			Filters: &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{
+				TypeFilter: &filterpb.WorkflowTypeFilter{
+					Name: wt,
+				},
+			},
 		})
 		s.NoError(err4)
 		openCount = len(resp.Executions)
