@@ -26,7 +26,6 @@ package resource
 
 import (
 	"github.com/uber-go/tally/v4"
-	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/sdk"
 )
 
 type (
@@ -60,7 +60,7 @@ type (
 		SDKMetricsReporter           metrics.Reporter
 		MetricsClient                metrics.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
-		SdkClient                    sdkclient.Client
+		SdkClientFactory             sdk.ClientFactory
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
 	}

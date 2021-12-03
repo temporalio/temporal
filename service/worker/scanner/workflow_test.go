@@ -82,7 +82,7 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	mockResource.TaskMgr.EXPECT().ListTaskQueue(gomock.Any()).Return(&p.ListTaskQueueResponse{}, nil)
 	ctx := scannerContext{
 		logger:           mockResource.GetLogger(),
-		sdkClient:        mockResource.GetSDKClient(),
+		sdkSystemClient:  mockResource.GetSDKClient(),
 		metricsClient:    mockResource.GetMetricsClient(),
 		executionManager: mockResource.GetExecutionManager(),
 		taskManager:      mockResource.GetTaskManager(),

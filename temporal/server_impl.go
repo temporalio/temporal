@@ -30,7 +30,6 @@ import (
 	"sync"
 
 	"github.com/uber-go/tally/v4"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -49,6 +48,7 @@ import (
 	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/common/sdk"
 )
 
 type (
@@ -244,24 +244,16 @@ func newBootstrapParams(
 
 	params.MetricsClient = metricsClient
 
-	options, err := tlsConfigProvider.GetFrontendClientConfig()
+	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
-	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
-		HostPort:     cfg.PublicClient.HostPort,
-		Namespace:    common.SystemLocalNamespace,
-		MetricsScope: globalTallyScope,
-		Logger:       log.NewSdkLogger(logger),
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS:                options,
-			DisableHealthCheck: true,
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("unable to create public client: %w", err)
-	}
+	params.SdkClientFactory = sdk.NewClientFactory(
+		cfg.PublicClient.HostPort,
+		tlsFrontendConfig,
+		globalTallyScope,
+	)
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
 		dc,

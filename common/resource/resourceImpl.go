@@ -37,10 +37,9 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resolver"
-
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -308,6 +307,11 @@ func New(
 		return nil, err
 	}
 
+	sdkSystemClient, err := params.SdkClientFactory.NewSystemClient(logger)
+	if err != nil {
+		return nil, err
+	}
+
 	impl = &Impl{
 		status: common.DaemonStatusInitialized,
 
@@ -341,7 +345,7 @@ func New(
 
 		// internal services clients
 
-		sdkClient:         params.SdkClient,
+		sdkClient:         sdkSystemClient,
 		frontendRawClient: frontendRawClient,
 		frontendClient:    frontendClient,
 		matchingRawClient: matchingRawClient,

@@ -88,8 +88,8 @@ type (
 
 		status           int32
 		stopC            chan struct{}
-		sdkClient        sdkclient.Client
 		sdkClientFactory sdk.ClientFactory
+		sdkSystemClient  sdkclient.Client
 		esClient         esclient.Client
 		config           *Config
 
@@ -113,7 +113,6 @@ type (
 func NewService(
 	logger resource.SnTaggedLogger,
 	serviceConfig *Config,
-	sdkClient sdkclient.Client,
 	sdkClientFactory sdk.ClientFactory,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
@@ -138,11 +137,15 @@ func NewService(
 		return nil, err
 	}
 
-	return &Service{
+	sdkSystemClient, err := sdkClientFactory.NewSystemClient(logger)
+	if err != nil {
+		return nil, err
+	}
 
+	return &Service{
 		status:                    common.DaemonStatusInitialized,
 		config:                    serviceConfig,
-		sdkClient:                 sdkClient,
+		sdkSystemClient:           sdkSystemClient,
 		sdkClientFactory:          sdkClientFactory,
 		esClient:                  esClient,
 		stopC:                     make(chan struct{}),
@@ -390,11 +393,11 @@ func (s *Service) Stop() {
 
 func (s *Service) startParentClosePolicyProcessor() {
 	params := &parentclosepolicy.BootstrapParams{
-		Config:        *s.config.ParentCloseCfg,
-		ServiceClient: s.sdkClient,
-		MetricsClient: s.metricsClient,
-		Logger:        s.logger,
-		ClientBean:    s.clientBean,
+		Config:          *s.config.ParentCloseCfg,
+		SdkSystemClient: s.sdkSystemClient,
+		MetricsClient:   s.metricsClient,
+		Logger:          s.logger,
+		ClientBean:      s.clientBean,
 	}
 	processor := parentclosepolicy.New(params)
 	if err := processor.Start(); err != nil {
@@ -406,13 +409,12 @@ func (s *Service) startParentClosePolicyProcessor() {
 }
 
 func (s *Service) startBatcher() {
-	params := &batcher.BootstrapParams{
-		Config:        *s.config.BatcherCfg,
-		SdkClient:     s.sdkClient,
-		MetricsClient: s.metricsClient,
-		Logger:        s.logger,
-	}
-	if err := batcher.New(params, s.sdkClientFactory).Start(); err != nil {
+	if err := batcher.New(
+		s.config.BatcherCfg,
+		s.sdkSystemClient,
+		s.metricsClient,
+		s.logger,
+		s.sdkClientFactory).Start(); err != nil {
 		s.logger.Fatal(
 			"error starting batcher",
 			tag.Error(err),
@@ -424,7 +426,7 @@ func (s *Service) startScanner() {
 	sc := scanner.New(
 		s.logger,
 		s.config.ScannerCfg,
-		s.sdkClient,
+		s.sdkSystemClient,
 		s.metricsClient,
 		s.executionManager,
 		s.taskManager,
@@ -458,7 +460,7 @@ func (s *Service) startReplicator() {
 
 func (s *Service) startArchiver() {
 	bc := &archiver.BootstrapContainer{
-		SdkClient:        s.sdkClient,
+		SdkSystemClient:  s.sdkSystemClient,
 		MetricsClient:    s.metricsClient,
 		Logger:           s.logger,
 		HistoryV2Manager: s.executionManager,

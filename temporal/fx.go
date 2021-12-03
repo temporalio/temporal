@@ -29,8 +29,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/server/common/collection"
-
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
@@ -38,6 +36,8 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/pborman/uuid"
+
+	"go.temporal.io/server/common/collection"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -569,7 +569,7 @@ func ApplyClusterMetadataConfigProvider(
 			// Only set current cluster Id as we don't know the remote cluster Id.
 			clusterId = uuid.New()
 		}
-		//Case 1: initialize cluster metadata config
+		// Case 1: initialize cluster metadata config
 		// We assume the existing remote cluster info is correct.
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
 			&persistence.SaveClusterMetadataRequest{

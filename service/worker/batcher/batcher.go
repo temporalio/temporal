@@ -48,23 +48,11 @@ type (
 		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
 	}
 
-	// BootstrapParams contains the set of params needed to bootstrap
-	// the batcher sub-system
-	BootstrapParams struct {
-		// Config contains the configuration for scanner
-		Config Config
-		// SdkClient is an instance of temporal SDK client
-		SdkClient sdkclient.Client
-		// MetricsClient is an instance of metrics object for emitting stats
-		MetricsClient metrics.Client
-		Logger        log.Logger
-	}
-
 	// Batcher is the background sub-system that execute workflow for batch operations
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
-		cfg              Config
-		systemSdkClient  sdkclient.Client
+		cfg              *Config
+		sdkSystemClient  sdkclient.Client
 		sdkClientFactory sdk.ClientFactory
 		metricsClient    metrics.Client
 		logger           log.Logger
@@ -72,13 +60,19 @@ type (
 )
 
 // New returns a new instance of batcher daemon Batcher
-func New(params *BootstrapParams, sdkClientFactory sdk.ClientFactory) *Batcher {
+func New(
+	cfg *Config,
+	sdkSystemClient sdkclient.Client,
+	metricsClient metrics.Client,
+	logger log.Logger,
+	sdkClientFactory sdk.ClientFactory,
+) *Batcher {
 	return &Batcher{
-		cfg:              params.Config,
-		systemSdkClient:  params.SdkClient,
+		cfg:              cfg,
+		sdkSystemClient:  sdkSystemClient,
 		sdkClientFactory: sdkClientFactory,
-		metricsClient:    params.MetricsClient,
-		logger:           log.With(params.Logger, tag.ComponentBatcher),
+		metricsClient:    metricsClient,
+		logger:           log.With(logger, tag.ComponentBatcher),
 	}
 }
 
@@ -94,7 +88,7 @@ func (s *Batcher) Start() error {
 
 		BackgroundActivityContext: ctx,
 	}
-	batchWorker := worker.New(s.systemSdkClient, BatcherTaskQueueName, workerOpts)
+	batchWorker := worker.New(s.sdkSystemClient, BatcherTaskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
 

@@ -32,34 +32,33 @@ import (
 	"sync/atomic"
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	serverClient "go.temporal.io/server/client"
-	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/membership"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/sdk/client"
+	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	serverClient "go.temporal.io/server/client"
+	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -103,7 +102,7 @@ type (
 		clientFactory               serverClient.Factory
 		clientBean                  serverClient.Bean
 		historyClient               historyservice.HistoryServiceClient
-		sdkClient                   client.Client
+		sdkClient                   sdkclient.Client
 		membershipMonitor           membership.Monitor
 		metricsClient               metrics.Client
 		namespaceRegistry           namespace.Registry
@@ -128,7 +127,7 @@ type (
 		ClientFactory                       serverClient.Factory
 		ClientBean                          serverClient.Bean
 		HistoryClient                       historyservice.HistoryServiceClient
-		SdkClient                           client.Client
+		SdkClient                           sdkclient.Client
 		MembershipMonitor                   membership.Monitor
 		ArchiverProvider                    provider.ArchiverProvider
 		MetricsClient                       metrics.Client
@@ -273,7 +272,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 
 	run, err := adh.sdkClient.ExecuteWorkflow(
 		ctx,
-		client.StartWorkflowOptions{
+		sdkclient.StartWorkflowOptions{
 			TaskQueue: worker.DefaultWorkerTaskQueue,
 			ID:        addsearchattributes.WorkflowName,
 		},

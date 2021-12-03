@@ -58,6 +58,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -98,7 +99,8 @@ var Module = fx.Options(
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
-	fx.Provide(SdkClientProvider),
+	fx.Provide(SdkClientFactoryProvider),
+	fx.Provide(SdkSystemClientProvider),
 	fx.Provide(FrontedClientProvider),
 	fx.Provide(PersistenceFaultInjectionFactoryProvider),
 	fx.Provide(GrpcListenerProvider),
@@ -235,8 +237,12 @@ func MembershipMonitorProvider(membershipFactory MembershipMonitorFactory) (memb
 	return membershipFactory.GetMembershipMonitor()
 }
 
-func SdkClientProvider(params *BootstrapParams) sdkclient.Client {
-	return params.SdkClient
+func SdkSystemClientProvider(clientFactory sdk.ClientFactory, logger SnTaggedLogger) (sdkclient.Client, error) {
+	return clientFactory.NewSystemClient(logger)
+}
+
+func SdkClientFactoryProvider(params *BootstrapParams) sdk.ClientFactory {
+	return params.SdkClientFactory
 }
 
 func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
