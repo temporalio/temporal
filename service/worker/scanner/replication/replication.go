@@ -256,9 +256,9 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 
 	// ** Step 2, get current replication status **
 	var repStatus replicationStatus
-	err2 := workflow.ExecuteActivity(ctx, a.GetMaxReplicationTaskIDs).Get(ctx, &repStatus)
-	if err2 != nil {
-		return err2
+	err = workflow.ExecuteActivity(ctx, a.GetMaxReplicationTaskIDs).Get(ctx, &repStatus)
+	if err != nil {
+		return err
 	}
 
 	// ** Step 3, wait remote cluster to catch up on replication tasks
@@ -274,9 +274,9 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		AllowedLagging: time.Duration(params.AllowedLaggingSeconds) * time.Second,
 		WaitForTaskIds: repStatus.MaxReplicationTaskIds,
 	}
-	err3 := workflow.ExecuteActivity(ctx3, a.WaitReplication, waitRequest).Get(ctx3, nil)
-	if err3 != nil {
-		return err3
+	err = workflow.ExecuteActivity(ctx3, a.WaitReplication, waitRequest).Get(ctx3, nil)
+	if err != nil {
+		return err
 	}
 
 	// ** Step 4, initiate handover
@@ -284,9 +284,9 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		Namespace: params.Namespace,
 		NewState:  enums.NAMESPACE_STATE_HANDOVER,
 	}
-	err4 := workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, handoverRequest).Get(ctx, nil)
-	if err4 != nil {
-		return err4
+	err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, handoverRequest).Get(ctx, nil)
+	if err != nil {
+		return err
 	}
 
 	// ** Step 5, wait remote to ack handover task id
@@ -309,9 +309,9 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 			Namespace:     params.Namespace,
 			ActiveCluster: params.RemoteCluster,
 		}
-		err6 := workflow.ExecuteActivity(ctx, a.UpdateActiveCluster, updateRequest).Get(ctx, nil)
-		if err6 != nil {
-			return err6
+		err = workflow.ExecuteActivity(ctx, a.UpdateActiveCluster, updateRequest).Get(ctx, nil)
+		if err != nil {
+			return err
 		}
 	}
 
@@ -320,9 +320,9 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		Namespace: params.Namespace,
 		NewState:  enums.NAMESPACE_STATE_REGISTERED,
 	}
-	err7 := workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
-	if err7 != nil {
-		return err7
+	err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
+	if err != nil {
+		return err
 	}
 
 	return err5
