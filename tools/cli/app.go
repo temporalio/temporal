@@ -163,12 +163,6 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminHistoryHostCommands(),
 				},
 				{
-					Name:        "namespace",
-					Aliases:     []string{"d"},
-					Usage:       "Run admin operation on namespace",
-					Subcommands: newAdminNamespaceCommands(),
-				},
-				{
 					Name:        "taskqueue",
 					Aliases:     []string{"tq"},
 					Usage:       "Run admin operation on taskQueue",

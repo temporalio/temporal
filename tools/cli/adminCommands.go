@@ -38,9 +38,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
-	replicationpb "go.temporal.io/api/replication/v1"
-	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -186,125 +183,6 @@ func describeMutableState(c *cli.Context) *adminservice.DescribeMutableStateResp
 		ErrorAndExit("Get workflow mutableState failed", err)
 	}
 	return resp
-}
-
-// RegisterNamespace register a namespace
-func RegisterNamespace(c *cli.Context) error {
-	namespace := getRequiredGlobalOption(c, FlagNamespace)
-
-	description := c.String(FlagDescription)
-	ownerEmail := c.String(FlagOwnerEmail)
-
-	client := cFactory.AdminClient(c)
-
-	var err error
-	retention := defaultNamespaceRetention
-	if c.IsSet(FlagRetention) {
-		retention, err = timestamp.ParseDurationDefaultDays(c.String(FlagRetention))
-		if err != nil {
-			return fmt.Errorf("option %s format is invalid: %s", FlagRetention, err)
-		}
-	}
-
-	var isGlobalNamespace bool
-	if c.IsSet(FlagIsGlobalNamespace) {
-		isGlobalNamespace, err = strconv.ParseBool(c.String(FlagIsGlobalNamespace))
-		if err != nil {
-			return fmt.Errorf("option %s format is invalid: %w.", FlagIsGlobalNamespace, err)
-		}
-	}
-
-	namespaceData := map[string]string{}
-	if c.IsSet(FlagNamespaceData) {
-		namespaceDataStr := c.String(FlagNamespaceData)
-		namespaceData, err = parseNamespaceDataKVs(namespaceDataStr)
-		if err != nil {
-			return fmt.Errorf("option %s format is invalid: %s", FlagNamespaceData, err)
-		}
-	}
-	if len(requiredNamespaceDataKeys) > 0 {
-		err = checkRequiredNamespaceDataKVs(namespaceData)
-		if err != nil {
-			return fmt.Errorf("namespace data missed required data: %s", err)
-		}
-	}
-
-	var activeClusterName string
-	if c.IsSet(FlagActiveClusterName) {
-		activeClusterName = c.String(FlagActiveClusterName)
-	}
-
-	var clusters []*replicationpb.ClusterReplicationConfig
-	if c.IsSet(FlagClusters) {
-		clusterStr := c.String(FlagClusters)
-		clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
-			ClusterName: clusterStr,
-		})
-		for _, clusterStr := range c.Args() {
-			clusters = append(clusters, &replicationpb.ClusterReplicationConfig{
-				ClusterName: clusterStr,
-			})
-		}
-	}
-
-	archState := archivalState(c, FlagHistoryArchivalState)
-	archVisState := archivalState(c, FlagVisibilityArchivalState)
-
-	req := &adminservice.RegisterNamespaceRequest{
-		Namespace:                        namespace,
-		Description:                      description,
-		OwnerEmail:                       ownerEmail,
-		Data:                             namespaceData,
-		WorkflowExecutionRetentionPeriod: &retention,
-		Clusters:                         clusters,
-		ActiveClusterName:                activeClusterName,
-		HistoryArchivalState:             archState,
-		HistoryArchivalUri:               c.String(FlagHistoryArchivalURI),
-		VisibilityArchivalState:          archVisState,
-		VisibilityArchivalUri:            c.String(FlagVisibilityArchivalURI),
-		IsGlobalNamespace:                isGlobalNamespace,
-	}
-
-	ctx, cancel := newContext(c)
-	defer cancel()
-	_, err = client.RegisterNamespace(ctx, req)
-	if err != nil {
-		if _, ok := err.(*serviceerror.NamespaceAlreadyExists); !ok {
-			return fmt.Errorf("namespace registration failed: %s", err)
-		} else {
-			return fmt.Errorf("namespace %s is already registered: %s", namespace, err)
-		}
-	} else {
-		fmt.Printf("Namespace %s successfully registered.\n", namespace)
-	}
-
-	return nil
-}
-
-// AdminListNamespaces outputs a list of all namespaces
-func AdminListNamespaces(c *cli.Context) {
-	adminClient := cFactory.AdminClient(c)
-	ctx, cancel := newContext(c)
-	defer cancel()
-
-	req := &adminservice.ListNamespacesRequest{
-		PageSize: int32(c.Int(FlagPageSize)),
-	}
-	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-		req.NextPageToken = paginationToken
-
-		resp, err := adminClient.ListNamespaces(ctx, req)
-		if err != nil {
-			return nil, nil, err
-		}
-
-		var items []interface{}
-		for _, task := range resp.Namespaces {
-			items = append(items, task)
-		}
-		return items, resp.NextPageToken, nil
-	}
-	paginate(c, paginationFunc)
 }
 
 // AdminDeleteWorkflow delete a workflow execution from Cassandra and visibility document from Elasticsearch.
@@ -487,50 +365,6 @@ func newESClient(c *cli.Context) esclient.CLIClient {
 	}
 
 	return client
-}
-
-// AdminGetNamespaceIDOrName map namespace
-func AdminGetNamespaceIDOrName(c *cli.Context) {
-	namespaceID := c.String(FlagNamespaceID)
-	namespace := c.String(FlagNamespace)
-	if len(namespaceID) == 0 && len(namespace) == 0 {
-		ErrorAndExit("Need either namespace or namespaceId", nil)
-	}
-
-	session := connectToCassandra(c)
-
-	if len(namespaceID) > 0 {
-		tmpl := "select namespace from namespaces where id = ? "
-		query := session.Query(tmpl, namespaceID)
-		res, err := readOneRow(query)
-		if err != nil {
-			ErrorAndExit("readOneRow", err)
-		}
-		namespaceName := res["name"].(string)
-		fmt.Printf("namespace for namespaceId %v is %v \n", namespaceID, namespaceName)
-	} else {
-		tmpl := "select namespace from namespaces_by_name where name = ?"
-		tmplV2 := "select namespace from namespaces where namespaces_partition=0 and name = ?"
-
-		query := session.Query(tmpl, namespace)
-		res, err := readOneRow(query)
-		if err != nil {
-			fmt.Printf("v1 return error: %v , trying v2...\n", err)
-
-			query := session.Query(tmplV2, namespace)
-			res, err := readOneRow(query)
-			if err != nil {
-				ErrorAndExit("readOneRow for v2", err)
-			}
-			namespace := res["namespace"].(map[string]interface{})
-			namespaceID := gocql.UUIDToString(namespace["id"])
-			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
-		} else {
-			namespace := res["namespace"].(map[string]interface{})
-			namespaceID := gocql.UUIDToString(namespace["id"])
-			fmt.Printf("namespaceId for namespace %v is %v \n", namespace, namespaceID)
-		}
-	}
 }
 
 // AdminGetShardID get shardID

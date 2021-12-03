@@ -49,62 +49,6 @@ import "temporal/server/api/persistence/v1/namespaces.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/tasks.proto";
 
-message ListNamespacesRequest {
-    int32 page_size = 1;
-    bytes next_page_token = 2;
-}
-
-message ListNamespacesResponse {
-    repeated DescribeNamespaceResponse namespaces = 1;
-    bytes next_page_token = 2;
-}
-
-message DescribeNamespaceResponse {
-    temporal.server.api.persistence.v1.NamespaceDetail namespace = 1;
-    int64 notification_version= 2;
-    bool is_global_namespace = 3;
-}
-
-message RegisterNamespaceRequest {
-    string namespace = 1;
-    string description = 2;
-    string owner_email = 3;
-    google.protobuf.Duration workflow_execution_retention_period = 4 [(gogoproto.stdduration) = true];
-    repeated temporal.api.replication.v1.ClusterReplicationConfig clusters = 5;
-    string active_cluster_name = 6;
-    // A key-value map for any customized purpose.
-    map<string, string> data = 7;
-    string security_token = 8;
-    bool is_global_namespace = 9;
-    // If unspecified (ARCHIVAL_STATE_UNSPECIFIED) then default server configuration is used.
-    temporal.api.enums.v1.ArchivalState history_archival_state = 10;
-    string history_archival_uri = 11;
-    // If unspecified (ARCHIVAL_STATE_UNSPECIFIED) then default server configuration is used.
-    temporal.api.enums.v1.ArchivalState visibility_archival_state = 12;
-    string visibility_archival_uri = 13;
-}
-
-message RegisterNamespaceResponse {
-}
-
-// (-- api-linter: core::0134::request-mask-required=disabled
-//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
-// (-- api-linter: core::0134::request-resource-required=disabled
-//     aip.dev/not-precedent: UpdateNamespace RPC doesn't follow Google API format. --)
-message UpdateNamespaceRequest {
-    string namespace = 1;
-    temporal.api.namespace.v1.UpdateNamespaceInfo update_info = 2;
-    temporal.api.namespace.v1.NamespaceConfig config = 3;
-    temporal.api.replication.v1.NamespaceReplicationConfig replication_config = 4;
-    string security_token = 5;
-    string delete_bad_binary = 6;
-    // promote local namespace to global namespace. Ignored if namespace is already global namespace.
-    bool promote_namespace = 7;
-}
-
-message UpdateNamespaceResponse {
-}
-
 message DescribeMutableStateRequest {
     string namespace = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;

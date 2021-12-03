@@ -371,60 +371,6 @@ func (c *metricClient) GetReplicationMessages(
 	return resp, err
 }
 
-func (c *metricClient) ListNamespaces(
-	ctx context.Context,
-	request *adminservice.ListNamespacesRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListNamespacesResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientListNamespacesScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientListNamespacesScope, metrics.ClientLatency)
-	resp, err := c.client.ListNamespaces(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientListNamespacesScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) RegisterNamespace(
-	ctx context.Context,
-	request *adminservice.RegisterNamespaceRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.RegisterNamespaceResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientRegisterNamespaceScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientRegisterNamespaceScope, metrics.ClientLatency)
-	resp, err := c.client.RegisterNamespace(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientRegisterNamespaceScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) UpdateNamespace(
-	ctx context.Context,
-	request *adminservice.UpdateNamespaceRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.UpdateNamespaceResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientUpdateNamespaceScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientUpdateNamespaceScope, metrics.ClientLatency)
-	resp, err := c.client.UpdateNamespace(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientUpdateNamespaceScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
 func (c *metricClient) GetNamespaceReplicationMessages(
 	ctx context.Context,
 	request *adminservice.GetNamespaceReplicationMessagesRequest,
