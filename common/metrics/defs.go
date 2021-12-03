@@ -2526,8 +2526,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		RemoteToLocalMatchPerTaskQueueCounter:     NewRollupCounterDef("remote_to_local_matches_per_tl", "remote_to_local_matches"),
 		RemoteToRemoteMatchPerTaskQueueCounter:    NewRollupCounterDef("remote_to_remote_matches_per_tl", "remote_to_remote_matches"),
 		LoadedTaskQueueGauge:                      NewGaugeDef("loaded_task_queue_count"),
-		TaskQueueStartedCounter:                   {metricName: "task_queue_started"},
-		TaskQueueStoppedCounter:                   {metricName: "task_queue_stopped"},
+		TaskQueueStartedCounter:                   NewCounterDef("task_queue_started"),
+		TaskQueueStoppedCounter:                   NewCounterDef("task_queue_stopped"),
 	},
 	Worker: {
 		ReplicatorMessages:                            NewCounterDef("replicator_messages"),
