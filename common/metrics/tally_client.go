@@ -33,11 +33,12 @@ import (
 // TallyClient is used for reporting metrics by various Temporal services
 type TallyClient struct {
 	// parentReporter is the parent scope for the metrics
-	parentScope  tally.Scope
-	childScopes  map[int]tally.Scope
-	metricDefs   map[int]metricDefinition
-	serviceIdx   ServiceIdx
-	scopeWrapper func(impl internalScope) internalScope
+	parentScope    tally.Scope
+	childScopes    map[int]tally.Scope
+	metricDefs     map[int]metricDefinition
+	serviceIdx     ServiceIdx
+	scopeWrapper   func(impl internalScope) internalScope
+	perUnitBuckets map[MetricUnit]tally.Buckets
 }
 
 // NewClient creates and returns a new instance of
@@ -46,17 +47,24 @@ type TallyClient struct {
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
 func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx ServiceIdx) Client {
 	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
+
+	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
+	for unit, boundariesList := range clientConfig.PerUnitHistogramBoundaries {
+		perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
+	}
+
 	scopeWrapper := func(impl internalScope) internalScope {
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &TallyClient{
-		parentScope:  scope,
-		childScopes:  make(map[int]tally.Scope, totalScopes),
-		metricDefs:   getMetricDefs(serviceIdx),
-		serviceIdx:   serviceIdx,
-		scopeWrapper: scopeWrapper,
+		parentScope:    scope,
+		childScopes:    make(map[int]tally.Scope, totalScopes),
+		metricDefs:     getMetricDefs(serviceIdx),
+		serviceIdx:     serviceIdx,
+		scopeWrapper:   scopeWrapper,
+		perUnitBuckets: perUnitBuckets,
 	}
 
 	for idx, def := range ScopeDefs[Common] {
@@ -113,8 +121,10 @@ func (m *TallyClient) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 // metric name
 func (m *TallyClient) RecordDistribution(scopeIdx int, timerIdx int, d int) {
 	dist := time.Duration(d * distributionToTimerRatio)
-	name := string(m.metricDefs[timerIdx].metricName)
-	m.childScopes[scopeIdx].Timer(name).Record(dist)
+	def := m.metricDefs[timerIdx]
+	name := string(def.metricName)
+	buckets, _ := m.perUnitBuckets[def.unit]
+	m.childScopes[scopeIdx].Histogram(name, buckets).RecordValue(float64(dist))
 }
 
 // UpdateGauge reports Gauge type metric
@@ -127,7 +137,15 @@ func (m *TallyClient) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
 // information to the metrics emitted
 func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	scope := m.childScopes[scopeIdx]
-	return m.scopeWrapper(newTallyScopeInternal(NoopScope(0), scope, m.metricDefs, false)).Tagged(tags...)
+	return m.scopeWrapper(
+		newTallyScopeInternal(
+			NoopScope(0),
+			scope,
+			m.metricDefs,
+			false,
+			m.perUnitBuckets,
+		),
+	).Tagged(tags...)
 }
 
 // UserScope returns a new metrics scope that can be used to add additional

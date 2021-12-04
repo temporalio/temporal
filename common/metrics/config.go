@@ -64,6 +64,19 @@ type (
 		ExcludeTags map[string][]string `yaml:"excludeTags"`
 		// Prefix sets the prefix to all outgoing metrics
 		Prefix string `yaml:"prefix"`
+
+		// DefaultHistogramBoundaries defines the default histogram bucket
+		// boundaries.
+		// Configuration of histogram boundaries for given metric unit.
+		//
+		// Supported values:
+		// - "dimensionless"
+		// - "milliseconds"
+		// - "bytes"
+		// - see defs.go:L62
+		//
+		// Tally implementation uses default buckets for timer/duration metrics.
+		PerUnitHistogramBoundaries map[string][]float64 `yaml:"perUnitHistogramBoundaries"`
 	}
 
 	// StatsdConfig contains the config items for statsd metrics reporter
@@ -90,6 +103,7 @@ type (
 		// DefaultHistogramBoundaries defines the default histogram bucket
 		// boundaries.
 		DefaultHistogramBoundaries []float64 `yaml:"defaultHistogramBoundaries"`
+
 		// HandlerPath if specified will be used instead of using the default
 		// HTTP handler path "/metrics".
 		HandlerPath string `yaml:"handlerPath"`

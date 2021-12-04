@@ -46,7 +46,7 @@ type (
 		// RecordDistribution records a distribution (wrapper on top of timer) for the given
 		// metric name
 		RecordDistribution(id int, d int)
-		RecordDistributionInternal(id string, d int)
+		RecordDistributionInternal(id string, unit MetricUnit, d int)
 		// UpdateGauge reports Gauge type absolute value metric
 		UpdateGauge(gauge int, value float64)
 		// Tagged returns an internal scope that can be used to add additional

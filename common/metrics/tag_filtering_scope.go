@@ -117,6 +117,6 @@ func (tfs *TagFilteringScope) RecordTimerInternal(timer string, d time.Duration)
 	tfs.RecordTimerInternal(timer, d)
 }
 
-func (tfs *TagFilteringScope) RecordDistributionInternal(id string, d int) {
-	tfs.RecordDistributionInternal(id, d)
+func (tfs *TagFilteringScope) RecordDistributionInternal(id string, unit MetricUnit, d int) {
+	tfs.RecordDistributionInternal(id, unit, d)
 }

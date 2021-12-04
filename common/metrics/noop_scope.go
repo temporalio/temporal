@@ -42,7 +42,7 @@ func (n NoopScopeImpl) StartTimerInternal(timer string) Stopwatch {
 func (n NoopScopeImpl) RecordTimerInternal(timer string, d time.Duration) {
 }
 
-func (n NoopScopeImpl) RecordDistributionInternal(id string, d int) {
+func (n NoopScopeImpl) RecordDistributionInternal(id string, unit MetricUnit, d int) {
 }
 
 func (n NoopScopeImpl) TaggedInternal(tags ...Tag) internalScope {

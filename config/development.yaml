@@ -21,7 +21,7 @@ global:
     prometheus:
 #      # specify framework to use new approach for initializing metrics and/or use opentelemetry
 #      framework: "opentelemetry"
-#      framework: "tally"
+      framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
 #    prometheusSDK:
@@ -34,6 +34,20 @@ global:
 #    excludeTags:
 #      namespace:
 #        - temporal-system
+#    perUnitHistogramBoundaries:
+#      dimensionless:
+#        - 10
+#        - 100
+#        - 1000
+#      milliseconds:
+#        - 10
+#        - 100
+#        - 1000
+#        - 60000
+#      bytes:
+#        - 1024
+#        - 1048576
+#        - 1073741824
 
 services:
   frontend:

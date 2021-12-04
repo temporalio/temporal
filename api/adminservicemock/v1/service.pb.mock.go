@@ -360,26 +360,6 @@ func (mr *MockAdminServiceClientMockRecorder) ListClusterMembers(ctx, in interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMembers", reflect.TypeOf((*MockAdminServiceClient)(nil).ListClusterMembers), varargs...)
 }
 
-// ListNamespaces mocks base method.
-func (m *MockAdminServiceClient) ListNamespaces(ctx context.Context, in *adminservice.ListNamespacesRequest, opts ...grpc.CallOption) (*adminservice.ListNamespacesResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "ListNamespaces", varargs...)
-	ret0, _ := ret[0].(*adminservice.ListNamespacesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListNamespaces indicates an expected call of ListNamespaces.
-func (mr *MockAdminServiceClientMockRecorder) ListNamespaces(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockAdminServiceClient)(nil).ListNamespaces), varargs...)
-}
-
 // ListReplicationTasks mocks base method.
 func (m *MockAdminServiceClient) ListReplicationTasks(ctx context.Context, in *adminservice.ListReplicationTasksRequest, opts ...grpc.CallOption) (*adminservice.ListReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -540,26 +520,6 @@ func (mr *MockAdminServiceClientMockRecorder) RefreshWorkflowTasks(ctx, in inter
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).RefreshWorkflowTasks), varargs...)
 }
 
-// RegisterNamespace mocks base method.
-func (m *MockAdminServiceClient) RegisterNamespace(ctx context.Context, in *adminservice.RegisterNamespaceRequest, opts ...grpc.CallOption) (*adminservice.RegisterNamespaceResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "RegisterNamespace", varargs...)
-	ret0, _ := ret[0].(*adminservice.RegisterNamespaceResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RegisterNamespace indicates an expected call of RegisterNamespace.
-func (mr *MockAdminServiceClientMockRecorder) RegisterNamespace(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterNamespace", reflect.TypeOf((*MockAdminServiceClient)(nil).RegisterNamespace), varargs...)
-}
-
 // RemoveRemoteCluster mocks base method.
 func (m *MockAdminServiceClient) RemoveRemoteCluster(ctx context.Context, in *adminservice.RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*adminservice.RemoveRemoteClusterResponse, error) {
 	m.ctrl.T.Helper()
@@ -638,26 +598,6 @@ func (mr *MockAdminServiceClientMockRecorder) ResendReplicationTasks(ctx, in int
 	mr.mock.ctrl.T.Helper()
 	varargs := append([]interface{}{ctx, in}, opts...)
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ResendReplicationTasks), varargs...)
-}
-
-// UpdateNamespace mocks base method.
-func (m *MockAdminServiceClient) UpdateNamespace(ctx context.Context, in *adminservice.UpdateNamespaceRequest, opts ...grpc.CallOption) (*adminservice.UpdateNamespaceResponse, error) {
-	m.ctrl.T.Helper()
-	varargs := []interface{}{ctx, in}
-	for _, a := range opts {
-		varargs = append(varargs, a)
-	}
-	ret := m.ctrl.Call(m, "UpdateNamespace", varargs...)
-	ret0, _ := ret[0].(*adminservice.UpdateNamespaceResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateNamespace indicates an expected call of UpdateNamespace.
-func (mr *MockAdminServiceClientMockRecorder) UpdateNamespace(ctx, in interface{}, opts ...interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	varargs := append([]interface{}{ctx, in}, opts...)
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockAdminServiceClient)(nil).UpdateNamespace), varargs...)
 }
 
 // MockAdminServiceServer is a mock of AdminServiceServer interface.
@@ -908,21 +848,6 @@ func (mr *MockAdminServiceServerMockRecorder) ListClusterMembers(arg0, arg1 inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMembers", reflect.TypeOf((*MockAdminServiceServer)(nil).ListClusterMembers), arg0, arg1)
 }
 
-// ListNamespaces mocks base method.
-func (m *MockAdminServiceServer) ListNamespaces(arg0 context.Context, arg1 *adminservice.ListNamespacesRequest) (*adminservice.ListNamespacesResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListNamespaces", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ListNamespacesResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// ListNamespaces indicates an expected call of ListNamespaces.
-func (mr *MockAdminServiceServerMockRecorder) ListNamespaces(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockAdminServiceServer)(nil).ListNamespaces), arg0, arg1)
-}
-
 // ListReplicationTasks mocks base method.
 func (m *MockAdminServiceServer) ListReplicationTasks(arg0 context.Context, arg1 *adminservice.ListReplicationTasksRequest) (*adminservice.ListReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -1043,21 +968,6 @@ func (mr *MockAdminServiceServerMockRecorder) RefreshWorkflowTasks(arg0, arg1 in
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RefreshWorkflowTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).RefreshWorkflowTasks), arg0, arg1)
 }
 
-// RegisterNamespace mocks base method.
-func (m *MockAdminServiceServer) RegisterNamespace(arg0 context.Context, arg1 *adminservice.RegisterNamespaceRequest) (*adminservice.RegisterNamespaceResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RegisterNamespace", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.RegisterNamespaceResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// RegisterNamespace indicates an expected call of RegisterNamespace.
-func (mr *MockAdminServiceServerMockRecorder) RegisterNamespace(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RegisterNamespace", reflect.TypeOf((*MockAdminServiceServer)(nil).RegisterNamespace), arg0, arg1)
-}
-
 // RemoveRemoteCluster mocks base method.
 func (m *MockAdminServiceServer) RemoveRemoteCluster(arg0 context.Context, arg1 *adminservice.RemoveRemoteClusterRequest) (*adminservice.RemoveRemoteClusterResponse, error) {
 	m.ctrl.T.Helper()
@@ -1116,19 +1026,4 @@ func (m *MockAdminServiceServer) ResendReplicationTasks(arg0 context.Context, ar
 func (mr *MockAdminServiceServerMockRecorder) ResendReplicationTasks(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ResendReplicationTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ResendReplicationTasks), arg0, arg1)
-}
-
-// UpdateNamespace mocks base method.
-func (m *MockAdminServiceServer) UpdateNamespace(arg0 context.Context, arg1 *adminservice.UpdateNamespaceRequest) (*adminservice.UpdateNamespaceResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNamespace", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.UpdateNamespaceResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// UpdateNamespace indicates an expected call of UpdateNamespace.
-func (mr *MockAdminServiceServerMockRecorder) UpdateNamespace(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockAdminServiceServer)(nil).UpdateNamespace), arg0, arg1)
 }

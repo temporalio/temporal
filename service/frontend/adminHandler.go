@@ -45,7 +45,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -225,121 +224,6 @@ func (adh *AdminHandler) Stop() {
 
 	// Calling stop if the queue does not start is ok
 	adh.namespaceReplicationQueue.Stop()
-}
-
-func (adh *AdminHandler) ListNamespaces(
-	ctx context.Context,
-	request *adminservice.ListNamespacesRequest,
-) (_ *adminservice.ListNamespacesResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminListNamespacesScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-
-	resp, err := adh.persistenceMetadataManager.ListNamespaces(&persistence.ListNamespacesRequest{
-		PageSize:      int(request.GetPageSize()),
-		NextPageToken: request.GetNextPageToken(),
-	})
-	if err != nil {
-		return nil, serviceerror.NewInternal(fmt.Sprintf("unable to get namespaces. Error: %v", err))
-	}
-
-	var namespaces []*adminservice.DescribeNamespaceResponse
-	for _, namespace := range resp.Namespaces {
-		namespaces = append(namespaces, &adminservice.DescribeNamespaceResponse{
-			Namespace:           namespace.Namespace,
-			NotificationVersion: namespace.NotificationVersion,
-			IsGlobalNamespace:   namespace.IsGlobalNamespace,
-		})
-	}
-
-	return &adminservice.ListNamespacesResponse{
-		Namespaces:    namespaces,
-		NextPageToken: resp.NextPageToken,
-	}, err
-}
-
-// RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
-// entity within Temporal, used as a container for all resources like workflow executions, taskqueues, etc. Namespace
-// acts as a sandbox and provides isolation for all resources within the namespace.  All resources belongs to exactly one
-// namespace.
-func (adh *AdminHandler) RegisterNamespace(ctx context.Context, request *adminservice.RegisterNamespaceRequest) (_ *adminservice.RegisterNamespaceResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminRegisterNamespaceScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-
-	if request.GetNamespace() == "" {
-		return nil, adh.error(interceptor.ErrNamespaceNotSet, scope)
-	}
-
-	if len(request.GetNamespace()) > adh.config.MaxIDLengthLimit() {
-		return nil, adh.error(errNamespaceTooLong, scope)
-	}
-
-	req := &workflowservice.RegisterNamespaceRequest{
-		Namespace:                        request.GetNamespace(),
-		Description:                      request.GetDescription(),
-		OwnerEmail:                       request.GetOwnerEmail(),
-		WorkflowExecutionRetentionPeriod: request.GetWorkflowExecutionRetentionPeriod(),
-		Clusters:                         request.GetClusters(),
-		ActiveClusterName:                request.GetActiveClusterName(),
-		Data:                             request.GetData(),
-		SecurityToken:                    request.GetSecurityToken(),
-		IsGlobalNamespace:                request.GetIsGlobalNamespace(),
-		HistoryArchivalState:             request.GetHistoryArchivalState(),
-		HistoryArchivalUri:               request.GetHistoryArchivalUri(),
-		VisibilityArchivalState:          request.GetVisibilityArchivalState(),
-		VisibilityArchivalUri:            request.GetVisibilityArchivalUri(),
-	}
-
-	_, err := adh.namespaceHandler.RegisterNamespace(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.RegisterNamespaceResponse{}, nil
-}
-
-// UpdateNamespace is used to update the information and configuration of a registered namespace.
-func (adh *AdminHandler) UpdateNamespace(ctx context.Context, request *adminservice.UpdateNamespaceRequest) (_ *adminservice.UpdateNamespaceResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminUpdateNamespaceScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-
-	if request.GetNamespace() == "" {
-		return nil, adh.error(interceptor.ErrNamespaceNotSet, scope)
-	}
-
-	req := &workflowservice.UpdateNamespaceRequest{
-		Namespace:         request.GetNamespace(),
-		UpdateInfo:        request.GetUpdateInfo(),
-		ReplicationConfig: request.GetReplicationConfig(),
-		DeleteBadBinary:   request.GetDeleteBadBinary(),
-		PromoteNamespace:  request.GetPromoteNamespace(),
-		Config:            request.GetConfig(),
-		SecurityToken:     request.GetSecurityToken(),
-	}
-
-	_, err := adh.namespaceHandler.UpdateNamespace(ctx, req)
-	if err != nil {
-		return nil, err
-	}
-
-	return &adminservice.UpdateNamespaceResponse{}, nil
 }
 
 // AddSearchAttributes add search attribute to the cluster.
