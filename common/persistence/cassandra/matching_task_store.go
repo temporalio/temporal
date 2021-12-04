@@ -317,27 +317,19 @@ func GetTaskTTL(expireTime *time.Time) int64 {
 func (d *MatchingTaskStore) GetTasks(
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
-	if request.MaxReadLevel == nil {
-		return nil, serviceerror.NewInternal("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
-	}
-	if request.ReadLevel > *request.MaxReadLevel {
-		return &p.InternalGetTasksResponse{}, nil
-	}
-
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := d.Session.Query(templateGetTasksQuery,
 		request.NamespaceID,
 		request.TaskQueue,
 		request.TaskType,
 		rowTypeTask,
-		request.ReadLevel,
-		*request.MaxReadLevel,
+		request.MinTaskID,
+		request.MaxTaskID,
 	)
-	iter := query.PageSize(request.BatchSize).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetTasksResponse{}
 	task := make(map[string]interface{})
-PopulateTasks:
 	for iter.MapScan(task) {
 		_, ok := task["task_id"]
 		if !ok { // no tasks, but static column record returned
@@ -364,18 +356,17 @@ PopulateTasks:
 			var byteSliceType []byte
 			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
 		}
-
 		response.Tasks = append(response.Tasks, p.NewDataBlob(taskVal, encodingVal))
-		if len(response.Tasks) == request.BatchSize {
-			break PopulateTasks
-		}
+
 		task = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+	}
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
 	}
 
 	if err := iter.Close(); err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
 	}
-
 	return response, nil
 }
 

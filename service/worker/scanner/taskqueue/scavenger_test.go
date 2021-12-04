@@ -196,7 +196,7 @@ func (s *ScavengerTestSuite) setupTaskMgrMocks() {
 		}).AnyTimes()
 	s.taskMgr.EXPECT().GetTasks(gomock.Any()).DoAndReturn(
 		func(req *p.GetTasksRequest) (*p.GetTasksResponse, error) {
-			result := s.taskTables[req.TaskQueue].get(req.BatchSize)
+			result := s.taskTables[req.TaskQueue].get(req.PageSize)
 			return &p.GetTasksResponse{Tasks: result}, nil
 		}).AnyTimes()
 	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any()).DoAndReturn(

@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -429,24 +430,47 @@ func (m *sqlTaskManager) GetTasks(
 		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 
+	minTaskID := request.MinTaskID
+	maxTaskID := request.MaxTaskID
+	if len(request.NextPageToken) != 0 {
+		token, err := deserializeMatchingTaskPageToken(request.NextPageToken)
+		if err != nil {
+			return nil, err
+		}
+		minTaskID = token.TaskID
+	}
+
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 	rows, err := m.Db.SelectFromTasks(ctx, sqlplugin.TasksFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
-		MinTaskID:   &request.ReadLevel,
-		MaxTaskID:   request.MaxReadLevel,
-		PageSize:    &request.BatchSize,
+		MinTaskID:   &minTaskID,
+		MaxTaskID:   &maxTaskID,
+		PageSize:    &request.PageSize,
 	})
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
 	}
 
-	var tasks = make([]*commonpb.DataBlob, len(rows))
+	response := &persistence.InternalGetTasksResponse{
+		Tasks: make([]*commonpb.DataBlob, len(rows)),
+	}
 	for i, v := range rows {
-		tasks[i] = persistence.NewDataBlob(v.Data, v.DataEncoding)
+		response.Tasks[i] = persistence.NewDataBlob(v.Data, v.DataEncoding)
+	}
+	if len(rows) == request.PageSize {
+		token, err := serializeMatchingTaskPageToken(&matchingTaskPageToken{
+			TaskID: rows[len(rows)-1].TaskID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		response.NextPageToken = token
+	} else {
+		response.NextPageToken = nil
 	}
 
-	return &persistence.InternalGetTasksResponse{Tasks: tasks}, nil
+	return response, nil
 }
 
 func (m *sqlTaskManager) CompleteTask(
@@ -554,4 +578,20 @@ func lockTaskQueue(
 	default:
 		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock task queue. Error: %v", err))
 	}
+}
+
+type matchingTaskPageToken struct {
+	TaskID int64
+}
+
+func serializeMatchingTaskPageToken(token *matchingTaskPageToken) ([]byte, error) {
+	return json.Marshal(token)
+}
+
+func deserializeMatchingTaskPageToken(payload []byte) (*matchingTaskPageToken, error) {
+	var token matchingTaskPageToken
+	if err := json.Unmarshal(payload, &token); err != nil {
+		return nil, err
+	}
+	return &token, nil
 }

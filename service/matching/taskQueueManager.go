@@ -447,7 +447,7 @@ func (c *taskQueueManagerImpl) String() string {
 	_, _ = fmt.Fprintf(buf, "RangeID=%v\n", rangeID)
 	_, _ = fmt.Fprintf(buf, "TaskIDBlock=%+v\n", rangeIDToTaskIDBlock(rangeID, c.config.RangeSize))
 	_, _ = fmt.Fprintf(buf, "AckLevel=%v\n", c.taskAckManager.ackLevel)
-	_, _ = fmt.Fprintf(buf, "MaxReadLevel=%v\n", c.taskAckManager.getReadLevel())
+	_, _ = fmt.Fprintf(buf, "MaxTaskID=%v\n", c.taskAckManager.getReadLevel())
 
 	return buf.String()
 }

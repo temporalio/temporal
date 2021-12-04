@@ -48,6 +48,7 @@ import (
 	v11 "go.temporal.io/api/replication/v1"
 	v111 "go.temporal.io/api/version/v1"
 	v19 "go.temporal.io/api/workflow/v1"
+
 	v110 "go.temporal.io/server/api/cluster/v1"
 	v16 "go.temporal.io/server/api/enums/v1"
 	v17 "go.temporal.io/server/api/history/v1"
@@ -6206,7 +6207,7 @@ func (this *ListTransferTasksRequest) GoString() string {
 	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
 	s = append(s, "MinTaskId: "+fmt.Sprintf("%#v", this.MinTaskId)+",\n")
 	s = append(s, "MaxTaskId: "+fmt.Sprintf("%#v", this.MaxTaskId)+",\n")
-	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
+	s = append(s, "PageSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
 	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -6231,9 +6232,9 @@ func (this *ListVisibilityTasksRequest) GoString() string {
 	s := make([]string, 0, 9)
 	s = append(s, "&adminservice.ListVisibilityTasksRequest{")
 	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
-	s = append(s, "ReadLevel: "+fmt.Sprintf("%#v", this.ReadLevel)+",\n")
-	s = append(s, "MaxReadLevel: "+fmt.Sprintf("%#v", this.MaxReadLevel)+",\n")
-	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
+	s = append(s, "MinTaskID: "+fmt.Sprintf("%#v", this.ReadLevel)+",\n")
+	s = append(s, "MaxTaskID: "+fmt.Sprintf("%#v", this.MaxReadLevel)+",\n")
+	s = append(s, "PageSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
 	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -6260,7 +6261,7 @@ func (this *ListTimerTasksRequest) GoString() string {
 	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
 	s = append(s, "MinTime: "+fmt.Sprintf("%#v", this.MinTime)+",\n")
 	s = append(s, "MaxTime: "+fmt.Sprintf("%#v", this.MaxTime)+",\n")
-	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
+	s = append(s, "PageSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
 	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -6287,7 +6288,7 @@ func (this *ListReplicationTasksRequest) GoString() string {
 	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
 	s = append(s, "MinTaskId: "+fmt.Sprintf("%#v", this.MinTaskId)+",\n")
 	s = append(s, "MaxTaskId: "+fmt.Sprintf("%#v", this.MaxTaskId)+",\n")
-	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
+	s = append(s, "PageSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
 	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -6850,7 +6851,7 @@ func (this *GetTaskQueueTasksRequest) GoString() string {
 	s = append(s, "TaskQueueType: "+fmt.Sprintf("%#v", this.TaskQueueType)+",\n")
 	s = append(s, "MinTaskId: "+fmt.Sprintf("%#v", this.MinTaskId)+",\n")
 	s = append(s, "MaxTaskId: "+fmt.Sprintf("%#v", this.MaxTaskId)+",\n")
-	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
+	s = append(s, "PageSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -11252,7 +11253,7 @@ func (this *ListTransferTasksRequest) String() string {
 		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
 		`MinTaskId:` + fmt.Sprintf("%v", this.MinTaskId) + `,`,
 		`MaxTaskId:` + fmt.Sprintf("%v", this.MaxTaskId) + `,`,
-		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
+		`PageSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
 		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
 	}, "")
@@ -11280,9 +11281,9 @@ func (this *ListVisibilityTasksRequest) String() string {
 	}
 	s := strings.Join([]string{`&ListVisibilityTasksRequest{`,
 		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
-		`ReadLevel:` + fmt.Sprintf("%v", this.ReadLevel) + `,`,
-		`MaxReadLevel:` + fmt.Sprintf("%v", this.MaxReadLevel) + `,`,
-		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
+		`MinTaskID:` + fmt.Sprintf("%v", this.ReadLevel) + `,`,
+		`MaxTaskID:` + fmt.Sprintf("%v", this.MaxReadLevel) + `,`,
+		`PageSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
 		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
 	}, "")
@@ -11312,7 +11313,7 @@ func (this *ListTimerTasksRequest) String() string {
 		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
 		`MinTime:` + strings.Replace(fmt.Sprintf("%v", this.MinTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`MaxTime:` + strings.Replace(fmt.Sprintf("%v", this.MaxTime), "Timestamp", "types.Timestamp", 1) + `,`,
-		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
+		`PageSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
 		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
 	}, "")
@@ -11342,7 +11343,7 @@ func (this *ListReplicationTasksRequest) String() string {
 		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
 		`MinTaskId:` + fmt.Sprintf("%v", this.MinTaskId) + `,`,
 		`MaxTaskId:` + fmt.Sprintf("%v", this.MaxTaskId) + `,`,
-		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
+		`PageSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
 		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
 	}, "")
@@ -11896,7 +11897,7 @@ func (this *GetTaskQueueTasksRequest) String() string {
 		`TaskQueueType:` + fmt.Sprintf("%v", this.TaskQueueType) + `,`,
 		`MinTaskId:` + fmt.Sprintf("%v", this.MinTaskId) + `,`,
 		`MaxTaskId:` + fmt.Sprintf("%v", this.MaxTaskId) + `,`,
-		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
+		`PageSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -14298,7 +14299,7 @@ func (m *ListTransferTasksRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 5:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PageSize", wireType)
 			}
 			m.BatchSize = 0
 			for shift := uint(0); ; shift += 7 {
@@ -14544,7 +14545,7 @@ func (m *ListVisibilityTasksRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ReadLevel", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field MinTaskID", wireType)
 			}
 			m.ReadLevel = 0
 			for shift := uint(0); ; shift += 7 {
@@ -14563,7 +14564,7 @@ func (m *ListVisibilityTasksRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxReadLevel", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field MaxTaskID", wireType)
 			}
 			m.MaxReadLevel = 0
 			for shift := uint(0); ; shift += 7 {
@@ -14582,7 +14583,7 @@ func (m *ListVisibilityTasksRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 5:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PageSize", wireType)
 			}
 			m.BatchSize = 0
 			for shift := uint(0); ; shift += 7 {
@@ -14900,7 +14901,7 @@ func (m *ListTimerTasksRequest) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PageSize", wireType)
 			}
 			m.BatchSize = 0
 			for shift := uint(0); ; shift += 7 {
@@ -15184,7 +15185,7 @@ func (m *ListReplicationTasksRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 4:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PageSize", wireType)
 			}
 			m.BatchSize = 0
 			for shift := uint(0); ; shift += 7 {
@@ -20779,7 +20780,7 @@ func (m *GetTaskQueueTasksRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 6:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field PageSize", wireType)
 			}
 			m.BatchSize = 0
 			for shift := uint(0); ; shift += 7 {
