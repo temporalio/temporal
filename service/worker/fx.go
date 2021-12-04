@@ -27,15 +27,12 @@ package worker
 import (
 	"context"
 
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/scanner/replication"
@@ -50,15 +47,10 @@ var Module = fx.Options(
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(NewConfig),
 	fx.Provide(PersistenceMaxQpsProvider),
-	fx.Provide(SdkClientProvider),
 	fx.Provide(NewService),
 	fx.Provide(NewWorkerManager),
 	fx.Invoke(ServiceLifetimeHooks),
 )
-
-func SdkClientProvider(sdkClientFactory sdk.ClientFactory, logger log.Logger) (sdkclient.Client, error) {
-	return sdkClientFactory.NewSystemClient(logger)
-}
 
 func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
 	return params.RPCFactory

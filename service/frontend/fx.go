@@ -29,6 +29,7 @@ import (
 	"net"
 
 	"github.com/uber-go/tally/v4"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/keepalive"
@@ -59,7 +60,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -350,7 +350,7 @@ func AdminHandlerProvider(
 	clientFactory client.Factory,
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
-	sdkClientFactory sdk.ClientFactory,
+	sdkSystemClient sdkclient.Client,
 	membershipMonitor membership.Monitor,
 	archiverProvider provider.ArchiverProvider,
 	metricsClient metrics.Client,
@@ -359,7 +359,7 @@ func AdminHandlerProvider(
 	saManager searchattribute.Manager,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
-) (*AdminHandler, error) {
+) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		params,
 		config,
@@ -376,7 +376,7 @@ func AdminHandlerProvider(
 		clientFactory,
 		clientBean,
 		historyClient,
-		sdkClientFactory,
+		sdkSystemClient,
 		membershipMonitor,
 		archiverProvider,
 		metricsClient,

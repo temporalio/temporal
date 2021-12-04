@@ -68,7 +68,6 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
@@ -128,7 +127,7 @@ type (
 		ClientFactory                       serverClient.Factory
 		ClientBean                          serverClient.Bean
 		HistoryClient                       historyservice.HistoryServiceClient
-		SdkClientFactory                    sdk.ClientFactory
+		SdkSystemClient                     sdkclient.Client
 		MembershipMonitor                   membership.Monitor
 		ArchiverProvider                    provider.ArchiverProvider
 		MetricsClient                       metrics.Client
@@ -150,17 +149,12 @@ var (
 // NewAdminHandler creates a gRPC handler for the adminservice
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
-) (*AdminHandler, error) {
+) *AdminHandler {
 
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
 		args.PersistenceMetadataManager,
 		args.Logger,
 	)
-
-	sdkSystemClient, err := args.SdkClientFactory.NewSystemClient(args.Logger)
-	if err != nil {
-		return nil, err
-	}
 
 	return &AdminHandler{
 		logger:                args.Logger,
@@ -193,14 +187,14 @@ func NewAdminHandler(
 		clientFactory:               args.ClientFactory,
 		clientBean:                  args.ClientBean,
 		historyClient:               args.HistoryClient,
-		sdkClient:                   sdkSystemClient,
+		sdkClient:                   args.SdkSystemClient,
 		membershipMonitor:           args.MembershipMonitor,
 		metricsClient:               args.MetricsClient,
 		namespaceRegistry:           args.NamespaceRegistry,
 		saProvider:                  args.SaProvider,
 		saManager:                   args.SaManager,
 		clusterMetadata:             args.ClusterMetadata,
-	}, nil
+	}
 }
 
 // Start starts the handler

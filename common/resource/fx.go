@@ -98,6 +98,7 @@ var Module = fx.Options(
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
+	sdk.Module,
 	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(FrontedClientProvider),
 	fx.Provide(PersistenceFaultInjectionFactoryProvider),
@@ -235,6 +236,7 @@ func MembershipMonitorProvider(membershipFactory MembershipMonitorFactory) (memb
 	return membershipFactory.GetMembershipMonitor()
 }
 
+// TODO (alex): move this to `sdk` package after BootstrapParams removal.
 func SdkClientFactoryProvider(params *BootstrapParams) sdk.ClientFactory {
 	return params.SdkClientFactory
 }

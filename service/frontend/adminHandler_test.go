@@ -113,7 +113,6 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
 	s.mockSdkSystemClient = &sdkmocks.Client{}
-	s.mockResource.SDKClientFactory.EXPECT().NewSystemClient(gomock.Any()).Return(s.mockSdkSystemClient, nil).AnyTimes()
 
 	params := &resource.BootstrapParams{
 		PersistenceConfig: config.Persistence{
@@ -137,7 +136,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetClientFactory(),
 		s.mockResource.GetClientBean(),
 		s.mockResource.GetHistoryClient(),
-		s.mockResource.GetSDKClientFactory(),
+		s.mockSdkSystemClient,
 		s.mockResource.GetMembershipMonitor(),
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetMetricsClient(),
@@ -147,9 +146,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockMetadata,
 		s.mockResource.GetArchivalMetadata(),
 	}
-	var err error
-	s.handler, err = NewAdminHandler(args)
-	s.NoError(err)
+	s.handler = NewAdminHandler(args)
 	s.handler.Start()
 }
 
