@@ -34,13 +34,12 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resolver"
-
-	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -109,7 +108,7 @@ type (
 
 		// internal services clients
 
-		sdkClient         sdkclient.Client
+		sdkClientFactory  sdk.ClientFactory
 		frontendRawClient workflowservice.WorkflowServiceClient
 		frontendClient    workflowservice.WorkflowServiceClient
 		matchingRawClient matchingservice.MatchingServiceClient
@@ -341,7 +340,7 @@ func New(
 
 		// internal services clients
 
-		sdkClient:         params.SdkClient,
+		sdkClientFactory:  params.SdkClientFactory,
 		frontendRawClient: frontendRawClient,
 		frontendClient:    frontendClient,
 		matchingRawClient: matchingRawClient,
@@ -510,9 +509,9 @@ func (h *Impl) GetWorkerServiceResolver() membership.ServiceResolver {
 
 // internal services clients
 
-// GetSDKClient return sdk client
-func (h *Impl) GetSDKClient() sdkclient.Client {
-	return h.sdkClient
+// GetSDKClientFactory return sdk client
+func (h *Impl) GetSDKClientFactory() sdk.ClientFactory {
+	return h.sdkClientFactory
 }
 
 // GetFrontendClient return frontend client with retry policy

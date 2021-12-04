@@ -68,10 +68,11 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		mockResource       *resource.Test
-		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
-		mockNamespaceCache *namespace.MockRegistry
+		controller          *gomock.Controller
+		mockResource        *resource.Test
+		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
+		mockSdkSystemClient *sdkmocks.Client
+		mockNamespaceCache  *namespace.MockRegistry
 
 		mockExecutionMgr           *persistence.MockExecutionManager
 		mockVisibilityMgr          *manager.MockVisibilityManager
@@ -111,6 +112,8 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockVisibilityMgr = manager.NewMockVisibilityManager(s.controller)
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
+	s.mockSdkSystemClient = &sdkmocks.Client{}
+
 	params := &resource.BootstrapParams{
 		PersistenceConfig: config.Persistence{
 			NumHistoryShards: 1,
@@ -133,7 +136,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetClientFactory(),
 		s.mockResource.GetClientBean(),
 		s.mockResource.GetHistoryClient(),
-		s.mockResource.GetSDKClient(),
+		s.mockSdkSystemClient,
 		s.mockResource.GetMembershipMonitor(),
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetMetricsClient(),
@@ -533,7 +536,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	}
 
 	// Start workflow failed.
-	s.mockResource.SDKClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
+	s.mockSdkSystemClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
 	resp, err := handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -546,7 +549,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	// Workflow failed.
 	mockRun := &sdkmocks.WorkflowRun{}
 	mockRun.On("Get", mock.Anything, nil).Return(errors.New("workflow failed")).Once()
-	s.mockResource.SDKClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(mockRun, nil)
+	s.mockSdkSystemClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(mockRun, nil)
 	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -558,7 +561,6 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 
 	// Success case.
 	mockRun.On("Get", mock.Anything, nil).Return(nil)
-	mockRun.On("GetRunID").Return("random-run-id")
 
 	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
@@ -567,6 +569,8 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+	mockRun.AssertExpectations(s.T())
+	s.mockSdkSystemClient.AssertExpectations(s.T())
 }
 
 func (s *adminHandlerSuite) Test_GetSearchAttributes() {
@@ -579,7 +583,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.Nil(resp)
 
 	// Elasticsearch is not configured
-	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+	s.mockSdkSystemClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -595,7 +599,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 		},
 	}
 
-	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+	s.mockSdkSystemClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -603,7 +607,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+	s.mockSdkSystemClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "another-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -611,7 +615,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	s.mockResource.SDKClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+	s.mockSdkSystemClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
 		nil, errors.New("random error")).Once()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()

@@ -118,7 +118,7 @@ type (
 		HistoryClient               historyservice.HistoryServiceClient
 		MatchingRawClient           matchingservice.MatchingServiceClient
 		MatchingClient              matchingservice.MatchingServiceClient
-		SdkClient                   sdkclient.Client
+		SdkSystemClient             sdkclient.Client
 		HistoryServiceResolver      membership.ServiceResolver
 		MetricsClient               metrics.Client
 		PayloadSerializer           serialization.Serializer
@@ -172,7 +172,7 @@ func NewHandler(args NewHandlerArgs) *Handler {
 		historyClient:               args.HistoryClient,
 		matchingRawClient:           args.MatchingRawClient,
 		matchingClient:              args.MatchingClient,
-		sdkClient:                   args.SdkClient,
+		sdkClient:                   args.SdkSystemClient,
 		historyServiceResolver:      args.HistoryServiceResolver,
 		metricsClient:               args.MetricsClient,
 		payloadSerializer:           args.PayloadSerializer,
