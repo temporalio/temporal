@@ -686,7 +686,8 @@ type (
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*persistencespb.AllocatedTaskInfo
+		Tasks         []*persistencespb.AllocatedTaskInfo
+		NextPageToken []byte
 	}
 
 	// CompleteTaskRequest is used to complete a task

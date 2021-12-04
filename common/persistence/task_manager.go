@@ -234,11 +234,7 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 
 func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
 	if request.MinTaskID >= request.MaxTaskID {
-		panic(fmt.Sprintf(
-			"taskManagerImpl encountered MinTaskID >= MaxTaskID: %v vs %v",
-			request.MinTaskID,
-			request.MaxTaskID,
-		))
+		return &GetTasksResponse{}, nil
 	}
 
 	internalResp, err := m.taskStore.GetTasks(request)
@@ -253,7 +249,7 @@ func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse,
 		}
 		tasks[i] = task
 	}
-	return &GetTasksResponse{Tasks: tasks}, nil
+	return &GetTasksResponse{Tasks: tasks, NextPageToken: internalResp.NextPageToken}, nil
 }
 
 func (m *taskManagerImpl) CompleteTask(request *CompleteTaskRequest) error {
