@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
+	sdkmocks "go.temporal.io/sdk/mocks"
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/sdk/testsuite"
@@ -80,9 +81,10 @@ func (s *scannerWorkflowTestSuite) TestScavengerActivity() {
 	mockResource := resource.NewTest(controller, metrics.Worker)
 
 	mockResource.TaskMgr.EXPECT().ListTaskQueue(gomock.Any()).Return(&p.ListTaskQueueResponse{}, nil)
+
 	ctx := scannerContext{
 		logger:           mockResource.GetLogger(),
-		sdkSystemClient:  mockResource.GetSDKClient(),
+		sdkSystemClient:  &sdkmocks.Client{},
 		metricsClient:    mockResource.GetMetricsClient(),
 		executionManager: mockResource.GetExecutionManager(),
 		taskManager:      mockResource.GetTaskManager(),
