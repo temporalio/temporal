@@ -2602,7 +2602,7 @@ func NewRollupTimerDef(name string, rollupName string) metricDefinition {
 }
 
 func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Milliseconds}
+	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes}
 }
 
 func NewDimensionlessHistogramDef(name string) metricDefinition {
