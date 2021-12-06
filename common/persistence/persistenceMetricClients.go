@@ -715,17 +715,42 @@ func (p *taskPersistenceClient) CompleteTasksLessThan(request *CompleteTasksLess
 	return result, err
 }
 
-func (p *taskPersistenceClient) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceLeaseTaskQueueScope, metrics.PersistenceRequests)
+func (p *taskPersistenceClient) CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceCreateTaskQueueScope, metrics.PersistenceRequests)
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceLeaseTaskQueueScope, metrics.PersistenceLatency)
-	response, err := p.persistence.LeaseTaskQueue(request)
+	sw := p.metricClient.StartTimer(metrics.PersistenceCreateTaskQueueScope, metrics.PersistenceLatency)
+	response, err := p.persistence.CreateTaskQueue(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceLeaseTaskQueueScope, err)
+		p.updateErrorMetric(metrics.PersistenceCreateTaskQueueScope, err)
 	}
 
+	return response, err
+}
+
+func (p *taskPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceUpdateTaskQueueScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateTaskQueueScope, metrics.PersistenceLatency)
+	response, err := p.persistence.UpdateTaskQueue(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceUpdateTaskQueueScope, err)
+	}
+
+	return response, err
+}
+
+func (p *taskPersistenceClient) GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceGetTaskQueueScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceGetTaskQueueScope, metrics.PersistenceLatency)
+	response, err := p.persistence.GetTaskQueue(request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceGetTaskQueueScope, err)
+	}
 	return response, err
 }
 
@@ -749,20 +774,6 @@ func (p *taskPersistenceClient) DeleteTaskQueue(request *DeleteTaskQueueRequest)
 		p.updateErrorMetric(metrics.PersistenceDeleteTaskQueueScope, err)
 	}
 	return err
-}
-
-func (p *taskPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceUpdateTaskQueueScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateTaskQueueScope, metrics.PersistenceLatency)
-	response, err := p.persistence.UpdateTaskQueue(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceUpdateTaskQueueScope, err)
-	}
-
-	return response, err
 }
 
 func (p *taskPersistenceClient) Close() {

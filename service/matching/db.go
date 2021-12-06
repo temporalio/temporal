@@ -25,16 +25,24 @@
 package matching
 
 import (
+	"fmt"
 	"sync"
-	"sync/atomic"
+	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+)
+
+const (
+	initialRangeID     = 1 // Id of the first range of a new task queue
+	stickyTaskQueueTTL = 24 * time.Hour
 )
 
 type (
@@ -88,19 +96,86 @@ func (db *taskQueueDB) RangeID() int64 {
 func (db *taskQueueDB) RenewLease() (taskQueueState, error) {
 	db.Lock()
 	defer db.Unlock()
-	resp, err := db.store.LeaseTaskQueue(&persistence.LeaseTaskQueueRequest{
-		NamespaceID:   db.namespaceID.String(),
-		TaskQueue:     db.taskQueueName,
-		TaskType:      db.taskType,
-		TaskQueueKind: db.taskQueueKind,
-		RangeID:       atomic.LoadInt64(&db.rangeID),
-	})
-	if err != nil {
-		return taskQueueState{}, err
+
+	if db.rangeID == 0 {
+		if err := db.takeTaskQueue(); err != nil {
+			return taskQueueState{}, err
+		}
+	} else {
+		if err := db.renewTaskQueue(db.rangeID + 1); err != nil {
+			return taskQueueState{}, err
+		}
 	}
-	db.ackLevel = resp.TaskQueueInfo.Data.AckLevel
-	db.rangeID = resp.TaskQueueInfo.RangeID
 	return taskQueueState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
+}
+
+func (db *taskQueueDB) takeTaskQueue() error {
+	response, err := db.store.GetTaskQueue(&persistence.GetTaskQueueRequest{
+		NamespaceID: db.namespaceID.String(),
+		TaskQueue:   db.taskQueueName,
+		TaskType:    db.taskType,
+	})
+	switch err.(type) {
+	case nil:
+		response.TaskQueueInfo.Kind = db.taskQueueKind
+		response.TaskQueueInfo.ExpiryTime = db.expiryTime()
+		response.TaskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
+		_, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+			RangeID:       response.RangeID + 1,
+			TaskQueueInfo: response.TaskQueueInfo,
+			PrevRangeID:   response.RangeID,
+		})
+		if err != nil {
+			return err
+		}
+		db.ackLevel = response.TaskQueueInfo.AckLevel
+		db.rangeID = response.RangeID + 1
+		return nil
+
+	case *serviceerror.NotFound:
+		if _, err := db.store.CreateTaskQueue(&persistence.CreateTaskQueueRequest{
+			RangeID: initialRangeID,
+			TaskQueueInfo: &persistencespb.TaskQueueInfo{
+				NamespaceId:    db.namespaceID.String(),
+				Name:           db.taskQueueName,
+				TaskType:       db.taskType,
+				Kind:           db.taskQueueKind,
+				AckLevel:       db.ackLevel,
+				ExpiryTime:     db.expiryTime(),
+				LastUpdateTime: timestamp.TimeNowPtrUtc(),
+			},
+		}); err != nil {
+			return err
+		}
+		db.rangeID = initialRangeID
+		return nil
+
+	default:
+		return err
+	}
+}
+
+func (db *taskQueueDB) renewTaskQueue(
+	rangeID int64,
+) error {
+	if _, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+		RangeID: rangeID,
+		TaskQueueInfo: &persistencespb.TaskQueueInfo{
+			NamespaceId:    db.namespaceID.String(),
+			Name:           db.taskQueueName,
+			TaskType:       db.taskType,
+			Kind:           db.taskQueueKind,
+			AckLevel:       db.ackLevel,
+			ExpiryTime:     db.expiryTime(),
+			LastUpdateTime: timestamp.TimeNowPtrUtc(),
+		},
+		PrevRangeID: db.rangeID,
+	}); err != nil {
+		return err
+	}
+
+	db.rangeID = rangeID
+	return nil
 }
 
 // UpdateState updates the taskQueue state with the given value
@@ -109,11 +184,13 @@ func (db *taskQueueDB) UpdateState(ackLevel int64) error {
 	defer db.Unlock()
 	_, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
-			NamespaceId: db.namespaceID.String(),
-			Name:        db.taskQueueName,
-			TaskType:    db.taskType,
-			AckLevel:    ackLevel,
-			Kind:        db.taskQueueKind,
+			NamespaceId:    db.namespaceID.String(),
+			Name:           db.taskQueueName,
+			TaskType:       db.taskType,
+			Kind:           db.taskQueueKind,
+			AckLevel:       ackLevel,
+			ExpiryTime:     db.expiryTime(),
+			LastUpdateTime: timestamp.TimeNowPtrUtc(),
 		},
 		RangeID: db.rangeID,
 	})
@@ -196,4 +273,15 @@ func (db *taskQueueDB) CompleteTasksLessThan(taskID int64, limit int) (int, erro
 			tag.WorkflowTaskQueueName(db.taskQueueName))
 	}
 	return n, err
+}
+
+func (db *taskQueueDB) expiryTime() *time.Time {
+	switch db.taskQueueKind {
+	case enumspb.TASK_QUEUE_KIND_NORMAL:
+		return nil
+	case enumspb.TASK_QUEUE_KIND_STICKY:
+		return timestamp.TimePtr(time.Now().UTC().Add(stickyTaskQueueTTL))
+	default:
+		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", db.taskQueueKind))
+	}
 }

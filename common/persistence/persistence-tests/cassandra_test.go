@@ -37,13 +37,6 @@ func TestCassandraHistoryV2Persistence(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestCassandraMatchingPersistence(t *testing.T) {
-	s := new(MatchingPersistenceSuite)
-	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
 func TestCassandraMetadataPersistenceV2(t *testing.T) {
 	s := new(MetadataPersistenceSuiteV2)
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
