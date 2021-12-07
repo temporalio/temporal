@@ -144,10 +144,7 @@ func buildCLI() *cli.App {
 				if cfg.DynamicConfigClient != nil {
 					dynamicConfigClient, err = dynamicconfig.NewFileBasedClient(cfg.DynamicConfigClient, logger, temporal.InterruptCh())
 					if err != nil {
-						// TODO: uncomment the next line and remove next 3 lines in 1.14.
-						// return cli.Exit(fmt.Sprintf("Unable to create dynamic config client. Error: %v", err), 1)
-						logger.Error("Unable to read dynamic config file. Continue with default settings but the ERROR MUST BE FIXED before the next upgrade", tag.Error(err))
-						dynamicConfigClient = dynamicconfig.NewNoopClient()
+						return cli.Exit(fmt.Sprintf("Unable to create dynamic config client. Error: %v", err), 1)
 					}
 				} else {
 					dynamicConfigClient = dynamicconfig.NewNoopClient()
