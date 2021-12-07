@@ -127,10 +127,9 @@ func (m *tallyScope) RecordDistribution(id int, d int) {
 }
 
 func (m *tallyScope) RecordDistributionInternal(name string, unit MetricUnit, d int) {
-	dist := time.Duration(d * distributionToTimerRatio)
 	buckets := m.perUnitBuckets[unit]
 	// if buckets == nil, Histogram will fall back to default buckets
-	m.scope.Histogram(name, buckets).RecordValue(float64(dist))
+	m.scope.Histogram(name, buckets).RecordValue(float64(d))
 }
 
 func (m *tallyScope) Tagged(tags ...Tag) Scope {
