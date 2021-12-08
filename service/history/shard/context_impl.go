@@ -735,13 +735,15 @@ func (s *ContextImpl) AddTasks(
 	// Drop lock while calling persistence to allow for more concurrency
 	s.wUnlock()
 	err = s.executionManager.AddTasks(request)
+	s.wLock()
 	if err == nil {
+		// Do this inside the lock because we don't want the transfer queue processor to wake up
+		// and see the previous max read level before we've updated it.
 		s.engine.NotifyNewTransferTasks(request.TransferTasks)
 		s.engine.NotifyNewTimerTasks(request.TimerTasks)
 		s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
 		s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
 	}
-	s.wLock()
 	return s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel)
 }
 
