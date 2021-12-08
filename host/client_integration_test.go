@@ -459,7 +459,7 @@ func (s *clientIntegrationSuite) TestClientDataConverter_WithChild() {
 
 	// to ensure custom data converter is used, this number might be different if client changed.
 	d := dc.(*testDataConverter)
-	s.Equal(3, d.NumOfCallToPayloads)
+	s.Equal(2, d.NumOfCallToPayloads)
 	s.Equal(2, d.NumOfCallFromPayloads)
 }
 
