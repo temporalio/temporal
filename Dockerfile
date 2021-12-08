@@ -1,4 +1,3 @@
-ARG TARGET=server
 ARG BASE_BUILDER_IMAGE=temporalio/base-builder:1.5.0
 ARG BASE_SERVER_IMAGE=temporalio/base-server:1.4.0
 ARG BASE_ADMIN_TOOLS_IMAGE=temporalio/base-admin-tools:1.3.0
@@ -80,6 +79,3 @@ COPY --from=temporal-builder /temporal/temporal-cassandra-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-sql-tool /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
 COPY --from=temporal-builder /temporal/tctl-authorization-plugin /usr/local/bin
-
-##### Build requested image #####
-FROM temporal-${TARGET}
