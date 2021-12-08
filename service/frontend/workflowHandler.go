@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -254,8 +255,8 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errRequestNotSet
 	}
 
-	if len(request.GetNamespace()) > wh.config.MaxIDLengthLimit() {
-		return nil, errNamespaceTooLong
+	if err := wh.validateNamespace(request.GetNamespace()); err != nil {
+		return nil, err
 	}
 
 	resp, err := wh.namespaceHandler.RegisterNamespace(ctx, request)
@@ -380,12 +381,8 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errRequestNotSet
 	}
 
-	if request.GetWorkflowId() == "" {
-		return nil, errWorkflowIDNotSet
-	}
-
-	if len(request.GetWorkflowId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errWorkflowIDTooLong
+	if err := wh.validateWorkflowID(request.GetWorkflowId()); err != nil {
+		return nil, err
 	}
 
 	namespaceName := namespace.Name(request.GetNamespace())
@@ -1876,12 +1873,8 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errRequestNotSet
 	}
 
-	if request.GetWorkflowId() == "" {
-		return nil, errWorkflowIDNotSet
-	}
-
-	if len(request.GetWorkflowId()) > wh.config.MaxIDLengthLimit() {
-		return nil, errWorkflowIDTooLong
+	if err := wh.validateWorkflowID(request.GetWorkflowId()); err != nil {
+		return nil, err
 	}
 
 	if request.GetSignalName() == "" {
@@ -3398,4 +3391,43 @@ func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(
 			WorkflowExecutionContinuedAsNewEventAttributes: newAttrs,
 		},
 	}, nil
+}
+
+func (wh *WorkflowHandler) validateNamespace(
+	str string,
+) error {
+	if str == "" {
+		return errNamespaceNotSet
+	}
+	if err := wh.validateUTF8String(str); err != nil {
+		return err
+	}
+	if len(str) > wh.config.MaxIDLengthLimit() {
+		return errNamespaceTooLong
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateWorkflowID(
+	str string,
+) error {
+	if str == "" {
+		return errWorkflowIDNotSet
+	}
+	if err := wh.validateUTF8String(str); err != nil {
+		return err
+	}
+	if len(str) > wh.config.MaxIDLengthLimit() {
+		return errWorkflowIDTooLong
+	}
+	return nil
+}
+
+func (wh *WorkflowHandler) validateUTF8String(
+	str string,
+) error {
+	if !utf8.ValidString(str) {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid UTF-8 string", str))
+	}
+	return nil
 }
