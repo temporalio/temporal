@@ -2165,7 +2165,6 @@ const (
 	NumServerMetrics
 )
 
-// todomigryz: see if I can move these out to metric_client_test.go
 // UnitTestService metrics enum
 const (
 	TestCounterMetric1 = iota + NumServerMetrics
