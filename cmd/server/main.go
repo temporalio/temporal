@@ -31,6 +31,7 @@ import (
 	"path"
 	"runtime"
 	"strings"
+	_ "time/tzdata" // embed tzdata as a fallback
 
 	"github.com/urfave/cli/v2"
 
