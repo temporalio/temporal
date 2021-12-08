@@ -32,6 +32,7 @@ import (
 
 	"github.com/uber-go/tally/v4"
 	sdkclient "go.temporal.io/sdk/client"
+	sdktally "go.temporal.io/sdk/contrib/tally"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -62,10 +63,10 @@ func NewClientFactory(hostPort string, tlsConfig *tls.Config, scope tally.Scope)
 
 func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error) {
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
-		HostPort:     f.hostPort,
-		Namespace:    namespaceName,
-		MetricsScope: f.scope,
-		Logger:       log.NewSdkLogger(logger),
+		HostPort:       f.hostPort,
+		Namespace:      namespaceName,
+		MetricsHandler: sdktally.NewMetricsHandler(f.scope),
+		Logger:         log.NewSdkLogger(logger),
 		ConnectionOptions: sdkclient.ConnectionOptions{
 			TLS:                f.tlsConfig,
 			DisableHealthCheck: true,
