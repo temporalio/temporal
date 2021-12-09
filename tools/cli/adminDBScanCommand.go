@@ -291,7 +291,8 @@ func scanShard(
 		deleteEmptyFiles(outputFiles.CorruptedExecutionFile, outputFiles.ExecutionCheckFailureFile, outputFiles.ShardScanReportFile)
 		closeFn()
 	}()
-	workflowStore := cassp.NewExecutionStore(session, log.NewNoopLogger())
+	shardLock := makeShardLock()
+	workflowStore := cassp.NewExecutionStore(session, log.NewNoopLogger(), shardLock)
 	execMan := persistence.NewExecutionManager(workflowStore, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
 
 	var token []byte

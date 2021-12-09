@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
@@ -194,6 +195,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 	adminDeleteVisibilityDocument(c, namespaceID)
 
 	session := connectToCassandra(c)
+	shardLock := makeShardLock()
 	shardID := resp.GetShardId()
 	shardIDInt, err := strconv.Atoi(shardID)
 	if err != nil {
@@ -213,7 +215,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 		fmt.Println("Deleting history events for:")
 		prettyPrintJSONObject(branchInfo)
-		execStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+		execStore := cassandra.NewExecutionStore(session, log.NewNoopLogger(), shardLock)
 		execMgr := persistence.NewExecutionManager(execStore, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
 		err = execMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
@@ -228,7 +230,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		}
 	}
 
-	exeStore := cassandra.NewExecutionStore(session, log.NewNoopLogger())
+	exeStore := cassandra.NewExecutionStore(session, log.NewNoopLogger(), shardLock)
 	req := &persistence.DeleteWorkflowExecutionRequest{
 		ShardID:     int32(shardIDInt),
 		NamespaceID: namespaceID,
@@ -340,6 +342,10 @@ func connectToCassandra(c *cli.Context) gocql.Session {
 		ErrorAndExit("connect to Cassandra failed", err)
 	}
 	return session
+}
+
+func makeShardLock() locks.IDMutex {
+	return locks.NewIDMutex(1, func(interface{}) uint32 { return 0 }, false)
 }
 
 func newESClient(c *cli.Context) esclient.CLIClient {
