@@ -74,10 +74,11 @@ func (tr *taskReader) Start() {
 		return
 	}
 
-	tr.Signal()
-
 	tr.gorogrp.Go(tr.dispatchBufferedTasks)
 	tr.gorogrp.Go(tr.getTasksPump)
+
+	// Do not signal getTasksPump to start here, let it wait until taskWriter
+	// acquires the lease and initializes the read level and max read level.
 }
 
 func (tr *taskReader) Stop() {
@@ -132,6 +133,14 @@ dispatchLoop:
 }
 
 func (tr *taskReader) getTasksPump(ctx context.Context) error {
+	// Wait for one notification from taskWriter
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-tr.notifyC:
+		tr.Signal()
+	}
+
 	updateAckTimer := time.NewTimer(tr.tlMgr.config.UpdateAckInterval())
 	defer updateAckTimer.Stop()
 
@@ -151,7 +160,7 @@ Loop:
 			}
 
 			if len(tasks) == 0 {
-				tr.tlMgr.taskAckManager.setReadLevel(readLevel)
+				tr.tlMgr.taskAckManager.setReadLevelAfterGap(readLevel)
 				if !isReadBatchDone {
 					tr.Signal()
 				}
