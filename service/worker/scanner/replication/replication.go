@@ -32,7 +32,6 @@ import (
 
 	apicommon "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-	apinamespace "go.temporal.io/api/namespace/v1"
 	apireplication "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
@@ -128,7 +127,7 @@ type (
 
 	updateStateRequest struct {
 		Namespace string // move this namespace into Handover state
-		NewState  enums.NamespaceState
+		NewState  enums.ReplicationState
 	}
 
 	updateActiveClusterRequest struct {
@@ -282,7 +281,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	// ** Step 4, initiate handover
 	handoverRequest := updateStateRequest{
 		Namespace: params.Namespace,
-		NewState:  enums.NAMESPACE_STATE_HANDOVER,
+		NewState:  enums.REPLICATION_STATE_HANDOVER,
 	}
 	err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, handoverRequest).Get(ctx, nil)
 	if err != nil {
@@ -318,7 +317,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	// ** Step 7, reset namespace state from Handover -> Registered
 	resetStateRequest := updateStateRequest{
 		Namespace: params.Namespace,
-		NewState:  enums.NAMESPACE_STATE_REGISTERED,
+		NewState:  enums.REPLICATION_STATE_NORMAL,
 	}
 	err = workflow.ExecuteActivity(ctx, a.UpdateNamespaceState, resetStateRequest).Get(ctx, nil)
 	if err != nil {
@@ -577,13 +576,13 @@ func (a *activities) UpdateNamespaceState(ctx context.Context, req updateStateRe
 	if err != nil {
 		return err
 	}
-	if descResp.NamespaceInfo.State == req.NewState {
+	if descResp.ReplicationConfig.State == req.NewState {
 		return nil
 	}
 
 	_, err = a.frontendClient.UpdateNamespace(ctx, &workflowservice.UpdateNamespaceRequest{
 		Namespace: req.Namespace,
-		UpdateInfo: &apinamespace.UpdateNamespaceInfo{
+		ReplicationConfig: &apireplication.NamespaceReplicationConfig{
 			State: req.NewState,
 		},
 	})
