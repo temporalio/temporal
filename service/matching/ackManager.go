@@ -82,6 +82,8 @@ func (m *ackManager) setReadLevelAfterGap(newReadLevel int64) {
 	defer m.Unlock()
 	if m.ackLevel == m.readLevel {
 		// This is called after we read a range and find no tasks. The range we read was m.readLevel to newReadLevel.
+		// (We know this because nothing should change m.readLevel except the getTasksPump loop itself, after initialization.
+		// And getTasksPump doesn't start until it gets a signal from taskWriter that it's initialized the levels.)
 		// If we've acked all tasks up to m.readLevel, and there are no tasks between that and newReadLevel, then we've
 		// acked all tasks up to newReadLevel too. This lets us advance the ack level on a task queue with no activity
 		// but where the rangeid has moved higher, to prevent excessive reads on the next load.
@@ -97,7 +99,7 @@ func (m *ackManager) getAckLevel() int64 {
 }
 
 // Moves ack level to the new level if it is higher than the current one.
-// Also updates the read level it is lower than the ackLevel.
+// Also updates the read level if it is lower than the ackLevel.
 func (m *ackManager) setAckLevel(ackLevel int64) {
 	m.Lock()
 	defer m.Unlock()
