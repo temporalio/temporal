@@ -158,7 +158,7 @@ Loop:
 			}
 
 			if len(tasks) == 0 {
-				tr.tlMgr.taskAckManager.setReadLevel(readLevel)
+				tr.tlMgr.taskAckManager.setReadLevelAfterGap(readLevel)
 				if !isReadBatchDone {
 					tr.Signal()
 				}
