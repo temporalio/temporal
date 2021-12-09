@@ -481,7 +481,7 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 
 	newHandoverNamespaces := make(map[string]struct{})
 	for _, ns := range namespaces {
-		if ns.IsGlobalNamespace() && ns.State() == enums.NAMESPACE_STATE_HANDOVER {
+		if ns.IsGlobalNamespace() && ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
 			nsName := ns.Name().String()
 			newHandoverNamespaces[nsName] = struct{}{}
 			if handover, ok := s.handoverNamespaces[nsName]; ok {
