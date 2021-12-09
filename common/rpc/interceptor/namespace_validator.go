@@ -65,6 +65,9 @@ var (
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
 		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
 	}
+	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
+	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
+
 	allowedMethodsDuringHandover = map[string]struct{}{
 		"DescribeNamespace":                {},
 		"UpdateNamespace":                  {},
@@ -72,8 +75,6 @@ var (
 		"ReplicateEventsV2":                {},
 		"GetWorkflowExecutionRawHistoryV2": {},
 	}
-	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
-	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).Intercept
