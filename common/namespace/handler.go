@@ -815,12 +815,12 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 
 	nsState := existingNamespace.Namespace.Info.State
 	if nsState != enumspb.NAMESPACE_STATE_REGISTERED {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("update ReplicationState is only supported when namespace is in REGISTERED state, current state: %s", nsState.String()))
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("update ReplicationState is only supported when namespace is in %s state, current state: %s", enumspb.NAMESPACE_STATE_REGISTERED.String(), nsState.String()))
 	}
 
 	if nsUpdateRequest.ReplicationConfig.State == enumspb.REPLICATION_STATE_HANDOVER {
 		if !existingNamespace.IsGlobalNamespace {
-			return serviceerror.NewInvalidArgument("REPLICATION_STATE_HANDOVER can only be set for global namespace")
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s can only be set for global namespace", enumspb.REPLICATION_STATE_HANDOVER))
 		}
 		// verify namespace has more than 1 replication clusters
 		replicationClusterCount := len(existingNamespace.Namespace.ReplicationConfig.Clusters)
@@ -828,7 +828,7 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 			replicationClusterCount = len(nsUpdateRequest.ReplicationConfig.Clusters)
 		}
 		if replicationClusterCount < 2 {
-			return serviceerror.NewInvalidArgument("REPLICATION_STATE_HANDOVER require more than one replication clusters")
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s require more than one replication clusters", enumspb.REPLICATION_STATE_HANDOVER))
 		}
 	}
 	return nil

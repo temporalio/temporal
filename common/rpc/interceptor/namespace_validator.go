@@ -65,7 +65,7 @@ var (
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
 		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
 	}
-	allowedMethodsDuringHandover = map[string]struct{} {
+	allowedMethodsDuringHandover = map[string]struct{}{
 		"DescribeNamespace":                {},
 		"UpdateNamespace":                  {},
 		"GetReplicationMessages":           {},
