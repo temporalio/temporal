@@ -1678,16 +1678,13 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 			Input:             signalInput,
 			ChildWorkflowOnly: childWorkflowOnly,
 			Header:            signalHeader,
+			Control:           control,
 		}},
 	}
 	si := &persistencespb.SignalInfo{
 		Version:     event.GetVersion(),
 		InitiatedId: event.GetEventId(),
 		RequestId:   signalRequestID,
-		Name:        signalName,
-		Input:       signalInput,
-		Control:     control,
-		Header:      signalHeader,
 	}
 
 	// the cancellation request ID is generated inside, cannot assert equal

@@ -2638,16 +2638,11 @@ func (e *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEven
 
 	// TODO: Consider also writing signalRequestID to history event
 	initiatedEventID := event.GetEventId()
-	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	si := &persistencespb.SignalInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventBatchId: firstEventID,
 		InitiatedId:           initiatedEventID,
 		RequestId:             signalRequestID,
-		Name:                  attributes.GetSignalName(),
-		Input:                 attributes.Input,
-		Control:               attributes.Control,
-		Header:                attributes.Header,
 	}
 
 	e.pendingSignalInfoIDs[si.InitiatedId] = si

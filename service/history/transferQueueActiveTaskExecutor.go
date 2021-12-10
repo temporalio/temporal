@@ -485,6 +485,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	if err != nil {
 		return err
 	}
+	attributes := initiatedEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
 	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
 	if err != nil {
@@ -501,11 +502,10 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			targetNamespace,
 			task.TargetWorkflowID,
 			task.TargetRunID,
-			signalInfo.Control,
+			attributes.Control,
 		)
 	}
 
-	attributes := initiatedEvent.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	if err = t.signalExternalExecutionWithRetry(
 		task,
 		targetNamespace,
@@ -526,7 +526,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			targetNamespace,
 			task.TargetWorkflowID,
 			task.TargetRunID,
-			signalInfo.Control,
+			attributes.Control,
 		)
 	}
 
@@ -536,7 +536,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		targetNamespace,
 		task.TargetWorkflowID,
 		task.TargetRunID,
-		signalInfo.Control,
+		attributes.Control,
 	)
 	if err != nil {
 		return err
@@ -625,6 +625,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if err != nil {
 		return err
 	}
+	attributes := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 
 	// ChildExecution already started, just create WorkflowTask and complete transfer task
 	if childInfo.StartedId != common.EmptyEventID {
@@ -639,7 +640,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return t.createFirstWorkflowTask(task.TargetNamespaceID, childExecution)
 	}
 
-	attributes := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	childRunID, err := t.startWorkflowWithRetry(
 		task,
 		parentNamespaceName,

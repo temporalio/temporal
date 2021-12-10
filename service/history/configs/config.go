@@ -40,9 +40,6 @@ type Config struct {
 	NumberOfShards             int32
 	DefaultVisibilityIndexName string
 
-	// TODO remove this dynamic flag in 1.14.x
-	EnableDBRecordVersion dynamicconfig.BoolPropertyFn
-
 	RPS                     dynamicconfig.IntPropertyFn
 	MaxIDLengthLimit        dynamicconfig.IntPropertyFn
 	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
