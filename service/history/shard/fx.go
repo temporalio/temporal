@@ -29,7 +29,7 @@ var Module = fx.Options(
 func ShardControllerProvider(
 	config *configs.Config,
 	logger log.Logger,
-	throttledLogger log.Logger,
+	throttledLogger resource.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	persistenceShardManager persistence.ShardManager,
 	clientBean client.Bean,
