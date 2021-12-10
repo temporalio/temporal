@@ -10,7 +10,6 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -45,15 +44,14 @@ func ShardControllerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider resource.HostInfoProvider,
 ) *ControllerImpl {
-	hostIdentity := hostInfoProvider.HostInfo().Identity()
 	return &ControllerImpl{
 		status:                      common.DaemonStatusInitialized,
 		membershipUpdateCh:          make(chan *membership.ChangedEvent, 10),
 		historyShards:               make(map[int32]*ContextImpl),
 		shutdownCh:                  make(chan struct{}),
 		logger:                      logger,
-		contextTaggedLogger:         log.With(logger, tag.ComponentShardController, tag.Address(hostIdentity)),
-		throttledLogger:             log.With(throttledLogger, tag.ComponentShardController, tag.Address(hostIdentity)),
+		contextTaggedLogger:         logger,          // will add tags in Start
+		throttledLogger:             throttledLogger, // will add tags in Start
 		config:                      config,
 		metricsScope:                metricsClient.Scope(metrics.HistoryShardControllerScope),
 		persistenceExecutionManager: persistenceExecutionManager,

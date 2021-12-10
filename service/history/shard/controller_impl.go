@@ -101,6 +101,10 @@ func (c *ControllerImpl) Start() {
 		return
 	}
 
+	hostIdentity := c.hostInfoProvider.HostInfo().Identity()
+	c.contextTaggedLogger = log.With(c.logger, tag.ComponentShardController, tag.Address(hostIdentity))
+	c.throttledLogger = log.With(c.throttledLogger, tag.ComponentShardController, tag.Address(hostIdentity))
+
 	c.acquireShards()
 	c.shutdownWG.Add(1)
 	go c.shardManagementPump()
