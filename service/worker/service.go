@@ -49,6 +49,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/batcher"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
@@ -85,11 +86,12 @@ type (
 
 		metricsScope tally.Scope
 
-		status    int32
-		stopC     chan struct{}
-		sdkClient sdkclient.Client
-		esClient  esclient.Client
-		config    *Config
+		status           int32
+		stopC            chan struct{}
+		sdkClientFactory sdk.ClientFactory
+		sdkSystemClient  sdkclient.Client
+		esClient         esclient.Client
+		config           *Config
 
 		manager *workerManager
 	}
@@ -111,7 +113,8 @@ type (
 func NewService(
 	logger resource.SnTaggedLogger,
 	serviceConfig *Config,
-	sdkClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
+	sdkSystemClient sdkclient.Client,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
@@ -136,12 +139,12 @@ func NewService(
 	}
 
 	return &Service{
-		status:    common.DaemonStatusInitialized,
-		config:    serviceConfig,
-		sdkClient: sdkClient,
-		esClient:  esClient,
-		stopC:     make(chan struct{}),
-
+		status:                    common.DaemonStatusInitialized,
+		config:                    serviceConfig,
+		sdkSystemClient:           sdkSystemClient,
+		sdkClientFactory:          sdkClientFactory,
+		esClient:                  esClient,
+		stopC:                     make(chan struct{}),
 		logger:                    logger,
 		archivalMetadata:          archivalMetadata,
 		clusterMetadata:           clusterMetadata,
@@ -386,11 +389,11 @@ func (s *Service) Stop() {
 
 func (s *Service) startParentClosePolicyProcessor() {
 	params := &parentclosepolicy.BootstrapParams{
-		Config:        *s.config.ParentCloseCfg,
-		ServiceClient: s.sdkClient,
-		MetricsClient: s.metricsClient,
-		Logger:        s.logger,
-		ClientBean:    s.clientBean,
+		Config:          *s.config.ParentCloseCfg,
+		SdkSystemClient: s.sdkSystemClient,
+		MetricsClient:   s.metricsClient,
+		Logger:          s.logger,
+		ClientBean:      s.clientBean,
 	}
 	processor := parentclosepolicy.New(params)
 	if err := processor.Start(); err != nil {
@@ -402,14 +405,12 @@ func (s *Service) startParentClosePolicyProcessor() {
 }
 
 func (s *Service) startBatcher() {
-	params := &batcher.BootstrapParams{
-		Config:        *s.config.BatcherCfg,
-		ServiceClient: s.sdkClient,
-		MetricsClient: s.metricsClient,
-		Logger:        s.logger,
-		ClientBean:    s.clientBean,
-	}
-	if err := batcher.New(params).Start(); err != nil {
+	if err := batcher.New(
+		s.config.BatcherCfg,
+		s.sdkSystemClient,
+		s.metricsClient,
+		s.logger,
+		s.sdkClientFactory).Start(); err != nil {
 		s.logger.Fatal(
 			"error starting batcher",
 			tag.Error(err),
@@ -421,7 +422,7 @@ func (s *Service) startScanner() {
 	sc := scanner.New(
 		s.logger,
 		s.config.ScannerCfg,
-		s.sdkClient,
+		s.sdkSystemClient,
 		s.metricsClient,
 		s.executionManager,
 		s.taskManager,
@@ -455,7 +456,7 @@ func (s *Service) startReplicator() {
 
 func (s *Service) startArchiver() {
 	bc := &archiver.BootstrapContainer{
-		SdkClient:        s.sdkClient,
+		SdkSystemClient:  s.sdkSystemClient,
 		MetricsClient:    s.metricsClient,
 		Logger:           s.logger,
 		HistoryV2Manager: s.executionManager,

@@ -160,12 +160,7 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	}
 
 	ctx := context.Background()
-	m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String(),
-		opt...).Record(ctx, value, m.labels...)
-
-	m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String(),
-		opt...,
-	).Record(ctx, value, m.labels...)
+	m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String(), opt...).Record(ctx, value, m.labels...)
 
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
 		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String(), opt...).Record(
@@ -175,11 +170,11 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 
 	switch {
 	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String()).Record(
+		m.rootScope.reporter.GetMeterMust().NewInt64Histogram(def.metricRollupName.String(), opt...).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	case m.isNamespaceTagged:
-		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String()).Record(
+		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String(), opt...).Record(
 			ctx,
 			value,
 			m.taggedString(map[string]string{namespace: namespaceAllValue}).labels...,

@@ -2468,7 +2468,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		MutableStateChecksumInvalidated:                   NewCounterDef("mutable_state_checksum_invalidated"),
 
 		ElasticsearchBulkProcessorRequests:         NewCounterDef("elasticsearch_bulk_processor_requests"),
-		ElasticsearchBulkProcessorQueuedRequests:   NewTimerDef("elasticsearch_bulk_processor_queued_requests"),
+		ElasticsearchBulkProcessorQueuedRequests:   NewDimensionlessHistogramDef("elasticsearch_bulk_processor_queued_requests"),
 		ElasticsearchBulkProcessorRetries:          NewCounterDef("elasticsearch_bulk_processor_retries"),
 		ElasticsearchBulkProcessorFailures:         NewCounterDef("elasticsearch_bulk_processor_errors"),
 		ElasticsearchBulkProcessorCorruptedData:    NewCounterDef("elasticsearch_bulk_processor_corrupted_data"),
@@ -2477,7 +2477,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ElasticsearchBulkProcessorCommitLatency:    NewTimerDef("elasticsearch_bulk_processor_commit_latency"),
 		ElasticsearchBulkProcessorWaitAddLatency:   NewTimerDef("elasticsearch_bulk_processor_wait_add_latency"),
 		ElasticsearchBulkProcessorWaitStartLatency: NewTimerDef("elasticsearch_bulk_processor_wait_start_latency"),
-		ElasticsearchBulkProcessorBulkSize:         NewBytesHistogramDef("elasticsearch_bulk_processor_bulk_size"),
+		ElasticsearchBulkProcessorBulkSize:         NewDimensionlessHistogramDef("elasticsearch_bulk_processor_bulk_size"),
 		ElasticsearchBulkProcessorDeadlock:         NewCounterDef("elasticsearch_bulk_processor_deadlock"),
 	},
 	Matching: {
@@ -2602,7 +2602,7 @@ func NewRollupTimerDef(name string, rollupName string) metricDefinition {
 }
 
 func NewBytesHistogramDef(name string) metricDefinition {
-	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Milliseconds}
+	return metricDefinition{metricName: MetricName(name), metricType: Histogram, unit: Bytes}
 }
 
 func NewDimensionlessHistogramDef(name string) metricDefinition {

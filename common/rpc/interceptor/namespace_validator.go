@@ -55,7 +55,7 @@ type (
 
 var (
 	ErrNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
-	errNamespaceHandover            = serviceerror.NewUnavailable(fmt.Sprintf("Namespace in %s state.", enumspb.NAMESPACE_STATE_HANDOVER.String()))
+	errNamespaceHandover            = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
 	errTaskTokenNotSet              = serviceerror.NewInvalidArgument("Task token not set on request.")
 	errTaskTokenNamespaceMismatch   = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 	errInvalidNamespaceStateMessage = "Namespace has invalid state: %s. Must be %s."
@@ -63,14 +63,18 @@ var (
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
 		"SignalWithStartWorkflowExecution": {enumspb.NAMESPACE_STATE_REGISTERED},
-		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_HANDOVER},
-		"UpdateNamespace":                  {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
-		"GetReplicationMessages":           {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
-		"ReplicateEventsV2":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
-		"GetWorkflowExecutionRawHistoryV2": {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_HANDOVER},
+		"DescribeNamespace":                {enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED, enumspb.NAMESPACE_STATE_DELETED},
 	}
 	// If API name is not in the map above, these are allowed states for all APIs that have `namespace` or `task_token` field in the request object.
 	defaultAllowedNamespaceStates = []enumspb.NamespaceState{enumspb.NAMESPACE_STATE_REGISTERED, enumspb.NAMESPACE_STATE_DEPRECATED}
+
+	allowedMethodsDuringHandover = map[string]struct{}{
+		"DescribeNamespace":                {},
+		"UpdateNamespace":                  {},
+		"GetReplicationMessages":           {},
+		"ReplicateEventsV2":                {},
+		"GetWorkflowExecutionRawHistoryV2": {},
+	}
 )
 
 var _ grpc.UnaryServerInterceptor = (*NamespaceValidatorInterceptor)(nil).Intercept
@@ -98,6 +102,10 @@ func (ni *NamespaceValidatorInterceptor) Intercept(
 	}
 
 	err = ni.checkNamespaceState(namespaceEntry, info.FullMethod)
+	if err != nil {
+		return nil, err
+	}
+	err = ni.checkReplicationState(namespaceEntry, info.FullMethod)
 	if err != nil {
 		return nil, err
 	}
@@ -226,11 +234,24 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 	return ni.stateNotAllowedError(namespaceEntry.State(), allowedStates)
 }
 
-func (ni *NamespaceValidatorInterceptor) stateNotAllowedError(currentState enumspb.NamespaceState, allowedStates []enumspb.NamespaceState) error {
-	if currentState == enumspb.NAMESPACE_STATE_HANDOVER {
-		return errNamespaceHandover
+func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *namespace.Namespace, fullMethod string) error {
+	if namespaceEntry == nil {
+		return nil
+	}
+	if namespaceEntry.ReplicationState() != enumspb.REPLICATION_STATE_HANDOVER {
+		return nil
 	}
 
+	_, methodName := splitMethodName(fullMethod)
+
+	if _, ok := allowedMethodsDuringHandover[methodName]; ok {
+		return nil
+	}
+
+	return errNamespaceHandover
+}
+
+func (ni *NamespaceValidatorInterceptor) stateNotAllowedError(currentState enumspb.NamespaceState, allowedStates []enumspb.NamespaceState) error {
 	var allowedStatesStr []string
 	for _, allowedState := range allowedStates {
 		allowedStatesStr = append(allowedStatesStr, allowedState.String())
