@@ -675,17 +675,19 @@ type (
 
 	// GetTasksRequest is used to retrieve tasks of a task queue
 	GetTasksRequest struct {
-		NamespaceID  string
-		TaskQueue    string
-		TaskType     enumspb.TaskQueueType
-		ReadLevel    int64  // range exclusive
-		MaxReadLevel *int64 // optional: range inclusive when specified
-		BatchSize    int
+		NamespaceID   string
+		TaskQueue     string
+		TaskType      enumspb.TaskQueueType
+		MinTaskID     int64 // exclusive
+		MaxTaskID     int64 // inclusive
+		PageSize      int
+		NextPageToken []byte
 	}
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*persistencespb.AllocatedTaskInfo
+		Tasks         []*persistencespb.AllocatedTaskInfo
+		NextPageToken []byte
 	}
 
 	// CompleteTaskRequest is used to complete a task

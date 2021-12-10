@@ -25,6 +25,7 @@
 package taskqueue
 
 import (
+	"math"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
@@ -59,8 +60,9 @@ func (s *Scavenger) getTasks(key *p.TaskQueueKey, batchSize int) (*p.GetTasksRes
 			NamespaceID: key.NamespaceID,
 			TaskQueue:   key.Name,
 			TaskType:    key.TaskType,
-			ReadLevel:   -1, // get the first N tasks sorted by taskID
-			BatchSize:   batchSize,
+			MinTaskID:   -1, // get the first N tasks sorted by taskID
+			MaxTaskID:   math.MaxInt64,
+			PageSize:    batchSize,
 		})
 		return err
 	})

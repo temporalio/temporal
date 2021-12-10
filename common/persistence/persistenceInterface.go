@@ -285,7 +285,8 @@ type (
 	}
 
 	InternalGetTasksResponse struct {
-		Tasks []*commonpb.DataBlob
+		Tasks         []*commonpb.DataBlob
+		NextPageToken []byte
 	}
 
 	InternalListTaskQueueResponse struct {

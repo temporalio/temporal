@@ -1493,12 +1493,12 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 
 	maxTaskID := request.GetMaxTaskId()
 	req := &persistence.GetTasksRequest{
-		NamespaceID:  namespaceID.String(),
-		TaskQueue:    request.GetTaskQueue(),
-		TaskType:     request.GetTaskQueueType(),
-		ReadLevel:    request.GetMinTaskId(),
-		MaxReadLevel: &maxTaskID,
-		BatchSize:    int(request.GetBatchSize()),
+		NamespaceID: namespaceID.String(),
+		TaskQueue:   request.GetTaskQueue(),
+		TaskType:    request.GetTaskQueueType(),
+		MinTaskID:   request.GetMinTaskId(),
+		MaxTaskID:   maxTaskID,
+		PageSize:    int(request.GetBatchSize()),
 	}
 
 	resp, err := taskMgr.GetTasks(req)

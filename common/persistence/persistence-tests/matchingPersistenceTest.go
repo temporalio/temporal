@@ -26,6 +26,7 @@ package persistencetests
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -170,8 +171,9 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 				NamespaceID: namespaceID,
 				TaskQueue:   taskQueue,
 				TaskType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-				BatchSize:   tc.batchSz,
-				ReadLevel:   tc.readLevel,
+				PageSize:    tc.batchSz,
+				MinTaskID:   tc.readLevel,
+				MaxTaskID:   math.MaxInt64,
 			})
 			s.NoError(err)
 			s.Equal(len(tc.taskIDs), len(response.Tasks), "wrong number of tasks")

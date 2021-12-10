@@ -146,12 +146,12 @@ func (db *taskQueueDB) CreateTasks(tasks []*persistencespb.AllocatedTaskInfo) (*
 // GetTasks returns a batch of tasks between the given range
 func (db *taskQueueDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(&persistence.GetTasksRequest{
-		NamespaceID:  db.namespaceID.String(),
-		TaskQueue:    db.taskQueueName,
-		TaskType:     db.taskType,
-		BatchSize:    batchSize,
-		ReadLevel:    minTaskID,  // exclusive
-		MaxReadLevel: &maxTaskID, // inclusive
+		NamespaceID: db.namespaceID.String(),
+		TaskQueue:   db.taskQueueName,
+		TaskType:    db.taskType,
+		PageSize:    batchSize,
+		MinTaskID:   minTaskID, // exclusive
+		MaxTaskID:   maxTaskID, // inclusive
 	})
 }
 
