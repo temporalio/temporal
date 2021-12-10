@@ -68,6 +68,7 @@ type (
 	Context interface {
 		GetNamespace() namespace.Name
 		GetNamespaceID() namespace.ID
+		GetNamespaceEntry() (*namespace.Namespace, error)
 		GetExecution() *commonpb.WorkflowExecution
 
 		LoadWorkflowExecution() (MutableState, error)
@@ -232,6 +233,10 @@ func (c *ContextImpl) GetNamespace() namespace.Name {
 		return ""
 	}
 	return namespaceEntry.Name()
+}
+
+func (c *ContextImpl) GetNamespaceEntry() (*namespace.Namespace, error) {
+	return c.shard.GetNamespaceRegistry().GetNamespaceByID(c.namespaceID)
 }
 
 func (c *ContextImpl) GetHistorySize() int64 {
@@ -425,7 +430,11 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyWorkflowSnapshotTasks(engine, newWorkflow)
+	nsEntry, err := c.GetNamespaceEntry()
+	if err != nil {
+		return err
+	}
+	NotifyWorkflowSnapshotTasks(engine, newWorkflow, nsEntry.IsGlobalNamespace())
 	emitStateTransitionCount(c.metricsClient, newMutableState)
 
 	return nil
