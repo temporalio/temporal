@@ -1966,7 +1966,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 				tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
 
 			return nil, &persistence.ConditionFailedError{
-				Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskQueue: %v, taskType: %v, rangeID: %v, db rangeID: %v",
+				Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
 					taskQueue, taskType, rangeID, tlm.rangeID),
 			}
 		}

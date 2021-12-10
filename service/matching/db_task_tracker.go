@@ -39,7 +39,7 @@ const (
 
 type (
 	dbTaskTracker struct {
-		taskQueueKey TaskQueueKey
+		taskQueueKey persistence.TaskQueueKey
 		store        persistence.TaskManager
 		logger       log.Logger
 
@@ -51,7 +51,7 @@ type (
 )
 
 func newDBTaskTracker(
-	taskQueueKey TaskQueueKey,
+	taskQueueKey persistence.TaskQueueKey,
 	store persistence.TaskManager,
 	ackedTaskID int64,
 	logger log.Logger,
@@ -124,9 +124,9 @@ func (t *dbTaskTracker) getPaginationFn(
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 		response, err := t.store.GetTasks(&persistence.GetTasksRequest{
-			NamespaceID:        t.taskQueueKey.NamespaceID.String(),
+			NamespaceID:        t.taskQueueKey.NamespaceID,
 			TaskQueue:          t.taskQueueKey.TaskQueueName,
-			TaskType:           t.taskQueueKey.TaskType,
+			TaskType:           t.taskQueueKey.TaskQueueType,
 			MinTaskIDExclusive: minTaskID, // exclusive
 			MaxTaskIDInclusive: maxTaskID, // inclusive
 			PageSize:           dbTaskTrackerPageSize,
