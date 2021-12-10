@@ -188,9 +188,6 @@ func NewHandler(args NewHandlerArgs) *Handler {
 		controller:                  args.ShardController,
 	}
 
-	// fx can't create a cycle, so fix it up manually
-	handler.controller.SetEngineFactory(handler)
-
 	// prevent us from trying to serve requests before shard controller is started and ready
 	handler.startWG.Add(1)
 	return handler

@@ -101,6 +101,10 @@ func (c *ControllerImpl) Start() {
 		return
 	}
 
+	if c.engineFactory == nil {
+		panic("engineFactory was not injected")
+	}
+
 	hostIdentity := c.hostInfoProvider.HostInfo().Identity()
 	c.contextTaggedLogger = log.With(c.logger, tag.ComponentShardController, tag.Address(hostIdentity))
 	c.throttledLogger = log.With(c.throttledLogger, tag.ComponentShardController, tag.Address(hostIdentity))

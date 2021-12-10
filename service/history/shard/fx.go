@@ -3,6 +3,8 @@
 package shard
 
 import (
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -18,7 +20,6 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
-	"go.uber.org/fx"
 )
 
 var Module = fx.Options(

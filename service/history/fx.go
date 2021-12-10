@@ -80,6 +80,7 @@ var Module = fx.Options(
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
+	fx.Invoke(func(h *Handler, c *shard.ControllerImpl) { c.SetEngineFactory(h) }), // create cycle
 )
 
 func ServiceProvider(
@@ -277,5 +278,4 @@ func ServiceLifetimeHooks(
 			},
 		},
 	)
-
 }
