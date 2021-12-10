@@ -76,7 +76,6 @@ type (
 	Handler struct {
 		status int32
 
-		controller                  *shard.ControllerImpl
 		tokenSerializer             common.TaskTokenSerializer
 		startWG                     sync.WaitGroup
 		config                      *configs.Config
@@ -104,6 +103,7 @@ type (
 		clusterMetadata             cluster.Metadata
 		archivalMetadata            archiver.ArchivalMetadata
 		hostInfoProvider            resource.HostInfoProvider
+		controller                  *shard.ControllerImpl
 	}
 
 	NewHandlerArgs struct {
