@@ -85,6 +85,12 @@ func (t *dbTaskTracker) ackTask(taskID int64) {
 	t.tasks[taskID] = true
 }
 
+// moveAckedTaskID tries to advance the acked task ID
+// e.g. assuming task ID & whether the task is completed
+//  10 -> true
+//  12 -> true
+//  15 -> false
+// the acked task ID can be set to 12, meaning task with ID <= 12 are finished
 func (t *dbTaskTracker) moveAckedTaskID() int64 {
 	t.Lock()
 	defer t.Unlock()
@@ -118,13 +124,13 @@ func (t *dbTaskTracker) getPaginationFn(
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 		response, err := t.store.GetTasks(&persistence.GetTasksRequest{
-			NamespaceID:   t.taskQueueKey.NamespaceID.String(),
-			TaskQueue:     t.taskQueueKey.TaskQueueName,
-			TaskType:      t.taskQueueKey.TaskType,
-			MinTaskID:     minTaskID, // exclusive
-			MaxTaskID:     maxTaskID, // inclusive
-			PageSize:      dbTaskTrackerPageSize,
-			NextPageToken: paginationToken,
+			NamespaceID:        t.taskQueueKey.NamespaceID.String(),
+			TaskQueue:          t.taskQueueKey.TaskQueueName,
+			TaskType:           t.taskQueueKey.TaskType,
+			MinTaskIDExclusive: minTaskID, // exclusive
+			MaxTaskIDInclusive: maxTaskID, // inclusive
+			PageSize:           dbTaskTrackerPageSize,
+			NextPageToken:      paginationToken,
 		})
 		if err != nil {
 			return nil, nil, err
@@ -142,6 +148,13 @@ func (t *dbTaskTracker) getPaginationFn(
 			t.loadedTaskID = task.GetTaskId()
 			t.tasks[task.GetTaskId()] = false
 		}
+		// special handling max task ID
+		// if there is a task with max task ID
+		//  then t.tasks with maxTaskID is set
+		// if there is no task with max task ID
+		//  then we simply set t.tasks[maxTaskID] = true
+		//  indicating that maxTaskID is already finished
+		//  this will greatly simplify the acked task ID logic
 		if len(token) == 0 {
 			t.loadedTaskID = maxTaskID
 			if _, ok := t.tasks[maxTaskID]; !ok {

@@ -122,7 +122,7 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 		}, nil
 	case sql.ErrNoRows:
 		return nil, serviceerror.NewNotFound(
-			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
+			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskQueueType: %v, Error: %v",
 				request.TaskQueue, request.TaskType, err))
 	default:
 		return nil, serviceerror.NewUnavailable(
@@ -360,7 +360,7 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 	if err != nil {
 		return serviceerror.NewUnavailable(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
 	result, err := m.Db.DeleteFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
@@ -430,8 +430,8 @@ func (m *sqlTaskManager) GetTasks(
 		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 
-	minTaskID := request.MinTaskID
-	maxTaskID := request.MaxTaskID
+	minTaskID := request.MinTaskIDExclusive
+	maxTaskID := request.MaxTaskIDInclusive
 	if len(request.NextPageToken) != 0 {
 		token, err := deserializeMatchingTaskPageToken(request.NextPageToken)
 		if err != nil {
@@ -484,7 +484,7 @@ func (m *sqlTaskManager) CompleteTask(
 	}
 
 	taskID := request.TaskID
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
 	_, err = m.Db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
@@ -521,7 +521,7 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 	return int(nRows), nil
 }
 
-// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, Name and TaskQueueType
+// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
 func (m *sqlTaskManager) calculateTaskQueueHash(
 	namespaceID primitives.UUID,
 	name string,
@@ -530,7 +530,7 @@ func (m *sqlTaskManager) calculateTaskQueueHash(
 	return farm.Fingerprint32(m.taskQueueId(namespaceID, name, taskType))
 }
 
-// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, Name and TaskQueueType
+// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
 func (m *sqlTaskManager) taskQueueIdAndHash(
 	namespaceID primitives.UUID,
 	name string,

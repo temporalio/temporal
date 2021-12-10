@@ -1902,13 +1902,13 @@ func (m *testTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueRe
 
 // CompleteTask provides a mock function with given fields: request
 func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
-	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.Name(request.TaskQueue.Name), tag.WorkflowTaskQueueType(request.TaskQueue.TaskType))
+	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.Name(request.TaskQueue.TaskQueueName), tag.WorkflowTaskQueueType(request.TaskQueue.TaskQueueType))
 	if request.TaskID <= 0 {
 		panic(fmt.Errorf("invalid taskID=%v", request.TaskID))
 	}
 
 	tli := request.TaskQueue
-	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.NamespaceID), tli.Name, tli.TaskType))
+	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.NamespaceID), tli.TaskQueueName, tli.TaskQueueType))
 
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -1938,7 +1938,7 @@ func (m *testTaskManager) ListTaskQueue(_ *persistence.ListTaskQueueRequest) (*p
 func (m *testTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueRequest) error {
 	m.Lock()
 	defer m.Unlock()
-	key := newTestTaskQueueID(namespace.ID(request.TaskQueue.NamespaceID), request.TaskQueue.Name, request.TaskQueue.TaskType)
+	key := newTestTaskQueueID(namespace.ID(request.TaskQueue.NamespaceID), request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
 	delete(m.taskQueues, *key)
 	return nil
 }
@@ -1990,7 +1990,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 // GetTasks provides a mock function with given fields: request
 func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
-	m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.MinTaskID), tag.ReadLevel(request.MaxTaskID))
+	m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.MinTaskIDExclusive), tag.ReadLevel(request.MaxTaskIDInclusive))
 
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
 	tlm.Lock()
@@ -2000,10 +2000,10 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	it := tlm.tasks.Iterator()
 	for it.Next() {
 		taskID := it.Key().(int64)
-		if taskID <= request.MinTaskID {
+		if taskID <= request.MinTaskIDExclusive {
 			continue
 		}
-		if taskID > request.MaxTaskID {
+		if taskID > request.MaxTaskIDInclusive {
 			break
 		}
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))

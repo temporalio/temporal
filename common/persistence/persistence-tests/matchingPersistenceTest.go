@@ -168,12 +168,12 @@ func (s *MatchingPersistenceSuite) TestGetTasksWithNoMaxReadLevel() {
 	for _, tc := range testCases {
 		s.Run(fmt.Sprintf("tc_%v_%v", tc.batchSz, tc.readLevel), func() {
 			response, err := s.TaskMgr.GetTasks(&p.GetTasksRequest{
-				NamespaceID: namespaceID,
-				TaskQueue:   taskQueue,
-				TaskType:    enumspb.TASK_QUEUE_TYPE_ACTIVITY,
-				PageSize:    tc.batchSz,
-				MinTaskID:   tc.readLevel,
-				MaxTaskID:   math.MaxInt64,
+				NamespaceID:        namespaceID,
+				TaskQueue:          taskQueue,
+				TaskType:           enumspb.TASK_QUEUE_TYPE_ACTIVITY,
+				PageSize:           tc.batchSz,
+				MinTaskIDExclusive: tc.readLevel,
+				MaxTaskIDInclusive: math.MaxInt64,
 			})
 			s.NoError(err)
 			s.Equal(len(tc.taskIDs), len(response.Tasks), "wrong number of tasks")
@@ -395,9 +395,9 @@ func (s *MatchingPersistenceSuite) deleteAllTaskQueue() {
 			it := i.Data
 			err = s.TaskMgr.DeleteTaskQueue(&p.DeleteTaskQueueRequest{
 				TaskQueue: &p.TaskQueueKey{
-					NamespaceID: it.GetNamespaceId(),
-					Name:        it.Name,
-					TaskType:    it.TaskType,
+					NamespaceID:   it.GetNamespaceId(),
+					TaskQueueName: it.Name,
+					TaskQueueType: it.TaskType,
 				},
 				RangeID: i.RangeID,
 			})

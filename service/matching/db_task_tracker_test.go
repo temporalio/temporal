@@ -104,13 +104,13 @@ func (s *dbTaskTrackerSuite) TearDownTest() {
 
 func (s *dbTaskTrackerSuite) TestIteration_Error() {
 	s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-		NamespaceID:   s.namespaceID.String(),
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskType,
-		PageSize:      dbTaskTrackerPageSize,
-		MinTaskID:     s.ackedTaskID,
-		MaxTaskID:     s.maxTaskID,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID.String(),
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskType,
+		PageSize:           dbTaskTrackerPageSize,
+		MinTaskIDExclusive: s.ackedTaskID,
+		MaxTaskIDInclusive: s.maxTaskID,
+		NextPageToken:      nil,
 	}).Return(nil, serviceerror.NewInternal("random error"))
 
 	iter := s.taskTracker.taskIterator(s.maxTaskID)
@@ -136,34 +136,34 @@ func (s *dbTaskTrackerSuite) TestIteration_ErrorRetry() {
 	}
 	gomock.InOrder(
 		s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-			NamespaceID:   s.namespaceID.String(),
-			TaskQueue:     s.taskQueueName,
-			TaskType:      s.taskType,
-			PageSize:      dbTaskTrackerPageSize,
-			MinTaskID:     s.ackedTaskID,
-			MaxTaskID:     s.maxTaskID,
-			NextPageToken: nil,
+			NamespaceID:        s.namespaceID.String(),
+			TaskQueue:          s.taskQueueName,
+			TaskType:           s.taskType,
+			PageSize:           dbTaskTrackerPageSize,
+			MinTaskIDExclusive: s.ackedTaskID,
+			MaxTaskIDInclusive: s.maxTaskID,
+			NextPageToken:      nil,
 		}).Return(&persistence.GetTasksResponse{
 			Tasks:         tasks1,
 			NextPageToken: token,
 		}, nil),
 		s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-			NamespaceID:   s.namespaceID.String(),
-			TaskQueue:     s.taskQueueName,
-			TaskType:      s.taskType,
-			PageSize:      dbTaskTrackerPageSize,
-			MinTaskID:     s.ackedTaskID,
-			MaxTaskID:     s.maxTaskID,
-			NextPageToken: token,
+			NamespaceID:        s.namespaceID.String(),
+			TaskQueue:          s.taskQueueName,
+			TaskType:           s.taskType,
+			PageSize:           dbTaskTrackerPageSize,
+			MinTaskIDExclusive: s.ackedTaskID,
+			MaxTaskIDInclusive: s.maxTaskID,
+			NextPageToken:      token,
 		}).Return(nil, serviceerror.NewInternal("some random error")),
 		s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-			NamespaceID:   s.namespaceID.String(),
-			TaskQueue:     s.taskQueueName,
-			TaskType:      s.taskType,
-			PageSize:      dbTaskTrackerPageSize,
-			MinTaskID:     taskID1,
-			MaxTaskID:     s.maxTaskID,
-			NextPageToken: nil,
+			NamespaceID:        s.namespaceID.String(),
+			TaskQueue:          s.taskQueueName,
+			TaskType:           s.taskType,
+			PageSize:           dbTaskTrackerPageSize,
+			MinTaskIDExclusive: taskID1,
+			MaxTaskIDInclusive: s.maxTaskID,
+			NextPageToken:      nil,
 		}).Return(&persistence.GetTasksResponse{
 			Tasks:         tasks2,
 			NextPageToken: nil,
@@ -220,13 +220,13 @@ func (s *dbTaskTrackerSuite) TestIteration_TwoIter() {
 	maxTaskID2 := s.maxTaskID
 
 	s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-		NamespaceID:   s.namespaceID.String(),
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskType,
-		PageSize:      dbTaskTrackerPageSize,
-		MinTaskID:     s.ackedTaskID,
-		MaxTaskID:     maxTaskID1,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID.String(),
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskType,
+		PageSize:           dbTaskTrackerPageSize,
+		MinTaskIDExclusive: s.ackedTaskID,
+		MaxTaskIDInclusive: maxTaskID1,
+		NextPageToken:      nil,
 	}).Return(&persistence.GetTasksResponse{
 		Tasks:         tasks1,
 		NextPageToken: nil,
@@ -250,13 +250,13 @@ func (s *dbTaskTrackerSuite) TestIteration_TwoIter() {
 	}, s.taskTracker.tasks)
 
 	s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-		NamespaceID:   s.namespaceID.String(),
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskType,
-		PageSize:      dbTaskTrackerPageSize,
-		MinTaskID:     s.taskTracker.loadedTaskID,
-		MaxTaskID:     maxTaskID2,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID.String(),
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskType,
+		PageSize:           dbTaskTrackerPageSize,
+		MinTaskIDExclusive: s.taskTracker.loadedTaskID,
+		MaxTaskIDInclusive: maxTaskID2,
+		NextPageToken:      nil,
 	}).Return(&persistence.GetTasksResponse{
 		Tasks:         tasks2,
 		NextPageToken: nil,
@@ -300,25 +300,25 @@ func (s *dbTaskTrackerSuite) TestIteration_Pagination() {
 
 	gomock.InOrder(
 		s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-			NamespaceID:   s.namespaceID.String(),
-			TaskQueue:     s.taskQueueName,
-			TaskType:      s.taskType,
-			PageSize:      dbTaskTrackerPageSize,
-			MinTaskID:     s.ackedTaskID,
-			MaxTaskID:     s.maxTaskID,
-			NextPageToken: nil,
+			NamespaceID:        s.namespaceID.String(),
+			TaskQueue:          s.taskQueueName,
+			TaskType:           s.taskType,
+			PageSize:           dbTaskTrackerPageSize,
+			MinTaskIDExclusive: s.ackedTaskID,
+			MaxTaskIDInclusive: s.maxTaskID,
+			NextPageToken:      nil,
 		}).Return(&persistence.GetTasksResponse{
 			Tasks:         tasks1,
 			NextPageToken: token,
 		}, nil),
 		s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-			NamespaceID:   s.namespaceID.String(),
-			TaskQueue:     s.taskQueueName,
-			TaskType:      s.taskType,
-			PageSize:      dbTaskTrackerPageSize,
-			MinTaskID:     s.ackedTaskID,
-			MaxTaskID:     s.maxTaskID,
-			NextPageToken: token,
+			NamespaceID:        s.namespaceID.String(),
+			TaskQueue:          s.taskQueueName,
+			TaskType:           s.taskType,
+			PageSize:           dbTaskTrackerPageSize,
+			MinTaskIDExclusive: s.ackedTaskID,
+			MaxTaskIDInclusive: s.maxTaskID,
+			NextPageToken:      token,
 		}).Return(&persistence.GetTasksResponse{
 			Tasks:         tasks2,
 			NextPageToken: nil,
@@ -356,13 +356,13 @@ func (s *dbTaskTrackerSuite) TestIteration_MaxTaskID_Exists() {
 	}
 
 	s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-		NamespaceID:   s.namespaceID.String(),
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskType,
-		PageSize:      dbTaskTrackerPageSize,
-		MinTaskID:     s.ackedTaskID,
-		MaxTaskID:     s.maxTaskID,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID.String(),
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskType,
+		PageSize:           dbTaskTrackerPageSize,
+		MinTaskIDExclusive: s.ackedTaskID,
+		MaxTaskIDInclusive: s.maxTaskID,
+		NextPageToken:      nil,
 	}).Return(&persistence.GetTasksResponse{
 		Tasks:         tasks,
 		NextPageToken: nil,
@@ -395,13 +395,13 @@ func (s *dbTaskTrackerSuite) TestIteration_MaxTaskID_Missing() {
 	}
 
 	s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
-		NamespaceID:   s.namespaceID.String(),
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskType,
-		PageSize:      dbTaskTrackerPageSize,
-		MinTaskID:     s.ackedTaskID,
-		MaxTaskID:     s.maxTaskID,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID.String(),
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskType,
+		PageSize:           dbTaskTrackerPageSize,
+		MinTaskIDExclusive: s.ackedTaskID,
+		MaxTaskIDInclusive: s.maxTaskID,
+		NextPageToken:      nil,
 	}).Return(&persistence.GetTasksResponse{
 		Tasks:         tasks,
 		NextPageToken: nil,

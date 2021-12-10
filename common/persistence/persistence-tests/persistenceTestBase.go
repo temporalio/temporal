@@ -1226,11 +1226,11 @@ func (s *TestBase) CreateActivityTasks(namespaceID string, workflowExecution com
 // GetTasks is a utility method to get tasks from persistence
 func (s *TestBase) GetTasks(namespaceID string, taskQueue string, taskType enumspb.TaskQueueType, batchSize int) (*persistence.GetTasksResponse, error) {
 	response, err := s.TaskMgr.GetTasks(&persistence.GetTasksRequest{
-		NamespaceID: namespaceID,
-		TaskQueue:   taskQueue,
-		TaskType:    taskType,
-		PageSize:    batchSize,
-		MaxTaskID:   math.MaxInt64,
+		NamespaceID:        namespaceID,
+		TaskQueue:          taskQueue,
+		TaskType:           taskType,
+		PageSize:           batchSize,
+		MaxTaskIDInclusive: math.MaxInt64,
 	})
 
 	if err != nil {
@@ -1244,9 +1244,9 @@ func (s *TestBase) GetTasks(namespaceID string, taskQueue string, taskType enums
 func (s *TestBase) CompleteTask(namespaceID string, taskQueue string, taskType enumspb.TaskQueueType, taskID int64) error {
 	return s.TaskMgr.CompleteTask(&persistence.CompleteTaskRequest{
 		TaskQueue: &persistence.TaskQueueKey{
-			NamespaceID: namespaceID,
-			TaskType:    taskType,
-			Name:        taskQueue,
+			NamespaceID:   namespaceID,
+			TaskQueueType: taskType,
+			TaskQueueName: taskQueue,
 		},
 		TaskID: taskID,
 	})
