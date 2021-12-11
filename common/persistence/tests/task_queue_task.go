@@ -108,13 +108,13 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Conflict() {
 	s.IsType(&p.ConditionFailedError{}, err)
 
 	resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		MinTaskID:     taskID - 1,
-		MaxTaskID:     taskID,
-		PageSize:      100,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID,
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		MinTaskIDExclusive: taskID - 1,
+		MaxTaskIDInclusive: taskID,
+		PageSize:           100,
+		NextPageToken:      nil,
 	})
 	s.NoError(err)
 	s.Equal([]*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
@@ -137,13 +137,13 @@ func (s *TaskQueueTaskSuite) TestCreateGet_One() {
 	s.NoError(err)
 
 	resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		MinTaskID:     taskID - 1,
-		MaxTaskID:     taskID,
-		PageSize:      100,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID,
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		MinTaskIDExclusive: taskID - 1,
+		MaxTaskIDInclusive: taskID,
+		PageSize:           100,
+		NextPageToken:      nil,
 	})
 	s.NoError(err)
 	s.Equal([]*persistencespb.AllocatedTaskInfo{task}, resp.Tasks)
@@ -183,13 +183,13 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
 	var actualTasks []*persistencespb.AllocatedTaskInfo
 	for doContinue := true; doContinue; doContinue = len(token) > 0 {
 		resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
-			NamespaceID:   s.namespaceID,
-			TaskQueue:     s.taskQueueName,
-			TaskType:      s.taskQueueType,
-			MinTaskID:     minTaskID - 1,
-			MaxTaskID:     maxTaskID,
-			PageSize:      1,
-			NextPageToken: token,
+			NamespaceID:        s.namespaceID,
+			TaskQueue:          s.taskQueueName,
+			TaskType:           s.taskQueueType,
+			MinTaskIDExclusive: minTaskID - 1,
+			MaxTaskIDInclusive: maxTaskID,
+			PageSize:           1,
+			NextPageToken:      token,
 		})
 		s.NoError(err)
 		token = resp.NextPageToken
@@ -215,22 +215,22 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_One() {
 
 	err = s.taskManager.CompleteTask(&p.CompleteTaskRequest{
 		TaskQueue: &p.TaskQueueKey{
-			NamespaceID: s.namespaceID,
-			Name:        s.taskQueueName,
-			TaskType:    s.taskQueueType,
+			NamespaceID:   s.namespaceID,
+			TaskQueueName: s.taskQueueName,
+			TaskQueueType: s.taskQueueType,
 		},
 		TaskID: taskID,
 	})
 	s.NoError(err)
 
 	resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		MinTaskID:     taskID - 1,
-		MaxTaskID:     taskID,
-		PageSize:      100,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID,
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		MinTaskIDExclusive: taskID - 1,
+		MaxTaskIDInclusive: taskID,
+		PageSize:           100,
+		NextPageToken:      nil,
 	})
 	s.NoError(err)
 	s.Equal([]*persistencespb.AllocatedTaskInfo{}, resp.Tasks)
@@ -276,13 +276,13 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 	s.NoError(err)
 
 	resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueue:     s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		MinTaskID:     minTaskID - 1,
-		MaxTaskID:     maxTaskID,
-		PageSize:      100,
-		NextPageToken: nil,
+		NamespaceID:        s.namespaceID,
+		TaskQueue:          s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		MinTaskIDExclusive: minTaskID - 1,
+		MaxTaskIDInclusive: maxTaskID,
+		PageSize:           100,
+		NextPageToken:      nil,
 	})
 	s.NoError(err)
 	s.Equal([]*persistencespb.AllocatedTaskInfo{}, resp.Tasks)

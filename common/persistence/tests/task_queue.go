@@ -208,9 +208,9 @@ func (s *TaskQueueSuite) TestDelete() {
 
 	err := s.taskManager.DeleteTaskQueue(&p.DeleteTaskQueueRequest{
 		TaskQueue: &p.TaskQueueKey{
-			NamespaceID: taskQueue.NamespaceId,
-			Name:        taskQueue.Name,
-			TaskType:    taskQueue.TaskType,
+			NamespaceID:   taskQueue.NamespaceId,
+			TaskQueueName: taskQueue.Name,
+			TaskQueueType: taskQueue.TaskType,
 		},
 		RangeID: rangeID,
 	})
@@ -230,9 +230,9 @@ func (s *TaskQueueSuite) TestDelete_Conflict() {
 
 	err := s.taskManager.DeleteTaskQueue(&p.DeleteTaskQueueRequest{
 		TaskQueue: &p.TaskQueueKey{
-			NamespaceID: taskQueue.NamespaceId,
-			Name:        taskQueue.Name,
-			TaskType:    taskQueue.TaskType,
+			NamespaceID:   taskQueue.NamespaceId,
+			TaskQueueName: taskQueue.Name,
+			TaskQueueType: taskQueue.TaskType,
 		},
 		RangeID: rand.Int63(),
 	})
