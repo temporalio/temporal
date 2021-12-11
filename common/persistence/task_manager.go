@@ -59,10 +59,10 @@ func (m *taskManagerImpl) GetName() string {
 func (m *taskManagerImpl) CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo
 	if taskQueueInfo.LastUpdateTime == nil {
-		panic(fmt.Sprintf("CreateTaskQueue encountered LastUpdateTime not set"))
+		panic("CreateTaskQueue encountered LastUpdateTime not set")
 	}
 	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		panic(fmt.Sprintf("CreateTaskQueue encountered ExpiryTime not set for sticky task queue"))
+		panic("CreateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
@@ -87,10 +87,10 @@ func (m *taskManagerImpl) CreateTaskQueue(request *CreateTaskQueueRequest) (*Cre
 func (m *taskManagerImpl) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo
 	if taskQueueInfo.LastUpdateTime == nil {
-		panic(fmt.Sprintf("UpdateTaskQueue encountered LastUpdateTime not set"))
+		panic("UpdateTaskQueue encountered LastUpdateTime not set")
 	}
 	if taskQueueInfo.ExpiryTime == nil && taskQueueInfo.GetKind() == enumspb.TASK_QUEUE_KIND_STICKY {
-		panic(fmt.Sprintf("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue"))
+		panic("UpdateTaskQueue encountered ExpiryTime not set for sticky task queue")
 	}
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
