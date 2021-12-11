@@ -36,6 +36,15 @@ import (
 	postgresqlschema "go.temporal.io/server/schema/postgresql"
 )
 
+// ErrDupEntryCode indicates a duplicate primary key i.e. the row already exists,
+// check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
+const ErrDupEntryCode = pq.ErrorCode("23505")
+
+func (pdb *db) IsDupEntryError(err error) bool {
+	sqlErr, ok := err.(*pq.Error)
+	return ok && sqlErr.Code == ErrDupEntryCode
+}
+
 // db represents a logical connection to mysql database
 type db struct {
 	dbKind sqlplugin.DbKind
@@ -49,15 +58,6 @@ type db struct {
 
 var _ sqlplugin.DB = (*db)(nil)
 var _ sqlplugin.Tx = (*db)(nil)
-
-// ErrDupEntry indicates a duplicate primary key i.e. the row already exists,
-// check http://www.postgresql.org/docs/9.3/static/errcodes-appendix.html
-const ErrDupEntry = "23505"
-
-func (pdb *db) IsDupEntryError(err error) bool {
-	sqlErr, ok := err.(*pq.Error)
-	return ok && sqlErr.Code == ErrDupEntry
-}
 
 // newDB returns an instance of DB, which is a logical
 // connection to the underlying postgresql database

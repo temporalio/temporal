@@ -112,6 +112,54 @@ func TestPostgreSQLHistoryStoreSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQLTaskQueueSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testPostgreSQLClusterName,
+		logger,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := NewTaskQueueSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
+func TestPostgreSQLTaskQueueTaskSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testPostgreSQLClusterName,
+		logger,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
 // NewPostgreSQLConfig returns a new MySQL config for test
 func NewPostgreSQLConfig() *config.SQL {
 	return &config.SQL{

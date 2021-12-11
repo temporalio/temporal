@@ -67,6 +67,10 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
+// TimePrecision is needed to account for database timestamp precision.
+// Cassandra only provides milliseconds timestamp precision, so we need to use tolerance when doing comparison
+const TimePrecision = 2 * time.Millisecond
+
 type (
 	// TransferTaskIDGenerator generates IDs for transfer tasks written by helper methods
 	TransferTaskIDGenerator interface {
@@ -1137,90 +1141,6 @@ func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exc
 		InclusiveBeginTimestamp: inclusiveBeginTimestamp,
 		ExclusiveEndTimestamp:   exclusiveEndTimestamp,
 	})
-}
-
-// CreateWorkflowTask is a utility method to create a task
-func (s *TestBase) CreateWorkflowTask(namespaceID string, workflowExecution commonpb.WorkflowExecution, taskQueue string,
-	workflowTaskScheduleID int64) (int64, error) {
-	leaseResponse, err := s.TaskMgr.LeaseTaskQueue(&persistence.LeaseTaskQueueRequest{
-		NamespaceID: namespaceID,
-		TaskQueue:   taskQueue,
-		TaskType:    enumspb.TASK_QUEUE_TYPE_WORKFLOW,
-	})
-	if err != nil {
-		return 0, err
-	}
-
-	taskID := s.GetNextSequenceNumber()
-	tasks := []*persistencespb.AllocatedTaskInfo{
-		{
-			TaskId: taskID,
-			Data: &persistencespb.TaskInfo{
-				NamespaceId: namespaceID,
-				WorkflowId:  workflowExecution.WorkflowId,
-				RunId:       workflowExecution.RunId,
-				ScheduleId:  workflowTaskScheduleID,
-				CreateTime:  timestamp.TimeNowPtrUtc(),
-			},
-		},
-	}
-
-	_, err = s.TaskMgr.CreateTasks(&persistence.CreateTasksRequest{
-		TaskQueueInfo: leaseResponse.TaskQueueInfo,
-		Tasks:         tasks,
-	})
-
-	if err != nil {
-		return 0, err
-	}
-
-	return taskID, err
-}
-
-// CreateActivityTasks is a utility method to create tasks
-func (s *TestBase) CreateActivityTasks(namespaceID string, workflowExecution commonpb.WorkflowExecution,
-	activities map[int64]string) ([]int64, error) {
-
-	taskQueues := make(map[string]*persistence.PersistedTaskQueueInfo)
-	for _, tl := range activities {
-		_, ok := taskQueues[tl]
-		if !ok {
-			resp, err := s.TaskMgr.LeaseTaskQueue(
-				&persistence.LeaseTaskQueueRequest{NamespaceID: namespaceID, TaskQueue: tl, TaskType: enumspb.TASK_QUEUE_TYPE_ACTIVITY})
-			if err != nil {
-				return []int64{}, err
-			}
-			taskQueues[tl] = resp.TaskQueueInfo
-		}
-	}
-
-	var taskIDs []int64
-	for activityScheduleID, taskQueue := range activities {
-		taskID := s.GetNextSequenceNumber()
-		tasks := []*persistencespb.AllocatedTaskInfo{
-			{
-				Data: &persistencespb.TaskInfo{
-					NamespaceId: namespaceID,
-					WorkflowId:  workflowExecution.WorkflowId,
-					RunId:       workflowExecution.RunId,
-					ScheduleId:  activityScheduleID,
-					ExpiryTime:  timestamp.TimeNowPtrUtcAddSeconds(defaultScheduleToStartTimeout),
-					CreateTime:  timestamp.TimeNowPtrUtc(),
-				},
-				TaskId: taskID,
-			},
-		}
-		_, err := s.TaskMgr.CreateTasks(&persistence.CreateTasksRequest{
-			TaskQueueInfo: taskQueues[taskQueue],
-			Tasks:         tasks,
-		})
-		if err != nil {
-			return nil, err
-		}
-		taskIDs = append(taskIDs, taskID)
-	}
-
-	return taskIDs, nil
 }
 
 // GetTasks is a utility method to get tasks from persistence

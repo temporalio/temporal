@@ -51,13 +51,13 @@ var _ sqlplugin.AdminDB = (*db)(nil)
 var _ sqlplugin.DB = (*db)(nil)
 var _ sqlplugin.Tx = (*db)(nil)
 
-// ErrDupEntry MySQL Error 1062 indicates a duplicate primary key i.e. the row already exists,
+// ErrDupEntryCode MySQL Error 1062 indicates a duplicate primary key i.e. the row already exists,
 // so we don't do the insert and return a ConditionalUpdate error.
-const ErrDupEntry = 1062
+const ErrDupEntryCode = 1062
 
 func (mdb *db) IsDupEntryError(err error) bool {
 	sqlErr, ok := err.(*mysql.MySQLError)
-	return ok && sqlErr.Number == ErrDupEntry
+	return ok && sqlErr.Number == ErrDupEntryCode
 }
 
 // newDB returns an instance of DB, which is a logical

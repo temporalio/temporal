@@ -89,6 +89,9 @@ func (m *sqlTaskManager) CreateTaskQueue(request *persistence.InternalCreateTask
 		DataEncoding: request.TaskQueueInfo.EncodingType.String(),
 	}
 	if _, err := m.Db.InsertIntoTaskQueues(ctx, &row); err != nil {
+		if m.Db.IsDupEntryError(err) {
+			return &persistence.ConditionFailedError{Msg: err.Error()}
+		}
 		return serviceerror.NewUnavailable(fmt.Sprintf("CreateTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
 	}
 
@@ -131,52 +134,6 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 	}
 }
 
-func (m *sqlTaskManager) ExtendLease(
-	request *persistence.InternalExtendLeaseRequest,
-) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
-	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
-	if err != nil {
-		return serviceerror.NewInternal(err.Error())
-	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
-
-	err = m.txExecute(ctx, "LeaseTaskQueue", func(tx sqlplugin.Tx) error {
-		// We need to separately check the condition and do the
-		// update because we want to throw different error codes.
-		// Since we need to do things separately (in a transaction), we need to take a lock.
-		if err := lockTaskQueue(ctx,
-			tx,
-			tqHash,
-			tqId,
-			request.RangeID,
-		); err != nil {
-			return err
-		}
-
-		result, err := tx.UpdateTaskQueues(ctx, &sqlplugin.TaskQueuesRow{
-			RangeHash:    tqHash,
-			TaskQueueID:  tqId,
-			RangeID:      request.RangeID + 1,
-			Data:         request.TaskQueueInfo.Data,
-			DataEncoding: request.TaskQueueInfo.EncodingType.String(),
-		})
-		if err != nil {
-			return err
-		}
-		rowsAffected, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("rowsAffected error: %v", err)
-		}
-		if rowsAffected == 0 {
-			return fmt.Errorf("%v rows affected instead of 1", rowsAffected)
-		}
-		return nil
-	})
-	return err
-}
-
 func (m *sqlTaskManager) UpdateTaskQueue(
 	request *persistence.InternalUpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
@@ -194,7 +151,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 			tx,
 			tqHash,
 			tqId,
-			request.RangeID,
+			request.PrevRangeID,
 		); err != nil {
 			return err
 		}
@@ -374,7 +331,9 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 		return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error:%v", err))
 	}
 	if nRows != 1 {
-		return serviceerror.NewUnavailable(fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows))
+		return &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows),
+		}
 	}
 	return nil
 }
