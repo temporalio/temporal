@@ -220,7 +220,7 @@ func (d *MatchingTaskStore) DeleteTaskQueue(
 	request *p.DeleteTaskQueueRequest,
 ) error {
 	query := d.Session.Query(templateDeleteTaskQueueQuery,
-		request.TaskQueue.NamespaceID, request.TaskQueue.Name, request.TaskQueue.TaskType, rowTypeTaskQueue, taskQueueTaskID, request.RangeID)
+		request.TaskQueue.NamespaceID, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType, rowTypeTaskQueue, taskQueueTaskID, request.RangeID)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -323,8 +323,8 @@ func (d *MatchingTaskStore) GetTasks(
 		request.TaskQueue,
 		request.TaskType,
 		rowTypeTask,
-		request.MinTaskID,
-		request.MaxTaskID,
+		request.MinTaskIDExclusive,
+		request.MaxTaskIDInclusive,
 	)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -377,8 +377,8 @@ func (d *MatchingTaskStore) CompleteTask(
 	tli := request.TaskQueue
 	query := d.Session.Query(templateCompleteTaskQuery,
 		tli.NamespaceID,
-		tli.Name,
-		tli.TaskType,
+		tli.TaskQueueName,
+		tli.TaskQueueType,
 		rowTypeTask,
 		request.TaskID)
 

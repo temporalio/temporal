@@ -191,7 +191,7 @@ func (s *ScavengerTestSuite) setupTaskMgrMocks() {
 		}).AnyTimes()
 	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any()).DoAndReturn(
 		func(req *p.DeleteTaskQueueRequest) error {
-			s.taskQueueTable.delete(req.TaskQueue.Name)
+			s.taskQueueTable.delete(req.TaskQueue.TaskQueueName)
 			return nil
 		}).AnyTimes()
 	s.taskMgr.EXPECT().GetTasks(gomock.Any()).DoAndReturn(

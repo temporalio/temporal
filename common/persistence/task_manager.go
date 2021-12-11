@@ -85,7 +85,7 @@ func (m *taskManagerImpl) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*Lease
 		}
 		taskQueueInfo, err := m.serializer.TaskQueueInfoFromBlob(taskQueue.TaskQueueInfo)
 		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("LeaseTaskQueue operation failed during serialization. TaskQueue: %v, TaskQueueType: %v, Error: %v", request.TaskQueue, request.TaskType, err))
 		}
 
 		taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
@@ -233,7 +233,7 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 }
 
 func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
-	if request.MinTaskID >= request.MaxTaskID {
+	if request.MinTaskIDExclusive >= request.MaxTaskIDInclusive {
 		return &GetTasksResponse{}, nil
 	}
 
