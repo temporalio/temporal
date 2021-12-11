@@ -98,18 +98,18 @@ func (db *taskQueueDB) RenewLease() (taskQueueState, error) {
 	defer db.Unlock()
 
 	if db.rangeID == 0 {
-		if err := db.takeTaskQueue(); err != nil {
+		if err := db.takeOverTaskQueueLocked(); err != nil {
 			return taskQueueState{}, err
 		}
 	} else {
-		if err := db.renewTaskQueue(db.rangeID + 1); err != nil {
+		if err := db.renewTaskQueueLocked(db.rangeID + 1); err != nil {
 			return taskQueueState{}, err
 		}
 	}
 	return taskQueueState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
 }
 
-func (db *taskQueueDB) takeTaskQueue() error {
+func (db *taskQueueDB) takeOverTaskQueueLocked() error {
 	response, err := db.store.GetTaskQueue(&persistence.GetTaskQueueRequest{
 		NamespaceID: db.namespaceID.String(),
 		TaskQueue:   db.taskQueueName,
@@ -155,7 +155,7 @@ func (db *taskQueueDB) takeTaskQueue() error {
 	}
 }
 
-func (db *taskQueueDB) renewTaskQueue(
+func (db *taskQueueDB) renewTaskQueueLocked(
 	rangeID int64,
 ) error {
 	if _, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
