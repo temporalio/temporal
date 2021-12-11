@@ -101,15 +101,11 @@ func (t *dbTaskTracker) moveAckedTaskID() int64 {
 	}
 	sort.Sort(taskIDs)
 
-	deleteTaskIDs := make([]int64, 0, len(taskIDs))
 	for _, taskID := range taskIDs {
 		if !t.tasks[taskID] {
 			break
 		}
 		t.ackedTaskID = taskID
-		deleteTaskIDs = append(deleteTaskIDs, taskID)
-	}
-	for _, taskID := range deleteTaskIDs {
 		delete(t.tasks, taskID)
 	}
 	return t.ackedTaskID
