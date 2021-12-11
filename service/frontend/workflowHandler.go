@@ -3394,30 +3394,30 @@ func (wh *WorkflowHandler) makeFakeContinuedAsNewEvent(
 }
 
 func (wh *WorkflowHandler) validateNamespace(
-	str string,
+	namespace string,
 ) error {
-	if str == "" {
+	if namespace == "" {
 		return errNamespaceNotSet
 	}
-	if err := wh.validateUTF8String(str); err != nil {
+	if err := wh.validateUTF8String(namespace); err != nil {
 		return err
 	}
-	if len(str) > wh.config.MaxIDLengthLimit() {
+	if len(namespace) > wh.config.MaxIDLengthLimit() {
 		return errNamespaceTooLong
 	}
 	return nil
 }
 
 func (wh *WorkflowHandler) validateWorkflowID(
-	str string,
+	workflowID string,
 ) error {
-	if str == "" {
+	if workflowID == "" {
 		return errWorkflowIDNotSet
 	}
-	if err := wh.validateUTF8String(str); err != nil {
+	if err := wh.validateUTF8String(workflowID); err != nil {
 		return err
 	}
-	if len(str) > wh.config.MaxIDLengthLimit() {
+	if len(workflowID) > wh.config.MaxIDLengthLimit() {
 		return errWorkflowIDTooLong
 	}
 	return nil

@@ -184,9 +184,9 @@ type (
 
 	// TaskQueueKey is the struct used to identity TaskQueues
 	TaskQueueKey struct {
-		NamespaceID string
-		Name        string
-		TaskType    enumspb.TaskQueueType
+		NamespaceID   string
+		TaskQueueName string
+		TaskQueueType enumspb.TaskQueueType
 	}
 
 	// GetOrCreateShardRequest is used to get shard information, or supply
@@ -686,13 +686,13 @@ type (
 
 	// GetTasksRequest is used to retrieve tasks of a task queue
 	GetTasksRequest struct {
-		NamespaceID   string
-		TaskQueue     string
-		TaskType      enumspb.TaskQueueType
-		MinTaskID     int64 // exclusive
-		MaxTaskID     int64 // inclusive
-		PageSize      int
-		NextPageToken []byte
+		NamespaceID        string
+		TaskQueue          string
+		TaskType           enumspb.TaskQueueType
+		MinTaskIDExclusive int64 // exclusive
+		MaxTaskIDInclusive int64 // inclusive
+		PageSize           int
+		NextPageToken      []byte
 	}
 
 	// GetTasksResponse is the response to GetTasksRequests

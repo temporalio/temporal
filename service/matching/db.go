@@ -224,12 +224,12 @@ func (db *taskQueueDB) CreateTasks(tasks []*persistencespb.AllocatedTaskInfo) (*
 // GetTasks returns a batch of tasks between the given range
 func (db *taskQueueDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(&persistence.GetTasksRequest{
-		NamespaceID: db.namespaceID.String(),
-		TaskQueue:   db.taskQueueName,
-		TaskType:    db.taskType,
-		PageSize:    batchSize,
-		MinTaskID:   minTaskID, // exclusive
-		MaxTaskID:   maxTaskID, // inclusive
+		NamespaceID:        db.namespaceID.String(),
+		TaskQueue:          db.taskQueueName,
+		TaskType:           db.taskType,
+		PageSize:           batchSize,
+		MinTaskIDExclusive: minTaskID, // exclusive
+		MaxTaskIDInclusive: maxTaskID, // inclusive
 	})
 }
 
@@ -237,9 +237,9 @@ func (db *taskQueueDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int)
 func (db *taskQueueDB) CompleteTask(taskID int64) error {
 	err := db.store.CompleteTask(&persistence.CompleteTaskRequest{
 		TaskQueue: &persistence.TaskQueueKey{
-			NamespaceID: db.namespaceID.String(),
-			Name:        db.taskQueueName,
-			TaskType:    db.taskType,
+			NamespaceID:   db.namespaceID.String(),
+			TaskQueueName: db.taskQueueName,
+			TaskQueueType: db.taskType,
 		},
 		TaskID: taskID,
 	})

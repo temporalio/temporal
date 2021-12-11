@@ -297,11 +297,11 @@ message SignalInfo {
     int64 version = 1;
     int64 initiated_event_batch_id = 2;
     string request_id = 3;
-    string name = 4;
-    temporal.api.common.v1.Payloads input = 5;
-    string control = 6;
+    reserved 4;
+    reserved 5;
+    reserved 6;
     int64 initiated_id = 7;
-    temporal.api.common.v1.Header header = 8;
+    reserved 8;
 }
 
 // checksum column

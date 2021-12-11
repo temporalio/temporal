@@ -42,8 +42,8 @@ func (s *Scavenger) completeTasks(key *p.TaskQueueKey, taskID int64, limit int) 
 	err = s.retryForever(func() error {
 		n, err = s.db.CompleteTasksLessThan(&p.CompleteTasksLessThanRequest{
 			NamespaceID:   key.NamespaceID,
-			TaskQueueName: key.Name,
-			TaskType:      key.TaskType,
+			TaskQueueName: key.TaskQueueName,
+			TaskType:      key.TaskQueueType,
 			TaskID:        taskID,
 			Limit:         limit,
 		})
@@ -57,12 +57,12 @@ func (s *Scavenger) getTasks(key *p.TaskQueueKey, batchSize int) (*p.GetTasksRes
 	var resp *p.GetTasksResponse
 	err = s.retryForever(func() error {
 		resp, err = s.db.GetTasks(&p.GetTasksRequest{
-			NamespaceID: key.NamespaceID,
-			TaskQueue:   key.Name,
-			TaskType:    key.TaskType,
-			MinTaskID:   -1, // get the first N tasks sorted by taskID
-			MaxTaskID:   math.MaxInt64,
-			PageSize:    batchSize,
+			NamespaceID:        key.NamespaceID,
+			TaskQueue:          key.TaskQueueName,
+			TaskType:           key.TaskQueueType,
+			MinTaskIDExclusive: -1, // get the first N tasks sorted by taskID
+			MaxTaskIDInclusive: math.MaxInt64,
+			PageSize:           batchSize,
 		})
 		return err
 	})
@@ -87,9 +87,9 @@ func (s *Scavenger) deleteTaskQueue(key *p.TaskQueueKey, rangeID int64) error {
 	return backoff.Retry(func() error {
 		return s.db.DeleteTaskQueue(&p.DeleteTaskQueueRequest{
 			TaskQueue: &p.TaskQueueKey{
-				NamespaceID: key.NamespaceID,
-				Name:        key.Name,
-				TaskType:    key.TaskType,
+				NamespaceID:   key.NamespaceID,
+				TaskQueueName: key.TaskQueueName,
+				TaskQueueType: key.TaskQueueType,
 			},
 			RangeID: rangeID,
 		})

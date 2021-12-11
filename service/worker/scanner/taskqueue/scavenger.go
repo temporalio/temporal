@@ -201,9 +201,9 @@ func (s *Scavenger) emitStats() {
 func (s *Scavenger) newTask(info *p.PersistedTaskQueueInfo) executor.Task {
 	return &executorTask{
 		TaskQueueKey: p.TaskQueueKey{
-			NamespaceID: info.Data.GetNamespaceId(),
-			Name:        info.Data.Name,
-			TaskType:    info.Data.TaskType,
+			NamespaceID:   info.Data.GetNamespaceId(),
+			TaskQueueName: info.Data.Name,
+			TaskQueueType: info.Data.TaskType,
 		},
 		taskQueueState: taskQueueState{
 			rangeID:     info.RangeID,
