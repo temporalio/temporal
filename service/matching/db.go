@@ -183,6 +183,7 @@ func (db *taskQueueDB) UpdateState(ackLevel int64) error {
 	db.Lock()
 	defer db.Unlock()
 	_, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+		RangeID: db.rangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    db.namespaceID.String(),
 			Name:           db.taskQueueName,
@@ -192,7 +193,7 @@ func (db *taskQueueDB) UpdateState(ackLevel int64) error {
 			ExpiryTime:     db.expiryTime(),
 			LastUpdateTime: timestamp.TimeNowPtrUtc(),
 		},
-		RangeID: db.rangeID,
+		PrevRangeID: db.rangeID,
 	})
 	if err == nil {
 		db.ackLevel = ackLevel
