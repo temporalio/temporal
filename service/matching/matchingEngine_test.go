@@ -160,6 +160,7 @@ func (s *matchingEngineSuite) TestAckManager() {
 	const t3 = 320
 	const t4 = 340
 	const t5 = 360
+	const t6 = 380
 
 	m.addTask(t1)
 	s.EqualValues(100, m.getAckLevel())
@@ -199,6 +200,11 @@ func (s *matchingEngineSuite) TestAckManager() {
 
 	m.setReadLevel(t5)
 	s.EqualValues(t5, m.getReadLevel())
+
+	m.setAckLevel(t5)
+	m.setReadLevelAfterGap(t6)
+	s.EqualValues(t6, m.getReadLevel())
+	s.EqualValues(t6, m.getAckLevel())
 }
 
 func (s *matchingEngineSuite) TestAckManager_Sort() {
@@ -1695,6 +1701,29 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 	s.NoError(err)
 }
 
+func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
+	namespaceID := namespace.ID(uuid.New())
+	tl := "makeToast"
+	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
+	tlNormal := enumspb.TASK_QUEUE_KIND_NORMAL
+	config := defaultTestConfig()
+
+	for i := 0; i < 4; i++ {
+		prevGetTasksCount := s.taskManager.getGetTasksCount(tlID)
+
+		tlMgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlNormal, config, s.matchingEngine.clusterMeta)
+		s.NoError(err)
+
+		tlMgr.Start()
+		// tlMgr.taskWriter startup is async so give it time to complete
+		time.Sleep(100 * time.Millisecond)
+		tlMgr.Stop()
+
+		getTasksCount := s.taskManager.getGetTasksCount(tlID) - prevGetTasksCount
+		s.LessOrEqual(getTasksCount, 1)
+	}
+}
+
 func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	runID := uuid.NewRandom().String()
 	workflowID := uuid.New()
@@ -1881,6 +1910,7 @@ type testTaskQueueManager struct {
 	rangeID         int64
 	ackLevel        int64
 	createTaskCount int
+	getTasksCount   int
 	tasks           *treemap.Map
 }
 
@@ -2079,6 +2109,7 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 		}
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))
 	}
+	tlm.getTasksCount++
 	return &persistence.GetTasksResponse{
 		Tasks: tasks,
 	}, nil
@@ -2098,6 +2129,14 @@ func (m *testTaskManager) getCreateTaskCount(taskQueue *taskQueueID) int {
 	tlm.Lock()
 	defer tlm.Unlock()
 	return tlm.createTaskCount
+}
+
+// getGetTasksCount returns how many times GetTasks was called
+func (m *testTaskManager) getGetTasksCount(taskQueue *taskQueueID) int {
+	tlm := m.getTaskQueueManager(taskQueue)
+	tlm.Lock()
+	defer tlm.Unlock()
+	return tlm.getTasksCount
 }
 
 func (m *testTaskManager) String() string {

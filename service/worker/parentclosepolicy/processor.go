@@ -52,8 +52,8 @@ type (
 	// BootstrapParams contains the set of params needed to bootstrap
 	// the sub-system
 	BootstrapParams struct {
-		// ServiceClient is an instance of temporal service client
-		ServiceClient sdkclient.Client
+		// SdkSystemClient is an instance of temporal service client
+		SdkSystemClient sdkclient.Client
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
 		// Logger is the logger
@@ -77,7 +77,7 @@ type (
 // New returns a new instance as daemon
 func New(params *BootstrapParams) *Processor {
 	return &Processor{
-		svcClient:     params.ServiceClient,
+		svcClient:     params.SdkSystemClient,
 		metricsClient: params.MetricsClient,
 		cfg:           params.Config,
 		logger:        log.With(params.Logger, tag.ComponentBatcher),

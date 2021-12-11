@@ -32,11 +32,11 @@ import (
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/sdk"
 )
 
 type (
@@ -48,40 +48,31 @@ type (
 		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
 	}
 
-	// BootstrapParams contains the set of params needed to bootstrap
-	// the batcher sub-system
-	BootstrapParams struct {
-		// Config contains the configuration for scanner
-		Config Config
-		// ServiceClient is an instance of temporal service client
-		ServiceClient sdkclient.Client
-		// MetricsClient is an instance of metrics object for emitting stats
-		MetricsClient metrics.Client
-		Logger        log.Logger
-		// ClientBean is an instance of client.Bean for a collection of clients
-		ClientBean client.Bean
-	}
-
 	// Batcher is the background sub-system that execute workflow for batch operations
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
-		cfg           Config
-		svcClient     sdkclient.Client
-		clientBean    client.Bean
-		metricsClient metrics.Client
-		logger        log.Logger
+		cfg              *Config
+		sdkSystemClient  sdkclient.Client
+		sdkClientFactory sdk.ClientFactory
+		metricsClient    metrics.Client
+		logger           log.Logger
 	}
 )
 
 // New returns a new instance of batcher daemon Batcher
-func New(params *BootstrapParams) *Batcher {
-	cfg := params.Config
+func New(
+	cfg *Config,
+	sdkSystemClient sdkclient.Client,
+	metricsClient metrics.Client,
+	logger log.Logger,
+	sdkClientFactory sdk.ClientFactory,
+) *Batcher {
 	return &Batcher{
-		cfg:           cfg,
-		svcClient:     params.ServiceClient,
-		metricsClient: params.MetricsClient,
-		logger:        log.With(params.Logger, tag.ComponentBatcher),
-		clientBean:    params.ClientBean,
+		cfg:              cfg,
+		sdkSystemClient:  sdkSystemClient,
+		sdkClientFactory: sdkClientFactory,
+		metricsClient:    metricsClient,
+		logger:           log.With(logger, tag.ComponentBatcher),
 	}
 }
 
@@ -97,7 +88,7 @@ func (s *Batcher) Start() error {
 
 		BackgroundActivityContext: ctx,
 	}
-	batchWorker := worker.New(s.svcClient, BatcherTaskQueueName, workerOpts)
+	batchWorker := worker.New(s.sdkSystemClient, BatcherTaskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
 

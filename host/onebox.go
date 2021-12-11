@@ -35,23 +35,16 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
-
 	"google.golang.org/grpc"
-
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/authorization"
-	"go.temporal.io/server/common/persistence/visibility"
-	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/worker"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
+	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -62,12 +55,17 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/visibility"
+	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
 	"go.temporal.io/server/service/matching"
+	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/replicator"
 )
@@ -405,6 +403,12 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		}
 	}
 
+	params.SdkClientFactory = sdk.NewClientFactory(
+		c.FrontendGRPCAddress(),
+		nil,
+		params.MetricsScope,
+	)
+
 	stoppedCh := make(chan struct{})
 	var frontendService *frontend.Service
 	var clientBean client.Bean
@@ -478,22 +482,16 @@ func (c *temporalImpl) startHistory(
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 
-		var err error
-		params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
-			HostPort:     c.FrontendGRPCAddress(),
-			Namespace:    common.SystemLocalNamespace,
-			MetricsScope: params.MetricsScope,
-			ConnectionOptions: sdkclient.ConnectionOptions{
-				DisableHealthCheck: true,
-			},
-		})
-		if err != nil {
-			c.logger.Fatal("Failed to create client for history", tag.Error(err))
-		}
+		params.SdkClientFactory = sdk.NewClientFactory(
+			c.FrontendGRPCAddress(),
+			nil,
+			params.MetricsScope,
+		)
 
 		params.ArchivalMetadata = c.archiverMetadata
 		params.ArchiverProvider = c.archiverProvider
 
+		var err error
 		params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -647,17 +645,11 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
 	}
 
-	params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{
-		HostPort:     c.FrontendGRPCAddress(),
-		Namespace:    common.SystemLocalNamespace,
-		MetricsScope: params.MetricsScope,
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			DisableHealthCheck: true,
-		},
-	})
-	if err != nil {
-		c.logger.Fatal("Failed to create client for worker", tag.Error(err))
-	}
+	params.SdkClientFactory = sdk.NewClientFactory(
+		c.FrontendGRPCAddress(),
+		nil,
+		params.MetricsScope,
+	)
 
 	dcClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 	service, err := resource.New(
@@ -733,8 +725,13 @@ func (c *temporalImpl) startWorkerClientWorker(params *resource.BootstrapParams,
 	)
 	workerConfig.ArchiverConfig.ArchiverConcurrency = dynamicconfig.GetIntPropertyFn(10)
 
+	systemSdkClient, err := params.SdkClientFactory.NewSystemClient(c.logger)
+	if err != nil {
+		c.logger.Fatal("Unable to create SDK client", tag.Error(err))
+	}
+
 	bc := &archiver.BootstrapContainer{
-		SdkClient:        params.SdkClient,
+		SdkSystemClient:  systemSdkClient,
 		MetricsClient:    service.GetMetricsClient(),
 		Logger:           c.logger,
 		HistoryV2Manager: c.executionManager,

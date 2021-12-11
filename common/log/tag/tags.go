@@ -503,8 +503,8 @@ func ShardContextState(state int) ZapTag {
 }
 
 // ShardContextStateRequest returns tag for ShardContextStateRequest
-func ShardContextStateRequest(r int) ZapTag {
-	return NewInt("shard-context-state-request", r)
+func ShardContextStateRequest(r string) ZapTag {
+	return NewStringTag("shard-context-state-request", r)
 }
 
 // ReadLevel returns tag for ReadLevel

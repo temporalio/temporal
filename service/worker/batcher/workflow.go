@@ -29,11 +29,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 	"golang.org/x/time/rate"
@@ -229,9 +229,15 @@ func setDefaultParams(params BatchParams) BatchParams {
 // BatchActivity is activity for processing batch operation
 func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetails, error) {
 	batcher := ctx.Value(batcherContextKey).(*Batcher)
-	client := batcher.clientBean.GetFrontendClient()
-
+	logger := getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
+
+	sdkClient, err := batcher.sdkClientFactory.NewClient(batchParams.Namespace, logger)
+	if err != nil {
+		logger.Error("Unable to create SDK client for namespace.", tag.Error(err), tag.WorkflowNamespace(batchParams.Namespace))
+		return hbd, err
+	}
+
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
@@ -239,14 +245,13 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 		} else {
 			batcher := ctx.Value(batcherContextKey).(*Batcher)
 			batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
-			getActivityLogger(ctx).Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
+			logger.Error("Failed to recover from last heartbeat, start over from beginning", tag.Error(err))
 		}
 	}
 
 	if startOver {
-		resp, err := client.CountWorkflowExecutions(ctx, &workflowservice.CountWorkflowExecutionsRequest{
-			Namespace: batchParams.Namespace,
-			Query:     batchParams.Query,
+		resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
+			Query: batchParams.Query,
 		})
 		if err != nil {
 			return HeartBeatDetails{}, err
@@ -257,15 +262,14 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 	taskCh := make(chan taskDetail, pageSize)
 	respCh := make(chan error, pageSize)
 	for i := 0; i < batchParams.Concurrency; i++ {
-		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, client)
+		go startTaskProcessor(ctx, batchParams, taskCh, respCh, rateLimiter, sdkClient, logger)
 	}
 
 	for {
 		// TODO https://github.com/uber/cadence/issues/2154
 		//  Need to improve scan concurrency because it will hold an ES resource until the workflow finishes.
 		//  And we can't use list API because terminate / reset will mutate the result.
-		resp, err := client.ScanWorkflowExecutions(ctx, &workflowservice.ScanWorkflowExecutionsRequest{
-			Namespace:     batchParams.Namespace,
+		resp, err := sdkClient.ScanWorkflow(ctx, &workflowservice.ScanWorkflowExecutionsRequest{
 			PageSize:      int32(pageSize),
 			NextPageToken: hbd.PageToken,
 			Query:         batchParams.Query,
@@ -327,7 +331,8 @@ func startTaskProcessor(
 	taskCh chan taskDetail,
 	respCh chan error,
 	limiter *rate.Limiter,
-	client workflowservice.WorkflowServiceClient,
+	sdkClient sdkclient.Client,
+	logger log.Logger,
 ) {
 	batcher := ctx.Value(batcherContextKey).(*Batcher)
 	for {
@@ -339,59 +344,29 @@ func startTaskProcessor(
 				return
 			}
 			var err error
-			requestID := uuid.New().String()
 
 			switch batchParams.BatchType {
 			case BatchTypeTerminate:
-				err = processTask(ctx, limiter, task, batchParams, client,
+				err = processTask(ctx, limiter, task, sdkClient, logger,
 					batchParams.TerminateParams.TerminateChildren,
 					func(workflowID, runID string) error {
-						_, err := client.TerminateWorkflowExecution(ctx, &workflowservice.TerminateWorkflowExecutionRequest{
-							Namespace: batchParams.Namespace,
-							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
-							},
-							Reason:   batchParams.Reason,
-							Identity: BatchWFTypeName,
-						})
-						return err
+						return sdkClient.TerminateWorkflow(ctx, workflowID, runID, batchParams.Reason)
 					})
 			case BatchTypeCancel:
-				err = processTask(ctx, limiter, task, batchParams, client,
+				err = processTask(ctx, limiter, task, sdkClient, logger,
 					batchParams.CancelParams.CancelChildren,
 					func(workflowID, runID string) error {
-						_, err := client.RequestCancelWorkflowExecution(ctx, &workflowservice.RequestCancelWorkflowExecutionRequest{
-							Namespace: batchParams.Namespace,
-							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
-							},
-							Identity:  BatchWFTypeName,
-							RequestId: requestID,
-						})
-						return err
+						return sdkClient.CancelWorkflow(ctx, workflowID, runID)
 					})
 			case BatchTypeSignal:
-				err = processTask(ctx, limiter, task, batchParams, client, convert.BoolPtr(false),
+				err = processTask(ctx, limiter, task, sdkClient, logger, convert.BoolPtr(false),
 					func(workflowID, runID string) error {
-						_, err := client.SignalWorkflowExecution(ctx, &workflowservice.SignalWorkflowExecutionRequest{
-							Namespace: batchParams.Namespace,
-							WorkflowExecution: &commonpb.WorkflowExecution{
-								WorkflowId: workflowID,
-								RunId:      runID,
-							},
-							Identity:   BatchWFTypeName,
-							RequestId:  requestID,
-							SignalName: batchParams.SignalParams.SignalName,
-							Input:      batchParams.SignalParams.Input,
-						})
-						return err
+						return sdkClient.SignalWorkflow(ctx, workflowID, runID, batchParams.SignalParams.SignalName, batchParams.SignalParams.Input)
 					})
 			}
 			if err != nil {
 				batcher.metricsClient.IncCounter(metrics.BatcherScope, metrics.BatcherProcessorFailures)
-				getActivityLogger(ctx).Error("Failed to process batch operation task", tag.Error(err))
+				logger.Error("Failed to process batch operation task", tag.Error(err))
 
 				_, ok := batchParams._nonRetryableErrors[err.Error()]
 				if ok || task.attempts > batchParams.AttemptsOnRetryableError {
@@ -413,8 +388,8 @@ func processTask(
 	ctx context.Context,
 	limiter *rate.Limiter,
 	task taskDetail,
-	batchParams BatchParams,
-	client workflowservice.WorkflowServiceClient,
+	sdkClient sdkclient.Client,
+	logger log.Logger,
 	applyOnChild *bool,
 	procFn func(string, string) error,
 ) error {
@@ -436,13 +411,7 @@ func processTask(
 			}
 		}
 		wfs = wfs[1:]
-		resp, err := client.DescribeWorkflowExecution(ctx, &workflowservice.DescribeWorkflowExecutionRequest{
-			Namespace: batchParams.Namespace,
-			Execution: &commonpb.WorkflowExecution{
-				WorkflowId: wf.GetWorkflowId(),
-				RunId:      wf.GetRunId(),
-			},
-		})
+		resp, err := sdkClient.DescribeWorkflowExecution(ctx, wf.GetWorkflowId(), wf.GetRunId())
 		if err != nil {
 			// NotFound means wf is deleted
 			if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -454,7 +423,7 @@ func processTask(
 		// TODO https://github.com/uber/cadence/issues/2159
 		// By default should use ChildPolicy, but it is totally broken in Temporal, we need to fix it before using
 		if applyOnChild != nil && *applyOnChild && len(resp.PendingChildren) > 0 {
-			getActivityLogger(ctx).Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
+			logger.Info("Found more child workflows to process", tag.Number(int64(len(resp.PendingChildren))))
 			for _, ch := range resp.PendingChildren {
 				wfs = append(wfs, commonpb.WorkflowExecution{
 					WorkflowId: ch.GetWorkflowId(),

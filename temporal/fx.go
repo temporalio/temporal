@@ -29,8 +29,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/server/common/collection"
-
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
@@ -38,6 +36,8 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/pborman/uuid"
+
+	"go.temporal.io/server/common/collection"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -482,26 +482,23 @@ func SoExpander(so *serverOptions) (
 	return &so.config.Global.PProf, so.config, so.persistenceServiceResolver
 }
 
-func DynamicConfigClientProvider(so *serverOptions, logger log.Logger, stoppedCh chan interface{}) dynamicconfig.Client {
+func DynamicConfigClientProvider(so *serverOptions, logger log.Logger, stoppedCh chan interface{}) (dynamicconfig.Client, error) {
 	var result dynamicconfig.Client
 	var err error
 	if so.dynamicConfigClient != nil {
-		return so.dynamicConfigClient
+		return so.dynamicConfigClient, nil
 	}
 
 	if so.config.DynamicConfigClient != nil {
 		result, err = dynamicconfig.NewFileBasedClient(so.config.DynamicConfigClient, logger, stoppedCh)
 		if err != nil {
-			// TODO: uncomment the next line and remove next 3 lines in 1.14.
-			// return fmt.Errorf("unable to create dynamic config client: %w", err)
-			logger.Error("Unable to read dynamic config file. Continue with default settings but the ERROR MUST BE FIXED before the next upgrade", tag.Error(err))
-			result = dynamicconfig.NewNoopClient()
+			return nil, fmt.Errorf("unable to create dynamic config client: %w", err)
 		}
-		return result
+		return result, nil
 	}
 
 	logger.Info("Dynamic config client is not configured. Using default values.")
-	return dynamicconfig.NewNoopClient()
+	return dynamicconfig.NewNoopClient(), nil
 }
 
 func DcCollectionProvider(dynamicConfigClient dynamicconfig.Client, logger log.Logger) *dynamicconfig.Collection {
@@ -569,7 +566,7 @@ func ApplyClusterMetadataConfigProvider(
 			// Only set current cluster Id as we don't know the remote cluster Id.
 			clusterId = uuid.New()
 		}
-		//Case 1: initialize cluster metadata config
+		// Case 1: initialize cluster metadata config
 		// We assume the existing remote cluster info is correct.
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
 			&persistence.SaveClusterMetadataRequest{

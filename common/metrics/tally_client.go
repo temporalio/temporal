@@ -120,11 +120,10 @@ func (m *TallyClient) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 // RecordDistribution record and emit a distribution (wrapper on top of timer) for the given
 // metric name
 func (m *TallyClient) RecordDistribution(scopeIdx int, timerIdx int, d int) {
-	dist := time.Duration(d * distributionToTimerRatio)
 	def := m.metricDefs[timerIdx]
 	name := string(def.metricName)
 	buckets, _ := m.perUnitBuckets[def.unit]
-	m.childScopes[scopeIdx].Histogram(name, buckets).RecordValue(float64(dist))
+	m.childScopes[scopeIdx].Histogram(name, buckets).RecordValue(float64(d))
 }
 
 // UpdateGauge reports Gauge type metric

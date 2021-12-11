@@ -33,7 +33,6 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -58,6 +57,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -98,7 +98,8 @@ var Module = fx.Options(
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
-	fx.Provide(SdkClientProvider),
+	sdk.Module,
+	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(FrontedClientProvider),
 	fx.Provide(PersistenceFaultInjectionFactoryProvider),
 	fx.Provide(GrpcListenerProvider),
@@ -235,8 +236,9 @@ func MembershipMonitorProvider(membershipFactory MembershipMonitorFactory) (memb
 	return membershipFactory.GetMembershipMonitor()
 }
 
-func SdkClientProvider(params *BootstrapParams) sdkclient.Client {
-	return params.SdkClient
+// TODO (alex): move this to `sdk` package after BootstrapParams removal.
+func SdkClientFactoryProvider(params *BootstrapParams) sdk.ClientFactory {
+	return params.SdkClientFactory
 }
 
 func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
