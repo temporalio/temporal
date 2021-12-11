@@ -145,21 +145,6 @@ func (mr *MockContextMockRecorder) GetNamespace() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockContext)(nil).GetNamespace))
 }
 
-// GetNamespaceEntry mocks base method.
-func (m *MockContext) GetNamespaceEntry() (*namespace.Namespace, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespaceEntry")
-	ret0, _ := ret[0].(*namespace.Namespace)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetNamespaceEntry indicates an expected call of GetNamespaceEntry.
-func (mr *MockContextMockRecorder) GetNamespaceEntry() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceEntry", reflect.TypeOf((*MockContext)(nil).GetNamespaceEntry))
-}
-
 // GetNamespaceID mocks base method.
 func (m *MockContext) GetNamespaceID() namespace.ID {
 	m.ctrl.T.Helper()
