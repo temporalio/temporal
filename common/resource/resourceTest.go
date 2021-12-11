@@ -244,6 +244,17 @@ func (s *Test) GetHostInfo() *membership.HostInfo {
 	return testHostInfo
 }
 
+// GetHostInfoProvider for testing
+func (s *Test) GetHostInfoProvider() HostInfoProvider {
+	return testResourceHostInfoProvider{s}
+}
+
+type testResourceHostInfoProvider struct {
+	*Test
+}
+func (t testResourceHostInfoProvider) Start() error { return nil }
+func (t testResourceHostInfoProvider) HostInfo() *membership.HostInfo { return t.GetHostInfo() }
+
 // GetClusterMetadata for testing
 func (s *Test) GetClusterMetadata() cluster.Metadata {
 	return s.ClusterMetadata

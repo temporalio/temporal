@@ -36,7 +36,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -54,7 +53,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
@@ -81,27 +79,13 @@ type (
 
 	ContextImpl struct {
 		// These fields are constant:
+		d                   ShardControllerDeps
 		shardID             int32
-		executionManager    persistence.ExecutionManager
-		metricsClient       metrics.Client
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
-		config              *configs.Config
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
 		engineFactory       EngineFactory
-
-		persistenceShardManager persistence.ShardManager
-		clientBean              client.Bean
-		historyClient           historyservice.HistoryServiceClient
-		payloadSerializer       serialization.Serializer
-		timeSource              clock.TimeSource
-		namespaceRegistry       namespace.Registry
-		saProvider              searchattribute.Provider
-		saMapper                searchattribute.Mapper
-		clusterMetadata         cluster.Metadata
-		archivalMetadata        archiver.ArchivalMetadata
-		hostInfoProvider        resource.HostInfoProvider
 
 		// Context that lives for the lifetime of the shard context
 		lifecycleCtx    context.Context
@@ -171,7 +155,7 @@ func (s *ContextImpl) GetShardID() int32 {
 
 func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 	// constant from initialization, no need for locks
-	return s.executionManager
+	return s.d.PersistenceExecutionManager
 }
 
 func (s *ContextImpl) GetEngine() (Engine, error) {
@@ -516,12 +500,12 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 	s.wLock()
 	defer s.wUnlock()
 
-	currentTime := s.timeSource.Now()
+	currentTime := s.d.TimeSource.Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
 		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
-	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
+	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.d.Config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
 	return s.timerMaxReadLevelMap[cluster]
 }
 
@@ -559,7 +543,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
-	resp, err := s.executionManager.CreateWorkflowExecution(request)
+	resp, err := s.GetExecutionManager().CreateWorkflowExecution(request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -613,7 +597,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
-	resp, err := s.executionManager.UpdateWorkflowExecution(request)
+	resp, err := s.GetExecutionManager().UpdateWorkflowExecution(request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -680,7 +664,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
-	resp, err := s.executionManager.ConflictResolveWorkflowExecution(request)
+	resp, err := s.GetExecutionManager().ConflictResolveWorkflowExecution(request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -726,7 +710,7 @@ func (s *ContextImpl) addTasksLocked(
 	}
 
 	request.RangeID = s.getRangeIDLocked()
-	err := s.executionManager.AddTasks(request)
+	err := s.GetExecutionManager().AddTasks(request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
@@ -847,7 +831,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
 			// TaskID is set by addTasksLocked
 			WorkflowKey:         key,
-			VisibilityTimestamp: s.timeSource.Now(),
+			VisibilityTimestamp: s.d.TimeSource.Now(),
 			Version:             version,
 		}},
 	}
@@ -861,7 +845,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 func (s *ContextImpl) GetConfig() *configs.Config {
 	// constant from initialization, no need for locks
-	return s.config
+	return s.d.Config
 }
 
 func (s *ContextImpl) GetEventsCache() events.Cache {
@@ -928,7 +912,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		updatedShardInfo.StolenSinceRenew++
 	}
 
-	err := s.persistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
+	err := s.d.PersistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId()})
 	if err != nil {
@@ -950,8 +934,8 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		tag.NextNumber(s.maxTransferSequenceNumber),
 	)
 
-	s.transferSequenceNumber = updatedShardInfo.GetRangeId() << s.config.RangeSizeBits
-	s.maxTransferSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.config.RangeSizeBits
+	s.transferSequenceNumber = updatedShardInfo.GetRangeId() << s.d.Config.RangeSizeBits
+	s.maxTransferSequenceNumber = (updatedShardInfo.GetRangeId() + 1) << s.d.Config.RangeSizeBits
 	s.transferMaxReadLevel = s.transferSequenceNumber - 1
 	s.shardInfo = updatedShardInfo
 
@@ -972,13 +956,13 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 
 	var err error
 	now := clock.NewRealTimeSource().Now()
-	if s.lastUpdated.Add(s.config.ShardUpdateMinInterval()).After(now) {
+	if s.lastUpdated.Add(s.d.Config.ShardUpdateMinInterval()).After(now) {
 		return nil
 	}
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 	s.emitShardInfoMetricsLogsLocked()
 
-	err = s.persistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
+	err = s.d.PersistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
@@ -1035,7 +1019,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 	transferFailoverInProgress := len(s.shardInfo.TransferFailoverLevels)
 	timerFailoverInProgress := len(s.shardInfo.TimerFailoverLevels)
 
-	if s.config.EmitShardDiffLog() &&
+	if s.d.Config.EmitShardDiffLog() &&
 		(logWarnTransferLevelDiff < diffTransferLevel ||
 			logWarnTimerLevelDiff < diffTimerLevel ||
 			logWarnTransferLevelDiff < transferLag ||
@@ -1171,7 +1155,7 @@ func (s *ContextImpl) GetCurrentTime(cluster string) time.Time {
 	if cluster != s.GetClusterMetadata().GetCurrentClusterName() {
 		return s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
-	return s.timeSource.Now().UTC()
+	return s.d.TimeSource.Now().UTC()
 }
 
 func (s *ContextImpl) GetLastUpdatedTime() time.Time {
@@ -1296,8 +1280,8 @@ func (s *ContextImpl) isValid() bool {
 
 func (s *ContextImpl) wLock() {
 	scope := metrics.ShardInfoScope
-	s.metricsClient.IncCounter(scope, metrics.LockRequests)
-	sw := s.metricsClient.StartTimer(scope, metrics.LockLatency)
+	s.d.MetricsClient.IncCounter(scope, metrics.LockRequests)
+	sw := s.d.MetricsClient.StartTimer(scope, metrics.LockLatency)
 	defer sw.Stop()
 
 	s.rwLock.Lock()
@@ -1305,8 +1289,8 @@ func (s *ContextImpl) wLock() {
 
 func (s *ContextImpl) rLock() {
 	scope := metrics.ShardInfoScope
-	s.metricsClient.IncCounter(scope, metrics.LockRequests)
-	sw := s.metricsClient.StartTimer(scope, metrics.LockLatency)
+	s.d.MetricsClient.IncCounter(scope, metrics.LockRequests)
+	sw := s.d.MetricsClient.StartTimer(scope, metrics.LockLatency)
 	defer sw.Stop()
 
 	s.rwLock.RLock()
@@ -1465,7 +1449,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.rUnlock()
 
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
-	resp, err := s.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+	resp, err := s.d.PersistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
 		ShardID:          s.shardID,
 		LifecycleContext: s.lifecycleCtx,
 	})
@@ -1478,8 +1462,8 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// shardInfo is a fresh value, so we don't really need to copy, but
 	// copyShardInfo also ensures that all maps are non-nil
 	updatedShardInfo := copyShardInfo(shardInfo)
-	*ownershipChanged = shardInfo.Owner != s.hostInfoProvider.HostInfo().Identity()
-	updatedShardInfo.Owner = s.hostInfoProvider.HostInfo().Identity()
+	*ownershipChanged = shardInfo.Owner != s.d.HostInfoProvider.HostInfo().Identity()
+	updatedShardInfo.Owner = s.d.HostInfoProvider.HostInfo().Identity()
 
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
@@ -1646,54 +1630,26 @@ func (s *ContextImpl) acquireShard(newMaxReadLevel int64) {
 
 func newContext(
 	shardID int32,
+	d ShardControllerDeps,
 	factory EngineFactory,
-	config *configs.Config,
 	closeCallback func(*ContextImpl),
-	logger log.Logger,
-	throttledLogger log.Logger,
-	persistenceExecutionManager persistence.ExecutionManager,
-	persistenceShardManager persistence.ShardManager,
-	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
-	metricsClient metrics.Client,
-	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
-	namespaceRegistry namespace.Registry,
-	saProvider searchattribute.Provider,
-	saMapper searchattribute.Mapper,
-	clusterMetadata cluster.Metadata,
-	archivalMetadata archiver.ArchivalMetadata,
-	hostInfoProvider resource.HostInfoProvider,
 ) (*ContextImpl, error) {
 
-	hostIdentity := hostInfoProvider.HostInfo().Identity()
+	hostIdentity := d.HostInfoProvider.HostInfo().Identity()
 
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 
 	shardContext := &ContextImpl{
-		state:                   contextStateInitialized,
-		shardID:                 shardID,
-		executionManager:        persistenceExecutionManager,
-		metricsClient:           metricsClient,
-		closeCallback:           closeCallback,
-		config:                  config,
-		contextTaggedLogger:     log.With(logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
-		throttledLogger:         log.With(throttledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
-		engineFactory:           factory,
-		persistenceShardManager: persistenceShardManager,
-		clientBean:              clientBean,
-		historyClient:           historyClient,
-		payloadSerializer:       payloadSerializer,
-		timeSource:              timeSource,
-		namespaceRegistry:       namespaceRegistry,
-		saProvider:              saProvider,
-		saMapper:                saMapper,
-		clusterMetadata:         clusterMetadata,
-		archivalMetadata:        archivalMetadata,
-		hostInfoProvider:        hostInfoProvider,
-		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
-		lifecycleCtx:            lifecycleCtx,
-		lifecycleCancel:         lifecycleCancel,
+		d:                   d,
+		state:               contextStateInitialized,
+		shardID:             shardID,
+		closeCallback:       closeCallback,
+		contextTaggedLogger: log.With(d.Logger, tag.ShardID(shardID), tag.Address(hostIdentity)),
+		throttledLogger:     log.With(d.ThrottledLogger, tag.ShardID(shardID), tag.Address(hostIdentity)),
+		engineFactory:       factory,
+		handoverNamespaces:  make(map[string]*namespaceHandOverInfo),
+		lifecycleCtx:        lifecycleCtx,
+		lifecycleCancel:     lifecycleCancel,
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),
@@ -1765,38 +1721,38 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 }
 
 func (s *ContextImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
-	return s.clientBean.GetRemoteAdminClient(cluster)
+	return s.d.ClientBean.GetRemoteAdminClient(cluster)
 }
 func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {
-	return s.payloadSerializer
+	return s.d.PayloadSerializer
 }
 
 func (s *ContextImpl) GetHistoryClient() historyservice.HistoryServiceClient {
-	return s.historyClient
+	return s.d.HistoryClient
 }
 
 func (s *ContextImpl) GetMetricsClient() metrics.Client {
-	return s.metricsClient
+	return s.d.MetricsClient
 }
 
 func (s *ContextImpl) GetTimeSource() clock.TimeSource {
-	return s.timeSource
+	return s.d.TimeSource
 }
 
 func (s *ContextImpl) GetNamespaceRegistry() namespace.Registry {
-	return s.namespaceRegistry
+	return s.d.NamespaceRegistry
 }
 
 func (s *ContextImpl) GetSearchAttributesProvider() searchattribute.Provider {
-	return s.saProvider
+	return s.d.SaProvider
 }
 func (s *ContextImpl) GetSearchAttributesMapper() searchattribute.Mapper {
-	return s.saMapper
+	return s.d.SaMapper
 }
 func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
-	return s.clusterMetadata
+	return s.d.ClusterMetadata
 }
 
-func (h *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
-	return h.archivalMetadata
+func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
+	return s.d.ArchivalMetadata
 }

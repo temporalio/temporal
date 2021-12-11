@@ -31,6 +31,8 @@ import (
 	"github.com/golang/mock/gomock"
 
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
@@ -55,7 +57,7 @@ func NewTestContextWithTimeSource(
 	timeSource clock.TimeSource,
 ) *ContextTest {
 	result := NewTestContext(ctrl, shardInfo, config)
-	result.timeSource = timeSource
+	result.d.TimeSource = timeSource
 	result.Resource.TimeSource = timeSource
 	return result
 }
@@ -68,14 +70,31 @@ func NewTestContext(
 	resource := resource.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	hostIdentity := resource.GetHostInfo().Identity()
 	shard := &ContextImpl{
+		d: ShardControllerDeps{
+			Config:                      config,
+			Logger:                      resource.GetLogger(),
+			ThrottledLogger:             resource.GetThrottledLogger(),
+			PersistenceExecutionManager: resource.GetExecutionManager(),
+			PersistenceShardManager:     resource.GetShardManager(),
+			ClientBean:                  resource.GetClientBean(),
+			HistoryClient:               resource.GetHistoryClient(),
+			HistoryServiceResolver:      resource.GetHistoryServiceResolver(),
+			MetricsClient:               resource.GetMetricsClient(),
+			PayloadSerializer:           resource.GetPayloadSerializer(),
+			TimeSource:                  resource.GetTimeSource(),
+			NamespaceRegistry:           resource.GetNamespaceRegistry(),
+			SaProvider:                  resource.GetSearchAttributesProvider(),
+			SaMapper:                    resource.GetSearchAttributesMapper(),
+			ClusterMetadata:             resource.GetClusterMetadata(),
+			ArchivalMetadata:            resource.GetArchivalMetadata(),
+			HostInfoProvider:            resource.GetHostInfoProvider(),
+		},
 		shardID:             shardInfo.GetShardId(),
-		executionManager:    resource.ExecutionMgr,
-		metricsClient:       resource.MetricsClient,
 		eventsCache:         eventsCache,
-		config:              config,
-		contextTaggedLogger: resource.GetLogger(),
-		throttledLogger:     resource.GetThrottledLogger(),
+		contextTaggedLogger: log.With(resource.GetLogger(), tag.ShardID(shardInfo.GetShardId()), tag.Address(hostIdentity)),
+		throttledLogger:     log.With(resource.GetThrottledLogger(), tag.ShardID(shardInfo.GetShardId()), tag.Address(hostIdentity)),
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 
@@ -87,15 +106,6 @@ func NewTestContext(
 		timerMaxReadLevelMap:      make(map[string]time.Time),
 		remoteClusterInfos:        make(map[string]*remoteClusterInfo),
 		handoverNamespaces:        make(map[string]*namespaceHandOverInfo),
-
-		clusterMetadata:         resource.ClusterMetadata,
-		timeSource:              resource.TimeSource,
-		namespaceRegistry:       resource.GetNamespaceRegistry(),
-		persistenceShardManager: resource.GetShardManager(),
-		clientBean:              resource.GetClientBean(),
-		saProvider:              resource.GetSearchAttributesProvider(),
-		historyClient:           resource.GetHistoryClient(),
-		archivalMetadata:        resource.GetArchivalMetadata(),
 	}
 	return &ContextTest{
 		Resource:        resource,

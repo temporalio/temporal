@@ -87,32 +87,35 @@ func NewTestController(
 	resource *resource.Test,
 	hostInfoProvider *resource.MockHostInfoProvider,
 ) *ControllerImpl {
+	hostIdentity := resource.GetHostInfo().Identity()
 	return &ControllerImpl{
-		config:                      config,
-		logger:                      resource.GetLogger(),
-		throttledLogger:             resource.GetThrottledLogger(),
-		contextTaggedLogger:         log.With(resource.GetLogger(), tag.ComponentShardController, tag.Address(resource.GetHostInfo().Identity())),
-		persistenceExecutionManager: resource.GetExecutionManager(),
-		persistenceShardManager:     resource.GetShardManager(),
-		clientBean:                  resource.GetClientBean(),
-		historyClient:               resource.GetHistoryClient(),
-		historyServiceResolver:      resource.GetHistoryServiceResolver(),
-		metricsClient:               resource.GetMetricsClient(),
-		payloadSerializer:           resource.GetPayloadSerializer(),
-		timeSource:                  resource.GetTimeSource(),
-		namespaceRegistry:           resource.GetNamespaceRegistry(),
-		saProvider:                  resource.GetSearchAttributesProvider(),
-		saMapper:                    resource.GetSearchAttributesMapper(),
-		clusterMetadata:             resource.GetClusterMetadata(),
-		archivalMetadata:            resource.GetArchivalMetadata(),
-		hostInfoProvider:            hostInfoProvider,
-
-		status:             common.DaemonStatusInitialized,
-		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
-		engineFactory:      engineFactory,
-		shutdownCh:         make(chan struct{}),
-		metricsScope:       resource.GetMetricsClient().Scope(metrics.HistoryShardControllerScope),
-		historyShards:      make(map[int32]*ContextImpl),
+		d: ShardControllerDeps{
+			Config:                      config,
+			Logger:                      resource.GetLogger(),
+			ThrottledLogger:             resource.GetThrottledLogger(),
+			PersistenceExecutionManager: resource.GetExecutionManager(),
+			PersistenceShardManager:     resource.GetShardManager(),
+			ClientBean:                  resource.GetClientBean(),
+			HistoryClient:               resource.GetHistoryClient(),
+			HistoryServiceResolver:      resource.GetHistoryServiceResolver(),
+			MetricsClient:               resource.GetMetricsClient(),
+			PayloadSerializer:           resource.GetPayloadSerializer(),
+			TimeSource:                  resource.GetTimeSource(),
+			NamespaceRegistry:           resource.GetNamespaceRegistry(),
+			SaProvider:                  resource.GetSearchAttributesProvider(),
+			SaMapper:                    resource.GetSearchAttributesMapper(),
+			ClusterMetadata:             resource.GetClusterMetadata(),
+			ArchivalMetadata:            resource.GetArchivalMetadata(),
+			HostInfoProvider:            hostInfoProvider,
+		},
+		status:              common.DaemonStatusInitialized,
+		membershipUpdateCh:  make(chan *membership.ChangedEvent, 10),
+		engineFactory:       engineFactory,
+		shutdownCh:          make(chan struct{}),
+		contextTaggedLogger: log.With(resource.GetLogger(), tag.ComponentShardController, tag.Address(hostIdentity)),
+		throttledLogger:     log.With(resource.GetThrottledLogger(), tag.ComponentShardController, tag.Address(hostIdentity)),
+		metricsScope:        resource.GetMetricsClient().Scope(metrics.HistoryShardControllerScope),
+		historyShards:       make(map[int32]*ContextImpl),
 	}
 }
 
@@ -145,6 +148,10 @@ func (s *controllerSuite) SetupTest() {
 		s.mockResource,
 		s.mockHostInfoProvider,
 	)
+	// this would normally be done in Start but do it here since we're not going to call Start:
+	hostIdentity := s.hostInfo.Identity()
+	s.shardController.contextTaggedLogger = log.With(s.shardController.d.Logger, tag.ComponentShardController, tag.Address(hostIdentity))
+	s.shardController.throttledLogger = log.With(s.shardController.d.ThrottledLogger, tag.ComponentShardController, tag.Address(hostIdentity))
 }
 
 func (s *controllerSuite) TearDownTest() {

@@ -31,16 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/configs"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -48,7 +40,6 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/resource"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
@@ -58,33 +49,19 @@ const (
 
 type (
 	ControllerImpl struct {
+		d ShardControllerDeps
+
+		status              int32
 		membershipUpdateCh  chan *membership.ChangedEvent
 		engineFactory       EngineFactory
-		status              int32
 		shutdownWG          sync.WaitGroup
 		shutdownCh          chan struct{}
 		contextTaggedLogger log.Logger
 		throttledLogger     log.Logger
-		config              *configs.Config
 		metricsScope        metrics.Scope
 
 		sync.RWMutex
-		historyShards               map[int32]*ContextImpl
-		logger                      log.Logger
-		persistenceExecutionManager persistence.ExecutionManager
-		persistenceShardManager     persistence.ShardManager
-		clientBean                  client.Bean
-		historyClient               historyservice.HistoryServiceClient
-		historyServiceResolver      membership.ServiceResolver
-		metricsClient               metrics.Client
-		payloadSerializer           serialization.Serializer
-		timeSource                  clock.TimeSource
-		namespaceRegistry           namespace.Registry
-		saProvider                  searchattribute.Provider
-		saMapper                    searchattribute.Mapper
-		clusterMetadata             cluster.Metadata
-		archivalMetadata            archiver.ArchivalMetadata
-		hostInfoProvider            resource.HostInfoProvider
+		historyShards map[int32]*ContextImpl
 	}
 )
 
@@ -105,15 +82,15 @@ func (c *ControllerImpl) Start() {
 		panic("engineFactory was not injected")
 	}
 
-	hostIdentity := c.hostInfoProvider.HostInfo().Identity()
-	c.contextTaggedLogger = log.With(c.logger, tag.ComponentShardController, tag.Address(hostIdentity))
-	c.throttledLogger = log.With(c.throttledLogger, tag.ComponentShardController, tag.Address(hostIdentity))
+	hostIdentity := c.d.HostInfoProvider.HostInfo().Identity()
+	c.contextTaggedLogger = log.With(c.d.Logger, tag.ComponentShardController, tag.Address(hostIdentity))
+	c.throttledLogger = log.With(c.d.ThrottledLogger, tag.ComponentShardController, tag.Address(hostIdentity))
 
 	c.acquireShards()
 	c.shutdownWG.Add(1)
 	go c.shardManagementPump()
 
-	if err := c.historyServiceResolver.AddListener(
+	if err := c.d.HistoryServiceResolver.AddListener(
 		shardControllerMembershipUpdateListenerName,
 		c.membershipUpdateCh,
 	); err != nil {
@@ -134,7 +111,7 @@ func (c *ControllerImpl) Stop() {
 
 	close(c.shutdownCh)
 
-	if err := c.historyServiceResolver.RemoveListener(
+	if err := c.d.HistoryServiceResolver.RemoveListener(
 		shardControllerMembershipUpdateListenerName,
 	); err != nil {
 		c.contextTaggedLogger.Error("Error removing membership update listener", tag.Error(err), tag.OperationFailed)
@@ -152,7 +129,7 @@ func (c *ControllerImpl) Status() int32 {
 }
 
 func (c *ControllerImpl) GetEngine(ctx context.Context, namespaceID namespace.ID, workflowID string) (Engine, error) {
-	shardID := c.config.GetShardID(namespaceID, workflowID)
+	shardID := c.d.Config.GetShardID(namespaceID, workflowID)
 	return c.GetEngineForShard(ctx, shardID)
 }
 
@@ -206,12 +183,12 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	}
 	c.RUnlock()
 
-	info, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
+	info, err := c.d.HistoryServiceResolver.Lookup(convert.Int32ToString(shardID))
 	if err != nil {
 		return nil, err
 	}
 
-	hostInfo := c.hostInfoProvider.HostInfo()
+	hostInfo := c.d.HostInfoProvider.HostInfo()
 	if info.Identity() != hostInfo.Identity() {
 		return nil, serviceerrors.NewShardOwnershipLost(hostInfo.Identity(), info.GetAddress())
 	}
@@ -232,24 +209,9 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 
 	shard, err := newContext(
 		shardID,
+		c.d,
 		c.engineFactory,
-		c.config,
 		c.shardClosedCallback,
-		c.logger,
-		c.throttledLogger,
-		c.persistenceExecutionManager,
-		c.persistenceShardManager,
-		c.clientBean,
-		c.historyClient,
-		c.metricsClient,
-		c.payloadSerializer,
-		c.timeSource,
-		c.namespaceRegistry,
-		c.saProvider,
-		c.saMapper,
-		c.clusterMetadata,
-		c.archivalMetadata,
-		c.hostInfoProvider,
 	)
 	if err != nil {
 		return nil, err
@@ -293,7 +255,7 @@ func (c *ControllerImpl) shardManagementPump() {
 
 	defer c.shutdownWG.Done()
 
-	acquireTicker := time.NewTicker(c.config.AcquireShardInterval())
+	acquireTicker := time.NewTicker(c.d.Config.AcquireShardInterval())
 	defer acquireTicker.Stop()
 
 	for {
@@ -321,8 +283,8 @@ func (c *ControllerImpl) acquireShards() {
 	sw := c.metricsScope.StartTimer(metrics.AcquireShardsLatency)
 	defer sw.Stop()
 
-	concurrency := common.MaxInt(c.config.AcquireShardConcurrency(), 1)
-	shardActionCh := make(chan int32, c.config.NumberOfShards)
+	concurrency := common.MaxInt(c.d.Config.AcquireShardConcurrency(), 1)
+	shardActionCh := make(chan int32, c.d.Config.NumberOfShards)
 	var wg sync.WaitGroup
 	wg.Add(concurrency)
 	// Spawn workers that would lookup and add/remove shards concurrently.
@@ -334,12 +296,12 @@ func (c *ControllerImpl) acquireShards() {
 				case <-c.shutdownCh:
 					return
 				default:
-					if info, err := c.historyServiceResolver.Lookup(
+					if info, err := c.d.HistoryServiceResolver.Lookup(
 						convert.Int32ToString(shardID),
 					); err != nil {
 						c.contextTaggedLogger.Error("Error looking up host for shardID", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 					} else {
-						if info.Identity() == c.hostInfoProvider.HostInfo().Identity() {
+						if info.Identity() == c.d.HostInfoProvider.HostInfo().Identity() {
 							ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 							if _, err := c.GetEngineForShard(ctx, shardID); err != nil {
 								c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
@@ -356,7 +318,7 @@ func (c *ControllerImpl) acquireShards() {
 
 	// Submit tasks to the channel.
 LoopSubmit:
-	for shardID := int32(1); shardID <= c.config.NumberOfShards; shardID++ {
+	for shardID := int32(1); shardID <= c.d.Config.NumberOfShards; shardID++ {
 		select {
 		case <-c.shutdownCh:
 			break LoopSubmit

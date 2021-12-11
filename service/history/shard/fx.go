@@ -48,48 +48,35 @@ var Module = fx.Options(
 	fx.Provide(ShardControllerProvider),
 )
 
-func ShardControllerProvider(
-	config *configs.Config,
-	logger log.Logger,
-	throttledLogger resource.ThrottledLogger,
-	persistenceExecutionManager persistence.ExecutionManager,
-	persistenceShardManager persistence.ShardManager,
-	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
-	historyServiceResolver membership.ServiceResolver,
-	metricsClient metrics.Client,
-	payloadSerializer serialization.Serializer,
-	timeSource clock.TimeSource,
-	namespaceRegistry namespace.Registry,
-	saProvider searchattribute.Provider,
-	saMapper searchattribute.Mapper,
-	clusterMetadata cluster.Metadata,
-	archivalMetadata archiver.ArchivalMetadata,
-	hostInfoProvider resource.HostInfoProvider,
-) *ControllerImpl {
+type ShardControllerDeps struct {
+	fx.In
+
+	Config                      *configs.Config
+	Logger                      log.Logger
+	ThrottledLogger             resource.ThrottledLogger
+	PersistenceExecutionManager persistence.ExecutionManager
+	PersistenceShardManager     persistence.ShardManager
+	ClientBean                  client.Bean
+	HistoryClient               historyservice.HistoryServiceClient
+	HistoryServiceResolver      membership.ServiceResolver
+	MetricsClient               metrics.Client
+	PayloadSerializer           serialization.Serializer
+	TimeSource                  clock.TimeSource
+	NamespaceRegistry           namespace.Registry
+	SaProvider                  searchattribute.Provider
+	SaMapper                    searchattribute.Mapper
+	ClusterMetadata             cluster.Metadata
+	ArchivalMetadata            archiver.ArchivalMetadata
+	HostInfoProvider            resource.HostInfoProvider
+}
+
+func ShardControllerProvider(d ShardControllerDeps) *ControllerImpl {
 	return &ControllerImpl{
-		status:                      common.DaemonStatusInitialized,
-		membershipUpdateCh:          make(chan *membership.ChangedEvent, 10),
-		historyShards:               make(map[int32]*ContextImpl),
-		shutdownCh:                  make(chan struct{}),
-		logger:                      logger,
-		contextTaggedLogger:         logger,          // will add tags in Start
-		throttledLogger:             throttledLogger, // will add tags in Start
-		config:                      config,
-		metricsScope:                metricsClient.Scope(metrics.HistoryShardControllerScope),
-		persistenceExecutionManager: persistenceExecutionManager,
-		persistenceShardManager:     persistenceShardManager,
-		clientBean:                  clientBean,
-		historyClient:               historyClient,
-		historyServiceResolver:      historyServiceResolver,
-		metricsClient:               metricsClient,
-		payloadSerializer:           payloadSerializer,
-		timeSource:                  timeSource,
-		namespaceRegistry:           namespaceRegistry,
-		saProvider:                  saProvider,
-		saMapper:                    saMapper,
-		clusterMetadata:             clusterMetadata,
-		archivalMetadata:            archivalMetadata,
-		hostInfoProvider:            hostInfoProvider,
+		d:                  d,
+		status:             common.DaemonStatusInitialized,
+		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
+		shutdownCh:         make(chan struct{}),
+		metricsScope:       d.MetricsClient.Scope(metrics.HistoryShardControllerScope),
+		historyShards:      make(map[int32]*ContextImpl),
 	}
 }
