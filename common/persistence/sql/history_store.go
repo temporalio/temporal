@@ -177,14 +177,6 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 	var token historyNodePaginationToken
 	if len(request.NextPageToken) == 0 {
 		token = newHistoryNodePaginationToken(request.MinNodeID, MinTxnID)
-	} else if len(request.NextPageToken) == 8 {
-		// TODO @wxing1292 remove this block in 1.10.x
-		//  this else if block exists to handle forward / backwards compatibility
-		lastNodeID, err := deserializePageToken(request.NextPageToken)
-		if err != nil {
-			return nil, err
-		}
-		token = newHistoryNodePaginationToken(lastNodeID+1, MinTxnID)
 	} else {
 		token, err = deserializeHistoryNodePaginationToken(request.NextPageToken)
 		if err != nil {
