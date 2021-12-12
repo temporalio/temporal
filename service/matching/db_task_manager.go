@@ -43,25 +43,28 @@ import (
 const (
 	dbTaskFlushInterval = 24 * time.Millisecond
 
+	dbTaskDeletionInterval = 10 * time.Second
+
 	dbTaskUpdateAckInterval   = time.Minute
 	dbTaskUpdateQueueInterval = time.Minute
 )
 
 type (
 	dbTaskManager struct {
-		status        int32
-		store         persistence.TaskManager
-		taskOwnership *dbTaskOwnershipImpl
-		taskFlusher   *dbTaskFlusher
-		taskTracker   *dbTaskTracker
+		status             int32
+		taskQueueKey       persistence.TaskQueueKey
+		store              persistence.TaskManager
+		taskQueueOwnership *dbTaskQueueOwnershipImpl
+		taskReader         *dbTaskWriter
+		taskWriter         *dbTaskReader
 
 		dispatchTaskFn func(*internalTask) error
 		finishTaskFn   func(*persistencespb.AllocatedTaskInfo, error)
 		logger         log.Logger
 
-		shutdownChan          chan struct{}
-		writeNotificationChan chan struct{}
-		dispatchChan          chan struct{}
+		shutdownChan              chan struct{}
+		dispatchChan              chan struct{}
+		maxDeletedTaskIDInclusive int64 // in mem only
 	}
 )
 
@@ -74,7 +77,7 @@ func newDBTaskManager(
 	dispatchTaskFn func(*internalTask) error,
 	finishTaskFn func(*persistencespb.AllocatedTaskInfo, error),
 ) (*dbTaskManager, error) {
-	taskOwnership := newDBTaskOwnership(
+	taskOwnership := newDBTaskQueueOwnership(
 		taskQueueKey,
 		taskQueueKind,
 		taskIDRangeSize,
@@ -86,15 +89,16 @@ func newDBTaskManager(
 	}
 
 	return &dbTaskManager{
-		status:        common.DaemonStatusInitialized,
-		store:         store,
-		taskOwnership: taskOwnership,
-		taskFlusher: newDBTaskFlusher(
+		status:             common.DaemonStatusInitialized,
+		taskQueueKey:       taskQueueKey,
+		store:              store,
+		taskQueueOwnership: taskOwnership,
+		taskReader: newDBTaskWriter(
 			taskQueueKey,
 			taskOwnership,
 			logger,
 		),
-		taskTracker: newDBTaskTracker(
+		taskWriter: newDBTaskReader(
 			taskQueueKey,
 			store,
 			taskOwnership.getAckedTaskID(),
@@ -104,8 +108,9 @@ func newDBTaskManager(
 		finishTaskFn:   finishTaskFn,
 		logger:         logger,
 
-		shutdownChan: make(chan struct{}),
-		dispatchChan: make(chan struct{}, 1),
+		shutdownChan:              make(chan struct{}),
+		dispatchChan:              make(chan struct{}, 1),
+		maxDeletedTaskIDInclusive: taskOwnership.getAckedTaskID(),
 	}, nil
 }
 
@@ -163,16 +168,16 @@ func (d *dbTaskManager) writerEventLoop() {
 		select {
 		case <-d.shutdownChan:
 			return
-		case <-d.taskOwnership.getShutdownChan():
+		case <-d.taskQueueOwnership.getShutdownChan():
 			d.Stop()
 
 		case <-updateQueueTicker.C:
 			d.persistTaskQueue()
 		case <-flushTicker.C:
-			d.taskFlusher.flushTasks()
+			d.taskReader.flushTasks()
 			d.SignalDispatch()
-		case <-d.taskFlusher.notifyFlushChan():
-			d.taskFlusher.flushTasks()
+		case <-d.taskReader.notifyFlushChan():
+			d.taskReader.flushTasks()
 			d.SignalDispatch()
 		}
 	}
@@ -182,6 +187,9 @@ func (d *dbTaskManager) readerEventLoop() {
 	updateAckTicker := time.NewTicker(dbTaskUpdateAckInterval)
 	defer updateAckTicker.Stop()
 
+	dbTaskAckTicker := time.NewTicker(dbTaskDeletionInterval)
+	defer dbTaskAckTicker.Stop()
+
 	for {
 		if d.isStopped() {
 			return
@@ -190,11 +198,13 @@ func (d *dbTaskManager) readerEventLoop() {
 		select {
 		case <-d.shutdownChan:
 			return
-		case <-d.taskOwnership.getShutdownChan():
+		case <-d.taskQueueOwnership.getShutdownChan():
 			d.Stop()
 
 		case <-updateAckTicker.C:
 			d.updateAckTaskID()
+		case <-dbTaskAckTicker.C:
+			d.deleteAckedTasks()
 		case <-d.dispatchChan:
 			d.readDispatchTask()
 		}
@@ -204,11 +214,11 @@ func (d *dbTaskManager) readerEventLoop() {
 func (d *dbTaskManager) writeAppendTask(
 	task *persistencespb.TaskInfo,
 ) future.Future {
-	return d.taskFlusher.appendTask(task)
+	return d.taskReader.appendTask(task)
 }
 
 func (d *dbTaskManager) readDispatchTask() {
-	iter := d.taskTracker.taskIterator(d.taskOwnership.getLastAllocatedTaskID())
+	iter := d.taskWriter.taskIterator(d.taskQueueOwnership.getLastAllocatedTaskID())
 	for iter.HasNext() {
 		item, err := iter.Next()
 		if err != nil {
@@ -227,7 +237,7 @@ func (d *dbTaskManager) mustDispatch(
 ) {
 	for !d.isStopped() {
 		if taskqueue.IsTaskExpired(task) {
-			d.taskTracker.ackTask(task.TaskId)
+			d.taskWriter.ackTask(task.TaskId)
 			return
 		}
 
@@ -246,12 +256,31 @@ func (d *dbTaskManager) mustDispatch(
 }
 
 func (d *dbTaskManager) updateAckTaskID() {
-	ackedTaskID := d.taskTracker.moveAckedTaskID()
-	d.taskOwnership.updateAckedTaskID(ackedTaskID)
+	ackedTaskID := d.taskWriter.moveAckedTaskID()
+	d.taskQueueOwnership.updateAckedTaskID(ackedTaskID)
+}
+
+func (d *dbTaskManager) deleteAckedTasks() {
+	ackedTaskID := d.taskQueueOwnership.getAckedTaskID()
+	if ackedTaskID <= d.maxDeletedTaskIDInclusive {
+		return
+	}
+	_, err := d.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
+		NamespaceID:   d.taskQueueKey.NamespaceID,
+		TaskQueueName: d.taskQueueKey.TaskQueueName,
+		TaskType:      d.taskQueueKey.TaskQueueType,
+		TaskID:        ackedTaskID,
+		Limit:         100000, // TODO @wxing1292 why delete with limit? history service is not doing similar thing
+	})
+	if err != nil {
+		d.logger.Error("dbTaskManager encountered task deletion error", tag.Error(err))
+		return
+	}
+	d.maxDeletedTaskIDInclusive = ackedTaskID
 }
 
 func (d *dbTaskManager) persistTaskQueue() {
-	err := d.taskOwnership.persistTaskQueue()
+	err := d.taskQueueOwnership.persistTaskQueue()
 	if err != nil {
 		d.logger.Error("dbTaskManager encountered unknown error", tag.Error(err))
 	}

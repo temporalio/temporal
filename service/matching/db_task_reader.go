@@ -34,11 +34,11 @@ import (
 )
 
 const (
-	dbTaskTrackerPageSize = 100
+	dbTaskReaderPageSize = 100
 )
 
 type (
-	dbTaskTracker struct {
+	dbTaskReader struct {
 		taskQueueKey persistence.TaskQueueKey
 		store        persistence.TaskManager
 		logger       log.Logger
@@ -50,13 +50,13 @@ type (
 	}
 )
 
-func newDBTaskTracker(
+func newDBTaskReader(
 	taskQueueKey persistence.TaskQueueKey,
 	store persistence.TaskManager,
 	ackedTaskID int64,
 	logger log.Logger,
-) *dbTaskTracker {
-	return &dbTaskTracker{
+) *dbTaskReader {
+	return &dbTaskReader{
 		taskQueueKey: taskQueueKey,
 		store:        store,
 		logger:       logger,
@@ -67,13 +67,13 @@ func newDBTaskTracker(
 	}
 }
 
-func (t *dbTaskTracker) taskIterator(
+func (t *dbTaskReader) taskIterator(
 	maxTaskID int64,
 ) collection.Iterator {
 	return collection.NewPagingIterator(t.getPaginationFn(maxTaskID))
 }
 
-func (t *dbTaskTracker) ackTask(taskID int64) {
+func (t *dbTaskReader) ackTask(taskID int64) {
 	t.Lock()
 	defer t.Unlock()
 
@@ -91,7 +91,7 @@ func (t *dbTaskTracker) ackTask(taskID int64) {
 //  12 -> true
 //  15 -> false
 // the acked task ID can be set to 12, meaning task with ID <= 12 are finished
-func (t *dbTaskTracker) moveAckedTaskID() int64 {
+func (t *dbTaskReader) moveAckedTaskID() int64 {
 	t.Lock()
 	defer t.Unlock()
 
@@ -111,7 +111,7 @@ func (t *dbTaskTracker) moveAckedTaskID() int64 {
 	return t.ackedTaskID
 }
 
-func (t *dbTaskTracker) getPaginationFn(
+func (t *dbTaskReader) getPaginationFn(
 	maxTaskID int64,
 ) collection.PaginationFn {
 	t.Lock()
@@ -125,7 +125,7 @@ func (t *dbTaskTracker) getPaginationFn(
 			TaskType:           t.taskQueueKey.TaskQueueType,
 			MinTaskIDExclusive: minTaskID, // exclusive
 			MaxTaskIDInclusive: maxTaskID, // inclusive
-			PageSize:           dbTaskTrackerPageSize,
+			PageSize:           dbTaskReaderPageSize,
 			NextPageToken:      paginationToken,
 		})
 		if err != nil {

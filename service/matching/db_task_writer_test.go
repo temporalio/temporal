@@ -45,7 +45,7 @@ import (
 )
 
 type (
-	dbTaskFlusherSuite struct {
+	dbTaskWriterSuite struct {
 		*require.Assertions
 		suite.Suite
 
@@ -56,24 +56,24 @@ type (
 		taskQueueName string
 		taskType      enumspb.TaskQueueType
 
-		taskFlusher *dbTaskFlusher
+		taskFlusher *dbTaskWriter
 	}
 )
 
-func TestDBTaskFlusherSuite(t *testing.T) {
-	s := new(dbTaskFlusherSuite)
+func TestDBTaskWriterSuite(t *testing.T) {
+	s := new(dbTaskWriterSuite)
 	suite.Run(t, s)
 }
 
-func (s *dbTaskFlusherSuite) SetupSuite() {
+func (s *dbTaskWriterSuite) SetupSuite() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func (s *dbTaskFlusherSuite) TearDownSuite() {
+func (s *dbTaskWriterSuite) TearDownSuite() {
 
 }
 
-func (s *dbTaskFlusherSuite) SetupTest() {
+func (s *dbTaskWriterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -83,7 +83,7 @@ func (s *dbTaskFlusherSuite) SetupTest() {
 	s.taskQueueName = uuid.New().String()
 	s.taskType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
 
-	s.taskFlusher = newDBTaskFlusher(
+	s.taskFlusher = newDBTaskWriter(
 		persistence.TaskQueueKey{
 			NamespaceID:   s.namespaceID,
 			TaskQueueName: s.taskQueueName,
@@ -94,11 +94,11 @@ func (s *dbTaskFlusherSuite) SetupTest() {
 	)
 }
 
-func (s *dbTaskFlusherSuite) TearDownTest() {
+func (s *dbTaskWriterSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *dbTaskFlusherSuite) TestAppendFlushTask_Once_Success() {
+func (s *dbTaskWriterSuite) TestAppendFlushTask_Once_Success() {
 	ctx := context.Background()
 	task := s.randomTask()
 
@@ -117,7 +117,7 @@ func (s *dbTaskFlusherSuite) TestAppendFlushTask_Once_Success() {
 	}
 }
 
-func (s *dbTaskFlusherSuite) TestAppendFlushTask_Once_Failed() {
+func (s *dbTaskWriterSuite) TestAppendFlushTask_Once_Failed() {
 	ctx := context.Background()
 	task := s.randomTask()
 	randomErr := serviceerror.NewUnavailable("random error")
@@ -137,7 +137,7 @@ func (s *dbTaskFlusherSuite) TestAppendFlushTask_Once_Failed() {
 	}
 }
 
-func (s *dbTaskFlusherSuite) TestAppendFlushTask_Multiple_OnePage_Success() {
+func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_OnePage_Success() {
 	numTasks := dbTaskFlusherBatchSize - 1
 	ctx := context.Background()
 
@@ -166,7 +166,7 @@ func (s *dbTaskFlusherSuite) TestAppendFlushTask_Multiple_OnePage_Success() {
 	}
 }
 
-func (s *dbTaskFlusherSuite) TestAppendFlushTask_Multiple_OnePage_Failed() {
+func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_OnePage_Failed() {
 	numTasks := dbTaskFlusherBatchSize - 1
 	ctx := context.Background()
 	randomErr := serviceerror.NewUnavailable("random error")
@@ -196,7 +196,7 @@ func (s *dbTaskFlusherSuite) TestAppendFlushTask_Multiple_OnePage_Failed() {
 	}
 }
 
-func (s *dbTaskFlusherSuite) TestAppendFlushTask_Multiple_MultiPage_Success() {
+func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_MultiPage_Success() {
 	numTasks := 2*dbTaskFlusherBatchSize - 2
 	ctx := context.Background()
 
@@ -230,7 +230,7 @@ func (s *dbTaskFlusherSuite) TestAppendFlushTask_Multiple_MultiPage_Success() {
 	<-s.taskFlusher.notifyFlushChan()
 }
 
-func (s *dbTaskFlusherSuite) TestAppendFlushTask_Multiple_MultiPage_Failed() {
+func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_MultiPage_Failed() {
 	numTasks := 2*dbTaskFlusherBatchSize - 2
 	ctx := context.Background()
 	randomErr := serviceerror.NewUnavailable("random error")
@@ -265,7 +265,7 @@ func (s *dbTaskFlusherSuite) TestAppendFlushTask_Multiple_MultiPage_Failed() {
 	<-s.taskFlusher.notifyFlushChan()
 }
 
-func (s *dbTaskFlusherSuite) randomTask() *persistencespb.TaskInfo {
+func (s *dbTaskWriterSuite) randomTask() *persistencespb.TaskInfo {
 	return &persistencespb.TaskInfo{
 		NamespaceId: s.namespaceID,
 		WorkflowId:  uuid.New().String(),

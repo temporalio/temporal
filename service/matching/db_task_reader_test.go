@@ -43,7 +43,7 @@ import (
 )
 
 type (
-	dbTaskTrackerSuite struct {
+	dbTaskReaderSuite struct {
 		*require.Assertions
 		suite.Suite
 
@@ -56,24 +56,24 @@ type (
 		ackedTaskID   int64
 		maxTaskID     int64
 
-		taskTracker *dbTaskTracker
+		taskTracker *dbTaskReader
 	}
 )
 
-func TestDBTaskTrackerSuite(t *testing.T) {
-	s := new(dbTaskTrackerSuite)
+func TestDBTaskReaderSuite(t *testing.T) {
+	s := new(dbTaskReaderSuite)
 	suite.Run(t, s)
 }
 
-func (s *dbTaskTrackerSuite) SetupSuite() {
+func (s *dbTaskReaderSuite) SetupSuite() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func (s *dbTaskTrackerSuite) TearDownSuite() {
+func (s *dbTaskReaderSuite) TearDownSuite() {
 
 }
 
-func (s *dbTaskTrackerSuite) SetupTest() {
+func (s *dbTaskReaderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -85,7 +85,7 @@ func (s *dbTaskTrackerSuite) SetupTest() {
 	s.ackedTaskID = rand.Int63()
 	s.maxTaskID = s.ackedTaskID + 1000
 
-	s.taskTracker = newDBTaskTracker(
+	s.taskTracker = newDBTaskReader(
 		persistence.TaskQueueKey{
 			NamespaceID:   s.namespaceID,
 			TaskQueueName: s.taskQueueName,
@@ -97,16 +97,16 @@ func (s *dbTaskTrackerSuite) SetupTest() {
 	)
 }
 
-func (s *dbTaskTrackerSuite) TearDownTest() {
+func (s *dbTaskReaderSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *dbTaskTrackerSuite) TestIteration_Error() {
+func (s *dbTaskReaderSuite) TestIteration_Error() {
 	s.taskStore.EXPECT().GetTasks(&persistence.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		PageSize:           dbTaskTrackerPageSize,
+		PageSize:           dbTaskReaderPageSize,
 		MinTaskIDExclusive: s.ackedTaskID,
 		MaxTaskIDInclusive: s.maxTaskID,
 		NextPageToken:      nil,
@@ -123,7 +123,7 @@ func (s *dbTaskTrackerSuite) TestIteration_Error() {
 	s.Equal(map[int64]bool{}, s.taskTracker.tasks)
 }
 
-func (s *dbTaskTrackerSuite) TestIteration_ErrorRetry() {
+func (s *dbTaskReaderSuite) TestIteration_ErrorRetry() {
 	taskID1 := s.ackedTaskID + 1
 	tasks1 := []*persistencespb.AllocatedTaskInfo{
 		{TaskId: taskID1},
@@ -138,7 +138,7 @@ func (s *dbTaskTrackerSuite) TestIteration_ErrorRetry() {
 			NamespaceID:        s.namespaceID,
 			TaskQueue:          s.taskQueueName,
 			TaskType:           s.taskQueueType,
-			PageSize:           dbTaskTrackerPageSize,
+			PageSize:           dbTaskReaderPageSize,
 			MinTaskIDExclusive: s.ackedTaskID,
 			MaxTaskIDInclusive: s.maxTaskID,
 			NextPageToken:      nil,
@@ -150,7 +150,7 @@ func (s *dbTaskTrackerSuite) TestIteration_ErrorRetry() {
 			NamespaceID:        s.namespaceID,
 			TaskQueue:          s.taskQueueName,
 			TaskType:           s.taskQueueType,
-			PageSize:           dbTaskTrackerPageSize,
+			PageSize:           dbTaskReaderPageSize,
 			MinTaskIDExclusive: s.ackedTaskID,
 			MaxTaskIDInclusive: s.maxTaskID,
 			NextPageToken:      token,
@@ -159,7 +159,7 @@ func (s *dbTaskTrackerSuite) TestIteration_ErrorRetry() {
 			NamespaceID:        s.namespaceID,
 			TaskQueue:          s.taskQueueName,
 			TaskType:           s.taskQueueType,
-			PageSize:           dbTaskTrackerPageSize,
+			PageSize:           dbTaskReaderPageSize,
 			MinTaskIDExclusive: taskID1,
 			MaxTaskIDInclusive: s.maxTaskID,
 			NextPageToken:      nil,
@@ -202,7 +202,7 @@ func (s *dbTaskTrackerSuite) TestIteration_ErrorRetry() {
 	}, s.taskTracker.tasks)
 }
 
-func (s *dbTaskTrackerSuite) TestIteration_TwoIter() {
+func (s *dbTaskReaderSuite) TestIteration_TwoIter() {
 	taskID1 := s.ackedTaskID + 1
 	taskID2 := s.ackedTaskID + 3
 	tasks1 := []*persistencespb.AllocatedTaskInfo{
@@ -222,7 +222,7 @@ func (s *dbTaskTrackerSuite) TestIteration_TwoIter() {
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		PageSize:           dbTaskTrackerPageSize,
+		PageSize:           dbTaskReaderPageSize,
 		MinTaskIDExclusive: s.ackedTaskID,
 		MaxTaskIDInclusive: maxTaskID1,
 		NextPageToken:      nil,
@@ -252,7 +252,7 @@ func (s *dbTaskTrackerSuite) TestIteration_TwoIter() {
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		PageSize:           dbTaskTrackerPageSize,
+		PageSize:           dbTaskReaderPageSize,
 		MinTaskIDExclusive: s.taskTracker.loadedTaskID,
 		MaxTaskIDInclusive: maxTaskID2,
 		NextPageToken:      nil,
@@ -282,7 +282,7 @@ func (s *dbTaskTrackerSuite) TestIteration_TwoIter() {
 	}, s.taskTracker.tasks)
 }
 
-func (s *dbTaskTrackerSuite) TestIteration_Pagination() {
+func (s *dbTaskReaderSuite) TestIteration_Pagination() {
 	taskID1 := s.ackedTaskID + 1
 	taskID2 := s.ackedTaskID + 3
 	taskID3 := s.ackedTaskID + 6
@@ -302,7 +302,7 @@ func (s *dbTaskTrackerSuite) TestIteration_Pagination() {
 			NamespaceID:        s.namespaceID,
 			TaskQueue:          s.taskQueueName,
 			TaskType:           s.taskQueueType,
-			PageSize:           dbTaskTrackerPageSize,
+			PageSize:           dbTaskReaderPageSize,
 			MinTaskIDExclusive: s.ackedTaskID,
 			MaxTaskIDInclusive: s.maxTaskID,
 			NextPageToken:      nil,
@@ -314,7 +314,7 @@ func (s *dbTaskTrackerSuite) TestIteration_Pagination() {
 			NamespaceID:        s.namespaceID,
 			TaskQueue:          s.taskQueueName,
 			TaskType:           s.taskQueueType,
-			PageSize:           dbTaskTrackerPageSize,
+			PageSize:           dbTaskReaderPageSize,
 			MinTaskIDExclusive: s.ackedTaskID,
 			MaxTaskIDInclusive: s.maxTaskID,
 			NextPageToken:      token,
@@ -344,7 +344,7 @@ func (s *dbTaskTrackerSuite) TestIteration_Pagination() {
 	}, s.taskTracker.tasks)
 }
 
-func (s *dbTaskTrackerSuite) TestIteration_MaxTaskID_Exists() {
+func (s *dbTaskReaderSuite) TestIteration_MaxTaskID_Exists() {
 	taskID1 := s.ackedTaskID + 1
 	taskID2 := s.ackedTaskID + 3
 	taskID3 := s.maxTaskID
@@ -358,7 +358,7 @@ func (s *dbTaskTrackerSuite) TestIteration_MaxTaskID_Exists() {
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		PageSize:           dbTaskTrackerPageSize,
+		PageSize:           dbTaskReaderPageSize,
 		MinTaskIDExclusive: s.ackedTaskID,
 		MaxTaskIDInclusive: s.maxTaskID,
 		NextPageToken:      nil,
@@ -385,7 +385,7 @@ func (s *dbTaskTrackerSuite) TestIteration_MaxTaskID_Exists() {
 	}, s.taskTracker.tasks)
 }
 
-func (s *dbTaskTrackerSuite) TestIteration_MaxTaskID_Missing() {
+func (s *dbTaskReaderSuite) TestIteration_MaxTaskID_Missing() {
 	taskID1 := s.ackedTaskID + 1
 	taskID2 := s.ackedTaskID + 3
 	tasks := []*persistencespb.AllocatedTaskInfo{
@@ -397,7 +397,7 @@ func (s *dbTaskTrackerSuite) TestIteration_MaxTaskID_Missing() {
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		PageSize:           dbTaskTrackerPageSize,
+		PageSize:           dbTaskReaderPageSize,
 		MinTaskIDExclusive: s.ackedTaskID,
 		MaxTaskIDInclusive: s.maxTaskID,
 		NextPageToken:      nil,
@@ -424,7 +424,7 @@ func (s *dbTaskTrackerSuite) TestIteration_MaxTaskID_Missing() {
 	}, s.taskTracker.tasks)
 }
 
-func (s *dbTaskTrackerSuite) TestAck_Exist() {
+func (s *dbTaskReaderSuite) TestAck_Exist() {
 	taskID := s.ackedTaskID + 12
 	s.taskTracker.tasks[taskID] = false
 
@@ -432,7 +432,7 @@ func (s *dbTaskTrackerSuite) TestAck_Exist() {
 	s.True(s.taskTracker.tasks[taskID])
 }
 
-func (s *dbTaskTrackerSuite) TestAck_NotExist() {
+func (s *dbTaskReaderSuite) TestAck_NotExist() {
 	taskID := s.ackedTaskID + 14
 
 	s.taskTracker.ackTask(taskID)
@@ -440,7 +440,7 @@ func (s *dbTaskTrackerSuite) TestAck_NotExist() {
 	s.False(ok)
 }
 
-func (s *dbTaskTrackerSuite) TestMoveAckedTaskID() {
+func (s *dbTaskReaderSuite) TestMoveAckedTaskID() {
 	taskID1 := s.ackedTaskID + 1
 	taskID2 := s.ackedTaskID + 3
 	taskID3 := s.ackedTaskID + 6

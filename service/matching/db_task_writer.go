@@ -44,9 +44,9 @@ type (
 		future *future.FutureImpl // nil, error
 	}
 
-	dbTaskFlusher struct {
+	dbTaskWriter struct {
 		taskQueueKey persistence.TaskQueueKey
-		ownership    dbTaskOwnership
+		ownership    dbTaskQueueOwnership
 		logger       log.Logger
 
 		flushSignalChan chan struct{}
@@ -54,12 +54,12 @@ type (
 	}
 )
 
-func newDBTaskFlusher(
+func newDBTaskWriter(
 	taskQueueKey persistence.TaskQueueKey,
-	ownership dbTaskOwnership,
+	ownership dbTaskQueueOwnership,
 	logger log.Logger,
-) *dbTaskFlusher {
-	return &dbTaskFlusher{
+) *dbTaskWriter {
+	return &dbTaskWriter{
 		taskQueueKey: taskQueueKey,
 		ownership:    ownership,
 		logger:       logger,
@@ -69,7 +69,7 @@ func newDBTaskFlusher(
 	}
 }
 
-func (f *dbTaskFlusher) appendTask(
+func (f *dbTaskWriter) appendTask(
 	task *persistencespb.TaskInfo,
 ) future.Future {
 	if len(f.taskBuffer) >= dbTaskFlusherBatchSize {
@@ -85,18 +85,18 @@ func (f *dbTaskFlusher) appendTask(
 		// noop
 	default:
 		// busy
-		fut.Set(nil, serviceerror.NewUnavailable("dbTaskFlusher encountered task buffer full"))
+		fut.Set(nil, serviceerror.NewUnavailable("dbTaskWriter encountered task buffer full"))
 	}
 	return fut
 }
 
-func (f *dbTaskFlusher) flushTasks() {
+func (f *dbTaskWriter) flushTasks() {
 	for len(f.taskBuffer) > 0 {
 		f.flushTasksOnce()
 	}
 }
 
-func (f *dbTaskFlusher) flushTasksOnce() {
+func (f *dbTaskWriter) flushTasksOnce() {
 	tasks := make([]*persistencespb.TaskInfo, 0, dbTaskFlusherBatchSize)
 	futures := make([]*future.FutureImpl, 0, len(tasks))
 
@@ -120,7 +120,7 @@ FlushLoop:
 	}
 }
 
-func (f *dbTaskFlusher) notifyFlush() {
+func (f *dbTaskWriter) notifyFlush() {
 	select {
 	case f.flushSignalChan <- struct{}{}:
 	default:
@@ -128,6 +128,6 @@ func (f *dbTaskFlusher) notifyFlush() {
 	}
 }
 
-func (f *dbTaskFlusher) notifyFlushChan() <-chan struct{} {
+func (f *dbTaskWriter) notifyFlushChan() <-chan struct{} {
 	return f.flushSignalChan
 }
