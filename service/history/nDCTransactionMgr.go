@@ -286,6 +286,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 	}
 	isWorkflowRunning := targetWorkflow.getMutableState().IsWorkflowExecutionRunning()
 	targetWorkflowActiveCluster := r.clusterMetadata.ClusterNameForFailoverVersion(
+		true,
 		targetWorkflow.getMutableState().GetNamespaceEntry().FailoverVersion(),
 	)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()

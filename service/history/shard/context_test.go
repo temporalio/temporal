@@ -136,8 +136,8 @@ func (s *contextSuite) TestAddTasks_Success() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	s.mockExecutionManager.EXPECT().AddTasks(addTasksRequest).Return(nil)
-	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(transferTasks)
-	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(timerTasks)
+	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(gomock.Any(), transferTasks)
+	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(gomock.Any(), timerTasks)
 	s.mockHistoryEngine.EXPECT().NotifyNewVisibilityTasks(visibilityTasks)
 	s.mockHistoryEngine.EXPECT().NotifyNewReplicationTasks(replicationTasks)
 

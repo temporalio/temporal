@@ -164,6 +164,9 @@ func (t *timerQueueProcessorImpl) NotifyNewTimers(
 	timerTasks []tasks.Task,
 ) {
 
+	if clusterName == cluster.FakeClusterForEmptyVersion {
+		return
+	}
 	if clusterName == t.currentClusterName {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return

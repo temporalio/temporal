@@ -598,7 +598,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return nil, serviceerror.NewNamespaceNotActive(
 					request.GetNamespace(),
 					clusterMetadata.GetCurrentClusterName(),
-					clusterMetadata.ClusterNameForFailoverVersion(t.LastWriteVersion),
+					clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), t.LastWriteVersion),
 				)
 			}
 
@@ -2051,7 +2051,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			return nil, serviceerror.NewNamespaceNotActive(
 				namespace.String(),
 				clusterMetadata.GetCurrentClusterName(),
-				clusterMetadata.ClusterNameForFailoverVersion(prevLastWriteVersion),
+				clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
 			)
 		}
 
@@ -2600,23 +2600,24 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 }
 
 func (e *historyEngineImpl) NotifyNewTransferTasks(
+	isGlobalNamespace bool,
 	tasks []tasks.Task,
 ) {
-
 	if len(tasks) > 0 {
 		task := tasks[0]
-		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
+		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(isGlobalNamespace, task.GetVersion())
 		e.txProcessor.NotifyNewTask(clusterName, tasks)
 	}
 }
 
 func (e *historyEngineImpl) NotifyNewTimerTasks(
+	isGlobalNamespace bool,
 	tasks []tasks.Task,
 ) {
 
 	if len(tasks) > 0 {
 		task := tasks[0]
-		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(task.GetVersion())
+		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(isGlobalNamespace, task.GetVersion())
 		e.timerProcessor.NotifyNewTimers(clusterName, tasks)
 	}
 }

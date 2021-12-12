@@ -226,27 +226,27 @@ func (mr *MockEngineMockRecorder) NotifyNewReplicationTasks(tasks interface{}) *
 }
 
 // NotifyNewTimerTasks mocks base method.
-func (m *MockEngine) NotifyNewTimerTasks(tasks []tasks.Task) {
+func (m *MockEngine) NotifyNewTimerTasks(isGlobalNamespace bool, tasks []tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTimerTasks", tasks)
+	m.ctrl.Call(m, "NotifyNewTimerTasks", isGlobalNamespace, tasks)
 }
 
 // NotifyNewTimerTasks indicates an expected call of NotifyNewTimerTasks.
-func (mr *MockEngineMockRecorder) NotifyNewTimerTasks(tasks interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) NotifyNewTimerTasks(isGlobalNamespace, tasks interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimerTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTimerTasks), tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimerTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTimerTasks), isGlobalNamespace, tasks)
 }
 
 // NotifyNewTransferTasks mocks base method.
-func (m *MockEngine) NotifyNewTransferTasks(tasks []tasks.Task) {
+func (m *MockEngine) NotifyNewTransferTasks(isGlobalNamespace bool, tasks []tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTransferTasks", tasks)
+	m.ctrl.Call(m, "NotifyNewTransferTasks", isGlobalNamespace, tasks)
 }
 
 // NotifyNewTransferTasks indicates an expected call of NotifyNewTransferTasks.
-func (mr *MockEngineMockRecorder) NotifyNewTransferTasks(tasks interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) NotifyNewTransferTasks(isGlobalNamespace, tasks interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTransferTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTransferTasks), tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTransferTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTransferTasks), isGlobalNamespace, tasks)
 }
 
 // NotifyNewVisibilityTasks mocks base method.
