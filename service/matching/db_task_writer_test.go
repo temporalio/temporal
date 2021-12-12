@@ -50,7 +50,7 @@ type (
 		suite.Suite
 
 		controller    *gomock.Controller
-		taskOwnership *MockdbTaskOwnership
+		taskOwnership *MockdbTaskQueueOwnership
 
 		namespaceID   string
 		taskQueueName string
@@ -77,7 +77,7 @@ func (s *dbTaskWriterSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.taskOwnership = NewMockdbTaskOwnership(s.controller)
+	s.taskOwnership = NewMockdbTaskQueueOwnership(s.controller)
 
 	s.namespaceID = uuid.New().String()
 	s.taskQueueName = uuid.New().String()
