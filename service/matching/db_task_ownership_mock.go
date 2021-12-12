@@ -32,7 +32,6 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-
 	persistence "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -105,6 +104,20 @@ func (mr *MockdbTaskOwnershipMockRecorder) getLastAllocatedTaskID() *gomock.Call
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getLastAllocatedTaskID", reflect.TypeOf((*MockdbTaskOwnership)(nil).getLastAllocatedTaskID))
 }
 
+// getShutdownChan mocks base method.
+func (m *MockdbTaskOwnership) getShutdownChan() <-chan struct{} {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "getShutdownChan")
+	ret0, _ := ret[0].(<-chan struct{})
+	return ret0
+}
+
+// getShutdownChan indicates an expected call of getShutdownChan.
+func (mr *MockdbTaskOwnershipMockRecorder) getShutdownChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getShutdownChan", reflect.TypeOf((*MockdbTaskOwnership)(nil).getShutdownChan))
+}
+
 // persistTaskQueue mocks base method.
 func (m *MockdbTaskOwnership) persistTaskQueue() error {
 	m.ctrl.T.Helper()
@@ -117,20 +130,6 @@ func (m *MockdbTaskOwnership) persistTaskQueue() error {
 func (mr *MockdbTaskOwnershipMockRecorder) persistTaskQueue() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "persistTaskQueue", reflect.TypeOf((*MockdbTaskOwnership)(nil).persistTaskQueue))
-}
-
-// shutdownChan mocks base method.
-func (m *MockdbTaskOwnership) getShutdownChan() <-chan struct{} {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getShutdownChan")
-	ret0, _ := ret[0].(<-chan struct{})
-	return ret0
-}
-
-// shutdownChan indicates an expected call of shutdownChan.
-func (mr *MockdbTaskOwnershipMockRecorder) shutdownChan() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getShutdownChan", reflect.TypeOf((*MockdbTaskOwnership)(nil).getShutdownChan))
 }
 
 // updateAckedTaskID mocks base method.
