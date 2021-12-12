@@ -138,11 +138,11 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Success() {
 		rangeID:             initialRangeID,
 		ackedTaskID:         0,
 		lastAllocatedTaskID: 0,
-		minTaskID:           minTaskID,
-		maxTaskID:           maxTaskID,
+		minTaskIDExclusive:  minTaskID,
+		maxTaskIDInclusive:  maxTaskID,
 	}, *s.taskOwnership.ownershipState)
 	select {
-	case <-s.taskOwnership.shutdownChan():
+	case <-s.taskOwnership.getShutdownChan():
 		s.Fail("task ownership lost")
 	default:
 		// noop
@@ -172,7 +172,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Failed() {
 	s.Error(err)
 	s.Nil(s.taskOwnership.stateLastUpdateTime)
 	s.Nil(s.taskOwnership.ownershipState)
-	<-s.taskOwnership.shutdownChan()
+	<-s.taskOwnership.getShutdownChan()
 }
 
 func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Success() {
@@ -210,11 +210,11 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Success() {
 		rangeID:             rangeID + 1,
 		ackedTaskID:         ackedTaskID,
 		lastAllocatedTaskID: minTaskID,
-		minTaskID:           minTaskID,
-		maxTaskID:           maxTaskID,
+		minTaskIDExclusive:  minTaskID,
+		maxTaskIDInclusive:  maxTaskID,
 	}, *s.taskOwnership.ownershipState)
 	select {
-	case <-s.taskOwnership.shutdownChan():
+	case <-s.taskOwnership.getShutdownChan():
 		s.Fail("task ownership lost")
 	default:
 		// noop
@@ -252,7 +252,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Failed() {
 	s.Error(err)
 	s.Nil(s.taskOwnership.stateLastUpdateTime)
 	s.Nil(s.taskOwnership.ownershipState)
-	<-s.taskOwnership.shutdownChan()
+	<-s.taskOwnership.getShutdownChan()
 }
 
 func (s *dbTaskOwnershipSuite) TestFlushTasks_Success() {
@@ -281,11 +281,11 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_Success() {
 		rangeID:             ownershipState.rangeID,
 		ackedTaskID:         ownershipState.ackedTaskID,
 		lastAllocatedTaskID: task2.TaskId,
-		minTaskID:           ownershipState.minTaskID,
-		maxTaskID:           ownershipState.maxTaskID,
+		minTaskIDExclusive:  ownershipState.minTaskIDExclusive,
+		maxTaskIDInclusive:  ownershipState.maxTaskIDInclusive,
 	}, *s.taskOwnership.ownershipState)
 	select {
-	case <-s.taskOwnership.shutdownChan():
+	case <-s.taskOwnership.getShutdownChan():
 		s.Fail("task ownership lost")
 	default:
 		// noop
@@ -318,11 +318,11 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_Failed() {
 		rangeID:             ownershipState.rangeID,
 		ackedTaskID:         ownershipState.ackedTaskID,
 		lastAllocatedTaskID: task2.TaskId,
-		minTaskID:           ownershipState.minTaskID,
-		maxTaskID:           ownershipState.maxTaskID,
+		minTaskIDExclusive:  ownershipState.minTaskIDExclusive,
+		maxTaskIDInclusive:  ownershipState.maxTaskIDInclusive,
 	}, *s.taskOwnership.ownershipState)
 	select {
-	case <-s.taskOwnership.shutdownChan():
+	case <-s.taskOwnership.getShutdownChan():
 		s.Fail("task ownership lost")
 	default:
 		// noop
@@ -352,14 +352,14 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_OwnershipLost() {
 	err := s.taskOwnership.flushTasks(task1.Data, task2.Data)
 	s.Error(err)
 	s.Nil(s.taskOwnership.ownershipState)
-	<-s.taskOwnership.shutdownChan()
+	<-s.taskOwnership.getShutdownChan()
 }
 
 func (s *dbTaskOwnershipSuite) TestGenerateTaskID_WithinRange() {
 	ownershipState := s.prepareTaskQueueOwnership(rand.Int63())
 
 	var expectedTaskIDs []int64
-	for i := ownershipState.minTaskID + 1; i <= ownershipState.maxTaskID; i++ {
+	for i := ownershipState.minTaskIDExclusive + 1; i <= ownershipState.maxTaskIDInclusive; i++ {
 		expectedTaskIDs = append(expectedTaskIDs, i)
 	}
 
@@ -375,9 +375,9 @@ func (s *dbTaskOwnershipSuite) TestGenerateTaskID_WithinRange() {
 	s.Equal(dbTaskOwnershipState{
 		rangeID:             ownershipState.rangeID,
 		ackedTaskID:         ownershipState.ackedTaskID,
-		lastAllocatedTaskID: ownershipState.maxTaskID,
-		minTaskID:           ownershipState.minTaskID,
-		maxTaskID:           ownershipState.maxTaskID,
+		lastAllocatedTaskID: ownershipState.maxTaskIDInclusive,
+		minTaskIDExclusive:  ownershipState.minTaskIDExclusive,
+		maxTaskIDInclusive:  ownershipState.maxTaskIDInclusive,
 	}, *s.taskOwnership.ownershipState)
 }
 
@@ -411,8 +411,8 @@ func (s *dbTaskOwnershipSuite) TestGenerateTaskID_OutOfRange() {
 		rangeID:             prevOwnershipState.rangeID + 1,
 		ackedTaskID:         prevOwnershipState.ackedTaskID,
 		lastAllocatedTaskID: expectedTaskIDs[len(expectedTaskIDs)-1],
-		minTaskID:           minTaskID,
-		maxTaskID:           maxTaskID,
+		minTaskIDExclusive:  minTaskID,
+		maxTaskIDInclusive:  maxTaskID,
 	}, *s.taskOwnership.ownershipState)
 }
 

@@ -43,7 +43,7 @@ import (
 
 const (
 	dbTaskOwnershipStatusUninitialized dbTaskOwnershipStatus = 0
-	dbTaskOwnershipStatusOwning        dbTaskOwnershipStatus = 1
+	dbTaskOwnershipStatusOwned         dbTaskOwnershipStatus = 1
 	dbTaskOwnershipStatusLost          dbTaskOwnershipStatus = 2
 )
 
@@ -51,7 +51,7 @@ type (
 	dbTaskOwnershipStatus int
 
 	dbTaskOwnership interface {
-		shutdownChan() <-chan struct{}
+		getShutdownChan() <-chan struct{}
 		getAckedTaskID() int64
 		updateAckedTaskID(taskID int64)
 		getLastAllocatedTaskID() int64
@@ -63,8 +63,8 @@ type (
 		rangeID             int64
 		ackedTaskID         int64
 		lastAllocatedTaskID int64
-		minTaskID           int64 // exclusive
-		maxTaskID           int64 // inclusive
+		minTaskIDExclusive  int64 // exclusive
+		maxTaskIDInclusive  int64 // inclusive
 	}
 
 	dbTaskOwnershipImpl struct {
@@ -78,7 +78,7 @@ type (
 		sync.Mutex
 		status              dbTaskOwnershipStatus
 		ownershipState      *dbTaskOwnershipState
-		shutdownC           chan struct{}
+		shutdownChan        chan struct{}
 		stateLastUpdateTime *time.Time
 	}
 )
@@ -100,14 +100,14 @@ func newDBTaskOwnership(
 
 		status:              dbTaskOwnershipStatusUninitialized,
 		ownershipState:      nil,
-		shutdownC:           make(chan struct{}),
+		shutdownChan:        make(chan struct{}),
 		stateLastUpdateTime: nil,
 	}
 	return taskOwnership
 }
 
-func (m *dbTaskOwnershipImpl) shutdownChan() <-chan struct{} {
-	return m.shutdownC
+func (m *dbTaskOwnershipImpl) getShutdownChan() <-chan struct{} {
+	return m.shutdownChan
 }
 
 func (m *dbTaskOwnershipImpl) getAckedTaskID() int64 {
@@ -149,7 +149,7 @@ func (m *dbTaskOwnershipImpl) takeTaskQueueOwnership() error {
 		if err := m.renewTaskQueueLocked(response.RangeID + 1); err != nil {
 			return err
 		}
-		m.status = dbTaskOwnershipStatusOwning
+		m.status = dbTaskOwnershipStatusOwned
 		return nil
 
 	case *serviceerror.NotFound:
@@ -170,7 +170,7 @@ func (m *dbTaskOwnershipImpl) takeTaskQueueOwnership() error {
 		}
 		m.stateLastUpdateTime = timestamp.TimePtr(m.timeSource.Now())
 		m.updateStateLocked(initialRangeID, 0)
-		m.status = dbTaskOwnershipStatusOwning
+		m.status = dbTaskOwnershipStatusOwned
 		return nil
 
 	default:
@@ -238,19 +238,19 @@ func (m *dbTaskOwnershipImpl) flushTasks(
 func (m *dbTaskOwnershipImpl) generatedTaskIDsLocked(
 	numTasks int,
 ) ([]int64, error) {
-	if m.ownershipState.maxTaskID-m.ownershipState.lastAllocatedTaskID < int64(numTasks) {
+	if m.ownershipState.maxTaskIDInclusive-m.ownershipState.lastAllocatedTaskID < int64(numTasks) {
 		if err := m.renewTaskQueueLocked(m.ownershipState.rangeID + 1); err != nil {
 			return nil, err
 		}
 	}
-	if m.ownershipState.maxTaskID-m.ownershipState.lastAllocatedTaskID < int64(numTasks) {
+	if m.ownershipState.maxTaskIDInclusive-m.ownershipState.lastAllocatedTaskID < int64(numTasks) {
 		panic(fmt.Sprintf("dbTaskOwnershipImpl generatedTaskIDsLocked unable to allocate task IDs"))
 	}
 
 	allocatedTaskIDs := make([]int64, numTasks)
 	for i := 0; i < numTasks; i++ {
 		m.ownershipState.lastAllocatedTaskID++
-		if m.ownershipState.lastAllocatedTaskID > m.ownershipState.maxTaskID {
+		if m.ownershipState.lastAllocatedTaskID > m.ownershipState.maxTaskIDInclusive {
 			panic(fmt.Sprintf("dbTaskOwnershipImpl generatedTaskIDsLocked encountered task ID overflow"))
 		}
 		allocatedTaskIDs[i] = m.ownershipState.lastAllocatedTaskID
@@ -291,8 +291,8 @@ func (m *dbTaskOwnershipImpl) updateStateLocked(
 			rangeID:             rangeID,
 			ackedTaskID:         ackedTaskID,
 			lastAllocatedTaskID: minTaskID,
-			minTaskID:           minTaskID,
-			maxTaskID:           maxTaskID,
+			minTaskIDExclusive:  minTaskID,
+			maxTaskIDInclusive:  maxTaskID,
 		}
 	} else {
 		if rangeID < m.ownershipState.rangeID {
@@ -305,8 +305,8 @@ func (m *dbTaskOwnershipImpl) updateStateLocked(
 		if minTaskID > m.ownershipState.lastAllocatedTaskID {
 			m.ownershipState.lastAllocatedTaskID = minTaskID
 		}
-		m.ownershipState.minTaskID = minTaskID
-		m.ownershipState.maxTaskID = maxTaskID
+		m.ownershipState.minTaskIDExclusive = minTaskID
+		m.ownershipState.maxTaskIDInclusive = maxTaskID
 	}
 }
 
@@ -323,7 +323,7 @@ func (m *dbTaskOwnershipImpl) maybeShutdownLocked(
 		return
 	}
 	m.status = dbTaskOwnershipStatusLost
-	close(m.shutdownC)
+	close(m.shutdownChan)
 }
 
 func rangeIDToTaskIDRange(
