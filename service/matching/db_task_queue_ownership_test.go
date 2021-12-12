@@ -118,7 +118,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Success() {
 		TaskType:    s.taskQueueType,
 	}).Return(nil, serviceerror.NewNotFound("random error message"))
 	s.taskStore.EXPECT().CreateTaskQueue(&persistence.CreateTaskQueueRequest{
-		RangeID: initialRangeID,
+		RangeID: dbTaskInitialRangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    s.namespaceID,
 			Name:           s.taskQueueName,
@@ -130,12 +130,12 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Success() {
 		},
 	}).Return(&persistence.CreateTaskQueueResponse{}, nil)
 
-	minTaskID, maxTaskID := rangeIDToTaskIDRange(initialRangeID, s.taskIDRangeSize)
+	minTaskID, maxTaskID := rangeIDToTaskIDRange(dbTaskInitialRangeID, s.taskIDRangeSize)
 	err := s.taskOwnership.takeTaskQueueOwnership()
 	s.NoError(err)
 	s.Equal(s.now, *s.taskOwnership.stateLastUpdateTime)
 	s.Equal(dbTaskQueueOwnershipState{
-		rangeID:             initialRangeID,
+		rangeID:             dbTaskInitialRangeID,
 		ackedTaskID:         0,
 		lastAllocatedTaskID: 0,
 		minTaskIDExclusive:  minTaskID,
@@ -156,7 +156,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Failed() {
 		TaskType:    s.taskQueueType,
 	}).Return(nil, serviceerror.NewNotFound("random error message"))
 	s.taskStore.EXPECT().CreateTaskQueue(&persistence.CreateTaskQueueRequest{
-		RangeID: initialRangeID,
+		RangeID: dbTaskInitialRangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    s.namespaceID,
 			Name:           s.taskQueueName,

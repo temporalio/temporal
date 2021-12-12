@@ -154,7 +154,7 @@ func (m *dbTaskQueueOwnershipImpl) takeTaskQueueOwnership() error {
 
 	case *serviceerror.NotFound:
 		if _, err := m.store.CreateTaskQueue(&persistence.CreateTaskQueueRequest{
-			RangeID: initialRangeID,
+			RangeID: dbTaskInitialRangeID,
 			TaskQueueInfo: &persistencespb.TaskQueueInfo{
 				NamespaceId:    m.taskQueueKey.NamespaceID,
 				Name:           m.taskQueueKey.TaskQueueName,
@@ -169,7 +169,7 @@ func (m *dbTaskQueueOwnershipImpl) takeTaskQueueOwnership() error {
 			return err
 		}
 		m.stateLastUpdateTime = timestamp.TimePtr(m.timeSource.Now())
-		m.updateStateLocked(initialRangeID, 0)
+		m.updateStateLocked(dbTaskInitialRangeID, 0)
 		m.status = dbTaskQueueOwnershipStatusOwned
 		return nil
 
@@ -275,7 +275,7 @@ func (m *dbTaskQueueOwnershipImpl) expiryTime() *time.Time {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
 		return nil
 	case enumspb.TASK_QUEUE_KIND_STICKY:
-		return timestamp.TimePtr(m.timeSource.Now().Add(stickyTaskQueueTTL))
+		return timestamp.TimePtr(m.timeSource.Now().Add(dbTaskStickyTaskQueueTTL))
 	default:
 		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", m.taskQueueKind))
 	}
