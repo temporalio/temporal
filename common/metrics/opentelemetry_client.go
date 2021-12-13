@@ -52,11 +52,11 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
-	rootScope := newOpentelemetryScope(serviceIdx, reporter, nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache)
+	globalRootScope := newOpentelemetryScope(serviceIdx, reporter, nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &opentelemetryClient{
-		rootScope:    rootScope,
+		rootScope:    globalRootScope,
 		childScopes:  make(map[int]Scope, totalScopes),
 		metricDefs:   getMetricDefs(serviceIdx),
 		serviceIdx:   serviceIdx,
@@ -70,7 +70,7 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
-		metricsClient.childScopes[idx] = scopeWrapper(rootScope.taggedString(scopeTags))
+		metricsClient.childScopes[idx] = scopeWrapper(globalRootScope.taggedString(scopeTags, true))
 	}
 
 	for idx, def := range ScopeDefs[serviceIdx] {
@@ -79,7 +79,7 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
-		metricsClient.childScopes[idx] = scopeWrapper(rootScope.taggedString(scopeTags))
+		metricsClient.childScopes[idx] = scopeWrapper(globalRootScope.taggedString(scopeTags, true))
 	}
 
 	return metricsClient, nil
