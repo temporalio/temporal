@@ -144,7 +144,7 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 				m.metricDefs,
 				false,
 				m.perUnitBuckets,
-				),
+			),
 			scope,
 			m.metricDefs,
 			false,
