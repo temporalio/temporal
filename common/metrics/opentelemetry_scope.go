@@ -55,6 +55,7 @@ func newOpentelemetryScope(
 	defs map[int]metricDefinition,
 	isNamespace bool,
 	gaugeCache OtelGaugeCache,
+	selfAsRoot bool,
 ) *opentelemetryScope {
 	result := &opentelemetryScope{
 		serviceIdx:        serviceIdx,
@@ -64,6 +65,9 @@ func newOpentelemetryScope(
 		defs:              defs,
 		isNamespaceTagged: isNamespace,
 		gaugeCache:        gaugeCache,
+	}
+	if selfAsRoot {
+		result.rootScope = result
 	}
 	result.labels = tagMapToLabelArray(tags)
 	return result
@@ -110,7 +114,7 @@ func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
 			m.rootScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerRollup})
 	case m.isNamespaceTagged:
-		allScope := m.taggedString(map[string]string{namespace: namespaceAllValue})
+		allScope := m.taggedString(map[string]string{namespace: namespaceAllValue}, false)
 		timerAll := newOpenTelemetryStopwatchMetric(
 			allScope.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String(), opt...),
 			allScope.labels)
@@ -146,7 +150,7 @@ func (m *opentelemetryScope) RecordTimer(id int, d time.Duration) {
 		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String(), opt...).Record(
 			ctx,
 			d.Nanoseconds(),
-			m.taggedString(map[string]string{namespace: namespaceAllValue}).labels...,
+			m.taggedString(map[string]string{namespace: namespaceAllValue}, false).labels...,
 		)
 	}
 }
@@ -177,12 +181,12 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 		m.reporter.GetMeterMust().NewInt64Histogram(def.metricName.String(), opt...).Record(
 			ctx,
 			value,
-			m.taggedString(map[string]string{namespace: namespaceAllValue}).labels...,
+			m.taggedString(map[string]string{namespace: namespaceAllValue}, false).labels...,
 		)
 	}
 }
 
-func (m *opentelemetryScope) taggedString(tags map[string]string) *opentelemetryScope {
+func (m *opentelemetryScope) taggedString(tags map[string]string, selfAsRoot bool) *opentelemetryScope {
 	namespaceTagged := m.isNamespaceTagged
 	tagMap := make(map[string]string, len(tags)+len(m.labels))
 	for k, v := range m.tags {
@@ -195,7 +199,7 @@ func (m *opentelemetryScope) taggedString(tags map[string]string) *opentelemetry
 		}
 		tagMap[k] = v
 	}
-	return newOpentelemetryScope(m.serviceIdx, m.reporter, m.rootScope, tagMap, m.defs, namespaceTagged, m.gaugeCache)
+	return newOpentelemetryScope(m.serviceIdx, m.reporter, m.rootScope, tagMap, m.defs, namespaceTagged, m.gaugeCache, selfAsRoot)
 }
 
 func (m *opentelemetryScope) Tagged(tags ...Tag) Scope {
@@ -232,7 +236,7 @@ func (m *opentelemetryScope) TaggedInternal(tags ...Tag) internalScope {
 		tagMap[tag.Key()] = tag.Value()
 	}
 
-	return m.taggedString(tagMap)
+	return m.taggedString(tagMap, false)
 }
 
 func unitToOptions(unit MetricUnit) metric.InstrumentOption {
