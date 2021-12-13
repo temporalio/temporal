@@ -138,7 +138,13 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	scope := m.childScopes[scopeIdx]
 	return m.scopeWrapper(
 		newTallyScopeInternal(
-			NoopScope(0),
+			newTallyScopeInternal(
+				NoopScope(0),
+				scope,
+				m.metricDefs,
+				false,
+				m.perUnitBuckets,
+			),
 			scope,
 			m.metricDefs,
 			false,
