@@ -36,6 +36,7 @@ var readOnlyNamespaceAPI = map[string]struct{}{
 	"QueryWorkflow":                  {},
 	"DescribeWorkflowExecution":      {},
 	"DescribeTaskQueue":              {},
+	"GetSystemInfo":                  {},
 	"ListTaskQueuePartitions":        {},
 }
 

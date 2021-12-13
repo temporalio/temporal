@@ -2778,6 +2778,45 @@ func (wh *WorkflowHandler) GetClusterInfo(_ context.Context, _ *workflowservice.
 	}, nil
 }
 
+// GetSystemInfo returns information about the Temporal system.
+func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflowservice.GetSystemInfoRequest) (_ *workflowservice.GetSystemInfoResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	_, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	metadata, err := wh.clusterMetadataManager.GetCurrentClusterMetadata()
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.GetSystemInfoResponse{
+		ServerVersion: headers.ServerVersion,
+		VersionInfo:   metadata.VersionInfo,
+		// Capabilities should be added as needed. In many cases, capabilities are
+		// hardcoded boolean true values since older servers will respond with a
+		// form of this message without the field which is implied false.
+		Capabilities: &workflowservice.GetSystemInfoResponse_Capabilities{
+			SignalAndQueryHeader:         true,
+			InternalErrorDifferentiation: true,
+		},
+	}, nil
+}
+
 // ListTaskQueuePartitions returns all the partition and host for a task queue.
 func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request *workflowservice.ListTaskQueuePartitionsRequest) (_ *workflowservice.ListTaskQueuePartitionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
