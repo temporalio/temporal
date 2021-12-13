@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"math"
 
@@ -88,6 +89,9 @@ func (m *sqlTaskManager) CreateTaskQueue(request *persistence.InternalCreateTask
 		DataEncoding: request.TaskQueueInfo.EncodingType.String(),
 	}
 	if _, err := m.Db.InsertIntoTaskQueues(ctx, &row); err != nil {
+		if m.Db.IsDupEntryError(err) {
+			return &persistence.ConditionFailedError{Msg: err.Error()}
+		}
 		return serviceerror.NewUnavailable(fmt.Sprintf("CreateTaskQueue operation failed. Failed to make task queue %v of type %v. Error: %v", request.TaskQueue, request.TaskType, err))
 	}
 
@@ -121,59 +125,13 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 		}, nil
 	case sql.ErrNoRows:
 		return nil, serviceerror.NewNotFound(
-			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskType: %v, Error: %v",
+			fmt.Sprintf("GetTaskQueue operation failed. TaskQueue: %v, TaskQueueType: %v, Error: %v",
 				request.TaskQueue, request.TaskType, err))
 	default:
 		return nil, serviceerror.NewUnavailable(
 			fmt.Sprintf("GetTaskQueue operation failed. Failed to check if task queue %v of type %v existed. Error: %v",
 				request.TaskQueue, request.TaskType, err))
 	}
-}
-
-func (m *sqlTaskManager) ExtendLease(
-	request *persistence.InternalExtendLeaseRequest,
-) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
-	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
-	if err != nil {
-		return serviceerror.NewInternal(err.Error())
-	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
-
-	err = m.txExecute(ctx, "LeaseTaskQueue", func(tx sqlplugin.Tx) error {
-		// We need to separately check the condition and do the
-		// update because we want to throw different error codes.
-		// Since we need to do things separately (in a transaction), we need to take a lock.
-		if err := lockTaskQueue(ctx,
-			tx,
-			tqHash,
-			tqId,
-			request.RangeID,
-		); err != nil {
-			return err
-		}
-
-		result, err := tx.UpdateTaskQueues(ctx, &sqlplugin.TaskQueuesRow{
-			RangeHash:    tqHash,
-			TaskQueueID:  tqId,
-			RangeID:      request.RangeID + 1,
-			Data:         request.TaskQueueInfo.Data,
-			DataEncoding: request.TaskQueueInfo.EncodingType.String(),
-		})
-		if err != nil {
-			return err
-		}
-		rowsAffected, err := result.RowsAffected()
-		if err != nil {
-			return fmt.Errorf("rowsAffected error: %v", err)
-		}
-		if rowsAffected == 0 {
-			return fmt.Errorf("%v rows affected instead of 1", rowsAffected)
-		}
-		return nil
-	})
-	return err
 }
 
 func (m *sqlTaskManager) UpdateTaskQueue(
@@ -193,7 +151,7 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 			tx,
 			tqHash,
 			tqId,
-			request.RangeID,
+			request.PrevRangeID,
 		); err != nil {
 			return err
 		}
@@ -359,7 +317,7 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 	if err != nil {
 		return serviceerror.NewUnavailable(err.Error())
 	}
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
 	result, err := m.Db.DeleteFromTaskQueues(ctx, sqlplugin.TaskQueuesFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
@@ -373,7 +331,9 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 		return serviceerror.NewUnavailable(fmt.Sprintf("rowsAffected returned error:%v", err))
 	}
 	if nRows != 1 {
-		return serviceerror.NewUnavailable(fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows))
+		return &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("delete failed: %v rows affected instead of 1", nRows),
+		}
 	}
 	return nil
 }
@@ -429,24 +389,47 @@ func (m *sqlTaskManager) GetTasks(
 		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 
+	minTaskID := request.MinTaskIDExclusive
+	maxTaskID := request.MaxTaskIDInclusive
+	if len(request.NextPageToken) != 0 {
+		token, err := deserializeMatchingTaskPageToken(request.NextPageToken)
+		if err != nil {
+			return nil, err
+		}
+		minTaskID = token.TaskID
+	}
+
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 	rows, err := m.Db.SelectFromTasks(ctx, sqlplugin.TasksFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
-		MinTaskID:   &request.ReadLevel,
-		MaxTaskID:   request.MaxReadLevel,
-		PageSize:    &request.BatchSize,
+		MinTaskID:   &minTaskID,
+		MaxTaskID:   &maxTaskID,
+		PageSize:    &request.PageSize,
 	})
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
 	}
 
-	var tasks = make([]*commonpb.DataBlob, len(rows))
+	response := &persistence.InternalGetTasksResponse{
+		Tasks: make([]*commonpb.DataBlob, len(rows)),
+	}
 	for i, v := range rows {
-		tasks[i] = persistence.NewDataBlob(v.Data, v.DataEncoding)
+		response.Tasks[i] = persistence.NewDataBlob(v.Data, v.DataEncoding)
+	}
+	if len(rows) == request.PageSize {
+		token, err := serializeMatchingTaskPageToken(&matchingTaskPageToken{
+			TaskID: rows[len(rows)-1].TaskID,
+		})
+		if err != nil {
+			return nil, err
+		}
+		response.NextPageToken = token
+	} else {
+		response.NextPageToken = nil
 	}
 
-	return &persistence.InternalGetTasksResponse{Tasks: tasks}, nil
+	return response, nil
 }
 
 func (m *sqlTaskManager) CompleteTask(
@@ -460,7 +443,7 @@ func (m *sqlTaskManager) CompleteTask(
 	}
 
 	taskID := request.TaskID
-	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.Name, request.TaskQueue.TaskType)
+	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
 	_, err = m.Db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
 		RangeHash:   tqHash,
 		TaskQueueID: tqId,
@@ -497,7 +480,7 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 	return int(nRows), nil
 }
 
-// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, Name and TaskQueueType
+// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
 func (m *sqlTaskManager) calculateTaskQueueHash(
 	namespaceID primitives.UUID,
 	name string,
@@ -506,7 +489,7 @@ func (m *sqlTaskManager) calculateTaskQueueHash(
 	return farm.Fingerprint32(m.taskQueueId(namespaceID, name, taskType))
 }
 
-// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, Name and TaskQueueType
+// Returns uint32 hash for a particular TaskQueue/Task given a Namespace, TaskQueueName and TaskQueueType
 func (m *sqlTaskManager) taskQueueIdAndHash(
 	namespaceID primitives.UUID,
 	name string,
@@ -554,4 +537,20 @@ func lockTaskQueue(
 	default:
 		return serviceerror.NewUnavailable(fmt.Sprintf("Failed to lock task queue. Error: %v", err))
 	}
+}
+
+type matchingTaskPageToken struct {
+	TaskID int64
+}
+
+func serializeMatchingTaskPageToken(token *matchingTaskPageToken) ([]byte, error) {
+	return json.Marshal(token)
+}
+
+func deserializeMatchingTaskPageToken(payload []byte) (*matchingTaskPageToken, error) {
+	var token matchingTaskPageToken
+	if err := json.Unmarshal(payload, &token); err != nil {
+		return nil, err
+	}
+	return &token, nil
 }

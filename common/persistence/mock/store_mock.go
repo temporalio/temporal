@@ -235,20 +235,6 @@ func (mr *MockTaskStoreMockRecorder) DeleteTaskQueue(request interface{}) *gomoc
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTaskQueue", reflect.TypeOf((*MockTaskStore)(nil).DeleteTaskQueue), request)
 }
 
-// ExtendLease mocks base method.
-func (m *MockTaskStore) ExtendLease(request *persistence.InternalExtendLeaseRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ExtendLease", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// ExtendLease indicates an expected call of ExtendLease.
-func (mr *MockTaskStoreMockRecorder) ExtendLease(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ExtendLease", reflect.TypeOf((*MockTaskStore)(nil).ExtendLease), request)
-}
-
 // GetName mocks base method.
 func (m *MockTaskStore) GetName() string {
 	m.ctrl.T.Helper()

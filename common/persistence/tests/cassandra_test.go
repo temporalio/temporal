@@ -109,6 +109,54 @@ func TestCassandraHistoryStoreSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestCassandraTaskQueueSuite(t *testing.T) {
+	cfg := NewCassandraConfig()
+	SetupCassandraDatabase(cfg)
+	SetupCassandraSchema(cfg)
+	logger := log.NewNoopLogger()
+	factory := cassandra.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testCassandraClusterName,
+		logger,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+		TearDownCassandraKeyspace(cfg)
+	}()
+
+	s := NewTaskQueueSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
+func TestCassandraTaskQueueTaskSuite(t *testing.T) {
+	cfg := NewCassandraConfig()
+	SetupCassandraDatabase(cfg)
+	SetupCassandraSchema(cfg)
+	logger := log.NewNoopLogger()
+	factory := cassandra.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testCassandraClusterName,
+		logger,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+		TearDownCassandraKeyspace(cfg)
+	}()
+
+	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
 // NewCassandraConfig returns a new Cassandra config for test
 func NewCassandraConfig() *config.Cassandra {
 	return &config.Cassandra{

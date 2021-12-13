@@ -425,7 +425,7 @@ func (c *ContextImpl) CreateWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	NotifyWorkflowSnapshotTasks(engine, newWorkflow)
+	NotifyWorkflowSnapshotTasks(engine, newWorkflow, newMutableState.GetNamespaceEntry().IsGlobalNamespace())
 	emitStateTransitionCount(c.metricsClient, newMutableState)
 
 	return nil

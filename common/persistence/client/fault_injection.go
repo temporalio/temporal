@@ -935,13 +935,6 @@ func (t *FaultInjectionTaskStore) GetTaskQueue(request *persistence.InternalGetT
 	return t.baseTaskStore.GetTaskQueue(request)
 }
 
-func (t *FaultInjectionTaskStore) ExtendLease(request *persistence.InternalExtendLeaseRequest) error {
-	if err := t.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return t.baseTaskStore.ExtendLease(request)
-}
-
 func (t *FaultInjectionTaskStore) UpdateTaskQueue(request *persistence.InternalUpdateTaskQueueRequest) (
 	*persistence.UpdateTaskQueueResponse,
 	error,

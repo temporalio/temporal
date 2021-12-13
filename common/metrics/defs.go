@@ -242,10 +242,12 @@ const (
 	PersistenceCompleteTaskScope
 	// PersistenceCompleteTasksLessThanScope is the metric scope for persistence.TaskManager.PersistenceCompleteTasksLessThan API
 	PersistenceCompleteTasksLessThanScope
-	// PersistenceLeaseTaskQueueScope tracks LeaseTaskQueue calls made by service to persistence layer
-	PersistenceLeaseTaskQueueScope
+	// PersistenceCreateTaskQueueScope tracks PersistenceCreateTaskQueueScope calls made by service to persistence layer
+	PersistenceCreateTaskQueueScope
 	// PersistenceUpdateTaskQueueScope tracks PersistenceUpdateTaskQueueScope calls made by service to persistence layer
 	PersistenceUpdateTaskQueueScope
+	// PersistenceGetTaskQueueScope tracks PersistenceGetTaskQueueScope calls made by service to persistence layer
+	PersistenceGetTaskQueueScope
 	// PersistenceListTaskQueueScope is the metric scope for persistence.TaskManager.ListTaskQueue API
 	PersistenceListTaskQueueScope
 	// PersistenceDeleteTaskQueueScope is the metric scope for persistence.TaskManager.DeleteTaskQueue API
@@ -1224,8 +1226,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetTasksScope:                          {operation: "GetTasks"},
 		PersistenceCompleteTaskScope:                      {operation: "CompleteTask"},
 		PersistenceCompleteTasksLessThanScope:             {operation: "CompleteTasksLessThan"},
-		PersistenceLeaseTaskQueueScope:                    {operation: "LeaseTaskQueue"},
+		PersistenceCreateTaskQueueScope:                   {operation: "CreateTaskQueue"},
 		PersistenceUpdateTaskQueueScope:                   {operation: "UpdateTaskQueue"},
+		PersistenceGetTaskQueueScope:                      {operation: "GetTaskQueue"},
 		PersistenceListTaskQueueScope:                     {operation: "ListTaskQueue"},
 		PersistenceDeleteTaskQueueScope:                   {operation: "DeleteTaskQueue"},
 		PersistenceAppendHistoryEventsScope:               {operation: "AppendHistoryEvents"},

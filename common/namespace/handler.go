@@ -510,6 +510,14 @@ func (d *HandlerImpl) UpdateNamespace(
 			}
 			replicationConfig.Clusters = clustersNew
 		}
+		if updateReplicationConfig.State != enumspb.REPLICATION_STATE_UNSPECIFIED &&
+			updateReplicationConfig.State != replicationConfig.State {
+			if err := validateReplicationStateUpdate(getResponse, updateRequest); err != nil {
+				return nil, err
+			}
+			configurationChanged = true
+			replicationConfig.State = updateReplicationConfig.State
+		}
 
 		if updateReplicationConfig.GetActiveClusterName() != "" {
 			activeClusterChanged = true
@@ -798,6 +806,34 @@ func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) 
 	return nil
 }
 
+func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceResponse, nsUpdateRequest *workflowservice.UpdateNamespaceRequest) error {
+	if nsUpdateRequest.ReplicationConfig == nil ||
+		nsUpdateRequest.ReplicationConfig.State == enumspb.REPLICATION_STATE_UNSPECIFIED ||
+		nsUpdateRequest.ReplicationConfig.State == existingNamespace.Namespace.ReplicationConfig.State {
+		return nil // no change
+	}
+
+	nsState := existingNamespace.Namespace.Info.State
+	if nsState != enumspb.NAMESPACE_STATE_REGISTERED {
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("update ReplicationState is only supported when namespace is in %s state, current state: %s", enumspb.NAMESPACE_STATE_REGISTERED.String(), nsState.String()))
+	}
+
+	if nsUpdateRequest.ReplicationConfig.State == enumspb.REPLICATION_STATE_HANDOVER {
+		if !existingNamespace.IsGlobalNamespace {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s can only be set for global namespace", enumspb.REPLICATION_STATE_HANDOVER))
+		}
+		// verify namespace has more than 1 replication clusters
+		replicationClusterCount := len(existingNamespace.Namespace.ReplicationConfig.Clusters)
+		if len(nsUpdateRequest.ReplicationConfig.Clusters) > 0 {
+			replicationClusterCount = len(nsUpdateRequest.ReplicationConfig.Clusters)
+		}
+		if replicationClusterCount < 2 {
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s require more than one replication clusters", enumspb.REPLICATION_STATE_HANDOVER))
+		}
+	}
+	return nil
+}
+
 func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, nsUpdateRequest *workflowservice.UpdateNamespaceRequest) error {
 	if nsUpdateRequest.UpdateInfo == nil {
 		return nil // no change
@@ -808,25 +844,15 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 		return nil // no change
 	}
 
+	if existingNamespace.Namespace.ReplicationConfig != nil &&
+		existingNamespace.Namespace.ReplicationConfig.State == enumspb.REPLICATION_STATE_HANDOVER {
+		return serviceerror.NewInvalidArgument("cannot update namespace state while its replication state in REPLICATION_STATE_HANDOVER")
+	}
+
 	switch oldState {
 	case enumspb.NAMESPACE_STATE_REGISTERED:
 		switch newState {
 		case enumspb.NAMESPACE_STATE_DELETED, enumspb.NAMESPACE_STATE_DEPRECATED:
-			return nil
-		case enumspb.NAMESPACE_STATE_HANDOVER:
-			// verify this is global namespace
-			isGlobalNamespace := existingNamespace.IsGlobalNamespace || nsUpdateRequest.PromoteNamespace
-			if !isGlobalNamespace {
-				return serviceerror.NewInvalidArgument("namespace state Handover is only valid for global namespace")
-			}
-			// verify namespace has more than 1 replication clusters
-			replicationClusterCount := len(existingNamespace.Namespace.ReplicationConfig.Clusters)
-			if nsUpdateRequest.ReplicationConfig != nil && len(nsUpdateRequest.ReplicationConfig.Clusters) > 0 {
-				replicationClusterCount = len(nsUpdateRequest.ReplicationConfig.Clusters)
-			}
-			if replicationClusterCount < 2 {
-				return serviceerror.NewInvalidArgument("namespace state Handover require more than one replication clusters")
-			}
 			return nil
 		default:
 			return ErrInvalidNamespaceStateUpdate
@@ -842,15 +868,6 @@ func validateStateUpdate(existingNamespace *persistence.GetNamespaceResponse, ns
 
 	case enumspb.NAMESPACE_STATE_DELETED:
 		return ErrInvalidNamespaceStateUpdate
-
-	case enumspb.NAMESPACE_STATE_HANDOVER:
-		switch newState {
-		case enumspb.NAMESPACE_STATE_REGISTERED:
-			return nil
-		default:
-			return ErrInvalidNamespaceStateUpdate
-		}
-
 	default:
 		return ErrInvalidNamespaceStateUpdate
 	}

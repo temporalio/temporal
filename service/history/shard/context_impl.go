@@ -481,7 +481,7 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 
 	newHandoverNamespaces := make(map[string]struct{})
 	for _, ns := range namespaces {
-		if ns.IsGlobalNamespace() && ns.State() == enums.NAMESPACE_STATE_HANDOVER {
+		if ns.IsGlobalNamespace() && ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
 			nsName := ns.Name().String()
 			newHandoverNamespaces[nsName] = struct{}{}
 			if handover, ok := s.handoverNamespaces[nsName]; ok {
@@ -730,8 +730,8 @@ func (s *ContextImpl) addTasksLocked(
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
-	s.engine.NotifyNewTransferTasks(request.TransferTasks)
-	s.engine.NotifyNewTimerTasks(request.TimerTasks)
+	s.engine.NotifyNewTransferTasks(namespaceEntry.IsGlobalNamespace(), request.TransferTasks)
+	s.engine.NotifyNewTimerTasks(namespaceEntry.IsGlobalNamespace(), request.TimerTasks)
 	s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
 	s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
 	return nil

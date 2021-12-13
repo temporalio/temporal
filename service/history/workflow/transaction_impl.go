@@ -87,7 +87,11 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	if err != nil {
 		return 0, err
 	}
-	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(newWorkflowSnapshot.ExecutionInfo.NamespaceId))
+	if err != nil {
+		return 0, err
+	}
+	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
 	if err := NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
@@ -124,9 +128,13 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	if err != nil {
 		return 0, 0, 0, err
 	}
-	NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot)
-	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
-	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
+	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(resetWorkflowSnapshot.ExecutionInfo.NamespaceId))
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
 	if err := NotifyNewHistorySnapshotEvent(engine, resetWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow reset", tag.Error(err))
 	}
@@ -173,8 +181,12 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if err != nil {
 		return 0, 0, err
 	}
-	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation)
-	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot)
+	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(currentWorkflowMutation.ExecutionInfo.NamespaceId))
+	if err != nil {
+		return 0, 0, err
+	}
+	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
+	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
 	if err := NotifyNewHistoryMutationEvent(engine, currentWorkflowMutation); err != nil {
 		t.logger.Error("unable to notify workflow mutation", tag.Error(err))
 	}
@@ -501,6 +513,7 @@ func updateWorkflowExecutionWithRetry(
 func NotifyWorkflowSnapshotTasks(
 	engine shard.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
+	isGlobalNamespace bool,
 ) {
 	if workflowSnapshot == nil {
 		return
@@ -511,12 +524,14 @@ func NotifyWorkflowSnapshotTasks(
 		workflowSnapshot.TimerTasks,
 		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.VisibilityTasks,
+		isGlobalNamespace,
 	)
 }
 
 func NotifyWorkflowMutationTasks(
 	engine shard.Engine,
 	workflowMutation *persistence.WorkflowMutation,
+	isGlobalNamespace bool,
 ) {
 	if workflowMutation == nil {
 		return
@@ -527,6 +542,7 @@ func NotifyWorkflowMutationTasks(
 		workflowMutation.TimerTasks,
 		workflowMutation.ReplicationTasks,
 		workflowMutation.VisibilityTasks,
+		isGlobalNamespace,
 	)
 }
 
@@ -536,9 +552,10 @@ func notifyTasks(
 	timerTasks []tasks.Task,
 	replicationTasks []tasks.Task,
 	visibilityTasks []tasks.Task,
+	isGlobalNamespace bool,
 ) {
-	engine.NotifyNewTransferTasks(transferTasks)
-	engine.NotifyNewTimerTasks(timerTasks)
+	engine.NotifyNewTransferTasks(isGlobalNamespace, transferTasks)
+	engine.NotifyNewTimerTasks(isGlobalNamespace, timerTasks)
 	engine.NotifyNewVisibilityTasks(visibilityTasks)
 	engine.NotifyNewReplicationTasks(replicationTasks)
 }

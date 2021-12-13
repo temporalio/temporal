@@ -690,11 +690,6 @@ func (s *mutableStateSuite) buildWorkflowMutableState() *persistencespb.Workflow
 			InitiatedId:           75,
 			InitiatedEventBatchId: 17,
 			RequestId:             uuid.New(),
-			Name:                  "test-signal-75",
-			Input:                 payloads.EncodeString("signal-input-75"),
-			Header: &commonpb.Header{
-				Fields: map[string]*commonpb.Payload{"signal-header-key-75": payload.EncodeString("signal-header-value-75")},
-			},
 		},
 	}
 

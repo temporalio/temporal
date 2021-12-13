@@ -184,9 +184,9 @@ type (
 
 	// TaskQueueKey is the struct used to identity TaskQueues
 	TaskQueueKey struct {
-		NamespaceID string
-		Name        string
-		TaskType    enumspb.TaskQueueType
+		NamespaceID   string
+		TaskQueueName string
+		TaskQueueType enumspb.TaskQueueType
 	}
 
 	// GetOrCreateShardRequest is used to get shard information, or supply
@@ -616,28 +616,39 @@ type (
 		TaskID              int64
 	}
 
-	// LeaseTaskQueueRequest is used to request lease of a task queue
-	LeaseTaskQueueRequest struct {
-		NamespaceID   string
-		TaskQueue     string
-		TaskType      enumspb.TaskQueueType
-		TaskQueueKind enumspb.TaskQueueKind
+	// CreateTaskQueueRequest create a new task queue
+	CreateTaskQueueRequest struct {
 		RangeID       int64
+		TaskQueueInfo *persistencespb.TaskQueueInfo
 	}
 
-	// LeaseTaskQueueResponse is response to LeaseTaskQueueRequest
-	LeaseTaskQueueResponse struct {
-		TaskQueueInfo *PersistedTaskQueueInfo
+	// CreateTaskQueueResponse is the response to CreateTaskQueue
+	CreateTaskQueueResponse struct {
 	}
 
 	// UpdateTaskQueueRequest is used to update task queue implementation information
 	UpdateTaskQueueRequest struct {
 		RangeID       int64
 		TaskQueueInfo *persistencespb.TaskQueueInfo
+
+		PrevRangeID int64
 	}
 
 	// UpdateTaskQueueResponse is the response to UpdateTaskQueue
 	UpdateTaskQueueResponse struct {
+	}
+
+	// GetTaskQueueRequest get the target task queue
+	GetTaskQueueRequest struct {
+		NamespaceID string
+		TaskQueue   string
+		TaskType    enumspb.TaskQueueType
+	}
+
+	// GetTaskQueueResponse is the response to GetTaskQueue
+	GetTaskQueueResponse struct {
+		RangeID       int64
+		TaskQueueInfo *persistencespb.TaskQueueInfo
 	}
 
 	// ListTaskQueueRequest contains the request params needed to invoke ListTaskQueue API
@@ -675,17 +686,19 @@ type (
 
 	// GetTasksRequest is used to retrieve tasks of a task queue
 	GetTasksRequest struct {
-		NamespaceID  string
-		TaskQueue    string
-		TaskType     enumspb.TaskQueueType
-		ReadLevel    int64  // range exclusive
-		MaxReadLevel *int64 // optional: range inclusive when specified
-		BatchSize    int
+		NamespaceID        string
+		TaskQueue          string
+		TaskType           enumspb.TaskQueueType
+		MinTaskIDExclusive int64 // exclusive
+		MaxTaskIDInclusive int64 // inclusive
+		PageSize           int
+		NextPageToken      []byte
 	}
 
 	// GetTasksResponse is the response to GetTasksRequests
 	GetTasksResponse struct {
-		Tasks []*persistencespb.AllocatedTaskInfo
+		Tasks         []*persistencespb.AllocatedTaskInfo
+		NextPageToken []byte
 	}
 
 	// CompleteTaskRequest is used to complete a task
@@ -1170,8 +1183,9 @@ type (
 	TaskManager interface {
 		Closeable
 		GetName() string
-		LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error)
+		CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error)
 		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error)
 		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
 		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)

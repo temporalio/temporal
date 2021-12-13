@@ -26,6 +26,7 @@ package interceptor
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -165,10 +166,11 @@ func (s *namespaceValidatorSuite) Test_Intercept_NamespaceNotFound() {
 
 func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 	testCases := []struct {
-		state       enumspb.NamespaceState
-		expectedErr error
-		method      string
-		req         interface{}
+		state            enumspb.NamespaceState
+		replicationState enumspb.ReplicationState
+		expectedErr      error
+		method           string
+		req              interface{}
 	}{
 		// StartWorkflowExecution
 		{
@@ -190,10 +192,11 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		{
-			state:       enumspb.NAMESPACE_STATE_HANDOVER,
-			expectedErr: errNamespaceHandover,
-			method:      "/temporal/StartWorkflowExecution",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			state:            enumspb.NAMESPACE_STATE_REGISTERED,
+			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
+			expectedErr:      errNamespaceHandover,
+			method:           "/temporal/StartWorkflowExecution",
+			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		// DescribeNamespace
 		{
@@ -215,10 +218,11 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 			req:         &workflowservice.DescribeNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
-			state:       enumspb.NAMESPACE_STATE_HANDOVER,
-			expectedErr: nil,
-			method:      "/temporal/DescribeNamespace",
-			req:         &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
+			state:            enumspb.NAMESPACE_STATE_REGISTERED,
+			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
+			expectedErr:      nil,
+			method:           "/temporal/DescribeNamespace",
+			req:              &workflowservice.StartWorkflowExecutionRequest{Namespace: "test-namespace"},
 		},
 		// PollWorkflowTaskQueue (default)
 		{
@@ -253,10 +257,11 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
-			state:       enumspb.NAMESPACE_STATE_HANDOVER,
-			expectedErr: nil,
-			method:      "/temporal/UpdateNamespace",
-			req:         &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
+			state:            enumspb.NAMESPACE_STATE_REGISTERED,
+			replicationState: enumspb.REPLICATION_STATE_HANDOVER,
+			expectedErr:      nil,
+			method:           "/temporal/UpdateNamespace",
+			req:              &workflowservice.UpdateNamespaceRequest{Namespace: "test-namespace"},
 		},
 		{
 			state:       enumspb.NAMESPACE_STATE_DELETED,
@@ -270,8 +275,10 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 		s.mockRegistry.EXPECT().GetNamespace(namespace.Name("test-namespace")).Return(namespace.FromPersistentState(
 			&persistence.GetNamespaceResponse{
 				Namespace: &persistencespb.NamespaceDetail{
-					Config:            &persistencespb.NamespaceConfig{},
-					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+					Config: &persistencespb.NamespaceConfig{},
+					ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+						State: testCase.replicationState,
+					},
 					Info: &persistencespb.NamespaceInfo{
 						State: testCase.state,
 					},
@@ -290,6 +297,7 @@ func (s *namespaceValidatorSuite) Test_Intercept_StatusFromNamespace() {
 		})
 
 		if testCase.expectedErr != nil {
+			fmt.Printf("Method: %s\nExpected: %v\nActual:%v\n", testCase.method, testCase.expectedErr, err)
 			s.IsType(testCase.expectedErr, err)
 			s.False(handlerCalled)
 		} else {

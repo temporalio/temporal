@@ -391,7 +391,10 @@ func (s *matchingEngineSuite) PollForTasksEmptyResultTest(callContext context.Co
 	tl := "makeToast"
 	identity := "selfDrivingToaster"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 	var taskQueueType enumspb.TaskQueueType
 	tlID := newTestTaskQueueID(namespaceID, tl, taskType)
 	s.handlerContext.Context = callContext
@@ -464,7 +467,10 @@ func (s *matchingEngineSuite) AddTasksTest(taskType enumspb.TaskQueueType, isFor
 	tl := "makeToast"
 	forwardedFrom := "/_sys/makeToast/1"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	const taskCount = 111
 
@@ -524,7 +530,10 @@ func (s *matchingEngineSuite) TestTaskWriterShutdown() {
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
@@ -572,7 +581,10 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	for i := int64(0); i < taskCount; i++ {
 		scheduleID := i * 3
@@ -605,8 +617,11 @@ func (s *matchingEngineSuite) TestAddThenConsumeActivities() {
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             activityID,
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name},
+						ActivityId: activityID,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueue.Name,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
@@ -712,7 +727,10 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 
 	mgr.Start()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 	activityTypeName := "activity1"
 	activityID := "activityId1"
 	activityType := &commonpb.ActivityType{Name: activityTypeName}
@@ -728,8 +746,11 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             activityID,
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name},
+						ActivityId: activityID,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueue.Name,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToStartTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -922,7 +943,10 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	s.matchingEngine.updateTaskQueue(tlID, mgr)
 	mgr.Start()
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
 
@@ -966,8 +990,11 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             activityID,
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name},
+						ActivityId: activityID,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueue.Name,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						Header:                 activityHeader,
@@ -1064,7 +1091,10 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeWorkflowTasks() {
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	var wg sync.WaitGroup
 	wg.Add(2 * workerCount)
@@ -1164,7 +1194,10 @@ func (s *matchingEngineSuite) TestPollWithExpiredContext() {
 	namespaceID := namespace.ID(uuid.New())
 	tl := "makeToast"
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	// Try with cancelled context
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -1211,7 +1244,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
@@ -1271,8 +1307,11 @@ func (s *matchingEngineSuite) TestMultipleEnginesActivitiesRangeStealing() {
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             activityID,
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: taskQueue.Name},
+						ActivityId: activityID,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: taskQueue.Name,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToStartTimeout: timestamp.DurationPtr(600 * time.Second),
@@ -1361,7 +1400,10 @@ func (s *matchingEngineSuite) TestMultipleEnginesWorkflowTasksRangeStealing() {
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	engines := make([]*matchingEngineImpl, engineCount)
 	for p := 0; p < engineCount; p++ {
@@ -1490,7 +1532,10 @@ func (s *matchingEngineSuite) TestAddTaskAfterStartFailure() {
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tlKind := enumspb.TASK_QUEUE_KIND_NORMAL
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	scheduleID := int64(0)
 	addRequest := matchingservice.AddActivityTaskRequest{
@@ -1532,7 +1577,10 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch() {
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	const taskCount = 1200
 	const rangeSize = 10
@@ -1685,7 +1733,10 @@ func (s *matchingEngineSuite) TestTaskExpiryAndCompletion() {
 	tl := "task-expiry-completion-tl0"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 
-	taskQueue := &taskqueuepb.TaskQueue{Name: tl}
+	taskQueue := &taskqueuepb.TaskQueue{
+		Name: tl,
+		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+	}
 
 	const taskCount = 20
 	const rangeSize = 10
@@ -1766,8 +1817,11 @@ func (s *matchingEngineSuite) setupRecordActivityTaskStartedMock(tlName string) 
 				Attempt: 1,
 				ScheduledEvent: newActivityTaskScheduledEvent(taskRequest.ScheduleId, 0,
 					&commandpb.ScheduleActivityTaskCommandAttributes{
-						ActivityId:             activityID,
-						TaskQueue:              &taskqueuepb.TaskQueue{Name: tlName},
+						ActivityId: activityID,
+						TaskQueue: &taskqueuepb.TaskQueue{
+							Name: tlName,
+							Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+						},
 						ActivityType:           activityType,
 						Input:                  activityInput,
 						ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
@@ -1891,54 +1945,71 @@ func newTestTaskQueueID(namespaceID namespace.ID, name string, taskType enumspb.
 	return result
 }
 
-// LeaseTaskQueue provides a mock function with given fields: request
-func (m *testTaskManager) LeaseTaskQueue(request *persistence.LeaseTaskQueueRequest) (*persistence.LeaseTaskQueueResponse, error) {
-	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
+func (m *testTaskManager) CreateTaskQueue(request *persistence.CreateTaskQueueRequest) (*persistence.CreateTaskQueueResponse, error) {
+	tli := request.TaskQueueInfo
+	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.GetNamespaceId()), tli.Name, tli.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
-	tlm.rangeID++
-	m.logger.Debug("LeaseTaskQueue", tag.ShardRangeID(tlm.rangeID))
 
-	return &persistence.LeaseTaskQueueResponse{
-		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
-			Data: &persistencespb.TaskQueueInfo{
-				AckLevel:    tlm.ackLevel,
-				NamespaceId: request.NamespaceID,
-				Name:        request.TaskQueue,
-				TaskType:    request.TaskType,
-				Kind:        request.TaskQueueKind,
-			},
-			RangeID: tlm.rangeID,
-		},
-	}, nil
+	if tlm.rangeID != 0 {
+		return nil, &persistence.ConditionFailedError{
+			Msg: fmt.Sprintf("Failed to create task queue: name=%v, type=%v", tli.Name, tli.TaskType),
+		}
+	}
+
+	tlm.rangeID = request.RangeID
+	tlm.ackLevel = tli.AckLevel
+	return &persistence.CreateTaskQueueResponse{}, nil
 }
 
 // UpdateTaskQueue provides a mock function with given fields: request
 func (m *testTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueRequest) (*persistence.UpdateTaskQueueResponse, error) {
-
 	tli := request.TaskQueueInfo
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.GetNamespaceId()), tli.Name, tli.TaskType))
-
 	tlm.Lock()
 	defer tlm.Unlock()
-	if tlm.rangeID != request.RangeID {
+
+	if tlm.rangeID != request.PrevRangeID {
 		return nil, &persistence.ConditionFailedError{
 			Msg: fmt.Sprintf("Failed to update task queue: name=%v, type=%v", tli.Name, tli.TaskType),
 		}
 	}
 	tlm.ackLevel = tli.AckLevel
+	tlm.rangeID = request.RangeID
 	return &persistence.UpdateTaskQueueResponse{}, nil
+}
+
+func (m *testTaskManager) GetTaskQueue(request *persistence.GetTaskQueueRequest) (*persistence.GetTaskQueueResponse, error) {
+	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
+	tlm.Lock()
+	defer tlm.Unlock()
+
+	if tlm.rangeID == 0 {
+		return nil, serviceerror.NewNotFound("task queue not found")
+	}
+	return &persistence.GetTaskQueueResponse{
+		TaskQueueInfo: &persistencespb.TaskQueueInfo{
+			NamespaceId:    request.NamespaceID,
+			Name:           request.TaskQueue,
+			TaskType:       request.TaskType,
+			Kind:           enumspb.TASK_QUEUE_KIND_NORMAL,
+			AckLevel:       tlm.ackLevel,
+			ExpiryTime:     nil,
+			LastUpdateTime: timestamp.TimeNowPtrUtc(),
+		},
+		RangeID: tlm.rangeID,
+	}, nil
 }
 
 // CompleteTask provides a mock function with given fields: request
 func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
-	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.Name(request.TaskQueue.Name), tag.WorkflowTaskQueueType(request.TaskQueue.TaskType))
+	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.Name(request.TaskQueue.TaskQueueName), tag.WorkflowTaskQueueType(request.TaskQueue.TaskQueueType))
 	if request.TaskID <= 0 {
 		panic(fmt.Errorf("invalid taskID=%v", request.TaskID))
 	}
 
 	tli := request.TaskQueue
-	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.NamespaceID), tli.Name, tli.TaskType))
+	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.NamespaceID), tli.TaskQueueName, tli.TaskQueueType))
 
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -1968,7 +2039,7 @@ func (m *testTaskManager) ListTaskQueue(_ *persistence.ListTaskQueueRequest) (*p
 func (m *testTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueRequest) error {
 	m.Lock()
 	defer m.Unlock()
-	key := newTestTaskQueueID(namespace.ID(request.TaskQueue.NamespaceID), request.TaskQueue.Name, request.TaskQueue.TaskType)
+	key := newTestTaskQueueID(namespace.ID(request.TaskQueue.NamespaceID), request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
 	delete(m.taskQueues, *key)
 	return nil
 }
@@ -1996,7 +2067,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 				tag.TaskID(task.GetTaskId()), tag.ShardRangeID(rangeID), tag.ShardRangeID(tlm.rangeID))
 
 			return nil, &persistence.ConditionFailedError{
-				Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskQueue: %v, taskType: %v, rangeID: %v, db rangeID: %v",
+				Msg: fmt.Sprintf("testTaskManager.CreateTask failed. TaskQueue: %v, taskQueueType: %v, rangeID: %v, db rangeID: %v",
 					taskQueue, taskType, rangeID, tlm.rangeID),
 			}
 		}
@@ -2020,11 +2091,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 // GetTasks provides a mock function with given fields: request
 func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
-	if request.MaxReadLevel != nil {
-		m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.ReadLevel), tag.ReadLevel(*request.MaxReadLevel))
-	} else {
-		m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.ReadLevel))
-	}
+	m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.MinTaskIDExclusive), tag.ReadLevel(request.MaxTaskIDInclusive))
 
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
 	tlm.Lock()
@@ -2034,10 +2101,10 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	it := tlm.tasks.Iterator()
 	for it.Next() {
 		taskID := it.Key().(int64)
-		if taskID <= request.ReadLevel {
+		if taskID <= request.MinTaskIDExclusive {
 			continue
 		}
-		if taskID > *request.MaxReadLevel {
+		if taskID > request.MaxTaskIDInclusive {
 			break
 		}
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))

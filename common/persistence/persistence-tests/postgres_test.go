@@ -37,13 +37,6 @@ func TestPostgreSQLHistoryV2PersistenceSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestPostgreSQLMatchingPersistenceSuite(t *testing.T) {
-	s := new(MatchingPersistenceSuite)
-	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
 func TestPostgreSQLMetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(MetadataPersistenceSuiteV2)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())

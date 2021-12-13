@@ -66,7 +66,6 @@ type (
 		GetName() string
 		CreateTaskQueue(request *InternalCreateTaskQueueRequest) error
 		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
-		ExtendLease(request *InternalExtendLeaseRequest) error
 		UpdateTaskQueue(request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
 		ListTaskQueue(request *ListTaskQueueRequest) (*InternalListTaskQueueResponse, error)
 		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
@@ -238,6 +237,9 @@ type (
 		TaskType      enumspb.TaskQueueType
 		RangeID       int64
 		TaskQueueInfo *commonpb.DataBlob
+
+		TaskQueueKind enumspb.TaskQueueKind
+		ExpiryTime    *time.Time
 	}
 
 	InternalGetTaskQueueRequest struct {
@@ -251,22 +253,17 @@ type (
 		TaskQueueInfo *commonpb.DataBlob
 	}
 
-	InternalExtendLeaseRequest struct {
-		NamespaceID   string
-		TaskQueue     string
-		TaskType      enumspb.TaskQueueType
-		RangeID       int64
-		TaskQueueInfo *commonpb.DataBlob
-	}
-
 	InternalUpdateTaskQueueRequest struct {
 		NamespaceID   string
 		TaskQueue     string
 		TaskType      enumspb.TaskQueueType
-		TaskQueueKind enumspb.TaskQueueKind
 		RangeID       int64
-		ExpiryTime    *time.Time
 		TaskQueueInfo *commonpb.DataBlob
+
+		TaskQueueKind enumspb.TaskQueueKind
+		ExpiryTime    *time.Time
+
+		PrevRangeID int64
 	}
 
 	InternalCreateTasksRequest struct {
@@ -285,7 +282,8 @@ type (
 	}
 
 	InternalGetTasksResponse struct {
-		Tasks []*commonpb.DataBlob
+		Tasks         []*commonpb.DataBlob
+		NextPageToken []byte
 	}
 
 	InternalListTaskQueueResponse struct {
