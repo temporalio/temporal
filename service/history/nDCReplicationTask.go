@@ -126,7 +126,7 @@ func newNDCReplicationTask(
 	lastEvent := events[len(events)-1]
 	version := firstEvent.GetVersion()
 
-	sourceCluster := clusterMetadata.ClusterNameForFailoverVersion(version)
+	sourceCluster := clusterMetadata.ClusterNameForFailoverVersion(true, version)
 
 	eventTime := time.Time{}
 	for _, event := range events {

@@ -509,22 +509,25 @@ func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(request *Comple
 	return p.persistence.CompleteTasksLessThan(request)
 }
 
-func (p *taskRateLimitedPersistenceClient) LeaseTaskQueue(request *LeaseTaskQueueRequest) (*LeaseTaskQueueResponse, error) {
+func (p *taskRateLimitedPersistenceClient) CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-
-	response, err := p.persistence.LeaseTaskQueue(request)
-	return response, err
+	return p.persistence.CreateTaskQueue(request)
 }
 
 func (p *taskRateLimitedPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
+	return p.persistence.UpdateTaskQueue(request)
+}
 
-	response, err := p.persistence.UpdateTaskQueue(request)
-	return response, err
+func (p *taskRateLimitedPersistenceClient) GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	return p.persistence.GetTaskQueue(request)
 }
 
 func (p *taskRateLimitedPersistenceClient) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {

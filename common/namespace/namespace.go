@@ -158,6 +158,10 @@ func (ns *Namespace) State() enumspb.NamespaceState {
 	return ns.info.State
 }
 
+func (ns *Namespace) ReplicationState() enumspb.ReplicationState {
+	return ns.replicationConfig.State
+}
+
 // ActiveClusterName observes the name of the cluster that is currently active
 // for this namspace.
 func (ns *Namespace) ActiveClusterName() string {

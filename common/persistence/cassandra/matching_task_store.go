@@ -73,7 +73,7 @@ func (d *MatchingTaskStore) CreateTaskQueue(
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
-		return gocql.ConvertError("LeaseTaskQueue", err)
+		return gocql.ConvertError("CreateTaskQueue", err)
 	}
 
 	if !applied {
@@ -111,37 +111,6 @@ func (d *MatchingTaskStore) GetTaskQueue(
 	}, nil
 }
 
-func (d *MatchingTaskStore) ExtendLease(
-	request *p.InternalExtendLeaseRequest,
-) error {
-	query := d.Session.Query(templateUpdateTaskQueueQuery,
-		request.RangeID+1,
-		request.TaskQueueInfo.Data,
-		request.TaskQueueInfo.EncodingType.String(),
-		request.NamespaceID,
-		&request.TaskQueue,
-		request.TaskType,
-		rowTypeTaskQueue,
-		taskQueueTaskID,
-		request.RangeID,
-	)
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
-	if err != nil {
-		return gocql.ConvertError("LeaseTaskQueue", err)
-	}
-
-	if !applied {
-		previousRangeID := previous["range_id"]
-		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("ExtendLease: taskQueue:%v, taskQueueType:%v, haveRangeID:%v, gotRangeID:%v",
-				request.TaskQueue, request.TaskType, request.RangeID, previousRangeID),
-		}
-	}
-
-	return nil
-}
-
 // UpdateTaskQueue update task queue
 func (d *MatchingTaskStore) UpdateTaskQueue(
 	request *p.InternalUpdateTaskQueueRequest,
@@ -153,7 +122,10 @@ func (d *MatchingTaskStore) UpdateTaskQueue(
 		if request.ExpiryTime == nil {
 			return nil, serviceerror.NewInternal("ExpiryTime cannot be nil for sticky task queue")
 		}
-		expiryTtl := convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds())
+		expiryTTL := convert.Int64Ceil(time.Until(timestamp.TimeValue(request.ExpiryTime)).Seconds())
+		if expiryTTL >= maxCassandraTTL {
+			expiryTTL = maxCassandraTTL
+		}
 		batch := d.Session.NewBatch(gocql.LoggedBatch)
 		batch.Query(templateUpdateTaskQueueQueryWithTTLPart1,
 			request.NamespaceID,
@@ -161,10 +133,10 @@ func (d *MatchingTaskStore) UpdateTaskQueue(
 			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
-			expiryTtl,
+			expiryTTL,
 		)
 		batch.Query(templateUpdateTaskQueueQueryWithTTLPart2,
-			expiryTtl,
+			expiryTTL,
 			request.RangeID,
 			request.TaskQueueInfo.Data,
 			request.TaskQueueInfo.EncodingType.String(),
@@ -173,7 +145,7 @@ func (d *MatchingTaskStore) UpdateTaskQueue(
 			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
-			request.RangeID,
+			request.PrevRangeID,
 		)
 		applied, _, err = d.Session.MapExecuteBatchCAS(batch, previous)
 	} else {
@@ -186,7 +158,7 @@ func (d *MatchingTaskStore) UpdateTaskQueue(
 			request.TaskType,
 			rowTypeTaskQueue,
 			taskQueueTaskID,
-			request.RangeID,
+			request.PrevRangeID,
 		)
 		applied, err = query.MapScanCAS(previous)
 	}
@@ -220,7 +192,7 @@ func (d *MatchingTaskStore) DeleteTaskQueue(
 	request *p.DeleteTaskQueueRequest,
 ) error {
 	query := d.Session.Query(templateDeleteTaskQueueQuery,
-		request.TaskQueue.NamespaceID, request.TaskQueue.Name, request.TaskQueue.TaskType, rowTypeTaskQueue, taskQueueTaskID, request.RangeID)
+		request.TaskQueue.NamespaceID, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType, rowTypeTaskQueue, taskQueueTaskID, request.RangeID)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -317,27 +289,19 @@ func GetTaskTTL(expireTime *time.Time) int64 {
 func (d *MatchingTaskStore) GetTasks(
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
-	if request.MaxReadLevel == nil {
-		return nil, serviceerror.NewInternal("getTasks: both readLevel and maxReadLevel MUST be specified for cassandra persistence")
-	}
-	if request.ReadLevel > *request.MaxReadLevel {
-		return &p.InternalGetTasksResponse{}, nil
-	}
-
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
 	query := d.Session.Query(templateGetTasksQuery,
 		request.NamespaceID,
 		request.TaskQueue,
 		request.TaskType,
 		rowTypeTask,
-		request.ReadLevel,
-		*request.MaxReadLevel,
+		request.MinTaskIDExclusive,
+		request.MaxTaskIDInclusive,
 	)
-	iter := query.PageSize(request.BatchSize).Iter()
+	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetTasksResponse{}
 	task := make(map[string]interface{})
-PopulateTasks:
 	for iter.MapScan(task) {
 		_, ok := task["task_id"]
 		if !ok { // no tasks, but static column record returned
@@ -364,18 +328,17 @@ PopulateTasks:
 			var byteSliceType []byte
 			return nil, newPersistedTypeMismatchError("task_encoding", byteSliceType, rawEncoding, task)
 		}
-
 		response.Tasks = append(response.Tasks, p.NewDataBlob(taskVal, encodingVal))
-		if len(response.Tasks) == request.BatchSize {
-			break PopulateTasks
-		}
+
 		task = make(map[string]interface{}) // Reinitialize map as initialized fails on unmarshalling
+	}
+	if len(iter.PageState()) > 0 {
+		response.NextPageToken = iter.PageState()
 	}
 
 	if err := iter.Close(); err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Error: %v", err))
 	}
-
 	return response, nil
 }
 
@@ -386,8 +349,8 @@ func (d *MatchingTaskStore) CompleteTask(
 	tli := request.TaskQueue
 	query := d.Session.Query(templateCompleteTaskQuery,
 		tli.NamespaceID,
-		tli.Name,
-		tli.TaskType,
+		tli.TaskQueueName,
+		tli.TaskQueueType,
 		rowTypeTask,
 		request.TaskID)
 

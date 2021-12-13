@@ -170,6 +170,9 @@ func (t *transferQueueProcessorImpl) NotifyNewTask(
 	transferTasks []tasks.Task,
 ) {
 
+	if clusterName == cluster.FakeClusterForEmptyVersion {
+		return
+	}
 	if clusterName == t.currentClusterName {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {

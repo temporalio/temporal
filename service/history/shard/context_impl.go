@@ -26,6 +26,7 @@ package shard
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -67,25 +68,16 @@ var (
 
 const (
 	// See transitionLocked for overview of state transitions.
-
 	// These are the possible values of ContextImpl.state:
 	contextStateInitialized contextState = iota
 	contextStateAcquiring
 	contextStateAcquired
 	contextStateStopping
 	contextStateStopped
-
-	// These are the requests that can be passed to transitionLocked to change state:
-	contextRequestAcquire contextRequest = iota
-	contextRequestAcquired
-	contextRequestLost
-	contextRequestStop
-	contextRequestFinishStop
 )
 
 type (
-	contextState   int32
-	contextRequest int
+	contextState int32
 
 	ContextImpl struct {
 		// These fields are constant:
@@ -141,6 +133,15 @@ type (
 		MaxReplicationTaskID int64
 		NotificationVersion  int64
 	}
+
+	// These are the requests that can be passed to transitionLocked to change state:
+	contextRequest interface{}
+
+	contextRequestAcquire    struct{}
+	contextRequestAcquired   struct{}
+	contextRequestLost       struct{ newMaxReadLevel int64 }
+	contextRequestStop       struct{}
+	contextRequestFinishStop struct{}
 )
 
 var _ Context = (*ContextImpl)(nil)
@@ -480,7 +481,7 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 
 	newHandoverNamespaces := make(map[string]struct{})
 	for _, ns := range namespaces {
-		if ns.IsGlobalNamespace() && ns.State() == enums.NAMESPACE_STATE_HANDOVER {
+		if ns.IsGlobalNamespace() && ns.ReplicationState() == enums.REPLICATION_STATE_HANDOVER {
 			nsName := ns.Name().String()
 			newHandoverNamespaces[nsName] = struct{}{}
 			if handover, ok := s.handoverNamespaces[nsName]; ok {
@@ -555,12 +556,11 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	); err != nil {
 		return nil, err
 	}
-	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.CreateWorkflowExecution(request)
-	if err = s.handleErrorLocked(err); err != nil {
+	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -610,12 +610,11 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 			return nil, err
 		}
 	}
-	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.UpdateWorkflowExecution(request)
-	if err = s.handleErrorLocked(err); err != nil {
+	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -678,12 +677,11 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 			return nil, err
 		}
 	}
-	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.ConflictResolveWorkflowExecution(request)
-	if err := s.handleErrorLocked(err); err != nil {
+	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -726,15 +724,14 @@ func (s *ContextImpl) addTasksLocked(
 	); err != nil {
 		return err
 	}
-	defer s.updateMaxReadLevelLocked(transferMaxReadLevel)
 
 	request.RangeID = s.getRangeIDLocked()
 	err := s.executionManager.AddTasks(request)
-	if err = s.handleErrorLocked(err); err != nil {
+	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
-	s.engine.NotifyNewTransferTasks(request.TransferTasks)
-	s.engine.NotifyNewTimerTasks(request.TimerTasks)
+	s.engine.NotifyNewTransferTasks(namespaceEntry.IsGlobalNamespace(), request.TransferTasks)
+	s.engine.NotifyNewTimerTasks(namespaceEntry.IsGlobalNamespace(), request.TimerTasks)
 	s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
 	s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
 	return nil
@@ -1172,20 +1169,32 @@ func (s *ContextImpl) GetLastUpdatedTime() time.Time {
 }
 
 func (s *ContextImpl) handleErrorLocked(err error) error {
+	// We can use 0 here since updateMaxReadLevelLocked ensures that the read level never goes backwards.
+	return s.handleErrorAndUpdateMaxReadLevelLocked(err, 0)
+}
+
+func (s *ContextImpl) handleErrorAndUpdateMaxReadLevelLocked(err error, newMaxReadLevel int64) error {
 	switch err.(type) {
 	case nil:
+		// Persistence success: update max read level
+		s.updateMaxReadLevelLocked(newMaxReadLevel)
 		return nil
 
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
 		*persistence.ConditionFailedError,
 		*serviceerror.ResourceExhausted:
-		// No special handling required for these errors
+		// Persistence failure that means the write was definitely not committed:
+		// No special handling required for these errors.
+		// Update max read level here anyway because we already allocated the
+		// task ids and will not reuse them.
+		s.updateMaxReadLevelLocked(newMaxReadLevel)
 		return err
 
 	case *persistence.ShardOwnershipLostError:
-		// Shard is stolen, trigger shutdown of history engine
-		s.transitionLocked(contextRequestStop)
+		// Shard is stolen, trigger shutdown of history engine.
+		// Handling of max read level doesn't matter here.
+		s.transitionLocked(contextRequestStop{})
 		return err
 
 	default:
@@ -1193,7 +1202,9 @@ func (s *ContextImpl) handleErrorLocked(err error) error {
 		// the shard in the background. If successful, we'll get a new RangeID, to guarantee that subsequent
 		// reads will either see that write, or know for certain that it failed. This allows the callers to
 		// reliably check the outcome by performing a read. If we fail, we'll shut down the shard.
-		s.transitionLocked(contextRequestLost)
+		// We only want to update the max read level _after_ the re-acquire succeeds, not right now, otherwise
+		// a write that gets applied after we see a timeout could cause us to lose tasks.
+		s.transitionLocked(contextRequestLost{newMaxReadLevel: newMaxReadLevel})
 		return err
 	}
 }
@@ -1243,13 +1254,13 @@ func (s *ContextImpl) getOrCreateEngine(ctx context.Context) (engine Engine, ret
 func (s *ContextImpl) start() {
 	s.wLock()
 	defer s.wUnlock()
-	s.transitionLocked(contextRequestAcquire)
+	s.transitionLocked(contextRequestAcquire{})
 }
 
 // stop should only be called by the controller.
 func (s *ContextImpl) stop() {
 	s.wLock()
-	s.transitionLocked(contextRequestFinishStop)
+	s.transitionLocked(contextRequestFinishStop{})
 	engine := s.engine
 	s.engine = nil
 	s.wUnlock()
@@ -1346,9 +1357,9 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 
 	*/
 
-	setStateAcquiring := func() {
+	setStateAcquiring := func(newMaxReadLevel int64) {
 		s.state = contextStateAcquiring
-		go s.acquireShard()
+		go s.acquireShard(newMaxReadLevel)
 	}
 
 	setStateStopping := func() {
@@ -1369,9 +1380,9 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 
 	switch s.state {
 	case contextStateInitialized:
-		switch request {
+		switch request.(type) {
 		case contextRequestAcquire:
-			setStateAcquiring()
+			setStateAcquiring(0)
 			return
 		case contextRequestStop:
 			setStateStopping()
@@ -1381,7 +1392,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 			return
 		}
 	case contextStateAcquiring:
-		switch request {
+		switch request.(type) {
 		case contextRequestAcquire:
 			return // nothing to do, already acquiring
 		case contextRequestAcquired:
@@ -1397,11 +1408,11 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 			return
 		}
 	case contextStateAcquired:
-		switch request {
+		switch request := request.(type) {
 		case contextRequestAcquire:
 			return // nothing to to do, already acquired
 		case contextRequestLost:
-			setStateAcquiring()
+			setStateAcquiring(request.newMaxReadLevel)
 			return
 		case contextRequestStop:
 			setStateStopping()
@@ -1411,7 +1422,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 			return
 		}
 	case contextStateStopping:
-		switch request {
+		switch request.(type) {
 		case contextRequestStop:
 			// nothing to do, already stopping
 			return
@@ -1422,7 +1433,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	}
 	s.contextTaggedLogger.Warn("invalid state transition request",
 		tag.ShardContextState(int(s.state)),
-		tag.ShardContextStateRequest(int(request)),
+		tag.ShardContextStateRequest(fmt.Sprintf("%T", request)),
 	)
 }
 
@@ -1540,7 +1551,7 @@ func (s *ContextImpl) getRemoteClusterInfoLocked(clusterName string) *remoteClus
 	return info
 }
 
-func (s *ContextImpl) acquireShard() {
+func (s *ContextImpl) acquireShard(newMaxReadLevel int64) {
 	// Retry for 5m, with interval up to 10s (default)
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	policy.SetExpirationInterval(5 * time.Minute)
@@ -1593,7 +1604,12 @@ func (s *ContextImpl) acquireShard() {
 			}
 			s.engine = engine
 		}
-		s.transitionLocked(contextRequestAcquired)
+
+		// Set max read level after a re-acquisition (if this is the first
+		// acquisition, newMaxReadLevel will be zero so it's a no-op)
+		s.updateMaxReadLevelLocked(newMaxReadLevel)
+
+		s.transitionLocked(contextRequestAcquired{})
 		return nil
 	}
 
@@ -1612,7 +1628,7 @@ func (s *ContextImpl) acquireShard() {
 		if s.state >= contextStateStopping {
 			return
 		}
-		s.transitionLocked(contextRequestStop)
+		s.transitionLocked(contextRequestStop{})
 	}
 }
 

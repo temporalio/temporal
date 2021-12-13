@@ -64,4 +64,5 @@ message NamespaceConfig {
 message NamespaceReplicationConfig {
     string active_cluster_name = 1;
     repeated string clusters = 2;
+    temporal.api.enums.v1.ReplicationState state = 3;
 }

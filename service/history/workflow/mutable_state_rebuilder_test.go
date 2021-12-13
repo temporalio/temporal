@@ -493,7 +493,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 		newRunStartedEvent, newRunSignalEvent, newRunWorkflowTaskEvent,
 	}
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(continueAsNewEvent.GetVersion()).Return(s.sourceCluster).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, continueAsNewEvent.GetVersion()).Return(s.sourceCluster).AnyTimes()
 	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionContinuedAsNewEvent(
 		continueAsNewEvent.GetEventId(),
 		continueAsNewEvent,
@@ -1678,16 +1678,13 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeSignalExternalWorkflowExecu
 			Input:             signalInput,
 			ChildWorkflowOnly: childWorkflowOnly,
 			Header:            signalHeader,
+			Control:           control,
 		}},
 	}
 	si := &persistencespb.SignalInfo{
 		Version:     event.GetVersion(),
 		InitiatedId: event.GetEventId(),
 		RequestId:   signalRequestID,
-		Name:        signalName,
-		Input:       signalInput,
-		Control:     control,
-		Header:      signalHeader,
 	}
 
 	// the cancellation request ID is generated inside, cannot assert equal

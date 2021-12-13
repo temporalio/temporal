@@ -161,7 +161,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Ope
 	targetWorkflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockEventsReapplier.EXPECT().reapplyEvents(ctx, mutableState, workflowEvents.Events, runID).Return(workflowEvents.Events, nil)
 
@@ -206,7 +206,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Active_Clo
 	targetWorkflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	targetWorkflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
@@ -274,7 +274,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Op
 	targetWorkflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	targetWorkflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(true).AnyTimes()
@@ -311,7 +311,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_CurrentWorkflow_Passive_Cl
 	targetWorkflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	targetWorkflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
@@ -369,7 +369,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Active(
 	targetWorkflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	targetWorkflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()
@@ -426,7 +426,7 @@ func (s *nDCTransactionMgrSuite) TestBackfillWorkflow_NotCurrentWorkflow_Passive
 	targetWorkflow.EXPECT().getMutableState().Return(mutableState).AnyTimes()
 	targetWorkflow.EXPECT().getReleaseFn().Return(releaseFn).AnyTimes()
 
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.namespaceEntry.FailoverVersion()).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName).AnyTimes()
 
 	mutableState.EXPECT().IsCurrentWorkflowGuaranteed().Return(false).AnyTimes()

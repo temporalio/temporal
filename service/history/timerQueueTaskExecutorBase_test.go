@@ -149,8 +149,8 @@ func (s *timerQueueTaskExecutorBaseSuite) TestDeleteWorkflow_NoErr() {
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil)
-	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any())
-	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any(), gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any(), gomock.Any())
 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any())
 	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any())
 
@@ -186,8 +186,8 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_NoErr_InlineArchiva
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil)
-	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any())
-	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any(), gomock.Any())
+	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any(), gomock.Any())
 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any())
 	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any())
 

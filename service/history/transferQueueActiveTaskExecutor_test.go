@@ -199,7 +199,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
 	s.logger = s.mockShard.GetLogger()
 
@@ -1159,7 +1159,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), s.createRequestCancelWorkflowExecutionRequest(s.targetNamespace, transferTask, rci)).Return(nil, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
 	s.Nil(err)
@@ -1222,7 +1222,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), s.createRequestCancelWorkflowExecutionRequest(s.targetNamespace, transferTask, rci)).Return(nil, serviceerror.NewNotFound(""))
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(gomock.Any(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
 	s.Nil(err)
@@ -1337,6 +1337,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 	event, si := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		tests.TargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput,
 		signalControl, signalHeader)
+	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
 	transferTask := &tasks.SignalExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1355,9 +1356,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Succes
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(s.targetNamespace, transferTask, si)).Return(nil, nil)
+	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(s.targetNamespace, transferTask, si, attributes)).Return(nil, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.mockHistoryClient.EXPECT().RemoveSignalMutableState(gomock.Any(), &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId: transferTask.TargetNamespaceID,
@@ -1417,6 +1418,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 	event, si := addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
 		tests.TargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput,
 		signalControl, signalHeader)
+	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 
 	transferTask := &tasks.SignalExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1435,9 +1437,9 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(s.targetNamespace, transferTask, si)).Return(nil, serviceerror.NewNotFound(""))
+	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(s.targetNamespace, transferTask, si, attributes)).Return(nil, serviceerror.NewNotFound(""))
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
 	s.Nil(err)
@@ -1579,7 +1581,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		ci,
 	)).Return(&historyservice.StartWorkflowExecutionResponse{RunId: childRunID}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId: tests.ChildNamespaceID.String(),
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1668,7 +1670,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		ci,
 	)).Return(nil, serviceerror.NewWorkflowExecutionAlreadyStarted("msg", "", ""))
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
-	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
 	s.Nil(err)
@@ -1968,6 +1970,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 	targetNamespace namespace.Name,
 	task *tasks.SignalExecutionTask,
 	si *persistencespb.SignalInfo,
+	attributes *historypb.SignalExternalWorkflowExecutionInitiatedEventAttributes,
 ) *historyservice.SignalWorkflowExecutionRequest {
 
 	sourceExecution := commonpb.WorkflowExecution{
@@ -1985,11 +1988,11 @@ func (s *transferQueueActiveTaskExecutorSuite) createSignalWorkflowExecutionRequ
 			Namespace:         targetNamespace.String(),
 			WorkflowExecution: &targetExecution,
 			Identity:          consts.IdentityHistoryService,
-			SignalName:        si.Name,
-			Input:             si.Input,
+			SignalName:        attributes.SignalName,
+			Input:             attributes.Input,
 			RequestId:         si.GetRequestId(),
-			Control:           si.Control,
-			Header:            si.Header,
+			Control:           attributes.Control,
+			Header:            attributes.Header,
 		},
 		ExternalWorkflowExecution: &sourceExecution,
 		ChildWorkflowOnly:         task.TargetChildWorkflowOnly,

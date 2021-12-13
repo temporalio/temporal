@@ -183,7 +183,7 @@ func (r *nDCWorkflowImpl) suppressBy(
 		return workflow.TransactionPolicyPassive, nil
 	}
 
-	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
+	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if currentCluster == lastWriteCluster {
@@ -207,7 +207,7 @@ func (r *nDCWorkflowImpl) flushBufferedEvents() error {
 		return err
 	}
 
-	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
+	lastWriteCluster := r.clusterMetadata.ClusterNameForFailoverVersion(true, lastWriteVersion)
 	currentCluster := r.clusterMetadata.GetCurrentClusterName()
 
 	if lastWriteCluster != currentCluster {

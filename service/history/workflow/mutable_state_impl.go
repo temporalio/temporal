@@ -2638,16 +2638,11 @@ func (e *MutableStateImpl) ReplicateSignalExternalWorkflowExecutionInitiatedEven
 
 	// TODO: Consider also writing signalRequestID to history event
 	initiatedEventID := event.GetEventId()
-	attributes := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	si := &persistencespb.SignalInfo{
 		Version:               event.GetVersion(),
 		InitiatedEventBatchId: firstEventID,
 		InitiatedId:           initiatedEventID,
 		RequestId:             signalRequestID,
-		Name:                  attributes.GetSignalName(),
-		Input:                 attributes.Input,
-		Control:               attributes.Control,
-		Header:                attributes.Header,
 	}
 
 	e.pendingSignalInfoIDs[si.InitiatedId] = si
@@ -4198,8 +4193,8 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 		return false, serviceerror.NewInternal(fmt.Sprintf("MutableStateImpl encountered mismatch version, workflow task: %v, last write version %v", workflowTask.Version, lastWriteVersion))
 	}
 
-	lastWriteSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(lastWriteVersion)
-	currentVersionCluster := e.clusterMetadata.ClusterNameForFailoverVersion(currentVersion)
+	lastWriteSourceCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), lastWriteVersion)
+	currentVersionCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), currentVersion)
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 
 	// there are 4 cases for version changes (based on version from namespace cache)
@@ -4268,7 +4263,7 @@ func (e *MutableStateImpl) closeTransactionWithPolicyCheck(
 		return nil
 	}
 
-	activeCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.GetCurrentVersion())
+	activeCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), e.GetCurrentVersion())
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 
 	if activeCluster != currentCluster {

@@ -45,6 +45,8 @@ const (
 	defaultClusterMetadataPageSize = 100
 	refreshInterval                = time.Minute
 	refreshFailureInterval         = time.Second * 30
+
+	FakeClusterForEmptyVersion = "fake-cluster-for-empty-version"
 )
 
 type (
@@ -67,7 +69,7 @@ type (
 		// GetAllClusterInfo return the all cluster name -> corresponding info
 		GetAllClusterInfo() map[string]ClusterInformation
 		// ClusterNameForFailoverVersion return the corresponding cluster name for a given failover version
-		ClusterNameForFailoverVersion(failoverVersion int64) string
+		ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) string
 		// GetFailoverVersionIncrement return the Failover version increment value
 		GetFailoverVersionIncrement() int64
 		RegisterMetadataChangeCallback(callbackId string, cb CallbackFn)
@@ -279,8 +281,14 @@ func (m *metadataImpl) GetAllClusterInfo() map[string]ClusterInformation {
 	return result
 }
 
-func (m *metadataImpl) ClusterNameForFailoverVersion(failoverVersion int64) string {
+func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) string {
 	if failoverVersion == common.EmptyVersion {
+		// Local namespace uses EmptyVersion. But local namespace could be promoted to global namespace. Once promoted,
+		// workflows with EmptyVersion could be replicated to other clusters. The receiving cluster needs to know that
+		// those workflows are not from their current cluster.
+		if isGlobalNamespace {
+			return FakeClusterForEmptyVersion
+		}
 		return m.currentClusterName
 	}
 
