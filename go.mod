@@ -34,7 +34,7 @@ require (
 	github.com/robfig/cron v1.2.0
 	github.com/stretchr/testify v1.7.0
 	github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95
-	github.com/uber-go/tally/v4 v4.0.1
+	github.com/uber-go/tally/v4 v4.1.1
 	github.com/uber/tchannel-go v1.22.0
 	github.com/urfave/cli v1.22.5
 	github.com/urfave/cli/v2 v2.3.0
@@ -46,7 +46,8 @@ require (
 	go.opentelemetry.io/otel/sdk/export/metric v0.24.0
 	go.opentelemetry.io/otel/sdk/metric v0.24.0
 	go.temporal.io/api v1.7.0
-	go.temporal.io/sdk v1.11.0
+	go.temporal.io/sdk v1.12.0
+	go.temporal.io/sdk/contrib/tally v0.1.0
 	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
 	go.uber.org/atomic v1.9.0
 	go.uber.org/fx v1.14.2
@@ -116,13 +117,3 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
-
-// This is required to allow go 1.16 to build this (go 1.17 is fine). With go
-// <= 1.16, github.com/cactus/go-statsd-client/statsd is seen as having an
-// ambiguous dependency of github.com/cactus/go-statsd-client/statsd defined
-// earlier in this file (fixed to v3.2.1) and github.com/cactus/go-statsd-client
-// defined in Tally's go.mod (fixed on v3.1.1). This forces that upgrade so that
-// the parent path of github.com/cactus/go-statsd-client is v3.2.1 which means
-// at that tag it no longer provides github.com/cactus/go-statsd-client/statsd
-// thereby removing the import.
-replace github.com/cactus/go-statsd-client => github.com/cactus/go-statsd-client v3.2.1+incompatible
