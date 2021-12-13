@@ -43,7 +43,6 @@ import (
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/version/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -1663,16 +1662,12 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	wh := s.getWorkflowHandler(config)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
-	var clusterMetadataResp persistence.GetClusterMetadataResponse
-	clusterMetadataResp.VersionInfo = &version.VersionInfo{Current: &version.ReleaseInfo{Version: "1.2.3"}}
-	s.mockResource.ClusterMetadataMgr.EXPECT().GetCurrentClusterMetadata().Return(&clusterMetadataResp, nil).AnyTimes()
 
 	resp, err := wh.GetSystemInfo(context.Background(), &workflowservice.GetSystemInfoRequest{
 		Namespace: s.testNamespace.String(),
 	})
 	s.NoError(err)
 	s.Equal(headers.ServerVersion, resp.ServerVersion)
-	s.Equal("1.2.3", resp.VersionInfo.Current.Version)
 	s.True(resp.Capabilities.SignalAndQueryHeader)
 	s.True(resp.Capabilities.InternalErrorDifferentiation)
 }

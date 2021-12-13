@@ -2799,14 +2799,8 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	metadata, err := wh.clusterMetadataManager.GetCurrentClusterMetadata()
-	if err != nil {
-		return nil, err
-	}
-
 	return &workflowservice.GetSystemInfoResponse{
 		ServerVersion: headers.ServerVersion,
-		VersionInfo:   metadata.VersionInfo,
 		// Capabilities should be added as needed. In many cases, capabilities are
 		// hardcoded boolean true values since older servers will respond with a
 		// form of this message without the field which is implied false.
