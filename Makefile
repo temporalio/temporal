@@ -195,14 +195,6 @@ temporal-server:
 	@./develop/scripts/create_build_info_data.sh
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-server cmd/server/main.go
 
-tctl:
-	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build -o tctl cmd/tools/cli/main.go
-
-plugins:
-	@printf $(COLOR) "Build tctl-authorization-plugin with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build -o tctl-authorization-plugin cmd/tools/cli/plugins/authorization/main.go
-
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
