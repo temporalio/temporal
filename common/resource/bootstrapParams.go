@@ -25,8 +25,6 @@
 package resource
 
 import (
-	"github.com/uber-go/tally/v4"
-
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -49,7 +47,7 @@ type (
 		ThrottledLogger log.Logger
 		NamespaceLogger log.Logger
 
-		MetricsScope                 tally.Scope
+		// MetricsScope                 tally.Scope
 		MembershipFactoryInitializer MembershipFactoryInitializerFunc
 		RPCFactory                   common.RPCFactory
 		ClientFactoryProvider        client.FactoryProvider

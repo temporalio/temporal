@@ -30,7 +30,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
@@ -78,12 +77,12 @@ var Module = fx.Options(
 	fx.Provide(SnTaggedLoggerProvider),
 	fx.Provide(ThrottledLoggerProvider),
 	fx.Provide(PersistenceConfigProvider),
-	fx.Provide(MetricsScopeProvider),
 	fx.Provide(HostNameProvider),
 	fx.Provide(ServiceNameProvider),
 	fx.Provide(TimeSourceProvider),
 	fx.Provide(cluster.NewMetadataFromConfig),
 	fx.Provide(MetricsClientProvider),
+	fx.Provide(MetricsUserScopeProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
@@ -139,10 +138,6 @@ func MetricsClientProvider(params *BootstrapParams) metrics.Client {
 
 func PersistenceConfigProvider(params *BootstrapParams) *config.Persistence {
 	return &params.PersistenceConfig
-}
-
-func MetricsScopeProvider(params *BootstrapParams) tally.Scope {
-	return params.MetricsScope
 }
 
 func ServiceNameProvider(params *BootstrapParams) ServiceName {
@@ -276,8 +271,12 @@ func InstanceIDProvider(params *BootstrapParams) InstanceID {
 	return InstanceID(params.InstanceID)
 }
 
+func MetricsUserScopeProvider(serverMetricsClient metrics.Client) metrics.UserScope {
+	return serverMetricsClient.UserScope()
+}
+
 func RuntimeMetricsReporterProvider(
-	metricsScope tally.Scope,
+	metricsScope metrics.UserScope,
 	logger SnTaggedLogger,
 	instanceID InstanceID,
 ) *metrics.RuntimeMetricsReporter {

@@ -28,7 +28,6 @@ import (
 	"context"
 	"net"
 
-	"github.com/uber-go/tally/v4"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -89,7 +88,7 @@ func ServiceProvider(
 	logger resource.SnTaggedLogger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	metricsScope tally.Scope,
+	userScope metrics.UserScope,
 	faultInjectionDataStoreFactory *persistenceClient.FaultInjectionDataStoreFactory,
 ) *Service {
 	return NewService(
@@ -100,7 +99,7 @@ func ServiceProvider(
 		logger,
 		grpcListener,
 		membershipMonitor,
-		metricsScope,
+		userScope,
 		faultInjectionDataStoreFactory,
 	)
 }
