@@ -58,6 +58,7 @@ type (
 		Timeout     int
 		numReplicas int
 		Datacenter  string
+		Consistency string
 		TLS         *auth.TLS
 	}
 )
@@ -135,6 +136,11 @@ func (cfg *CQLClientConfig) toCassandraConfig() *config.Cassandra {
 		Keyspace:   cfg.Keyspace,
 		TLS:        cfg.TLS,
 		Datacenter: cfg.Datacenter,
+		Consistency: &config.CassandraStoreConsistency{
+			Default: &config.CassandraConsistencySettings{
+				Consistency: cfg.Consistency,
+			},
+		},
 	}
 
 	return &cassandraConfig
@@ -178,9 +184,6 @@ func (client *cqlClient) CreateSchemaVersionTables() error {
 // ReadSchemaVersion returns the current schema version for the Keyspace
 func (client *cqlClient) ReadSchemaVersion() (string, error) {
 	query := client.session.Query(readSchemaVersionCQL, client.keyspace)
-	// when querying the DB schema version, override to local quorum
-	// in case Cassandra node down (compared to using ALL)
-	query.Consistency(gocql.LocalQuorum)
 
 	iter := query.Iter()
 	var version string

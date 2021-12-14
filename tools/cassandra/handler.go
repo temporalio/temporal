@@ -176,6 +176,7 @@ func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 		Keyspace:    cli.GlobalString(schema.CLIOptKeyspace),
 		numReplicas: cli.Int(schema.CLIOptReplicationFactor),
 		Datacenter:  cli.String(schema.CLIOptDatacenter),
+		Consistency: cli.String(schema.CLIOptConsistency),
 	}
 
 	if cli.GlobalBool(schema.CLIFlagEnableTLS) {

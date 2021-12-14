@@ -107,6 +107,8 @@ const (
 	CLIOptReplicationFactor = "replication-factor"
 	// CLIOptDatacenter is the cli option for NetworkTopologyStrategy datacenter
 	CLIOptDatacenter = "datacenter"
+	// CLIOptConsistency is the cli option for consistency settings
+	CLIOptConsistency = "consistency"
 	// CLIOptQuiet is the cli option for quiet mode
 	CLIOptQuiet = "quiet"
 	// CLIOptForce is the cli option for force mode
