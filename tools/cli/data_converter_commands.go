@@ -28,6 +28,7 @@ import (
 	"net"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gorilla/websocket"
 
@@ -129,7 +130,7 @@ func DataConverter(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Unable to create listener", err)
 	}
-	origin := c.String(FlagWebURL)
+	origin := strings.TrimSuffix(c.String(FlagWebURL), "/")
 	port := listener.Addr().(*net.TCPAddr).Port
 	url := fmt.Sprintf(dataConverterURL, origin, port)
 
