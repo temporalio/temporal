@@ -47,7 +47,6 @@ type (
 		ThrottledLogger log.Logger
 		NamespaceLogger log.Logger
 
-		// MetricsScope                 tally.Scope
 		MembershipFactoryInitializer MembershipFactoryInitializerFunc
 		RPCFactory                   common.RPCFactory
 		ClientFactoryProvider        client.FactoryProvider
