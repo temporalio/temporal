@@ -206,18 +206,18 @@ func (d *dbTaskManager) readerEventLoop() {
 		case <-dbTaskAckTicker.C:
 			d.deleteAckedTasks()
 		case <-d.dispatchChan:
-			d.readDispatchTask()
+			d.readAndDispatchTasks()
 		}
 	}
 }
 
-func (d *dbTaskManager) writeAppendTask(
+func (d *dbTaskManager) bufferAndWriteTask(
 	task *persistencespb.TaskInfo,
 ) future.Future {
 	return d.taskReader.appendTask(task)
 }
 
-func (d *dbTaskManager) readDispatchTask() {
+func (d *dbTaskManager) readAndDispatchTasks() {
 	iter := d.taskWriter.taskIterator(d.taskQueueOwnership.getLastAllocatedTaskID())
 	for iter.HasNext() {
 		item, err := iter.Next()
