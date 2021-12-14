@@ -53,9 +53,6 @@ func NewSchemaVersionReader(session gocql.Session) *SchemaVersionReader {
 // ReadSchemaVersion returns the current schema version for the Keyspace
 func (svr *SchemaVersionReader) ReadSchemaVersion(keyspace string) (string, error) {
 	query := svr.session.Query(readSchemaVersionCQL, keyspace)
-	// when querying the DB schema version, override to local quorum
-	// in case Cassandra node down (compared to using ALL)
-	query.Consistency(gocql.LocalQuorum)
 
 	iter := query.Iter()
 	var version string
