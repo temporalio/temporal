@@ -956,7 +956,6 @@ func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 	time.Sleep(time.Second) // wait for the timeout to trigger
 
-	i := 0
 	for dweResult, dweErr := describeWorkflowExecution(); dweResult.GetWorkflowExecutionInfo().GetCloseTime() == nil; dweResult, dweErr = describeWorkflowExecution() {
 		s.NoError(dweErr)
 		s.NotNil(dweResult.GetWorkflowExecutionInfo())
@@ -967,7 +966,6 @@ func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 			s.Equal(heartbeatDetailsPayload, details)
 		}
 
-		i++
 		time.Sleep(time.Millisecond * 100)
 	}
 
