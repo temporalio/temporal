@@ -32,7 +32,7 @@ import (
 )
 
 type opentelemetryUserScope struct {
-	reporter *OpentelemetryReporter
+	reporter OpentelemetryReporter
 	labels   []attribute.KeyValue
 	tags     map[string]string
 
@@ -40,7 +40,7 @@ type opentelemetryUserScope struct {
 }
 
 func newOpentelemetryUserScope(
-	reporter *OpentelemetryReporter,
+	reporter OpentelemetryReporter,
 	tags map[string]string,
 	gaugeCache OtelGaugeCache,
 ) *opentelemetryUserScope {

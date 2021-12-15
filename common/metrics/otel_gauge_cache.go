@@ -43,7 +43,7 @@ type (
 	otelGaugeCache struct {
 		lock     sync.RWMutex
 		gauges   map[string]*gaugeValues
-		reporter *OpentelemetryReporter
+		reporter OpentelemetryReporter
 	}
 
 	gaugeValues struct {
@@ -94,7 +94,7 @@ func (o *gaugeValues) Update(tags map[string]string, value float64) {
 	gaugeValue.value.Store(value)
 }
 
-func NewOtelGaugeCache(reporter *OpentelemetryReporter) OtelGaugeCache {
+func NewOtelGaugeCache(reporter OpentelemetryReporter) OtelGaugeCache {
 	return &otelGaugeCache{
 		lock:     sync.RWMutex{},
 		gauges:   make(map[string]*gaugeValues),

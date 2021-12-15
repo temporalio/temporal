@@ -81,6 +81,7 @@ const (
 	Matching
 	Worker
 	Server
+	UnitTestService
 	NumServices
 )
 
@@ -1177,6 +1178,14 @@ const (
 	NumServerScopes
 )
 
+// -- Scopes for UnitTestService --
+const (
+	TestScope1 = iota + NumServerScopes
+	TestScope2
+
+	NumUnitTestServiceScopes
+)
+
 // ScopeDefs record the scopes for all services
 var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// common scope Names
@@ -1696,6 +1705,10 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	Server: {
 		ServerTlsScope: {operation: "ServerTls"},
 	},
+	UnitTestService: {
+		TestScope1: {operation: "test_scope_1_operation"},
+		TestScope2: {operation: "test_scope_2_operation"},
+	},
 }
 
 // Common Metrics enum
@@ -2152,6 +2165,23 @@ const (
 	NumServerMetrics
 )
 
+// UnitTestService metrics enum
+const (
+	TestCounterMetric1 = iota + NumServerMetrics
+	TestCounterMetric2
+	TestCounterRollupMetric1
+	TestTimerMetric1
+	TestTimerMetric2
+	TestGaugeMetric1
+	TestGaugeMetric2
+	TestBytesHistogramMetric1
+	TestBytesHistogramMetric2
+	TestDimensionlessHistogramMetric1
+	TestDimensionlessHistogramMetric2
+
+	NumUnitTestServiceMetrics
+)
+
 // MetricDefs record the metrics for all services
 var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Common: {
@@ -2571,6 +2601,19 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),
 		TlsCertsExpiring: NewGaugeDef("certificates_expiring"),
+	},
+	UnitTestService: {
+		TestCounterMetric1:                NewCounterDef("test_counter_metric_a"),
+		TestCounterMetric2:                NewCounterDef("test_counter_metric_b"),
+		TestCounterRollupMetric1:          NewRollupCounterDef("test_counter_rollup_metric_a", "test_counter_rollup_metric_a_rollup"),
+		TestTimerMetric1:                  NewTimerDef("test_timer_metric_a"),
+		TestTimerMetric2:                  NewTimerDef("test_timer_metric_b"),
+		TestGaugeMetric1:                  NewGaugeDef("test_gauge_metric_a"),
+		TestGaugeMetric2:                  NewGaugeDef("test_gauge_metric_b"),
+		TestBytesHistogramMetric1:         NewBytesHistogramDef("test_bytes_histogram_metric_a"),
+		TestBytesHistogramMetric2:         NewBytesHistogramDef("test_bytes_histogram_metric_b"),
+		TestDimensionlessHistogramMetric1: NewDimensionlessHistogramDef("test_bytes_histogram_metric_a"),
+		TestDimensionlessHistogramMetric2: NewDimensionlessHistogramDef("test_bytes_histogram_metric_b"),
 	},
 }
 

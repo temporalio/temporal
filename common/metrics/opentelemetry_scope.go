@@ -36,7 +36,7 @@ import (
 type (
 	opentelemetryScope struct {
 		serviceIdx        ServiceIdx
-		reporter          *OpentelemetryReporter
+		reporter          OpentelemetryReporter
 		labels            []attribute.KeyValue
 		tags              map[string]string
 		rootScope         *opentelemetryScope
@@ -49,7 +49,7 @@ type (
 
 func newOpentelemetryScope(
 	serviceIdx ServiceIdx,
-	reporter *OpentelemetryReporter,
+	reporter OpentelemetryReporter,
 	rootScope *opentelemetryScope,
 	tags map[string]string,
 	defs map[int]metricDefinition,
