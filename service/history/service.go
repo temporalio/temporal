@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-go/tally/v4"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -60,8 +59,8 @@ type (
 		logger                         log.Logger
 		grpcListener                   net.Listener
 		membershipMonitor              membership.Monitor
-		metricsScope                   tally.Scope
 		faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
+		userScope                      metrics.UserScope
 	}
 )
 
@@ -73,7 +72,7 @@ func NewService(
 	logger log.Logger,
 	grpcListener net.Listener,
 	membershipMonitor membership.Monitor,
-	metricsScope tally.Scope,
+	userScope metrics.UserScope,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{
@@ -85,7 +84,7 @@ func NewService(
 		logger:                         logger,
 		grpcListener:                   grpcListener,
 		membershipMonitor:              membershipMonitor,
-		metricsScope:                   metricsScope,
+		userScope:                      userScope,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 	}
 }
@@ -99,7 +98,7 @@ func (s *Service) Start() {
 	logger := s.logger
 	logger.Info("history starting")
 
-	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	s.userScope.AddCounter(metrics.RestartCount, 1)
 	rand.Seed(time.Now().UnixNano())
 
 	s.handler.Start()

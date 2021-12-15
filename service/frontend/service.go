@@ -32,7 +32,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -195,7 +194,7 @@ type Service struct {
 	sdkMetricsReporter             metrics.Reporter
 	logger                         log.Logger
 	grpcListener                   net.Listener
-	metricsScope                   tally.Scope
+	userMetricsScope               metrics.UserScope
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 }
 
@@ -208,7 +207,7 @@ func NewService(
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
 	grpcListener net.Listener,
-	metricsScope tally.Scope,
+	userMetricsScope metrics.UserScope,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{
@@ -221,7 +220,7 @@ func NewService(
 		visibilityManager:              visibilityMgr,
 		logger:                         logger,
 		grpcListener:                   grpcListener,
-		metricsScope:                   metricsScope,
+		userMetricsScope:               userMetricsScope,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 	}
 }
@@ -243,7 +242,7 @@ func (s *Service) Start() {
 	reflection.Register(s.server)
 
 	// must start resource first
-	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
 	rand.Seed(time.Now().UnixNano())
 
 	s.adminHandler.Start()

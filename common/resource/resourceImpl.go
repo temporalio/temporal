@@ -31,7 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 
@@ -83,7 +82,6 @@ type (
 		serviceName     string
 		hostName        string
 		hostInfo        *membership.HostInfo
-		metricsScope    tally.Scope
 		clusterMetadata cluster.Metadata
 		saProvider      searchattribute.Provider
 		saManager       searchattribute.Manager
@@ -312,10 +310,10 @@ func New(
 
 		// static infos
 
-		numShards:       numShards,
-		serviceName:     params.Name,
-		hostName:        hostName,
-		metricsScope:    params.MetricsScope,
+		numShards:   numShards,
+		serviceName: params.Name,
+		hostName:    hostName,
+
 		clusterMetadata: clusterMetadata,
 		saProvider:      saProvider,
 		saManager:       saManager,
@@ -368,7 +366,7 @@ func New(
 
 		// internal vars
 		runtimeMetricsReporter: metrics.NewRuntimeMetricsReporter(
-			params.MetricsScope,
+			params.MetricsClient.UserScope(),
 			time.Minute,
 			logger,
 			params.InstanceID,
@@ -389,7 +387,7 @@ func (h *Impl) Start() {
 		return
 	}
 
-	h.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	h.metricsClient.UserScope().AddCounter(metrics.RestartCount, 1)
 	h.runtimeMetricsReporter.Start()
 
 	h.clusterMetadata.Start()

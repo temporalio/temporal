@@ -40,6 +40,7 @@ type (
 		serviceIdx   ServiceIdx
 		scopeWrapper func(impl internalScope) internalScope
 		gaugeCache   OtelGaugeCache
+		userScope    *opentelemetryUserScope
 	}
 )
 
@@ -52,6 +53,8 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
+	userScope := newOpentelemetryUserScope(reporter, clientConfig.Tags, gaugeCache)
+
 	globalRootScope := newOpentelemetryScope(serviceIdx, reporter, nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
@@ -62,6 +65,7 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 		serviceIdx:   serviceIdx,
 		scopeWrapper: scopeWrapper,
 		gaugeCache:   gaugeCache,
+		userScope:    userScope,
 	}
 
 	for idx, def := range ScopeDefs[Common] {
@@ -126,7 +130,7 @@ func (m *opentelemetryClient) Scope(scopeIdx int, tags ...Tag) Scope {
 }
 
 // UserScope returns a new metrics scope that can be used to add additional
-// information to the metrics emitted by user code
+// information to the metrics emitted by user code.
 func (m *opentelemetryClient) UserScope() UserScope {
-	return m.rootScope.userScope()
+	return m.userScope
 }

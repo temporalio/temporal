@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-go/tally/v4"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -54,7 +53,7 @@ type Service struct {
 	membershipMonitor              membership.Monitor
 	grpcListener                   net.Listener
 	runtimeMetricsReporter         *metrics.RuntimeMetricsReporter
-	metricsScope                   tally.Scope
+	userMetricsScope               metrics.UserScope
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory
 }
 
@@ -66,7 +65,7 @@ func NewService(
 	grpcListener net.Listener,
 	runtimeMetricsReporter *metrics.RuntimeMetricsReporter,
 	handler *Handler,
-	metricsScope tally.Scope,
+	userMetricsScope metrics.UserScope,
 	faultInjectionDataStoreFactory *client.FaultInjectionDataStoreFactory,
 ) *Service {
 	return &Service{
@@ -78,7 +77,7 @@ func NewService(
 		membershipMonitor:              membershipMonitor,
 		grpcListener:                   grpcListener,
 		runtimeMetricsReporter:         runtimeMetricsReporter,
-		metricsScope:                   metricsScope,
+		userMetricsScope:               userMetricsScope,
 		faultInjectionDataStoreFactory: faultInjectionDataStoreFactory,
 	}
 }
@@ -92,7 +91,7 @@ func (s *Service) Start() {
 	s.logger.Info("matching starting")
 
 	// must start base service first
-	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
 	rand.Seed(time.Now().UnixNano())
 
 	s.handler.Start()
