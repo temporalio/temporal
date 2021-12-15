@@ -862,7 +862,6 @@ func (s *integrationSuite) TestActivityCancellationNotStarted() {
 	s.True(err == nil || err == matching.ErrNoTasks)
 }
 
-
 func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	// Latest reported heartbeat on activity should be available throughout workflow execution or until activity succeeds.
 	// 1. Start workflow with single activity
@@ -904,17 +903,17 @@ func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 	activityId := "heartbeat_retry"
 	workflowFn := func(ctx workflow.Context) error {
 		activityRetryPolicy := &temporal.RetryPolicy{
-			InitialInterval:        time.Second * 2,
-			BackoffCoefficient:     1,
-			MaximumInterval:        time.Second * 2,
-			MaximumAttempts:        3,
+			InitialInterval:    time.Second * 2,
+			BackoffCoefficient: 1,
+			MaximumInterval:    time.Second * 2,
+			MaximumAttempts:    3,
 		}
 
 		ctx1 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ActivityID:             activityId,
 			ScheduleToStartTimeout: 2 * time.Second,
 			StartToCloseTimeout:    2 * time.Second,
-			RetryPolicy: activityRetryPolicy,
+			RetryPolicy:            activityRetryPolicy,
 		})
 		f1 := workflow.ExecuteActivity(ctx1, activityFn)
 
@@ -932,7 +931,7 @@ func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 		TaskQueue:          s.taskQueue,
 		WorkflowRunTimeout: 20 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 30 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	if err != nil {
@@ -974,4 +973,3 @@ func (s *clientIntegrationSuite) TestActivityHeartbeatDetailsDuringRetry() {
 
 	s.NoError(err1)
 }
-
