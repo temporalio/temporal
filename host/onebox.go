@@ -380,12 +380,12 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
 		c.logger)
-	params.MetricsScope = tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
+	tallyScope := tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -406,7 +406,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.SdkClientFactory = sdk.NewClientFactory(
 		c.FrontendGRPCAddress(),
 		nil,
-		params.MetricsScope,
+		sdk.NewMetricHandler(params.MetricsClient.UserScope()),
 	)
 
 	stoppedCh := make(chan struct{})
@@ -473,19 +473,19 @@ func (c *temporalImpl) startHistory(
 		params.Name = common.HistoryServiceName
 		params.ThrottledLogger = c.logger
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, grpcPort, membershipPorts[i], c.logger)
-		params.MetricsScope = tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
+		tallyMetricsScope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadataConfig = c.clusterMetadataConfig
-		params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+		params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 
 		params.SdkClientFactory = sdk.NewClientFactory(
 			c.FrontendGRPCAddress(),
 			nil,
-			params.MetricsScope,
+			sdk.NewMetricHandler(params.MetricsClient.UserScope()),
 		)
 
 		params.ArchivalMetadata = c.archiverMetadata
@@ -568,12 +568,12 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	params.Name = common.MatchingServiceName
 	params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
-	params.MetricsScope = tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
+	tallyMetricsScope := tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -630,12 +630,12 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	params.Name = common.WorkerServiceName
 	params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.WorkerServiceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
-	params.MetricsScope = tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
+	tallyMetricsScope := tally.NewTestScope(common.WorkerServiceName, make(map[string]string))
 	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, params.MetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
@@ -648,7 +648,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	params.SdkClientFactory = sdk.NewClientFactory(
 		c.FrontendGRPCAddress(),
 		nil,
-		params.MetricsScope,
+		sdk.NewMetricHandler(params.MetricsClient.UserScope()),
 	)
 
 	dcClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
