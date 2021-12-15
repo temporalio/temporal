@@ -51,7 +51,7 @@ type (
 		Statsd *StatsdConfig `yaml:"statsd"`
 		// Prometheus is the configuration for prometheus reporter
 		Prometheus *PrometheusConfig `yaml:"prometheus"`
-		// {optional} Config for Prometheus metrics reporter for SDK reported metrics.
+		// Deprecated {optional} Config for Prometheus metrics reporter for SDK reported metrics.
 		PrometheusSDK *PrometheusConfig `yaml:"prometheusSDK"`
 	}
 
