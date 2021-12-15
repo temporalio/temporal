@@ -313,8 +313,7 @@ func New(
 		numShards:   numShards,
 		serviceName: params.Name,
 		hostName:    hostName,
-		// todomigryz: commented code
-		// metricsScope:    params.MetricsScope,
+
 		clusterMetadata: clusterMetadata,
 		saProvider:      saProvider,
 		saManager:       saManager,
