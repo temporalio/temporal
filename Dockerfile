@@ -2,6 +2,7 @@ ARG TARGET=server
 ARG BASE_BUILDER_IMAGE=temporalio/base-builder:1.5.0
 ARG BASE_SERVER_IMAGE=temporalio/base-server:1.4.0
 ARG BASE_ADMIN_TOOLS_IMAGE=temporalio/base-admin-tools:1.3.0
+ARG BASE_TCTL_IMAGE=temporalio/tctl:1.12.4
 ARG GOPROXY
 
 ##### Temporal builder #####
@@ -36,8 +37,6 @@ COPY docker/config_template.yaml /etc/temporal/config/config_template.yaml
 COPY docker/entrypoint.sh /etc/temporal/entrypoint.sh
 COPY docker/start-temporal.sh /etc/temporal/start-temporal.sh
 
-COPY --from=temporal-builder /temporal/tctl /usr/local/bin
-COPY --from=temporal-builder /temporal/tctl-authorization-plugin /usr/local/bin
 COPY --from=temporal-builder /temporal/temporal-server /usr/local/bin
 
 ##### Auto setup Temporal server #####
@@ -63,7 +62,7 @@ CMD ["autosetup", "develop"]
 COPY docker/setup-develop.sh /etc/temporal/setup-develop.sh
 
 ##### Temporal CLI (tctl) #####
-FROM ${BASE_SERVER_IMAGE} AS temporal-tctl
+FROM ${BASE_TCTL_IMAGE} AS temporal-tctl
 WORKDIR /etc/temporal
 ENTRYPOINT ["tctl"]
 COPY --from=temporal-builder /temporal/tctl /usr/local/bin
