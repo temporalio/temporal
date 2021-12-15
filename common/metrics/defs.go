@@ -1087,6 +1087,8 @@ const (
 	HistoryQueryWorkflowScope
 	// HistoryProcessDeleteHistoryEventScope tracks ProcessDeleteHistoryEvent processing calls
 	HistoryProcessDeleteHistoryEventScope
+	// HistoryDeleteWorkflowExecutionScope tracks DeleteWorkflowExecutions API calls
+	HistoryDeleteWorkflowExecutionScope
 	// WorkflowCompletionStatsScope tracks workflow completion updates
 	WorkflowCompletionStatsScope
 	// ArchiverClientScope is scope used by all metrics emitted by archiver.Client
