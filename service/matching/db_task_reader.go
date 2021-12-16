@@ -37,8 +37,16 @@ const (
 	dbTaskReaderPageSize = 100
 )
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination db_task_reader_mock.go
+
 type (
-	dbTaskReader struct {
+	dbTaskReader interface {
+		taskIterator(maxTaskID int64) collection.Iterator
+		ackTask(taskID int64)
+		moveAckedTaskID() int64
+	}
+
+	dbTaskReaderImpl struct {
 		taskQueueKey persistence.TaskQueueKey
 		store        persistence.TaskManager
 		logger       log.Logger
@@ -55,8 +63,8 @@ func newDBTaskReader(
 	store persistence.TaskManager,
 	ackedTaskID int64,
 	logger log.Logger,
-) *dbTaskReader {
-	return &dbTaskReader{
+) *dbTaskReaderImpl {
+	return &dbTaskReaderImpl{
 		taskQueueKey: taskQueueKey,
 		store:        store,
 		logger:       logger,
@@ -67,13 +75,13 @@ func newDBTaskReader(
 	}
 }
 
-func (t *dbTaskReader) taskIterator(
+func (t *dbTaskReaderImpl) taskIterator(
 	maxTaskID int64,
 ) collection.Iterator {
 	return collection.NewPagingIterator(t.getPaginationFn(maxTaskID))
 }
 
-func (t *dbTaskReader) ackTask(taskID int64) {
+func (t *dbTaskReaderImpl) ackTask(taskID int64) {
 	t.Lock()
 	defer t.Unlock()
 
@@ -91,7 +99,7 @@ func (t *dbTaskReader) ackTask(taskID int64) {
 //  12 -> true
 //  15 -> false
 // the acked task ID can be set to 12, meaning task with ID <= 12 are finished
-func (t *dbTaskReader) moveAckedTaskID() int64 {
+func (t *dbTaskReaderImpl) moveAckedTaskID() int64 {
 	t.Lock()
 	defer t.Unlock()
 
@@ -111,7 +119,7 @@ func (t *dbTaskReader) moveAckedTaskID() int64 {
 	return t.ackedTaskID
 }
 
-func (t *dbTaskReader) getPaginationFn(
+func (t *dbTaskReaderImpl) getPaginationFn(
 	maxTaskID int64,
 ) collection.PaginationFn {
 	t.Lock()

@@ -132,6 +132,20 @@ func (mr *MockdbTaskQueueOwnershipMockRecorder) persistTaskQueue() *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "persistTaskQueue", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).persistTaskQueue))
 }
 
+// takeTaskQueueOwnership mocks base method.
+func (m *MockdbTaskQueueOwnership) takeTaskQueueOwnership() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "takeTaskQueueOwnership")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// takeTaskQueueOwnership indicates an expected call of takeTaskQueueOwnership.
+func (mr *MockdbTaskQueueOwnershipMockRecorder) takeTaskQueueOwnership() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "takeTaskQueueOwnership", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).takeTaskQueueOwnership))
+}
+
 // updateAckedTaskID mocks base method.
 func (m *MockdbTaskQueueOwnership) updateAckedTaskID(taskID int64) {
 	m.ctrl.T.Helper()

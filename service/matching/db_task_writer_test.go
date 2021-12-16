@@ -54,9 +54,9 @@ type (
 
 		namespaceID   string
 		taskQueueName string
-		taskType      enumspb.TaskQueueType
+		taskQueueType enumspb.TaskQueueType
 
-		taskFlusher *dbTaskWriter
+		taskFlusher *dbTaskWriterImpl
 	}
 )
 
@@ -81,13 +81,13 @@ func (s *dbTaskWriterSuite) SetupTest() {
 
 	s.namespaceID = uuid.New().String()
 	s.taskQueueName = uuid.New().String()
-	s.taskType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
+	s.taskQueueType = enumspb.TASK_QUEUE_TYPE_ACTIVITY
 
 	s.taskFlusher = newDBTaskWriter(
 		persistence.TaskQueueKey{
 			NamespaceID:   s.namespaceID,
 			TaskQueueName: s.taskQueueName,
-			TaskQueueType: s.taskType,
+			TaskQueueType: s.taskQueueType,
 		},
 		s.taskOwnership,
 		log.NewTestLogger(),

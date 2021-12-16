@@ -56,7 +56,7 @@ type (
 		ackedTaskID   int64
 		maxTaskID     int64
 
-		taskTracker *dbTaskReader
+		taskTracker *dbTaskReaderImpl
 	}
 )
 

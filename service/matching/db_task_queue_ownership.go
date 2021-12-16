@@ -51,6 +51,7 @@ type (
 	dbTaskQueueOwnershipStatus int
 
 	dbTaskQueueOwnership interface {
+		takeTaskQueueOwnership() error
 		getShutdownChan() <-chan struct{}
 		getAckedTaskID() int64
 		updateAckedTaskID(taskID int64)
