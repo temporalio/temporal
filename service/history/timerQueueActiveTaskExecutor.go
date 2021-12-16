@@ -62,7 +62,8 @@ type (
 
 func newTimerQueueActiveTaskExecutor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowDeleteManager workflow.DeleteManager,
+	cache workflow.Cache,
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
 	metricsClient metrics.Client,
@@ -72,7 +73,8 @@ func newTimerQueueActiveTaskExecutor(
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
-			historyService,
+			workflowDeleteManager,
+			cache,
 			logger,
 			metricsClient,
 			config,

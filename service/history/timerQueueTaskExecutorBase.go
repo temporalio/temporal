@@ -41,7 +41,7 @@ import (
 type (
 	timerQueueTaskExecutorBase struct {
 		shard         shard.Context
-		historyEngine *historyEngineImpl
+		deleteManager workflow.DeleteManager
 		cache         workflow.Cache
 		logger        log.Logger
 		metricsClient metrics.Client
@@ -51,15 +51,16 @@ type (
 
 func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	deleteManager workflow.DeleteManager,
+	cache workflow.Cache,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
 		shard:         shard,
-		historyEngine: historyEngine,
-		cache:         historyEngine.historyCache,
+		deleteManager: deleteManager,
+		cache:         cache,
 		logger:        logger,
 		metricsClient: metricsClient,
 		config:        config,
@@ -104,7 +105,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 
-	return t.historyEngine.DeleteWorkflowExecutionFromTimerTask(
+	return t.deleteManager.DeleteWorkflowExecutionFromTimerTask(
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weContext,
