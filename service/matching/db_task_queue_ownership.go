@@ -39,18 +39,18 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination db_task_ownership_mock.go
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination db_task_queue_ownership_mock.go
 
 const (
-	dbTaskOwnershipStatusUninitialized dbTaskOwnershipStatus = 0
-	dbTaskOwnershipStatusOwned         dbTaskOwnershipStatus = 1
-	dbTaskOwnershipStatusLost          dbTaskOwnershipStatus = 2
+	dbTaskQueueOwnershipStatusUninitialized dbTaskQueueOwnershipStatus = 0
+	dbTaskQueueOwnershipStatusOwned         dbTaskQueueOwnershipStatus = 1
+	dbTaskQueueOwnershipStatusLost          dbTaskQueueOwnershipStatus = 2
 )
 
 type (
-	dbTaskOwnershipStatus int
+	dbTaskQueueOwnershipStatus int
 
-	dbTaskOwnership interface {
+	dbTaskQueueOwnership interface {
 		getShutdownChan() <-chan struct{}
 		getAckedTaskID() int64
 		updateAckedTaskID(taskID int64)
@@ -59,7 +59,7 @@ type (
 		flushTasks(taskInfos ...*persistencespb.TaskInfo) error
 	}
 
-	dbTaskOwnershipState struct {
+	dbTaskQueueOwnershipState struct {
 		rangeID             int64
 		ackedTaskID         int64
 		lastAllocatedTaskID int64
@@ -67,7 +67,7 @@ type (
 		maxTaskIDInclusive  int64 // inclusive
 	}
 
-	dbTaskOwnershipImpl struct {
+	dbTaskQueueOwnershipImpl struct {
 		taskQueueKey    persistence.TaskQueueKey
 		taskQueueKind   enumspb.TaskQueueKind
 		taskIDRangeSize int64
@@ -76,21 +76,21 @@ type (
 		logger          log.Logger
 
 		sync.Mutex
-		status              dbTaskOwnershipStatus
-		ownershipState      *dbTaskOwnershipState
+		status              dbTaskQueueOwnershipStatus
+		ownershipState      *dbTaskQueueOwnershipState
 		shutdownChan        chan struct{}
 		stateLastUpdateTime *time.Time
 	}
 )
 
-func newDBTaskOwnership(
+func newDBTaskQueueOwnership(
 	taskQueueKey persistence.TaskQueueKey,
 	taskQueueKind enumspb.TaskQueueKind,
 	taskIDRangeSize int64,
 	store persistence.TaskManager,
 	logger log.Logger,
-) *dbTaskOwnershipImpl {
-	taskOwnership := &dbTaskOwnershipImpl{
+) *dbTaskQueueOwnershipImpl {
+	taskOwnership := &dbTaskQueueOwnershipImpl{
 		taskQueueKey:    taskQueueKey,
 		taskQueueKind:   taskQueueKind,
 		taskIDRangeSize: taskIDRangeSize,
@@ -98,7 +98,7 @@ func newDBTaskOwnership(
 		store:           store,
 		logger:          logger,
 
-		status:              dbTaskOwnershipStatusUninitialized,
+		status:              dbTaskQueueOwnershipStatusUninitialized,
 		ownershipState:      nil,
 		shutdownChan:        make(chan struct{}),
 		stateLastUpdateTime: nil,
@@ -106,18 +106,18 @@ func newDBTaskOwnership(
 	return taskOwnership
 }
 
-func (m *dbTaskOwnershipImpl) getShutdownChan() <-chan struct{} {
+func (m *dbTaskQueueOwnershipImpl) getShutdownChan() <-chan struct{} {
 	return m.shutdownChan
 }
 
-func (m *dbTaskOwnershipImpl) getAckedTaskID() int64 {
+func (m *dbTaskQueueOwnershipImpl) getAckedTaskID() int64 {
 	m.Lock()
 	defer m.Unlock()
 
 	return m.ownershipState.ackedTaskID
 }
 
-func (m *dbTaskOwnershipImpl) updateAckedTaskID(taskID int64) {
+func (m *dbTaskQueueOwnershipImpl) updateAckedTaskID(taskID int64) {
 	m.Lock()
 	defer m.Unlock()
 
@@ -127,14 +127,14 @@ func (m *dbTaskOwnershipImpl) updateAckedTaskID(taskID int64) {
 	m.ownershipState.ackedTaskID = taskID
 }
 
-func (m *dbTaskOwnershipImpl) getLastAllocatedTaskID() int64 {
+func (m *dbTaskQueueOwnershipImpl) getLastAllocatedTaskID() int64 {
 	m.Lock()
 	defer m.Unlock()
 
 	return m.ownershipState.lastAllocatedTaskID
 }
 
-func (m *dbTaskOwnershipImpl) takeTaskQueueOwnership() error {
+func (m *dbTaskQueueOwnershipImpl) takeTaskQueueOwnership() error {
 	m.Lock()
 	defer m.Unlock()
 
@@ -149,12 +149,12 @@ func (m *dbTaskOwnershipImpl) takeTaskQueueOwnership() error {
 		if err := m.renewTaskQueueLocked(response.RangeID + 1); err != nil {
 			return err
 		}
-		m.status = dbTaskOwnershipStatusOwned
+		m.status = dbTaskQueueOwnershipStatusOwned
 		return nil
 
 	case *serviceerror.NotFound:
 		if _, err := m.store.CreateTaskQueue(&persistence.CreateTaskQueueRequest{
-			RangeID: initialRangeID,
+			RangeID: dbTaskInitialRangeID,
 			TaskQueueInfo: &persistencespb.TaskQueueInfo{
 				NamespaceId:    m.taskQueueKey.NamespaceID,
 				Name:           m.taskQueueKey.TaskQueueName,
@@ -169,8 +169,8 @@ func (m *dbTaskOwnershipImpl) takeTaskQueueOwnership() error {
 			return err
 		}
 		m.stateLastUpdateTime = timestamp.TimePtr(m.timeSource.Now())
-		m.updateStateLocked(initialRangeID, 0)
-		m.status = dbTaskOwnershipStatusOwned
+		m.updateStateLocked(dbTaskInitialRangeID, 0)
+		m.status = dbTaskQueueOwnershipStatusOwned
 		return nil
 
 	default:
@@ -178,7 +178,7 @@ func (m *dbTaskOwnershipImpl) takeTaskQueueOwnership() error {
 	}
 }
 
-func (m *dbTaskOwnershipImpl) renewTaskQueueLocked(
+func (m *dbTaskQueueOwnershipImpl) renewTaskQueueLocked(
 	rangeID int64,
 ) error {
 	_, err := m.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
@@ -195,14 +195,14 @@ func (m *dbTaskOwnershipImpl) renewTaskQueueLocked(
 	return nil
 }
 
-func (m *dbTaskOwnershipImpl) persistTaskQueue() error {
+func (m *dbTaskQueueOwnershipImpl) persistTaskQueue() error {
 	m.Lock()
 	defer m.Unlock()
 
 	return m.renewTaskQueueLocked(m.ownershipState.rangeID)
 }
 
-func (m *dbTaskOwnershipImpl) flushTasks(
+func (m *dbTaskQueueOwnershipImpl) flushTasks(
 	taskInfos ...*persistencespb.TaskInfo,
 ) error {
 	m.Lock()
@@ -235,7 +235,7 @@ func (m *dbTaskOwnershipImpl) flushTasks(
 	return nil
 }
 
-func (m *dbTaskOwnershipImpl) generatedTaskIDsLocked(
+func (m *dbTaskQueueOwnershipImpl) generatedTaskIDsLocked(
 	numTasks int,
 ) ([]int64, error) {
 	if m.ownershipState.maxTaskIDInclusive-m.ownershipState.lastAllocatedTaskID < int64(numTasks) {
@@ -244,21 +244,21 @@ func (m *dbTaskOwnershipImpl) generatedTaskIDsLocked(
 		}
 	}
 	if m.ownershipState.maxTaskIDInclusive-m.ownershipState.lastAllocatedTaskID < int64(numTasks) {
-		panic(fmt.Sprintf("dbTaskOwnershipImpl generatedTaskIDsLocked unable to allocate task IDs"))
+		panic(fmt.Sprintf("dbTaskQueueOwnershipImpl generatedTaskIDsLocked unable to allocate task IDs"))
 	}
 
 	allocatedTaskIDs := make([]int64, numTasks)
 	for i := 0; i < numTasks; i++ {
 		m.ownershipState.lastAllocatedTaskID++
 		if m.ownershipState.lastAllocatedTaskID > m.ownershipState.maxTaskIDInclusive {
-			panic(fmt.Sprintf("dbTaskOwnershipImpl generatedTaskIDsLocked encountered task ID overflow"))
+			panic(fmt.Sprintf("dbTaskQueueOwnershipImpl generatedTaskIDsLocked encountered task ID overflow"))
 		}
 		allocatedTaskIDs[i] = m.ownershipState.lastAllocatedTaskID
 	}
 	return allocatedTaskIDs, nil
 }
 
-func (m *dbTaskOwnershipImpl) taskQueueInfoLocked() *persistencespb.TaskQueueInfo {
+func (m *dbTaskQueueOwnershipImpl) taskQueueInfoLocked() *persistencespb.TaskQueueInfo {
 	return &persistencespb.TaskQueueInfo{
 		NamespaceId:    m.taskQueueKey.NamespaceID,
 		Name:           m.taskQueueKey.TaskQueueName,
@@ -270,24 +270,24 @@ func (m *dbTaskOwnershipImpl) taskQueueInfoLocked() *persistencespb.TaskQueueInf
 	}
 }
 
-func (m *dbTaskOwnershipImpl) expiryTime() *time.Time {
+func (m *dbTaskQueueOwnershipImpl) expiryTime() *time.Time {
 	switch m.taskQueueKind {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
 		return nil
 	case enumspb.TASK_QUEUE_KIND_STICKY:
-		return timestamp.TimePtr(m.timeSource.Now().Add(stickyTaskQueueTTL))
+		return timestamp.TimePtr(m.timeSource.Now().Add(dbTaskStickyTaskQueueTTL))
 	default:
 		panic(fmt.Sprintf("taskQueueDB encountered unknown task kind: %v", m.taskQueueKind))
 	}
 }
 
-func (m *dbTaskOwnershipImpl) updateStateLocked(
+func (m *dbTaskQueueOwnershipImpl) updateStateLocked(
 	rangeID int64,
 	ackedTaskID int64,
 ) {
 	minTaskID, maxTaskID := rangeIDToTaskIDRange(rangeID, m.taskIDRangeSize)
 	if m.ownershipState == nil {
-		m.ownershipState = &dbTaskOwnershipState{
+		m.ownershipState = &dbTaskQueueOwnershipState{
 			rangeID:             rangeID,
 			ackedTaskID:         ackedTaskID,
 			lastAllocatedTaskID: minTaskID,
@@ -296,9 +296,9 @@ func (m *dbTaskOwnershipImpl) updateStateLocked(
 		}
 	} else {
 		if rangeID < m.ownershipState.rangeID {
-			panic(fmt.Sprintf("dbTaskOwnershipImpl updateStateLocked encountered smaller range ID"))
+			panic(fmt.Sprintf("dbTaskQueueOwnershipImpl updateStateLocked encountered smaller range ID"))
 		} else if ackedTaskID < m.ownershipState.ackedTaskID {
-			panic(fmt.Sprintf("dbTaskOwnershipImpl updateStateLocked encountered acked task ID"))
+			panic(fmt.Sprintf("dbTaskQueueOwnershipImpl updateStateLocked encountered acked task ID"))
 		}
 		m.ownershipState.rangeID = rangeID
 		m.ownershipState.ackedTaskID = ackedTaskID
@@ -310,7 +310,7 @@ func (m *dbTaskOwnershipImpl) updateStateLocked(
 	}
 }
 
-func (m *dbTaskOwnershipImpl) maybeShutdownLocked(
+func (m *dbTaskQueueOwnershipImpl) maybeShutdownLocked(
 	err error,
 ) {
 	_, ok := err.(*persistence.ConditionFailedError)
@@ -319,10 +319,10 @@ func (m *dbTaskOwnershipImpl) maybeShutdownLocked(
 	}
 
 	m.ownershipState = nil
-	if m.status == dbTaskOwnershipStatusLost {
+	if m.status == dbTaskQueueOwnershipStatusLost {
 		return
 	}
-	m.status = dbTaskOwnershipStatusLost
+	m.status = dbTaskQueueOwnershipStatusLost
 	close(m.shutdownChan)
 }
 

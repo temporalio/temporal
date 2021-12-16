@@ -32,13 +32,13 @@ import (
 
 // TallyClient is used for reporting metrics by various Temporal services
 type TallyClient struct {
-	// parentReporter is the parent scope for the metrics
-	parentScope    tally.Scope
-	childScopes    map[int]tally.Scope
-	metricDefs     map[int]metricDefinition
-	serviceIdx     ServiceIdx
-	scopeWrapper   func(impl internalScope) internalScope
-	perUnitBuckets map[MetricUnit]tally.Buckets
+	// This is the scope provided by user to the client. It contains no client-specific tags.
+	globalRootScope tally.Scope
+	childScopes     map[int]tally.Scope
+	metricDefs      map[int]metricDefinition
+	serviceIdx      ServiceIdx
+	scopeWrapper    func(impl internalScope) internalScope
+	perUnitBuckets  map[MetricUnit]tally.Buckets
 }
 
 // NewClient creates and returns a new instance of
@@ -59,12 +59,12 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &TallyClient{
-		parentScope:    scope,
-		childScopes:    make(map[int]tally.Scope, totalScopes),
-		metricDefs:     getMetricDefs(serviceIdx),
-		serviceIdx:     serviceIdx,
-		scopeWrapper:   scopeWrapper,
-		perUnitBuckets: perUnitBuckets,
+		globalRootScope: scope,
+		childScopes:     make(map[int]tally.Scope, totalScopes),
+		metricDefs:      getMetricDefs(serviceIdx),
+		serviceIdx:      serviceIdx,
+		scopeWrapper:    scopeWrapper,
+		perUnitBuckets:  perUnitBuckets,
 	}
 
 	for idx, def := range ScopeDefs[Common] {
@@ -138,7 +138,13 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	scope := m.childScopes[scopeIdx]
 	return m.scopeWrapper(
 		newTallyScopeInternal(
-			NoopScope(0),
+			newTallyScopeInternal(
+				NoopScope(0),
+				scope,
+				m.metricDefs,
+				false,
+				m.perUnitBuckets,
+			),
 			scope,
 			m.metricDefs,
 			false,
@@ -150,5 +156,5 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 // UserScope returns a new metrics scope that can be used to add additional
 // information to the metrics emitted by user code
 func (m *TallyClient) UserScope() UserScope {
-	return newTallyUserScope(m.parentScope)
+	return newTallyUserScope(m.globalRootScope)
 }

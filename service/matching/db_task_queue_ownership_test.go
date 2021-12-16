@@ -59,7 +59,7 @@ type (
 		taskQueueType   enumspb.TaskQueueType
 		taskQueueKind   enumspb.TaskQueueKind
 
-		taskOwnership *dbTaskOwnershipImpl
+		taskOwnership *dbTaskQueueOwnershipImpl
 	}
 )
 
@@ -92,7 +92,7 @@ func (s *dbTaskOwnershipSuite) SetupTest() {
 		rand.Int31n(int32(len(enumspb.TaskQueueKind_name))-1) + 1,
 	)
 
-	s.taskOwnership = newDBTaskOwnership(
+	s.taskOwnership = newDBTaskQueueOwnership(
 		persistence.TaskQueueKey{
 			NamespaceID:   s.namespaceID,
 			TaskQueueName: s.taskQueueName,
@@ -118,7 +118,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Success() {
 		TaskType:    s.taskQueueType,
 	}).Return(nil, serviceerror.NewNotFound("random error message"))
 	s.taskStore.EXPECT().CreateTaskQueue(&persistence.CreateTaskQueueRequest{
-		RangeID: initialRangeID,
+		RangeID: dbTaskInitialRangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    s.namespaceID,
 			Name:           s.taskQueueName,
@@ -130,12 +130,12 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Success() {
 		},
 	}).Return(&persistence.CreateTaskQueueResponse{}, nil)
 
-	minTaskID, maxTaskID := rangeIDToTaskIDRange(initialRangeID, s.taskIDRangeSize)
+	minTaskID, maxTaskID := rangeIDToTaskIDRange(dbTaskInitialRangeID, s.taskIDRangeSize)
 	err := s.taskOwnership.takeTaskQueueOwnership()
 	s.NoError(err)
 	s.Equal(s.now, *s.taskOwnership.stateLastUpdateTime)
-	s.Equal(dbTaskOwnershipState{
-		rangeID:             initialRangeID,
+	s.Equal(dbTaskQueueOwnershipState{
+		rangeID:             dbTaskInitialRangeID,
 		ackedTaskID:         0,
 		lastAllocatedTaskID: 0,
 		minTaskIDExclusive:  minTaskID,
@@ -156,7 +156,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Failed() {
 		TaskType:    s.taskQueueType,
 	}).Return(nil, serviceerror.NewNotFound("random error message"))
 	s.taskStore.EXPECT().CreateTaskQueue(&persistence.CreateTaskQueueRequest{
-		RangeID: initialRangeID,
+		RangeID: dbTaskInitialRangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    s.namespaceID,
 			Name:           s.taskQueueName,
@@ -206,7 +206,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Success() {
 	err := s.taskOwnership.takeTaskQueueOwnership()
 	s.NoError(err)
 	s.Equal(s.now, *s.taskOwnership.stateLastUpdateTime)
-	s.Equal(dbTaskOwnershipState{
+	s.Equal(dbTaskQueueOwnershipState{
 		rangeID:             rangeID + 1,
 		ackedTaskID:         ackedTaskID,
 		lastAllocatedTaskID: minTaskID,
@@ -277,7 +277,7 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_Success() {
 
 	err := s.taskOwnership.flushTasks(task1.Data, task2.Data)
 	s.NoError(err)
-	s.Equal(dbTaskOwnershipState{
+	s.Equal(dbTaskQueueOwnershipState{
 		rangeID:             ownershipState.rangeID,
 		ackedTaskID:         ownershipState.ackedTaskID,
 		lastAllocatedTaskID: task2.TaskId,
@@ -314,7 +314,7 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_Failed() {
 
 	err := s.taskOwnership.flushTasks(task1.Data, task2.Data)
 	s.Error(err)
-	s.Equal(dbTaskOwnershipState{
+	s.Equal(dbTaskQueueOwnershipState{
 		rangeID:             ownershipState.rangeID,
 		ackedTaskID:         ownershipState.ackedTaskID,
 		lastAllocatedTaskID: task2.TaskId,
@@ -372,7 +372,7 @@ func (s *dbTaskOwnershipSuite) TestGenerateTaskID_WithinRange() {
 	}
 
 	s.Equal(expectedTaskIDs, actualTaskIDs)
-	s.Equal(dbTaskOwnershipState{
+	s.Equal(dbTaskQueueOwnershipState{
 		rangeID:             ownershipState.rangeID,
 		ackedTaskID:         ownershipState.ackedTaskID,
 		lastAllocatedTaskID: ownershipState.maxTaskIDInclusive,
@@ -407,7 +407,7 @@ func (s *dbTaskOwnershipSuite) TestGenerateTaskID_OutOfRange() {
 	actualTaskIDs, err := s.taskOwnership.generatedTaskIDsLocked(2)
 	s.NoError(err)
 	s.Equal(expectedTaskIDs, actualTaskIDs)
-	s.Equal(dbTaskOwnershipState{
+	s.Equal(dbTaskQueueOwnershipState{
 		rangeID:             prevOwnershipState.rangeID + 1,
 		ackedTaskID:         prevOwnershipState.ackedTaskID,
 		lastAllocatedTaskID: expectedTaskIDs[len(expectedTaskIDs)-1],
@@ -418,7 +418,7 @@ func (s *dbTaskOwnershipSuite) TestGenerateTaskID_OutOfRange() {
 
 func (s *dbTaskOwnershipSuite) prepareTaskQueueOwnership(
 	targetRangeID int64,
-) dbTaskOwnershipState {
+) dbTaskQueueOwnershipState {
 	minTaskID, maxTaskID := rangeIDToTaskIDRange(targetRangeID-1, s.taskIDRangeSize)
 	ackedTaskID := minTaskID + rand.Int63n(maxTaskID-minTaskID)
 	taskQueueInfo := s.randomTaskQueue(ackedTaskID)

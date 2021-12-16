@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/uber-go/tally/v4"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -58,14 +57,13 @@ type (
 
 	// ServerImpl is temporal server.
 	ServerImpl struct {
-		so                 *serverOptions
-		servicesMetadata   []*ServicesMetadata
-		stoppedCh          chan interface{}
-		logger             log.Logger
-		namespaceLogger    NamespaceLogger
-		serverReporter     metrics.Reporter
-		sdkReporter        metrics.Reporter
-		globalMetricsScope tally.Scope
+		so               *serverOptions
+		servicesMetadata []*ServicesMetadata
+		stoppedCh        chan interface{}
+		logger           log.Logger
+		namespaceLogger  NamespaceLogger
+		serverReporter   metrics.Reporter
+		sdkReporter      metrics.Reporter
 
 		dynamicConfigClient dynamicconfig.Client
 		dcCollection        *dynamicconfig.Collection
@@ -90,7 +88,6 @@ func NewServerFxImpl(
 	dcCollection *dynamicconfig.Collection,
 	serverReporter ServerReporter,
 	sdkReporter SdkReporter,
-	globalMetricsScope tally.Scope,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
@@ -103,7 +100,6 @@ func NewServerFxImpl(
 		namespaceLogger:     namespaceLogger,
 		serverReporter:      serverReporter,
 		sdkReporter:         sdkReporter,
-		globalMetricsScope:  globalMetricsScope,
 		dynamicConfigClient: dynamicConfigClient,
 		dcCollection:        dcCollection,
 		persistenceConfig:   persistenceConfig,
@@ -217,6 +213,9 @@ func newBootstrapParams(
 			)
 		}
 
+	params.ServerMetricsReporter = serverReporter
+	params.SDKMetricsReporter = sdkReporter
+
 	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
 	if serverReporter == nil {
 		var err error
@@ -229,12 +228,6 @@ func newBootstrapParams(
 		params.ServerMetricsReporter = serverReporter
 		params.SDKMetricsReporter = sdkReporter
 	}
-
-	globalTallyScope, err := extractTallyScopeForSDK(sdkReporter)
-	if err != nil {
-		return nil, err
-	}
-	params.MetricsScope = globalTallyScope
 
 	serviceIdx := metrics.GetMetricsServiceIdx(svcName, logger)
 	metricsClient, err := serverReporter.NewClient(logger, serviceIdx)
@@ -249,10 +242,16 @@ func newBootstrapParams(
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
+	sdkMetricsClient, err := params.SDKMetricsReporter.NewClient(logger, serviceIdx)
+	if err != nil {
+		return nil, fmt.Errorf("unable to init sdk metrics client: %w", err)
+	}
+
+	sdkMetricsHandler := sdk.NewMetricHandler(sdkMetricsClient.UserScope())
 	params.SdkClientFactory = sdk.NewClientFactory(
 		cfg.PublicClient.HostPort,
 		tlsFrontendConfig,
-		globalTallyScope,
+		sdkMetricsHandler,
 	)
 
 	params.ArchivalMetadata = archiver.NewArchivalMetadata(
@@ -268,17 +267,6 @@ func newBootstrapParams(
 	params.PersistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 
 	return params, nil
-}
-
-func extractTallyScopeForSDK(sdkReporter metrics.Reporter) (tally.Scope, error) {
-	if sdkTallyReporter, ok := sdkReporter.(*metrics.TallyReporter); ok {
-		return sdkTallyReporter.GetScope(), nil
-	} else {
-		return nil, fmt.Errorf(
-			"Sdk reporter is not of Tally type. Unfortunately, SDK only supports Tally for now. "+
-				"Please specify prometheusSDK in metrics config with framework type %s.", metrics.FrameworkTally,
-		)
-	}
 }
 
 func initSystemNamespaces(

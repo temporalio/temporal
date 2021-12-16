@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
-	"github.com/uber-go/tally/v4"
 	"go.uber.org/fx"
 
 	"github.com/pborman/uuid"
@@ -736,22 +735,17 @@ func NamespaceLoggerProvider(so *serverOptions) NamespaceLogger {
 	return so.namespaceLogger
 }
 
-func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReporter, SdkReporter, tally.Scope, error) {
+func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReporter, SdkReporter, error) {
 	var serverReporter ServerReporter
 	var sdkReporter SdkReporter
-	var globalMetricsScope tally.Scope
 	if so.config.Global.Metrics != nil {
 		var err error
 		serverReporter, sdkReporter, err = so.config.Global.Metrics.InitMetricReporters(logger, so.metricsReporter)
 		if err != nil {
-			return nil, nil, nil, err
-		}
-		globalMetricsScope, err = extractTallyScopeForSDK(sdkReporter)
-		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, err
 		}
 	}
-	return serverReporter, sdkReporter, globalMetricsScope, nil
+	return serverReporter, sdkReporter, nil
 }
 
 func MetricsClientProvider(logger log.Logger, serverReporter ServerReporter) (metrics.Client, error) {

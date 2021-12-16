@@ -29,7 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-go/tally/v4"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
 
@@ -84,7 +83,7 @@ type (
 
 		membershipMonitor membership.Monitor
 
-		metricsScope tally.Scope
+		userMetricsScope metrics.UserScope
 
 		status           int32
 		stopC            chan struct{}
@@ -127,7 +126,7 @@ func NewService(
 	persistenceBean persistenceClient.Bean,
 	membershipMonitor membership.Monitor,
 	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
-	metricsScope tally.Scope,
+	metricsScope metrics.UserScope,
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
@@ -158,7 +157,7 @@ func NewService(
 		membershipMonitor:         membershipMonitor,
 		archiverProvider:          archiverProvider,
 		namespaceReplicationQueue: namespaceReplicationQueue,
-		metricsScope:              metricsScope,
+		userMetricsScope:          metricsScope,
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
@@ -317,7 +316,7 @@ func (s *Service) Start() {
 	)
 
 	// todo: introduce proper counter (same in resource.go)
-	s.metricsScope.Counter(metrics.RestartCount).Inc(1)
+	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
 
 	s.clusterMetadata.Start()
 	s.membershipMonitor.Start()

@@ -40,9 +40,18 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
+var _ Reporter = (OpentelemetryReporter)(nil)
+var _ OpentelemetryReporter = (*opentelemetryReporterImpl)(nil)
+
 type (
-	// OpentelemetryReporter is a base class for reporting metrics to opentelemetry.
-	OpentelemetryReporter struct {
+	OpentelemetryReporter interface {
+		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
+		Stop(logger log.Logger)
+		GetMeterMust() metric.MeterMust
+	}
+
+	// opentelemetryReporterImpl is a base class for reporting metrics to opentelemetry.
+	opentelemetryReporterImpl struct {
 		exporter     *prometheus.Exporter
 		meter        metric.Meter
 		meterMust    metric.MeterMust
@@ -60,7 +69,7 @@ func newOpentelemeteryReporter(
 	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
-) (*OpentelemetryReporter, error) {
+) (*opentelemetryReporterImpl, error) {
 	histogramBoundaries := prometheusConfig.DefaultHistogramBoundaries
 	if len(histogramBoundaries) == 0 {
 		histogramBoundaries = defaultHistogramBoundaries
@@ -88,7 +97,7 @@ func newOpentelemeteryReporter(
 	metricServer := initPrometheusListener(prometheusConfig, logger, exporter)
 
 	meter := c.Meter("temporal")
-	reporter := &OpentelemetryReporter{
+	reporter := &opentelemetryReporterImpl{
 		exporter:     exporter,
 		meter:        meter,
 		meterMust:    metric.Must(meter),
@@ -123,15 +132,11 @@ func initPrometheusListener(config *PrometheusConfig, logger log.Logger, exporte
 	return server
 }
 
-func (r *OpentelemetryReporter) GetMeter() metric.Meter {
-	return r.meter
-}
-
-func (r *OpentelemetryReporter) GetMeterMust() metric.MeterMust {
+func (r *opentelemetryReporterImpl) GetMeterMust() metric.MeterMust {
 	return r.meterMust
 }
 
-func (r *OpentelemetryReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
+func (r *opentelemetryReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
 	if r.gaugeCache == nil {
 		r.gaugeCache = NewOtelGaugeCache(r)
 	}
@@ -139,7 +144,7 @@ func (r *OpentelemetryReporter) NewClient(logger log.Logger, serviceIdx ServiceI
 	return newOpentelemeteryClient(r.clientConfig, serviceIdx, r, logger, r.gaugeCache)
 }
 
-func (r *OpentelemetryReporter) Stop(logger log.Logger) {
+func (r *opentelemetryReporterImpl) Stop(logger log.Logger) {
 	ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
 	defer closeCtx()
 	if err := r.server.Shutdown(ctx); !(err == nil || err == http.ErrServerClosed) {

@@ -22,46 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package cassandra
+package metrics
 
 import (
-	"errors"
+	"testing"
 
-	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
-)
-
-const (
-	readSchemaVersionCQL = `SELECT curr_version from schema_version where keyspace_name=?`
+	"github.com/stretchr/testify/suite"
 )
 
 type (
-	SchemaVersionReader struct {
-		session gocql.Session
+	OtelClientTestSuite struct {
+		MetricTestSuiteBase
 	}
 )
 
-var (
-	ErrGetSchemaVersion = errors.New("failed to get current schema version from cassandra")
-)
-
-func NewSchemaVersionReader(session gocql.Session) *SchemaVersionReader {
-	return &SchemaVersionReader{
-		session: session,
-	}
-}
-
-// ReadSchemaVersion returns the current schema version for the Keyspace
-func (svr *SchemaVersionReader) ReadSchemaVersion(keyspace string) (string, error) {
-	query := svr.session.Query(readSchemaVersionCQL, keyspace)
-
-	iter := query.Iter()
-	var version string
-	if !iter.Scan(&version) {
-		_ = iter.Close()
-		return "", ErrGetSchemaVersion
-	}
-	if err := iter.Close(); err != nil {
-		return "", err
-	}
-	return version, nil
+func TestOtelClientSuite(t *testing.T) {
+	s := new(OtelClientTestSuite)
+	s.MetricTestUtilityProvider = func() MetricTestUtility { return NewOtelMetricTestUtility() }
+	suite.Run(t, s)
 }

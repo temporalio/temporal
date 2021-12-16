@@ -29,8 +29,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/uber-go/tally/v4"
-
 	"go.temporal.io/server/build"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -46,8 +44,8 @@ const (
 
 // RuntimeMetricsReporter A struct containing the state of the RuntimeMetricsReporter.
 type RuntimeMetricsReporter struct {
-	scope          tally.Scope
-	buildInfoScope tally.Scope
+	scope          UserScope
+	buildInfoScope UserScope
 	reportInterval time.Duration
 	started        int32
 	quit           chan struct{}
@@ -58,7 +56,7 @@ type RuntimeMetricsReporter struct {
 
 // NewRuntimeMetricsReporter Creates a new RuntimeMetricsReporter.
 func NewRuntimeMetricsReporter(
-	scope tally.Scope,
+	scope UserScope,
 	reportInterval time.Duration,
 	logger log.Logger,
 	instanceID string,
@@ -93,34 +91,32 @@ func (r *RuntimeMetricsReporter) report() {
 	var memStats runtime.MemStats
 	runtime.ReadMemStats(&memStats)
 
-	r.scope.Gauge(NumGoRoutinesGauge).Update(float64(runtime.NumGoroutine()))
-	r.scope.Gauge(GoMaxProcsGauge).Update(float64(runtime.GOMAXPROCS(0)))
-	r.scope.Gauge(MemoryAllocatedGauge).Update(float64(memStats.Alloc))
-	r.scope.Gauge(MemoryHeapGauge).Update(float64(memStats.HeapAlloc))
-	r.scope.Gauge(MemoryHeapIdleGauge).Update(float64(memStats.HeapIdle))
-	r.scope.Gauge(MemoryHeapInuseGauge).Update(float64(memStats.HeapInuse))
-	r.scope.Gauge(MemoryStackGauge).Update(float64(memStats.StackInuse))
+	r.scope.UpdateGauge(NumGoRoutinesGauge, float64(runtime.NumGoroutine()))
+	r.scope.UpdateGauge(GoMaxProcsGauge, float64(runtime.GOMAXPROCS(0)))
+	r.scope.UpdateGauge(MemoryAllocatedGauge, float64(memStats.Alloc))
+	r.scope.UpdateGauge(MemoryHeapGauge, float64(memStats.HeapAlloc))
+	r.scope.UpdateGauge(MemoryHeapIdleGauge, float64(memStats.HeapIdle))
+	r.scope.UpdateGauge(MemoryHeapInuseGauge, float64(memStats.HeapInuse))
+	r.scope.UpdateGauge(MemoryStackGauge, float64(memStats.StackInuse))
 
 	// memStats.NumGC is a perpetually incrementing counter (unless it wraps at 2^32)
 	num := memStats.NumGC
 	lastNum := atomic.SwapUint32(&r.lastNumGC, num) // reset for the next iteration
 	if delta := num - lastNum; delta > 0 {
-		r.scope.Counter(NumGCCounter).Inc(int64(delta))
+		r.scope.AddCounter(NumGCCounter, int64(delta))
 		if delta > 255 {
 			// too many GCs happened, the timestamps buffer got wrapped around. Report only the last 256
 			lastNum = num - 256
 		}
 		for i := lastNum; i != num; i++ {
 			pause := memStats.PauseNs[i%256]
-			r.scope.Timer(GcPauseMsTimer).Record(time.Duration(pause))
+			r.scope.RecordTimer(GcPauseMsTimer, time.Duration(pause))
 		}
 	}
 
 	// report build info
-	buildInfoGauge := r.buildInfoScope.Gauge(buildInfoMetricName)
-	buildAgeGauge := r.buildInfoScope.Gauge(buildAgeMetricName)
-	buildInfoGauge.Update(1.0)
-	buildAgeGauge.Update(float64(time.Since(r.buildTime)))
+	r.buildInfoScope.UpdateGauge(buildInfoMetricName, 1.0)
+	r.buildInfoScope.UpdateGauge(buildAgeMetricName, float64(time.Since(r.buildTime)))
 }
 
 // Start Starts the reporter thread that periodically emits metrics.
