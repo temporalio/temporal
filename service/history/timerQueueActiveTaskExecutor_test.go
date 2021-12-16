@@ -74,6 +74,7 @@ type (
 		mockClusterMetadata *cluster.MockMetadata
 
 		mockHistoryEngine *historyEngineImpl
+		mockDeleteManager *workflow.MockDeleteManager
 		mockExecutionMgr  *persistence.MockExecutionManager
 
 		logger                       log.Logger
@@ -147,25 +148,28 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	historyCache := workflow.NewCache(s.mockShard)
+	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
-		logger:             s.logger,
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewNoopMetricsClient(), func(namespace.ID, string) int32 { return 1 }),
-		txProcessor:        s.mockTxProcessor,
-		timerProcessor:     s.mockTimerProcessor,
+		currentClusterName:    s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
+		shard:                 s.mockShard,
+		clusterMetadata:       s.mockClusterMetadata,
+		executionManager:      s.mockExecutionMgr,
+		historyCache:          historyCache,
+		logger:                s.logger,
+		tokenSerializer:       common.NewProtoTaskTokenSerializer(),
+		metricsClient:         s.mockShard.GetMetricsClient(),
+		eventNotifier:         events.NewNotifier(clock.NewRealTimeSource(), metrics.NewNoopMetricsClient(), func(namespace.ID, string) int32 { return 1 }),
+		txProcessor:           s.mockTxProcessor,
+		timerProcessor:        s.mockTimerProcessor,
+		workflowDeleteManager: s.mockDeleteManager,
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.mockHistoryEngine = h
 
 	s.timerQueueActiveTaskExecutor = newTimerQueueActiveTaskExecutor(
 		s.mockShard,
-		h,
+		s.mockDeleteManager,
+		historyCache,
 		newTimerQueueActiveProcessor(
 			s.mockShard,
 			h,
