@@ -522,7 +522,7 @@ func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskP
 		TaskId: syncMatchTaskId,
 	}
 
-	task := newInternalTask(fakeTaskIdWrapper, c.completeTask, params.source, params.forwardedFrom, true)
+	task := newInternalTask(fakeTaskIdWrapper, nil, params.source, params.forwardedFrom, true)
 	matched, err := c.matcher.Offer(childCtx, task)
 	cancel()
 	return matched, err
