@@ -278,34 +278,34 @@ func (c *taskQueueManagerImpl) AddTask(
 	}
 
 	var syncMatch bool
-	_, err := c.executeWithRetry(func() (interface{}, error) {
-		td := params.taskInfo
+	err := executeWithRetry(func() error {
+		taskInfo := params.taskInfo
 
-		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(td.GetNamespaceId()))
+		namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceId()))
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-			r, err := c.taskWriter.appendTask(params.execution, td)
+			_, err := c.taskWriter.appendTask(params.execution, taskInfo)
 			syncMatch = false
-			return r, err
+			return err
 		}
 
 		syncMatch, err = c.trySyncMatch(ctx, params)
 		if syncMatch {
-			return &persistence.CreateTasksResponse{}, err
+			return err
 		}
 
 		if params.forwardedFrom != "" {
 			// forwarded from child partition - only do sync match
 			// child partition will persist the task when sync match fails
-			return &persistence.CreateTasksResponse{}, errRemoteSyncMatchFailed
+			return errRemoteSyncMatchFailed
 		}
 
-		resp, err := c.taskWriter.appendTask(params.execution, params.taskInfo)
+		_, err = c.taskWriter.appendTask(params.execution, taskInfo)
 		c.signalIfFatal(err)
-		return resp, err
+		return err
 	})
 	if !syncMatch && err == nil {
 		c.taskReader.Signal()
@@ -465,9 +465,10 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 		// again the underlying reason for failing to start will be resolved.
 		// Note that RecordTaskStarted only fails after retrying for a long time, so a single task will not be
 		// re-written to persistence frequently.
-		_, err = c.executeWithRetry(func() (interface{}, error) {
+		err = executeWithRetry(func() error {
 			wf := &commonpb.WorkflowExecution{WorkflowId: task.Data.GetWorkflowId(), RunId: task.Data.GetRunId()}
-			return c.taskWriter.appendTask(wf, task.Data)
+			_, err := c.taskWriter.appendTask(wf, task.Data)
+			return err
 		})
 
 		if err != nil {
@@ -497,15 +498,10 @@ func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {
 }
 
 // Retry operation on transient error.
-func (c *taskQueueManagerImpl) executeWithRetry(
-	operation func() (interface{}, error)) (result interface{}, err error) {
-
-	op := func() error {
-		result, err = operation()
-		return err
-	}
-
-	err = backoff.Retry(op, persistenceOperationRetryPolicy, func(err error) bool {
+func executeWithRetry(
+	operation func() error,
+) error {
+	err := backoff.Retry(operation, persistenceOperationRetryPolicy, func(err error) bool {
 		if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 			return false
 		}
@@ -514,7 +510,7 @@ func (c *taskQueueManagerImpl) executeWithRetry(
 		}
 		return common.IsPersistenceTransientError(err)
 	})
-	return
+	return err
 }
 
 func (c *taskQueueManagerImpl) trySyncMatch(ctx context.Context, params addTaskParams) (bool, error) {

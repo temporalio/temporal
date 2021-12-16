@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -41,6 +42,9 @@ import (
 )
 
 const (
+	dbTaskInitialRangeID     = 1
+	dbTaskStickyTaskQueueTTL = 24 * time.Hour
+
 	dbTaskFlushInterval = 24 * time.Millisecond
 
 	dbTaskDeletionInterval = 10 * time.Second
@@ -58,7 +62,7 @@ type (
 		taskReader         *dbTaskWriter
 		taskWriter         *dbTaskReader
 
-		dispatchTaskFn func(*internalTask) error
+		dispatchTaskFn func(context.Context, *internalTask) error
 		finishTaskFn   func(*persistencespb.AllocatedTaskInfo, error)
 		logger         log.Logger
 
@@ -74,7 +78,7 @@ func newDBTaskManager(
 	taskIDRangeSize int64,
 	store persistence.TaskManager,
 	logger log.Logger,
-	dispatchTaskFn func(*internalTask) error,
+	dispatchTaskFn func(context.Context, *internalTask) error,
 	finishTaskFn func(*persistencespb.AllocatedTaskInfo, error),
 ) (*dbTaskManager, error) {
 	taskOwnership := newDBTaskQueueOwnership(
@@ -241,7 +245,7 @@ func (d *dbTaskManager) mustDispatch(
 			return
 		}
 
-		err := d.dispatchTaskFn(newInternalTask(
+		err := d.dispatchTaskFn(context.Background(), newInternalTask(
 			task,
 			d.finishTaskFn,
 			enumsspb.TASK_SOURCE_DB_BACKLOG,

@@ -196,13 +196,16 @@ Loop:
 }
 
 func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64) ([]*persistencespb.AllocatedTaskInfo, error) {
-	response, err := tr.tlMgr.executeWithRetry(func() (interface{}, error) {
-		return tr.tlMgr.db.GetTasks(readLevel, maxReadLevel, tr.tlMgr.config.GetTasksBatchSize())
+	var response *persistence.GetTasksResponse
+	var err error
+	err = executeWithRetry(func() error {
+		response, err = tr.tlMgr.db.GetTasks(readLevel, maxReadLevel, tr.tlMgr.config.GetTasksBatchSize())
+		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return response.(*persistence.GetTasksResponse).Tasks, err
+	return response.Tasks, err
 }
 
 // Returns a batch of tasks from persistence starting form current read level.
