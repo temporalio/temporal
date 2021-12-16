@@ -194,6 +194,21 @@ func (mr *MockHandlerMockRecorder) GetSearchAttributes(arg0, arg1 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSearchAttributes", reflect.TypeOf((*MockHandler)(nil).GetSearchAttributes), arg0, arg1)
 }
 
+// GetSystemInfo mocks base method.
+func (m *MockHandler) GetSystemInfo(arg0 context.Context, arg1 *v1.GetSystemInfoRequest) (*v1.GetSystemInfoResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSystemInfo", arg0, arg1)
+	ret0, _ := ret[0].(*v1.GetSystemInfoResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetSystemInfo indicates an expected call of GetSystemInfo.
+func (mr *MockHandlerMockRecorder) GetSystemInfo(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemInfo", reflect.TypeOf((*MockHandler)(nil).GetSystemInfo), arg0, arg1)
+}
+
 // GetWorkflowExecutionHistory mocks base method.
 func (m *MockHandler) GetWorkflowExecutionHistory(arg0 context.Context, arg1 *v1.GetWorkflowExecutionHistoryRequest) (*v1.GetWorkflowExecutionHistoryResponse, error) {
 	m.ctrl.T.Helper()

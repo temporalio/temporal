@@ -1189,6 +1189,14 @@ func (handler *DCRedirectionHandlerImpl) GetClusterInfo(
 	return handler.frontendHandler.GetClusterInfo(ctx, request)
 }
 
+// GetSystemInfo API call
+func (handler *DCRedirectionHandlerImpl) GetSystemInfo(
+	ctx context.Context,
+	request *workflowservice.GetSystemInfoRequest,
+) (*workflowservice.GetSystemInfoResponse, error) {
+	return handler.frontendHandler.GetSystemInfo(ctx, request)
+}
+
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	scope int,
 ) (metrics.Scope, time.Time) {

@@ -94,6 +94,7 @@ var (
 
 	OtherAPIToPriority = map[string]int{
 		"GetClusterInfo":      0,
+		"GetSystemInfo":       0,
 		"GetSearchAttributes": 0,
 
 		"RegisterNamespace":  0,

@@ -151,6 +151,7 @@ func (s *quotasSuite) TestVisibilityAPIs() {
 func (s *quotasSuite) TestOtherAPIs() {
 	apis := map[string]struct{}{
 		"GetClusterInfo":      {},
+		"GetSystemInfo":       {},
 		"GetSearchAttributes": {},
 
 		"RegisterNamespace":  {},
