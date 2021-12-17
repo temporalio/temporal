@@ -1582,6 +1582,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryResetWorkflowExecutionScope:              {operation: "ResetWorkflowExecution"},
 		HistoryQueryWorkflowScope:                       {operation: "QueryWorkflow"},
 		HistoryProcessDeleteHistoryEventScope:           {operation: "ProcessDeleteHistoryEvent"},
+		HistoryDeleteWorkflowExecutionScope:             {operation: "DeleteWorkflowExecution"},
 		HistoryScheduleWorkflowTaskScope:                {operation: "ScheduleWorkflowTask"},
 		HistoryRecordChildExecutionCompletedScope:       {operation: "RecordChildExecutionCompleted"},
 		HistoryRequestCancelWorkflowExecutionScope:      {operation: "RequestCancelWorkflowExecution"},
