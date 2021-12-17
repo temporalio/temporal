@@ -32,6 +32,7 @@ var (
 	APIToPriority = map[string]int{
 		"CloseShard":                          0,
 		"GetShard":                            0,
+		"DeleteWorkflowExecution":             0,
 		"DescribeHistoryHost":                 0,
 		"DescribeMutableState":                0,
 		"DescribeWorkflowExecution":           0,
