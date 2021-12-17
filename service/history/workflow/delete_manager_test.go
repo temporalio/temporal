@@ -24,231 +24,287 @@
 
 package workflow
 
-//
-// import (
-// 	"errors"
-// 	"testing"
-// 	"time"
-//
-// 	"github.com/golang/mock/gomock"
-// 	"github.com/stretchr/testify/require"
-// 	"github.com/stretchr/testify/suite"
-//
-// 	"go.temporal.io/server/common/definition"
-// 	"go.temporal.io/server/common/searchattribute"
-// 	"go.temporal.io/server/service/history/tasks"
-// 	"go.temporal.io/server/service/history/workflow"
-//
-// 	persistencespb "go.temporal.io/server/api/persistence/v1"
-// 	"go.temporal.io/server/common"
-// 	"go.temporal.io/server/common/cluster"
-// 	"go.temporal.io/server/common/namespace"
-// 	"go.temporal.io/server/common/persistence"
-// 	"go.temporal.io/server/service/history/shard"
-// 	"go.temporal.io/server/service/history/tests"
-// 	"go.temporal.io/server/service/worker/archiver"
-// )
-//
-// type (
-// 	historyEngineDeleteWorkflowSuite struct {
-// 		suite.Suite
-// 		*require.Assertions
-//
-// 		controller                   *gomock.Controller
-// 		mockShard                    *shard.ContextTest
-// 		mockEngine                   *shard.MockEngine
-// 		mockWorkflowExecutionContext *workflow.MockContext
-// 		mockMutableState             *workflow.MockMutableState
-//
-// 		mockExecutionManager         *persistence.MockExecutionManager
-// 		mockArchivalClient           *archiver.MockClient
-// 		mockNamespaceCache           *namespace.MockRegistry
-// 		mockClusterMetadata          *cluster.MockMetadata
-// 		mockSearchAttributesProvider *searchattribute.MockProvider
-//
-// 		timerQueueTaskExecutorBase *timerQueueTaskExecutorBase
-// 	}
-// )
-//
-// func TestHistoryEngineDeleteWorkflowSuite(t *testing.T) {
-// 	s := new(timerQueueTaskExecutorBaseSuite)
-// 	suite.Run(t, s)
-// }
-//
-// func (s *historyEngineDeleteWorkflowSuite) SetupSuite() {
-//
-// }
-//
-// func (s *historyEngineDeleteWorkflowSuite) TearDownSuite() {
-//
-// }
-//
-// func (s *historyEngineDeleteWorkflowSuite) SetupTest() {
-// 	s.Assertions = require.New(s.T())
-//
-// 	s.controller = gomock.NewController(s.T())
-// 	s.mockWorkflowExecutionContext = workflow.NewMockContext(s.controller)
-// 	s.mockMutableState = workflow.NewMockMutableState(s.controller)
-//
-// 	config := tests.NewDynamicConfig()
-// 	s.mockShard = shard.NewTestContext(
-// 		s.controller,
-// 		&persistence.ShardInfoWithFailover{
-// 			ShardInfo: &persistencespb.ShardInfo{
-// 				ShardId:          0,
-// 				RangeId:          1,
-// 				TransferAckLevel: 0,
-// 			}},
-// 		config,
-// 	)
-// 	s.mockEngine = shard.NewMockEngine(s.controller)
-// 	s.mockShard.SetEngineForTesting(s.mockEngine)
-//
-// 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
-// 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
-// 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
-// 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
-// 	s.mockSearchAttributesProvider = s.mockShard.Resource.SearchAttributesProvider
-//
-// 	logger := s.mockShard.GetLogger()
-//
-// 	h := &historyEngineImpl{
-// 		shard:           s.mockShard,
-// 		logger:          logger,
-// 		metricsClient:   s.mockShard.GetMetricsClient(),
-// 		archivalClient:  s.mockArchivalClient,
-// 		clusterMetadata: s.mockClusterMetadata,
-// 	}
-//
-// 	s.timerQueueTaskExecutorBase = newTimerQueueTaskExecutorBase(
-// 		s.mockShard,
-// 		h,
-// 		logger,
-// 		s.mockShard.GetMetricsClient(),
-// 		config,
-// 	)
-// }
-//
-// func (s *historyEngineDeleteWorkflowSuite) TearDownTest() {
-// 	s.controller.Finish()
-// }
-//
-// func (s *historyEngineDeleteWorkflowSuite) TestDeleteWorkflow_NoErr() {
-// 	task := &tasks.DeleteHistoryEventTask{
-// 		WorkflowKey: definition.NewWorkflowKey(
-// 			tests.NamespaceID.String(),
-// 			tests.WorkflowID,
-// 			tests.RunID,
-// 		),
-// 		Version:             123,
-// 		TaskID:              12345,
-// 		VisibilityTimestamp: time.Now().UTC(),
-// 	}
-//
-// 	s.mockWorkflowExecutionContext.EXPECT().Clear()
-//
-// 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
-// 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-// 	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil)
-// 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any(), gomock.Any())
-// 	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any(), gomock.Any())
-// 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any())
-// 	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any())
-//
-// 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil)
-// 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil)
-// 	s.mockExecutionManager.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(nil)
-// 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
-//
-// 	err := s.timerQueueTaskExecutorBase.deleteWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState)
-// 	s.NoError(err)
-// }
-//
-// func (s *historyEngineDeleteWorkflowSuite) TestArchiveHistory_NoErr_InlineArchivalFailed() {
-// 	task := &tasks.DeleteHistoryEventTask{
-// 		WorkflowKey: definition.NewWorkflowKey(
-// 			tests.NamespaceID.String(),
-// 			tests.WorkflowID,
-// 			tests.RunID,
-// 		),
-// 		Version:             123,
-// 		TaskID:              12345,
-// 		VisibilityTimestamp: time.Now().UTC(),
-// 	}
-//
-// 	s.mockWorkflowExecutionContext.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
-// 		HistorySize: 1024,
-// 	}, nil)
-// 	s.mockWorkflowExecutionContext.EXPECT().Clear()
-// 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
-// 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil)
-// 	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101))
-//
-// 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
-// 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-// 	s.mockExecutionManager.EXPECT().AddTasks(gomock.Any()).Return(nil)
-// 	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any(), gomock.Any())
-// 	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any(), gomock.Any())
-// 	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any())
-// 	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any())
-//
-// 	s.mockExecutionManager.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any()).Return(nil)
-// 	s.mockExecutionManager.EXPECT().DeleteWorkflowExecution(gomock.Any()).Return(nil)
-//
-// 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: true}).
-// 		Return(&archiver.ClientResponse{
-// 			HistoryArchivedInline: false,
-// 		}, nil)
-//
-// 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
-//
-// 	namespaceRegistryEntry := namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0)
-// 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceRegistryEntry)
-// 	s.NoError(err)
-// }
-//
-// func (s *historyEngineDeleteWorkflowSuite) TestArchiveHistory_SendSignalErr() {
-// 	task := &tasks.DeleteHistoryEventTask{
-// 		WorkflowKey: definition.NewWorkflowKey(
-// 			tests.NamespaceID.String(),
-// 			tests.WorkflowID,
-// 			tests.RunID,
-// 		),
-// 		Version:             123,
-// 		TaskID:              12345,
-// 		VisibilityTimestamp: time.Now().UTC(),
-// 	}
-//
-// 	s.mockWorkflowExecutionContext.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
-// 		HistorySize: 1024 * 1024 * 1024,
-// 	}, nil)
-//
-// 	s.mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{1, 2, 3}, nil)
-// 	s.mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1234), nil)
-// 	s.mockMutableState.EXPECT().GetNextEventID().Return(int64(101))
-//
-// 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: false}).
-// 		Return(nil, errors.New("failed to send signal"))
-// 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false)
-//
-// 	namespaceRegistryEntry := namespace.NewNamespaceForTest(&persistencespb.NamespaceInfo{}, &persistencespb.NamespaceConfig{}, false, nil, 0)
-// 	err := s.timerQueueTaskExecutorBase.archiveWorkflow(task, s.mockWorkflowExecutionContext, s.mockMutableState, namespaceRegistryEntry)
-// 	s.Error(err)
-// }
-//
-// type (
-// 	archiverClientRequestMatcher struct {
-// 		inline bool
-// 	}
-// )
-//
-// func (m archiverClientRequestMatcher) Matches(x interface{}) bool {
-// 	req := x.(*archiver.ClientRequest)
-// 	return req.CallerService == common.HistoryServiceName &&
-// 		req.AttemptArchiveInline == m.inline &&
-// 		req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
-// }
-//
-// func (m archiverClientRequestMatcher) String() string {
-// 	return "archiverClientRequestMatcher"
-// }
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/golang/mock/gomock"
+	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
+	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	carchiver "go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/worker/archiver"
+)
+
+type (
+	deleteManagerWorkflowSuite struct {
+		suite.Suite
+		*require.Assertions
+
+		controller         *gomock.Controller
+		mockCache          *MockCache
+		mockArchivalClient *archiver.MockClient
+		mockShardContext   *shard.MockContext
+
+		deleteManager DeleteManager
+	}
+)
+
+func TestDeleteManagerSuite(t *testing.T) {
+	s := &deleteManagerWorkflowSuite{}
+	suite.Run(t, s)
+}
+
+func (s *deleteManagerWorkflowSuite) SetupSuite() {
+
+}
+
+func (s *deleteManagerWorkflowSuite) TearDownSuite() {
+
+}
+
+func (s *deleteManagerWorkflowSuite) SetupTest() {
+	s.Assertions = require.New(s.T())
+
+	s.controller = gomock.NewController(s.T())
+	s.mockCache = NewMockCache(s.controller)
+	s.mockArchivalClient = archiver.NewMockClient(s.controller)
+
+	config := tests.NewDynamicConfig()
+	s.mockShardContext = shard.NewMockContext(s.controller)
+	s.mockShardContext.EXPECT().GetMetricsClient().Return(metrics.NewNoopMetricsClient()).AnyTimes()
+
+	s.deleteManager = NewDeleteManager(
+		s.mockShardContext,
+		s.mockCache,
+		config,
+		s.mockArchivalClient,
+	)
+}
+
+func (s *deleteManagerWorkflowSuite) TearDownTest() {
+	s.controller.Finish()
+}
+
+func (s *deleteManagerWorkflowSuite) TestDeleteWorkflow_NoArchival() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := NewMockContext(s.controller)
+	mockMutableState := NewMockMutableState(s.controller)
+
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, CallerTypeAPI).Return(mockWeCtx, NoopReleaseFn, nil)
+	mockWeCtx.EXPECT().LoadWorkflowExecution().Return(mockMutableState, nil)
+	mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1))
+
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+
+	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		definition.WorkflowKey{
+			NamespaceID: tests.NamespaceID.String(),
+			WorkflowID:  tests.WorkflowID,
+			RunID:       tests.RunID,
+		},
+		[]byte{22, 8, 78},
+		int64(1),
+	).Return(nil)
+	mockWeCtx.EXPECT().Clear()
+
+	err := s.deleteManager.DeleteWorkflowExecution(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		false,
+	)
+	s.NoError(err)
+}
+
+func (s *deleteManagerWorkflowSuite) TestDeleteWorkflow_NoArchival_Error() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := NewMockContext(s.controller)
+	mockMutableState := NewMockMutableState(s.controller)
+
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, CallerTypeAPI).Return(mockWeCtx, NoopReleaseFn, nil)
+	mockWeCtx.EXPECT().LoadWorkflowExecution().Return(mockMutableState, nil)
+	mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1))
+
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+
+	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		definition.WorkflowKey{
+			NamespaceID: tests.NamespaceID.String(),
+			WorkflowID:  tests.WorkflowID,
+			RunID:       tests.RunID,
+		},
+		[]byte{22, 8, 78},
+		int64(1),
+	).Return(serviceerror.NewInternal("test error"))
+
+	err := s.deleteManager.DeleteWorkflowExecution(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		false,
+	)
+	s.Error(err)
+}
+
+func (s *deleteManagerWorkflowSuite) TestDeleteWorkflow_Archival_NotInline() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := NewMockContext(s.controller)
+	mockMutableState := NewMockMutableState(s.controller)
+
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, CallerTypeAPI).Return(mockWeCtx, NoopReleaseFn, nil)
+	mockWeCtx.EXPECT().LoadWorkflowExecution().Return(mockMutableState, nil)
+	mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1))
+
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+
+	// ====================== Archival mocks =======================================
+	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
+	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
+	mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: tests.Namespace.String(),
+		},
+		&persistencespb.NamespaceConfig{
+			HistoryArchivalState: enums.ARCHIVAL_STATE_ENABLED,
+		},
+		"target-cluster",
+	), nil)
+
+	mockClusterArchivalMetadata := carchiver.NewMockArchivalMetadata(s.controller)
+	mockClusterArchivalConfig := carchiver.NewMockArchivalConfig(s.controller)
+	s.mockShardContext.EXPECT().GetArchivalMetadata().Return(mockClusterArchivalMetadata)
+	mockClusterArchivalMetadata.EXPECT().GetHistoryConfig().Return(mockClusterArchivalConfig)
+	mockClusterArchivalConfig.EXPECT().ClusterConfiguredForArchival().Return(true)
+	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
+	s.mockShardContext.EXPECT().GetShardID().Return(int32(1))
+	mockMutableState.EXPECT().GetNextEventID().Return(int64(1))
+	mockWeCtx.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
+		HistorySize: 22,
+	}, nil)
+	mockSearchAttributesProvider := searchattribute.NewMockProvider(s.controller)
+	mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockShardContext.EXPECT().GetSearchAttributesProvider().Return(mockSearchAttributesProvider)
+	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: true}).Return(&archiver.ClientResponse{
+		HistoryArchivedInline: false,
+	}, nil)
+	// =============================================================
+
+	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		definition.WorkflowKey{
+			NamespaceID: tests.NamespaceID.String(),
+			WorkflowID:  tests.WorkflowID,
+			RunID:       tests.RunID,
+		},
+		nil,
+		int64(1),
+	).Return(nil)
+	mockWeCtx.EXPECT().Clear()
+
+	err := s.deleteManager.DeleteWorkflowExecution(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		true,
+	)
+	s.NoError(err)
+}
+
+func (s *deleteManagerWorkflowSuite) TestDeleteWorkflow_Archival_SendSignalErr() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := NewMockContext(s.controller)
+	mockMutableState := NewMockMutableState(s.controller)
+
+	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, CallerTypeAPI).Return(mockWeCtx, NoopReleaseFn, nil)
+	mockWeCtx.EXPECT().LoadWorkflowExecution().Return(mockMutableState, nil)
+	mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1))
+
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+
+	// ====================== Archival mocks =======================================
+	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
+	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
+	mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespace.NewLocalNamespaceForTest(
+		&persistencespb.NamespaceInfo{
+			Name: tests.Namespace.String(),
+		},
+		&persistencespb.NamespaceConfig{
+			HistoryArchivalState: enums.ARCHIVAL_STATE_ENABLED,
+		},
+		"target-cluster",
+	), nil)
+
+	mockClusterArchivalMetadata := carchiver.NewMockArchivalMetadata(s.controller)
+	mockClusterArchivalConfig := carchiver.NewMockArchivalConfig(s.controller)
+	s.mockShardContext.EXPECT().GetArchivalMetadata().Return(mockClusterArchivalMetadata)
+	mockClusterArchivalMetadata.EXPECT().GetHistoryConfig().Return(mockClusterArchivalConfig)
+	mockClusterArchivalConfig.EXPECT().ClusterConfiguredForArchival().Return(true)
+	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
+	s.mockShardContext.EXPECT().GetShardID().Return(int32(1))
+	mockMutableState.EXPECT().GetNextEventID().Return(int64(1))
+	mockWeCtx.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
+		HistorySize: 22 * 1024 * 1024 * 1024,
+	}, nil)
+	mockSearchAttributesProvider := searchattribute.NewMockProvider(s.controller)
+	mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), gomock.Any()).Return(searchattribute.TestNameTypeMap, nil)
+	s.mockShardContext.EXPECT().GetSearchAttributesProvider().Return(mockSearchAttributesProvider)
+	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: false}).Return(nil, errors.New("failed to send signal"))
+	// =============================================================
+
+	err := s.deleteManager.DeleteWorkflowExecution(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		true,
+	)
+	s.Error(err)
+}
+
+type (
+	archiverClientRequestMatcher struct {
+		inline bool
+	}
+)
+
+func (m archiverClientRequestMatcher) Matches(x interface{}) bool {
+	req := x.(*archiver.ClientRequest)
+	return req.CallerService == common.HistoryServiceName &&
+		req.AttemptArchiveInline == m.inline &&
+		req.ArchiveRequest.Targets[0] == archiver.ArchiveTargetHistory
+}
+
+func (m archiverClientRequestMatcher) String() string {
+	return "archiverClientRequestMatcher"
+}

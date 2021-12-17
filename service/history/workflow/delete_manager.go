@@ -1,3 +1,27 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination delete_manager_mock.go
 
 package workflow
@@ -54,14 +78,14 @@ func NewDeleteManager(
 	return deleteManager
 }
 
-func (e *DeleteManagerImpl) DeleteWorkflowExecution(
+func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
 	archiveIfEnabled bool,
 ) (retError error) {
 
-	weCtx, release, err := e.historyCache.GetOrCreateWorkflowExecution(
+	weCtx, release, err := m.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		we,
@@ -77,18 +101,18 @@ func (e *DeleteManagerImpl) DeleteWorkflowExecution(
 		return err
 	}
 
-	return e.deleteWorkflowExecutionInternal(
+	return m.deleteWorkflowExecutionInternal(
 		namespaceID,
 		we,
 		weCtx,
 		mutableState,
 		mutableState.GetCurrentVersion(),
 		archiveIfEnabled,
-		e.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
+		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
 	)
 }
 
-func (e *DeleteManagerImpl) DeleteWorkflowExecutionFromTimerTask(
+func (m *DeleteManagerImpl) DeleteWorkflowExecutionFromTimerTask(
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
@@ -96,14 +120,14 @@ func (e *DeleteManagerImpl) DeleteWorkflowExecutionFromTimerTask(
 	timerTaskVersion int64,
 ) (retError error) {
 
-	err := e.deleteWorkflowExecutionInternal(
+	err := m.deleteWorkflowExecutionInternal(
 		namespaceID,
 		we,
 		weCtx,
 		ms,
 		timerTaskVersion,
 		true,
-		e.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
+		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)
 
 	if err != nil && errors.Is(err, consts.ErrWorkflowIsRunning) {
@@ -116,7 +140,7 @@ func (e *DeleteManagerImpl) DeleteWorkflowExecutionFromTimerTask(
 	return err
 }
 
-func (e *DeleteManagerImpl) deleteWorkflowExecutionInternal(
+func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
@@ -137,7 +161,7 @@ func (e *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 
 	shouldDeleteHistory := true
 	if archiveIfEnabled {
-		shouldDeleteHistory, err = e.archiveWorkflowIfEnabled(namespaceID, we, currentBranchToken, weCtx, ms, scope)
+		shouldDeleteHistory, err = m.archiveWorkflowIfEnabled(namespaceID, we, currentBranchToken, weCtx, ms, scope)
 		if err != nil {
 			return err
 		}
@@ -147,7 +171,7 @@ func (e *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		// currentBranchToken == nil means don't delete history.
 		currentBranchToken = nil
 	}
-	if err := e.shard.DeleteWorkflowExecution(
+	if err := m.shard.DeleteWorkflowExecution(
 		definition.WorkflowKey{
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  we.GetWorkflowId(),
@@ -166,7 +190,7 @@ func (e *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	return nil
 }
 
-func (e *DeleteManagerImpl) archiveWorkflowIfEnabled(
+func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	namespaceID namespace.ID,
 	workflowExecution commonpb.WorkflowExecution,
 	currentBranchToken []byte,
@@ -175,11 +199,11 @@ func (e *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	scope metrics.Scope,
 ) (bool, error) {
 
-	namespaceRegistryEntry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	namespaceRegistryEntry, err := m.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return false, err
 	}
-	clusterConfiguredForHistoryArchival := e.shard.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
+	clusterConfiguredForHistoryArchival := m.shard.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
 	namespaceConfiguredForHistoryArchival := namespaceRegistryEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
 
@@ -199,7 +223,7 @@ func (e *DeleteManagerImpl) archiveWorkflowIfEnabled(
 			WorkflowID:           workflowExecution.GetWorkflowId(),
 			RunID:                workflowExecution.GetRunId(),
 			Namespace:            namespaceRegistryEntry.Name().String(),
-			ShardID:              e.shard.GetShardID(),
+			ShardID:              m.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
 			HistoryURI:           namespaceRegistryEntry.HistoryArchivalState().URI,
 			NextEventID:          mutableState.GetNextEventID(),
@@ -210,11 +234,11 @@ func (e *DeleteManagerImpl) archiveWorkflowIfEnabled(
 		AttemptArchiveInline: false, // archive in workflow by default
 	}
 	executionStats, err := weCtx.LoadExecutionStats()
-	if err == nil && executionStats.HistorySize < int64(e.config.TimerProcessorHistoryArchivalSizeLimit()) {
+	if err == nil && executionStats.HistorySize < int64(m.config.TimerProcessorHistoryArchivalSizeLimit()) {
 		req.AttemptArchiveInline = true
 	}
 
-	saTypeMap, err := e.shard.GetSearchAttributesProvider().GetSearchAttributes(e.config.DefaultVisibilityIndexName, false)
+	saTypeMap, err := m.shard.GetSearchAttributesProvider().GetSearchAttributes(m.config.DefaultVisibilityIndexName, false)
 	if err != nil {
 		return false, err
 	}
@@ -222,9 +246,9 @@ func (e *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	// and it might not have access to typeMap (i.e. type needs to be embedded).
 	searchattribute.ApplyTypeMap(req.ArchiveRequest.SearchAttributes, saTypeMap)
 
-	ctx, cancel := context.WithTimeout(context.Background(), e.config.TimerProcessorArchivalTimeLimit())
+	ctx, cancel := context.WithTimeout(context.Background(), m.config.TimerProcessorArchivalTimeLimit())
 	defer cancel()
-	resp, err := e.archivalClient.Archive(ctx, req)
+	resp, err := m.archivalClient.Archive(ctx, req)
 	if err != nil {
 		return false, err
 	}
