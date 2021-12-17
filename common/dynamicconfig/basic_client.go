@@ -53,6 +53,14 @@ func newBasicClient() *basicClient {
 	return bc
 }
 
+func (bc *basicClient) getValues() configValueMap {
+	return bc.values.Load().(configValueMap)
+}
+
+func (bc *basicClient) updateValues(newValues configValueMap) {
+	bc.values.Store(newValues)
+}
+
 func (bc *basicClient) GetValue(
 	name Key,
 	defaultValue interface{},

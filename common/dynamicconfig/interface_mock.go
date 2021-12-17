@@ -29,6 +29,7 @@
 package dynamicconfig
 
 import (
+	os "os"
 	reflect "reflect"
 	time "time"
 
@@ -176,4 +177,57 @@ func (m *MockClient) GetValueWithFilters(name Key, filters map[Filter]interface{
 func (mr *MockClientMockRecorder) GetValueWithFilters(name, filters, defaultValue interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetValueWithFilters", reflect.TypeOf((*MockClient)(nil).GetValueWithFilters), name, filters, defaultValue)
+}
+
+// MockFileReader is a mock of FileReader interface.
+type MockFileReader struct {
+	ctrl     *gomock.Controller
+	recorder *MockFileReaderMockRecorder
+}
+
+// MockFileReaderMockRecorder is the mock recorder for MockFileReader.
+type MockFileReaderMockRecorder struct {
+	mock *MockFileReader
+}
+
+// NewMockFileReader creates a new mock instance.
+func NewMockFileReader(ctrl *gomock.Controller) *MockFileReader {
+	mock := &MockFileReader{ctrl: ctrl}
+	mock.recorder = &MockFileReaderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockFileReader) EXPECT() *MockFileReaderMockRecorder {
+	return m.recorder
+}
+
+// ReadFile mocks base method.
+func (m *MockFileReader) ReadFile(src string) ([]byte, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadFile", src)
+	ret0, _ := ret[0].([]byte)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadFile indicates an expected call of ReadFile.
+func (mr *MockFileReaderMockRecorder) ReadFile(src interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadFile", reflect.TypeOf((*MockFileReader)(nil).ReadFile), src)
+}
+
+// Stat mocks base method.
+func (m *MockFileReader) Stat(src string) (os.FileInfo, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Stat", src)
+	ret0, _ := ret[0].(os.FileInfo)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// Stat indicates an expected call of Stat.
+func (mr *MockFileReaderMockRecorder) Stat(src interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stat", reflect.TypeOf((*MockFileReader)(nil).Stat), src)
 }

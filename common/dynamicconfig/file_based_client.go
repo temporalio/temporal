@@ -28,6 +28,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"reflect"
 	"strings"
 	"time"
 
@@ -44,53 +45,91 @@ const (
 	fileMode        = 0644 // used for update config file
 )
 
-// FileBasedClientConfig is the config for the file based dynamic config client.
-// It specifies where the config file is stored and how often the config should be
-// updated by checking the config file again.
-type FileBasedClientConfig struct {
-	Filepath     string        `yaml:"filepath"`
-	PollInterval time.Duration `yaml:"pollInterval"`
-}
-
-type fileBasedClient struct {
-	*basicClient
-	lastUpdatedTime time.Time
-	config          *FileBasedClientConfig
-	doneCh          <-chan interface{}
-	logger          log.Logger
-}
-
-// NewFileBasedClient creates a file based client.
-func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (Client, error) {
-	if err := validateConfig(config); err != nil {
-		return nil, fmt.Errorf("unable to validate dynamic config: %w", err)
+type (
+	// FileBasedClientConfig is the config for the file based dynamic config client.
+	// It specifies where the config file is stored and how often the config should be
+	// updated by checking the config file again.
+	FileBasedClientConfig struct {
+		Filepath     string        `yaml:"filepath"`
+		PollInterval time.Duration `yaml:"pollInterval"`
 	}
 
+	fileBasedClient struct {
+		*basicClient
+		reader          FileReader
+		lastUpdatedTime time.Time
+		config          *FileBasedClientConfig
+		doneCh          <-chan interface{}
+		logger          log.Logger
+	}
+
+	osReader struct {
+	}
+)
+
+var OsReader FileReader = &osReader{}
+
+// NewFileBasedClient creates a file based client.
+func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
 		basicClient: newBasicClient(),
+		reader:      OsReader,
 		config:      config,
 		doneCh:      doneCh,
 		logger:      logger,
 	}
-	if err := client.update(); err != nil {
-		return nil, fmt.Errorf("unable to read dynamic config: %w", err)
+
+	err := client.init()
+	if err != nil {
+		return nil, err
 	}
+
+	return client, nil
+}
+
+func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
+	client := &fileBasedClient{
+		basicClient: newBasicClient(),
+		reader:      reader,
+		config:      config,
+		doneCh:      doneCh,
+		logger:      logger,
+	}
+
+	err := client.init()
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (fc *fileBasedClient) init() error {
+	if err := fc.validateConfig(fc.config); err != nil {
+		return fmt.Errorf("unable to validate dynamic config: %w", err)
+	}
+
+	if err := fc.update(); err != nil {
+		return fmt.Errorf("unable to read dynamic config: %w", err)
+	}
+
 	go func() {
-		ticker := time.NewTicker(client.config.PollInterval)
+		ticker := time.NewTicker(fc.config.PollInterval)
 		for {
 			select {
 			case <-ticker.C:
-				err := client.update()
+				err := fc.update()
 				if err != nil {
-					client.logger.Error("Unable to update dynamic config.", tag.Error(err))
+					fc.logger.Error("Unable to update dynamic config.", tag.Error(err))
 				}
-			case <-client.doneCh:
+			case <-fc.doneCh:
 				ticker.Stop()
 				return
 			}
 		}
 	}()
-	return client, nil
+
+	return nil
 }
 
 func (fc *fileBasedClient) update() error {
@@ -100,7 +139,7 @@ func (fc *fileBasedClient) update() error {
 
 	newValues := make(configValueMap)
 
-	info, err := os.Stat(fc.config.Filepath)
+	info, err := fc.reader.Stat(fc.config.Filepath)
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
@@ -108,7 +147,7 @@ func (fc *fileBasedClient) update() error {
 		return nil
 	}
 
-	confContent, err := os.ReadFile(fc.config.Filepath)
+	confContent, err := fc.reader.ReadFile(fc.config.Filepath)
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
@@ -117,7 +156,94 @@ func (fc *fileBasedClient) update() error {
 		return fmt.Errorf("unable to decode dynamic config: %w", err)
 	}
 
-	return fc.storeValues(newValues)
+	oldValues := fc.basicClient.getValues()
+	err = fc.storeValues(newValues)
+	newStoredValues := fc.getValues()
+
+	fc.logDiff(oldValues, newStoredValues)
+
+	return err
+}
+
+func (fc *fileBasedClient) logDiff(old configValueMap, new configValueMap) {
+	for key, newValues := range new {
+		oldValues, ok := old[key]
+		if !ok {
+			for _, newValue := range newValues {
+				// new key added
+				fc.logValueDiff(key, nil, newValue)
+			}
+		} else {
+			// compare existing keys
+			fc.logConstraintsDiff(key, oldValues, newValues)
+		}
+	}
+
+	// check for removed values
+	for key, oldValues := range old {
+		if _, ok := new[key]; !ok {
+			for _, oldValue := range oldValues {
+				fc.logValueDiff(key, oldValue, nil)
+			}
+		}
+	}
+}
+
+func (fc *fileBasedClient) logConstraintsDiff(key string, oldValues []*constrainedValue, newValues []*constrainedValue) {
+	for _, oldValue := range oldValues {
+		matchFound := false
+		for _, newValue := range newValues {
+			if reflect.DeepEqual(oldValue.Constraints, newValue.Constraints) {
+				matchFound = true
+				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
+					fc.logValueDiff(key, oldValue, newValue)
+				}
+			}
+		}
+		if !matchFound {
+			fc.logValueDiff(key, oldValue, nil)
+		}
+	}
+
+	for _, newValue := range newValues {
+		matchFound := false
+		for _, oldValue := range oldValues {
+			if reflect.DeepEqual(oldValue.Constraints, newValue.Constraints) {
+				matchFound = true
+			}
+		}
+		if !matchFound {
+			fc.logValueDiff(key, nil, newValue)
+		}
+	}
+}
+
+func (fc *fileBasedClient) logValueDiff(key string, oldValue *constrainedValue, newValue *constrainedValue) {
+	logLine := &strings.Builder{}
+	logLine.Grow(128)
+	logLine.WriteString("dynamic config changed for the key: ")
+	logLine.WriteString(key)
+	logLine.WriteString(" oldValue: ")
+	fc.appendConstrainedValue(logLine, oldValue)
+	logLine.WriteString(" newValue: ")
+	fc.appendConstrainedValue(logLine, newValue)
+	fc.logger.Info(logLine.String())
+}
+
+func (fc *fileBasedClient) appendConstrainedValue(logLine *strings.Builder, value *constrainedValue) {
+	if value == nil {
+		logLine.WriteString("nil")
+	} else {
+		logLine.WriteString("{ constraints: {")
+		for constraintKey, constraintValue := range value.Constraints {
+			logLine.WriteString("{")
+			logLine.WriteString(constraintKey)
+			logLine.WriteString(":")
+			logLine.WriteString(fmt.Sprintf("%v", constraintValue))
+			logLine.WriteString("}")
+		}
+		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
+	}
 }
 
 func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue) error {
@@ -138,16 +264,16 @@ func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue)
 		formattedNewValues[strings.ToLower(key)] = valuesSlice
 	}
 
-	fc.values.Store(formattedNewValues)
+	fc.basicClient.updateValues(formattedNewValues)
 	fc.logger.Info("Updated dynamic config")
 	return nil
 }
 
-func validateConfig(config *FileBasedClientConfig) error {
+func (fc *fileBasedClient) validateConfig(config *FileBasedClientConfig) error {
 	if config == nil {
 		return errors.New("configuration for dynamic config client is nil")
 	}
-	if _, err := os.Stat(config.Filepath); err != nil {
+	if _, err := fc.reader.Stat(config.Filepath); err != nil {
 		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)
 	}
 	if config.PollInterval < minPollInterval {
@@ -193,4 +319,12 @@ func convertKeyTypeToStringSlice(s []interface{}) ([]interface{}, error) {
 		stringKeySlice[idx] = convertedValue
 	}
 	return stringKeySlice, nil
+}
+
+func (r *osReader) ReadFile(src string) ([]byte, error) {
+	return os.ReadFile(src)
+}
+
+func (r *osReader) Stat(src string) (os.FileInfo, error) {
+	return os.Stat(src)
 }
