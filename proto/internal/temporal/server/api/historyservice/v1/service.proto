@@ -139,6 +139,12 @@ service HistoryService {
     rpc TerminateWorkflowExecution (TerminateWorkflowExecutionRequest) returns (TerminateWorkflowExecutionResponse) {
     }
 
+    // DeleteWorkflowExecution delete closed workflow execution (workflow must be completed or terminated before) and its history.
+    // It also asynchronously deletes visibility record.
+    // If call to DeleteWorkflowExecution fails, it must be retried to prevent unreferenced data.
+    rpc DeleteWorkflowExecution (DeleteWorkflowExecutionRequest) returns (DeleteWorkflowExecutionResponse) {
+    }
+
     // ResetWorkflowExecution reset an existing workflow execution by a firstEventId of a existing event batch
     // in the history and immediately terminating the current execution instance.
     // After reset, the history will grow from nextFirstEventId.
@@ -238,6 +244,5 @@ service HistoryService {
     }
 
     rpc GetReplicationStatus(GetReplicationStatusRequest) returns (GetReplicationStatusResponse) {
-
     }
 }

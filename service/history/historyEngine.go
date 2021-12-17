@@ -2249,6 +2249,18 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 		})
 }
 
+func (e *historyEngineImpl) DeleteWorkflowExecution(
+	ctx context.Context,
+	deleteRequest *historyservice.DeleteWorkflowExecutionRequest,
+) error {
+	return e.workflowDeleteManager.DeleteWorkflowExecution(
+		ctx,
+		namespace.ID(deleteRequest.NamespaceId),
+		*deleteRequest.WorkflowExecution,
+		false,
+	)
+}
+
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history
 func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	ctx context.Context,
