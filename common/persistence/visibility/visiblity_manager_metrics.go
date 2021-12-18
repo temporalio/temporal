@@ -193,13 +193,8 @@ func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err er
 	case *serviceerror.NotFound:
 		scope.IncCounter(metrics.VisibilityPersistenceNotFound)
 	default:
-		if err == persistence.ErrPersistenceLimitExceeded {
-			scope.IncCounter(metrics.VisibilityPersistenceResourceExhausted)
-			scope.IncCounter(metrics.VisibilityPersistenceFailures)
-		} else {
-			m.logger.Error("Operation failed with an error.", tag.Error(err))
-			scope.IncCounter(metrics.VisibilityPersistenceFailures)
-		}
+		m.logger.Error("Operation failed with an error.", tag.Error(err))
+		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	}
 
 	return err
