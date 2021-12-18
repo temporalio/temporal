@@ -139,9 +139,9 @@ service HistoryService {
     rpc TerminateWorkflowExecution (TerminateWorkflowExecutionRequest) returns (TerminateWorkflowExecutionResponse) {
     }
 
-    // DeleteWorkflowExecution delete closed workflow execution (workflow must be completed or terminated before) and its history.
-    // It also asynchronously deletes visibility record.
-    // If call to DeleteWorkflowExecution fails, it must be retried to prevent unreferenced data.
+    // DeleteWorkflowExecution delete closed workflow execution (workflow must be completed or terminated before) and its history synchronously.
+    // Visibility record is deleted asynchronously.
+    // If call to DeleteWorkflowExecution fails, it must be retried to prevent orphan DB records.
     rpc DeleteWorkflowExecution (DeleteWorkflowExecutionRequest) returns (DeleteWorkflowExecutionResponse) {
     }
 
