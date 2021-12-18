@@ -1174,6 +1174,11 @@ func (s *ContextImpl) handleErrorLocked(err error) error {
 }
 
 func (s *ContextImpl) handleErrorAndUpdateMaxReadLevelLocked(err error, newMaxReadLevel int64) error {
+	if err == persistence.ErrPersistenceLimitExceeded {
+		s.updateMaxReadLevelLocked(newMaxReadLevel)
+		return nil
+	}
+
 	switch err.(type) {
 	case nil:
 		// Persistence success: update max read level
