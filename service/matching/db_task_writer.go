@@ -38,13 +38,25 @@ const (
 	dbTaskFlusherBufferSize = dbTaskFlusherBatchSize * 4
 )
 
+var (
+	errDBTaskWriterBufferFull = serviceerror.NewUnavailable("dbTaskWriter encountered task buffer full")
+)
+
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination db_task_writer_mock.go
+
 type (
+	dbTaskWriter interface {
+		appendTask(task *persistencespb.TaskInfo) future.Future
+		flushTasks()
+		notifyFlushChan() <-chan struct{}
+	}
+
 	dbTaskInfo struct {
 		task   *persistencespb.TaskInfo
 		future *future.FutureImpl // nil, error
 	}
 
-	dbTaskWriter struct {
+	dbTaskWriterImpl struct {
 		taskQueueKey persistence.TaskQueueKey
 		ownership    dbTaskQueueOwnership
 		logger       log.Logger
@@ -58,8 +70,8 @@ func newDBTaskWriter(
 	taskQueueKey persistence.TaskQueueKey,
 	ownership dbTaskQueueOwnership,
 	logger log.Logger,
-) *dbTaskWriter {
-	return &dbTaskWriter{
+) *dbTaskWriterImpl {
+	return &dbTaskWriterImpl{
 		taskQueueKey: taskQueueKey,
 		ownership:    ownership,
 		logger:       logger,
@@ -69,7 +81,7 @@ func newDBTaskWriter(
 	}
 }
 
-func (f *dbTaskWriter) appendTask(
+func (f *dbTaskWriterImpl) appendTask(
 	task *persistencespb.TaskInfo,
 ) future.Future {
 	if len(f.taskBuffer) >= dbTaskFlusherBatchSize {
@@ -85,18 +97,18 @@ func (f *dbTaskWriter) appendTask(
 		// noop
 	default:
 		// busy
-		fut.Set(nil, serviceerror.NewUnavailable("dbTaskWriter encountered task buffer full"))
+		fut.Set(nil, errDBTaskWriterBufferFull)
 	}
 	return fut
 }
 
-func (f *dbTaskWriter) flushTasks() {
+func (f *dbTaskWriterImpl) flushTasks() {
 	for len(f.taskBuffer) > 0 {
 		f.flushTasksOnce()
 	}
 }
 
-func (f *dbTaskWriter) flushTasksOnce() {
+func (f *dbTaskWriterImpl) flushTasksOnce() {
 	tasks := make([]*persistencespb.TaskInfo, 0, dbTaskFlusherBatchSize)
 	futures := make([]*future.FutureImpl, 0, len(tasks))
 
@@ -120,7 +132,7 @@ FlushLoop:
 	}
 }
 
-func (f *dbTaskWriter) notifyFlush() {
+func (f *dbTaskWriterImpl) notifyFlush() {
 	select {
 	case f.flushSignalChan <- struct{}{}:
 	default:
@@ -128,6 +140,6 @@ func (f *dbTaskWriter) notifyFlush() {
 	}
 }
 
-func (f *dbTaskWriter) notifyFlushChan() <-chan struct{} {
+func (f *dbTaskWriterImpl) notifyFlushChan() <-chan struct{} {
 	return f.flushSignalChan
 }
