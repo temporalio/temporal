@@ -34,7 +34,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dgrijalva/jwt-go/v4"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -292,11 +292,11 @@ func newTokenGenerator() *tokenGenerator {
 type (
 	CustomClaims struct {
 		Permissions []string `json:"permissions"`
-		jwt.StandardClaims
+		jwt.RegisteredClaims
 	}
 )
 
-func (CustomClaims) Valid(*jwt.ValidationHelper) error {
+func (CustomClaims) Valid() error {
 	return nil
 }
 
@@ -311,8 +311,8 @@ func (tg *tokenGenerator) generateECDSAToken(subject string, permissions []strin
 func (tg *tokenGenerator) generateToken(alg keyAlgorithm, subject string, permissions []string, options errorTestOptions) (string, error) {
 	claims := CustomClaims{
 		permissions,
-		jwt.StandardClaims{
-			ExpiresAt: jwt.At(time.Now().Add(time.Hour)),
+		jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 			Issuer:    "test",
 			Audience:  []string{"test-audience"},
 		},

@@ -28,7 +28,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/dgrijalva/jwt-go/v4"
+	"github.com/golang-jwt/jwt/v4"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/config"
@@ -130,12 +130,7 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 
 func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audience string) (jwt.MapClaims, error) {
 
-	var parser *jwt.Parser
-	if strings.TrimSpace(audience) == "" {
-		parser = jwt.NewParser(jwt.WithoutAudienceValidation())
-	} else {
-		parser = jwt.NewParser(jwt.WithAudience(audience))
-	}
+	parser := jwt.NewParser()
 	token, err := parser.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 
 		kid, ok := token.Header["kid"].(string)
@@ -159,11 +154,17 @@ func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audi
 	if err != nil {
 		return nil, err
 	}
-
-	if claims, ok := token.Claims.(jwt.MapClaims); ok {
-		return claims, nil
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return nil, serviceerror.NewPermissionDenied("invalid token with no claims", "")
 	}
-	return nil, serviceerror.NewPermissionDenied("invalid token with no claims", "")
+	if err := claims.Valid(); err != nil {
+		return nil, err
+	}
+	if strings.TrimSpace(audience) != "" && !claims.VerifyAudience(audience, true) {
+		return nil, serviceerror.NewPermissionDenied("audience mismatch", "")
+	}
+	return claims, nil
 }
 
 func permissionToRole(permission string) Role {
