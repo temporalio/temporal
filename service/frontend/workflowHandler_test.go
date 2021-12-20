@@ -1655,6 +1655,23 @@ func (s *workflowHandlerSuite) TestVerifyHistoryIsComplete() {
 	}
 }
 
+func (s *workflowHandlerSuite) TestGetSystemInfo() {
+	config := s.newConfig()
+	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
+
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+
+	resp, err := wh.GetSystemInfo(context.Background(), &workflowservice.GetSystemInfoRequest{
+		Namespace: s.testNamespace.String(),
+	})
+	s.NoError(err)
+	s.Equal(headers.ServerVersion, resp.ServerVersion)
+	s.True(resp.Capabilities.SignalAndQueryHeader)
+	s.True(resp.Capabilities.InternalErrorDifferentiation)
+}
+
 func (s *workflowHandlerSuite) newConfig() *Config {
 	return NewConfig(dc.NewCollection(dc.NewNoopClient(), s.mockResource.GetLogger()), numHistoryShards, "", false)
 }
