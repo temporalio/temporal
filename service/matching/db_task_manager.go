@@ -55,7 +55,7 @@ const (
 )
 
 var (
-	dbTaskManagerErrNotReady = serviceerror.NewUnavailable("dbTaskManager is not ready")
+	errDBTaskManagerNotReady = serviceerror.NewUnavailable("dbTaskManager is not ready")
 )
 
 type (
@@ -275,11 +275,11 @@ func (d *dbTaskManager) BufferAndWriteTask(
 	select {
 	case <-d.startupChan:
 		if d.isStopped() {
-			return future.NewReadyFuture(nil, dbTaskManagerErrNotReady)
+			return future.NewReadyFuture(nil, errDBTaskManagerNotReady)
 		}
 		return d.taskWriter.appendTask(task)
 	default:
-		return future.NewReadyFuture(nil, dbTaskManagerErrNotReady)
+		return future.NewReadyFuture(nil, errDBTaskManagerNotReady)
 	}
 }
 

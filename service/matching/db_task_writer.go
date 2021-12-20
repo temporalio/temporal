@@ -39,7 +39,7 @@ const (
 )
 
 var (
-	dbTaskWriterErrBufferFull = serviceerror.NewUnavailable("dbTaskWriter encountered task buffer full")
+	errDBTaskWriterBufferFull = serviceerror.NewUnavailable("dbTaskWriter encountered task buffer full")
 )
 
 //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination db_task_writer_mock.go
@@ -97,7 +97,7 @@ func (f *dbTaskWriterImpl) appendTask(
 		// noop
 	default:
 		// busy
-		fut.Set(nil, dbTaskWriterErrBufferFull)
+		fut.Set(nil, errDBTaskWriterBufferFull)
 	}
 	return fut
 }

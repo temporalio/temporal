@@ -204,7 +204,7 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_NotReady() {
 	taskInfo := &persistencespb.TaskInfo{}
 	fut := s.dbTaskManager.BufferAndWriteTask(taskInfo)
 	_, err := fut.Get(context.Background())
-	s.Equal(dbTaskManagerErrNotReady, err)
+	s.Equal(errDBTaskManagerNotReady, err)
 }
 
 func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
