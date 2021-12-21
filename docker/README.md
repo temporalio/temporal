@@ -13,7 +13,7 @@ To run docker image with dependencies:
 Replace **YOUR_TAG** and **YOUR_CHECKOUT_COMMIT** in the below command to build:
 ```bash
 git checkout YOUR_CHECKOUT_COMMIT
-docker build . -t temporalio/auto-setup:YOUR_TAG --build-arg TARGET=auto-setup
+docker build . -t temporalio/auto-setup:YOUR_TAG --target temporal-auto-setup
 ```
 
 ## Run Temporal with custom docker image
