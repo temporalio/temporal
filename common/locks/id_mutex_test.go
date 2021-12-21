@@ -37,7 +37,7 @@ type (
 		suite.Suite
 
 		cleanupLocks bool
-		numShard     uint32
+		numShards    uint32
 		idMutex      IDMutex
 	}
 
@@ -152,8 +152,8 @@ func (s *idMutexSuite) TearDownSuite() {
 }
 
 func (s *idMutexSuite) SetupTest() {
-	s.numShard = 32
-	s.idMutex = NewIDMutex(s.numShard, func(key interface{}) uint32 {
+	s.numShards = 32
+	s.idMutex = NewIDMutex(s.numShards, func(key interface{}) uint32 {
 		id, ok := key.(string)
 		if !ok {
 			return 0
@@ -236,7 +236,7 @@ func (s *idMutexSuite) TestConcurrentAccess() {
 
 	if s.cleanupLocks {
 		impl := s.idMutex.(*idMutexImpl)
-		for i := uint32(0); i < s.numShard; i++ {
+		for i := uint32(0); i < s.numShards; i++ {
 			impl.shards[i].Lock()
 			s.Equal(0, len(impl.shards[i].mutexInfos))
 			impl.shards[i].Unlock()

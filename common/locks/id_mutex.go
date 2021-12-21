@@ -42,10 +42,10 @@ type (
 
 	// idMutexShardImpl is the implementation of IDMutex shard
 	idMutexImpl struct {
-		numShard uint32
-		hashFn   HashFunc
-		shards   []*idMutexShardImpl
-		cleanup  bool
+		numShards uint32
+		hashFn    HashFunc
+		shards    []*idMutexShardImpl
+		cleanup   bool
 	}
 
 	// idMutexShardImpl is the implementation of IDMutex shard
@@ -64,14 +64,14 @@ type (
 )
 
 // NewIDMutex create a new IDLock
-func NewIDMutex(numShard uint32, hashFn HashFunc, cleanupLocks bool) IDMutex {
+func NewIDMutex(numShards uint32, hashFn HashFunc, cleanupLocks bool) IDMutex {
 	impl := &idMutexImpl{
-		numShard: numShard,
-		hashFn:   hashFn,
-		shards:   make([]*idMutexShardImpl, numShard),
-		cleanup:  cleanupLocks,
+		numShards: numShards,
+		hashFn:    hashFn,
+		shards:    make([]*idMutexShardImpl, numShards),
+		cleanup:   cleanupLocks,
 	}
-	for i := uint32(0); i < numShard; i++ {
+	for i := uint32(0); i < numShards; i++ {
 		impl.shards[i] = &idMutexShardImpl{
 			mutexInfos: make(map[interface{}]*mutexInfo),
 		}
@@ -103,15 +103,15 @@ func (idMutex *idMutexImpl) LockID(identifier interface{}) UnlockFunc {
 	return func() {
 		mi.Unlock()
 		shard.Lock()
+		defer shard.Unlock()
 		if mi.waitCount == 1 {
 			delete(shard.mutexInfos, identifier)
 		} else {
 			mi.waitCount--
 		}
-		shard.Unlock()
 	}
 }
 
 func (idMutex *idMutexImpl) getShardIndex(key interface{}) uint32 {
-	return idMutex.hashFn(key) % idMutex.numShard
+	return idMutex.hashFn(key) % idMutex.numShards
 }
