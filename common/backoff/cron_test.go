@@ -54,6 +54,10 @@ var crontests = []struct {
 	{"@every 30s", "2020-07-17T09:00:02-01:00", "2020-07-17T09:00:02-01:00", time.Second * 30},
 	{"@every 30s", "2020-07-17T09:00:02-01:00", "2020-09-17T03:00:53-01:00", time.Second * 9},
 	{"@every 30m", "2020-07-17T09:00:00-01:00", "2020-07-17T08:45:00-01:00", time.Minute * 15},
+	// At 16:05 East Coast (Day light saving on)
+	{"CRON_TZ=America/New_York 5 16 * * *", "2021-03-14T00:00:00-04:00", "2021-03-14T15:05:00-04:00", time.Hour * 1},
+	// At 04:05 East Coast (Day light saving off)
+	{"CRON_TZ=America/New_York 5 4 * * *", "2021-11-25T00:00:00-05:00", "2021-11-25T03:05:00-05:00", time.Hour * 1},
 }
 
 func TestCron(t *testing.T) {
