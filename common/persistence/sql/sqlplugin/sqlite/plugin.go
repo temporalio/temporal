@@ -127,8 +127,9 @@ func (p *plugin) createDBConnection(
 
 	// only suitable for in memory databases!
 	if _, ok := cfg.ConnectAttributes["setup"]; ok {
-		// creates temporary DB overlay in order to configure database and schemas
+		delete(cfg.ConnectAttributes, "setup")
 
+		// creates temporary DB overlay in order to configure database and schemas
 		err := p.setupSQLiteDatabase(cfg, db)
 		if err != nil {
 			_ = db.Close()
