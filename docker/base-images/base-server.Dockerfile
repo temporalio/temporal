@@ -19,6 +19,7 @@ FROM alpine:3.13 AS base-server
 
 RUN apk add --update --no-cache \
     ca-certificates \
+    tzdata \
     bash \
     curl \
     vim

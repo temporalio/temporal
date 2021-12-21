@@ -5,7 +5,7 @@ To build a new version of base docker image run:
 make <base_image_name> DOCKER_IMAGE_TAG=<new_base_image_version>
 ```
 
-Check [MakeFile](Makefile) for all possible `base_image_name` options.
+Check [Makefile](Makefile) for all possible `base_image_name` options.
 
 For example:
 ```bash
