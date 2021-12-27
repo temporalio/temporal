@@ -426,6 +426,10 @@ func (s *HistoryV2PersistenceSuite) TestDeleteForkedBranch() {
 	}
 	resp, err = s.ExecutionManager.ReadHistoryBranch(req)
 	s.IsType(&serviceerror.NotFound{}, err)
+
+	// clean up the base branch
+	err = s.deleteHistoryBranch(bi)
+	s.Nil(err)
 }
 
 // TestConcurrentlyCreateAndAppendBranches test
