@@ -46,6 +46,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -1426,6 +1428,91 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	attrs2 := event.GetWorkflowExecutionContinuedAsNewEventAttributes()
 	s.Equal(newRunID, attrs2.NewExecutionRunId)
 	s.Equal("this workflow failed", attrs2.Failure.Message)
+}
+
+func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTransientDecision() {
+	namespaceID := namespace.ID(uuid.New())
+	namespace := namespace.Name("namespace")
+	we := commonpb.WorkflowExecution{WorkflowId: "wid1", RunId: uuid.New()}
+
+	config := s.newConfig()
+	config.SendRawWorkflowHistory = dc.GetBoolPropertyFnFilteredByNamespace(true)
+	wh := s.getWorkflowHandler(config)
+
+	branchToken := []byte{1, 2, 3}
+	persistenceToken := []byte("some random persistence token")
+	nextPageToken, err := serializeHistoryToken(&tokenspb.HistoryContinuation{
+		RunId:            we.GetRunId(),
+		FirstEventId:     common.FirstEventID,
+		NextEventId:      5,
+		PersistenceToken: persistenceToken,
+		TransientWorkflowTask: &historyspb.TransientWorkflowTaskInfo{
+			ScheduledEvent: &historypb.HistoryEvent{
+				EventId:   5,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+			},
+			StartedEvent: &historypb.HistoryEvent{
+				EventId:   6,
+				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+			},
+		},
+		BranchToken: branchToken,
+	})
+	s.NoError(err)
+	req := &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:              namespace.String(),
+		Execution:              &we,
+		MaximumPageSize:        10,
+		NextPageToken:          nextPageToken,
+		WaitNewEvent:           false,
+		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_ALL_EVENT,
+		SkipArchival:           true,
+	}
+
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), we.WorkflowId, numHistoryShards)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace).Return(namespaceID, nil).AnyTimes()
+
+	historyBlob1, err := wh.payloadSerializer.SerializeEvent(
+		&historypb.HistoryEvent{
+			EventId:   int64(3),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		},
+		enumspb.ENCODING_TYPE_PROTO3,
+	)
+	s.NoError(err)
+	historyBlob2, err := wh.payloadSerializer.SerializeEvent(
+		&historypb.HistoryEvent{
+			EventId:   int64(4),
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
+		},
+		enumspb.ENCODING_TYPE_PROTO3,
+	)
+	s.NoError(err)
+	s.mockExecutionManager.EXPECT().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+		BranchToken:   branchToken,
+		MinEventID:    1,
+		MaxEventID:    5,
+		PageSize:      10,
+		NextPageToken: persistenceToken,
+		ShardID:       shardID,
+	}).Return(&persistence.ReadRawHistoryBranchResponse{
+		HistoryEventBlobs: []*commonpb.DataBlob{historyBlob1, historyBlob2},
+		NextPageToken:     []byte{},
+		Size:              1,
+	}, nil).Times(1)
+
+	resp, err := wh.GetWorkflowExecutionHistory(context.Background(), req)
+	s.NoError(err)
+	s.False(resp.Archived)
+	s.Empty(resp.History.Events)
+	s.Len(resp.RawHistory, 4)
+	event, err := wh.payloadSerializer.DeserializeEvent(resp.RawHistory[2])
+	s.NoError(err)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED, event.EventType)
+	event, err = wh.payloadSerializer.DeserializeEvent(resp.RawHistory[3])
+	s.NoError(err)
+	s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED, event.EventType)
 }
 
 func (s *workflowHandlerSuite) TestListArchivedVisibility_Failure_InvalidRequest() {

@@ -2875,7 +2875,7 @@ func (wh *WorkflowHandler) getRawHistory(
 		})
 	}
 
-	if len(nextPageToken) == 0 && transientWorkflowTaskInfo != nil {
+	if len(resp.NextPageToken) == 0 && transientWorkflowTaskInfo != nil {
 		if err := wh.validateTransientWorkflowTaskEvents(nextEventID, transientWorkflowTaskInfo); err != nil {
 			scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 			wh.logger.Error("getHistory error",
