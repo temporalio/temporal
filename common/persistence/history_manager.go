@@ -171,6 +171,7 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 			// skip the target branch
 			continue
 		}
+		usedBranches[br.BranchId] = common.LastEventID
 		for _, ancestor := range br.Ancestors {
 			if curr, ok := usedBranches[ancestor.GetBranchId()]; !ok || curr < ancestor.GetEndNodeId() {
 				usedBranches[ancestor.GetBranchId()] = ancestor.GetEndNodeId()
@@ -185,10 +186,12 @@ findDeleteRanges:
 		br := brsToDelete[i]
 		if maxEndNode, ok := usedBranches[br.GetBranchId()]; ok {
 			// branch is used by others, we can only delete from the maxEndNode
-			deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
-				BranchId:    br.BranchId,
-				BeginNodeId: maxEndNode,
-			})
+			if maxEndNode != common.LastEventID {
+				deleteRanges = append(deleteRanges, InternalDeleteHistoryBranchRange{
+					BranchId:    br.BranchId,
+					BeginNodeId: maxEndNode,
+				})
+			}
 			// all ancestors are also used, no need to go up further,
 			break findDeleteRanges
 		} else {
