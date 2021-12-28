@@ -1171,6 +1171,8 @@ const (
 	ParentClosePolicyProcessorScope
 	// AddSearchAttributesWorkflowScope is scope used by all metrics emitted by worker.AddSearchAttributesWorkflowScope module
 	AddSearchAttributesWorkflowScope
+	// MigrationWorkflowScope is scope used by metrics emitted by migration related workflows
+	MigrationWorkflowScope
 
 	NumWorkerScopes
 )
@@ -1707,6 +1709,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BatcherScope:                           {operation: "batcher"},
 		ParentClosePolicyProcessorScope:        {operation: "ParentClosePolicyProcessor"},
 		AddSearchAttributesWorkflowScope:       {operation: "AddSearchAttributesWorkflow"},
+		MigrationWorkflowScope:                 {operation: "MigrationWorkflow"},
 	},
 	Server: {
 		ServerTlsScope: {operation: "ServerTls"},
@@ -2159,6 +2162,8 @@ const (
 	ScavengerValidationRequestsCount
 	ScavengerValidationFailuresCount
 	AddSearchAttributesFailuresCount
+	CatchUpReadyShardCountGauge
+	HandoverReadyShardCountGauge
 
 	NumWorkerMetrics
 )
@@ -2593,16 +2598,18 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ExecutorTasksDoneCount:                        NewCounterDef("executor_done"),
 		ExecutorTasksErrCount:                         NewCounterDef("executor_err"),
 		ExecutorTasksDeferredCount:                    NewCounterDef("executor_deferred"),
-		ExecutorTasksDroppedCount:                     NewCounterDef("executor_dropped"),
-		BatcherProcessorSuccess:                       NewCounterDef("batcher_processor_requests"),
-		BatcherProcessorFailures:                      NewCounterDef("batcher_processor_errors"),
-		HistoryScavengerSuccessCount:                  NewCounterDef("scavenger_success"),
-		HistoryScavengerErrorCount:                    NewCounterDef("scavenger_errors"),
-		HistoryScavengerSkipCount:                     NewCounterDef("scavenger_skips"),
-		NamespaceReplicationEnqueueDLQCount:           NewCounterDef("namespace_replication_dlq_enqueue_requests"),
-		ScavengerValidationRequestsCount:              NewCounterDef("scavenger_validation_requests"),
-		ScavengerValidationFailuresCount:              NewCounterDef("scavenger_validation_failures"),
-		AddSearchAttributesFailuresCount:              NewCounterDef("add_search_attributes_failures"),
+		ExecutorTasksDroppedCount:           NewCounterDef("executor_dropped"),
+		BatcherProcessorSuccess:             NewCounterDef("batcher_processor_requests"),
+		BatcherProcessorFailures:            NewCounterDef("batcher_processor_errors"),
+		HistoryScavengerSuccessCount:        NewCounterDef("scavenger_success"),
+		HistoryScavengerErrorCount:          NewCounterDef("scavenger_errors"),
+		HistoryScavengerSkipCount:           NewCounterDef("scavenger_skips"),
+		NamespaceReplicationEnqueueDLQCount: NewCounterDef("namespace_replication_dlq_enqueue_requests"),
+		ScavengerValidationRequestsCount:    NewCounterDef("scavenger_validation_requests"),
+		ScavengerValidationFailuresCount:    NewCounterDef("scavenger_validation_failures"),
+		AddSearchAttributesFailuresCount:    NewCounterDef("add_search_attributes_failures"),
+		CatchUpReadyShardCountGauge:         NewGaugeDef("catchup_ready_shard_count"),
+		HandoverReadyShardCountGauge:        NewGaugeDef("handover_ready_shard_count"),
 	},
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),

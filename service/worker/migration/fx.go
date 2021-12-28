@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replication
+package migration
 
 import (
 	"go.temporal.io/api/workflowservice/v1"
@@ -31,6 +31,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -46,6 +47,7 @@ type (
 		HistoryClient     historyservice.HistoryServiceClient
 		FrontendClient    workflowservice.WorkflowServiceClient
 		Logger            log.Logger
+		MetricsClient     metrics.Client
 	}
 
 	fxResult struct {
@@ -90,5 +92,6 @@ func (wc *replicationWorkerComponent) activities() *activities {
 		historyClient:     wc.HistoryClient,
 		frontendClient:    wc.FrontendClient,
 		logger:            wc.Logger,
+		metricsClient:     wc.MetricsClient,
 	}
 }
