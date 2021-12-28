@@ -469,7 +469,7 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 		if info.ActivityID == "Heartbeat" {
 			go func() {
 				// NOTE: due to client side heartbeat batching, heartbeat may be sent
-				// later then expected.
+				// later than expected.
 				// e.g. if activity heartbeat timeout is 2s,
 				// and we call RecordHeartbeat() at 0s, 0.5s, 1s, 1.5s
 				// the client by default will send two heartbeats at 0s and 2*0.8=1.6s
