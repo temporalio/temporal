@@ -416,8 +416,8 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 		clusterInfo, ok := shard.RemoteClusters[waitRequest.RemoteCluster]
 		if ok {
 			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId ||
-				( clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
-				shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
+				(clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
+					shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
 				readyShardCount++
 				continue
 			}
@@ -507,7 +507,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			}
 		}
 	}
-	
+
 	// emit metrics about how many shards are ready
 	a.metricsClient.Scope(
 		metrics.MigrationWorkflowScope,
