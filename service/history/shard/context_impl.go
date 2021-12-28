@@ -1021,6 +1021,7 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 	replicationLag := s.transferMaxReadLevel - s.shardInfo.ReplicationAckLevel
 	transferLag := s.transferMaxReadLevel - s.shardInfo.TransferAckLevel
 	timerLag := time.Since(timestamp.TimeValue(s.shardInfo.TimerAckLevelTime))
+	visibilityLag := s.transferMaxReadLevel - s.shardInfo.VisibilityAckLevel
 
 	transferFailoverInProgress := len(s.shardInfo.TransferFailoverLevels)
 	timerFailoverInProgress := len(s.shardInfo.TimerFailoverLevels)
@@ -1037,15 +1038,17 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 			tag.ShardTransferAcks(s.shardInfo.ClusterTransferAckLevel))
 	}
 
-	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferDiffHistogram, int(diffTransferLevel))
-	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerDiffTimer, diffTimerLevel)
+	metricsScope := s.GetMetricsClient().Scope(metrics.ShardInfoScope)
+	metricsScope.RecordDistribution(metrics.ShardInfoTransferDiffHistogram, int(diffTransferLevel))
+	metricsScope.RecordTimer(metrics.ShardInfoTimerDiffTimer, diffTimerLevel)
 
-	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoReplicationLagHistogram, int(replicationLag))
-	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferLagHistogram, int(transferLag))
-	s.GetMetricsClient().RecordTimer(metrics.ShardInfoScope, metrics.ShardInfoTimerLagTimer, timerLag)
+	metricsScope.RecordDistribution(metrics.ShardInfoReplicationLagHistogram, int(replicationLag))
+	metricsScope.RecordDistribution(metrics.ShardInfoTransferLagHistogram, int(transferLag))
+	metricsScope.RecordTimer(metrics.ShardInfoTimerLagTimer, timerLag)
+	metricsScope.RecordDistribution(metrics.ShardInfoVisibilityLagHistogram, int(visibilityLag))
 
-	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferFailoverInProgressHistogram, transferFailoverInProgress)
-	s.GetMetricsClient().RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTimerFailoverInProgressHistogram, timerFailoverInProgress)
+	metricsScope.RecordDistribution(metrics.ShardInfoTransferFailoverInProgressHistogram, transferFailoverInProgress)
+	metricsScope.RecordDistribution(metrics.ShardInfoTimerFailoverInProgressHistogram, timerFailoverInProgress)
 }
 
 func (s *ContextImpl) allocateTaskIDsLocked(
