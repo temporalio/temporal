@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package replication
+package migration
 
 import (
 	"context"
@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 )
@@ -82,6 +83,7 @@ type (
 		historyClient     historyservice.HistoryServiceClient
 		frontendClient    workflowservice.WorkflowServiceClient
 		logger            log.Logger
+		metricsClient     metrics.Client
 	}
 
 	genReplicationForShardRange struct {
@@ -408,18 +410,27 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	}
 
 	// check that every shard has caught up
+	readyShardCount := 0
+	logged := false
 	for _, shard := range resp.Shards {
-		clusterInfo, ok := shard.RemoteClusters[waitRequest.RemoteCluster]
-		if !ok {
-			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
+		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
+		if hasClusterInfo {
+			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId ||
+				(clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
+					shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
+				readyShardCount++
+				continue
+			}
 		}
-		if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId {
-			continue // already caught up, continue to check next shard.
-		}
-
-		if clusterInfo.AckedTaskId < waitRequest.WaitForTaskIds[shard.ShardId] ||
-			shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) > waitRequest.AllowedLagging {
-			a.logger.Info("Wait for remote ack",
+		// shard is not ready, log first non-ready shard
+		if !logged {
+			logged = true
+			if !hasClusterInfo {
+				a.logger.Info("Wait catchup missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+				// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
+				return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
+			}
+			a.logger.Info("Wait catchup not ready",
 				tag.NewInt32("ShardId", shard.ShardId),
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
@@ -427,11 +438,16 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
 				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
 			)
-			return false, nil
 		}
 	}
 
-	return true, nil
+	// emit metrics about how many shards are ready
+	a.metricsClient.Scope(
+		metrics.MigrationWorkflowScope,
+		metrics.TargetClusterTag(waitRequest.RemoteCluster),
+	).UpdateGauge(metrics.CatchUpReadyShardCountGauge, float64(readyShardCount))
+
+	return readyShardCount == len(resp.Shards), nil
 }
 
 func (a *activities) WaitHandover(ctx context.Context, waitRequest waitHandoverRequest) error {
@@ -462,32 +478,50 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 		return false, fmt.Errorf("GetReplicationStatus returns %d shards, expecting %d", len(resp.Shards), waitRequest.ShardCount)
 	}
 
+	readyShardCount := 0
+	logged := false
 	// check that every shard is ready to handover
 	for _, shard := range resp.Shards {
-		clusterInfo, ok := shard.RemoteClusters[waitRequest.RemoteCluster]
-		if !ok {
-			return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
+		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
+		handoverInfo, hasHandoverInfo := shard.HandoverNamespaces[waitRequest.Namespace]
+		if hasClusterInfo && hasHandoverInfo {
+			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId || clusterInfo.AckedTaskId >= handoverInfo.HandoverReplicationTaskId {
+				readyShardCount++
+				continue
+			}
 		}
-		handoverInfo, ok := shard.HandoverNamespaces[waitRequest.Namespace]
-		if !ok {
-			return false, fmt.Errorf("namespace %s on shard %d is not in handover state", waitRequest.Namespace, shard.ShardId)
-		}
+		// shard is not ready, log first non-ready shard
+		if !logged {
+			logged = true
+			if !hasClusterInfo {
+				a.logger.Info("Wait handover missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
+				// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
+				return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
+			}
 
-		if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId && clusterInfo.AckedTaskId >= handoverInfo.HandoverReplicationTaskId {
-			continue // already caught up, continue to check next shard.
+			if !hasHandoverInfo {
+				// this could happen before namespace cache refresh
+				a.logger.Info("Wait handover missing handover namespace info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster), tag.WorkflowNamespace(waitRequest.Namespace))
+			} else {
+				a.logger.Info("Wait handover not ready",
+					tag.NewInt32("ShardId", shard.ShardId),
+					tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
+					tag.NewInt64("HandoverTaskId", handoverInfo.HandoverReplicationTaskId),
+					tag.NewStringTag("Namespace", waitRequest.Namespace),
+					tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
+				)
+			}
 		}
-
-		a.logger.Info("Wait for handover to be ready",
-			tag.NewInt32("ShardId", shard.ShardId),
-			tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-			tag.NewInt64("HandoverTaskId", handoverInfo.HandoverReplicationTaskId),
-			tag.NewStringTag("Namespace", waitRequest.Namespace),
-			tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-		)
-		return false, nil
 	}
 
-	return true, nil
+	// emit metrics about how many shards are ready
+	a.metricsClient.Scope(
+		metrics.MigrationWorkflowScope,
+		metrics.TargetClusterTag(waitRequest.RemoteCluster),
+		metrics.NamespaceTag(waitRequest.Namespace),
+	).UpdateGauge(metrics.HandoverReadyShardCountGauge, float64(readyShardCount))
+
+	return readyShardCount == len(resp.Shards), nil
 }
 
 func (a *activities) genReplicationTasks(ctx context.Context, request genReplicationForShard) error {

@@ -35,11 +35,11 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/addsearchattributes"
-	"go.temporal.io/server/service/worker/scanner/replication"
+	"go.temporal.io/server/service/worker/migration"
 )
 
 var Module = fx.Options(
-	replication.Module,
+	migration.Module,
 	addsearchattributes.Module,
 	resource.Module,
 	fx.Provide(ParamsExpandProvider),

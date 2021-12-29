@@ -1171,6 +1171,8 @@ const (
 	ParentClosePolicyProcessorScope
 	// AddSearchAttributesWorkflowScope is scope used by all metrics emitted by worker.AddSearchAttributesWorkflowScope module
 	AddSearchAttributesWorkflowScope
+	// MigrationWorkflowScope is scope used by metrics emitted by migration related workflows
+	MigrationWorkflowScope
 
 	NumWorkerScopes
 )
@@ -1707,6 +1709,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BatcherScope:                           {operation: "batcher"},
 		ParentClosePolicyProcessorScope:        {operation: "ParentClosePolicyProcessor"},
 		AddSearchAttributesWorkflowScope:       {operation: "AddSearchAttributesWorkflow"},
+		MigrationWorkflowScope:                 {operation: "MigrationWorkflow"},
 	},
 	Server: {
 		ServerTlsScope: {operation: "ServerTls"},
@@ -2161,6 +2164,8 @@ const (
 	ScavengerValidationRequestsCount
 	ScavengerValidationFailuresCount
 	AddSearchAttributesFailuresCount
+	CatchUpReadyShardCountGauge
+	HandoverReadyShardCountGauge
 
 	NumWorkerMetrics
 )
@@ -2607,6 +2612,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ScavengerValidationRequestsCount:              NewCounterDef("scavenger_validation_requests"),
 		ScavengerValidationFailuresCount:              NewCounterDef("scavenger_validation_failures"),
 		AddSearchAttributesFailuresCount:              NewCounterDef("add_search_attributes_failures"),
+		CatchUpReadyShardCountGauge:                   NewGaugeDef("catchup_ready_shard_count"),
+		HandoverReadyShardCountGauge:                  NewGaugeDef("handover_ready_shard_count"),
 	},
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),
