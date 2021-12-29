@@ -445,7 +445,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace(
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
 	updateRequest := &workflowservice.UpdateNamespaceRequest{
-		Namespace: namespace,
+		Namespace:        namespace,
 		PromoteNamespace: true,
 	}
 	s.mockProducer.EXPECT().Publish(gomock.Any())
