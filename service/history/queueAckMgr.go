@@ -184,13 +184,17 @@ func (a *queueAckMgrImpl) updateQueueAckLevel() error {
 	if pendingTasks > warnPendingTasks {
 		a.logger.Warn("Too many pending tasks")
 	}
+
+	metricsScope := a.metricsClient.Scope(metrics.ShardInfoScope)
 	switch a.options.MetricScope {
 	case metrics.ReplicatorQueueProcessorScope:
-		a.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoReplicationPendingTasksTimer, pendingTasks)
+		metricsScope.RecordDistribution(metrics.ShardInfoReplicationPendingTasksTimer, pendingTasks)
 	case metrics.TransferActiveQueueProcessorScope:
-		a.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferActivePendingTasksTimer, pendingTasks)
+		metricsScope.RecordDistribution(metrics.ShardInfoTransferActivePendingTasksTimer, pendingTasks)
 	case metrics.TransferStandbyQueueProcessorScope:
-		a.metricsClient.RecordDistribution(metrics.ShardInfoScope, metrics.ShardInfoTransferStandbyPendingTasksTimer, pendingTasks)
+		metricsScope.RecordDistribution(metrics.ShardInfoTransferStandbyPendingTasksTimer, pendingTasks)
+	case metrics.VisibilityQueueProcessorScope:
+		metricsScope.RecordDistribution(metrics.ShardInfoVisibilityPendingTasksTimer, pendingTasks)
 	}
 
 MoveAckLevelLoop:

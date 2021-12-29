@@ -1944,9 +1944,11 @@ const (
 	ShardInfoTransferStandbyPendingTasksTimer
 	ShardInfoTimerActivePendingTasksTimer
 	ShardInfoTimerStandbyPendingTasksTimer
+	ShardInfoVisibilityPendingTasksTimer
 	ShardInfoReplicationLagHistogram
 	ShardInfoTransferLagHistogram
 	ShardInfoTimerLagTimer
+	ShardInfoVisibilityLagHistogram
 	ShardInfoTransferDiffHistogram
 	ShardInfoTimerDiffTimer
 	ShardInfoTransferFailoverInProgressHistogram
@@ -2399,9 +2401,11 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ShardInfoTransferStandbyPendingTasksTimer:         NewDimensionlessHistogramDef("shardinfo_transfer_standby_pending_task"),
 		ShardInfoTimerActivePendingTasksTimer:             NewDimensionlessHistogramDef("shardinfo_timer_active_pending_task"),
 		ShardInfoTimerStandbyPendingTasksTimer:            NewDimensionlessHistogramDef("shardinfo_timer_standby_pending_task"),
+		ShardInfoVisibilityPendingTasksTimer:              NewDimensionlessHistogramDef("shardinfo_visibility_pending_task"),
 		ShardInfoReplicationLagHistogram:                  NewDimensionlessHistogramDef("shardinfo_replication_lag"),
 		ShardInfoTransferLagHistogram:                     NewDimensionlessHistogramDef("shardinfo_transfer_lag"),
 		ShardInfoTimerLagTimer:                            NewTimerDef("shardinfo_timer_lag"),
+		ShardInfoVisibilityLagHistogram:                   NewDimensionlessHistogramDef("shardinfo_visibility_lag"),
 		ShardInfoTransferDiffHistogram:                    NewDimensionlessHistogramDef("shardinfo_transfer_diff"),
 		ShardInfoTimerDiffTimer:                           NewTimerDef("shardinfo_timer_diff"),
 		ShardInfoTransferFailoverInProgressHistogram:      NewDimensionlessHistogramDef("shardinfo_transfer_failover_in_progress"),
