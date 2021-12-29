@@ -476,6 +476,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(&persistence.GetTimerTasksResponse{}, nil)
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
@@ -784,6 +785,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
 	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)

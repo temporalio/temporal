@@ -109,6 +109,7 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 	s.shardManager = s.mockResource.ShardMgr
 	s.config = tests.NewDynamicConfig()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.taskExecutors = make(map[string]replicationTaskExecutor)
 	s.taskExecutor = NewMockreplicationTaskExecutor(s.controller)
 	s.sourceCluster = cluster.TestAlternativeClusterName
