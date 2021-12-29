@@ -429,3 +429,47 @@ func TestCheckIdleTaskQueue(t *testing.T) {
 	tlm.Stop()
 	require.Equal(t, common.DaemonStatusStopped, atomic.LoadInt32(&tlm.status))
 }
+
+func TestAddTaskStandby(t *testing.T) {
+	controller := gomock.NewController(t)
+	defer controller.Finish()
+
+	tlm := mustCreateTestTaskQueueManagerWithConfig(
+		t,
+		controller,
+		NewConfig(dynamicconfig.NewNoopCollection()),
+		func(tqm *taskQueueManagerImpl) {
+			// we need to override the mockNamespaceCache to return a passive namespace
+			mockNamespaceCache := namespace.NewMockRegistry(controller)
+			mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).
+				Return(namespace.NewGlobalNamespaceForTest(
+					&persistencespb.NamespaceInfo{},
+					&persistencespb.NamespaceConfig{},
+					&persistencespb.NamespaceReplicationConfig{
+						ActiveClusterName: cluster.TestAlternativeClusterName,
+					},
+					cluster.TestAlternativeClusterInitialFailoverVersion,
+				), nil).AnyTimes()
+			tqm.namespaceRegistry = mockNamespaceCache
+		},
+	)
+	tlm.Start()
+	// stop taskWriter so that we can check if there's any call to it
+	// otherwise the task persist process is async and hard to test
+	tlm.taskWriter.Stop()
+
+	addTaskParam := addTaskParams{
+		execution: &commonpb.WorkflowExecution{},
+		taskInfo:  &persistencespb.TaskInfo{},
+		source:    enumsspb.TASK_SOURCE_HISTORY,
+	}
+
+	syncMatch, err := tlm.AddTask(context.Background(), addTaskParam)
+	require.Equal(t, errShutdown, err) // task writer was stopped above
+	require.False(t, syncMatch)
+
+	addTaskParam.forwardedFrom = "from child partition"
+	syncMatch, err = tlm.AddTask(context.Background(), addTaskParam)
+	require.Equal(t, errRemoteSyncMatchFailed, err) // should not persist the task
+	require.False(t, syncMatch)
+}

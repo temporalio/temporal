@@ -286,15 +286,12 @@ func (c *taskQueueManagerImpl) AddTask(
 			return err
 		}
 
-		if !namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
-			_, err := c.taskWriter.appendTask(params.execution, taskInfo)
-			syncMatch = false
-			return err
-		}
-
-		syncMatch, err = c.trySyncMatch(ctx, params)
-		if syncMatch {
-			return err
+		syncMatch = false
+		if namespaceEntry.ActiveInCluster(c.clusterMeta.GetCurrentClusterName()) {
+			syncMatch, err = c.trySyncMatch(ctx, params)
+			if syncMatch {
+				return err
+			}
 		}
 
 		if params.forwardedFrom != "" {
