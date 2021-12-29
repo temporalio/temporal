@@ -413,8 +413,8 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	readyShardCount := 0
 	logged := false
 	for _, shard := range resp.Shards {
-		clusterInfo, ok := shard.RemoteClusters[waitRequest.RemoteCluster]
-		if ok {
+		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
+		if hasClusterInfo {
 			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId ||
 				(clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
 					shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
@@ -425,18 +425,19 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 		// shard is not ready, log first non-ready shard
 		if !logged {
 			logged = true
-			if !ok {
+			if !hasClusterInfo {
 				a.logger.Info("Wait catchup missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
-			} else {
-				a.logger.Info("Wait catchup not ready",
-					tag.NewInt32("ShardId", shard.ShardId),
-					tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
-					tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
-					tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
-					tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
-					tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
-				)
+				// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
+				return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
 			}
+			a.logger.Info("Wait catchup not ready",
+				tag.NewInt32("ShardId", shard.ShardId),
+				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
+				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
+				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
+				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
+				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
+			)
 		}
 	}
 
@@ -494,8 +495,13 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 			logged = true
 			if !hasClusterInfo {
 				a.logger.Info("Wait handover missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster))
-			} else if !hasHandoverInfo {
-				a.logger.Info("Wait handover missing remote cluster info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster), tag.WorkflowNamespace(waitRequest.Namespace))
+				// this is not expected, so fail activity to surface the error, but retryPolicy will keep retrying.
+				return false, fmt.Errorf("GetReplicationStatus response for shard %d does not contains remote cluster %s", shard.ShardId, waitRequest.RemoteCluster)
+			}
+
+			if !hasHandoverInfo {
+				// this could happen before namespace cache refresh
+				a.logger.Info("Wait handover missing handover namespace info", tag.ShardID(shard.ShardId), tag.ClusterName(waitRequest.RemoteCluster), tag.WorkflowNamespace(waitRequest.Namespace))
 			} else {
 				a.logger.Info("Wait handover not ready",
 					tag.NewInt32("ShardId", shard.ShardId),
