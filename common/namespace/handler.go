@@ -557,7 +557,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		if configurationChanged {
 			configVersion++
 		}
-		if activeClusterChanged && isGlobalNamespace {
+		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
 				failoverVersion,

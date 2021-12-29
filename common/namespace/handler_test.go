@@ -432,6 +432,34 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_InvalidRetentionPeriod
 	}
 }
 
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace() {
+	namespace := "local-ns-to-be-promoted"
+	registerRequest := &workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		Description:                      namespace,
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(24 * time.Hour),
+		IsGlobalNamespace:                false,
+	}
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), registerRequest)
+	s.NoError(err)
+	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
+
+	updateRequest := &workflowservice.UpdateNamespaceRequest{
+		Namespace:        namespace,
+		PromoteNamespace: true,
+	}
+	s.mockProducer.EXPECT().Publish(gomock.Any())
+	_, err = s.handler.UpdateNamespace(context.Background(), updateRequest)
+	s.NoError(err)
+
+	descResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	s.True(descResp.IsGlobalNamespace)
+	s.Equal(cluster.TestCurrentClusterInitialFailoverVersion, descResp.FailoverVersion)
+}
+
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
 	return "namespace" + uuid.New()
 }
