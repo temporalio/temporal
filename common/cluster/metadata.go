@@ -477,7 +477,10 @@ func (m *metadataImpl) listAllClusterMetadataFromDB() (map[string]*ClusterInform
 
 	paginationFn := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		resp, err := m.clusterMetadataStore.ListClusterMetadata(
-			&persistence.ListClusterMetadataRequest{PageSize: defaultClusterMetadataPageSize},
+			&persistence.ListClusterMetadataRequest{
+				PageSize:      defaultClusterMetadataPageSize,
+				NextPageToken: paginationToken,
+			},
 		)
 		if err != nil {
 			return nil, nil, err

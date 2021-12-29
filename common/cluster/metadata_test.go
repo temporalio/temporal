@@ -138,7 +138,7 @@ func (s *metadataSuite) Test_RegisterMetadataChangeCallback() {
 	s.Equal(0, len(s.metadata.clusterChangeCallback))
 }
 
-func (s *metadataSuite) Test_RefreshClusterMetadata() {
+func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 	id := uuid.New()
 	s.metadata.clusterChangeCallback[id] = func(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation) {
 		oldMetadata, ok := oldClusterMetadata[id]
@@ -179,5 +179,50 @@ func (s *metadataSuite) Test_RefreshClusterMetadata() {
 				},
 			},
 		}, nil)
-	s.metadata.refreshClusterMetadata(context.Background())
+	err := s.metadata.refreshClusterMetadata(context.Background())
+	s.NoError(err)
+}
+
+func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
+	nextPageSizeToken := []byte{1}
+	newClusterName := uuid.New()
+	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+		PageSize:      defaultClusterMetadataPageSize,
+		NextPageToken: nil,
+	}).Return(
+		&persistence.ListClusterMetadataResponse{
+			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
+				{
+					ClusterMetadata: persistencespb.ClusterMetadata{
+						ClusterName:            s.clusterName,
+						IsConnectionEnabled:    true,
+						InitialFailoverVersion: 1,
+						ClusterAddress:         uuid.New(),
+					},
+					Version: 1,
+				},
+			},
+			NextPageToken: nextPageSizeToken,
+		}, nil).Times(1)
+	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+		PageSize:      defaultClusterMetadataPageSize,
+		NextPageToken: nextPageSizeToken,
+	}).Return(
+		&persistence.ListClusterMetadataResponse{
+			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
+				{
+					ClusterMetadata: persistencespb.ClusterMetadata{
+						ClusterName:            newClusterName,
+						IsConnectionEnabled:    true,
+						InitialFailoverVersion: 2,
+						ClusterAddress:         uuid.New(),
+					},
+					Version: 2,
+				},
+			},
+		}, nil).Times(1)
+
+	resp, err := s.metadata.listAllClusterMetadataFromDB()
+	s.NoError(err)
+	s.Equal(2, len(resp))
 }
