@@ -100,6 +100,13 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 		},
 	})
 	s.NoError(err)
+	previousRangeID := resp.ShardInfo.RangeId
+	resp.ShardInfo.RangeId += 1
+	err = s.shardManager.UpdateShard(&p.UpdateShardRequest{
+		ShardInfo:       resp.ShardInfo,
+		PreviousRangeID: previousRangeID,
+	})
+	s.NoError(err)
 	s.rangeID = resp.ShardInfo.RangeId
 
 	s.namespaceID = uuid.New().String()
