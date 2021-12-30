@@ -104,13 +104,13 @@ func (s *transactionSuite) TestOperationMayApplied() {
 	}
 
 	for _, tc := range testCases {
-		s.Equal(tc.mayApplied, operationMayApplied(tc.err))
+		s.Equal(tc.mayApplied, operationPossiblySucceeded(tc.err))
 	}
 }
 
 func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(operationMayApplied(timeoutErr))
+	s.True(operationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification()
@@ -133,7 +133,7 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 
 func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(operationMayApplied(timeoutErr))
+	s.True(operationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification() // for current workflow mutation
@@ -159,7 +159,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 
 func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(operationMayApplied(timeoutErr))
+	s.True(operationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().ConflictResolveWorkflowExecution(gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification() // for reset workflow snapshot

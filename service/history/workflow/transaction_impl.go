@@ -88,7 +88,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		NewWorkflowSnapshot: *newWorkflowSnapshot,
 		NewWorkflowEvents:   newWorkflowEventsSeq,
 	})
-	if operationMayApplied(err) {
+	if operationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
 	}
 	if err != nil {
@@ -132,7 +132,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		CurrentWorkflowMutation: currentWorkflowMutation,
 		CurrentWorkflowEvents:   currentWorkflowEventsSeq,
 	})
-	if operationMayApplied(err) {
+	if operationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, nsEntry.IsGlobalNamespace())
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
@@ -188,7 +188,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		NewWorkflowSnapshot:    newWorkflowSnapshot,
 		NewWorkflowEvents:      newWorkflowEventsSeq,
 	})
-	if operationMayApplied(err) {
+	if operationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
 	}
@@ -736,7 +736,7 @@ func emitCompletionMetrics(
 	}
 }
 
-func operationMayApplied(err error) bool {
+func operationPossiblySucceeded(err error) bool {
 	switch err.(type) {
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
