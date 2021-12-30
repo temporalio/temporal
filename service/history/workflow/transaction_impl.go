@@ -72,17 +72,6 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 ) (int64, error) {
 
-	resp, err := createWorkflowExecutionWithRetry(t.shard, &persistence.CreateWorkflowExecutionRequest{
-		ShardID: t.shard.GetShardID(),
-		// RangeID , this is set by shard context
-		Mode:                createMode,
-		NewWorkflowSnapshot: *newWorkflowSnapshot,
-		NewWorkflowEvents:   newWorkflowEventsSeq,
-	})
-	if err != nil {
-		return 0, err
-	}
-
 	engine, err := t.shard.GetEngine()
 	if err != nil {
 		return 0, err
@@ -91,7 +80,21 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	if err != nil {
 		return 0, err
 	}
-	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+
+	resp, err := createWorkflowExecutionWithRetry(t.shard, &persistence.CreateWorkflowExecutionRequest{
+		ShardID: t.shard.GetShardID(),
+		// RangeID , this is set by shard context
+		Mode:                createMode,
+		NewWorkflowSnapshot: *newWorkflowSnapshot,
+		NewWorkflowEvents:   newWorkflowEventsSeq,
+	})
+	if operationPossiblySucceeded(err) {
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+	}
+	if err != nil {
+		return 0, err
+	}
+
 	if err := NotifyNewHistorySnapshotEvent(engine, newWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow creation", tag.Error(err))
 	}
@@ -109,6 +112,15 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 ) (int64, int64, int64, error) {
 
+	engine, err := t.shard.GetEngine()
+	if err != nil {
+		return 0, 0, 0, err
+	}
+	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(resetWorkflowSnapshot.ExecutionInfo.NamespaceId))
+	if err != nil {
+		return 0, 0, 0, err
+	}
+
 	resp, err := conflictResolveWorkflowExecutionWithRetry(t.shard, &persistence.ConflictResolveWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
@@ -120,21 +132,15 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		CurrentWorkflowMutation: currentWorkflowMutation,
 		CurrentWorkflowEvents:   currentWorkflowEventsSeq,
 	})
+	if operationPossiblySucceeded(err) {
+		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
+	}
 	if err != nil {
 		return 0, 0, 0, err
 	}
 
-	engine, err := t.shard.GetEngine()
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(resetWorkflowSnapshot.ExecutionInfo.NamespaceId))
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, nsEntry.IsGlobalNamespace())
-	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
-	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
 	if err := NotifyNewHistorySnapshotEvent(engine, resetWorkflowSnapshot); err != nil {
 		t.logger.Error("unable to notify workflow reset", tag.Error(err))
 	}
@@ -164,6 +170,15 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 ) (int64, int64, error) {
 
+	engine, err := t.shard.GetEngine()
+	if err != nil {
+		return 0, 0, err
+	}
+	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(currentWorkflowMutation.ExecutionInfo.NamespaceId))
+	if err != nil {
+		return 0, 0, err
+	}
+
 	resp, err := updateWorkflowExecutionWithRetry(t.shard, &persistence.UpdateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
@@ -173,20 +188,14 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		NewWorkflowSnapshot:    newWorkflowSnapshot,
 		NewWorkflowEvents:      newWorkflowEventsSeq,
 	})
+	if operationPossiblySucceeded(err) {
+		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+	}
 	if err != nil {
 		return 0, 0, err
 	}
 
-	engine, err := t.shard.GetEngine()
-	if err != nil {
-		return 0, 0, err
-	}
-	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(currentWorkflowMutation.ExecutionInfo.NamespaceId))
-	if err != nil {
-		return 0, 0, err
-	}
-	NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
-	NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
 	if err := NotifyNewHistoryMutationEvent(engine, currentWorkflowMutation); err != nil {
 		t.logger.Error("unable to notify workflow mutation", tag.Error(err))
 	}
@@ -725,4 +734,22 @@ func emitCompletionMetrics(
 			completionMetric.status,
 		)
 	}
+}
+
+func operationPossiblySucceeded(err error) bool {
+	switch err.(type) {
+	case *persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
+		*persistence.ConditionFailedError,
+		*persistence.ShardOwnershipLostError,
+		*persistence.InvalidPersistenceRequestError,
+		*persistence.TransactionSizeLimitError,
+		*serviceerror.ResourceExhausted,
+		*serviceerror.NotFound:
+		// Persistence failure that means the write was definitely not committed:
+		return false
+	default:
+		return true
+	}
+
 }
