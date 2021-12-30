@@ -662,8 +662,10 @@ func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                  id,
 		TaskQueue:           s.taskQueue,
-		WorkflowRunTimeout:  10 * time.Second,
+		// Intentionally use same timeout for WorkflowTaskTimeout and WorkflowRunTimeout so if workflow task is not
+		// correctly dispatched, it would time out which would fail the workflow and cause test to fail.
 		WorkflowTaskTimeout: 10 * time.Second,
+		WorkflowRunTimeout:  10 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
