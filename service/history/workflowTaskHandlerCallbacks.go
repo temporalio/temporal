@@ -496,17 +496,16 @@ Update_History_Loop:
 		createNewWorkflowTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
 		var newWorkflowTaskScheduledID int64
 		if createNewWorkflowTask {
+			bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
 			var newWorkflowTask *workflow.WorkflowTaskInfo
 			var err error
 			if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
 				newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(
-					request.GetReturnNewWorkflowTask(),
+					bypassTaskGeneration,
 					currentWorkflowTask.OriginalScheduledTime,
 				)
 			} else {
-				newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEvent(
-					request.GetReturnNewWorkflowTask(),
-				)
+				newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEvent(bypassTaskGeneration)
 			}
 			if err != nil {
 				return nil, err
@@ -514,7 +513,7 @@ Update_History_Loop:
 
 			newWorkflowTaskScheduledID = newWorkflowTask.ScheduleID
 			// skip transfer task for workflow task if request asking to return new workflow task
-			if request.GetReturnNewWorkflowTask() {
+			if bypassTaskGeneration {
 				// start the new workflow task if request asked to do so
 				// TODO: replace the poll request
 				_, _, err := msBuilder.AddWorkflowTaskStartedEvent(
