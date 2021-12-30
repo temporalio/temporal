@@ -226,27 +226,27 @@ func (mr *MockEngineMockRecorder) NotifyNewReplicationTasks(tasks interface{}) *
 }
 
 // NotifyNewTimerTasks mocks base method.
-func (m *MockEngine) NotifyNewTimerTasks(isGlobalNamespace bool, tasks []tasks.Task) {
+func (m *MockEngine) NotifyNewTimerTasks(clusterName string, tasks []tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTimerTasks", isGlobalNamespace, tasks)
+	m.ctrl.Call(m, "NotifyNewTimerTasks", clusterName, tasks)
 }
 
 // NotifyNewTimerTasks indicates an expected call of NotifyNewTimerTasks.
-func (mr *MockEngineMockRecorder) NotifyNewTimerTasks(isGlobalNamespace, tasks interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) NotifyNewTimerTasks(clusterName, tasks interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimerTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTimerTasks), isGlobalNamespace, tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimerTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTimerTasks), clusterName, tasks)
 }
 
 // NotifyNewTransferTasks mocks base method.
-func (m *MockEngine) NotifyNewTransferTasks(isGlobalNamespace bool, tasks []tasks.Task) {
+func (m *MockEngine) NotifyNewTransferTasks(clusterName string, tasks []tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTransferTasks", isGlobalNamespace, tasks)
+	m.ctrl.Call(m, "NotifyNewTransferTasks", clusterName, tasks)
 }
 
 // NotifyNewTransferTasks indicates an expected call of NotifyNewTransferTasks.
-func (mr *MockEngineMockRecorder) NotifyNewTransferTasks(isGlobalNamespace, tasks interface{}) *gomock.Call {
+func (mr *MockEngineMockRecorder) NotifyNewTransferTasks(clusterName, tasks interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTransferTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTransferTasks), isGlobalNamespace, tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTransferTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTransferTasks), clusterName, tasks)
 }
 
 // NotifyNewVisibilityTasks mocks base method.
