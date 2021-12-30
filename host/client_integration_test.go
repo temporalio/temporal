@@ -660,8 +660,8 @@ func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
 
 	id := "integration-test-unhandled-command-new-task"
 	workflowOptions := sdkclient.StartWorkflowOptions{
-		ID:                  id,
-		TaskQueue:           s.taskQueue,
+		ID:        id,
+		TaskQueue: s.taskQueue,
 		// Intentionally use same timeout for WorkflowTaskTimeout and WorkflowRunTimeout so if workflow task is not
 		// correctly dispatched, it would time out which would fail the workflow and cause test to fail.
 		WorkflowTaskTimeout: 10 * time.Second,
