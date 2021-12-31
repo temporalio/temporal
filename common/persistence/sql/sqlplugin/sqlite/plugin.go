@@ -126,9 +126,7 @@ func (p *plugin) createDBConnection(
 	db.MapperFunc(strcase.ToSnake)
 
 	// only suitable for in memory databases!
-	if _, ok := cfg.ConnectAttributes["setup"]; ok {
-		delete(cfg.ConnectAttributes, "setup")
-
+	if mode := cfg.ConnectAttributes["mode"]; mode == "memory" {
 		// creates temporary DB overlay in order to configure database and schemas
 		err := p.setupSQLiteDatabase(cfg, db)
 		if err != nil {
