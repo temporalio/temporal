@@ -45,18 +45,21 @@ type (
 	}
 )
 
+// WithConfig sets a custom configuration
 func WithConfig(cfg *config.Config) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.config = cfg
 	})
 }
 
+// WithConfigLoader sets a custom configuration load
 func WithConfigLoader(configDir string, env string, zone string) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.configDir, s.env, s.zone = configDir, env, zone
 	})
 }
 
+// ForServices indicates which supplied services (e.g. frontend, history, matching, worker) within the server to start
 func ForServices(names []string) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.serviceNames = make(map[string]struct{})
@@ -74,41 +77,42 @@ func InterruptOn(interruptCh <-chan interface{}) ServerOption {
 	})
 }
 
+// WithLogger sets a custom logger
 func WithLogger(logger log.Logger) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.logger = logger
 	})
 }
 
-// Sets optional logger for all frontend operations
+// WithNamespaceLogger sets an optional logger for all frontend operations
 func WithNamespaceLogger(namespaceLogger log.Logger) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.namespaceLogger = namespaceLogger
 	})
 }
 
-// Sets low level authorizer to allow/deny all API calls
+// WithAuthorizer sets a low level authorizer to allow/deny all API calls
 func WithAuthorizer(authorizer authorization.Authorizer) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.authorizer = authorizer
 	})
 }
 
-// Overrides default provider of TLS configuration
+// WithTLSConfigFactory overrides default provider of TLS configuration
 func WithTLSConfigFactory(tlsConfigProvider encryption.TLSConfigProvider) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.tlsConfigProvider = tlsConfigProvider
 	})
 }
 
-// Configures a role mapper for authorization
+// WithClaimMapper configures a role mapper for authorization
 func WithClaimMapper(claimMapper func(cfg *config.Config) authorization.ClaimMapper) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.claimMapper = claimMapper(s.config)
 	})
 }
 
-// Configures JWT audience getter for authorization
+// WithAudienceGetter configures JWT audience getter for authorization
 func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JWTAudienceMapper) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.audienceGetter = audienceGetter(s.config)
@@ -126,21 +130,21 @@ func WithCustomMetricsReporter(reporter interface{}) ServerOption {
 	})
 }
 
-// Set custom persistence service resolver which will convert service name or address value from config to another a....
+// WithPersistenceServiceResolver sets a custom persistence service resolver which will convert service name or address value from config to another address
 func WithPersistenceServiceResolver(r resolver.ServiceResolver) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.persistenceServiceResolver = r
 	})
 }
 
-// Set custom persistence service resolver which will convert service name or address value from config to another a....
+// WithElasticsearchHttpClient sets a custom HTTP client which is used to make requests to Elasticsearch
 func WithElasticsearchHttpClient(c *http.Client) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.elasticsearchHttpClient = c
 	})
 }
 
-// Set custom dynmaic config client
+// WithDynamicConfigClient sets custom dynamic config client for reading dynamic configuration.
 func WithDynamicConfigClient(c dynamicconfig.Client) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.dynamicConfigClient = c
@@ -163,7 +167,7 @@ func WithClientFactoryProvider(clientFactoryProvider client.FactoryProvider) Ser
 	})
 }
 
-// Set custom search attributes mapper which converts search attributes aliases to field names and vice versa.
+// WithSearchAttributesMapper sets a custom search attributes mapper which converts search attributes aliases to field names and vice versa.
 func WithSearchAttributesMapper(m searchattribute.Mapper) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.searchAttributesMapper = m
