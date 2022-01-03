@@ -28,160 +28,39 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/dgryski/go-farm"
 	"github.com/stretchr/testify/suite"
 )
 
 type (
 	idMutexSuite struct {
 		suite.Suite
-
-		cleanupLocks bool
-		numShards    uint32
-		idMutex      IDMutex
-	}
-
-	testIdentifier struct {
-		A string
-		B string
-		C string
 	}
 )
 
-const benchCleanupLocks = false
-
-func BenchmarkGolangMutex(b *testing.B) {
-	lock := &sync.Mutex{}
-	for i := 0; i < b.N; i++ {
-		lock.Lock()
-		lock.Unlock() //nolint:staticcheck
-	}
-}
-
-func BenchmarkIDMutex_String(b *testing.B) {
-	identifier := "random string"
-	idLock := NewIDMutex(32, func(key interface{}) uint32 {
-		id, ok := key.(string)
-		if !ok {
-			return 0
-		}
-		return farm.Fingerprint32([]byte(id))
-	}, benchCleanupLocks)
-
-	for i := 0; i < b.N; i++ {
-		unlock := idLock.LockID(identifier)
-		unlock()
-	}
-}
-
-func BenchmarkIDMutex_Struct(b *testing.B) {
-	identifier := testIdentifier{
-		A: "some random A",
-		B: "some random B",
-		C: "some random C",
-	}
-	idLock := NewIDMutex(32, func(key interface{}) uint32 {
-		id, ok := key.(testIdentifier)
-		if !ok {
-			return 0
-		}
-		return farm.Fingerprint32([]byte(id.A))
-	}, benchCleanupLocks)
-
-	for i := 0; i < b.N; i++ {
-		unlock := idLock.LockID(identifier)
-		unlock()
-	}
-}
-
-func BenchmarkIDMutex_StringConcurrent(b *testing.B) {
-	identifier := "random string"
-	idLock := NewIDMutex(32, func(key interface{}) uint32 {
-		id, ok := key.(string)
-		if !ok {
-			return 0
-		}
-		return farm.Fingerprint32([]byte(id))
-	}, benchCleanupLocks)
-
-	for i := 0; i < b.N; i++ {
-		counter := 0
-		iteration := 2000
-
-		waitGroupBegin := &sync.WaitGroup{}
-		waitGroupBegin.Add(1)
-
-		waitGroupEnd := &sync.WaitGroup{}
-		waitGroupEnd.Add(iteration)
-
-		fn := func() {
-			waitGroupBegin.Wait()
-
-			unlock := idLock.LockID(identifier)
-			counter++
-			unlock()
-
-			waitGroupEnd.Done()
-		}
-
-		for i := 0; i < iteration; i++ {
-			go fn()
-		}
-		waitGroupBegin.Done()
-		waitGroupEnd.Wait()
-	}
-}
-
 func TestIDMutexSuite(t *testing.T) {
 	s := new(idMutexSuite)
-	s.cleanupLocks = true
 	suite.Run(t, s)
-}
-
-func TestIDMutexSuiteWithoutCleanup(t *testing.T) {
-	s := new(idMutexSuite)
-	s.cleanupLocks = false
-	suite.Run(t, s)
-}
-
-func (s *idMutexSuite) SetupSuite() {
-}
-
-func (s *idMutexSuite) TearDownSuite() {
-
-}
-
-func (s *idMutexSuite) SetupTest() {
-	s.numShards = 32
-	s.idMutex = NewIDMutex(s.numShards, func(key interface{}) uint32 {
-		id, ok := key.(string)
-		if !ok {
-			return 0
-		}
-		return farm.Fingerprint32([]byte(id))
-	}, s.cleanupLocks)
-}
-
-func (s *idMutexSuite) TearDownTest() {
-
 }
 
 func (s *idMutexSuite) TestLockOnDiffIDs() {
+	idMutex := NewIDMutex()
+
 	identifier1 := "some random identifier 1"
 	identifier2 := "some random identifier 2"
 
-	unlock1 := s.idMutex.LockID(identifier1)
-	unlock2 := s.idMutex.LockID(identifier2)
+	unlock1 := idMutex.LockID(identifier1)
+	unlock2 := idMutex.LockID(identifier2)
 	unlock2()
 	unlock1()
 
-	unlock1 = s.idMutex.LockID(identifier1)
-	unlock2 = s.idMutex.LockID(identifier2)
+	unlock1 = idMutex.LockID(identifier1)
+	unlock2 = idMutex.LockID(identifier2)
 	unlock1()
 	unlock2()
 }
 
 func (s *idMutexSuite) TestLockOnSameID() {
+	idMutex := NewIDMutex()
 	count := 0
 	identifier := "some random identifier"
 
@@ -191,10 +70,10 @@ func (s *idMutexSuite) TestLockOnSameID() {
 	waitGroupEnd := &sync.WaitGroup{}
 	waitGroupEnd.Add(1)
 
-	unlock := s.idMutex.LockID(identifier)
+	unlock := idMutex.LockID(identifier)
 	go func() {
 		waitGroupBegin.Done()
-		unlock := s.idMutex.LockID(identifier)
+		unlock := idMutex.LockID(identifier)
 		s.Equal(1, count)
 		unlock()
 		waitGroupEnd.Done()
@@ -206,6 +85,7 @@ func (s *idMutexSuite) TestLockOnSameID() {
 }
 
 func (s *idMutexSuite) TestConcurrentAccess() {
+	idMutex := NewIDMutex()
 	counter := 0
 	identifier := "some random identifier"
 	iteration := 2000
@@ -219,7 +99,7 @@ func (s *idMutexSuite) TestConcurrentAccess() {
 	fn := func() {
 		waitGroupBegin.Wait()
 
-		unlock := s.idMutex.LockID(identifier)
+		unlock := idMutex.LockID(identifier)
 		counter++
 		unlock()
 
@@ -233,13 +113,4 @@ func (s *idMutexSuite) TestConcurrentAccess() {
 	waitGroupEnd.Wait()
 
 	s.Equal(iteration, counter)
-
-	if s.cleanupLocks {
-		impl := s.idMutex.(*idMutexImpl)
-		for i := uint32(0); i < s.numShards; i++ {
-			impl.shards[i].Lock()
-			s.Equal(0, len(impl.shards[i].mutexInfos))
-			impl.shards[i].Unlock()
-		}
-	}
 }

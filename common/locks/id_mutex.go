@@ -29,9 +29,6 @@ import (
 )
 
 type (
-	// HashFunc represents a hash function for string
-	HashFunc func(interface{}) uint32
-
 	// UnlockFunc unlocks a lock
 	UnlockFunc func()
 
@@ -40,78 +37,30 @@ type (
 		LockID(identifier interface{}) UnlockFunc
 	}
 
-	// idMutexShardImpl is the implementation of IDMutex shard
+	// idMutexImpl is the implementation of IDMutex
 	idMutexImpl struct {
-		numShards uint32
-		hashFn    HashFunc
-		shards    []*idMutexShardImpl
-		cleanup   bool
-	}
-
-	// idMutexShardImpl is the implementation of IDMutex shard
-	idMutexShardImpl struct {
-		sync.Mutex
-		mutexInfos map[interface{}]*mutexInfo
-	}
-
-	mutexInfo struct {
-		// actual lock
-		sync.Mutex
-		// how many callers are using this mutexInfo
-		// this is guarded by lock in idMutexShardImpl, not this lock
-		waitCount int
+		lock    sync.Mutex
+		mutexes map[interface{}]*sync.Mutex
 	}
 )
 
-// NewIDMutex create a new IDLock
-func NewIDMutex(numShards uint32, hashFn HashFunc, cleanupLocks bool) IDMutex {
-	impl := &idMutexImpl{
-		numShards: numShards,
-		hashFn:    hashFn,
-		shards:    make([]*idMutexShardImpl, numShards),
-		cleanup:   cleanupLocks,
+// NewIDMutex create a new IDMutex
+func NewIDMutex() IDMutex {
+	return &idMutexImpl{
+		mutexes: make(map[interface{}]*sync.Mutex),
 	}
-	for i := uint32(0); i < numShards; i++ {
-		impl.shards[i] = &idMutexShardImpl{
-			mutexInfos: make(map[interface{}]*mutexInfo),
-		}
-	}
-	return impl
 }
 
 // LockID lock by specific identifier
-func (idMutex *idMutexImpl) LockID(identifier interface{}) UnlockFunc {
-	shard := idMutex.shards[idMutex.getShardIndex(identifier)]
-
-	shard.Lock()
-	mi, ok := shard.mutexInfos[identifier]
+func (idm *idMutexImpl) LockID(identifier interface{}) UnlockFunc {
+	idm.lock.Lock()
+	mutex, ok := idm.mutexes[identifier]
 	if !ok {
-		mi = new(mutexInfo)
-		shard.mutexInfos[identifier] = mi
+		mutex = new(sync.Mutex)
+		idm.mutexes[identifier] = mutex
 	}
+	idm.lock.Unlock()
 
-	if !idMutex.cleanup {
-		shard.Unlock()
-		mi.Lock()
-		return mi.Unlock
-	}
-
-	mi.waitCount++
-	shard.Unlock()
-	mi.Lock()
-
-	return func() {
-		mi.Unlock()
-		shard.Lock()
-		defer shard.Unlock()
-		if mi.waitCount == 1 {
-			delete(shard.mutexInfos, identifier)
-		} else {
-			mi.waitCount--
-		}
-	}
-}
-
-func (idMutex *idMutexImpl) getShardIndex(key interface{}) uint32 {
-	return idMutex.hashFn(key) % idMutex.numShards
+	mutex.Lock()
+	return mutex.Unlock
 }

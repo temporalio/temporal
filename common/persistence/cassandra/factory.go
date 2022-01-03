@@ -48,12 +48,6 @@ type (
 	}
 )
 
-const (
-	// shardLockIDMutexShards is the number of internal shards to use for
-	// IDMutex (which history shards are hashed down to).
-	shardLockIDMutexShards = 4
-)
-
 // NewFactory returns an instance of a factory object which can be used to create
 // data stores that are backed by cassandra
 func NewFactory(
@@ -83,7 +77,7 @@ func NewFactoryFromSession(
 		session:     session,
 		// Serialize all LWTs on executions table ourselves to avoid Cassandra timeouts due to CAS contention.
 		// Key is shardID (partition key of table).
-		shardLock: locks.NewIDMutex(shardLockIDMutexShards, shardIDToLockShard, false),
+		shardLock: locks.NewIDMutex(),
 	}
 }
 
@@ -122,12 +116,4 @@ func (f *Factory) Close() {
 	f.Lock()
 	defer f.Unlock()
 	f.session.Close()
-}
-
-func shardIDToLockShard(i interface{}) uint32 {
-	shardID, ok := i.(int32)
-	if !ok {
-		panic("shardID is not int32")
-	}
-	return uint32(shardID)
 }
