@@ -76,7 +76,6 @@ type (
 	Handler struct {
 		status int32
 
-		controller                  *shard.ControllerImpl
 		tokenSerializer             common.TaskTokenSerializer
 		startWG                     sync.WaitGroup
 		config                      *configs.Config
@@ -104,6 +103,7 @@ type (
 		clusterMetadata             cluster.Metadata
 		archivalMetadata            archiver.ArchivalMetadata
 		hostInfoProvider            resource.HostInfoProvider
+		controller                  *shard.ControllerImpl
 	}
 
 	NewHandlerArgs struct {
@@ -130,6 +130,7 @@ type (
 		ArchivalMetadata            archiver.ArchivalMetadata
 		HostInfoProvider            resource.HostInfoProvider
 		ArchiverProvider            provider.ArchiverProvider
+		ShardController             *shard.ControllerImpl
 	}
 )
 
@@ -184,6 +185,7 @@ func NewHandler(args NewHandlerArgs) *Handler {
 		archivalMetadata:            args.ArchivalMetadata,
 		hostInfoProvider:            args.HostInfoProvider,
 		archiverProvider:            args.ArchiverProvider,
+		controller:                  args.ShardController,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -210,26 +212,6 @@ func (h *Handler) Start() {
 
 	h.replicationTaskFetchers.Start()
 
-	h.controller = shard.NewController(
-		h,
-		h.config,
-		h.logger,
-		h.throttledLogger,
-		h.persistenceExecutionManager,
-		h.persistenceShardManager,
-		h.clientBean,
-		h.historyClient,
-		h.historyServiceResolver,
-		h.metricsClient,
-		h.payloadSerializer,
-		h.timeSource,
-		h.namespaceRegistry,
-		h.saProvider,
-		h.saMapper,
-		h.clusterMetadata,
-		h.archivalMetadata,
-		h.hostInfoProvider,
-	)
 	h.eventNotifier = events.NewNotifier(h.timeSource, h.metricsClient, h.config.GetShardID)
 	// events notifier must starts before controller
 	h.eventNotifier.Start()

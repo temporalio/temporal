@@ -30,7 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
@@ -48,8 +47,6 @@ import (
 // Service represents the history service
 type (
 	Service struct {
-		self *fx.App
-
 		status            int32
 		handler           *Handler
 		visibilityManager manager.VisibilityManager

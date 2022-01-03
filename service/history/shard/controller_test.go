@@ -43,6 +43,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -80,6 +81,41 @@ type (
 	}
 )
 
+func NewTestController(
+	engineFactory *MockEngineFactory,
+	config *configs.Config,
+	resource *resource.Test,
+	hostInfoProvider *resource.MockHostInfoProvider,
+) *ControllerImpl {
+	return &ControllerImpl{
+		config:                      config,
+		logger:                      resource.GetLogger(),
+		throttledLogger:             resource.GetThrottledLogger(),
+		contextTaggedLogger:         log.With(resource.GetLogger(), tag.ComponentShardController, tag.Address(resource.GetHostInfo().Identity())),
+		persistenceExecutionManager: resource.GetExecutionManager(),
+		persistenceShardManager:     resource.GetShardManager(),
+		clientBean:                  resource.GetClientBean(),
+		historyClient:               resource.GetHistoryClient(),
+		historyServiceResolver:      resource.GetHistoryServiceResolver(),
+		metricsClient:               resource.GetMetricsClient(),
+		payloadSerializer:           resource.GetPayloadSerializer(),
+		timeSource:                  resource.GetTimeSource(),
+		namespaceRegistry:           resource.GetNamespaceRegistry(),
+		saProvider:                  resource.GetSearchAttributesProvider(),
+		saMapper:                    resource.GetSearchAttributesMapper(),
+		clusterMetadata:             resource.GetClusterMetadata(),
+		archivalMetadata:            resource.GetArchivalMetadata(),
+		hostInfoProvider:            hostInfoProvider,
+
+		status:             common.DaemonStatusInitialized,
+		membershipUpdateCh: make(chan *membership.ChangedEvent, 10),
+		engineFactory:      engineFactory,
+		shutdownCh:         make(chan struct{}),
+		metricsScope:       resource.GetMetricsClient().Scope(metrics.HistoryShardControllerScope),
+		historyShards:      make(map[int32]*ContextImpl),
+	}
+}
+
 func TestShardControllerSuite(t *testing.T) {
 	s := new(controllerSuite)
 	suite.Run(t, s)
@@ -103,24 +139,10 @@ func (s *controllerSuite) SetupTest() {
 	s.logger = s.mockResource.Logger
 	s.config = tests.NewDynamicConfig()
 
-	s.shardController = NewController(
+	s.shardController = NewTestController(
 		s.mockEngineFactory,
 		s.config,
-		s.mockResource.Logger,
-		s.mockResource.GetThrottledLogger(),
-		s.mockResource.GetExecutionManager(),
-		s.mockResource.GetShardManager(),
-		s.mockResource.GetClientBean(),
-		s.mockResource.GetHistoryClient(),
-		s.mockResource.GetHistoryServiceResolver(),
-		s.mockResource.GetMetricsClient(),
-		s.mockResource.GetPayloadSerializer(),
-		s.mockResource.GetTimeSource(),
-		s.mockResource.GetNamespaceRegistry(),
-		s.mockResource.GetSearchAttributesProvider(),
-		s.mockResource.GetSearchAttributesMapper(),
-		s.mockResource.GetClusterMetadata(),
-		s.mockResource.GetArchivalMetadata(),
+		s.mockResource,
 		s.mockHostInfoProvider,
 	)
 }
@@ -476,24 +498,10 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 func (s *controllerSuite) TestHistoryEngineClosed() {
 	numShards := int32(4)
 	s.config.NumberOfShards = numShards
-	s.shardController = NewController(
+	s.shardController = NewTestController(
 		s.mockEngineFactory,
 		s.config,
-		s.mockResource.Logger,
-		s.mockResource.GetThrottledLogger(),
-		s.mockResource.GetExecutionManager(),
-		s.mockResource.GetShardManager(),
-		s.mockResource.GetClientBean(),
-		s.mockResource.GetHistoryClient(),
-		s.mockResource.GetHistoryServiceResolver(),
-		s.mockResource.GetMetricsClient(),
-		s.mockResource.GetPayloadSerializer(),
-		s.mockResource.GetTimeSource(),
-		s.mockResource.GetNamespaceRegistry(),
-		s.mockResource.GetSearchAttributesProvider(),
-		s.mockResource.GetSearchAttributesMapper(),
-		s.mockResource.GetClusterMetadata(),
-		s.mockResource.GetArchivalMetadata(),
+		s.mockResource,
 		s.mockHostInfoProvider,
 	)
 	historyEngines := make(map[int32]*MockEngine)
@@ -586,24 +594,10 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 func (s *controllerSuite) TestShardControllerClosed() {
 	numShards := int32(4)
 	s.config.NumberOfShards = numShards
-	s.shardController = NewController(
+	s.shardController = NewTestController(
 		s.mockEngineFactory,
 		s.config,
-		s.mockResource.Logger,
-		s.mockResource.GetThrottledLogger(),
-		s.mockResource.GetExecutionManager(),
-		s.mockResource.GetShardManager(),
-		s.mockResource.GetClientBean(),
-		s.mockResource.GetHistoryClient(),
-		s.mockResource.GetHistoryServiceResolver(),
-		s.mockResource.GetMetricsClient(),
-		s.mockResource.GetPayloadSerializer(),
-		s.mockResource.GetTimeSource(),
-		s.mockResource.GetNamespaceRegistry(),
-		s.mockResource.GetSearchAttributesProvider(),
-		s.mockResource.GetSearchAttributesMapper(),
-		s.mockResource.GetClusterMetadata(),
-		s.mockResource.GetArchivalMetadata(),
+		s.mockResource,
 		s.mockHostInfoProvider,
 	)
 
