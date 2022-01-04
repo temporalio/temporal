@@ -109,32 +109,32 @@ var (
 )
 
 type (
-	NamesapceRateBurstImpl struct {
+	NamespaceRateBurstImpl struct {
 		namespaceName string
 		rateFn        dynamicconfig.FloatPropertyFnWithNamespaceFilter
 		burstFn       dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 )
 
-var _ quotas.RateBurst = (*NamesapceRateBurstImpl)(nil)
+var _ quotas.RateBurst = (*NamespaceRateBurstImpl)(nil)
 
 func NewNamespaceRateBurst(
 	namespaceName string,
 	rateFn dynamicconfig.FloatPropertyFnWithNamespaceFilter,
 	burstFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
-) *NamesapceRateBurstImpl {
-	return &NamesapceRateBurstImpl{
+) *NamespaceRateBurstImpl {
+	return &NamespaceRateBurstImpl{
 		namespaceName: namespaceName,
 		rateFn:        rateFn,
 		burstFn:       burstFn,
 	}
 }
 
-func (c *NamesapceRateBurstImpl) Rate() float64 {
+func (c *NamespaceRateBurstImpl) Rate() float64 {
 	return c.rateFn(c.namespaceName)
 }
 
-func (c *NamesapceRateBurstImpl) Burst() int {
+func (c *NamespaceRateBurstImpl) Burst() int {
 	return c.burstFn(c.namespaceName)
 }
 

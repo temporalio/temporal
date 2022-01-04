@@ -32,6 +32,8 @@ import (
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
@@ -40,223 +42,201 @@ var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
 type metricClient struct {
 	client        matchingservice.MatchingServiceClient
 	metricsClient metrics.Client
+	logger        log.Logger
 }
 
 // NewMetricClient creates a new instance of matchingservice.MatchingServiceClient that emits metrics
-func NewMetricClient(client matchingservice.MatchingServiceClient, metricsClient metrics.Client) matchingservice.MatchingServiceClient {
+func NewMetricClient(
+	client matchingservice.MatchingServiceClient,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) matchingservice.MatchingServiceClient {
 	return &metricClient{
 		client:        client,
 		metricsClient: metricsClient,
+		logger:        logger,
 	}
 }
 
 func (c *metricClient) AddActivityTask(
 	ctx context.Context,
 	request *matchingservice.AddActivityTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.AddActivityTaskResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.AddActivityTaskResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddActivityTaskScope, metrics.ClientLatency)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientAddActivityTaskScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
 	c.emitForwardedSourceStats(
-		metrics.MatchingClientAddActivityTaskScope,
+		scope,
 		request.GetForwardedSource(),
 		request.TaskQueue,
 	)
 
-	resp, err := c.client.AddActivityTask(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientAddActivityTaskScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.AddActivityTask(ctx, request, opts...)
 }
 
 func (c *metricClient) AddWorkflowTask(
 	ctx context.Context,
 	request *matchingservice.AddWorkflowTaskRequest,
-	opts ...grpc.CallOption) (*matchingservice.AddWorkflowTaskResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientLatency)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientAddWorkflowTaskScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
 	c.emitForwardedSourceStats(
-		metrics.MatchingClientAddWorkflowTaskScope,
+		scope,
 		request.GetForwardedSource(),
 		request.TaskQueue,
 	)
 
-	resp, err := c.client.AddWorkflowTask(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientAddWorkflowTaskScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.AddWorkflowTask(ctx, request, opts...)
 }
 
 func (c *metricClient) PollActivityTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollActivityTaskQueueRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollActivityTaskQueueResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientLatency)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientPollActivityTaskQueueScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
 	if request.PollRequest != nil {
 		c.emitForwardedSourceStats(
-			metrics.MatchingClientPollActivityTaskQueueScope,
+			scope,
 			request.GetForwardedSource(),
 			request.PollRequest.TaskQueue,
 		)
 	}
 
-	resp, err := c.client.PollActivityTaskQueue(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollActivityTaskQueueScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.PollActivityTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) PollWorkflowTaskQueue(
 	ctx context.Context,
 	request *matchingservice.PollWorkflowTaskQueueRequest,
-	opts ...grpc.CallOption) (*matchingservice.PollWorkflowTaskQueueResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientLatency)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientPollWorkflowTaskQueueScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
 	if request.PollRequest != nil {
 		c.emitForwardedSourceStats(
-			metrics.MatchingClientPollWorkflowTaskQueueScope,
+			scope,
 			request.GetForwardedSource(),
 			request.PollRequest.TaskQueue,
 		)
 	}
 
-	resp, err := c.client.PollWorkflowTaskQueue(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientPollWorkflowTaskQueueScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.PollWorkflowTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) QueryWorkflow(
 	ctx context.Context,
 	request *matchingservice.QueryWorkflowRequest,
-	opts ...grpc.CallOption) (*matchingservice.QueryWorkflowResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.QueryWorkflowResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.ClientRequests)
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientQueryWorkflowScope, metrics.ClientLatency)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientQueryWorkflowScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
 	c.emitForwardedSourceStats(
-		metrics.MatchingClientQueryWorkflowScope,
+		scope,
 		request.GetForwardedSource(),
 		request.TaskQueue,
 	)
 
-	resp, err := c.client.QueryWorkflow(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientQueryWorkflowScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.QueryWorkflow(ctx, request, opts...)
 }
 
 func (c *metricClient) RespondQueryTaskCompleted(
 	ctx context.Context,
 	request *matchingservice.RespondQueryTaskCompletedRequest,
-	opts ...grpc.CallOption) (*matchingservice.RespondQueryTaskCompletedResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientRespondQueryTaskCompletedScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.ClientLatency)
-	resp, err := c.client.RespondQueryTaskCompleted(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientRespondQueryTaskCompletedScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
 
 func (c *metricClient) CancelOutstandingPoll(
 	ctx context.Context,
 	request *matchingservice.CancelOutstandingPollRequest,
-	opts ...grpc.CallOption) (*matchingservice.CancelOutstandingPollResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientCancelOutstandingPollScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientCancelOutstandingPollScope, metrics.ClientLatency)
-	resp, err := c.client.CancelOutstandingPoll(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientCancelOutstandingPollScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.CancelOutstandingPoll(ctx, request, opts...)
 }
 
 func (c *metricClient) DescribeTaskQueue(
 	ctx context.Context,
 	request *matchingservice.DescribeTaskQueueRequest,
-	opts ...grpc.CallOption) (*matchingservice.DescribeTaskQueueResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientDescribeTaskQueueScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientLatency)
-	resp, err := c.client.DescribeTaskQueue(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientDescribeTaskQueueScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
 
 func (c *metricClient) ListTaskQueuePartitions(
 	ctx context.Context,
 	request *matchingservice.ListTaskQueuePartitionsRequest,
-	opts ...grpc.CallOption) (*matchingservice.ListTaskQueuePartitionsResponse, error) {
+	opts ...grpc.CallOption,
+) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
 
-	c.metricsClient.IncCounter(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientRequests)
+	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientListTaskQueuePartitionsScope)
+	defer c.finishMetricsRecording(scope, stopwatch, retError)
 
-	sw := c.metricsClient.StartTimer(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientLatency)
-	resp, err := c.client.ListTaskQueuePartitions(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.MatchingClientListTaskQueuePartitionsScope, metrics.ClientFailures)
-	}
-
-	return resp, err
+	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
-func (c *metricClient) emitForwardedSourceStats(scope int, forwardedFrom string, taskQueue *taskqueuepb.TaskQueue) {
+func (c *metricClient) emitForwardedSourceStats(
+	scope metrics.Scope,
+	forwardedFrom string,
+	taskQueue *taskqueuepb.TaskQueue,
+) {
 	if taskQueue == nil {
 		return
 	}
+
 	isChildPartition := strings.HasPrefix(taskQueue.GetName(), taskQueuePartitionPrefix)
 	switch {
 	case forwardedFrom != "":
-		c.metricsClient.IncCounter(scope, metrics.MatchingClientForwardedCounter)
+		scope.IncCounter(metrics.MatchingClientForwardedCounter)
 	default:
 		if isChildPartition {
-			c.metricsClient.IncCounter(scope, metrics.MatchingClientInvalidTaskQueueName)
+			scope.IncCounter(metrics.MatchingClientInvalidTaskQueueName)
 		}
 	}
+}
+
+func (c *metricClient) startMetricsRecording(
+	metricScope int,
+) (metrics.Scope, metrics.Stopwatch) {
+	scope := c.metricsClient.Scope(metricScope)
+	scope.IncCounter(metrics.ClientRequests)
+	stopwatch := scope.StartTimer(metrics.ClientLatency)
+	return scope, stopwatch
+}
+
+func (c *metricClient) finishMetricsRecording(
+	scope metrics.Scope,
+	stopwatch metrics.Stopwatch,
+	err error,
+) {
+	if err != nil {
+		c.logger.Error("matching client encountered error", tag.Error(err))
+		scope.IncCounter(metrics.ClientFailures)
+	}
+	stopwatch.Stop()
 }
