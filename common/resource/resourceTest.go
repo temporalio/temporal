@@ -252,7 +252,8 @@ func (s *Test) GetHostInfoProvider() HostInfoProvider {
 type testResourceHostInfoProvider struct {
 	*Test
 }
-func (t testResourceHostInfoProvider) Start() error { return nil }
+
+func (t testResourceHostInfoProvider) Start() error                   { return nil }
 func (t testResourceHostInfoProvider) HostInfo() *membership.HostInfo { return t.GetHostInfo() }
 
 // GetClusterMetadata for testing

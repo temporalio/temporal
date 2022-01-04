@@ -57,7 +57,7 @@ func NewTestContextWithTimeSource(
 	timeSource clock.TimeSource,
 ) *ContextTest {
 	result := NewTestContext(ctrl, shardInfo, config)
-	result.d.TimeSource = timeSource
+	result.TimeSource = timeSource
 	result.Resource.TimeSource = timeSource
 	return result
 }
@@ -72,7 +72,7 @@ func NewTestContext(
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	hostIdentity := resource.GetHostInfo().Identity()
 	shard := &ContextImpl{
-		d: ShardControllerDeps{
+		ShardControllerDeps: ShardControllerDeps{
 			Config:                      config,
 			Logger:                      resource.GetLogger(),
 			ThrottledLogger:             resource.GetThrottledLogger(),
