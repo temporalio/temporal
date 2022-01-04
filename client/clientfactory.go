@@ -30,6 +30,7 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -147,7 +148,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	clientCache := common.NewClientCache(keyResolver, clientProvider)
 	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
 	if cf.metricsClient != nil {
-		client = history.NewMetricClient(client, cf.metricsClient)
+		client = history.NewMetricClient(client, cf.metricsClient, cf.logger)
 	}
 	return client, nil
 }
@@ -175,7 +176,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	)
 
 	if cf.metricsClient != nil {
-		client = matching.NewMetricClient(client, cf.metricsClient)
+		client = matching.NewMetricClient(client, cf.metricsClient, cf.logger)
 	}
 	return client, nil
 
