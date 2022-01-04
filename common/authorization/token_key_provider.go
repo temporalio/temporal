@@ -35,6 +35,7 @@ type TokenKeyProvider interface {
 	EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error)
 	HmacKey(alg string, kid string) ([]byte, error)
 	RsaKey(alg string, kid string) (*rsa.PublicKey, error)
+	SupportedMethods() []string
 	Close()
 }
 

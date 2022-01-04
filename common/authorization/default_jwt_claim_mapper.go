@@ -130,7 +130,7 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 
 func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audience string) (jwt.MapClaims, error) {
 
-	parser := jwt.NewParser()
+	parser := jwt.NewParser(jwt.WithValidMethods(keyProvider.SupportedMethods()))
 	token, err := parser.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 
 		kid, ok := token.Header["kid"].(string)

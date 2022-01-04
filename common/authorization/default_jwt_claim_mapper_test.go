@@ -270,6 +270,8 @@ type (
 	}
 )
 
+var _ TokenKeyProvider = (*tokenGenerator)(nil)
+
 func newTokenGenerator() *tokenGenerator {
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -355,6 +357,9 @@ func (tg *tokenGenerator) HmacKey(alg string, kid string) ([]byte, error) {
 }
 func (tg *tokenGenerator) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
 	return tg.rsaPublicKey, nil
+}
+func (tg *tokenGenerator) SupportedMethods() []string {
+	return []string{"RS256", "ES256"}
 }
 func (tg *tokenGenerator) Close() {
 }

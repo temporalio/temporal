@@ -83,7 +83,7 @@ func (a *defaultTokenKeyProvider) Close() {
 }
 
 func (a *defaultTokenKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
-	if !strings.EqualFold(alg, "rs256") {
+	if !strings.EqualFold(alg, "RS256") {
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
 
@@ -97,7 +97,7 @@ func (a *defaultTokenKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey
 }
 
 func (a *defaultTokenKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
-	if !strings.EqualFold(alg, "es256") {
+	if !strings.EqualFold(alg, "ES256") {
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
 
@@ -108,6 +108,10 @@ func (a *defaultTokenKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.Publi
 		return nil, fmt.Errorf("ECDSA key not found for key ID: %s", kid)
 	}
 	return key, nil
+}
+
+func (a *defaultTokenKeyProvider) SupportedMethods() []string {
+	return []string{"RS256", "ES256"}
 }
 
 func (a *defaultTokenKeyProvider) timerCallback() {
