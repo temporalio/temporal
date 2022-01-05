@@ -359,7 +359,7 @@ func (tg *tokenGenerator) RsaKey(alg string, kid string) (*rsa.PublicKey, error)
 	return tg.rsaPublicKey, nil
 }
 func (tg *tokenGenerator) SupportedMethods() []string {
-	return []string{"RS256", "ES256"}
+	return []string{jwt.SigningMethodRS256.Name, jwt.SigningMethodES256.Name}
 }
 func (tg *tokenGenerator) Close() {
 }
