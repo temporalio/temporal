@@ -245,16 +245,18 @@ func (s *IntegrationBase) getLastEvent(namespace string, execution *commonpb.Wor
 	return events[len(events)-1]
 }
 
-func (s *IntegrationBase) decodePayloadsString(ps *commonpb.Payloads) (r string) {
+func (s *IntegrationBase) decodePayloadsString(ps *commonpb.Payloads) string {
 	s.T().Helper()
+	var r string
 	s.NoError(payloads.Decode(ps, &r))
-	return
+	return r
 }
 
-func (s *IntegrationBase) decodePayloadsInt(ps *commonpb.Payloads) (r int) {
+func (s *IntegrationBase) decodePayloadsInt(ps *commonpb.Payloads) int {
 	s.T().Helper()
+	var r int
 	s.NoError(payloads.Decode(ps, &r))
-	return
+	return r
 }
 
 func (s *IntegrationBase) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
