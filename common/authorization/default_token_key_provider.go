@@ -34,6 +34,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/golang-jwt/jwt/v4"
 	"gopkg.in/square/go-jose.v2"
 
 	"go.temporal.io/server/common/config"
@@ -83,7 +84,7 @@ func (a *defaultTokenKeyProvider) Close() {
 }
 
 func (a *defaultTokenKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
-	if !strings.EqualFold(alg, "rs256") {
+	if !strings.EqualFold(alg, jwt.SigningMethodRS256.Name) {
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
 
@@ -97,7 +98,7 @@ func (a *defaultTokenKeyProvider) RsaKey(alg string, kid string) (*rsa.PublicKey
 }
 
 func (a *defaultTokenKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.PublicKey, error) {
-	if !strings.EqualFold(alg, "es256") {
+	if !strings.EqualFold(alg, jwt.SigningMethodES256.Name) {
 		return nil, fmt.Errorf("unexpected signing algorithm: %s", alg)
 	}
 
@@ -108,6 +109,10 @@ func (a *defaultTokenKeyProvider) EcdsaKey(alg string, kid string) (*ecdsa.Publi
 		return nil, fmt.Errorf("ECDSA key not found for key ID: %s", kid)
 	}
 	return key, nil
+}
+
+func (a *defaultTokenKeyProvider) SupportedMethods() []string {
+	return []string{jwt.SigningMethodRS256.Name, jwt.SigningMethodES256.Name}
 }
 
 func (a *defaultTokenKeyProvider) timerCallback() {

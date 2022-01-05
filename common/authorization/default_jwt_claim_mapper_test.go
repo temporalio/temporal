@@ -34,7 +34,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dgrijalva/jwt-go/v4"
+	"github.com/golang-jwt/jwt/v4"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -270,6 +270,8 @@ type (
 	}
 )
 
+var _ TokenKeyProvider = (*tokenGenerator)(nil)
+
 func newTokenGenerator() *tokenGenerator {
 
 	rsaKey, err := rsa.GenerateKey(rand.Reader, 2048)
@@ -292,11 +294,11 @@ func newTokenGenerator() *tokenGenerator {
 type (
 	CustomClaims struct {
 		Permissions []string `json:"permissions"`
-		jwt.StandardClaims
+		jwt.RegisteredClaims
 	}
 )
 
-func (CustomClaims) Valid(*jwt.ValidationHelper) error {
+func (CustomClaims) Valid() error {
 	return nil
 }
 
@@ -311,8 +313,8 @@ func (tg *tokenGenerator) generateECDSAToken(subject string, permissions []strin
 func (tg *tokenGenerator) generateToken(alg keyAlgorithm, subject string, permissions []string, options errorTestOptions) (string, error) {
 	claims := CustomClaims{
 		permissions,
-		jwt.StandardClaims{
-			ExpiresAt: jwt.At(time.Now().Add(time.Hour)),
+		jwt.RegisteredClaims{
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(time.Hour)),
 			Issuer:    "test",
 			Audience:  []string{"test-audience"},
 		},
@@ -355,6 +357,9 @@ func (tg *tokenGenerator) HmacKey(alg string, kid string) ([]byte, error) {
 }
 func (tg *tokenGenerator) RsaKey(alg string, kid string) (*rsa.PublicKey, error) {
 	return tg.rsaPublicKey, nil
+}
+func (tg *tokenGenerator) SupportedMethods() []string {
+	return []string{jwt.SigningMethodRS256.Name, jwt.SigningMethodES256.Name}
 }
 func (tg *tokenGenerator) Close() {
 }
