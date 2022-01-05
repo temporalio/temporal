@@ -1,5 +1,7 @@
 # Build docker image
 
+Temporal builds 4 Docker images with [every release](https://github.com/temporalio/temporal/releases): Server, Server [with Auto Setup](https://docs.temporal.io/blog/auto-setup), tctl CLI, and Admin-Tools. There are [other builds e.g. for CI](https://hub.docker.com/u/temporalio) as well.
+
 ## Prerequisites
 
 To build docker image:
