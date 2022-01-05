@@ -79,7 +79,7 @@ type (
 
 	ContextImpl struct {
 		// These fields are constant:
-		ShardControllerDeps
+		shardControllerDeps
 		shardID             int32
 		eventsCache         events.Cache
 		closeCallback       func(*ContextImpl)
@@ -1630,7 +1630,7 @@ func (s *ContextImpl) acquireShard(newMaxReadLevel int64) {
 
 func newContext(
 	shardID int32,
-	deps ShardControllerDeps,
+	deps shardControllerDeps,
 	factory EngineFactory,
 	closeCallback func(*ContextImpl),
 ) (*ContextImpl, error) {
@@ -1640,7 +1640,7 @@ func newContext(
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 
 	shardContext := &ContextImpl{
-		ShardControllerDeps: deps,
+		shardControllerDeps: deps,
 		state:               contextStateInitialized,
 		shardID:             shardID,
 		closeCallback:       closeCallback,

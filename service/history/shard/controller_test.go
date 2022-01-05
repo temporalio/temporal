@@ -89,7 +89,7 @@ func NewTestController(
 ) *ControllerImpl {
 	hostIdentity := resource.GetHostInfo().Identity()
 	return &ControllerImpl{
-		d: ShardControllerDeps{
+		d: shardControllerDeps{
 			Config:                      config,
 			Logger:                      resource.GetLogger(),
 			ThrottledLogger:             resource.GetThrottledLogger(),

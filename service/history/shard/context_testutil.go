@@ -72,7 +72,7 @@ func NewTestContext(
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	hostIdentity := resource.GetHostInfo().Identity()
 	shard := &ContextImpl{
-		ShardControllerDeps: ShardControllerDeps{
+		shardControllerDeps: shardControllerDeps{
 			Config:                      config,
 			Logger:                      resource.GetLogger(),
 			ThrottledLogger:             resource.GetThrottledLogger(),

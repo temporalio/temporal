@@ -48,7 +48,7 @@ var Module = fx.Options(
 	fx.Provide(ShardControllerProvider),
 )
 
-type ShardControllerDeps struct {
+type shardControllerDeps struct {
 	fx.In
 
 	Config                      *configs.Config
@@ -70,7 +70,7 @@ type ShardControllerDeps struct {
 	HostInfoProvider            resource.HostInfoProvider
 }
 
-func ShardControllerProvider(d ShardControllerDeps) *ControllerImpl {
+func ShardControllerProvider(d shardControllerDeps) *ControllerImpl {
 	return &ControllerImpl{
 		d:                  d,
 		status:             common.DaemonStatusInitialized,

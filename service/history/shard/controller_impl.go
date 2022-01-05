@@ -49,7 +49,7 @@ const (
 
 type (
 	ControllerImpl struct {
-		d ShardControllerDeps
+		d shardControllerDeps
 
 		status              int32
 		membershipUpdateCh  chan *membership.ChangedEvent
