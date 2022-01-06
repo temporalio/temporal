@@ -27,6 +27,8 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
@@ -36,6 +38,10 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
+)
+
+var (
+	errUnknownTieredStorageTask = serviceerror.NewInternal("unknown tiered storage task")
 )
 
 type (
@@ -92,7 +98,7 @@ func (t *tieredStorageQueueTaskExecutor) execute(
 	case *tasks.TieredStorageTask:
 		return t.processTieredStorageTask(ctx, task)
 	default:
-		return errUnknownVisibilityTask
+		return errUnknownTieredStorageTask
 	}
 }
 
