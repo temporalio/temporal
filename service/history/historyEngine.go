@@ -1251,7 +1251,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				if ai.RetryLastFailure != nil {
 					p.LastFailure = ai.RetryLastFailure
 				}
-				if ai.RetryLastWorkerIdentity != "" {
+				if p.LastWorkerIdentity == "" && ai.RetryLastWorkerIdentity != "" {
 					p.LastWorkerIdentity = ai.RetryLastWorkerIdentity
 				}
 			} else {
