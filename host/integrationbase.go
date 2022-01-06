@@ -25,6 +25,8 @@
 package host
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"time"
@@ -43,6 +45,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -234,6 +237,40 @@ func (s *IntegrationBase) getHistory(namespace string, execution *commonpb.Workf
 	}
 
 	return events
+}
+
+func (s *IntegrationBase) getLastEvent(namespace string, execution *commonpb.WorkflowExecution) *historypb.HistoryEvent {
+	events := s.getHistory(namespace, execution)
+	s.Require().NotEmpty(events)
+	return events[len(events)-1]
+}
+
+func (s *IntegrationBase) decodePayloadsString(ps *commonpb.Payloads) string {
+	s.T().Helper()
+	var r string
+	s.NoError(payloads.Decode(ps, &r))
+	return r
+}
+
+func (s *IntegrationBase) decodePayloadsInt(ps *commonpb.Payloads) int {
+	s.T().Helper()
+	var r int
+	s.NoError(payloads.Decode(ps, &r))
+	return r
+}
+
+func (s *IntegrationBase) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
+	s.T().Helper()
+	var buf []byte
+	s.NoError(payloads.Decode(ps, &buf))
+	s.NoError(binary.Read(bytes.NewReader(buf), binary.LittleEndian, &r))
+	return
+}
+
+func (s *IntegrationBase) DurationNear(value, target, tolerance time.Duration) {
+	s.T().Helper()
+	s.Greater(value, target-tolerance)
+	s.Less(value, target+tolerance)
 }
 
 // To register archival namespace we can't use frontend API as the retention period is set to 0 for testing,

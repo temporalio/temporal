@@ -25,8 +25,6 @@
 package host
 
 import (
-	"bytes"
-	"encoding/binary"
 	"flag"
 	"testing"
 
@@ -34,7 +32,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/payloads"
 )
 
 type (
@@ -75,24 +72,4 @@ func (s *integrationSuite) sendSignal(namespace string, execution *commonpb.Work
 	})
 
 	return err
-}
-
-func (s *integrationSuite) decodePayloadsString(ps *commonpb.Payloads) (r string) {
-	s.T().Helper()
-	s.NoError(payloads.Decode(ps, &r))
-	return
-}
-
-func (s *integrationSuite) decodePayloadsInt(ps *commonpb.Payloads) (r int) {
-	s.T().Helper()
-	s.NoError(payloads.Decode(ps, &r))
-	return
-}
-
-func (s *integrationSuite) decodePayloadsByteSliceInt32(ps *commonpb.Payloads) (r int32) {
-	s.T().Helper()
-	var buf []byte
-	s.NoError(payloads.Decode(ps, &buf))
-	s.NoError(binary.Read(bytes.NewReader(buf), binary.LittleEndian, &r))
-	return
 }
