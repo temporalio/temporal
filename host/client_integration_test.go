@@ -525,7 +525,7 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 		ctx4 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ActivityID:          "Heartbeat",
 			StartToCloseTimeout: 10 * time.Second,
-			HeartbeatTimeout:    2 * time.Second,
+			HeartbeatTimeout:    1 * time.Second,
 			RetryPolicy:         noRetryPolicy,
 		})
 		f4 := workflow.ExecuteActivity(ctx4, activityFn)
