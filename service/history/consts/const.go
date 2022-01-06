@@ -50,6 +50,8 @@ var (
 	ErrStaleState = errors.New("cache mutable state could potentially be stale")
 	// ErrActivityTaskNotFound is the error to indicate activity task could be duplicate and activity already completed
 	ErrActivityTaskNotFound = serviceerror.NewNotFound("invalid activityID or activity already timed out or invoking workflow is completed")
+	// ErrActivityTaskNotCancelRequested is the error to indicate activity to be canceled is not cancel requested
+	ErrActivityTaskNotCancelRequested = serviceerror.NewInvalidArgument("unable to mark activity as canceled without activity being request canceled first")
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
 	ErrWorkflowCompleted = serviceerror.NewNotFound("workflow execution already completed")
 	// ErrWorkflowExecutionNotFound is the error to indicate workflow execution does not exist

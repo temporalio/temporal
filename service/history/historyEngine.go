@@ -1642,6 +1642,11 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
+			// sanity check if activity is requested to be cancelled
+			if !ai.CancelRequested {
+				return nil, consts.ErrActivityTaskNotCancelRequested
+			}
+
 			if _, err := mutableState.AddActivityTaskCanceledEvent(
 				scheduleID,
 				ai.StartedId,
