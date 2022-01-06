@@ -178,6 +178,7 @@ steps:
       queue: "default"
       docker: "*"
     command: "make fossa-analyze fossa-delay fossa-test"
+    branches: "master"
     retry:
       automatic:
         limit: 2
