@@ -1955,6 +1955,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				return nil, consts.ErrSignalsLimitExceeded
 			}
 
+			if sRequest.GetRequestId() != "" && mutableState.IsSignalRequested(sRequest.GetRequestId()) {
+				// duplicate signal
+				return &historyservice.SignalWithStartWorkflowExecutionResponse{RunId: context.GetExecution().RunId}, nil
+			}
+			if sRequest.GetRequestId() != "" {
+				mutableState.AddSignalRequested(sRequest.GetRequestId())
+			}
 			if _, err := mutableState.AddWorkflowExecutionSignaled(
 				sRequest.GetSignalName(),
 				sRequest.GetSignalInput(),
@@ -2071,6 +2078,9 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	// Add signal event
+	if sRequest.GetRequestId() != "" {
+		mutableState.AddSignalRequested(sRequest.GetRequestId())
+	}
 	if _, err := mutableState.AddWorkflowExecutionSignaled(
 		sRequest.GetSignalName(),
 		sRequest.GetSignalInput(),
