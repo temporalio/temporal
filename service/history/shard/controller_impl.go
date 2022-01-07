@@ -383,8 +383,10 @@ func (c *ControllerImpl) acquireShards() {
 								c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 							}
 							cancel()
+						} else {
+							// current host is not owner of shard, unload it if it is already loaded.
+							c.CloseShardByID(shardID)
 						}
-						// TODO: If we're _not_ the owner for this shard, and we have it loaded, we should unload it.
 					}
 				}
 			}
