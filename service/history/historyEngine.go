@@ -2257,6 +2257,9 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(initiatedID)
+			if !isRunning && initiatedID >= mutableState.GetNextEventID() {
+				return nil, consts.ErrStaleState
+			}
 			if !isRunning || ci.StartedId == common.EmptyEventID {
 				return nil, serviceerror.NewNotFound("Pending child execution not found.")
 			}
