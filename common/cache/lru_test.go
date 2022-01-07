@@ -236,9 +236,9 @@ func TestRemovedFuncWithTTL_Pin(t *testing.T) {
 	}
 }
 
-func TestRemovedFuncMaxSize_Pin(t *testing.T) {
+func TestRemovedFuncMaxSize_Pin_MidItem(t *testing.T) {
 	ch := make(chan bool)
-	cache := New(1, &Options{
+	cache := New(2, &Options{
 		TTL: time.Millisecond * 50,
 		Pin: true,
 		RemovedFunc: func(i interface{}) {
@@ -250,25 +250,72 @@ func TestRemovedFuncMaxSize_Pin(t *testing.T) {
 
 	_, err := cache.PutIfNotExist("A", t)
 	assert.NoError(t, err)
-	assert.Equal(t, t, cache.Get("A"))
-	cache.Release("A")
-
-	_, err = cache.PutIfNotExist("B", t)
-	assert.Error(t, err)
-	assert.Equal(t, t, cache.Get("A"))
-	cache.Release("A")
-	assert.Nil(t, cache.Get("B"))
-
-	// since put if not exist also increase the counter
-	cache.Release("A")
-
-	time.Sleep(time.Millisecond * 100)
-	assert.Nil(t, cache.Get("A"))
 
 	_, err = cache.PutIfNotExist("B", t)
 	assert.NoError(t, err)
+
+	_, err = cache.PutIfNotExist("C", t)
+	assert.Error(t, err)
+
+	assert.Equal(t, t, cache.Get("A"))
+	cache.Release("A") // get will also increase the ref count
 	assert.Equal(t, t, cache.Get("B"))
-	cache.Release("B")
+	cache.Release("B") // get will also increase the ref count
+
+	cache.Release("B") // B's ref count is 0
+	_, err = cache.PutIfNotExist("C", t)
+	assert.NoError(t, err)
+	assert.Equal(t, t, cache.Get("C"))
+	cache.Release("C") // get will also increase the ref count
+
+	cache.Release("A") // A's ref count is 0
+	cache.Release("C") // C's ref count is 0
+
+	time.Sleep(time.Millisecond * 100)
+	assert.Nil(t, cache.Get("A"))
+	assert.Nil(t, cache.Get("B"))
+	assert.Nil(t, cache.Get("C"))
+}
+
+func TestRemovedFuncMaxSize_Pin_LastItem(t *testing.T) {
+	ch := make(chan bool)
+	cache := New(2, &Options{
+		TTL: time.Millisecond * 50,
+		Pin: true,
+		RemovedFunc: func(i interface{}) {
+			_, ok := i.(*testing.T)
+			assert.True(t, ok)
+			ch <- true
+		},
+	})
+
+	_, err := cache.PutIfNotExist("A", t)
+	assert.NoError(t, err)
+
+	_, err = cache.PutIfNotExist("B", t)
+	assert.NoError(t, err)
+
+	_, err = cache.PutIfNotExist("C", t)
+	assert.Error(t, err)
+
+	assert.Equal(t, t, cache.Get("A"))
+	cache.Release("A") // get will also increase the ref count
+	assert.Equal(t, t, cache.Get("B"))
+	cache.Release("B") // get will also increase the ref count
+
+	cache.Release("A") // A's ref count is 0
+	_, err = cache.PutIfNotExist("C", t)
+	assert.NoError(t, err)
+	assert.Equal(t, t, cache.Get("C"))
+	cache.Release("C") // get will also increase the ref count
+
+	cache.Release("B") // B's ref count is 0
+	cache.Release("C") // C's ref count is 0
+
+	time.Sleep(time.Millisecond * 100)
+	assert.Nil(t, cache.Get("A"))
+	assert.Nil(t, cache.Get("B"))
+	assert.Nil(t, cache.Get("C"))
 }
 
 func TestIterator(t *testing.T) {

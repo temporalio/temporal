@@ -294,20 +294,15 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 		entry.createTime = time.Now().UTC()
 	}
 
-	c.byKey[key] = c.byAccess.PushFront(entry)
-	if len(c.byKey) > c.maxSize {
-		oldest := c.byAccess.Back().Value.(*entryImpl)
-
-		if oldest.refCount > 0 {
-			// Cache is full with pinned elements
-			// revert the insert and return
-			c.deleteInternal(c.byAccess.Front())
-			return nil, ErrCacheFull
-		}
-
-		c.deleteInternal(c.byAccess.Back())
+	if len(c.byKey) >= c.maxSize {
+		c.evictOnceInternal()
+	}
+	if len(c.byKey) >= c.maxSize {
+		return nil, ErrCacheFull
 	}
 
+	element := c.byAccess.PushFront(entry)
+	c.byKey[key] = element
 	return nil, nil
 }
 
@@ -317,6 +312,21 @@ func (c *lru) deleteInternal(element *list.Element) {
 		go c.rmFunc(entry.value)
 	}
 	delete(c.byKey, entry.key)
+}
+
+func (c *lru) evictOnceInternal() {
+	element := c.byAccess.Back()
+	for element != nil {
+		entry := element.Value.(*entryImpl)
+		if entry.refCount == 0 {
+			c.deleteInternal(element)
+			return
+		}
+
+		// entry.refCount > 0
+		// skip, entry still being referenced
+		element = element.Prev()
+	}
 }
 
 func (c *lru) isEntryExpired(entry *entryImpl, currentTime time.Time) bool {
