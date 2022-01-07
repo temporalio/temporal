@@ -302,7 +302,7 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(
 		params.PersistenceConfig,
 		persistenceServiceResolver,
-		esConfig.GetVisibilityIndex(),
+		esConfig,
 		esClient,
 		nil, // frontend visibility never write
 		saProvider,

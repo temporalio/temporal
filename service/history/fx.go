@@ -240,7 +240,7 @@ func VisibilityManagerProvider(
 	return visibility.NewManager(
 		params.PersistenceConfig,
 		persistenceServiceResolver,
-		esConfig.GetVisibilityIndex(),
+		esConfig,
 		esClient,
 		esProcessorConfig,
 		saProvider,

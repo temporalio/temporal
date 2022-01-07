@@ -32,7 +32,8 @@ import (
 
 const (
 	// VisibilityAppName is used to find ES indexName for visibility
-	VisibilityAppName = "visibility"
+	VisibilityAppName          = "visibility"
+	SecondaryVisibilityAppName = "secondary_visibility"
 )
 
 // Config for connecting to Elasticsearch
@@ -80,10 +81,16 @@ type (
 // GetVisibilityIndex return visibility index name from Elasticsearch config or empty string if it is not defined.
 func (cfg *Config) GetVisibilityIndex() string {
 	if cfg == nil {
-		// Empty string is be used as default index name when Elasticsearch is not configured.
 		return ""
 	}
 	return cfg.Indices[VisibilityAppName]
+}
+
+func (cfg *Config) GetSecondaryVisibilityIndex() string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Indices[SecondaryVisibilityAppName]
 }
 
 func (cfg *Config) Validate(storeName string) error {

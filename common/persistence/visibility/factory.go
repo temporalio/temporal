@@ -44,7 +44,7 @@ func NewManager(
 	persistenceCfg config.Persistence,
 	persistenceResolver resolver.ServiceResolver,
 
-	defaultIndexName string,
+	esConfig *esclient.Config,
 	esClient esclient.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
@@ -73,7 +73,22 @@ func NewManager(
 	}
 
 	advVisibilityManager, err := NewAdvancedManager(
-		defaultIndexName,
+		esConfig.GetVisibilityIndex(),
+		esClient,
+		esProcessorConfig,
+		searchAttributesProvider,
+		searchAttributesMapper,
+		advancedVisibilityPersistenceMaxReadQPS,
+		advancedVisibilityPersistenceMaxWriteQPS,
+		metricsClient,
+		logger,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	secondaryVisibilityManager, err := NewAdvancedManager(
+		esConfig.GetSecondaryVisibilityIndex(),
 		esClient,
 		esProcessorConfig,
 		searchAttributesProvider,
@@ -92,12 +107,26 @@ func NewManager(
 		return nil, nil
 	}
 
+	if stdVisibilityManager != nil && secondaryVisibilityManager != nil {
+		logger.Fatal("invalid config: secondary visibility store cannot be used with standard visibility")
+		return nil, nil
+	}
+
 	if stdVisibilityManager != nil && advVisibilityManager == nil {
 		return stdVisibilityManager, nil
 	}
 
 	if stdVisibilityManager == nil && advVisibilityManager != nil {
-		return advVisibilityManager, nil
+		if secondaryVisibilityManager == nil {
+			return advVisibilityManager, nil
+		}
+
+		return NewVisibilityManagerDual(
+			advVisibilityManager,
+			secondaryVisibilityManager,
+			enableAdvancedVisibilityRead,
+			advancedVisibilityWritingMode,
+		), nil
 	}
 
 	// If both visibilities are configured use dual write.
@@ -138,7 +167,7 @@ func NewStandardManager(
 }
 
 func NewAdvancedManager(
-	defaultIndexName string,
+	indexName string,
 	esClient esclient.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
@@ -150,8 +179,12 @@ func NewAdvancedManager(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
+	if indexName == "" {
+		return nil, nil
+	}
+
 	advVisibilityStore := newAdvancedVisibilityStore(
-		defaultIndexName,
+		indexName,
 		esClient,
 		esProcessorConfig,
 		searchAttributesProvider,
