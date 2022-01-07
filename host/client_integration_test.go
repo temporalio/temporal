@@ -481,7 +481,7 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 				// so here, we reduce the duration between two heartbeats, so that they are
 				// more likey be sent in the heartbeat batch at 1.6s
 				// (basically increasing the room for delay in heartbeat goroutine from 0.1s to 1s)
-				for i := 0; i < 4; i++ {
+				for i := 0; i < 3; i++ {
 					activity.RecordHeartbeat(ctx, i)
 					time.Sleep(200 * time.Millisecond)
 				}
@@ -525,7 +525,7 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 		ctx4 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 			ActivityID:          "Heartbeat",
 			StartToCloseTimeout: 10 * time.Second,
-			HeartbeatTimeout:    2 * time.Second,
+			HeartbeatTimeout:    1 * time.Second,
 			RetryPolicy:         noRetryPolicy,
 		})
 		f4 := workflow.ExecuteActivity(ctx4, activityFn)
@@ -594,7 +594,7 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 	s.True(timeoutErr.HasLastHeartbeatDetails())
 	var v int
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
-	s.Equal(3, v)
+	s.Equal(2, v)
 
 	//s.printHistory(id, workflowRun.GetRunID())
 }
