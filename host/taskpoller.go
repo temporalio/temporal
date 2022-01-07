@@ -146,6 +146,7 @@ Loop:
 		if pollStickyTaskQueue {
 			taskQueue = p.StickyTaskQueue
 		}
+
 		response, err1 := p.Engine.PollWorkflowTaskQueue(NewContext(), &workflowservice.PollWorkflowTaskQueueRequest{
 			Namespace: p.Namespace,
 			TaskQueue: taskQueue,
