@@ -44,7 +44,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 )
 
-func randomSnapshot(
+func RandomSnapshot(
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -54,16 +54,16 @@ func randomSnapshot(
 	dbRecordVersion int64,
 ) *p.WorkflowSnapshot {
 	return &p.WorkflowSnapshot{
-		ExecutionInfo:  randomExecutionInfo(namespaceID, workflowID, lastWriteVersion),
-		ExecutionState: randomExecutionState(runID, state, status),
+		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion),
+		ExecutionState: RandomExecutionState(runID, state, status),
 
 		NextEventID: rand.Int63(),
 
-		ActivityInfos:       randomInt64ActivityInfoMap(),
-		TimerInfos:          randomStringTimerInfoMap(),
-		ChildExecutionInfos: randomInt64ChildExecutionInfoMap(),
-		RequestCancelInfos:  randomInt64RequestCancelInfoMap(),
-		SignalInfos:         randomInt64SignalInfoMap(),
+		ActivityInfos:       RandomInt64ActivityInfoMap(),
+		TimerInfos:          RandomStringTimerInfoMap(),
+		ChildExecutionInfos: RandomInt64ChildExecutionInfoMap(),
+		RequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
+		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 
 		TransferTasks:    []tasks.Task{},
@@ -76,7 +76,7 @@ func randomSnapshot(
 	}
 }
 
-func randomMutation(
+func RandomMutation(
 	namespaceID string,
 	workflowID string,
 	runID string,
@@ -86,20 +86,20 @@ func randomMutation(
 	dbRecordVersion int64,
 ) *p.WorkflowMutation {
 	mutation := &p.WorkflowMutation{
-		ExecutionInfo:  randomExecutionInfo(namespaceID, workflowID, lastWriteVersion),
-		ExecutionState: randomExecutionState(runID, state, status),
+		ExecutionInfo:  RandomExecutionInfo(namespaceID, workflowID, lastWriteVersion),
+		ExecutionState: RandomExecutionState(runID, state, status),
 
 		NextEventID: rand.Int63(),
 
-		UpsertActivityInfos:       randomInt64ActivityInfoMap(),
+		UpsertActivityInfos:       RandomInt64ActivityInfoMap(),
 		DeleteActivityInfos:       map[int64]struct{}{rand.Int63(): {}},
-		UpsertTimerInfos:          randomStringTimerInfoMap(),
+		UpsertTimerInfos:          RandomStringTimerInfoMap(),
 		DeleteTimerInfos:          map[string]struct{}{uuid.New().String(): {}},
-		UpsertChildExecutionInfos: randomInt64ChildExecutionInfoMap(),
+		UpsertChildExecutionInfos: RandomInt64ChildExecutionInfoMap(),
 		DeleteChildExecutionInfos: map[int64]struct{}{rand.Int63(): {}},
-		UpsertRequestCancelInfos:  randomInt64RequestCancelInfoMap(),
+		UpsertRequestCancelInfos:  RandomInt64RequestCancelInfoMap(),
 		DeleteRequestCancelInfos:  map[int64]struct{}{rand.Int63(): {}},
-		UpsertSignalInfos:         randomInt64SignalInfoMap(),
+		UpsertSignalInfos:         RandomInt64SignalInfoMap(),
 		DeleteSignalInfos:         map[int64]struct{}{rand.Int63(): {}},
 		UpsertSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 		DeleteSignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
@@ -124,14 +124,14 @@ func randomMutation(
 		mutation.NewBufferedEvents = nil
 	case 2:
 		mutation.ClearBufferedEvents = false
-		mutation.NewBufferedEvents = []*historypb.HistoryEvent{randomHistoryEvent()}
+		mutation.NewBufferedEvents = []*historypb.HistoryEvent{RandomHistoryEvent()}
 	default:
 		panic("broken test")
 	}
 	return mutation
 }
 
-func randomExecutionInfo(
+func RandomExecutionInfo(
 	namespaceID string,
 	workflowID string,
 	lastWriteVersion int64,
@@ -140,11 +140,11 @@ func randomExecutionInfo(
 	_ = gofakeit.Struct(&executionInfo)
 	executionInfo.NamespaceId = namespaceID
 	executionInfo.WorkflowId = workflowID
-	executionInfo.VersionHistories = randomVersionHistory(lastWriteVersion)
+	executionInfo.VersionHistories = RandomVersionHistory(lastWriteVersion)
 	return &executionInfo
 }
 
-func randomExecutionState(
+func RandomExecutionState(
 	runID string,
 	state enumsspb.WorkflowExecutionState,
 	status enumspb.WorkflowExecutionStatus,
@@ -157,110 +157,110 @@ func randomExecutionState(
 	}
 }
 
-func randomInt64ActivityInfoMap() map[int64]*persistencespb.ActivityInfo {
+func RandomInt64ActivityInfoMap() map[int64]*persistencespb.ActivityInfo {
 	return map[int64]*persistencespb.ActivityInfo{
-		rand.Int63(): randomActivityInfo(),
+		rand.Int63(): RandomActivityInfo(),
 	}
 }
 
-func randomStringTimerInfoMap() map[string]*persistencespb.TimerInfo {
+func RandomStringTimerInfoMap() map[string]*persistencespb.TimerInfo {
 	return map[string]*persistencespb.TimerInfo{
-		uuid.New().String(): randomTimerInfo(),
+		uuid.New().String(): RandomTimerInfo(),
 	}
 }
 
-func randomInt64ChildExecutionInfoMap() map[int64]*persistencespb.ChildExecutionInfo {
+func RandomInt64ChildExecutionInfoMap() map[int64]*persistencespb.ChildExecutionInfo {
 	return map[int64]*persistencespb.ChildExecutionInfo{
-		rand.Int63(): randomChildExecutionInfo(),
+		rand.Int63(): RandomChildExecutionInfo(),
 	}
 }
 
-func randomInt64RequestCancelInfoMap() map[int64]*persistencespb.RequestCancelInfo {
+func RandomInt64RequestCancelInfoMap() map[int64]*persistencespb.RequestCancelInfo {
 	return map[int64]*persistencespb.RequestCancelInfo{
-		rand.Int63(): randomRequestCancelInfo(),
+		rand.Int63(): RandomRequestCancelInfo(),
 	}
 }
 
-func randomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
+func RandomInt64SignalInfoMap() map[int64]*persistencespb.SignalInfo {
 	return map[int64]*persistencespb.SignalInfo{
-		rand.Int63(): randomSignalInfo(),
+		rand.Int63(): RandomSignalInfo(),
 	}
 }
 
-func randomActivityInfo() *persistencespb.ActivityInfo {
+func RandomActivityInfo() *persistencespb.ActivityInfo {
 	// cannot use gofakeit due to RetryLastFailure is of type Failure
 	// and Failure can contain another Failure -> stack overflow
 	return &persistencespb.ActivityInfo{
 		Version:                rand.Int63(),
 		ScheduledEventBatchId:  rand.Int63(),
-		ScheduledTime:          randomTime(),
+		ScheduledTime:          RandomTime(),
 		StartedId:              rand.Int63(),
-		StartedTime:            randomTime(),
+		StartedTime:            RandomTime(),
 		ActivityId:             uuid.New().String(),
 		RequestId:              uuid.New().String(),
-		ScheduleToStartTimeout: randomDuration(),
-		ScheduleToCloseTimeout: randomDuration(),
-		StartToCloseTimeout:    randomDuration(),
-		HeartbeatTimeout:       randomDuration(),
+		ScheduleToStartTimeout: RandomDuration(),
+		ScheduleToCloseTimeout: RandomDuration(),
+		StartToCloseTimeout:    RandomDuration(),
+		HeartbeatTimeout:       RandomDuration(),
 
 		// other fields omitted, above should be enough for tests
 	}
 }
 
-func randomTimerInfo() *persistencespb.TimerInfo {
+func RandomTimerInfo() *persistencespb.TimerInfo {
 	var timerInfo persistencespb.TimerInfo
 	_ = gofakeit.Struct(&timerInfo)
 	return &timerInfo
 }
 
-func randomChildExecutionInfo() *persistencespb.ChildExecutionInfo {
+func RandomChildExecutionInfo() *persistencespb.ChildExecutionInfo {
 	var childExecutionInfo persistencespb.ChildExecutionInfo
 	_ = gofakeit.Struct(&childExecutionInfo)
 	return &childExecutionInfo
 }
 
-func randomRequestCancelInfo() *persistencespb.RequestCancelInfo {
+func RandomRequestCancelInfo() *persistencespb.RequestCancelInfo {
 	var requestCancelInfo persistencespb.RequestCancelInfo
 	_ = gofakeit.Struct(&requestCancelInfo)
 	return &requestCancelInfo
 }
 
-func randomSignalInfo() *persistencespb.SignalInfo {
+func RandomSignalInfo() *persistencespb.SignalInfo {
 	var signalInfo persistencespb.SignalInfo
 	_ = gofakeit.Struct(&signalInfo)
 	return &signalInfo
 }
 
-func randomHistoryEvent() *historypb.HistoryEvent {
+func RandomHistoryEvent() *historypb.HistoryEvent {
 	var historyEvent historypb.HistoryEvent
 	_ = gofakeit.Struct(&historyEvent)
 	return &historyEvent
 }
 
-func randomResetPoints() *workflowpb.ResetPoints {
+func RandomResetPoints() *workflowpb.ResetPoints {
 	return &workflowpb.ResetPoints{Points: []*workflowpb.ResetPointInfo{{
 		BinaryChecksum:               uuid.New().String(),
 		RunId:                        uuid.New().String(),
 		FirstWorkflowTaskCompletedId: rand.Int63(),
-		CreateTime:                   randomTime(),
-		ExpireTime:                   randomTime(),
+		CreateTime:                   RandomTime(),
+		ExpireTime:                   RandomTime(),
 		Resettable:                   rand.Int31()%2 == 0,
 	}}}
 }
 
-func randomStringPayloadMap() map[string]*commonpb.Payload {
+func RandomStringPayloadMap() map[string]*commonpb.Payload {
 	return map[string]*commonpb.Payload{
-		uuid.New().String(): randomPayload(),
+		uuid.New().String(): RandomPayload(),
 	}
 }
 
-func randomPayload() *commonpb.Payload {
+func RandomPayload() *commonpb.Payload {
 	var payload commonpb.Payload
 	_ = gofakeit.Struct(&payload)
 	return &payload
 }
 
-func randomVersionHistory(
+func RandomVersionHistory(
 	lastWriteVersion int64,
 ) *historyspb.VersionHistories {
 	return &historyspb.VersionHistories{
@@ -275,12 +275,12 @@ func randomVersionHistory(
 	}
 }
 
-func randomTime() *time.Time {
+func RandomTime() *time.Time {
 	time := time.Unix(0, rand.Int63())
 	return &time
 }
 
-func randomDuration() *time.Duration {
+func RandomDuration() *time.Duration {
 	duration := time.Duration(rand.Int63())
 	return &duration
 }
