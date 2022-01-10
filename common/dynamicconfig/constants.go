@@ -70,7 +70,9 @@ var Keys = map[Key]string{
 	AdvancedVisibilityPersistenceMaxReadQPS:  "system.advancedVisibilityPersistenceMaxReadQPS",
 	AdvancedVisibilityPersistenceMaxWriteQPS: "system.advancedVisibilityPersistenceMaxWriteQPS",
 	AdvancedVisibilityWritingMode:            "system.advancedVisibilityWritingMode",
+	EnableWriteToSecondaryVisibility:         "system.enableWriteToSecondaryVisibility",
 	EnableReadVisibilityFromES:               "system.enableReadVisibilityFromES",
+	EnableReadFromSecondaryVisibility:        "system.enableReadFromSecondaryVisibility",
 
 	HistoryArchivalState:                   "system.historyArchivalState",
 	EnableReadFromHistoryArchival:          "system.enableReadFromHistoryArchival",
@@ -383,8 +385,12 @@ const (
 	AdvancedVisibilityPersistenceMaxWriteQPS
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
 	AdvancedVisibilityWritingMode
+	// EnableWriteToSecondaryVisibility is the config to enable write to secondary visibility for elastic search
+	EnableWriteToSecondaryVisibility
 	// EnableReadVisibilityFromES is key for enable read from elastic search
 	EnableReadVisibilityFromES
+	// EnableReadFromSecondaryVisibility is the config to enable read from secondary elastic search
+	EnableReadFromSecondaryVisibility
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
 

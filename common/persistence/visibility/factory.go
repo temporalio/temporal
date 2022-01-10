@@ -56,6 +56,8 @@ func NewManager(
 	advancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
 	enableAdvancedVisibilityRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
+	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableWriteToSecondaryVisibility dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -121,20 +123,30 @@ func NewManager(
 			return advVisibilityManager, nil
 		}
 
+		// Dual write to primary and secondary ES indices.
+		managerSelector := NewESManagerSelector(
+			advVisibilityManager,
+			secondaryVisibilityManager,
+			enableReadFromSecondaryVisibility,
+			enableWriteToSecondaryVisibility)
+
 		return NewVisibilityManagerDual(
 			advVisibilityManager,
 			secondaryVisibilityManager,
-			enableAdvancedVisibilityRead,
-			advancedVisibilityWritingMode,
+			managerSelector,
 		), nil
 	}
 
-	// If both visibilities are configured use dual write.
-	return NewVisibilityManagerDual(
+	// Dual write to standard and advanced visibility.
+	managerSelector := NewSQLToESManagerSelector(
 		stdVisibilityManager,
 		advVisibilityManager,
 		enableAdvancedVisibilityRead,
-		advancedVisibilityWritingMode,
+		advancedVisibilityWritingMode)
+	return NewVisibilityManagerDual(
+		stdVisibilityManager,
+		advVisibilityManager,
+		managerSelector,
 	), nil
 }
 

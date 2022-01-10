@@ -251,6 +251,8 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
 		serviceConfig.AdvancedVisibilityWritingMode,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
+		serviceConfig.EnableWriteToSecondaryVisibility,
 		params.MetricsClient,
 		logger,
 	)

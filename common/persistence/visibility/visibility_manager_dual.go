@@ -28,7 +28,6 @@ import (
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -36,27 +35,73 @@ import (
 
 type (
 	visibilityManagerDual struct {
-		stdVisibilityManager          manager.VisibilityManager
-		advVisibilityManager          manager.VisibilityManager
+		stdVisibilityManager manager.VisibilityManager
+		advVisibilityManager manager.VisibilityManager
+		managerSelector      managerSelector
+	}
+
+	managerSelector interface {
+		readManager(namespace namespace.Name) manager.VisibilityManager
+		writeManagers() ([]manager.VisibilityManager, error)
+	}
+
+	sqlToESManagerSelector struct {
 		enableAdvancedVisibilityRead  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 		advancedVisibilityWritingMode dynamicconfig.StringPropertyFn
+		stdVisibilityManager          manager.VisibilityManager
+		advVisibilityManager          manager.VisibilityManager
+	}
+
+	esManagerSelector struct {
+		enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		enableWriteToSecondaryVisibility  dynamicconfig.BoolPropertyFn
+		visibilityManager                 manager.VisibilityManager
+		secondaryVisibilityManager        manager.VisibilityManager
 	}
 )
 
 var _ manager.VisibilityManager = (*visibilityManagerDual)(nil)
+var _ managerSelector = (*sqlToESManagerSelector)(nil)
+var _ managerSelector = (*esManagerSelector)(nil)
 
 // NewVisibilityManagerDual create a visibility manager that operate on DB or Elasticsearch based on dynamic config.
 func NewVisibilityManagerDual(
 	stdVisibilityManager manager.VisibilityManager,
 	advVisibilityManager manager.VisibilityManager,
-	enableAdvancedVisibilityRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
+	managerSelector managerSelector,
 ) *visibilityManagerDual {
 	return &visibilityManagerDual{
+		stdVisibilityManager: stdVisibilityManager,
+		advVisibilityManager: advVisibilityManager,
+		managerSelector:      managerSelector,
+	}
+}
+
+func NewSQLToESManagerSelector(
+	stdVisibilityManager manager.VisibilityManager,
+	advVisibilityManager manager.VisibilityManager,
+	enableAdvancedVisibilityRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
+) *sqlToESManagerSelector {
+	return &sqlToESManagerSelector{
 		stdVisibilityManager:          stdVisibilityManager,
 		advVisibilityManager:          advVisibilityManager,
 		enableAdvancedVisibilityRead:  enableAdvancedVisibilityRead,
 		advancedVisibilityWritingMode: advancedVisibilityWritingMode,
+	}
+}
+
+func NewESManagerSelector(
+	visibilityManager manager.VisibilityManager,
+	secondaryVisibilityManager manager.VisibilityManager,
+	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableWriteToSecondaryVisibility dynamicconfig.BoolPropertyFn,
+) *esManagerSelector {
+	return &esManagerSelector{
+		visibilityManager:                 visibilityManager,
+		secondaryVisibilityManager:        secondaryVisibilityManager,
+		enableReadFromSecondaryVisibility: enableReadFromSecondaryVisibility,
+		enableWriteToSecondaryVisibility:  enableWriteToSecondaryVisibility,
 	}
 }
 
@@ -70,7 +115,7 @@ func (v *visibilityManagerDual) GetName() string {
 }
 
 func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(request *manager.RecordWorkflowExecutionStartedRequest) error {
-	ms, err := v.writeManagers()
+	ms, err := v.managerSelector.writeManagers()
 	if err != nil {
 		return err
 	}
@@ -84,7 +129,7 @@ func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(request *manager.
 }
 
 func (v *visibilityManagerDual) RecordWorkflowExecutionClosed(request *manager.RecordWorkflowExecutionClosedRequest) error {
-	ms, err := v.writeManagers()
+	ms, err := v.managerSelector.writeManagers()
 	if err != nil {
 		return err
 	}
@@ -98,7 +143,7 @@ func (v *visibilityManagerDual) RecordWorkflowExecutionClosed(request *manager.R
 }
 
 func (v *visibilityManagerDual) UpsertWorkflowExecution(request *manager.UpsertWorkflowExecutionRequest) error {
-	ms, err := v.writeManagers()
+	ms, err := v.managerSelector.writeManagers()
 	if err != nil {
 		return err
 	}
@@ -112,7 +157,7 @@ func (v *visibilityManagerDual) UpsertWorkflowExecution(request *manager.UpsertW
 }
 
 func (v *visibilityManagerDual) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
-	ms, err := v.writeManagers()
+	ms, err := v.managerSelector.writeManagers()
 	if err != nil {
 		return err
 	}
@@ -126,46 +171,46 @@ func (v *visibilityManagerDual) DeleteWorkflowExecution(request *manager.Visibil
 }
 
 func (v *visibilityManagerDual) ListOpenWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ListOpenWorkflowExecutions(request)
+	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerDual) ListClosedWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ListClosedWorkflowExecutions(request)
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerDual) ListOpenWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ListOpenWorkflowExecutionsByType(request)
+	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByType(request)
 }
 
 func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ListClosedWorkflowExecutionsByType(request)
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByType(request)
 }
 
 func (v *visibilityManagerDual) ListOpenWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ListOpenWorkflowExecutionsByWorkflowID(request)
+	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByWorkflowID(request)
 }
 
 func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ListClosedWorkflowExecutionsByWorkflowID(request)
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByWorkflowID(request)
 }
 
 func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByStatus(request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ListClosedWorkflowExecutionsByStatus(request)
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByStatus(request)
 }
 
 func (v *visibilityManagerDual) ListWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ListWorkflowExecutions(request)
+	return v.managerSelector.readManager(request.Namespace).ListWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerDual) ScanWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).ScanWorkflowExecutions(request)
+	return v.managerSelector.readManager(request.Namespace).ScanWorkflowExecutions(request)
 }
 
 func (v *visibilityManagerDual) CountWorkflowExecutions(request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
-	return v.readManager(request.Namespace).CountWorkflowExecutions(request)
+	return v.managerSelector.readManager(request.Namespace).CountWorkflowExecutions(request)
 }
 
-func (v *visibilityManagerDual) writeManagers() ([]manager.VisibilityManager, error) {
+func (v *sqlToESManagerSelector) writeManagers() ([]manager.VisibilityManager, error) {
 	switch v.advancedVisibilityWritingMode() {
 	case AdvancedVisibilityWritingModeOff:
 		return []manager.VisibilityManager{v.stdVisibilityManager}, nil
@@ -178,9 +223,25 @@ func (v *visibilityManagerDual) writeManagers() ([]manager.VisibilityManager, er
 	}
 }
 
-func (v *visibilityManagerDual) readManager(namespace namespace.Name) manager.VisibilityManager {
+func (v *sqlToESManagerSelector) readManager(namespace namespace.Name) manager.VisibilityManager {
 	if v.enableAdvancedVisibilityRead(namespace.String()) {
 		return v.advVisibilityManager
 	}
 	return v.stdVisibilityManager
+}
+
+func (v *esManagerSelector) writeManagers() ([]manager.VisibilityManager, error) {
+	managers := []manager.VisibilityManager{v.visibilityManager}
+	if v.enableWriteToSecondaryVisibility() {
+		managers = append(managers, v.secondaryVisibilityManager)
+	}
+
+	return managers, nil
+}
+
+func (v *esManagerSelector) readManager(namespace namespace.Name) manager.VisibilityManager {
+	if v.enableReadFromSecondaryVisibility(namespace.String()) {
+		return v.secondaryVisibilityManager
+	}
+	return v.visibilityManager
 }
