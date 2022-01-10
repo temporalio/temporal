@@ -138,17 +138,6 @@ CREATE TABLE queue (
     'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
   };
 
--- TODO deprecate this table in v1.15+
-CREATE TABLE cluster_metadata (
-  metadata_partition      int,
-  data                    blob,
-  data_encoding           text,
-  version                 bigint,
-  PRIMARY KEY  (metadata_partition)
-) WITH COMPACTION = {
-    'class': 'org.apache.cassandra.db.compaction.LeveledCompactionStrategy'
-    };
-
 CREATE TABLE cluster_metadata_info (
   metadata_partition      int,
   cluster_name            text,
