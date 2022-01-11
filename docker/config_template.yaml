@@ -33,15 +33,15 @@ persistence:
                     serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
         visibility:
             cassandra:
-                {{- $vis_seeds := default .Env.VISIBILITY_CASSANDRA_SEEDS .Env.CASSANDRA_SEEDS -}}
-                {{- $vis_port := default .Env.VISIBILITY_CASSANDRA_PORT .Env.CASSANDRA_PORT -}}
-                {{- $vis_user := default .Env.VISIBILITY_CASSANDRA_USER .Env.CASSANDRA_USER -}}
-                {{- $vis_pwd := default .Env.VISIBILITY_CASSANDRA_PASSWORD .Env.CASSANDRA_PASSWORD -}}
-                hosts: "{{ default $vis_seeds "" }}"
+                {{- $visibility_seeds := default .Env.VISIBILITY_CASSANDRA_SEEDS .Env.CASSANDRA_SEEDS -}}
+                {{- $visibility_port := default .Env.VISIBILITY_CASSANDRA_PORT .Env.CASSANDRA_PORT -}}
+                {{- $visibility_user := default .Env.VISIBILITY_CASSANDRA_USER .Env.CASSANDRA_USER -}}
+                {{- $visibility_pwd := default .Env.VISIBILITY_CASSANDRA_PASSWORD .Env.CASSANDRA_PASSWORD -}}
+                hosts: "{{ default $visibility_seeds "" }}"
                 keyspace: "{{ default .Env.VISIBILITY_KEYSPACE "temporal_visibility" }}"
-                user: "{{ default $vis_user "" }}"
-                password: "{{ default $vis_pwd "" }}"
-                port: {{ default $vis_port "9042" }}
+                user: "{{ default $visibility_user "" }}"
+                password: "{{ default $visibility_pwd "" }}"
+                port: {{ default $visibility_port "9042" }}
                 maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "10" }}
                 tls:
                     enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
@@ -80,14 +80,14 @@ persistence:
             sql:
                 pluginName: "mysql"
                 databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
-                {{- $vis_seeds := default .Env.VISIBILITY_MYSQL_SEEDS .Env.MYSQL_SEEDS -}}
-                {{- $vis_port := default .Env.VISIBILITY_DB_PORT .Env.DB_PORT -}}
-                connectAddr: "{{ default $vis_seeds "" }}:{{ default $vis_port "3306" }}"
+                {{- $visibility_seeds := default .Env.VISIBILITY_MYSQL_SEEDS .Env.MYSQL_SEEDS -}}
+                {{- $visibility_port := default .Env.VISIBILITY_DB_PORT .Env.DB_PORT -}}
+                {{- $visibility_user := default .Env.VISIBILITY_MYSQL_USER .Env.MYSQL_USER -}}
+                {{- $visibility_pwd := default .Env.VISIBILITY_MYSQL_PWD .Env.MYSQL_PWD -}}
+                connectAddr: "{{ default $visibility_seeds "" }}:{{ default $visibility_port "3306" }}"
                 connectProtocol: "tcp"
-                {{- $vis_user := default .Env.VISIBILITY_MYSQL_USER .Env.MYSQL_USER -}}
-                {{- $vis_pwd := default .Env.VISIBILITY_MYSQL_PWD .Env.MYSQL_PWD -}}
-                user: "{{ default $vis_user "" }}"
-                password: "{{ default $vis_pwd "" }}"
+                user: "{{ default $visibility_user "" }}"
+                password: "{{ default $visibility_pwd "" }}"
                 {{- if .Env.MYSQL_TX_ISOLATION_COMPAT }}
                 connectAttributes:
                     tx_isolation: "'READ-COMMITTED'"
@@ -125,14 +125,14 @@ persistence:
             sql:
                 pluginName: "postgres"
                 databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
-                {{- $vis_seeds := default .Env.VISIBILITY_POSTGRES_SEEDS .Env.POSTGRES_SEEDS -}}
-                {{- $vis_port := default .Env.VISIBILITY_DB_PORT .Env.DB_PORT -}}
-                connectAddr: "{{ default $vis_seeds "" }}:{{ default $vis_port "5432" }}"
+                {{- $visibility_seeds := default .Env.VISIBILITY_POSTGRES_SEEDS .Env.POSTGRES_SEEDS -}}
+                {{- $visibility_port := default .Env.VISIBILITY_DB_PORT .Env.DB_PORT -}}
+                {{- $visibility_user := default .Env.VISIBILITY_POSTGRES_USER .Env.POSTGRES_USER -}}
+                {{- $visibility_pwd := default .Env.VISIBILITY_POSTGRES_PWD .Env.POSTGRES_PWD -}}
+                connectAddr: "{{ default $visibility_seeds "" }}:{{ default $visibility_port "5432" }}"
                 connectProtocol: "tcp"
-                {{- $vis_user := default .Env.VISIBILITY_POSTGRES_USER .Env.POSTGRES_USER -}}
-                {{- $vis_pwd := default .Env.VISIBILITY_POSTGRES_PWD .Env.POSTGRES_PWD -}}
-                user: "{{ default $vis_user "" }}"
-                password: "{{ default $vis_pwd "" }}"
+                user: "{{ default $visibility_user "" }}"
+                password: "{{ default $visibility_pwd "" }}"
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
