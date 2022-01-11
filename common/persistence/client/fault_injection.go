@@ -745,13 +745,6 @@ func (c *FaultInjectionClusterMetadataStore) ListClusterMetadata(request *persis
 	return c.baseCMStore.ListClusterMetadata(request)
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetClusterMetadataV1() (*persistence.InternalGetClusterMetadataResponse, error) {
-	if err := c.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return c.baseCMStore.GetClusterMetadataV1()
-}
-
 func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(request *persistence.InternalGetClusterMetadataRequest) (
 	*persistence.InternalGetClusterMetadataResponse,
 	error,
@@ -760,15 +753,6 @@ func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(request *persist
 		return nil, err
 	}
 	return c.baseCMStore.GetClusterMetadata(request)
-}
-
-func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadataV1(
-	request *persistence.InternalSaveClusterMetadataRequest,
-) (bool, error) {
-	if err := c.ErrorGenerator.Generate(); err != nil {
-		return false, err
-	}
-	return c.baseCMStore.SaveClusterMetadataV1(request)
 }
 
 func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(

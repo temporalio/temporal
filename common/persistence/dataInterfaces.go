@@ -1226,7 +1226,6 @@ type (
 		PruneClusterMembership(request *PruneClusterMembershipRequest) error
 		ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error)
 		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
-		GetClusterMetadataV1() (*GetClusterMetadataResponse, error) //TODO: deprecate this after 1.15+
 		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
 		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
 		DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error

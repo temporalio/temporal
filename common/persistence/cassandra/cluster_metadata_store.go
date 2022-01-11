@@ -41,12 +41,6 @@ const constMetadataPartition = 0
 const constMembershipPartition = 0
 
 const (
-	// ****** CLUSTER_METADATA TABLE ******
-	// TODO: deprecate this v1 query after 1.15+
-	templateGetClusterMetadataV1    = `SELECT data, data_encoding, version FROM cluster_metadata WHERE metadata_partition = ?`
-	templateCreateClusterMetadataV1 = `INSERT INTO cluster_metadata (metadata_partition, data, data_encoding, version) VALUES(?, ?, ?, ?) IF NOT EXISTS`
-	templateUpdateClusterMetadataV1 = `UPDATE cluster_metadata SET data = ?, data_encoding = ?, version = ? WHERE metadata_partition = ? IF version = ?`
-
 	// ****** CLUSTER_METADATA_INFO TABLE ******
 	templateListClusterMetadata   = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = ?`
 	templateGetClusterMetadata    = `SELECT data, data_encoding, version FROM cluster_metadata_info WHERE metadata_partition = ? AND cluster_name= ?`
@@ -125,55 +119,6 @@ func (m *ClusterMetadataStore) ListClusterMetadata(
 		return nil, gocql.ConvertError("ListClusterMetadata", err)
 	}
 	return response, nil
-}
-
-func (m *ClusterMetadataStore) GetClusterMetadataV1() (*p.InternalGetClusterMetadataResponse, error) {
-	query := m.session.Query(templateGetClusterMetadataV1, constMetadataPartition)
-
-	var clusterMetadata []byte
-	var encoding string
-	var version int64
-
-	err := query.Scan(&clusterMetadata, &encoding, &version)
-	if err != nil {
-		return nil, gocql.ConvertError("GetClusterMetadataV1", err)
-	}
-	return &p.InternalGetClusterMetadataResponse{
-		ClusterMetadata: p.NewDataBlob(clusterMetadata, encoding),
-		Version:         version,
-	}, nil
-}
-
-func (m *ClusterMetadataStore) SaveClusterMetadataV1(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
-	var query gocql.Query
-	if request.Version == 0 {
-		query = m.session.Query(
-			templateCreateClusterMetadataV1,
-			constMetadataPartition,
-			request.ClusterMetadata.Data,
-			request.ClusterMetadata.EncodingType.String(),
-			1,
-		)
-	} else {
-		query = m.session.Query(
-			templateUpdateClusterMetadataV1,
-			request.ClusterMetadata.Data,
-			request.ClusterMetadata.EncodingType.String(),
-			request.Version+1,
-			constMetadataPartition,
-			request.Version,
-		)
-	}
-
-	previous := make(map[string]interface{})
-	applied, err := query.MapScanCAS(previous)
-	if err != nil {
-		return false, gocql.ConvertError("SaveClusterMetadataV1", err)
-	}
-	if !applied {
-		return false, serviceerror.NewUnavailable("SaveClusterMetadataV1 operation encountered concurrent write.")
-	}
-	return true, nil
 }
 
 func (m *ClusterMetadataStore) GetClusterMetadata(

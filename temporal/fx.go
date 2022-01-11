@@ -29,7 +29,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
 	"go.uber.org/fx"
@@ -553,20 +552,20 @@ func ApplyClusterMetadataConfigProvider(
 	}
 	defer clusterMetadataManager.Close()
 
-	/**
-	 * 1. Create cluster metadata info in both cluster_metadata and cluster_metadata_info tables.
-	 * 2. For non current clusters, the initialization will be succeeded in the first time but fails in the following due to version conditional update.
-	 * 3. For current cluster, 1) initialize in both tables (applied == true), 2) migrate data from cluster_metadata to cluster_metadata_info (applied == false)
-	 */
 	clusterData := config.ClusterMetadata
 	for clusterName, clusterInfo := range clusterData.ClusterInformation {
-		var clusterId = ""
-		if clusterName == clusterData.CurrentClusterName {
-			// Only set current cluster Id as we don't know the remote cluster Id.
-			clusterId = uuid.New()
+		if clusterName != clusterData.CurrentClusterName {
+			logger.Warn(
+				"ClusterInformation in ClusterMetadata config is deprecated. "+
+					"Please use TCTL admin tool to configure remote cluster connections",
+				tag.Key("clusterInformation"),
+				tag.ClusterName(clusterName),
+				tag.IgnoredValue(clusterInfo))
+			continue
 		}
-		// Case 1: initialize cluster metadata config
-		// We assume the existing remote cluster info is correct.
+
+		// Only configure current cluster metadata from static config file
+		clusterId := uuid.New()
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
 			&persistence.SaveClusterMetadataRequest{
 				ClusterMetadata: persistencespb.ClusterMetadata{
@@ -590,68 +589,35 @@ func ApplyClusterMetadataConfigProvider(
 		resp, err := clusterMetadataManager.GetClusterMetadata(&persistence.GetClusterMetadataRequest{
 			ClusterName: clusterName,
 		})
-		switch err.(type) {
-		case nil:
-			// Verify current cluster metadata
-			if clusterName == clusterData.CurrentClusterName {
-				var persistedShardCount = resp.HistoryShardCount
-				if config.Persistence.NumHistoryShards != persistedShardCount {
-					logger.Error(
-						mismatchLogMessage,
-						tag.Key("persistence.numHistoryShards"),
-						tag.IgnoredValue(config.Persistence.NumHistoryShards),
-						tag.Value(persistedShardCount))
-					config.Persistence.NumHistoryShards = persistedShardCount
-				}
-				if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
-					logger.Error(
-						mismatchLogMessage,
-						tag.Key("clusterMetadata.EnableGlobalNamespace"),
-						tag.IgnoredValue(clusterData.EnableGlobalNamespace),
-						tag.Value(resp.IsGlobalNamespaceEnabled))
-					config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
-				}
-				if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
-					logger.Error(
-						mismatchLogMessage,
-						tag.Key("clusterMetadata.FailoverVersionIncrement"),
-						tag.IgnoredValue(clusterData.FailoverVersionIncrement),
-						tag.Value(resp.FailoverVersionIncrement))
-					config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
-				}
-			}
-		case *serviceerror.NotFound:
-			if clusterName == clusterData.CurrentClusterName {
-				// Case 3: data exists in cluster metadata but not in cluster metadata info. Back fill data.
-				oldClusterMetadata, err := clusterMetadataManager.GetClusterMetadataV1()
-				if err != nil {
-					return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while getting old cluster metadata: %w", err)
-				}
-				applied, err = clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
-					ClusterMetadata: persistencespb.ClusterMetadata{
-						HistoryShardCount:        oldClusterMetadata.HistoryShardCount,
-						ClusterName:              oldClusterMetadata.ClusterName,
-						ClusterId:                oldClusterMetadata.ClusterId,
-						VersionInfo:              oldClusterMetadata.VersionInfo,
-						IndexSearchAttributes:    oldClusterMetadata.IndexSearchAttributes,
-						ClusterAddress:           clusterInfo.RPCAddress,
-						FailoverVersionIncrement: clusterData.FailoverVersionIncrement,
-						InitialFailoverVersion:   clusterInfo.InitialFailoverVersion,
-						IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
-						IsConnectionEnabled:      clusterInfo.Enabled,
-					}})
-				if err != nil || !applied {
-					return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while backfiling cluster metadata: %w", err)
-				}
-			} else {
-				return config.ClusterMetadata,
-					config.Persistence,
-					fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
-			}
-		default:
-			return config.ClusterMetadata,
-				config.Persistence,
-				fmt.Errorf("error while fetching metadata from cluster %s: %w", clusterName, err)
+		if err != nil {
+			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
+		}
+
+		// Verify current cluster metadata
+		var persistedShardCount = resp.HistoryShardCount
+		if config.Persistence.NumHistoryShards != persistedShardCount {
+			logger.Warn(
+				mismatchLogMessage,
+				tag.Key("persistence.numHistoryShards"),
+				tag.IgnoredValue(config.Persistence.NumHistoryShards),
+				tag.Value(persistedShardCount))
+			config.Persistence.NumHistoryShards = persistedShardCount
+		}
+		if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
+			logger.Warn(
+				mismatchLogMessage,
+				tag.Key("clusterMetadata.EnableGlobalNamespace"),
+				tag.IgnoredValue(clusterData.EnableGlobalNamespace),
+				tag.Value(resp.IsGlobalNamespaceEnabled))
+			config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
+		}
+		if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
+			logger.Warn(
+				mismatchLogMessage,
+				tag.Key("clusterMetadata.FailoverVersionIncrement"),
+				tag.IgnoredValue(clusterData.FailoverVersionIncrement),
+				tag.Value(resp.FailoverVersionIncrement))
+			config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
 		}
 	}
 	err = loadClusterInformationFromStore(config, clusterMetadataManager, logger)
@@ -689,33 +655,11 @@ func loadClusterInformationFromStore(config *config.Config, clusterMsg persisten
 			InitialFailoverVersion: metadata.InitialFailoverVersion,
 			RPCAddress:             metadata.ClusterAddress,
 		}
-		if staticMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok {
-			if staticMetadata.Enabled != metadata.IsConnectionEnabled {
-				logger.Error(
-					mismatchLogMessage,
-					tag.Key("clusterInformation.Enabled"),
-					tag.IgnoredValue(staticMetadata),
-					tag.Value(newMetadata))
-			}
-			if staticMetadata.RPCAddress != metadata.ClusterAddress {
-				logger.Error(
-					mismatchLogMessage,
-					tag.Key("clusterInformation.RPCAddress"),
-					tag.IgnoredValue(staticMetadata),
-					tag.Value(newMetadata))
-			}
-			if staticMetadata.InitialFailoverVersion != metadata.InitialFailoverVersion {
-				logger.Error(
-					mismatchLogMessage,
-					tag.Key("clusterInformation.InitialFailoverVersion"),
-					tag.IgnoredValue(staticMetadata),
-					tag.Value(newMetadata))
-			}
-		} else {
-			logger.Error(
-				mismatchLogMessage,
+		if staticClusterMetadata, ok := config.ClusterMetadata.ClusterInformation[metadata.ClusterName]; ok && metadata.ClusterName != config.ClusterMetadata.CurrentClusterName {
+			logger.Warn(
+				"ClusterInformation in ClusterMetadata config is deprecated. Please use TCTL tool to configure remote cluster connections",
 				tag.Key("clusterInformation"),
-				tag.IgnoredValue(config.ClusterMetadata.ClusterInformation),
+				tag.IgnoredValue(staticClusterMetadata),
 				tag.Value(newMetadata))
 		}
 		config.ClusterMetadata.ClusterInformation[metadata.ClusterName] = newMetadata

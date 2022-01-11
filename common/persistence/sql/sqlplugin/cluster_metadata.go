@@ -78,13 +78,10 @@ type (
 
 	// ClusterMetadata is the SQL persistence interface for cluster metadata
 	ClusterMetadata interface {
-		SaveClusterMetadataV1(ctx context.Context, row *ClusterMetadataRow) (sql.Result, error) // TODO: deprecate this after 1.15+
 		SaveClusterMetadata(ctx context.Context, row *ClusterMetadataRow) (sql.Result, error)
-		GetClusterMetadataV1(ctx context.Context) (*ClusterMetadataRow, error) // TODO: deprecate this after 1.15+
 		GetClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (*ClusterMetadataRow, error)
 		ListClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) ([]ClusterMetadataRow, error)
 		DeleteClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (sql.Result, error)
-		WriteLockGetClusterMetadataV1(ctx context.Context) (*ClusterMetadataRow, error) // TODO: deprecate this after 1.15+
 		WriteLockGetClusterMetadata(ctx context.Context, filter *ClusterMetadataFilter) (*ClusterMetadataRow, error)
 		GetClusterMembers(ctx context.Context, filter *ClusterMembershipFilter) ([]ClusterMembershipRow, error)
 		UpsertClusterMembership(ctx context.Context, row *ClusterMembershipRow) (sql.Result, error)
