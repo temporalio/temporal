@@ -46,7 +46,7 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v0.25.0
 	go.temporal.io/api v1.7.1-0.20211215222122-0be6c74f9c9a
 	go.temporal.io/sdk v1.12.0
-	go.temporal.io/version v0.0.0-20201015012359-4d3bb966d193
+	go.temporal.io/version v0.2.1
 	go.uber.org/atomic v1.9.0
 	go.uber.org/fx v1.14.2
 	go.uber.org/multierr v1.7.0

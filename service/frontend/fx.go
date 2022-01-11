@@ -394,6 +394,7 @@ func AdminHandlerProvider(
 func HandlerProvider(
 	params *resource.BootstrapParams,
 	serviceConfig *Config,
+	versionChecker *VersionChecker,
 	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	visibilityMgr manager.VisibilityManager,
 	logger resource.SnTaggedLogger,
@@ -432,6 +433,7 @@ func HandlerProvider(
 		saProvider,
 		clusterMetadata,
 		archivalMetadata,
+		versionChecker,
 	)
 	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler

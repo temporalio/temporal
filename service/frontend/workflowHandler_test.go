@@ -106,6 +106,8 @@ type (
 
 		testNamespace   namespace.Name
 		testNamespaceID namespace.ID
+
+		versionChecker *VersionChecker
 	}
 )
 
@@ -150,10 +152,15 @@ func (s *workflowHandlerSuite) SetupTest() {
 
 	mockMonitor := s.mockResource.MembershipMonitor
 	mockMonitor.EXPECT().GetMemberCount(common.FrontendServiceName).Return(5, nil).AnyTimes()
+	s.versionChecker = NewVersionChecker(s.newConfig(), s.mockResource.GetMetricsClient(), s.mockResource.GetClusterMetadataManager())
 }
 
 func (s *workflowHandlerSuite) TearDownTest() {
 	s.controller.Finish()
+}
+
+func (s *workflowHandlerSuite) RecordSDKInfo(name, version string) {
+	s.versionChecker.RecordSDKInfo(name, version)
 }
 
 func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandler {
@@ -175,6 +182,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
+		s,
 	)
 }
 
@@ -1757,6 +1765,32 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.Equal(headers.ServerVersion, resp.ServerVersion)
 	s.True(resp.Capabilities.SignalAndQueryHeader)
 	s.True(resp.Capabilities.InternalErrorDifferentiation)
+}
+
+func (s *workflowHandlerSuite) TestSDKInfoCounter() {
+	config := s.newConfig()
+	config.EnableReadVisibilityFromES = dc.GetBoolPropertyFnFilteredByNamespace(true)
+
+	wh := s.getWorkflowHandler(config)
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
+	s.mockResource.ClusterMetadataMgr.EXPECT().GetName().Return("test").AnyTimes()
+
+	sdkVersion := "1.10.1"
+	ctx := headers.SetVersionsForTests(context.Background(), sdkVersion, headers.ClientNameGoSDK, headers.SupportedServerVersions, headers.AllFeatures)
+	_, err := wh.GetSystemInfo(ctx, &workflowservice.GetSystemInfoRequest{
+		Namespace: s.testNamespace.String(),
+	})
+	s.NoError(err)
+	metadata := new(persistence.GetClusterMetadataResponse)
+	metadata.ClusterId = "test"
+
+	req, err := s.versionChecker.createVersionCheckRequest(metadata)
+	s.NoError(err)
+	s.Equal(1, len(req.SDKInfo))
+	s.Equal(headers.ClientNameGoSDK, req.SDKInfo[0].Name)
+	s.Equal(sdkVersion, req.SDKInfo[0].Version)
+	s.Equal(int64(1), req.SDKInfo[0].TimesSeen)
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {

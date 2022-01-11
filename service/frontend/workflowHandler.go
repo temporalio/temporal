@@ -108,6 +108,7 @@ type (
 		saMapper                        searchattribute.Mapper
 		saProvider                      searchattribute.Provider
 		archivalMetadata                archiver.ArchivalMetadata
+		sdkVersionRecorder              SDKInfoRecorder
 	}
 
 	// HealthStatus is an enum that refers to the rpc handler health status
@@ -137,6 +138,7 @@ func NewWorkflowHandler(
 	saProvider searchattribute.Provider,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
+	sdkInfoRecorder SDKInfoRecorder,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -168,6 +170,7 @@ func NewWorkflowHandler(
 		saProvider:                      saProvider,
 		saMapper:                        saMapper,
 		archivalMetadata:                archivalMetadata,
+		sdkVersionRecorder:              sdkInfoRecorder,
 	}
 
 	return handler
@@ -236,6 +239,13 @@ func (wh *WorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_W
 	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
+func (wh *WorkflowHandler) RecordClientVersionAndCheckIfSupported(ctx context.Context) error {
+	sdkName, sdkVersion := wh.versionChecker.GetClientNameAndVersion(ctx)
+	wh.sdkVersionRecorder.RecordSDKInfo(sdkName, sdkVersion)
+
+	return wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck())
+}
+
 // RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
 // entity within Temporal, used as a container for all resources like workflow executions, task queues, etc.  Namespace
 // acts as a sandbox and provides isolation for all resources within the namespace.  All resources belong to exactly one
@@ -247,7 +257,7 @@ func (wh *WorkflowHandler) RegisterNamespace(ctx context.Context, request *workf
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -275,7 +285,7 @@ func (wh *WorkflowHandler) DescribeNamespace(ctx context.Context, request *workf
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -298,7 +308,7 @@ func (wh *WorkflowHandler) ListNamespaces(ctx context.Context, request *workflow
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -321,7 +331,7 @@ func (wh *WorkflowHandler) UpdateNamespace(ctx context.Context, request *workflo
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -347,7 +357,7 @@ func (wh *WorkflowHandler) DeprecateNamespace(ctx context.Context, request *work
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -373,7 +383,7 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -446,7 +456,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -735,7 +745,7 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	callTime := time.Now().UTC()
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -828,7 +838,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -895,7 +905,7 @@ func (wh *WorkflowHandler) RespondWorkflowTaskFailed(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -968,7 +978,7 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 	callTime := time.Now().UTC()
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1063,7 +1073,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeat(ctx context.Context, requ
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1135,7 +1145,7 @@ func (wh *WorkflowHandler) RecordActivityTaskHeartbeatById(ctx context.Context, 
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1239,7 +1249,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompleted(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1312,7 +1322,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCompletedById(ctx context.Context,
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1419,7 +1429,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1486,7 +1496,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1577,7 +1587,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceled(ctx context.Context, requ
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1651,7 +1661,7 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1752,7 +1762,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1789,7 +1799,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1857,7 +1867,7 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1944,7 +1954,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -1998,7 +2008,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2034,7 +2044,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2127,7 +2137,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2235,7 +2245,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2283,7 +2293,7 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2369,7 +2379,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2418,7 +2428,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2456,7 +2466,7 @@ func (wh *WorkflowHandler) GetSearchAttributes(ctx context.Context, _ *workflows
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2484,7 +2494,7 @@ func (wh *WorkflowHandler) RespondQueryTaskCompleted(
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2555,7 +2565,7 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2594,7 +2604,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		return nil, errQueryDisallowedForNamespace
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2656,7 +2666,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2711,7 +2721,7 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
@@ -2778,7 +2788,7 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 		return nil, errShuttingDown
 	}
 
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+	if err := wh.RecordClientVersionAndCheckIfSupported(ctx); err != nil {
 		return nil, err
 	}
 
