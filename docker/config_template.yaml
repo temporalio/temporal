@@ -117,10 +117,14 @@ persistence:
             sql:
                 pluginName: "postgres"
                 databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
-                connectAddr: "{{ default .Env.POSTGRES_SEEDS "" }}:{{ default .Env.DB_PORT "5432" }}"
+                {{- $vis_seeds := default .Env.VISIBILITY_POSTGRES_SEEDS .Env.POSTGRES_SEEDS -}}
+                {{- $vis_port := default .Env.VISIBILITY_DB_PORT .Env.DB_PORT -}}
+                connectAddr: "{{ default $vis_seeds "" }}:{{ default $vis_port "5432" }}"
                 connectProtocol: "tcp"
-                user: "{{ default .Env.POSTGRES_USER "" }}"
-                password: "{{ default .Env.POSTGRES_PWD "" }}"
+                {{- $vis_user := default .Env.VISIBILITY_POSTGRES_USER .Env.POSTGRES_USER -}}
+                {{- $vis_pwd := default .Env.VISIBILITY_POSTGRES_PWD .Env.POSTGRES_PWD -}}
+                user: "{{ default $vis_user "" }}"
+                password: "{{ default $vis_pwd "" }}"
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
