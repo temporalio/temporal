@@ -695,6 +695,18 @@ func (mr *MockContextMockRecorder) SetCurrentTime(cluster, currentTime interface
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCurrentTime", reflect.TypeOf((*MockContext)(nil).SetCurrentTime), cluster, currentTime)
 }
 
+// Unload mocks base method.
+func (m *MockContext) Unload() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Unload")
+}
+
+// Unload indicates an expected call of Unload.
+func (mr *MockContextMockRecorder) Unload() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unload", reflect.TypeOf((*MockContext)(nil).Unload))
+}
+
 // UpdateClusterReplicationLevel mocks base method.
 func (m *MockContext) UpdateClusterReplicationLevel(cluster string, ackTaskID int64, ackTimestamp time.Time) error {
 	m.ctrl.T.Helper()

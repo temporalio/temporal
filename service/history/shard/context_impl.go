@@ -1269,6 +1269,10 @@ func (s *ContextImpl) start() {
 	s.transitionLocked(contextRequestAcquire{})
 }
 
+func (s *ContextImpl) Unload() {
+	s.stop()
+}
+
 // stop should only be called by the controller.
 func (s *ContextImpl) stop() {
 	s.wLock()
