@@ -128,5 +128,7 @@ type (
 		GetSearchAttributesProvider() searchattribute.Provider
 		GetSearchAttributesMapper() searchattribute.Mapper
 		GetArchivalMetadata() archiver.ArchivalMetadata
+
+		Unload()
 	}
 )

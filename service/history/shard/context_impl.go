@@ -1088,7 +1088,8 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 	return s.allocateTimerIDsLocked(
 		namespaceEntry,
 		workflowID,
-		timerTasks)
+		timerTasks,
+		transferMaxReadLevel)
 }
 
 func (s *ContextImpl) allocateTransferIDsLocked(
@@ -1115,6 +1116,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
 	timerTasks []tasks.Task,
+	transferMaxReadLevel *int64,
 ) error {
 
 	// assign IDs for the timer tasks. They need to be assigned under shard lock.
@@ -1145,6 +1147,7 @@ func (s *ContextImpl) allocateTimerIDsLocked(
 			return err
 		}
 		task.SetTaskID(seqNum)
+		*transferMaxReadLevel = seqNum
 		visibilityTs := task.GetVisibilityTime()
 		s.contextTaggedLogger.Debug("Assigning new timer",
 			tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevelTime))
@@ -1267,6 +1270,10 @@ func (s *ContextImpl) start() {
 	s.wLock()
 	defer s.wUnlock()
 	s.transitionLocked(contextRequestAcquire{})
+}
+
+func (s *ContextImpl) Unload() {
+	s.stop()
 }
 
 // stop should only be called by the controller.
