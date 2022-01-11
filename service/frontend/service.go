@@ -56,11 +56,11 @@ type Config struct {
 	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
 
-	StandardVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
-	StandardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
+	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
 	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ESIndexMaxResultWindow                    dynamicconfig.IntPropertyFn
