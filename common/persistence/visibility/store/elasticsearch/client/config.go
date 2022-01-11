@@ -81,6 +81,7 @@ type (
 // GetVisibilityIndex return visibility index name from Elasticsearch config or empty string if it is not defined.
 func (cfg *Config) GetVisibilityIndex() string {
 	if cfg == nil {
+		// Empty string is be used as default index name when Elasticsearch is not configured.
 		return ""
 	}
 	return cfg.Indices[VisibilityAppName]

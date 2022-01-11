@@ -58,9 +58,15 @@ const (
 	scrollKeepAliveInterval      = "1m"
 
 	readTimeout = 16 * time.Second
-
-	v2IndexPrefix = "temporal_visibility_v2"
 )
+
+// Default sort by uses the sorting order defined in the index template, so no
+// additional sorting is needed during query.
+var defaultSorter = []elastic.Sorter{
+	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
+	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
+	elastic.NewFieldSort(searchattribute.RunID).Desc().Missing("_first"),
+}
 
 type (
 	visibilityStore struct {
@@ -594,27 +600,11 @@ func (s *visibilityStore) buildSearchParameters(
 		Index:    s.index,
 		Query:    boolQuery,
 		PageSize: request.PageSize,
+		Sorter:   defaultSorter,
 	}
 
 	if token != nil && len(token.SearchAfter) > 0 {
 		params.SearchAfter = token.SearchAfter
-	}
-
-	if strings.HasPrefix(s.index, v2IndexPrefix) {
-		params.Sorter = []elastic.Sorter{
-			elastic.NewFieldSort(searchattribute.CloseTime).Desc(),
-			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
-			elastic.NewFieldSort(searchattribute.RunID).Desc(),
-		}
-	} else {
-		if overStartTime {
-			params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.StartTime).Desc())
-		} else {
-			params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.CloseTime).Desc())
-		}
-
-		// RunID is explicit tiebreaker.
-		params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.RunID).Desc())
 	}
 
 	return params, nil
@@ -668,20 +658,7 @@ func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID nam
 
 func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
 	if len(fieldSorts) == 0 {
-		if strings.HasPrefix(s.index, v2IndexPrefix) {
-			// Sort by the index sorting order defined in the index template.
-			return []elastic.Sorter{
-				elastic.NewFieldSort(searchattribute.CloseTime).Desc(),
-				elastic.NewFieldSort(searchattribute.StartTime).Desc(),
-				elastic.NewFieldSort(searchattribute.RunID).Desc(),
-			}
-		}
-
-		// Set default sorting by StartTime desc and RunID as tiebreaker.
-		return []elastic.Sorter{
-			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
-			elastic.NewFieldSort(searchattribute.RunID).Desc(),
-		}
+		return defaultSorter
 	}
 
 	res := make([]elastic.Sorter, len(fieldSorts)+1)

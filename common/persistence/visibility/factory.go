@@ -44,7 +44,8 @@ func NewManager(
 	persistenceCfg config.Persistence,
 	persistenceResolver resolver.ServiceResolver,
 
-	esConfig *esclient.Config,
+	defaultIndexName string,
+	secondaryVisibilityIndexName string,
 	esClient esclient.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
@@ -56,8 +57,8 @@ func NewManager(
 	advancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
 	enableAdvancedVisibilityRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
-	enableReadFromSecondaryVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
-	enableWriteToSecondaryVisibility dynamicconfig.BoolPropertyFn,
+	enableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -75,7 +76,7 @@ func NewManager(
 	}
 
 	advVisibilityManager, err := NewAdvancedManager(
-		esConfig.GetVisibilityIndex(),
+		defaultIndexName,
 		esClient,
 		esProcessorConfig,
 		searchAttributesProvider,
@@ -90,7 +91,7 @@ func NewManager(
 	}
 
 	secondaryVisibilityManager, err := NewAdvancedManager(
-		esConfig.GetSecondaryVisibilityIndex(),
+		secondaryVisibilityIndexName,
 		esClient,
 		esProcessorConfig,
 		searchAttributesProvider,
@@ -127,8 +128,8 @@ func NewManager(
 		managerSelector := NewESManagerSelector(
 			advVisibilityManager,
 			secondaryVisibilityManager,
-			enableReadFromSecondaryVisibility,
-			enableWriteToSecondaryVisibility)
+			enableReadFromSecondaryAdvancedVisibility,
+			enableWriteToSecondaryAdvancedVisibility)
 
 		return NewVisibilityManagerDual(
 			advVisibilityManager,
@@ -179,7 +180,7 @@ func NewStandardManager(
 }
 
 func NewAdvancedManager(
-	indexName string,
+	defaultIndexName string,
 	esClient esclient.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
@@ -191,12 +192,12 @@ func NewAdvancedManager(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
-	if indexName == "" {
+	if defaultIndexName == "" {
 		return nil, nil
 	}
 
 	advVisibilityStore := newAdvancedVisibilityStore(
-		indexName,
+		defaultIndexName,
 		esClient,
 		esProcessorConfig,
 		searchAttributesProvider,
