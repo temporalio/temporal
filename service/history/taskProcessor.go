@@ -168,6 +168,12 @@ func (t *taskProcessor) taskWorker(
 			if !ok {
 				return
 			}
+			if task.GetTaskID() > t.shard.GetTransferMaxReadLevel() {
+				// this could happen if we lost ownership and was not aware of it.
+				// unload shard
+				t.shard.Unload()
+				return
+			}
 			t.processTaskAndAck(notificationChan, task)
 		}
 	}
