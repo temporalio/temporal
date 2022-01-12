@@ -51,6 +51,9 @@ const (
 	// 6. QueryWorkflow
 	// please also reference selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs
 	DCRedirectionPolicySelectedAPIsForwarding = "selected-apis-forwarding"
+
+	// DCRedirectionPolicyAllAPIsForwarding means forwarding all APIs based on namespace active cluster
+	DCRedirectionPolicyAllAPIsForwarding = "all-apis-forwarding"
 )
 
 type (
@@ -71,6 +74,7 @@ type (
 		currentClusterName string
 		config             *Config
 		namespaceRegistry  namespace.Registry
+		enableForAllAPIs   bool
 	}
 )
 
@@ -96,6 +100,9 @@ func RedirectionPolicyGenerator(clusterMetadata cluster.Metadata, config *Config
 	case DCRedirectionPolicySelectedAPIsForwarding:
 		currentClusterName := clusterMetadata.GetCurrentClusterName()
 		return NewSelectedAPIsForwardingPolicy(currentClusterName, config, namespaceRegistry)
+	case DCRedirectionPolicyAllAPIsForwarding:
+		currentClusterName := clusterMetadata.GetCurrentClusterName()
+		return NewAllAPIsForwardingPolicy(currentClusterName, config, namespaceRegistry)
 	default:
 		panic(fmt.Sprintf("Unknown DC redirection policy %v", policy.Policy))
 	}
@@ -124,6 +131,16 @@ func NewSelectedAPIsForwardingPolicy(currentClusterName string, config *Config, 
 		currentClusterName: currentClusterName,
 		config:             config,
 		namespaceRegistry:  namespaceRegistry,
+	}
+}
+
+// NewAllAPIsForwardingPolicy creates a forwarding policy for all APIs based on namespace
+func NewAllAPIsForwardingPolicy(currentClusterName string, config *Config, namespaceRegistry namespace.Registry) *SelectedAPIsForwardingRedirectionPolicy {
+	return &SelectedAPIsForwardingRedirectionPolicy{
+		currentClusterName: currentClusterName,
+		config:             config,
+		namespaceRegistry:  namespaceRegistry,
+		enableForAllAPIs:   true,
 	}
 }
 
@@ -178,6 +195,10 @@ func (policy *SelectedAPIsForwardingRedirectionPolicy) getTargetClusterAndIsName
 	if !policy.config.EnableNamespaceNotActiveAutoForwarding(namespaceEntry.Name().String()) {
 		// do not do dc redirection if auto-forwarding dynamic config flag is not enabled
 		return policy.currentClusterName, false
+	}
+
+	if policy.enableForAllAPIs {
+		return namespaceEntry.ActiveClusterName(), true
 	}
 
 	_, ok := selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs[apiName]
