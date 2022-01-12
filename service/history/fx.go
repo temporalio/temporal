@@ -241,6 +241,7 @@ func VisibilityManagerProvider(
 		params.PersistenceConfig,
 		persistenceServiceResolver,
 		esConfig.GetVisibilityIndex(),
+		esConfig.GetSecondaryVisibilityIndex(),
 		esClient,
 		esProcessorConfig,
 		saProvider,
@@ -251,6 +252,8 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
 		serviceConfig.AdvancedVisibilityWritingMode,
+		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
+		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
 		params.MetricsClient,
 		logger,
 	)

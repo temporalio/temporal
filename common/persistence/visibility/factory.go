@@ -45,6 +45,7 @@ func NewManager(
 	persistenceResolver resolver.ServiceResolver,
 
 	defaultIndexName string,
+	secondaryVisibilityIndexName string,
 	esClient esclient.Client,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	searchAttributesProvider searchattribute.Provider,
@@ -56,6 +57,8 @@ func NewManager(
 	advancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn,
 	enableAdvancedVisibilityRead dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 	advancedVisibilityWritingMode dynamicconfig.StringPropertyFn,
+	enableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	enableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn,
 
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -87,8 +90,28 @@ func NewManager(
 		return nil, err
 	}
 
+	secondaryVisibilityManager, err := NewAdvancedManager(
+		secondaryVisibilityIndexName,
+		esClient,
+		esProcessorConfig,
+		searchAttributesProvider,
+		searchAttributesMapper,
+		advancedVisibilityPersistenceMaxReadQPS,
+		advancedVisibilityPersistenceMaxWriteQPS,
+		metricsClient,
+		logger,
+	)
+	if err != nil {
+		return nil, err
+	}
+
 	if stdVisibilityManager == nil && advVisibilityManager == nil {
 		logger.Fatal("invalid config: one of standard or advanced visibility must be configured")
+		return nil, nil
+	}
+
+	if stdVisibilityManager != nil && secondaryVisibilityManager != nil {
+		logger.Fatal("invalid config: secondary visibility store cannot be used with standard visibility")
 		return nil, nil
 	}
 
@@ -97,15 +120,34 @@ func NewManager(
 	}
 
 	if stdVisibilityManager == nil && advVisibilityManager != nil {
-		return advVisibilityManager, nil
+		if secondaryVisibilityManager == nil {
+			return advVisibilityManager, nil
+		}
+
+		// Dual write to primary and secondary ES indices.
+		managerSelector := NewESManagerSelector(
+			advVisibilityManager,
+			secondaryVisibilityManager,
+			enableReadFromSecondaryAdvancedVisibility,
+			enableWriteToSecondaryAdvancedVisibility)
+
+		return NewVisibilityManagerDual(
+			advVisibilityManager,
+			secondaryVisibilityManager,
+			managerSelector,
+		), nil
 	}
 
-	// If both visibilities are configured use dual write.
-	return NewVisibilityManagerDual(
+	// Dual write to standard and advanced visibility.
+	managerSelector := NewSQLToESManagerSelector(
 		stdVisibilityManager,
 		advVisibilityManager,
 		enableAdvancedVisibilityRead,
-		advancedVisibilityWritingMode,
+		advancedVisibilityWritingMode)
+	return NewVisibilityManagerDual(
+		stdVisibilityManager,
+		advVisibilityManager,
+		managerSelector,
 	), nil
 }
 
@@ -150,6 +192,10 @@ func NewAdvancedManager(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (manager.VisibilityManager, error) {
+	if defaultIndexName == "" {
+		return nil, nil
+	}
+
 	advVisibilityStore := newAdvancedVisibilityStore(
 		defaultIndexName,
 		esClient,

@@ -17,6 +17,7 @@ persistence:
           host: "127.0.0.1:9200"
         indices:
           visibility: temporal_visibility_v1_dev
+          # secondary_visibility: temporal_visibility_v2_dev
         closeIdleConnectionsInterval: 15s
 global:
   membership:

@@ -8,7 +8,10 @@
       "number_of_shards": "1",
       "number_of_replicas": "0",
       "auto_expand_replicas": "0-2",
-      "search.idle.after": "365d"
+      "search.idle.after": "365d",
+      "sort.field": [ "CloseTime", "StartTime", "RunId" ],
+      "sort.order": [ "desc", "desc", "desc" ],
+      "sort.missing": [ "_first", "_first", "_first" ]
     }
   },
   "mappings": {

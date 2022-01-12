@@ -60,6 +60,14 @@ const (
 	readTimeout = 16 * time.Second
 )
 
+// Default sort by uses the sorting order defined in the index template, so no
+// additional sorting is needed during query.
+var defaultSorter = []elastic.Sorter{
+	elastic.NewFieldSort(searchattribute.CloseTime).Desc().Missing("_first"),
+	elastic.NewFieldSort(searchattribute.StartTime).Desc().Missing("_first"),
+	elastic.NewFieldSort(searchattribute.RunID).Desc().Missing("_first"),
+}
+
 type (
 	visibilityStore struct {
 		esClient                 client.Client
@@ -236,7 +244,7 @@ func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequ
 func (s *visibilityStore) checkProcessor() {
 	if s.processor == nil {
 		// must be bug, check history setup
-		panic("elastic search processor is nil")
+		panic("Elasticsearch processor is nil")
 	}
 	if s.processorAckTimeout == nil {
 		// must be bug, check history setup
@@ -592,20 +600,12 @@ func (s *visibilityStore) buildSearchParameters(
 		Index:    s.index,
 		Query:    boolQuery,
 		PageSize: request.PageSize,
+		Sorter:   defaultSorter,
 	}
 
 	if token != nil && len(token.SearchAfter) > 0 {
 		params.SearchAfter = token.SearchAfter
 	}
-
-	if overStartTime {
-		params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.StartTime).Desc())
-	} else {
-		params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.CloseTime).Desc())
-	}
-
-	// RunID is explicit tiebreaker.
-	params.Sorter = append(params.Sorter, elastic.NewFieldSort(searchattribute.RunID).Desc())
 
 	return params, nil
 }
@@ -658,11 +658,7 @@ func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID nam
 
 func (s *visibilityStore) setDefaultFieldSort(fieldSorts []*elastic.FieldSort) []elastic.Sorter {
 	if len(fieldSorts) == 0 {
-		// Set default sorting by StartTime desc and RunID as tiebreaker.
-		return []elastic.Sorter{
-			elastic.NewFieldSort(searchattribute.StartTime).Desc(),
-			elastic.NewFieldSort(searchattribute.RunID).Desc(),
-		}
+		return defaultSorter
 	}
 
 	res := make([]elastic.Sorter, len(fieldSorts)+1)
