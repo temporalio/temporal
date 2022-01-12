@@ -66,10 +66,6 @@ type Options struct {
 
 	// Pin prevents in-use objects from getting evicted.
 	Pin bool
-
-	// RemovedFunc is an optional function called when an element
-	// is scheduled for deletion
-	RemovedFunc RemovedFunc
 }
 
 // SimpleOptions provides options that can be used to configure SimpleCache
