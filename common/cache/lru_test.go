@@ -156,64 +156,21 @@ func TestLRUCacheConcurrentAccess(t *testing.T) {
 	wg.Wait()
 }
 
-func TestRemoveFunc(t *testing.T) {
-	ch := make(chan bool)
-	cache := New(5, &Options{
-		RemovedFunc: func(i interface{}) {
-			_, ok := i.(*testing.T)
-			assert.True(t, ok)
-			ch <- true
-		},
-	})
-
-	cache.Put("testing", t)
-	cache.Delete("testing")
-	assert.Nil(t, cache.Get("testing"))
-
-	timeout := time.NewTimer(time.Millisecond * 300)
-	select {
-	case b := <-ch:
-		assert.True(t, b)
-	case <-timeout.C:
-		t.Error("RemovedFunc did not send true on channel ch")
-	}
-}
-
-func TestRemovedFuncWithTTL(t *testing.T) {
-	ch := make(chan bool)
+func TestTTL(t *testing.T) {
 	cache := New(5, &Options{
 		TTL: time.Millisecond * 50,
-		RemovedFunc: func(i interface{}) {
-			_, ok := i.(*testing.T)
-			assert.True(t, ok)
-			ch <- true
-		},
 	})
 
 	cache.Put("A", t)
 	assert.Equal(t, t, cache.Get("A"))
 	time.Sleep(time.Millisecond * 100)
 	assert.Nil(t, cache.Get("A"))
-
-	timeout := time.NewTimer(time.Millisecond * 300)
-	select {
-	case b := <-ch:
-		assert.True(t, b)
-	case <-timeout.C:
-		t.Error("RemovedFunc did not send true on channel ch")
-	}
 }
 
-func TestRemovedFuncWithTTL_Pin(t *testing.T) {
-	ch := make(chan bool)
+func TestTTLWithPin(t *testing.T) {
 	cache := New(5, &Options{
 		TTL: time.Millisecond * 50,
 		Pin: true,
-		RemovedFunc: func(i interface{}) {
-			_, ok := i.(*testing.T)
-			assert.True(t, ok)
-			ch <- true
-		},
 	})
 
 	_, err := cache.PutIfNotExist("A", t)
@@ -226,26 +183,12 @@ func TestRemovedFuncWithTTL_Pin(t *testing.T) {
 	cache.Release("A")
 	cache.Release("A")
 	assert.Nil(t, cache.Get("A"))
-
-	timeout := time.NewTimer(time.Millisecond * 300)
-	select {
-	case b := <-ch:
-		assert.True(t, b)
-	case <-timeout.C:
-		t.Error("RemovedFunc did not send true on channel ch")
-	}
 }
 
-func TestRemovedFuncMaxSize_Pin_MidItem(t *testing.T) {
-	ch := make(chan bool)
+func TestMaxSizeWithPin_MidItem(t *testing.T) {
 	cache := New(2, &Options{
 		TTL: time.Millisecond * 50,
 		Pin: true,
-		RemovedFunc: func(i interface{}) {
-			_, ok := i.(*testing.T)
-			assert.True(t, ok)
-			ch <- true
-		},
 	})
 
 	_, err := cache.PutIfNotExist("A", t)
@@ -277,16 +220,10 @@ func TestRemovedFuncMaxSize_Pin_MidItem(t *testing.T) {
 	assert.Nil(t, cache.Get("C"))
 }
 
-func TestRemovedFuncMaxSize_Pin_LastItem(t *testing.T) {
-	ch := make(chan bool)
+func TestMaxSizeWithPin_LastItem(t *testing.T) {
 	cache := New(2, &Options{
 		TTL: time.Millisecond * 50,
 		Pin: true,
-		RemovedFunc: func(i interface{}) {
-			_, ok := i.(*testing.T)
-			assert.True(t, ok)
-			ch <- true
-		},
 	})
 
 	_, err := cache.PutIfNotExist("A", t)

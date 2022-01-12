@@ -45,7 +45,6 @@ type (
 		maxSize  int
 		ttl      time.Duration
 		pin      bool
-		rmFunc   RemovedFunc
 	}
 
 	iteratorImpl struct {
@@ -141,7 +140,6 @@ func New(maxSize int, opts *Options) Cache {
 		ttl:      opts.TTL,
 		maxSize:  maxSize,
 		pin:      opts.Pin,
-		rmFunc:   opts.RemovedFunc,
 	}
 }
 
@@ -308,9 +306,6 @@ func (c *lru) putInternal(key interface{}, value interface{}, allowUpdate bool) 
 
 func (c *lru) deleteInternal(element *list.Element) {
 	entry := c.byAccess.Remove(element).(*entryImpl)
-	if c.rmFunc != nil {
-		go c.rmFunc(entry.value)
-	}
 	delete(c.byKey, entry.key)
 }
 
