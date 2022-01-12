@@ -609,6 +609,7 @@ func ApplyClusterMetadataConfigProvider(
 				tag.Key("clusterMetadata.EnableGlobalNamespace"),
 				tag.IgnoredValue(resp.IsGlobalNamespaceEnabled),
 				tag.Value(clusterData.EnableGlobalNamespace))
+			// Favor local config value over storage.
 		}
 		if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
 			logger.Warn(
