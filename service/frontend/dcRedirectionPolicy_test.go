@@ -334,6 +334,36 @@ func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_G
 	s.Equal(2*len(selectedAPIsForwardingRedirectionPolicyWhitelistedAPIs), alternativeClustercallCount)
 }
 
+func (s *selectedAPIsForwardingRedirectionPolicySuite) TestGetTargetDataCenter_GlobalNamespace_Forwarding_AlternativeClusterToCurrentCluster_AllAPIs() {
+	s.setupGlobalNamespaceWithTwoReplicationCluster(true, false)
+	s.policy.enableForAllAPIs = true
+
+	currentClustercallCount := 0
+	alternativeClustercallCount := 0
+	callFn := func(targetCluster string) error {
+		switch targetCluster {
+		case s.currentClusterName:
+			currentClustercallCount++
+			return nil
+		case s.alternativeClusterName:
+			alternativeClustercallCount++
+			return serviceerror.NewNamespaceNotActive("", s.alternativeClusterName, s.currentClusterName)
+		default:
+			panic(fmt.Sprintf("unknown cluster name %v", targetCluster))
+		}
+	}
+
+	apiName := "NotExistRandomAPI"
+	err := s.policy.WithNamespaceIDRedirect(context.Background(), s.namespaceID, apiName, callFn)
+	s.Nil(err)
+
+	err = s.policy.WithNamespaceRedirect(context.Background(), s.namespace, apiName, callFn)
+	s.Nil(err)
+
+	s.Equal(2, currentClustercallCount)
+	s.Equal(2, alternativeClustercallCount)
+}
+
 func (s *selectedAPIsForwardingRedirectionPolicySuite) setupLocalNamespace() {
 	namespaceEntry := namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
