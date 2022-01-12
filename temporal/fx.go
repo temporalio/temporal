@@ -607,9 +607,8 @@ func ApplyClusterMetadataConfigProvider(
 			logger.Warn(
 				mismatchLogMessage,
 				tag.Key("clusterMetadata.EnableGlobalNamespace"),
-				tag.IgnoredValue(clusterData.EnableGlobalNamespace),
-				tag.Value(resp.IsGlobalNamespaceEnabled))
-			config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
+				tag.IgnoredValue(resp.IsGlobalNamespaceEnabled),
+				tag.Value(clusterData.EnableGlobalNamespace))
 		}
 		if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
 			logger.Warn(
