@@ -938,7 +938,7 @@ func (adh *AdminHandler) DescribeCluster(
 		VersionInfo:              metadata.VersionInfo,
 		FailoverVersionIncrement: metadata.FailoverVersionIncrement,
 		InitialFailoverVersion:   metadata.InitialFailoverVersion,
-		IsGlobalNamespaceEnabled: adh.clusterMetadata.IsGlobalNamespaceEnabled(),
+		IsGlobalNamespaceEnabled: metadata.IsGlobalNamespaceEnabled,
 	}, nil
 }
 
