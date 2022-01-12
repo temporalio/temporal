@@ -77,6 +77,7 @@ var Module = fx.Options(
 	fx.Provide(NamespaceCountLimitInterceptorProvider),
 	fx.Provide(NamespaceValidatorInterceptorProvider),
 	fx.Provide(NamespaceRateLimitInterceptorProvider),
+	fx.Provide(SDKVersionInterceptorProvider),
 	fx.Provide(GrpcServerOptionsProvider),
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
@@ -131,6 +132,7 @@ func GrpcServerOptionsProvider(
 	namespaceValidatorInterceptor *interceptor.NamespaceValidatorInterceptor,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
+	sdkVersionInterceptor *interceptor.SDKVersionInterceptor,
 	authorizer authorization.Authorizer,
 	claimMapper authorization.ClaimMapper,
 	audienceGetter authorization.JWTAudienceMapper,
@@ -168,6 +170,7 @@ func GrpcServerOptionsProvider(
 			logger,
 			audienceGetter,
 		),
+		sdkVersionInterceptor.Intercept,
 	}
 	if len(customInterceptors) > 0 {
 		interceptors = append(interceptors, customInterceptors...)
@@ -281,6 +284,10 @@ func NamespaceValidatorInterceptorProvider(
 		namespaceRegistry,
 		serviceConfig.EnableTokenNamespaceEnforcement,
 	)
+}
+
+func SDKVersionInterceptorProvider() *interceptor.SDKVersionInterceptor {
+	return interceptor.NewSDKVersionInterceptor()
 }
 
 func PersistenceMaxQpsProvider(
@@ -433,7 +440,6 @@ func HandlerProvider(
 		saProvider,
 		clusterMetadata,
 		archivalMetadata,
-		versionChecker,
 	)
 	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler

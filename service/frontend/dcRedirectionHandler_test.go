@@ -125,7 +125,6 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
-		s,
 	)
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
@@ -146,10 +145,6 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 
 func (s *dcRedirectionHandlerSuite) TearDownTest() {
 	s.controller.Finish()
-}
-
-// RecordSDKInfo is a noop in this test suite
-func (s *dcRedirectionHandlerSuite) RecordSDKInfo(name, version string) {
 }
 
 func (s *dcRedirectionHandlerSuite) TestDescribeTaskQueue() {

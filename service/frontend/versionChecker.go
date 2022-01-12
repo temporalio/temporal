@@ -27,7 +27,6 @@ package frontend
 import (
 	"runtime"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	enumsbp "go.temporal.io/api/enums/v1"
@@ -39,47 +38,33 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 const VersionCheckInterval = 24 * time.Hour
 
-type sdkNameVersion struct {
-	name    string
-	version string
-}
-
-type sdkCount struct {
-	count int64
-}
-
-type SDKInfoRecorder interface {
-	RecordSDKInfo(name, version string)
-}
-
 type VersionChecker struct {
-	config       *Config
-	shutdownChan chan struct{}
-	// Using a sync map to support effienct concurrent updates.
-	// Key type is sdkNameVersion and value type is sdkCount.
-	// Note that we never delete keys from this map as the cardinality of
-	// client versions should be fairly low.
-	sdkInfoCounter         sync.Map
+	config                 *Config
+	shutdownChan           chan struct{}
 	metricsScope           metrics.Scope
 	clusterMetadataManager persistence.ClusterMetadataManager
 	startOnce              sync.Once
 	stopOnce               sync.Once
+	sdkVersionRecorder     interceptor.SDKInfoRecorder
 }
 
 func NewVersionChecker(
 	config *Config,
 	metricsClient metrics.Client,
 	clusterMetadataManager persistence.ClusterMetadataManager,
+	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 ) *VersionChecker {
 	return &VersionChecker{
 		config:                 config,
 		shutdownChan:           make(chan struct{}),
 		metricsScope:           metricsClient.Scope(metrics.VersionCheckScope),
 		clusterMetadataManager: clusterMetadataManager,
+		sdkVersionRecorder:     sdkVersionRecorder,
 	}
 }
 
@@ -97,16 +82,6 @@ func (vc *VersionChecker) Stop() {
 			close(vc.shutdownChan)
 		})
 	}
-}
-
-func (vc *VersionChecker) RecordSDKInfo(name, version string) {
-	info := sdkNameVersion{name, version}
-	valIface, ok := vc.sdkInfoCounter.Load(info)
-	if !ok {
-		// Store if wasn't added racy
-		valIface, _ = vc.sdkInfoCounter.LoadOrStore(info, &sdkCount{})
-	}
-	atomic.AddInt64(&valIface.(*sdkCount).count, 1)
 }
 
 func (vc *VersionChecker) versionCheckLoop() {
@@ -162,13 +137,6 @@ func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
 }
 
 func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*check.VersionCheckRequest, error) {
-	sdkInfo := make([]check.SDKInfo, 0)
-	vc.sdkInfoCounter.Range(func(key, value interface{}) bool {
-		timesSeen := atomic.SwapInt64(&value.(*sdkCount).count, 0)
-		nameVersion := key.(sdkNameVersion)
-		sdkInfo = append(sdkInfo, check.SDKInfo{Name: nameVersion.name, Version: nameVersion.version, TimesSeen: timesSeen})
-		return true
-	})
 
 	return &check.VersionCheckRequest{
 		Product:   headers.ClientNameServer,
@@ -178,7 +146,7 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 		DB:        vc.clusterMetadataManager.GetName(),
 		ClusterID: metadata.ClusterId,
 		Timestamp: time.Now().UnixNano(),
-		SDKInfo:   sdkInfo,
+		SDKInfo:   vc.sdkVersionRecorder.GetAndResetSDKInfo(),
 	}, nil
 }
 
