@@ -28,3 +28,9 @@ system.advancedVisibilityWritingMode:
 system.enableReadVisibilityFromES:
   - value: true
     constraints: {}
+#system.enableWriteToSecondaryAdvancedVisibility:
+#  - value: true
+#    constraints: {}
+#system.enableReadFromSecondaryAdvancedVisibility:
+#  - value: false
+#    constraints: {}

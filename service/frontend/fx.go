@@ -304,6 +304,7 @@ func VisibilityManagerProvider(
 		params.PersistenceConfig,
 		persistenceServiceResolver,
 		esConfig.GetVisibilityIndex(),
+		esConfig.GetSecondaryVisibilityIndex(),
 		esClient,
 		nil, // frontend visibility never write
 		saProvider,
@@ -314,6 +315,8 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityPersistenceMaxWriteQPS,
 		serviceConfig.EnableReadVisibilityFromES,
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
+		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
+		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
 		params.MetricsClient,
 		logger,
 	)

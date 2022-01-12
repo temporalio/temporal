@@ -36,7 +36,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		// this version is not used by task processing for validation,
-		// instead, the version is used by elastic search
+		// instead, the version is used by Elasticsearch
 		Version int64
 	}
 )

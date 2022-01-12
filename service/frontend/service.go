@@ -57,13 +57,14 @@ type Config struct {
 	PersistenceMaxQPS       dynamicconfig.IntPropertyFn
 	PersistenceGlobalMaxQPS dynamicconfig.IntPropertyFn
 
-	StandardVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
-	StandardVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
-	AdvancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
-	VisibilityMaxPageSize                    dynamicconfig.IntPropertyFnWithNamespaceFilter
-	EnableReadVisibilityFromES               dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ESIndexMaxResultWindow                   dynamicconfig.IntPropertyFn
+	StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+	AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+	VisibilityMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ESIndexMaxResultWindow                    dynamicconfig.IntPropertyFn
 
 	HistoryMaxPageSize           dynamicconfig.IntPropertyFnWithNamespaceFilter
 	RPS                          dynamicconfig.IntPropertyFn
@@ -137,13 +138,14 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		PersistenceMaxQPS:       dc.GetIntProperty(dynamicconfig.FrontendPersistenceMaxQPS, 2000),
 		PersistenceGlobalMaxQPS: dc.GetIntProperty(dynamicconfig.FrontendPersistenceGlobalMaxQPS, 0),
 
-		StandardVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
-		StandardVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
-		AdvancedVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
-		AdvancedVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
-		VisibilityMaxPageSize:                    dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
-		EnableReadVisibilityFromES:               dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
-		ESIndexMaxResultWindow:                   dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
+		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
+		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
+		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
+		VisibilityMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendVisibilityMaxPageSize, 1000),
+		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
+		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
+		ESIndexMaxResultWindow:                    dc.GetIntProperty(dynamicconfig.FrontendESIndexMaxResultWindow, 10000),
 
 		HistoryMaxPageSize:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendHistoryMaxPageSize, common.GetHistoryMaxPageSize),
 		RPS:                                    dc.GetIntProperty(dynamicconfig.FrontendRPS, 2400),

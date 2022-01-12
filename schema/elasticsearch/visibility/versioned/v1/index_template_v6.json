@@ -7,7 +7,10 @@
     "index": {
       "number_of_shards": "1",
       "number_of_replicas": "0",
-      "auto_expand_replicas": "0-2"
+      "auto_expand_replicas": "0-2",
+      "sort.field": [ "CloseTime", "StartTime", "RunId" ],
+      "sort.order": [ "desc", "desc", "desc" ],
+      "sort.missing": [ "_first", "_first", "_first" ]
     }
   },
   "mappings": {

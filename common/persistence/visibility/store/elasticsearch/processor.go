@@ -48,7 +48,7 @@ import (
 )
 
 type (
-	// Processor is interface for elastic search bulk processor
+	// Processor is interface for Elasticsearch bulk processor
 	Processor interface {
 		common.Daemon
 

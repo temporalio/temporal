@@ -65,12 +65,14 @@ var Keys = map[Key]string{
 	AdminMatchingNamespaceTaskqueueToPartitionDispatchRate: "admin.matchingNamespaceTaskqueueToPartitionDispatchRate",
 
 	// system settings
-	StandardVisibilityPersistenceMaxReadQPS:  "system.standardVisibilityPersistenceMaxReadQPS",
-	StandardVisibilityPersistenceMaxWriteQPS: "system.standardVisibilityPersistenceMaxWriteQPS",
-	AdvancedVisibilityPersistenceMaxReadQPS:  "system.advancedVisibilityPersistenceMaxReadQPS",
-	AdvancedVisibilityPersistenceMaxWriteQPS: "system.advancedVisibilityPersistenceMaxWriteQPS",
-	AdvancedVisibilityWritingMode:            "system.advancedVisibilityWritingMode",
-	EnableReadVisibilityFromES:               "system.enableReadVisibilityFromES",
+	StandardVisibilityPersistenceMaxReadQPS:   "system.standardVisibilityPersistenceMaxReadQPS",
+	StandardVisibilityPersistenceMaxWriteQPS:  "system.standardVisibilityPersistenceMaxWriteQPS",
+	AdvancedVisibilityPersistenceMaxReadQPS:   "system.advancedVisibilityPersistenceMaxReadQPS",
+	AdvancedVisibilityPersistenceMaxWriteQPS:  "system.advancedVisibilityPersistenceMaxWriteQPS",
+	AdvancedVisibilityWritingMode:             "system.advancedVisibilityWritingMode",
+	EnableWriteToSecondaryAdvancedVisibility:  "system.enableWriteToSecondaryAdvancedVisibility",
+	EnableReadVisibilityFromES:                "system.enableReadVisibilityFromES",
+	EnableReadFromSecondaryAdvancedVisibility: "system.enableReadFromSecondaryAdvancedVisibility",
 
 	HistoryArchivalState:                   "system.historyArchivalState",
 	EnableReadFromHistoryArchival:          "system.enableReadFromHistoryArchival",
@@ -383,8 +385,12 @@ const (
 	AdvancedVisibilityPersistenceMaxWriteQPS
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
 	AdvancedVisibilityWritingMode
-	// EnableReadVisibilityFromES is key for enable read from elastic search
+	// EnableWriteToSecondaryAdvancedVisibility is the config to enable write to secondary visibility for Elasticsearch
+	EnableWriteToSecondaryAdvancedVisibility
+	// EnableReadVisibilityFromES is key for enable read from Elasticsearch
 	EnableReadVisibilityFromES
+	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
+	EnableReadFromSecondaryAdvancedVisibility
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter
 

@@ -53,6 +53,7 @@ type Config struct {
 	AdvancedVisibilityPersistenceMaxReadQPS  dynamicconfig.IntPropertyFn
 	AdvancedVisibilityPersistenceMaxWriteQPS dynamicconfig.IntPropertyFn
 	AdvancedVisibilityWritingMode            dynamicconfig.StringPropertyFn
+	EnableWriteToSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFn
 
 	EmitShardDiffLog      dynamicconfig.BoolPropertyFn
 	MaxAutoResetPoints    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -296,6 +297,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		AdvancedVisibilityPersistenceMaxReadQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
 		AdvancedVisibilityPersistenceMaxWriteQPS: dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
 		AdvancedVisibilityWritingMode:            dc.GetStringProperty(dynamicconfig.AdvancedVisibilityWritingMode, visibility.DefaultAdvancedVisibilityWritingMode(isAdvancedVisibilityConfigExist)),
+		EnableWriteToSecondaryAdvancedVisibility: dc.GetBoolProperty(dynamicconfig.EnableWriteToSecondaryAdvancedVisibility, false),
 
 		EmitShardDiffLog:                     dc.GetBoolProperty(dynamicconfig.EmitShardDiffLog, false),
 		HistoryCacheInitialSize:              dc.GetIntProperty(dynamicconfig.HistoryCacheInitialSize, 128),

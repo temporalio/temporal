@@ -32,7 +32,8 @@ import (
 
 const (
 	// VisibilityAppName is used to find ES indexName for visibility
-	VisibilityAppName = "visibility"
+	VisibilityAppName          = "visibility"
+	SecondaryVisibilityAppName = "secondary_visibility"
 )
 
 // Config for connecting to Elasticsearch
@@ -84,6 +85,13 @@ func (cfg *Config) GetVisibilityIndex() string {
 		return ""
 	}
 	return cfg.Indices[VisibilityAppName]
+}
+
+func (cfg *Config) GetSecondaryVisibilityIndex() string {
+	if cfg == nil {
+		return ""
+	}
+	return cfg.Indices[SecondaryVisibilityAppName]
 }
 
 func (cfg *Config) Validate(storeName string) error {
