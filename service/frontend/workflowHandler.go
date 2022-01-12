@@ -3483,11 +3483,19 @@ func (wh *WorkflowHandler) trimHistoryNode(
 		return // abort
 	}
 
-	// best effort
-	_, _ = wh.persistenceExecutionManager.TrimHistoryBranch(&persistence.TrimHistoryBranchRequest{
+	_, err = wh.persistenceExecutionManager.TrimHistoryBranch(&persistence.TrimHistoryBranchRequest{
 		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
 		BranchToken:   response.CurrentBranchToken,
 		NodeID:        response.GetLastFirstEventId(),
 		TransactionID: response.GetLastFirstEventTxnId(),
 	})
+	if err != nil {
+		// best effort
+		wh.logger.Error("unable to trim history branch",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+			tag.Error(err),
+		)
+	}
 }
