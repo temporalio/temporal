@@ -385,11 +385,11 @@ const (
 	AdvancedVisibilityPersistenceMaxWriteQPS
 	// AdvancedVisibilityWritingMode is key for how to write to advanced visibility
 	AdvancedVisibilityWritingMode
-	// EnableWriteToSecondaryAdvancedVisibility is the config to enable write to secondary visibility for elastic search
+	// EnableWriteToSecondaryAdvancedVisibility is the config to enable write to secondary visibility for Elasticsearch
 	EnableWriteToSecondaryAdvancedVisibility
-	// EnableReadVisibilityFromES is key for enable read from elastic search
+	// EnableReadVisibilityFromES is key for enable read from Elasticsearch
 	EnableReadVisibilityFromES
-	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary elastic search
+	// EnableReadFromSecondaryAdvancedVisibility is the config to enable read from secondary Elasticsearch
 	EnableReadFromSecondaryAdvancedVisibility
 	// DisableListVisibilityByFilter is config to disable list open/close workflow using filter
 	DisableListVisibilityByFilter

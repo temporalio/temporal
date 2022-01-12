@@ -244,7 +244,7 @@ func (s *visibilityStore) addBulkRequestAndWait(bulkRequest *client.BulkableRequ
 func (s *visibilityStore) checkProcessor() {
 	if s.processor == nil {
 		// must be bug, check history setup
-		panic("elastic search processor is nil")
+		panic("Elasticsearch processor is nil")
 	}
 	if s.processorAckTimeout == nil {
 		// must be bug, check history setup
