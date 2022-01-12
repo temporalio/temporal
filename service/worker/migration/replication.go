@@ -65,7 +65,7 @@ type (
 		SkipAfterTime           time.Time // skip workflows that are updated after this time
 		ConcurrentActivityCount int32
 		RemoteCluster           string // remote cluster name
-		RpsPerActivity          int32  // RPS per each activity
+		RpsPerActivity          int    // RPS per each activity
 	}
 
 	NamespaceHandoverParams struct {
@@ -93,7 +93,7 @@ type (
 		EndShardID     int32     // inclusive
 		NamespaceID    string    // only generate replication tasks for workflows in this namespace
 		SkipAfterTime  time.Time // skip workflows whose LastUpdateTime is after this time
-		RpsPerActivity int32     // RPS per activity
+		RpsPerActivity int       // RPS per activity
 	}
 
 	genReplicationForShard struct {
@@ -102,7 +102,7 @@ type (
 		SkipAfterTime time.Time
 		PageToken     []byte
 		Index         int
-		RPS           int32
+		RPS           int
 	}
 
 	heartbeatProgress struct {
@@ -536,7 +536,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 func (a *activities) genReplicationTasks(ctx context.Context, request genReplicationForShard) error {
 	pageToken := request.PageToken
 	startIndex := request.Index
-	rateLimiter := quotas.NewRateLimiter(float64(request.RPS), 1 /* no burst */)
+	rateLimiter := quotas.NewRateLimiter(float64(request.RPS), request.RPS)
 
 	for {
 		var listResult *persistence.ListConcreteExecutionsResponse
