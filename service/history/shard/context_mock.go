@@ -387,6 +387,20 @@ func (mr *MockContextMockRecorder) GetLogger() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetLogger", reflect.TypeOf((*MockContext)(nil).GetLogger))
 }
 
+// GetMaxTaskIDForCurrentRangeID mocks base method.
+func (m *MockContext) GetMaxTaskIDForCurrentRangeID() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMaxTaskIDForCurrentRangeID")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetMaxTaskIDForCurrentRangeID indicates an expected call of GetMaxTaskIDForCurrentRangeID.
+func (mr *MockContextMockRecorder) GetMaxTaskIDForCurrentRangeID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMaxTaskIDForCurrentRangeID", reflect.TypeOf((*MockContext)(nil).GetMaxTaskIDForCurrentRangeID))
+}
+
 // GetMetricsClient mocks base method.
 func (m *MockContext) GetMetricsClient() metrics.Client {
 	m.ctrl.T.Helper()

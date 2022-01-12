@@ -69,6 +69,8 @@ type (
 		GetTransferMaxReadLevel() int64
 		UpdateTimerMaxReadLevel(cluster string) time.Time
 
+		GetMaxTaskIDForCurrentRangeID() int64
+
 		SetCurrentTime(cluster string, currentTime time.Time)
 		GetCurrentTime(cluster string) time.Time
 		GetLastUpdatedTime() time.Time
