@@ -499,7 +499,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, int64, bool, error) {
+	) ([]byte, string, int64, int64, bool, error) {
 		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID.String(),
 			Execution:           execution,
@@ -508,14 +508,13 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		})
 
 		if err != nil {
-			return nil, "", 0, 0, 0, false, err
+			return nil, "", 0, 0, false, err
 		}
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventId(),
-			response.GetLastFirstEventTxnId(),
 			response.GetNextEventId(),
 			isWorkflowRunning,
 			nil
@@ -528,7 +527,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 
 	var runID string
 	lastFirstEventID := common.FirstEventID
-	lastFirstEventTxnID := int64(0)
 	var nextEventID int64
 	var isWorkflowRunning bool
 
@@ -550,7 +548,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, lastFirstEventTxnID, nextEventID, isWorkflowRunning, err =
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
 				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken)
 			if err != nil {
 				return nil, err
@@ -564,7 +562,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, lastFirstEventTxnID, nextEventID, isWorkflowRunning, err =
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
 			queryHistory(namespaceID, execution, queryNextEventID, nil)
 		if err != nil {
 			return nil, err
@@ -583,14 +581,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	//  when data inconsistency occurs
 	//  long term solution should check event batch pointing backwards within history store
 	defer func() {
-		// lastFirstEventTxnID != 0 exists due to forward / backward compatibility
-		if _, ok := retError.(*serviceerror.DataLoss); ok && lastFirstEventTxnID != 0 {
-			_, _ = wh.persistenceExecutionManager.TrimHistoryBranch(&persistence.TrimHistoryBranchRequest{
-				ShardID:       common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards),
-				BranchToken:   continuationToken.BranchToken,
-				NodeID:        lastFirstEventID,
-				TransactionID: lastFirstEventTxnID,
-			})
+		if _, ok := retError.(*serviceerror.DataLoss); ok {
+			wh.trimHistoryNode(ctx, namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
 		}
 	}()
 
@@ -3024,7 +3016,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 	namespaceID namespace.ID,
 	matchingResp *matchingservice.PollWorkflowTaskQueueResponse,
 	branchToken []byte,
-) (*workflowservice.PollWorkflowTaskQueueResponse, error) {
+) (_ *workflowservice.PollWorkflowTaskQueueResponse, retError error) {
 
 	if matchingResp.WorkflowExecution == nil {
 		// this will happen if there is no workflow task to be send to worker / caller
@@ -3060,6 +3052,15 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 		if dErr != nil {
 			return nil, dErr
 		}
+
+		// TODO below is a temporal solution to guard against invalid event batch
+		//  when data inconsistency occurs
+		//  long term solution should check event batch pointing backwards within history store
+		defer func() {
+			if _, ok := retError.(*serviceerror.DataLoss); ok {
+				wh.trimHistoryNode(ctx, namespaceID.String(), matchingResp.WorkflowExecution.GetWorkflowId(), matchingResp.WorkflowExecution.GetRunId())
+			}
+		}()
 		history, persistenceToken, err = wh.getHistory(
 			wh.metricsScope(ctx),
 			namespaceID,
@@ -3430,4 +3431,38 @@ func (wh *WorkflowHandler) validateUTF8String(
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid UTF-8 string", str))
 	}
 	return nil
+}
+
+func (wh *WorkflowHandler) trimHistoryNode(
+	ctx context.Context,
+	namespaceID string,
+	workflowID string,
+	runID string,
+) {
+	response, err := wh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
+		NamespaceId: namespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
+	})
+	if err != nil {
+		return // abort
+	}
+
+	_, err = wh.persistenceExecutionManager.TrimHistoryBranch(&persistence.TrimHistoryBranchRequest{
+		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
+		BranchToken:   response.CurrentBranchToken,
+		NodeID:        response.GetLastFirstEventId(),
+		TransactionID: response.GetLastFirstEventTxnId(),
+	})
+	if err != nil {
+		// best effort
+		wh.logger.Error("unable to trim history branch",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+			tag.Error(err),
+		)
+	}
 }
