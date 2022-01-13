@@ -69,6 +69,8 @@ func (s *TaskSerializer) SerializeTransferTasks(
 			transferTask = s.TransferCloseTaskToProto(task)
 		case *tasks.ResetWorkflowTask:
 			transferTask = s.TransferResetTaskToProto(task)
+		case *tasks.DeleteExecutionTask:
+			transferTask = s.TransferDeleteExecutionTaskToProto(task)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", task))
 		}
@@ -107,6 +109,8 @@ func (s *TaskSerializer) DeserializeTransferTasks(
 			task = s.transferCloseTaskFromProto(transferTask)
 		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
 			task = s.transferResetTaskFromProto(transferTask)
+		case enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
+			task = s.transferDeleteExecutionTaskFromProto(transferTask)
 		default:
 			return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown transfer task type: %v", transferTask.TaskType))
 		}
@@ -592,6 +596,41 @@ func (s *TaskSerializer) transferResetTaskFromProto(
 		VisibilityTimestamp: *resetTask.VisibilityTime,
 		TaskID:              resetTask.TaskId,
 		Version:             resetTask.Version,
+	}
+}
+
+func (s *TaskSerializer) TransferDeleteExecutionTaskToProto(
+	deleteExecutionTask *tasks.DeleteExecutionTask,
+) *persistencespb.TransferTaskInfo {
+	return &persistencespb.TransferTaskInfo{
+		NamespaceId:             deleteExecutionTask.WorkflowKey.NamespaceID,
+		WorkflowId:              deleteExecutionTask.WorkflowKey.WorkflowID,
+		RunId:                   deleteExecutionTask.WorkflowKey.RunID,
+		TaskType:                enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
+		TargetNamespaceId:       "",
+		TargetWorkflowId:        "",
+		TargetRunId:             "",
+		TargetChildWorkflowOnly: false,
+		TaskQueue:               "",
+		ScheduleId:              0,
+		Version:                 deleteExecutionTask.Version,
+		TaskId:                  deleteExecutionTask.TaskID,
+		VisibilityTime:          timestamp.TimePtr(deleteExecutionTask.VisibilityTimestamp),
+	}
+}
+
+func (s *TaskSerializer) transferDeleteExecutionTaskFromProto(
+	deleteExecutionTask *persistencespb.TransferTaskInfo,
+) *tasks.DeleteExecutionTask {
+	return &tasks.DeleteExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			deleteExecutionTask.NamespaceId,
+			deleteExecutionTask.WorkflowId,
+			deleteExecutionTask.RunId,
+		),
+		VisibilityTimestamp: *deleteExecutionTask.VisibilityTime,
+		TaskID:              deleteExecutionTask.TaskId,
+		Version:             deleteExecutionTask.Version,
 	}
 }
 

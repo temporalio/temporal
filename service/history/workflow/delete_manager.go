@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
@@ -46,8 +47,8 @@ import (
 
 type (
 	DeleteManager interface {
-		DeleteWorkflowExecution(ctx context.Context, namespaceID namespace.ID, we commonpb.WorkflowExecution, archiveIfEnabled bool) (retError error)
-		DeleteWorkflowExecutionFromTimerTask(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, timerTaskVersion int64) (retError error)
+		DeleteDeletedWorkflowExecution(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, transferTaskVersion int64) error
+		DeleteWorkflowExecutionRetention(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, timerTaskVersion int64) error
 	}
 
 	DeleteManagerImpl struct {
@@ -78,47 +79,46 @@ func NewDeleteManager(
 	return deleteManager
 }
 
-func (m *DeleteManagerImpl) DeleteWorkflowExecution(
-	ctx context.Context,
+func (m *DeleteManagerImpl) DeleteDeletedWorkflowExecution(
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
-	archiveIfEnabled bool,
-) (retError error) {
+	weCtx Context,
+	ms MutableState,
+	transferTaskVersion int64,
+) error {
 
-	weCtx, release, err := m.historyCache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		we,
-		CallerTypeAPI,
-	)
-	if err != nil {
-		return err
-	}
-	defer func() { release(retError) }()
-
-	mutableState, err := weCtx.LoadWorkflowExecution()
-	if err != nil {
-		return err
+	// Workflow execution must be marked as deleted prior to actual deletion.
+	if ms.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_DELETED {
+		return errors.New("unable to delete a workflow that is not in DELETED state")
 	}
 
-	return m.deleteWorkflowExecutionInternal(
+	err := m.deleteWorkflowExecutionInternal(
 		namespaceID,
 		we,
 		weCtx,
-		mutableState,
-		mutableState.GetCurrentVersion(),
-		archiveIfEnabled,
+		ms,
+		transferTaskVersion,
+		false,
 		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
 	)
+
+	return err
 }
 
-func (m *DeleteManagerImpl) DeleteWorkflowExecutionFromTimerTask(
+func (m *DeleteManagerImpl) DeleteWorkflowExecutionRetention(
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
 	timerTaskVersion int64,
-) (retError error) {
+) error {
+
+	if ms.IsWorkflowExecutionRunning() {
+		// If workflow is running then just ignore DeleteHistoryEventTask timer task.
+		// This should almost never happen because DeleteHistoryEventTask is created only for closed workflows.
+		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
+		return consts.ErrWorkflowIsRunning
+	}
 
 	err := m.deleteWorkflowExecutionInternal(
 		namespaceID,
@@ -129,13 +129,6 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionFromTimerTask(
 		true,
 		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)
-
-	if err != nil && errors.Is(err, consts.ErrWorkflowIsRunning) {
-		// If workflow is running then just ignore DeleteHistoryEventTask timer task.
-		// This should almost never happen because DeleteHistoryEventTask is created only for closed workflows.
-		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
-		return nil
-	}
 
 	return err
 }
@@ -149,10 +142,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	archiveIfEnabled bool,
 	scope metrics.Scope,
 ) error {
-
-	if ms.IsWorkflowExecutionRunning() {
-		return consts.ErrWorkflowIsRunning
-	}
 
 	currentBranchToken, err := ms.GetCurrentBranchToken()
 	if err != nil {

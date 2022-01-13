@@ -316,7 +316,8 @@ func checkWorkflowState(state enumsspb.WorkflowExecutionState) error {
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-		enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED:
+		enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:
 		return nil
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))

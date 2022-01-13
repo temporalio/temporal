@@ -29,7 +29,6 @@
 package workflow
 
 import (
-	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -60,30 +59,30 @@ func (m *MockDeleteManager) EXPECT() *MockDeleteManagerMockRecorder {
 	return m.recorder
 }
 
-// DeleteWorkflowExecution mocks base method.
-func (m *MockDeleteManager) DeleteWorkflowExecution(ctx context.Context, namespaceID namespace.ID, we v1.WorkflowExecution, archiveIfEnabled bool) error {
+// DeleteDeletedWorkflowExecution mocks base method.
+func (m *MockDeleteManager) DeleteDeletedWorkflowExecution(namespaceID namespace.ID, we v1.WorkflowExecution, weCtx Context, ms MutableState, transferTaskVersion int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, namespaceID, we, archiveIfEnabled)
+	ret := m.ctrl.Call(m, "DeleteDeletedWorkflowExecution", namespaceID, we, weCtx, ms, transferTaskVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockDeleteManagerMockRecorder) DeleteWorkflowExecution(ctx, namespaceID, we, archiveIfEnabled interface{}) *gomock.Call {
+// DeleteDeletedWorkflowExecution indicates an expected call of DeleteDeletedWorkflowExecution.
+func (mr *MockDeleteManagerMockRecorder) DeleteDeletedWorkflowExecution(namespaceID, we, weCtx, ms, transferTaskVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockDeleteManager)(nil).DeleteWorkflowExecution), ctx, namespaceID, we, archiveIfEnabled)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteDeletedWorkflowExecution", reflect.TypeOf((*MockDeleteManager)(nil).DeleteDeletedWorkflowExecution), namespaceID, we, weCtx, ms, transferTaskVersion)
 }
 
-// DeleteWorkflowExecutionFromTimerTask mocks base method.
-func (m *MockDeleteManager) DeleteWorkflowExecutionFromTimerTask(namespaceID namespace.ID, we v1.WorkflowExecution, weCtx Context, ms MutableState, timerTaskVersion int64) error {
+// DeleteWorkflowExecutionRetention mocks base method.
+func (m *MockDeleteManager) DeleteWorkflowExecutionRetention(namespaceID namespace.ID, we v1.WorkflowExecution, weCtx Context, ms MutableState, timerTaskVersion int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecutionFromTimerTask", namespaceID, we, weCtx, ms, timerTaskVersion)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecutionRetention", namespaceID, we, weCtx, ms, timerTaskVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// DeleteWorkflowExecutionFromTimerTask indicates an expected call of DeleteWorkflowExecutionFromTimerTask.
-func (mr *MockDeleteManagerMockRecorder) DeleteWorkflowExecutionFromTimerTask(namespaceID, we, weCtx, ms, timerTaskVersion interface{}) *gomock.Call {
+// DeleteWorkflowExecutionRetention indicates an expected call of DeleteWorkflowExecutionRetention.
+func (mr *MockDeleteManagerMockRecorder) DeleteWorkflowExecutionRetention(namespaceID, we, weCtx, ms, timerTaskVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecutionFromTimerTask", reflect.TypeOf((*MockDeleteManager)(nil).DeleteWorkflowExecutionFromTimerTask), namespaceID, we, weCtx, ms, timerTaskVersion)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecutionRetention", reflect.TypeOf((*MockDeleteManager)(nil).DeleteWorkflowExecutionRetention), namespaceID, we, weCtx, ms, timerTaskVersion)
 }

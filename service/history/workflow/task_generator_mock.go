@@ -130,6 +130,20 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDelayedWorkflowTasks(now, start
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDelayedWorkflowTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDelayedWorkflowTasks), now, startEvent)
 }
 
+// GenerateDeleteExecutionTask mocks base method.
+func (m *MockTaskGenerator) GenerateDeleteExecutionTask(now time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateDeleteExecutionTask", now)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateDeleteExecutionTask indicates an expected call of GenerateDeleteExecutionTask.
+func (mr *MockTaskGeneratorMockRecorder) GenerateDeleteExecutionTask(now interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateDeleteExecutionTask", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateDeleteExecutionTask), now)
+}
+
 // GenerateHistoryReplicationTasks mocks base method.
 func (m *MockTaskGenerator) GenerateHistoryReplicationTasks(now time.Time, branchToken []byte, events []*history.HistoryEvent) error {
 	m.ctrl.T.Helper()

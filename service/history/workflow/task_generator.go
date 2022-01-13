@@ -52,6 +52,9 @@ type (
 		GenerateWorkflowCloseTasks(
 			now time.Time,
 		) error
+		GenerateDeleteExecutionTask(
+			now time.Time,
+		) error
 		GenerateRecordWorkflowStartedTasks(
 			now time.Time,
 			startEvent *historypb.HistoryEvent,
@@ -201,6 +204,22 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now.Add(retention),
+		Version:             currentVersion,
+	})
+
+	return nil
+}
+
+func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask(
+	now time.Time,
+) error {
+
+	currentVersion := r.mutableState.GetCurrentVersion()
+
+	r.mutableState.AddTransferTasks(&tasks.DeleteExecutionTask{
+		// TaskID is set by shard
+		WorkflowKey:         r.mutableState.GetWorkflowKey(),
+		VisibilityTimestamp: now,
 		Version:             currentVersion,
 	})
 

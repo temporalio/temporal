@@ -84,6 +84,7 @@ func newTransferQueueActiveTaskExecutor(
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
 			historyEngine,
+			historyEngine.workflowDeleteManager,
 			logger,
 			metricsClient,
 			config,
@@ -125,6 +126,8 @@ func (t *transferQueueActiveTaskExecutor) execute(
 		return t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
 		return t.processResetWorkflow(ctx, task)
+	case *tasks.DeleteExecutionTask:
+		return t.processDeleteExecutionTask(ctx, task)
 	default:
 		return errUnknownTransferTask
 	}
