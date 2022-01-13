@@ -107,20 +107,6 @@ func (s *clientIntegrationSuite) SetupTest() {
 	s.sdkClient = sdkClient
 	s.taskQueue = s.randomizeStr("tq")
 	s.worker = worker.New(s.sdkClient, s.taskQueue, worker.Options{})
-
-	workflowFn := func(ctx workflow.Context) error {
-		s.Logger.Fatal("Should not reach here")
-		return nil
-	}
-	activityFn := func(ctx context.Context) error {
-		s.Logger.Fatal("Should not reach here")
-		return nil
-	}
-
-	// register dummy workflow and activity, otherwise worker won't start.
-	s.worker.RegisterWorkflow(workflowFn)
-	s.worker.RegisterActivity(activityFn)
-
 	if err := s.worker.Start(); err != nil {
 		s.Logger.Fatal("Error when start worker", tag.Error(err))
 	}
