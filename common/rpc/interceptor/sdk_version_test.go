@@ -29,22 +29,13 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/assert"
 
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/metrics"
 )
 
 func TestSDKVersionRecorder(t *testing.T) {
-	ctrl := gomock.NewController(t)
-	metricsClient := metrics.NewMockClient(ctrl)
-	metricsScope := metrics.NewMockScope(ctrl)
-	// Note that that empty SDK names and versions are ignored
-	metricsClient.EXPECT().Scope(metrics.SDKVersionRecordScope).Times(3).Return(metricsScope)
-	metricsScope.EXPECT().IncCounter(metrics.SDKVersionRecordSuccessCount).Times(2)
-	metricsScope.EXPECT().IncCounter(metrics.SDKVersionRecordFailedCount).Times(1)
-	interceptor := NewSDKVersionInterceptor(func() int { return 2 }, metricsClient)
+	interceptor := NewSDKVersionInterceptor(func() int { return 2 })
 
 	sdkVersion := "1.10.1"
 

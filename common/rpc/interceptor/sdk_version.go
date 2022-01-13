@@ -29,7 +29,6 @@ import (
 	"sync"
 
 	"go.temporal.io/server/common/headers"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/version/check"
 	"google.golang.org/grpc"
 )
@@ -43,17 +42,15 @@ type SDKVersionInterceptor struct {
 	sdkInfoSet           map[sdkNameVersion]bool
 	lock                 sync.RWMutex
 	infoSetSizeCapGetter func() int
-	metricsClient        metrics.Client
 }
 
 var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
 
-func NewSDKVersionInterceptor(infoSetSizeCapGetter func() int, metricsClient metrics.Client) *SDKVersionInterceptor {
+func NewSDKVersionInterceptor(infoSetSizeCapGetter func() int) *SDKVersionInterceptor {
 	return &SDKVersionInterceptor{
 		sdkInfoSet:           make(map[sdkNameVersion]bool),
 		lock:                 sync.RWMutex{},
 		infoSetSizeCapGetter: infoSetSizeCapGetter,
-		metricsClient:        metricsClient,
 	}
 }
 
@@ -71,44 +68,30 @@ func (vi *SDKVersionInterceptor) Intercept(
 }
 
 func (vi *SDKVersionInterceptor) RecordSDKInfo(name, version string) {
-	scope := vi.metricsClient.Scope(metrics.SDKVersionRecordScope)
 	info := sdkNameVersion{name, version}
-	counter := metrics.SDKVersionRecordSuccessCount
 	setSizeCap := vi.infoSetSizeCapGetter()
-	shouldUpdate := false
-
-	// Increment after unlocking
-	defer func() { scope.IncCounter(counter) }()
-
-	// Update after unlocking read lock
-	defer func() {
-		if shouldUpdate {
-			vi.lock.Lock()
-			vi.sdkInfoSet[info] = true
-			vi.lock.Unlock()
-		}
-	}()
 
 	vi.lock.RLock()
-	defer vi.lock.RUnlock()
-
-	if len(vi.sdkInfoSet) >= setSizeCap {
-		counter = metrics.SDKVersionRecordFailedCount
-		return
-	}
+	overCap := len(vi.sdkInfoSet) >= setSizeCap
 	_, found := vi.sdkInfoSet[info]
-	shouldUpdate = !found
+	vi.lock.RUnlock()
+
+	if !overCap && !found {
+		vi.lock.Lock()
+		vi.sdkInfoSet[info] = true
+		vi.lock.Unlock()
+	}
 }
 
 func (vi *SDKVersionInterceptor) GetAndResetSDKInfo() []check.SDKInfo {
 	vi.lock.Lock()
-	defer vi.lock.Unlock()
-	sdkInfo := make([]check.SDKInfo, len(vi.sdkInfoSet))
-	i := 0
-	for k := range vi.sdkInfoSet {
-		sdkInfo[i] = check.SDKInfo{Name: k.name, Version: k.version}
-		i += 1
-	}
+	currSet := vi.sdkInfoSet
 	vi.sdkInfoSet = make(map[sdkNameVersion]bool)
+	vi.lock.Unlock()
+
+	sdkInfo := make([]check.SDKInfo, 0, len(currSet))
+	for k := range currSet {
+		sdkInfo = append(sdkInfo, check.SDKInfo{Name: k.name, Version: k.version})
+	}
 	return sdkInfo
 }
