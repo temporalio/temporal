@@ -1250,6 +1250,8 @@ func (e *MutableStateImpl) IsWorkflowExecutionRunning() bool {
 		return true
 	case enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		return true
+	case enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:
+		return false
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		return false
 	case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:

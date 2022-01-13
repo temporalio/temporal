@@ -1,4 +1,8 @@
-// Copyright (c) 2019 Temporal Technologies, Inc.
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -18,25 +22,50 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package tasks
 
-package temporal.server.api.enums.v1;
+import (
+	"time"
 
-option go_package = "go.temporal.io/server/api/enums/v1;enums";
+	"go.temporal.io/server/common/definition"
+)
 
-enum WorkflowExecutionState {
-    WORKFLOW_EXECUTION_STATE_UNSPECIFIED = 0;
-    WORKFLOW_EXECUTION_STATE_CREATED = 1;
-    WORKFLOW_EXECUTION_STATE_RUNNING = 2;
-    WORKFLOW_EXECUTION_STATE_COMPLETED = 3;
-    WORKFLOW_EXECUTION_STATE_ZOMBIE = 4;
-    WORKFLOW_EXECUTION_STATE_VOID = 5;
-    WORKFLOW_EXECUTION_STATE_CORRUPTED = 6;
-    WORKFLOW_EXECUTION_STATE_DELETED = 7;
+type (
+	DeleteExecutionTask struct {
+		definition.WorkflowKey
+		VisibilityTimestamp time.Time
+		TaskID              int64
+		Version             int64
+	}
+)
+
+func (a *DeleteExecutionTask) GetKey() Key {
+	return Key{
+		FireTime: time.Unix(0, 0),
+		TaskID:   a.TaskID,
+	}
 }
 
-enum WorkflowBackoffType {
-    WORKFLOW_BACKOFF_TYPE_UNSPECIFIED = 0;
-    WORKFLOW_BACKOFF_TYPE_RETRY = 1;
-    WORKFLOW_BACKOFF_TYPE_CRON = 2;
+func (a *DeleteExecutionTask) GetVersion() int64 {
+	return a.Version
+}
+
+func (a *DeleteExecutionTask) SetVersion(version int64) {
+	a.Version = version
+}
+
+func (a *DeleteExecutionTask) GetTaskID() int64 {
+	return a.TaskID
+}
+
+func (a *DeleteExecutionTask) SetTaskID(id int64) {
+	a.TaskID = id
+}
+
+func (a *DeleteExecutionTask) GetVisibilityTime() time.Time {
+	return a.VisibilityTimestamp
+}
+
+func (a *DeleteExecutionTask) SetVisibilityTime(timestamp time.Time) {
+	a.VisibilityTimestamp = timestamp
 }
