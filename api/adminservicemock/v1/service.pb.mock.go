@@ -360,6 +360,26 @@ func (mr *MockAdminServiceClientMockRecorder) ListClusterMembers(ctx, in interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMembers", reflect.TypeOf((*MockAdminServiceClient)(nil).ListClusterMembers), varargs...)
 }
 
+// ListClusters mocks base method.
+func (m *MockAdminServiceClient) ListClusters(ctx context.Context, in *adminservice.ListClustersRequest, opts ...grpc.CallOption) (*adminservice.ListClustersResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListClusters", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListClustersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListClusters indicates an expected call of ListClusters.
+func (mr *MockAdminServiceClientMockRecorder) ListClusters(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockAdminServiceClient)(nil).ListClusters), varargs...)
+}
+
 // ListReplicationTasks mocks base method.
 func (m *MockAdminServiceClient) ListReplicationTasks(ctx context.Context, in *adminservice.ListReplicationTasksRequest, opts ...grpc.CallOption) (*adminservice.ListReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -846,6 +866,21 @@ func (m *MockAdminServiceServer) ListClusterMembers(arg0 context.Context, arg1 *
 func (mr *MockAdminServiceServerMockRecorder) ListClusterMembers(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMembers", reflect.TypeOf((*MockAdminServiceServer)(nil).ListClusterMembers), arg0, arg1)
+}
+
+// ListClusters mocks base method.
+func (m *MockAdminServiceServer) ListClusters(arg0 context.Context, arg1 *adminservice.ListClustersRequest) (*adminservice.ListClustersResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListClusters", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListClustersResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListClusters indicates an expected call of ListClusters.
+func (mr *MockAdminServiceServerMockRecorder) ListClusters(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockAdminServiceServer)(nil).ListClusters), arg0, arg1)
 }
 
 // ListReplicationTasks mocks base method.

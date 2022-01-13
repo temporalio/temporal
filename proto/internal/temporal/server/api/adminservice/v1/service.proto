@@ -95,6 +95,10 @@ service AdminService {
     rpc DescribeCluster(DescribeClusterRequest) returns (DescribeClusterResponse) {
     }
 
+    // ListClusters returns information about Temporal clusters.
+    rpc ListClusters(ListClustersRequest) returns (ListClustersResponse) {
+    }
+
     // ListClusterMembers returns information about Temporal cluster members.
     rpc ListClusterMembers(ListClusterMembersRequest) returns (ListClusterMembersResponse) {
     }

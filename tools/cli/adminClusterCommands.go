@@ -47,6 +47,34 @@ func AdminDescribeCluster(c *cli.Context) {
 	prettyPrintJSONObject(response)
 }
 
+// AdminListClusters is used to fetch information about all clusters
+func AdminListClusters(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+	var token []byte
+
+	pageSize := c.Int(FlagPageSize)
+	for more := true; more; more = len(token) > 0 {
+		if more && len(token) > 0 {
+			if !showNextPage() {
+				break
+			}
+		}
+		ctx, cancel := newContext(c)
+		response, err := adminClient.ListClusters(ctx, &adminservice.ListClustersRequest{
+			PageSize:      int32(pageSize),
+			NextPageToken: token,
+		})
+		cancel()
+		if err != nil {
+			ErrorAndExit("Operation ListClusters failed.", err)
+		}
+		token = response.GetNextPageToken()
+		if len(response.GetClusters()) > 0 {
+			prettyPrintJSONObject(response.GetClusters())
+		}
+	}
+}
+
 // AdminAddOrUpdateRemoteCluster is used to add or update remote cluster information
 func AdminAddOrUpdateRemoteCluster(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
