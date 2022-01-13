@@ -128,6 +128,14 @@ func TestHistoryBuilderSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func (s *historyBuilderSuite) SetupSuite() {
+	rand.Seed(time.Now().UnixNano())
+}
+
+func (s *historyBuilderSuite) TearDownSuite() {
+
+}
+
 func (s *historyBuilderSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
@@ -553,7 +561,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionContinueAsNew() {
 				WorkflowRunTimeout:           workflowRunTimeout,
 				WorkflowTaskTimeout:          workflowTaskStartToCloseTimeout,
 				BackoffStartInterval:         firstWorkflowTaskBackoff,
-				Initiator:                    enumspb.CONTINUE_AS_NEW_INITIATOR_CRON_SCHEDULE,
+				Initiator:                    initiator,
 				Failure:                      testFailure,
 				LastCompletionResult:         testPayloads,
 				Memo:                         testMemo,

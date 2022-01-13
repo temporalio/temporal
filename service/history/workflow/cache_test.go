@@ -27,8 +27,11 @@ package workflow
 import (
 	"context"
 	"errors"
+	"math/rand"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -239,24 +242,34 @@ func (s *historyCacheSuite) TestHistoryCacheClear() {
 	release(nil)
 }
 
-func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
-	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(20)
-	namespaceID := namespace.ID("test_namespace_id")
-	s.cache = NewCache(s.mockShard)
-	we := commonpb.WorkflowExecution{
-		WorkflowId: "wf-cache-test-pinning",
-		RunId:      uuid.New(),
-	}
-
+func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Release() {
+	cacheMaxSize := 16
 	coroutineCount := 50
-	waitGroup := &sync.WaitGroup{}
-	stopChan := make(chan struct{})
+
+	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
+	s.cache = NewCache(s.mockShard)
+
+	startGroup := &sync.WaitGroup{}
+	stopGroup := &sync.WaitGroup{}
+	startGroup.Add(coroutineCount)
+	stopGroup.Add(coroutineCount)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	workflowId := "wf-cache-test-pinning"
+	runID := uuid.New()
+
 	testFn := func() {
-		<-stopChan
+		defer stopGroup.Done()
+		startGroup.Done()
+
+		startGroup.Wait()
 		ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 			context.Background(),
 			namespaceID,
-			we,
+			commonpb.WorkflowExecution{
+				WorkflowId: workflowId,
+				RunId:      runID,
+			},
 			CallerTypeAPI,
 		)
 		s.Nil(err)
@@ -268,20 +281,20 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 		mock.EXPECT().GetQueryRegistry().Return(NewQueryRegistry())
 		ctx.(*ContextImpl).MutableState = mock
 		release(errors.New("some random error message"))
-		waitGroup.Done()
 	}
 
 	for i := 0; i < coroutineCount; i++ {
-		waitGroup.Add(1)
 		go testFn()
 	}
-	close(stopChan)
-	waitGroup.Wait()
+	stopGroup.Wait()
 
 	ctx, release, err := s.cache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		namespaceID,
-		we,
+		commonpb.WorkflowExecution{
+			WorkflowId: workflowId,
+			RunId:      runID,
+		},
 		CallerTypeAPI,
 	)
 	s.Nil(err)
@@ -289,4 +302,65 @@ func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess() {
 	// all we need is a fake MutableState
 	s.Nil(ctx.(*ContextImpl).MutableState)
 	release(nil)
+}
+
+func (s *historyCacheSuite) TestHistoryCacheConcurrentAccess_Pin() {
+	cacheMaxSize := 16
+	runIDCount := cacheMaxSize * 4
+	coroutineCount := runIDCount * 64
+
+	s.mockShard.GetConfig().HistoryCacheMaxSize = dynamicconfig.GetIntPropertyFn(cacheMaxSize)
+	s.mockShard.GetConfig().HistoryCacheTTL = dynamicconfig.GetDurationPropertyFn(time.Nanosecond)
+	s.cache = NewCache(s.mockShard)
+
+	startGroup := &sync.WaitGroup{}
+	stopGroup := &sync.WaitGroup{}
+	startGroup.Add(coroutineCount)
+	stopGroup.Add(coroutineCount)
+
+	namespaceID := namespace.ID("test_namespace_id")
+	workflowID := "wf-cache-test-pinning"
+	runIDs := make([]string, runIDCount)
+	runIDRefCounter := make([]int32, runIDCount)
+	for i := 0; i < runIDCount; i++ {
+		runIDs[i] = uuid.New()
+		runIDRefCounter[i] = 0
+	}
+
+	testFn := func(id int, runID string, refCounter *int32) {
+		defer stopGroup.Done()
+		startGroup.Done()
+		startGroup.Wait()
+
+		var releaseFn ReleaseCacheFunc
+		var err error
+		for {
+			_, releaseFn, err = s.cache.GetOrCreateWorkflowExecution(
+				context.Background(),
+				namespaceID,
+				commonpb.WorkflowExecution{
+					WorkflowId: workflowID,
+					RunId:      runID,
+				},
+				CallerTypeAPI,
+			)
+			if err == nil {
+				break
+			}
+		}
+		if !atomic.CompareAndSwapInt32(refCounter, 0, 1) {
+			s.Fail("unable to assert lock uniqueness")
+		}
+		// randomly sleep few nanoseconds
+		time.Sleep(time.Duration(rand.Int63n(10)))
+		if !atomic.CompareAndSwapInt32(refCounter, 1, 0) {
+			s.Fail("unable to assert lock uniqueness")
+		}
+		releaseFn(nil)
+	}
+
+	for i := 0; i < coroutineCount; i++ {
+		go testFn(i, runIDs[i%runIDCount], &runIDRefCounter[i%runIDCount])
+	}
+	stopGroup.Wait()
 }
