@@ -504,6 +504,13 @@ func newAdminClusterCommands() []cli.Command {
 			Name:    "list",
 			Aliases: []string{"ls"},
 			Usage:   "List clusters information",
+			Flags: []cli.Flag{
+				cli.IntFlag{
+					Name:  FlagPageSize,
+					Value: 100,
+					Usage: "Page size (optional, default: 100)",
+				},
+			},
 			Action: func(c *cli.Context) {
 				AdminListClusters(c)
 			},

@@ -30,8 +30,6 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 )
 
-const listClusterPageSize = 200
-
 // AdminDescribeCluster is used to dump information about the cluster
 func AdminDescribeCluster(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
@@ -54,6 +52,7 @@ func AdminListClusters(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
 	var token []byte
 
+	pageSize := c.Int(FlagPageSize)
 	for more := true; more; more = len(token) > 0 {
 		if more && len(token) > 0 {
 			if !showNextPage() {
@@ -62,7 +61,7 @@ func AdminListClusters(c *cli.Context) {
 		}
 		ctx, cancel := newContext(c)
 		response, err := adminClient.ListClusters(ctx, &adminservice.ListClustersRequest{
-			PageSize:      listClusterPageSize,
+			PageSize:      int32(pageSize),
 			NextPageToken: token,
 		})
 		cancel()

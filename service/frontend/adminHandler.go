@@ -78,6 +78,7 @@ import (
 const (
 	getNamespaceReplicationMessageBatchSize = 100
 	defaultLastMessageID                    = -1
+	listClustersPageSize                    = 100
 )
 
 type (
@@ -955,8 +956,12 @@ func (adh *AdminHandler) ListClusters(
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
+	if request.GetPageSize() <= 0 {
+		request.PageSize = listClustersPageSize
+	}
+
 	resp, err := adh.clusterMetadataManager.ListClusterMetadata(&persistence.ListClusterMetadataRequest{
-		PageSize: int(request.GetPageSize()),
+		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
 	if err != nil {
@@ -968,7 +973,7 @@ func (adh *AdminHandler) ListClusters(
 		clusterMetadataList = append(clusterMetadataList, &clusterResp.ClusterMetadata)
 	}
 	return &adminservice.ListClustersResponse{
-		Clusters: clusterMetadataList,
+		Clusters:      clusterMetadataList,
 		NextPageToken: resp.NextPageToken,
 	}, nil
 }
