@@ -30,6 +30,8 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 )
 
+const listClusterPageSize = 200
+
 // AdminDescribeCluster is used to dump information about the cluster
 func AdminDescribeCluster(c *cli.Context) {
 	adminClient := cFactory.AdminClient(c)
@@ -45,6 +47,33 @@ func AdminDescribeCluster(c *cli.Context) {
 	}
 
 	prettyPrintJSONObject(response)
+}
+
+// AdminListClusters is used to fetch information about all clusters
+func AdminListClusters(c *cli.Context) {
+	adminClient := cFactory.AdminClient(c)
+	var token []byte
+
+	for more := true; more; more = len(token) > 0 {
+		if more && len(token) > 0 {
+			if !showNextPage() {
+				break
+			}
+		}
+		ctx, cancel := newContext(c)
+		response, err := adminClient.ListClusters(ctx, &adminservice.ListClustersRequest{
+			PageSize:      listClusterPageSize,
+			NextPageToken: token,
+		})
+		cancel()
+		if err != nil {
+			ErrorAndExit("Operation ListClusters failed.", err)
+		}
+		token = response.GetNextPageToken()
+		if len(response.GetClusters()) > 0 {
+			prettyPrintJSONObject(response.GetClusters())
+		}
+	}
 }
 
 // AdminAddOrUpdateRemoteCluster is used to add or update remote cluster information

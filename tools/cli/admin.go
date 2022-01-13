@@ -501,6 +501,14 @@ func newAdminClusterCommands() []cli.Command {
 			},
 		},
 		{
+			Name:    "list",
+			Aliases: []string{"ls"},
+			Usage:   "List clusters information",
+			Action: func(c *cli.Context) {
+				AdminListClusters(c)
+			},
+		},
+		{
 			Name:    "upsert-remote-cluster",
 			Aliases: []string{"urc"},
 			Usage:   "Add or update remote cluster information in the current cluster",
