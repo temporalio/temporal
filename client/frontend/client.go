@@ -554,6 +554,20 @@ func (c *clientImpl) TerminateWorkflowExecution(
 	return client.TerminateWorkflowExecution(ctx, request, opts...)
 }
 
+func (c *clientImpl) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkflowExecutionResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.DeleteWorkflowExecution(ctx, request, opts...)
+}
+
 func (c *clientImpl) UpdateNamespace(
 	ctx context.Context,
 	request *workflowservice.UpdateNamespaceRequest,

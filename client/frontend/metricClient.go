@@ -678,6 +678,24 @@ func (c *metricClient) TerminateWorkflowExecution(
 	return resp, err
 }
 
+func (c *metricClient) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *workflowservice.DeleteWorkflowExecutionRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteWorkflowExecutionResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.FrontendClientDeleteWorkflowExecutionScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.FrontendClientDeleteWorkflowExecutionScope, metrics.ClientLatency)
+	resp, err := c.client.DeleteWorkflowExecution(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.FrontendClientDeleteWorkflowExecutionScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) UpdateNamespace(
 	ctx context.Context,
 	request *workflowservice.UpdateNamespaceRequest,

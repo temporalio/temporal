@@ -495,6 +495,8 @@ const (
 	FrontendClientStartWorkflowExecutionScope
 	// FrontendClientTerminateWorkflowExecutionScope tracks RPC calls to frontend service
 	FrontendClientTerminateWorkflowExecutionScope
+	// FrontendClientDeleteWorkflowExecutionScope tracks RPC calls to frontend service
+	FrontendClientDeleteWorkflowExecutionScope
 	// FrontendClientUpdateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientUpdateNamespaceScope
 	// FrontendClientListWorkflowExecutionsScope tracks RPC calls to frontend service
