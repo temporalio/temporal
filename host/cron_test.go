@@ -375,7 +375,6 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 	// Continue-as-new is not tested (behavior is currently not correct)
 
 	id := "integration-wf-cron-failed-test"
-	wt := "integration-wf-cron-failed-type"
 	cronSchedule := "@every 3s"
 
 	targetBackoffDuration := 3 * time.Second
@@ -432,7 +431,7 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 		panic("shouldn't get here")
 	}
 
-	s.worker.RegisterWorkflowWithOptions(workflowFn, workflow.RegisterOptions{Name: wt})
+	s.worker.RegisterWorkflow(workflowFn)
 
 	// Because of rounding in GetBackoffForNextSchedule, we'll tend to stay aligned to whatever
 	// phase we start in relative to second boundaries, but drift slightly later within the second
@@ -452,7 +451,7 @@ func (s *clientIntegrationSuite) TestCronWorkflowCompletionStates() {
 	startTs := ts
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	_, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, wt)
+	_, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
 	s.NoError(err)
 
 	// check execution and history of first run
