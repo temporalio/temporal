@@ -286,8 +286,11 @@ func NamespaceValidatorInterceptorProvider(
 	)
 }
 
-func SDKVersionInterceptorProvider() *interceptor.SDKVersionInterceptor {
-	return interceptor.NewSDKVersionInterceptor()
+func SDKVersionInterceptorProvider(
+	serviceConfig *Config,
+	metricsClient metrics.Client,
+) *interceptor.SDKVersionInterceptor {
+	return interceptor.NewSDKVersionInterceptor(func() int { return serviceConfig.MaxSDKVersionsToRecord() }, metricsClient)
 }
 
 func PersistenceMaxQpsProvider(

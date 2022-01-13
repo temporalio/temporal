@@ -487,6 +487,8 @@ const (
 	VisibilityArchivalQueryMaxQPS
 	// EnableServerVersionCheck is a flag that controls whether or not periodic version checking is enabled
 	EnableServerVersionCheck
+	// MaxSDKVersionsToRecord caps the number of distinct SDK versions to record for version checking purposes
+	MaxSDKVersionsToRecord
 	// EnableTokenNamespaceEnforcement enables enforcement that namespace in completion token matches namespace of the request
 	EnableTokenNamespaceEnforcement
 	// KeepAliveMinTime is the minimum amount of time a client should wait before sending a keepalive ping.

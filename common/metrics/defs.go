@@ -881,6 +881,10 @@ const (
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
+
+	// SDKVersionRecordScope is the scope used by the version interceptor
+	SDKVersionRecordScope
+
 	// AuthorizationScope is the scope used by all metric emitted by authorization code
 	AuthorizationScope
 
@@ -1562,6 +1566,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendGetClusterInfoScope:                     {operation: "GetClusterInfo"},
 		FrontendGetSystemInfoScope:                      {operation: "GetSystemInfo"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
+		SDKVersionRecordScope:                           {operation: "SDKVersionRecord"},
 		AuthorizationScope:                              {operation: "Authorization"},
 	},
 	// History Scope Names
@@ -1872,6 +1877,9 @@ const (
 	VersionCheckRequestFailedCount
 	VersionCheckFailedCount
 	VersionCheckLatency
+
+	SDKVersionRecordSuccessCount
+	SDKVersionRecordFailedCount
 
 	ParentClosePolicyProcessorSuccess
 	ParentClosePolicyProcessorFailures
@@ -2304,6 +2312,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		VersionCheckFailedCount:                                   NewCounterDef("version_check_failed"),
 		VersionCheckRequestFailedCount:                            NewCounterDef("version_check_request_failed"),
 		VersionCheckLatency:                                       NewTimerDef("version_check_latency"),
+
+		SDKVersionRecordSuccessCount: NewCounterDef("sdk_version_record_success"),
+		SDKVersionRecordFailedCount:  NewCounterDef("sdk_version_record_faile"),
 
 		ParentClosePolicyProcessorSuccess:  NewCounterDef("parent_close_policy_processor_requests"),
 		ParentClosePolicyProcessorFailures: NewCounterDef("parent_close_policy_processor_errors"),

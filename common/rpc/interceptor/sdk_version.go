@@ -27,39 +27,34 @@ package interceptor
 import (
 	"context"
 	"sync"
-	"sync/atomic"
 
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/version/check"
 	"google.golang.org/grpc"
 )
-
-type SDKInfoRecorder interface {
-	RecordSDKInfo(name, version string)
-	GetAndResetSDKInfo() []check.SDKInfo
-}
-
-type SDKVersionInterceptor struct {
-	// Using a sync map to support effienct concurrent updates.
-	// Key type is sdkNameVersion and value type is sdkCount.
-	// Note that we never delete keys from this map as the cardinality of
-	// client versions should be fairly low.
-	sdkInfoCounter sync.Map
-}
 
 type sdkNameVersion struct {
 	name    string
 	version string
 }
 
-type sdkCount struct {
-	count int64
+type SDKVersionInterceptor struct {
+	sdkInfoSet           map[sdkNameVersion]bool
+	lock                 sync.RWMutex
+	infoSetSizeCapGetter func() int
+	metricsClient        metrics.Client
 }
 
 var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
 
-func NewSDKVersionInterceptor() *SDKVersionInterceptor {
-	return &SDKVersionInterceptor{}
+func NewSDKVersionInterceptor(infoSetSizeCapGetter func() int, metricsClient metrics.Client) *SDKVersionInterceptor {
+	return &SDKVersionInterceptor{
+		sdkInfoSet:           make(map[sdkNameVersion]bool),
+		lock:                 sync.RWMutex{},
+		infoSetSizeCapGetter: infoSetSizeCapGetter,
+		metricsClient:        metricsClient,
+	}
 }
 
 func (vi *SDKVersionInterceptor) Intercept(
@@ -76,22 +71,44 @@ func (vi *SDKVersionInterceptor) Intercept(
 }
 
 func (vi *SDKVersionInterceptor) RecordSDKInfo(name, version string) {
+	scope := vi.metricsClient.Scope(metrics.SDKVersionRecordScope)
 	info := sdkNameVersion{name, version}
-	valIface, ok := vi.sdkInfoCounter.Load(info)
-	if !ok {
-		// Store if wasn't added racy
-		valIface, _ = vi.sdkInfoCounter.LoadOrStore(info, &sdkCount{})
+	counter := metrics.SDKVersionRecordSuccessCount
+	setSizeCap := vi.infoSetSizeCapGetter()
+	shouldUpdate := false
+
+	// Increment after unlocking
+	defer func() { scope.IncCounter(counter) }()
+
+	// Update after unlocking read lock
+	defer func() {
+		if shouldUpdate {
+			vi.lock.Lock()
+			vi.sdkInfoSet[info] = true
+			vi.lock.Unlock()
+		}
+	}()
+
+	vi.lock.RLock()
+	defer vi.lock.RUnlock()
+
+	if len(vi.sdkInfoSet) >= setSizeCap {
+		counter = metrics.SDKVersionRecordFailedCount
+		return
 	}
-	atomic.AddInt64(&valIface.(*sdkCount).count, 1)
+	_, found := vi.sdkInfoSet[info]
+	shouldUpdate = !found
 }
 
 func (vi *SDKVersionInterceptor) GetAndResetSDKInfo() []check.SDKInfo {
-	sdkInfo := make([]check.SDKInfo, 0)
-	vi.sdkInfoCounter.Range(func(key, value interface{}) bool {
-		timesSeen := atomic.SwapInt64(&value.(*sdkCount).count, 0)
-		nameVersion := key.(sdkNameVersion)
-		sdkInfo = append(sdkInfo, check.SDKInfo{Name: nameVersion.name, Version: nameVersion.version, TimesSeen: timesSeen})
-		return true
-	})
+	vi.lock.Lock()
+	defer vi.lock.Unlock()
+	sdkInfo := make([]check.SDKInfo, len(vi.sdkInfoSet))
+	i := 0
+	for k := range vi.sdkInfoSet {
+		sdkInfo[i] = check.SDKInfo{Name: k.name, Version: k.version}
+		i += 1
+	}
+	vi.sdkInfoSet = make(map[sdkNameVersion]bool)
 	return sdkInfo
 }
