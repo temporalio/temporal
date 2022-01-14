@@ -39,21 +39,22 @@ type sdkNameVersion struct {
 }
 
 type SDKVersionInterceptor struct {
-	sdkInfoSet           map[sdkNameVersion]bool
-	lock                 sync.RWMutex
-	infoSetSizeCapGetter func() int
+	sdkInfoSet map[sdkNameVersion]bool
+	lock       sync.RWMutex
+	maxSetSize int
 }
 
-var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
+const defaultMaxSetSize = 100
 
-func NewSDKVersionInterceptor(infoSetSizeCapGetter func() int) *SDKVersionInterceptor {
+// NewSDKVersionInterceptor creates a new SDKVersionInterceptor with default max set size
+func NewSDKVersionInterceptor() *SDKVersionInterceptor {
 	return &SDKVersionInterceptor{
-		sdkInfoSet:           make(map[sdkNameVersion]bool),
-		lock:                 sync.RWMutex{},
-		infoSetSizeCapGetter: infoSetSizeCapGetter,
+		sdkInfoSet: make(map[sdkNameVersion]bool),
+		maxSetSize: defaultMaxSetSize,
 	}
 }
 
+// Intercept a grpc request
 func (vi *SDKVersionInterceptor) Intercept(
 	ctx context.Context,
 	req interface{},
@@ -67,12 +68,12 @@ func (vi *SDKVersionInterceptor) Intercept(
 	return handler(ctx, req)
 }
 
+// RecordSDKInfo records name and version tuple in memory
 func (vi *SDKVersionInterceptor) RecordSDKInfo(name, version string) {
 	info := sdkNameVersion{name, version}
-	setSizeCap := vi.infoSetSizeCapGetter()
 
 	vi.lock.RLock()
-	overCap := len(vi.sdkInfoSet) >= setSizeCap
+	overCap := len(vi.sdkInfoSet) >= vi.maxSetSize
 	_, found := vi.sdkInfoSet[info]
 	vi.lock.RUnlock()
 
@@ -83,6 +84,7 @@ func (vi *SDKVersionInterceptor) RecordSDKInfo(name, version string) {
 	}
 }
 
+// GetAndResetSDKInfo gets all recorded name, version tuples and resets internal records
 func (vi *SDKVersionInterceptor) GetAndResetSDKInfo() []check.SDKInfo {
 	vi.lock.Lock()
 	currSet := vi.sdkInfoSet

@@ -35,7 +35,10 @@ import (
 )
 
 func TestSDKVersionRecorder(t *testing.T) {
-	interceptor := NewSDKVersionInterceptor(func() int { return 2 })
+	interceptor := &SDKVersionInterceptor{
+		sdkInfoSet: make(map[sdkNameVersion]bool),
+		maxSetSize: 2,
+	}
 
 	sdkVersion := "1.10.1"
 

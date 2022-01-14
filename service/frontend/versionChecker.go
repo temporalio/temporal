@@ -87,7 +87,6 @@ func (vc *VersionChecker) Stop() {
 func (vc *VersionChecker) versionCheckLoop() {
 	timer := time.NewTicker(VersionCheckInterval)
 	defer timer.Stop()
-
 	vc.performVersionCheck()
 	for {
 		select {
@@ -137,7 +136,6 @@ func isUpdateNeeded(metadata *persistence.GetClusterMetadataResponse) bool {
 }
 
 func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClusterMetadataResponse) (*check.VersionCheckRequest, error) {
-
 	return &check.VersionCheckRequest{
 		Product:   headers.ClientNameServer,
 		Version:   headers.ServerVersion,
@@ -178,7 +176,7 @@ func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) erro
 
 func toVersionInfo(resp *check.VersionCheckResponse) (*versionpb.VersionInfo, error) {
 	for _, product := range resp.Products {
-		if product.Product == "server" {
+		if product.Product == headers.ClientNameServer {
 			return &versionpb.VersionInfo{
 				Current:        convertReleaseInfo(product.Current),
 				Recommended:    convertReleaseInfo(product.Recommended),
