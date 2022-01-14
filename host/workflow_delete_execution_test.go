@@ -25,6 +25,7 @@
 package host
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -32,10 +33,10 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -45,7 +46,8 @@ func (s *integrationSuite) TestDeleteWorkflowExecution() {
 	tl := "integration-delete-workflow-test-taskqueue"
 	identity := "worker1"
 
-	request := &workflowservice.StartWorkflowExecutionRequest{
+	// Start workflow execution.
+	we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
 		RequestId:           uuid.New(),
 		Namespace:           s.namespace,
 		WorkflowId:          id,
@@ -55,13 +57,10 @@ func (s *integrationSuite) TestDeleteWorkflowExecution() {
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
 		Identity:            identity,
-	}
+	})
+	s.NoError(err)
 
-	we, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
-	s.NoError(err0)
-
-	s.Logger.Info("StartWorkflowExecution", tag.WorkflowRunID(we.RunId))
-
+	// Complete workflow.
 	wtHandler := func(execution *commonpb.WorkflowExecution, wt *commonpb.WorkflowType, previousStartedEventID, startedEventID int64, history *historypb.History) ([]*commandpb.Command, error) {
 		return []*commandpb.Command{{
 			CommandType: enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
@@ -84,9 +83,29 @@ func (s *integrationSuite) TestDeleteWorkflowExecution() {
 		T:                   s.T(),
 	}
 
-	_, err := poller.PollAndProcessWorkflowTask(false, false)
+	_, err = poller.PollAndProcessWorkflowTask(false, false)
 	s.NoError(err)
 
+	// Verify that workflow is completed and visibility is updated.
+	executionsCount := 0
+	for i := 0; i < 10; i++ {
+		visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace:     s.namespace,
+			PageSize:      1,
+			NextPageToken: nil,
+			Query:         fmt.Sprintf("WorkflowId='%s'", id),
+		})
+		s.NoError(err)
+		if len(visibilityResponse.Executions) == 0 {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			executionsCount = len(visibilityResponse.Executions)
+			break
+		}
+	}
+	s.Equal(1, executionsCount)
+
+	// Delete workflow execution.
 	_, err = s.engine.DeleteWorkflowExecution(NewContext(), &workflowservice.DeleteWorkflowExecutionRequest{
 		Namespace: s.namespace,
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -98,6 +117,7 @@ func (s *integrationSuite) TestDeleteWorkflowExecution() {
 
 	executionDeleted := false
 	for i := 0; i < 10; i++ {
+		// Check execution is deleted.
 		describeResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
@@ -110,9 +130,11 @@ func (s *integrationSuite) TestDeleteWorkflowExecution() {
 			time.Sleep(100 * time.Millisecond)
 			continue
 		}
-		s.Error(err) // NotFound
-		s.Nil(describeResponse.WorkflowExecutionInfo)
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
+		s.Nil(describeResponse)
 
+		// Check history is deleted.
 		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 			Namespace: s.namespace,
 			Execution: &commonpb.WorkflowExecution{
@@ -120,8 +142,27 @@ func (s *integrationSuite) TestDeleteWorkflowExecution() {
 				RunId:      we.RunId,
 			},
 		})
-		s.Error(err) // NotFound
-		s.Len(historyResponse.History, 0)
+		var invalidArgumentErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgumentErr)
+		s.Nil(historyResponse)
+
+		// Check visibility is updated.
+		for i := 0; i < 10; i++ {
+			visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace:     s.namespace,
+				PageSize:      1,
+				NextPageToken: nil,
+				Query:         fmt.Sprintf("WorkflowId='%s'", id),
+			})
+			s.NoError(err)
+			if len(visibilityResponse.Executions) != 0 {
+				time.Sleep(100 * time.Millisecond)
+			} else {
+				executionsCount = len(visibilityResponse.Executions)
+				break
+			}
+		}
+		s.Equal(0, executionsCount)
 
 		executionDeleted = true
 		break
