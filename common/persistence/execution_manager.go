@@ -990,6 +990,12 @@ func (m *executionManagerImpl) trimHistoryNode(
 		RunID:       runID,
 	})
 	if err != nil {
+		m.logger.Error("ExecutionManager unable to get mutable state for trimming history branch",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+			tag.Error(err),
+		)
 		return // best effort trim
 	}
 
@@ -1007,7 +1013,13 @@ func (m *executionManagerImpl) trimHistoryNode(
 		TransactionID: mutableStateLastNodeTransactionID,
 	}); err != nil {
 		// best effort trim
-		m.logger.Error("ExecutionManager unable to trim history branch", tag.Error(err))
+		m.logger.Error("ExecutionManager unable to trim history branch",
+			tag.WorkflowNamespaceID(namespaceID),
+			tag.WorkflowID(workflowID),
+			tag.WorkflowRunID(runID),
+			tag.Error(err),
+		)
+		return
 	}
 }
 
