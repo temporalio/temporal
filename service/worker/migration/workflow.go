@@ -51,9 +51,10 @@ import (
 )
 
 const (
-	forceReplicationWorkflowName  = "force-replication"
-	namespaceHandoverWorkflowName = "namespace-handover"
-	listExecutionPageSize         = 1000
+	forceReplicationWorkflowName     = "force-replication"
+	namespaceHandoverWorkflowName    = "namespace-handover"
+	defaultListWorkflowsPageSize     = 1000
+	defaultActivityCountPerExecution = 200
 
 	minimumAllowedLaggingSeconds  = 5
 	minimumHandoverTimeoutSeconds = 30
@@ -62,10 +63,13 @@ const (
 type (
 	ForceReplicationParams struct {
 		Namespace               string
-		SkipAfterTime           time.Time // skip workflows that are updated after this time
-		ConcurrentActivityCount int32
-		RemoteCluster           string // remote cluster name
+		RemoteCluster           string
+		Query                   string // query to list workflows for force replicaiton
+		ConcurrentActivityCount int
+		MaxActivityCount        int    // max activities before continue as new
 		RpsPerActivity          int    // RPS per each activity
+		ListWorkflowsPageSize   int    // needed for testing purpose, default to 1K
+		NextPageToken           []byte // used by continue as new
 	}
 
 	NamespaceHandoverParams struct {
@@ -88,27 +92,15 @@ type (
 		metricsClient     metrics.Client
 	}
 
-	genReplicationForShardRange struct {
-		BeginShardID   int32     // inclusive
-		EndShardID     int32     // inclusive
-		NamespaceID    string    // only generate replication tasks for workflows in this namespace
-		SkipAfterTime  time.Time // skip workflows whose LastUpdateTime is after this time
-		RpsPerActivity int       // RPS per activity
+	listWorkflowsResponse struct {
+		Executions    []commonpb.WorkflowExecution
+		NextPageToken []byte
 	}
 
-	genReplicationForShard struct {
-		ShardID       int32
-		NamespaceID   string
-		SkipAfterTime time.Time
-		PageToken     []byte
-		Index         int
-		RPS           int
-	}
-
-	heartbeatProgress struct {
-		ShardID   int32
-		PageToken []byte
-		Index     int
+	genReplicationRequest struct {
+		NamespaceID string
+		Executions  []commonpb.WorkflowExecution
+		RPS         int
 	}
 
 	metadataRequest struct {
@@ -150,7 +142,6 @@ type (
 
 var (
 	historyServiceRetryPolicy = common.CreateHistoryServiceRetryPolicy()
-	persistenceRetryPolicy    = common.CreateHistoryServiceRetryPolicy()
 )
 
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
@@ -163,8 +154,14 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	if params.ConcurrentActivityCount <= 0 {
 		params.ConcurrentActivityCount = 1
 	}
+	if params.MaxActivityCount <= 0 || params.MaxActivityCount > 1000 {
+		params.MaxActivityCount = defaultActivityCountPerExecution
+	}
 	if params.RpsPerActivity <= 0 {
 		params.RpsPerActivity = 1
+	}
+	if params.ListWorkflowsPageSize <= 0 {
+		params.ListWorkflowsPageSize = defaultListWorkflowsPageSize
 	}
 
 	retryPolicy := &temporal.RetryPolicy{
@@ -173,58 +170,92 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	}
 
 	// ** Step 1, Get cluster metadata **
-	ao := workflow.ActivityOptions{
+	lao := workflow.LocalActivityOptions{
 		StartToCloseTimeout: time.Second * 10,
 		RetryPolicy:         retryPolicy,
 	}
-	ctx1 := workflow.WithActivityOptions(ctx, ao)
+	ctx1 := workflow.WithLocalActivityOptions(ctx, lao)
 	var a *activities
 	var metadataResp metadataResponse
 	metadataRequest := metadataRequest{Namespace: params.Namespace}
-	err := workflow.ExecuteActivity(ctx1, a.GetMetadata, metadataRequest).Get(ctx1, &metadataResp)
+	err := workflow.ExecuteLocalActivity(ctx1, a.GetMetadata, metadataRequest).Get(ctx1, &metadataResp)
 	if err != nil {
 		return err
 	}
 
-	// ** Step 2, Force replication **
-	ao2 := workflow.ActivityOptions{
-		StartToCloseTimeout: time.Hour * 10,
-		HeartbeatTimeout:    time.Second * 30,
-		RetryPolicy:         retryPolicy,
-	}
-	ctx2 := workflow.WithActivityOptions(ctx, ao2)
-
-	concurrentCount := params.ConcurrentActivityCount
-	shardCount := metadataResp.ShardCount
-	skipAfter := params.SkipAfterTime
-	if skipAfter.IsZero() {
-		skipAfter = workflow.Now(ctx2)
-	}
-	var futures []workflow.Future
-	batchSize := (shardCount + concurrentCount - 1) / concurrentCount
-	for beginShardID := int32(1); beginShardID <= shardCount; beginShardID += batchSize {
-		endShardID := beginShardID + batchSize - 1
-		if endShardID > shardCount {
-			endShardID = shardCount
+	// dispatchChan to dispatch workflow executions to activities to generate replication tasks.
+	dispatchChan := workflow.NewChannel(ctx)
+	// doneChan to notify workflow main coroutine that all activities are done
+	doneChan := workflow.NewChannel(ctx)
+	selector := workflow.NewSelector(ctx)
+	pendingActivities := 0
+	workflow.Go(ctx, func(ctx workflow.Context) {
+		ao := workflow.ActivityOptions{
+			StartToCloseTimeout: time.Hour,
+			HeartbeatTimeout:    time.Second * 30,
+			RetryPolicy:         retryPolicy,
 		}
-		rangeRequest := genReplicationForShardRange{
-			BeginShardID:   beginShardID,
-			EndShardID:     endShardID,
-			NamespaceID:    metadataResp.NamespaceID,
-			SkipAfterTime:  skipAfter,
-			RpsPerActivity: params.RpsPerActivity,
-		}
-		future := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, rangeRequest)
-		futures = append(futures, future)
-	}
+		ctx2 := workflow.WithActivityOptions(ctx, ao)
 
-	for _, f := range futures {
-		if err := f.Get(ctx2, nil); err != nil {
+		for {
+			var executions []commonpb.WorkflowExecution
+			if more := dispatchChan.Receive(ctx, &executions); !more {
+				break
+			}
+
+			fu := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &genReplicationRequest{
+				NamespaceID: metadataResp.NamespaceID,
+				Executions:  executions,
+				RPS:         params.RpsPerActivity,
+			})
+			pendingActivities++
+
+			selector.AddFuture(fu, func(f workflow.Future) {
+				pendingActivities--
+			})
+
+			if pendingActivities >= params.ConcurrentActivityCount {
+				selector.Select(ctx) // this will block until one of the pending activities complete
+			}
+		}
+		// wait until all activities done
+		for pendingActivities > 0 {
+			selector.Select(ctx)
+		}
+		doneChan.Close()
+	})
+
+	for i := 0; i < params.MaxActivityCount; i++ {
+		fu := workflow.ExecuteLocalActivity(ctx1, a.ListWorkflows, &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace:     params.Namespace,
+			PageSize:      int32(params.ListWorkflowsPageSize),
+			NextPageToken: params.NextPageToken,
+			Query:         params.Query,
+		})
+		var resp listWorkflowsResponse
+		err = fu.Get(ctx1, &resp)
+		if err != nil {
 			return err
 		}
+		// dispatch workflow executions to be worked on by activities
+		dispatchChan.Send(ctx, resp.Executions)
+
+		params.NextPageToken = resp.NextPageToken
+		if params.NextPageToken == nil {
+			break
+		}
+	}
+	// to notify dispatcher coroutine that there is no more work coming.
+	dispatchChan.Close()
+
+	// wait until all activities are done
+	doneChan.Receive(ctx, nil)
+
+	if params.NextPageToken == nil {
+		return nil
 	}
 
-	return nil
+	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflow, params)
 }
 
 func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverParams) error {
@@ -350,30 +381,39 @@ func (a *activities) GetMetadata(ctx context.Context, request metadataRequest) (
 	}, nil
 }
 
-// GenerateReplicationTasks generates replication task for last history event for each workflow.
-func (a *activities) GenerateReplicationTasks(ctx context.Context, request genReplicationForShardRange) error {
-	perShard := genReplicationForShard{
-		ShardID:       request.BeginShardID,
-		NamespaceID:   request.NamespaceID,
-		SkipAfterTime: request.SkipAfterTime,
-		RPS:           request.RpsPerActivity,
+func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice.ListWorkflowExecutionsRequest) (*listWorkflowsResponse, error) {
+	resp, err := a.frontendClient.ListWorkflowExecutions(ctx, request)
+	if err != nil {
+		return nil, err
 	}
-	var progress heartbeatProgress
+	executions := make([]commonpb.WorkflowExecution, len(resp.Executions))
+	for i, e := range resp.Executions {
+		executions[i] = *e.Execution
+	}
+	return &listWorkflowsResponse{Executions: executions, NextPageToken: resp.NextPageToken}, nil
+}
+
+func (a *activities) GenerateReplicationTasks(ctx context.Context, request *genReplicationRequest) error {
+	rateLimiter := quotas.NewRateLimiter(float64(request.RPS), request.RPS)
+
+	startIndex := 0
 	if activity.HasHeartbeatDetails(ctx) {
-		if err := activity.GetHeartbeatDetails(ctx, &progress); err == nil {
-			perShard.ShardID = progress.ShardID
-			perShard.PageToken = progress.PageToken
-			perShard.Index = progress.Index
+		var finishedIndex int
+		if err := activity.GetHeartbeatDetails(ctx, &finishedIndex); err == nil {
+			startIndex = finishedIndex + 1 // start from next one
 		}
 	}
-	for ; perShard.ShardID <= request.EndShardID; perShard.ShardID++ {
-		if err := a.genReplicationTasks(ctx, perShard); err != nil {
+
+	for i := startIndex; i < len(request.Executions); i++ {
+		rateLimiter.Wait(ctx)
+		we := request.Executions[i]
+		err := a.genReplicationTaskForOneWorkflow(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
+		if err != nil {
 			return err
 		}
-		// heartbeat progress only apply for first shard
-		perShard.PageToken = nil
-		perShard.Index = 0
+		activity.RecordHeartbeat(ctx, i)
 	}
+
 	return nil
 }
 
@@ -531,62 +571,6 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	).UpdateGauge(metrics.HandoverReadyShardCountGauge, float64(readyShardCount))
 
 	return readyShardCount == len(resp.Shards), nil
-}
-
-func (a *activities) genReplicationTasks(ctx context.Context, request genReplicationForShard) error {
-	pageToken := request.PageToken
-	startIndex := request.Index
-	rateLimiter := quotas.NewRateLimiter(float64(request.RPS), request.RPS)
-
-	for {
-		var listResult *persistence.ListConcreteExecutionsResponse
-		op := func(ctx context.Context) error {
-			var err error
-			listResult, err = a.executionManager.ListConcreteExecutions(&persistence.ListConcreteExecutionsRequest{
-				ShardID:   request.ShardID,
-				PageSize:  listExecutionPageSize,
-				PageToken: pageToken,
-			})
-			return err
-		}
-
-		rateLimiter.Wait(ctx)
-		err := backoff.RetryContext(ctx, op, persistenceRetryPolicy, common.IsPersistenceTransientError)
-		if err != nil {
-			return err
-		}
-
-		for i := startIndex; i < len(listResult.States); i++ {
-			activity.RecordHeartbeat(ctx, heartbeatProgress{
-				ShardID:   request.ShardID,
-				PageToken: pageToken,
-				Index:     i,
-			})
-
-			ms := listResult.States[i]
-			if ms.ExecutionInfo.LastUpdateTime != nil && ms.ExecutionInfo.LastUpdateTime.After(request.SkipAfterTime) {
-				// workflow was updated after SkipAfterTime, no need to generate replication task
-				continue
-			}
-			if ms.ExecutionInfo.NamespaceId != request.NamespaceID {
-				// skip if not target namespace
-				continue
-			}
-			rateLimiter.Wait(ctx)
-			err := a.genReplicationTaskForOneWorkflow(ctx, definition.NewWorkflowKey(request.NamespaceID, ms.ExecutionInfo.WorkflowId, ms.ExecutionState.RunId))
-			if err != nil {
-				return err
-			}
-		}
-
-		pageToken = listResult.PageToken
-		startIndex = 0
-		if pageToken == nil {
-			break
-		}
-	}
-
-	return nil
 }
 
 func (a *activities) genReplicationTaskForOneWorkflow(ctx context.Context, wKey definition.WorkflowKey) error {
