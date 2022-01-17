@@ -546,7 +546,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		NextEventID:     input.NextEventID,
 	}
 
-	result.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
+	result.ExecutionInfoBlob, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}
