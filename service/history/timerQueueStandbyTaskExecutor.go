@@ -60,7 +60,8 @@ type (
 
 func newTimerQueueStandbyTaskExecutor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	deleteManager workflow.DeleteManager,
+	cache workflow.Cache,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 	metricsClient metrics.Client,
@@ -71,7 +72,8 @@ func newTimerQueueStandbyTaskExecutor(
 	return &timerQueueStandbyTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
-			historyService,
+			deleteManager,
+			cache,
 			logger,
 			metricsClient,
 			config,

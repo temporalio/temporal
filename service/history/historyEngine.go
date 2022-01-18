@@ -120,7 +120,7 @@ type (
 		rawMatchingClient             matchingservice.MatchingServiceClient
 		replicationDLQHandler         replicationDLQHandler
 		searchAttributesValidator     *searchattribute.Validator
-		searchAttributesMapper        searchattribute.Mapper
+		workflowDeleteManager         workflow.DeleteManager
 	}
 )
 
@@ -145,33 +145,44 @@ func NewEngineWithShardContext(
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 	historyCache := newCacheFn(shard)
+
+	archivalClient := archiver.NewClient(
+		shard.GetMetricsClient(),
+		logger,
+		publicClient,
+		shard.GetConfig().NumArchiveSystemWorkflows,
+		shard.GetConfig().ArchiveRequestRPS,
+		archiverProvider,
+	)
+
+	workflowDeleteManager := workflow.NewDeleteManager(
+		shard,
+		historyCache,
+		config,
+		archivalClient,
+	)
+
 	historyEngImpl := &historyEngineImpl{
-		status:             common.DaemonStatusInitialized,
-		currentClusterName: currentClusterName,
-		shard:              shard,
-		clusterMetadata:    shard.GetClusterMetadata(),
-		timeSource:         shard.GetTimeSource(),
-		executionManager:   executionManager,
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		historyCache:       historyCache,
-		logger:             log.With(logger, tag.ComponentHistoryEngine),
-		throttledLogger:    log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
-		metricsClient:      shard.GetMetricsClient(),
-		eventNotifier:      eventNotifier,
-		config:             config,
-		archivalClient: archiver.NewClient(
-			shard.GetMetricsClient(),
-			logger,
-			publicClient,
-			shard.GetConfig().NumArchiveSystemWorkflows,
-			shard.GetConfig().ArchiveRequestRPS,
-			archiverProvider,
-		),
+		status:                    common.DaemonStatusInitialized,
+		currentClusterName:        currentClusterName,
+		shard:                     shard,
+		clusterMetadata:           shard.GetClusterMetadata(),
+		timeSource:                shard.GetTimeSource(),
+		executionManager:          executionManager,
+		tokenSerializer:           common.NewProtoTaskTokenSerializer(),
+		historyCache:              historyCache,
+		logger:                    log.With(logger, tag.ComponentHistoryEngine),
+		throttledLogger:           log.With(shard.GetThrottledLogger(), tag.ComponentHistoryEngine),
+		metricsClient:             shard.GetMetricsClient(),
+		eventNotifier:             eventNotifier,
+		config:                    config,
+		archivalClient:            archivalClient,
 		publicClient:              publicClient,
 		matchingClient:            matchingClient,
 		rawMatchingClient:         rawMatchingClient,
 		replicationTaskProcessors: make(map[string]ReplicationTaskProcessor),
 		replicationTaskFetchers:   replicationTaskFetchers,
+		workflowDeleteManager:     workflowDeleteManager,
 	}
 
 	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl,
@@ -216,8 +227,6 @@ func NewEngineWithShardContext(
 		config.SearchAttributesSizeOfValueLimit,
 		config.SearchAttributesTotalSizeLimit,
 	)
-
-	historyEngImpl.searchAttributesMapper = shard.GetSearchAttributesMapper()
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
 	historyEngImpl.replicationDLQHandler = newLazyReplicationDLQHandler(shard)
@@ -514,7 +523,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 
-	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace.String())
+	err = searchattribute.SubstituteAliases(e.shard.GetSearchAttributesMapper(), request.GetSearchAttributes(), namespace.String())
 	if err != nil {
 		return nil, err
 	}
@@ -2012,7 +2021,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace.String())
+	err = searchattribute.SubstituteAliases(e.shard.GetSearchAttributesMapper(), request.GetSearchAttributes(), namespace.String())
 	if err != nil {
 		return nil, err
 	}

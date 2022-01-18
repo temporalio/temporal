@@ -60,12 +60,14 @@ type (
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
+		workflowDeleteManager    workflow.DeleteManager
 	}
 )
 
 func newTransferQueueTaskExecutorBase(
 	shard shard.Context,
 	historyEngine *historyEngineImpl,
+	workflowDeleteManager workflow.DeleteManager,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
@@ -80,6 +82,7 @@ func newTransferQueueTaskExecutorBase(
 		matchingClient:           matchingClient,
 		config:                   config,
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
+		workflowDeleteManager:    workflowDeleteManager,
 	}
 }
 

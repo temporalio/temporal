@@ -97,7 +97,8 @@ func newTimerQueueActiveProcessor(
 	}
 	processor.taskExecutor = newTimerQueueActiveTaskExecutor(
 		shard,
-		historyService,
+		historyService.workflowDeleteManager,
+		historyService.historyCache,
 		processor,
 		logger,
 		historyService.metricsClient,
@@ -189,7 +190,8 @@ func newTimerQueueFailoverProcessor(
 	}
 	processor.taskExecutor = newTimerQueueActiveTaskExecutor(
 		shard,
-		historyService,
+		historyService.workflowDeleteManager,
+		historyService.historyCache,
 		processor,
 		logger,
 		historyService.metricsClient,
