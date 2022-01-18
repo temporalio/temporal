@@ -67,8 +67,9 @@ type (
 		// Deprecated: use Namespace in RequestDetail instead. Should be removed in 1.17
 		Namespace string
 		// Deprecated: use NamespaceID in RequestDetail instead. Should be removed in 1.17
-		NamespaceID string
-		Executions  []RequestDetail
+		NamespaceID     string
+		ParentExecution commonpb.WorkflowExecution
+		Executions      []RequestDetail
 	}
 )
 
@@ -106,6 +107,12 @@ func ProcessorWorkflow(ctx workflow.Context) error {
 func ProcessorActivity(ctx context.Context, request Request) error {
 	processor := ctx.Value(processorContextKey).(*Processor)
 	client := processor.clientBean.GetHistoryClient()
+	// this is for backward compatibility
+	// ideally we should always have childWorkflowOnly = true
+	// however if ParentExecution is not specified, setting it to false
+	// will cause terminate or cancel request to return mismatch error
+	childWorkflowOnly := request.ParentExecution.GetWorkflowId() != "" &&
+		request.ParentExecution.GetRunId() != ""
 	for _, execution := range request.Executions {
 		namespaceId := execution.NamespaceID
 		if len(execution.NamespaceID) == 0 {
@@ -134,6 +141,8 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity:            processorWFTypeName,
 					FirstExecutionRunId: execution.RunID,
 				},
+				ExternalWorkflowExecution: &request.ParentExecution,
+				ChildWorkflowOnly:         childWorkflowOnly,
 			})
 		case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 			_, err = client.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
@@ -146,6 +155,8 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 					Identity:            processorWFTypeName,
 					FirstExecutionRunId: execution.RunID,
 				},
+				ExternalWorkflowExecution: &request.ParentExecution,
+				ChildWorkflowOnly:         childWorkflowOnly,
 			})
 		}
 

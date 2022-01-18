@@ -2200,6 +2200,8 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	namespaceID := namespaceEntry.ID()
 
 	request := terminateRequest.TerminateRequest
+	parentExecution := terminateRequest.ExternalWorkflowExecution
+	childWorkflowOnly := terminateRequest.ChildWorkflowOnly
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 	}
@@ -2226,6 +2228,13 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 			executionInfo := mutableState.GetExecutionInfo()
 			if len(firstExecutionRunID) > 0 && executionInfo.FirstExecutionRunId != firstExecutionRunID {
 				return nil, consts.ErrWorkflowExecutionNotFound
+			}
+
+			if childWorkflowOnly {
+				if parentExecution.GetWorkflowId() != executionInfo.ParentWorkflowId ||
+					parentExecution.GetRunId() != executionInfo.ParentRunId {
+					return nil, consts.ErrWorkflowParent
+				}
 			}
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()

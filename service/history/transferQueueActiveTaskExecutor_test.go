@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -910,8 +911,22 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
-	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil)
-	s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil)
+	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *historyservice.RequestCancelWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.RequestCancelWorkflowExecutionResponse, error) {
+			s.True(request.GetChildWorkflowOnly())
+			s.Equal(execution.GetWorkflowId(), request.GetExternalWorkflowExecution().GetWorkflowId())
+			s.Equal(execution.GetRunId(), request.GetExternalWorkflowExecution().GetRunId())
+			return nil, nil
+		},
+	)
+	s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *historyservice.TerminateWorkflowExecutionRequest, _ ...grpc.CallOption) (*historyservice.TerminateWorkflowExecutionResponse, error) {
+			s.True(request.GetChildWorkflowOnly())
+			s.Equal(execution.GetWorkflowId(), request.GetExternalWorkflowExecution().GetWorkflowId())
+			s.Equal(execution.GetRunId(), request.GetExternalWorkflowExecution().GetRunId())
+			return nil, nil
+		},
+	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name("child namespace2")).Return(namespace.ID("child namespace2 id"), nil)
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name("child namespace3")).Return(namespace.ID("child namespace3 id"), nil)
@@ -1005,7 +1020,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
-	s.mockParentClosePolicyClient.EXPECT().SendParentClosePolicyRequest(gomock.Any()).Return(nil)
+	s.mockParentClosePolicyClient.EXPECT().SendParentClosePolicyRequest(gomock.Any()).DoAndReturn(
+		func(request parentclosepolicy.Request) error {
+			s.Equal(execution, request.ParentExecution)
+			return nil
+		},
+	)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(tests.NamespaceID, nil).Times(10)
 
