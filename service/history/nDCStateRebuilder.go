@@ -112,7 +112,6 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	targetBranchToken []byte,
 	requestID string,
 ) (workflow.MutableState, int64, error) {
-
 	iter := collection.NewPagingIterator(r.getPaginationFn(
 		common.FirstEventID,
 		baseLastEventID+1,
@@ -129,27 +128,29 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		now,
 	)
 
+	var lastTxnId int64
 	for iter.HasNext() {
 		batch, err := iter.Next()
 		switch err.(type) {
 		case nil:
 			// noop
 		case *serviceerror.DataLoss:
-			// log event
 			r.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(baseWorkflowIdentifier.NamespaceID), tag.WorkflowID(baseWorkflowIdentifier.WorkflowID), tag.WorkflowRunID(baseWorkflowIdentifier.RunID))
 			return nil, 0, err
 		default:
 			return nil, 0, err
 		}
 
+		history := batch.(*historypb.History)
 		if err := r.applyEvents(
 			targetWorkflowIdentifier,
 			stateBuilder,
-			batch.(*historypb.History).Events,
+			history.Events,
 			requestID,
 		); err != nil {
 			return nil, 0, err
 		}
+		lastTxnId = history.TransactionId
 	}
 
 	if err := rebuiltMutableState.SetCurrentBranchToken(targetBranchToken); err != nil {
@@ -180,6 +181,8 @@ func (r *nDCStateRebuilderImpl) rebuild(
 		return nil, 0, err
 	}
 
+	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
+
 	// refresh tasks to be generated
 	if err := r.taskRefresher.RefreshTasks(now, rebuiltMutableState); err != nil {
 		return nil, 0, err
@@ -191,7 +194,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 func (r *nDCStateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
 	now time.Time,
-) (workflow.MutableState, workflow.MutableStateRebuilder) {
+) (*workflow.MutableStateImpl, workflow.MutableStateRebuilder) {
 	resetMutableStateBuilder := workflow.NewMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),
@@ -239,9 +242,7 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 	nextEventID int64,
 	branchToken []byte,
 ) collection.PaginationFn {
-
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
-
 		resp, err := r.executionMgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,

@@ -499,7 +499,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, bool, error) {
+		reverseOrder bool,
+	) ([]byte, string, int64, int64, int64, bool, error) {
 		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID.String(),
 			Execution:           execution,
@@ -508,7 +509,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		})
 
 		if err != nil {
-			return nil, "", 0, 0, false, err
+			return nil, "", 0, 0, 0, false, err
 		}
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
@@ -516,6 +517,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventId(),
 			response.GetNextEventId(),
+			response.GetLastFirstEventTxnId(),
 			isWorkflowRunning,
 			nil
 	}
@@ -528,6 +530,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	var runID string
 	lastFirstEventID := common.FirstEventID
 	var nextEventID int64
+	var lastFirstTxnID int64
 	var isWorkflowRunning bool
 
 	// process the token for paging
@@ -548,8 +551,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 			if !isCloseEventOnly {
 				queryNextEventID = continuationToken.GetNextEventId()
 			}
-			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken)
+			continuationToken.BranchToken, _, lastFirstEventID, nextEventID, lastFirstTxnID, isWorkflowRunning, err =
+				queryHistory(namespaceID, execution, queryNextEventID, continuationToken.BranchToken, request.ReverseOrder)
 			if err != nil {
 				return nil, err
 			}
@@ -562,8 +565,8 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if !isCloseEventOnly {
 			queryNextEventID = common.FirstEventID
 		}
-		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, isWorkflowRunning, err =
-			queryHistory(namespaceID, execution, queryNextEventID, nil)
+		continuationToken.BranchToken, runID, lastFirstEventID, nextEventID, lastFirstTxnID, isWorkflowRunning, err =
+			queryHistory(namespaceID, execution, queryNextEventID, nil, request.ReverseOrder)
 		if err != nil {
 			return nil, err
 		}
@@ -619,10 +622,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					*execution,
 					lastFirstEventID,
 					nextEventID,
+					lastFirstTxnID,
 					request.GetMaximumPageSize(),
 					nil,
 					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
+					request.GetReverseOrder(),
 				)
 				if err != nil {
 					return nil, err
@@ -666,10 +671,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 					*execution,
 					continuationToken.FirstEventId,
 					continuationToken.NextEventId,
+					lastFirstTxnID,
 					request.GetMaximumPageSize(),
 					continuationToken.PersistenceToken,
 					continuationToken.TransientWorkflowTask,
 					continuationToken.BranchToken,
+					request.ReverseOrder,
 				)
 			}
 
@@ -2906,24 +2913,27 @@ func (wh *WorkflowHandler) getHistory(
 	execution commonpb.WorkflowExecution,
 	firstEventID int64,
 	nextEventID int64,
+	lastFirstTxnID int64,
 	pageSize int32,
 	nextPageToken []byte,
 	transientWorkflowTaskInfo *historyspb.TransientWorkflowTaskInfo,
 	branchToken []byte,
+	reverseOrder bool,
 ) (*historypb.History, []byte, error) {
-
 	var size int
 	isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
 	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(wh.persistenceExecutionManager, &persistence.ReadHistoryBranchRequest{
-		BranchToken:   branchToken,
-		MinEventID:    firstEventID,
-		MaxEventID:    nextEventID,
-		PageSize:      int(pageSize),
-		NextPageToken: nextPageToken,
-		ShardID:       shardID,
+		BranchToken:            branchToken,
+		MinEventID:             firstEventID,
+		MaxEventID:             nextEventID,
+		PageSize:               int(pageSize),
+		NextPageToken:          nextPageToken,
+		ShardID:                shardID,
+		LastFirstTransactionID: lastFirstTxnID,
+		ReverseOrder:           reverseOrder,
 	})
 	switch err.(type) {
 	case nil:
@@ -2945,7 +2955,8 @@ func (wh *WorkflowHandler) getHistory(
 		nextEventID-1,
 		isFirstPage,
 		isLastPage,
-		int(pageSize)); err != nil {
+		int(pageSize),
+		reverseOrder); err != nil {
 		scope.IncCounter(metrics.ServiceErrIncompleteHistoryCounter)
 		wh.logger.Error("getHistory: incomplete history",
 			tag.WorkflowNamespaceID(namespaceID.String()),
@@ -3101,10 +3112,12 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 			*matchingResp.GetWorkflowExecution(),
 			firstEventID,
 			nextEventID,
+			0,
 			int32(wh.config.HistoryMaxPageSize(namespaceEntry.Name().String())),
 			nil,
 			matchingResp.GetWorkflowTaskInfo(),
 			branchToken,
+			false,
 		)
 		if err != nil {
 			return nil, err
@@ -3152,8 +3165,8 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 	isFirstPage bool,
 	isLastPage bool,
 	pageSize int,
+	reverseOrder bool,
 ) error {
-
 	nEvents := len(events)
 	if nEvents == 0 {
 		if isLastPage {
@@ -3163,6 +3176,17 @@ func (wh *WorkflowHandler) verifyHistoryIsComplete(
 			return nil
 		}
 		return serviceerror.NewDataLoss("History contains zero events.")
+	}
+
+	if reverseOrder {
+		currEventID := events[0].EventId
+		for _, event := range events {
+			if currEventID != event.EventId {
+				return serviceerror.NewDataLoss(fmt.Sprintf("event ids in range are not contiguous. expected id: %v, actual id: %v", currEventID, event.EventId))
+			}
+			currEventID--
+		}
+		return nil
 	}
 
 	firstEventID := events[0].GetEventId()

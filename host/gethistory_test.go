@@ -26,8 +26,13 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"time"
+
+	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/common/persistence/serialization"
 
@@ -480,6 +485,7 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 			},
 			MaximumPageSize: int32(100),
 			NextPageToken:   token,
+			ReverseOrder:    true,
 		})
 		s.Nil(err)
 		return responseInner.RawHistory, responseInner.NextPageToken
@@ -570,4 +576,208 @@ func (s *integrationSuite) TestGetWorkflowExecutionHistory_GetRawHistoryData() {
 		}
 	}
 	s.Equal(11, len(allEvents))
+}
+
+func (s *clientIntegrationSuite) TestGetHistoryReverse() {
+	activityExecutedCount := 0
+	activityFn := func(ctx context.Context) error {
+		var err error
+		activityExecutedCount++
+		return err
+	}
+
+	var err1 error
+
+	activityId := "heartbeat_retry"
+	workflowFn := func(ctx workflow.Context) error {
+		activityRetryPolicy := &temporal.RetryPolicy{
+			InitialInterval:    time.Second * 2,
+			BackoffCoefficient: 1,
+			MaximumInterval:    time.Second * 2,
+			MaximumAttempts:    3,
+		}
+
+		ctx1 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             activityId,
+			ScheduleToStartTimeout: 2 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			RetryPolicy:            activityRetryPolicy,
+		})
+		f1 := workflow.ExecuteActivity(ctx1, activityFn)
+		err1 = f1.Get(ctx1, nil)
+
+		return nil
+	}
+
+	s.worker.RegisterActivity(activityFn)
+	s.worker.RegisterWorkflow(workflowFn)
+
+	wfId := "integration-test-gethistoryreverse"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 wfId,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+
+	err = workflowRun.Get(ctx, nil)
+	s.NoError(err)
+
+	s.NoError(err1)
+
+	wfeResponse, err := s.sdkClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	s.Nil(err)
+
+	eventDefaultOrder := s.getHistory(s.namespace, wfeResponse.WorkflowExecutionInfo.Execution)
+	eventDefaultOrder = reverseSlice(eventDefaultOrder)
+
+	events := s.getHistoryReverse(s.namespace, wfeResponse.WorkflowExecutionInfo.Execution, 100, true)
+	s.Equal(len(eventDefaultOrder), len(events))
+	s.Equal(eventDefaultOrder, events)
+
+	events = s.getHistoryReverse(s.namespace, wfeResponse.WorkflowExecutionInfo.Execution, 3, true)
+	s.Equal(len(eventDefaultOrder), len(events))
+	s.Equal(eventDefaultOrder, events)
+
+	events = s.getHistoryReverse(s.namespace, wfeResponse.WorkflowExecutionInfo.Execution, 1, true)
+	s.Equal(len(eventDefaultOrder), len(events))
+	s.Equal(eventDefaultOrder, events)
+}
+
+func (s *clientIntegrationSuite) TestGetHistoryReverseBranch() {
+	activityExecutedCount := 0
+	activityFn := func(ctx context.Context) error {
+		var err error
+		activityExecutedCount++
+		return err
+	}
+
+	var err1, err2 error
+
+	activityId := "activity-gethistory-reverse-branch"
+	workflowFn := func(ctx workflow.Context) error {
+		activityRetryPolicy := &temporal.RetryPolicy{
+			InitialInterval:    time.Second * 2,
+			BackoffCoefficient: 1,
+			MaximumInterval:    time.Second * 2,
+			MaximumAttempts:    3,
+		}
+
+		ctx1 := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+			ActivityID:             activityId,
+			ScheduleToStartTimeout: 2 * time.Second,
+			StartToCloseTimeout:    2 * time.Second,
+			RetryPolicy:            activityRetryPolicy,
+		})
+
+		f1 := workflow.ExecuteActivity(ctx1, activityFn)
+		err1 = f1.Get(ctx1, nil)
+		s.NoError(err1)
+
+		workflow.Sleep(ctx, time.Second*2)
+
+		f2 := workflow.ExecuteActivity(ctx1, activityFn)
+		err2 = f2.Get(ctx1, nil)
+
+		return nil
+	}
+
+	s.worker.RegisterActivity(activityFn)
+	s.worker.RegisterWorkflow(workflowFn)
+
+	wfId := "integration-test-gethistory-reverse-branch"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:                 wfId,
+		TaskQueue:          s.taskQueue,
+		WorkflowRunTimeout: 20 * time.Second,
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+
+	time.Sleep(time.Second)
+
+	s.NoError(err1)
+	s.NoError(err2)
+
+	wfeResponse, err := s.sdkClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
+	s.NoError(err)
+
+	rweResponse, err := s.sdkClient.ResetWorkflowExecution(ctx, &workflowservice.ResetWorkflowExecutionRequest{
+		Namespace:                 s.namespace,
+		WorkflowExecution:         wfeResponse.WorkflowExecutionInfo.Execution,
+		Reason:                    "TestGetHistoryReverseBranch",
+		WorkflowTaskFinishEventId: 10,
+		RequestId:                 "test_id",
+	})
+	s.NoError(err)
+
+	resetRunId := rweResponse.GetRunId()
+	resetWorkflowRun := s.sdkClient.GetWorkflow(ctx, wfId, resetRunId)
+	err = resetWorkflowRun.Get(ctx, nil)
+	s.NoError(err)
+
+	resetWfeResponse, err := s.sdkClient.DescribeWorkflowExecution(ctx, resetWorkflowRun.GetID(), resetWorkflowRun.GetRunID())
+	s.NoError(err)
+
+	eventsDefaultOrder := s.getHistory(s.namespace, resetWfeResponse.WorkflowExecutionInfo.Execution)
+	eventsDefaultOrder = reverseSlice(eventsDefaultOrder)
+
+	events := s.getHistoryReverse(s.namespace, resetWfeResponse.WorkflowExecutionInfo.Execution, 100, true)
+	s.Equal(len(eventsDefaultOrder), len(events))
+	s.Equal(eventsDefaultOrder, events)
+
+	events = s.getHistoryReverse(s.namespace, resetWfeResponse.WorkflowExecutionInfo.Execution, 3, true)
+	s.Equal(len(eventsDefaultOrder), len(events))
+	s.Equal(eventsDefaultOrder, events)
+
+	events = s.getHistoryReverse(s.namespace, resetWfeResponse.WorkflowExecutionInfo.Execution, 1, true)
+	s.Equal(len(eventsDefaultOrder), len(events))
+	s.Equal(eventsDefaultOrder, events)
+}
+
+func reverseSlice(events []*historypb.HistoryEvent) []*historypb.HistoryEvent {
+	for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
+		events[i], events[j] = events[j], events[i]
+	}
+	return events
+}
+
+func (s *IntegrationBase) getHistoryReverse(namespace string, execution *commonpb.WorkflowExecution, pageSize int32, reverse bool) []*historypb.HistoryEvent {
+	historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+		Namespace:       namespace,
+		Execution:       execution,
+		MaximumPageSize: pageSize,
+		ReverseOrder:    reverse,
+	})
+	s.Require().NoError(err)
+
+	events := historyResponse.History.Events
+	for historyResponse.NextPageToken != nil {
+		historyResponse, err = s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace:       namespace,
+			Execution:       execution,
+			NextPageToken:   historyResponse.NextPageToken,
+			MaximumPageSize: pageSize,
+			ReverseOrder:    reverse,
+		})
+		s.Require().NoError(err)
+		events = append(events, historyResponse.History.Events...)
+	}
+
+	return events
 }

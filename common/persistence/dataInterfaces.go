@@ -873,6 +873,11 @@ type (
 		PageSize int
 		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
 		NextPageToken []byte
+
+		// LastFirstTransactionID specified in mutable state. Only used for reading in reverse order.
+		LastFirstTransactionID int64
+		// Whether we want to return events in reverse order.
+		ReverseOrder bool
 	}
 
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
@@ -1282,18 +1287,27 @@ func UnixMilliseconds(t time.Time) int64 {
 
 // NewHistoryBranchToken return a new branch token
 func NewHistoryBranchToken(treeID string) ([]byte, error) {
-	branchID := primitives.NewUUID().String()
-	bi := &persistencespb.HistoryBranch{
-		TreeId:    treeID,
-		BranchId:  branchID,
-		Ancestors: []*persistencespb.HistoryBranchRange{},
-	}
+	bi := NewHistoryBranch(treeID)
+	return SerializeHistoryBranchToken(bi)
+}
+
+func SerializeHistoryBranchToken(bi *persistencespb.HistoryBranch) ([]byte, error) {
 	datablob, err := serialization.HistoryBranchToBlob(bi)
 	if err != nil {
 		return nil, err
 	}
 	token := datablob.Data
 	return token, nil
+}
+
+func NewHistoryBranch(treeID string) *persistencespb.HistoryBranch {
+	branchID := primitives.NewUUID().String()
+	bi := &persistencespb.HistoryBranch{
+		TreeId:    treeID,
+		BranchId:  branchID,
+		Ancestors: []*persistencespb.HistoryBranchRange{},
+	}
+	return bi
 }
 
 // NewHistoryBranchTokenByBranchID return a new branch token with treeID/branchID

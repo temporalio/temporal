@@ -54,13 +54,13 @@ CREATE TABLE executions (
   };
 
 CREATE TABLE history_node (
-  tree_id           uuid,
-  branch_id         uuid,
-  node_id           bigint, -- node_id: first eventID in a batch of events
-  txn_id            bigint, -- for override the same node_id: bigger txn_id wins
-  prev_txn_id       bigint, -- pointing to the previous node: event chaining
-  data                blob, -- Batch of workflow execution history events as a blob
-  data_encoding       text, -- Protocol used for history serialization
+  tree_id           uuid,   -- ~= effectively runid
+  branch_id         uuid,   -- branch id will changes in case of reset workflow
+  node_id           bigint, -- == first eventID in a batch of events
+  txn_id            bigint, -- in case of multiple transactions on same node, we utilize highest transaction ID. Unique.
+  prev_txn_id       bigint, -- point to the previous node
+  data                blob, -- batch of workflow execution history events as a blob
+  data_encoding       text, -- protocol used for history serialization
   PRIMARY KEY ((tree_id), branch_id, node_id, txn_id )
 ) WITH CLUSTERING ORDER BY (branch_id ASC, node_id ASC, txn_id DESC)
   AND COMPACTION = {

@@ -28,6 +28,7 @@ import (
 	"sort"
 
 	historypb "go.temporal.io/api/history/v1"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -42,7 +43,9 @@ func ReadFullPageEvents(executionMgr ExecutionManager, req *ReadHistoryBranchReq
 		if err != nil {
 			return nil, 0, nil, err
 		}
+
 		historyEvents = append(historyEvents, response.HistoryEvents...)
+
 		size += response.Size
 		if len(historyEvents) >= req.PageSize || len(response.NextPageToken) == 0 {
 			return historyEvents, size, response.NextPageToken, nil
