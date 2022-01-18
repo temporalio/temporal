@@ -426,7 +426,7 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		ExecutionInfo      *commonpb.DataBlob
+		ExecutionInfoBlob  *commonpb.DataBlob
 		ExecutionState     *persistencespb.WorkflowExecutionState
 		ExecutionStateBlob *commonpb.DataBlob
 		StartVersion       int64
