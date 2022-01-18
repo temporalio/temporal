@@ -36,7 +36,7 @@ import (
 
 func TestSDKVersionRecorder(t *testing.T) {
 	interceptor := &SDKVersionInterceptor{
-		sdkInfoSet: make(map[sdkNameVersion]bool),
+		sdkInfoSet: make(map[sdkNameVersion]struct{}),
 		maxSetSize: 2,
 	}
 

@@ -39,7 +39,7 @@ type sdkNameVersion struct {
 }
 
 type SDKVersionInterceptor struct {
-	sdkInfoSet map[sdkNameVersion]bool
+	sdkInfoSet map[sdkNameVersion]struct{}
 	lock       sync.RWMutex
 	maxSetSize int
 }
@@ -49,7 +49,7 @@ const defaultMaxSetSize = 100
 // NewSDKVersionInterceptor creates a new SDKVersionInterceptor with default max set size
 func NewSDKVersionInterceptor() *SDKVersionInterceptor {
 	return &SDKVersionInterceptor{
-		sdkInfoSet: make(map[sdkNameVersion]bool),
+		sdkInfoSet: make(map[sdkNameVersion]struct{}),
 		maxSetSize: defaultMaxSetSize,
 	}
 }
@@ -79,7 +79,7 @@ func (vi *SDKVersionInterceptor) RecordSDKInfo(name, version string) {
 
 	if !overCap && !found {
 		vi.lock.Lock()
-		vi.sdkInfoSet[info] = true
+		vi.sdkInfoSet[info] = struct{}{}
 		vi.lock.Unlock()
 	}
 }
@@ -88,7 +88,7 @@ func (vi *SDKVersionInterceptor) RecordSDKInfo(name, version string) {
 func (vi *SDKVersionInterceptor) GetAndResetSDKInfo() []check.SDKInfo {
 	vi.lock.Lock()
 	currSet := vi.sdkInfoSet
-	vi.sdkInfoSet = make(map[sdkNameVersion]bool)
+	vi.sdkInfoSet = make(map[sdkNameVersion]struct{})
 	vi.lock.Unlock()
 
 	sdkInfo := make([]check.SDKInfo, 0, len(currSet))
