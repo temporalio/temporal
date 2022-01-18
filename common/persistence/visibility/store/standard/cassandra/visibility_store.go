@@ -448,6 +448,7 @@ func (v *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDel
 			persistence.UnixMilliseconds(minTime),
 			persistence.UnixMilliseconds(maxTime),
 			request.WorkflowID).
+		PageSize(0).
 		Consistency(v.lowConslevel)
 	iter := query.Iter()
 
