@@ -28,6 +28,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -42,9 +43,11 @@ import (
 const (
 	namespacePartition       = 0
 	cassandraPersistenceName = "cassandra"
+)
 
-	// ref: https://docs.datastax.com/en/dse-trblshoot/doc/troubleshooting/recoveringTtlYear2038Problem.html
-	maxCassandraTTL = int64(315360000) // Cassandra max support time is 2038-01-19T03:14:06+00:00. Updated this to 10 years to support until year 2028
+var (
+	minTime = time.Unix(0, 0).UTC()
+	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
 )
 
 const (
@@ -58,13 +61,15 @@ const (
 		`AND start_time = ? ` +
 		`AND run_id = ?`
 
-	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
-
 	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
 		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	templateDeleteWorkflowExecutionClosed = `DELETE FROM closed_executions ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
+		`AND close_time = ? ` +
+		`AND run_id = ?`
 
 	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
@@ -190,49 +195,21 @@ func (v *visibilityStore) RecordWorkflowExecutionClosed(request *store.InternalR
 	)
 
 	// Next, add a row in the closed table.
-
-	// Find how long to keep the row
-	var retentionSeconds int64
-	if request.Retention != nil {
-		retentionSeconds = int64(request.Retention.Seconds())
-	} else {
-		retentionSeconds = maxCassandraTTL + 1
-	}
-
-	if retentionSeconds > maxCassandraTTL {
-		batch.Query(templateCreateWorkflowExecutionClosed,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			persistence.UnixMilliseconds(request.StartTime),
-			persistence.UnixMilliseconds(request.ExecutionTime),
-			persistence.UnixMilliseconds(request.CloseTime),
-			request.WorkflowTypeName,
-			request.Status,
-			request.HistoryLength,
-			request.Memo.Data,
-			request.Memo.EncodingType.String(),
-			request.TaskQueue,
-		)
-	} else {
-		batch.Query(templateCreateWorkflowExecutionClosedWithTTL,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			persistence.UnixMilliseconds(request.StartTime),
-			persistence.UnixMilliseconds(request.ExecutionTime),
-			persistence.UnixMilliseconds(request.CloseTime),
-			request.WorkflowTypeName,
-			request.Status,
-			request.HistoryLength,
-			request.Memo.Data,
-			request.Memo.EncodingType.String(),
-			request.TaskQueue,
-			retentionSeconds,
-		)
-	}
+	batch.Query(templateCreateWorkflowExecutionClosed,
+		request.NamespaceID,
+		namespacePartition,
+		request.WorkflowID,
+		request.RunID,
+		persistence.UnixMilliseconds(request.StartTime),
+		persistence.UnixMilliseconds(request.ExecutionTime),
+		persistence.UnixMilliseconds(request.CloseTime),
+		request.WorkflowTypeName,
+		request.Status,
+		request.HistoryLength,
+		request.Memo.Data,
+		request.Memo.EncodingType.String(),
+		request.TaskQueue,
+	)
 
 	// RecordWorkflowExecutionStarted is using StartTime as the timestamp for every query in `open_executions` table.
 	// Due to the fact that cross DC using mutable state creation time as workflow start time and visibility using event time
@@ -460,8 +437,47 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	return response, nil
 }
 
-// DeleteWorkflowExecution is a no-op since deletes are auto-handled by cassandra TTLs
-func (v *visibilityStore) DeleteWorkflowExecution(_ *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+func (v *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+	// Primary key in closed_execution table has close_time which is not in the request.
+	// Query closed_execution table first (using secondary index by workflow_id) to get close_time.
+	// This is not very efficient if workflow has multiple executions.
+	query := v.session.
+		Query(templateGetClosedWorkflowExecutionsByID,
+			request.NamespaceID.String(),
+			namespacePartition,
+			persistence.UnixMilliseconds(minTime),
+			persistence.UnixMilliseconds(maxTime),
+			request.WorkflowID).
+		Consistency(v.lowConslevel)
+	iter := query.Iter()
+
+	wfExecution, has := readClosedWorkflowExecutionRecord(iter)
+	var wfExecutionToDelete *store.InternalWorkflowExecutionInfo
+	for has {
+		if wfExecution.RunID == request.RunID {
+			wfExecutionToDelete = wfExecution
+			break
+		}
+		wfExecution, has = readClosedWorkflowExecutionRecord(iter)
+	}
+
+	if err := iter.Close(); err != nil {
+		return gocql.ConvertError("DeleteWorkflowExecution", err)
+	}
+
+	if wfExecutionToDelete == nil {
+		return nil
+	}
+
+	query = v.session.Query(templateDeleteWorkflowExecutionClosed,
+		request.NamespaceID.String(),
+		namespacePartition,
+		wfExecution.CloseTime,
+		request.RunID).
+		Consistency(v.lowConslevel)
+	if err := query.Exec(); err != nil {
+		return gocql.ConvertError("DeleteWorkflowExecution", err)
+	}
 	return nil
 }
 

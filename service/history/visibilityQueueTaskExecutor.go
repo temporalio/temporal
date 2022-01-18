@@ -443,36 +443,27 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 		return err
 	}
 
-	recordWorkflowClose := true
-
-	retention := namespaceEntry.Retention()
-
-	if recordWorkflowClose {
-		return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{
-			VisibilityRequestBase: &manager.VisibilityRequestBase{
-				NamespaceID: namespaceID,
-				Namespace:   namespaceEntry.Name(),
-				Execution: commonpb.WorkflowExecution{
-					WorkflowId: workflowID,
-					RunId:      runID,
-				},
-				WorkflowTypeName:     workflowTypeName,
-				StartTime:            startTime,
-				ExecutionTime:        executionTime,
-				StateTransitionCount: stateTransitionCount, Status: status,
-				TaskID:           taskID,
-				ShardID:          t.shard.GetShardID(),
-				Memo:             visibilityMemo,
-				TaskQueue:        taskQueue,
-				SearchAttributes: searchAttributes,
+	return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{
+		VisibilityRequestBase: &manager.VisibilityRequestBase{
+			NamespaceID: namespaceID,
+			Namespace:   namespaceEntry.Name(),
+			Execution: commonpb.WorkflowExecution{
+				WorkflowId: workflowID,
+				RunId:      runID,
 			},
-			CloseTime:     endTime,
-			HistoryLength: historyLength,
-			Retention:     &retention,
-		})
-	}
-
-	return nil
+			WorkflowTypeName:     workflowTypeName,
+			StartTime:            startTime,
+			ExecutionTime:        executionTime,
+			StateTransitionCount: stateTransitionCount, Status: status,
+			TaskID:           taskID,
+			ShardID:          t.shard.GetShardID(),
+			Memo:             visibilityMemo,
+			TaskQueue:        taskQueue,
+			SearchAttributes: searchAttributes,
+		},
+		CloseTime:     endTime,
+		HistoryLength: historyLength,
+	})
 }
 
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
