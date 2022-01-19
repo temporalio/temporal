@@ -51,8 +51,9 @@ import (
 )
 
 const (
-	forceReplicationWorkflowName     = "force-replication"
-	namespaceHandoverWorkflowName    = "namespace-handover"
+	forceReplicationWorkflowName  = "force-replication"
+	namespaceHandoverWorkflowName = "namespace-handover"
+
 	defaultListWorkflowsPageSize     = 1000
 	defaultActivityCountPerExecution = 200
 
@@ -63,7 +64,6 @@ const (
 type (
 	ForceReplicationParams struct {
 		Namespace               string
-		RemoteCluster           string
 		Query                   string // query to list workflows for force replicaiton
 		ConcurrentActivityCount int
 		MaxActivityCount        int    // max activities before continue as new
@@ -147,9 +147,6 @@ var (
 func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParams) error {
 	if len(params.Namespace) == 0 {
 		return errors.New("InvalidArgument: Namespace is required")
-	}
-	if len(params.RemoteCluster) == 0 {
-		return errors.New("InvalidArgument: RemoteCluster is required")
 	}
 	if params.ConcurrentActivityCount <= 0 {
 		params.ConcurrentActivityCount = 1
