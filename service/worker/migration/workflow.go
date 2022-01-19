@@ -54,8 +54,9 @@ const (
 	forceReplicationWorkflowName  = "force-replication"
 	namespaceHandoverWorkflowName = "namespace-handover"
 
-	defaultListWorkflowsPageSize     = 1000
-	defaultActivityCountPerExecution = 200
+	defaultListWorkflowsPageSize = 1000
+	defaultPageCountPerExecution = 200
+	maxPageCountPerExecution     = 1000
 
 	minimumAllowedLaggingSeconds  = 5
 	minimumHandoverTimeoutSeconds = 30
@@ -64,11 +65,11 @@ const (
 type (
 	ForceReplicationParams struct {
 		Namespace               string
-		Query                   string // query to list workflows for force replicaiton
+		Query                   string // query to list workflows for replication
 		ConcurrentActivityCount int
-		MaxActivityCount        int    // max activities before continue as new
 		RpsPerActivity          int    // RPS per each activity
-		ListWorkflowsPageSize   int    // needed for testing purpose, default to 1K
+		ListWorkflowsPageSize   int    // PageSize of ListWorkflow, will paginate through results.
+		PageCountPerExecution   int    // number of pages to be processed before continue as new, max is 1000.
 		NextPageToken           []byte // used by continue as new
 	}
 
@@ -97,7 +98,7 @@ type (
 		NextPageToken []byte
 	}
 
-	genReplicationRequest struct {
+	generateReplicationTasksRequest struct {
 		NamespaceID string
 		Executions  []commonpb.WorkflowExecution
 		RPS         int
@@ -151,14 +152,17 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	if params.ConcurrentActivityCount <= 0 {
 		params.ConcurrentActivityCount = 1
 	}
-	if params.MaxActivityCount <= 0 || params.MaxActivityCount > 1000 {
-		params.MaxActivityCount = defaultActivityCountPerExecution
-	}
 	if params.RpsPerActivity <= 0 {
 		params.RpsPerActivity = 1
 	}
 	if params.ListWorkflowsPageSize <= 0 {
 		params.ListWorkflowsPageSize = defaultListWorkflowsPageSize
+	}
+	if params.PageCountPerExecution <= 0 {
+		params.PageCountPerExecution = defaultPageCountPerExecution
+	}
+	if params.PageCountPerExecution > maxPageCountPerExecution {
+		params.PageCountPerExecution = maxPageCountPerExecution
 	}
 
 	retryPolicy := &temporal.RetryPolicy{
@@ -166,7 +170,8 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		MaximumInterval: time.Second * 10,
 	}
 
-	// ** Step 1, Get cluster metadata **
+	// Get cluster metadata, we need namespace ID for history API call.
+	// TODO: remove this step.
 	lao := workflow.LocalActivityOptions{
 		StartToCloseTimeout: time.Second * 10,
 		RetryPolicy:         retryPolicy,
@@ -200,7 +205,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 				break
 			}
 
-			fu := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &genReplicationRequest{
+			fu := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
 				NamespaceID: metadataResp.NamespaceID,
 				Executions:  executions,
 				RPS:         params.RpsPerActivity,
@@ -222,7 +227,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		doneChan.Close()
 	})
 
-	for i := 0; i < params.MaxActivityCount; i++ {
+	for i := 0; i < params.PageCountPerExecution; i++ {
 		fu := workflow.ExecuteLocalActivity(ctx1, a.ListWorkflows, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace:     params.Namespace,
 			PageSize:      int32(params.ListWorkflowsPageSize),
@@ -390,7 +395,7 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 	return &listWorkflowsResponse{Executions: executions, NextPageToken: resp.NextPageToken}, nil
 }
 
-func (a *activities) GenerateReplicationTasks(ctx context.Context, request *genReplicationRequest) error {
+func (a *activities) GenerateReplicationTasks(ctx context.Context, request *generateReplicationTasksRequest) error {
 	rateLimiter := quotas.NewRateLimiter(float64(request.RPS), request.RPS)
 
 	startIndex := 0
