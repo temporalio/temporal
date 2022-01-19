@@ -275,7 +275,7 @@ build-tests:
 	@printf $(COLOR) "Build tests..."
 	@go test -exec="true" -count=0 -tags=esintegration $(TEST_DIRS)
 
-unit-test: clean-test-results
+unit-test:
 	@printf $(COLOR) "Run unit tests..."
 	$(foreach UNIT_TEST_DIR,$(UNIT_TEST_DIRS),\
 		@go test $(UNIT_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race | tee -a test.log \
