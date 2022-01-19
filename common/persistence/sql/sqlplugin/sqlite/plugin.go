@@ -30,7 +30,6 @@ package sqlite
 
 import (
 	"fmt"
-	sqliteschema "go.temporal.io/server/schema/sqlite"
 	"net/url"
 	"strings"
 
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
+	sqliteschema "go.temporal.io/server/schema/sqlite"
 )
 
 const (

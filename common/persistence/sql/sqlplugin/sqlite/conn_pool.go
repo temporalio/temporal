@@ -22,12 +22,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:build cgo
+
 package sqlite
 
 import (
 	"sync"
 
 	"github.com/jmoiron/sqlx"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/resolver"
 )
@@ -102,7 +105,7 @@ func (cp *connPool) Close(cfg *config.SQL) {
 		// todo: at the moment pool will persist a single connection to the DB for the whole duration of application
 		// temporal will start and stop DB connections multiple times, which will cause the loss of the cache
 		// and "db is closed" error
-		//e.db.Close()
-		//delete(cp.pool, dsn)
+		// e.db.Close()
+		// delete(cp.pool, dsn)
 	}
 }
