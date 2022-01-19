@@ -45,11 +45,6 @@ const (
 	cassandraPersistenceName = "cassandra"
 )
 
-var (
-	minTime = time.Unix(0, 0).UTC()
-	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
-)
-
 const (
 	templateCreateWorkflowExecutionStarted = `INSERT INTO open_executions (` +
 		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue) ` +
@@ -438,42 +433,10 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 }
 
 func (v *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
-	// Primary key in closed_execution table has close_time which is not in the request.
-	// Query closed_execution table first (using secondary index by workflow_id) to get close_time.
-	// This is not very efficient if workflow has multiple executions.
-	query := v.session.
-		Query(templateGetClosedWorkflowExecutionsByID,
-			request.NamespaceID.String(),
-			namespacePartition,
-			persistence.UnixMilliseconds(minTime),
-			persistence.UnixMilliseconds(maxTime),
-			request.WorkflowID).
-		PageSize(0).
-		Consistency(v.lowConslevel)
-	iter := query.Iter()
-
-	wfExecution, has := readClosedWorkflowExecutionRecord(iter)
-	var wfExecutionToDelete *store.InternalWorkflowExecutionInfo
-	for has {
-		if wfExecution.RunID == request.RunID {
-			wfExecutionToDelete = wfExecution
-			break
-		}
-		wfExecution, has = readClosedWorkflowExecutionRecord(iter)
-	}
-
-	if err := iter.Close(); err != nil {
-		return gocql.ConvertError("DeleteWorkflowExecution", err)
-	}
-
-	if wfExecutionToDelete == nil {
-		return nil
-	}
-
-	query = v.session.Query(templateDeleteWorkflowExecutionClosed,
+	query := v.session.Query(templateDeleteWorkflowExecutionClosed,
 		request.NamespaceID.String(),
 		namespacePartition,
-		wfExecution.CloseTime,
+		persistence.UnixMilliseconds(request.CloseTime),
 		request.RunID).
 		Consistency(v.lowConslevel)
 	if err := query.Exec(); err != nil {

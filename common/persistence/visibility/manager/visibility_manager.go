@@ -167,6 +167,7 @@ type (
 		RunID       string
 		WorkflowID  string
 		TaskID      int64
+		CloseTime   time.Time
 	}
 )
 

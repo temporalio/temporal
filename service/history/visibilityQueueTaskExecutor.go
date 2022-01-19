@@ -474,6 +474,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
+		CloseTime:   task.CloseTime,
 	}
 	return t.visibilityMgr.DeleteWorkflowExecution(request)
 }
