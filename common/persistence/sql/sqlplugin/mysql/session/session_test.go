@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package mysql
+package session
 
 import (
 	"net/url"
@@ -36,23 +36,35 @@ import (
 	"go.temporal.io/server/common/resolver"
 )
 
-type StoreTestSuite struct {
-	suite.Suite
-	controller *gomock.Controller
-}
-
-func TestStoreTestSuite(t *testing.T) {
-	ts := &StoreTestSuite{
-		controller: gomock.NewController(t),
+type (
+	sessionTestSuite struct {
+		suite.Suite
+		controller *gomock.Controller
 	}
-	suite.Run(t, ts)
+)
+
+func TestSessionTestSuite(t *testing.T) {
+	s := new(sessionTestSuite)
+	suite.Run(t, s)
 }
 
-func (s *StoreTestSuite) TearDownSuite() {
+func (s *sessionTestSuite) SetupSuite() {
+
+}
+
+func (s *sessionTestSuite) TearDownSuite() {
+
+}
+
+func (s *sessionTestSuite) SetupTest() {
+	s.controller = gomock.NewController(s.T())
+}
+
+func (s *sessionTestSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *StoreTestSuite) TestBuildDSN() {
+func (s *sessionTestSuite) TestBuildDSN() {
 	testCases := []struct {
 		in              config.SQL
 		outURLPath      string

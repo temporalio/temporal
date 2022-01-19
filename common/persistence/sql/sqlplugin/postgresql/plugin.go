@@ -26,23 +26,21 @@ package postgresql
 
 import (
 	"fmt"
-	"net/url"
 	"strings"
 
-	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql/session"
 	"go.temporal.io/server/common/resolver"
 )
 
 const (
 	// PluginName is the name of the plugin
 	PluginName = "postgres"
-	dsnFmt     = "postgres://%v:%v@%v/%v?%v"
 )
 
 var (
@@ -94,33 +92,14 @@ func (d *plugin) CreateAdminDB(
 // the tables in the database
 func (d *plugin) createDBConnection(
 	cfg *config.SQL,
-	r resolver.ServiceResolver,
-) (*sqlx.DB, error) {
-	db, err := d.tryConnect(cfg, r)
-	if err != nil {
-		return nil, err
-	}
-	if cfg.MaxConns > 0 {
-		db.SetMaxOpenConns(cfg.MaxConns)
-	}
-	if cfg.MaxIdleConns > 0 {
-		db.SetMaxIdleConns(cfg.MaxIdleConns)
-	}
-	if cfg.MaxConnLifetime > 0 {
-		db.SetConnMaxLifetime(cfg.MaxConnLifetime)
-	}
-
-	// Maps struct names in CamelCase to snake without need for db struct tags.
-	db.MapperFunc(strcase.ToSnake)
-	return db, nil
-}
-
-func (d *plugin) tryConnect(
-	cfg *config.SQL,
-	r resolver.ServiceResolver,
+	resolver resolver.ServiceResolver,
 ) (*sqlx.DB, error) {
 	if cfg.DatabaseName != "" {
-		return sqlx.Connect(PluginName, buildDSN(cfg, r))
+		postgresqlSession, err := session.NewSession(cfg, resolver)
+		if err != nil {
+			return nil, err
+		}
+		return postgresqlSession.DB, nil
 	}
 
 	// database name not provided
@@ -130,8 +109,11 @@ func (d *plugin) tryConnect(
 	var errors []error
 	for _, databaseName := range defaultDatabaseNames {
 		cfg.DatabaseName = databaseName
-		if sqlxDB, err := sqlx.Connect(PluginName, buildDSN(cfg, r)); err == nil {
-			return sqlxDB, nil
+		if postgresqlSession, err := session.NewSession(
+			cfg,
+			resolver,
+		); err == nil {
+			return postgresqlSession.DB, nil
 		} else {
 			errors = append(errors, err)
 		}
@@ -139,21 +121,4 @@ func (d *plugin) tryConnect(
 	return nil, serviceerror.NewUnavailable(
 		fmt.Sprintf("unable to connect to DB, tried default DB names: %v, errors: %v", strings.Join(defaultDatabaseNames, ","), errors),
 	)
-}
-
-func buildDSN(
-	cfg *config.SQL,
-	r resolver.ServiceResolver,
-) string {
-	tlsAttrs := buildDSNAttr(cfg).Encode()
-	resolvedAddr := r.Resolve(cfg.ConnectAddr)[0]
-	dsn := fmt.Sprintf(
-		dsnFmt,
-		cfg.User,
-		url.QueryEscape(cfg.Password),
-		resolvedAddr,
-		cfg.DatabaseName,
-		tlsAttrs,
-	)
-	return dsn
 }
