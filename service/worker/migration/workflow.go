@@ -185,47 +185,8 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 		return err
 	}
 
-	// dispatchChan to dispatch workflow executions to activities to generate replication tasks.
-	//dispatchChan := workflow.NewChannel(ctx)
-	// doneChan to notify workflow main coroutine that all activities are done
-	//doneChan := workflow.NewChannel(ctx)
 	selector := workflow.NewSelector(ctx)
 	pendingActivities := 0
-	//workflow.Go(ctx, func(ctx workflow.Context) {
-	//	ao := workflow.ActivityOptions{
-	//		StartToCloseTimeout: time.Hour,
-	//		HeartbeatTimeout:    time.Second * 30,
-	//		RetryPolicy:         retryPolicy,
-	//	}
-	//	ctx2 := workflow.WithActivityOptions(ctx, ao)
-	//
-	//	for {
-	//		var executions []commonpb.WorkflowExecution
-	//		if more := dispatchChan.Receive(ctx, &executions); !more {
-	//			break
-	//		}
-	//
-	//		fu := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
-	//			NamespaceID: metadataResp.NamespaceID,
-	//			Executions:  executions,
-	//			RPS:         params.RpsPerActivity,
-	//		})
-	//		pendingActivities++
-	//
-	//		selector.AddFuture(fu, func(f workflow.Future) {
-	//			pendingActivities--
-	//		})
-	//
-	//		if pendingActivities >= params.ConcurrentActivityCount {
-	//			selector.Select(ctx) // this will block until one of the pending activities complete
-	//		}
-	//	}
-	//	// wait until all activities done
-	//	for pendingActivities > 0 {
-	//		selector.Select(ctx)
-	//	}
-	//	doneChan.Close()
-	//})
 
 	ao := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
@@ -235,27 +196,25 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	ctx2 := workflow.WithActivityOptions(ctx, ao)
 
 	for i := 0; i < params.PageCountPerExecution; i++ {
-		fu := workflow.ExecuteLocalActivity(ctx1, a.ListWorkflows, &workflowservice.ListWorkflowExecutionsRequest{
+		listFuture := workflow.ExecuteLocalActivity(ctx1, a.ListWorkflows, &workflowservice.ListWorkflowExecutionsRequest{
 			Namespace:     params.Namespace,
 			PageSize:      int32(params.ListWorkflowsPageSize),
 			NextPageToken: params.NextPageToken,
 			Query:         params.Query,
 		})
-		var resp listWorkflowsResponse
-		err = fu.Get(ctx1, &resp)
+		var listResp listWorkflowsResponse
+		err = listFuture.Get(ctx1, &listResp)
 		if err != nil {
 			return err
 		}
-		// dispatch workflow executions to be worked on by activities
-		//dispatchChan.Send(ctx, resp.Executions)
 
-		taskFuture := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
+		workerFuture := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
 			NamespaceID: metadataResp.NamespaceID,
-			Executions:  resp.Executions,
+			Executions:  listResp.Executions,
 			RPS:         params.RpsPerActivity,
 		})
 		pendingActivities++
-		selector.AddFuture(taskFuture, func(f workflow.Future) {
+		selector.AddFuture(workerFuture, func(f workflow.Future) {
 			pendingActivities--
 		})
 
@@ -263,26 +222,22 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 			selector.Select(ctx) // this will block until one of the pending activities complete
 		}
 
-		params.NextPageToken = resp.NextPageToken
+		params.NextPageToken = listResp.NextPageToken
 		if params.NextPageToken == nil {
 			break
 		}
 	}
-	// wait until all activities done
+	// wait until all pending activities are done
 	for pendingActivities > 0 {
 		selector.Select(ctx)
 	}
 
-	// to notify dispatcher coroutine that there is no more work coming.
-	//dispatchChan.Close()
-	//
-	//// wait until all activities are done
-	//doneChan.Receive(ctx, nil)
-
 	if params.NextPageToken == nil {
+		// we are all done
 		return nil
 	}
 
+	// too many pages, and we exceed PageCountPerExecution, so move on to next execution
 	return workflow.NewContinueAsNewError(ctx, ForceReplicationWorkflow, params)
 }
 
