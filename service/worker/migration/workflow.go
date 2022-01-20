@@ -186,46 +186,53 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	}
 
 	// dispatchChan to dispatch workflow executions to activities to generate replication tasks.
-	dispatchChan := workflow.NewChannel(ctx)
+	//dispatchChan := workflow.NewChannel(ctx)
 	// doneChan to notify workflow main coroutine that all activities are done
-	doneChan := workflow.NewChannel(ctx)
+	//doneChan := workflow.NewChannel(ctx)
 	selector := workflow.NewSelector(ctx)
 	pendingActivities := 0
-	workflow.Go(ctx, func(ctx workflow.Context) {
-		ao := workflow.ActivityOptions{
-			StartToCloseTimeout: time.Hour,
-			HeartbeatTimeout:    time.Second * 30,
-			RetryPolicy:         retryPolicy,
-		}
-		ctx2 := workflow.WithActivityOptions(ctx, ao)
+	//workflow.Go(ctx, func(ctx workflow.Context) {
+	//	ao := workflow.ActivityOptions{
+	//		StartToCloseTimeout: time.Hour,
+	//		HeartbeatTimeout:    time.Second * 30,
+	//		RetryPolicy:         retryPolicy,
+	//	}
+	//	ctx2 := workflow.WithActivityOptions(ctx, ao)
+	//
+	//	for {
+	//		var executions []commonpb.WorkflowExecution
+	//		if more := dispatchChan.Receive(ctx, &executions); !more {
+	//			break
+	//		}
+	//
+	//		fu := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
+	//			NamespaceID: metadataResp.NamespaceID,
+	//			Executions:  executions,
+	//			RPS:         params.RpsPerActivity,
+	//		})
+	//		pendingActivities++
+	//
+	//		selector.AddFuture(fu, func(f workflow.Future) {
+	//			pendingActivities--
+	//		})
+	//
+	//		if pendingActivities >= params.ConcurrentActivityCount {
+	//			selector.Select(ctx) // this will block until one of the pending activities complete
+	//		}
+	//	}
+	//	// wait until all activities done
+	//	for pendingActivities > 0 {
+	//		selector.Select(ctx)
+	//	}
+	//	doneChan.Close()
+	//})
 
-		for {
-			var executions []commonpb.WorkflowExecution
-			if more := dispatchChan.Receive(ctx, &executions); !more {
-				break
-			}
-
-			fu := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
-				NamespaceID: metadataResp.NamespaceID,
-				Executions:  executions,
-				RPS:         params.RpsPerActivity,
-			})
-			pendingActivities++
-
-			selector.AddFuture(fu, func(f workflow.Future) {
-				pendingActivities--
-			})
-
-			if pendingActivities >= params.ConcurrentActivityCount {
-				selector.Select(ctx) // this will block until one of the pending activities complete
-			}
-		}
-		// wait until all activities done
-		for pendingActivities > 0 {
-			selector.Select(ctx)
-		}
-		doneChan.Close()
-	})
+	ao := workflow.ActivityOptions{
+		StartToCloseTimeout: time.Hour,
+		HeartbeatTimeout:    time.Second * 30,
+		RetryPolicy:         retryPolicy,
+	}
+	ctx2 := workflow.WithActivityOptions(ctx, ao)
 
 	for i := 0; i < params.PageCountPerExecution; i++ {
 		fu := workflow.ExecuteLocalActivity(ctx1, a.ListWorkflows, &workflowservice.ListWorkflowExecutionsRequest{
@@ -240,18 +247,37 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 			return err
 		}
 		// dispatch workflow executions to be worked on by activities
-		dispatchChan.Send(ctx, resp.Executions)
+		//dispatchChan.Send(ctx, resp.Executions)
+
+		taskFuture := workflow.ExecuteActivity(ctx2, a.GenerateReplicationTasks, &generateReplicationTasksRequest{
+			NamespaceID: metadataResp.NamespaceID,
+			Executions:  resp.Executions,
+			RPS:         params.RpsPerActivity,
+		})
+		pendingActivities++
+		selector.AddFuture(taskFuture, func(f workflow.Future) {
+			pendingActivities--
+		})
+
+		if pendingActivities >= params.ConcurrentActivityCount {
+			selector.Select(ctx) // this will block until one of the pending activities complete
+		}
 
 		params.NextPageToken = resp.NextPageToken
 		if params.NextPageToken == nil {
 			break
 		}
 	}
-	// to notify dispatcher coroutine that there is no more work coming.
-	dispatchChan.Close()
+	// wait until all activities done
+	for pendingActivities > 0 {
+		selector.Select(ctx)
+	}
 
-	// wait until all activities are done
-	doneChan.Receive(ctx, nil)
+	// to notify dispatcher coroutine that there is no more work coming.
+	//dispatchChan.Close()
+	//
+	//// wait until all activities are done
+	//doneChan.Receive(ctx, nil)
 
 	if params.NextPageToken == nil {
 		return nil
