@@ -390,7 +390,7 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	for i := startIndex; i < len(request.Executions); i++ {
 		rateLimiter.Wait(ctx)
 		we := request.Executions[i]
-		err := a.genReplicationTaskForOneWorkflow(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
+		err := a.generateWorkflowReplicationTask(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
 		if err != nil {
 			return err
 		}
@@ -556,7 +556,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 	return readyShardCount == len(resp.Shards), nil
 }
 
-func (a *activities) genReplicationTaskForOneWorkflow(ctx context.Context, wKey definition.WorkflowKey) error {
+func (a *activities) generateWorkflowReplicationTask(ctx context.Context, wKey definition.WorkflowKey) error {
 	// will generate replication task
 	op := func(ctx context.Context) error {
 		var err error
