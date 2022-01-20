@@ -354,7 +354,12 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		}
 	}
 
-	return t.processParentClosePolicy(namespaceID.String(), namespaceName.String(), children)
+	return t.processParentClosePolicy(
+		namespaceID.String(),
+		namespaceName.String(),
+		&execution,
+		children,
+	)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
@@ -1282,6 +1287,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	namespaceID string,
 	namespace string,
+	parentExecution *commonpb.WorkflowExecution,
 	childInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) error {
 
@@ -1319,15 +1325,17 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		}
 
 		request := parentclosepolicy.Request{
-			Namespace:   namespace,
-			NamespaceID: namespaceID,
-			Executions:  executions,
+			Namespace:       namespace,
+			NamespaceID:     namespaceID,
+			ParentExecution: *parentExecution,
+			Executions:      executions,
 		}
 		return t.parentClosePolicyClient.SendParentClosePolicyRequest(request)
 	}
 
 	for _, childInfo := range childInfos {
 		if err := t.applyParentClosePolicy(
+			parentExecution,
 			childInfo,
 		); err != nil {
 			if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -1341,6 +1349,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 }
 
 func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
+	parentExecution *commonpb.WorkflowExecution,
 	childInfo *persistencespb.ChildExecutionInfo,
 ) error {
 
@@ -1370,6 +1379,8 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 				Reason:              "by parent close policy",
 				Identity:            consts.IdentityHistoryService,
 			},
+			ExternalWorkflowExecution: parentExecution,
+			ChildWorkflowOnly:         true,
 		})
 		return err
 
@@ -1391,6 +1402,8 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 				FirstExecutionRunId: childInfo.GetStartedRunId(),
 				Identity:            consts.IdentityHistoryService,
 			},
+			ExternalWorkflowExecution: parentExecution,
+			ChildWorkflowOnly:         true,
 		})
 		return err
 
