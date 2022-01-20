@@ -573,6 +573,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob),
 		SignalInfos:         make(map[int64]*commonpb.DataBlob),
 
+		ExecutionInfo:      input.ExecutionInfo,
 		ExecutionState:     input.ExecutionState,
 		SignalRequestedIDs: make(map[string]struct{}),
 
