@@ -239,6 +239,10 @@ func NewConfig(logger log.Logger, dcClient dynamicconfig.Client, params *resourc
 				dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskPollers,
 				4,
 			),
+			NumParentClosePolicySystemWorkflows: dc.GetIntProperty(
+				dynamicconfig.NumParentClosePolicySystemWorkflows,
+				10,
+			),
 		},
 		ScannerCfg: &scanner.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(

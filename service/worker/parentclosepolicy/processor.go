@@ -47,6 +47,7 @@ type (
 		MaxConcurrentWorkflowTaskExecutionSize dynamicconfig.IntPropertyFn
 		MaxConcurrentActivityTaskPollers       dynamicconfig.IntPropertyFn
 		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
+		NumParentClosePolicySystemWorkflows    dynamicconfig.IntPropertyFn
 	}
 
 	// BootstrapParams contains the set of params needed to bootstrap
@@ -87,18 +88,20 @@ func New(params *BootstrapParams) *Processor {
 
 // Start starts the scanner
 func (s *Processor) Start() error {
-	ctx := context.WithValue(context.Background(), processorContextKey, s)
-	workerOpts := worker.Options{
-		MaxConcurrentActivityExecutionSize:     s.cfg.MaxConcurrentActivityExecutionSize(),
-		MaxConcurrentWorkflowTaskExecutionSize: s.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
-		MaxConcurrentActivityTaskPollers:       s.cfg.MaxConcurrentActivityTaskPollers(),
-		MaxConcurrentWorkflowTaskPollers:       s.cfg.MaxConcurrentWorkflowTaskPollers(),
-		BackgroundActivityContext:              ctx,
-	}
-	processorWorker := worker.New(s.svcClient, processorTaskQueueName, workerOpts)
-
+	processorWorker := worker.New(s.svcClient, processorTaskQueueName, getWorkerOptions(s))
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
 
 	return processorWorker.Start()
+}
+
+func getWorkerOptions(p *Processor) worker.Options {
+	ctx := context.WithValue(context.Background(), processorContextKey, p)
+	return worker.Options{
+		MaxConcurrentActivityExecutionSize:     p.cfg.MaxConcurrentActivityExecutionSize(),
+		MaxConcurrentWorkflowTaskExecutionSize: p.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
+		MaxConcurrentActivityTaskPollers:       p.cfg.MaxConcurrentActivityTaskPollers(),
+		MaxConcurrentWorkflowTaskPollers:       p.cfg.MaxConcurrentWorkflowTaskPollers(),
+		BackgroundActivityContext:              ctx,
+	}
 }
