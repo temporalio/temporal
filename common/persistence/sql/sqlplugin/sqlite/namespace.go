@@ -24,6 +24,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:build cgo
+
 package sqlite
 
 import (
@@ -32,6 +34,7 @@ import (
 	"errors"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
 

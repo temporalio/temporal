@@ -12,7 +12,7 @@ WORKDIR /temporal
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN make bins
+RUN CGO_ENABLED=0 make bins
 
 ##### Temporal server #####
 FROM ${BASE_SERVER_IMAGE} AS temporal-server

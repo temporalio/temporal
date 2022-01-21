@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:build cgo
+
 package tests
 
 import (
@@ -29,6 +31,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
