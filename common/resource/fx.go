@@ -80,7 +80,7 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(ServiceNameProvider),
 	fx.Provide(TimeSourceProvider),
-	fx.Provide(cluster.NewMetadataFromConfig),
+	cluster.ClusterMetadataModule,
 	fx.Provide(MetricsClientProvider),
 	fx.Provide(MetricsUserScopeProvider),
 	fx.Provide(SearchAttributeProviderProvider),
