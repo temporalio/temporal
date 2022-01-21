@@ -29,7 +29,7 @@ import (
 	"sync"
 	"time"
 
-	enumsbp "go.temporal.io/api/enums/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	versionpb "go.temporal.io/api/version/v1"
 	"go.temporal.io/version/check"
@@ -194,7 +194,7 @@ func convertAlerts(alerts []check.Alert) []*versionpb.Alert {
 	for _, alert := range alerts {
 		result = append(result, &versionpb.Alert{
 			Message:  alert.Message,
-			Severity: enumsbp.Severity(alert.Severity),
+			Severity: enumspb.Severity(alert.Severity),
 		})
 	}
 	return result
