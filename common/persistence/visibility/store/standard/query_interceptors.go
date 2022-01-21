@@ -98,6 +98,10 @@ func (vi *valuesInterceptor) Values(name string, values ...interface{}) ([]inter
 		}
 		return values, err
 	case searchattribute.StartTime:
+		if len(values) != 2 {
+			return nil, query.NewConverterError("StartTime only supports BETWEEN ... AND ... filter")
+		}
+
 		values, err := vi.nextInterceptor.Values(name, values...)
 		if err == nil {
 			minTime, err := time.Parse(time.RFC3339Nano, values[0].(string))
