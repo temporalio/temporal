@@ -75,7 +75,7 @@ persistence:
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
-                    сaFile: {{ default .Env.SQL_CA "" }}
+                    caFile: {{ default .Env.SQL_CA "" }}
                     certFile: {{ default .Env.SQL_CERT "" }}
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
@@ -105,7 +105,7 @@ persistence:
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
-                    сaFile: {{ default .Env.SQL_CA "" }}
+                    caFile: {{ default .Env.SQL_CA "" }}
                     certFile: {{ default .Env.SQL_CERT "" }}
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
@@ -124,7 +124,7 @@ persistence:
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
-                    сaFile: {{ default .Env.SQL_CA "" }}
+                    caFile: {{ default .Env.SQL_CA "" }}
                     certFile: {{ default .Env.SQL_CERT "" }}
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
@@ -150,7 +150,7 @@ persistence:
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
-                    сaFile: {{ default .Env.SQL_CA "" }}
+                    caFile: {{ default .Env.SQL_CA "" }}
                     certFile: {{ default .Env.SQL_CERT "" }}
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
@@ -183,7 +183,7 @@ global:
             checkInterval: {{ default .Env.TEMPORAL_TLS_EXPIRATION_CHECKS_CHECK_INTERVAL "0s" }}
         internode:
             # This server section configures the TLS certificate that internal temporal
-            # cluster nodes (history or matching) present to other clients within the Temporal Cluster. 
+            # cluster nodes (history or matching) present to other clients within the Temporal Cluster.
             server:
                 requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
 
