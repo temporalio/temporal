@@ -11,11 +11,11 @@ steps:
 
   - wait
 
-  - label: ":golang: build docker image"
+  - label: ":docker: build docker images"
     agents:
       queue: "default"
       docker: "*"
-    command: "make docker-server"
+    command: "docker build ."
 
   - label: ":golang: unit test"
     agents:
