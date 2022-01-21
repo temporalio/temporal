@@ -203,9 +203,6 @@ temporal-sql-tool:
 	@printf $(COLOR) "Build temporal-sql-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	go build -o temporal-sql-tool ./cmd/tools/sql
 
-bins-cgo: CGO_ENABLED := 1
-bins-cgo: bins
-
 ##### Checks #####
 copyright-check:
 	@printf $(COLOR) "Check license header..."
