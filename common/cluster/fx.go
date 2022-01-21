@@ -30,16 +30,12 @@ import (
 	"go.uber.org/fx"
 )
 
-var ClusterMetadataModule = fx.Options(
+var MetadataLifetimeHooksModule = fx.Options(
 	fx.Provide(NewMetadataFromConfig),
-	fx.Invoke(RegistryLifetimeHooks),
+	fx.Invoke(MetadataLifetimeHooks),
 )
 
-var RegistryLifetimeHooksModule = fx.Options(
-	fx.Invoke(RegistryLifetimeHooks),
-)
-
-func RegistryLifetimeHooks(
+func MetadataLifetimeHooks(
 	lc fx.Lifecycle,
 	clusterMetadata Metadata,
 ) {
