@@ -73,6 +73,9 @@ type (
 	MatchingClient    matchingservice.MatchingServiceClient
 )
 
+// Module
+// Use fx.Hook and OnStart/OnStop to manage Daemon resource lifecycle
+// See LifetimeHooksModule for detail
 var Module = fx.Options(
 	persistenceClient.Module,
 	fx.Provide(SnTaggedLoggerProvider),
@@ -82,7 +85,7 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(ServiceNameProvider),
 	fx.Provide(TimeSourceProvider),
-	fx.Provide(cluster.NewMetadataFromConfig),
+	cluster.MetadataLifetimeHooksModule,
 	fx.Provide(MetricsClientProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
