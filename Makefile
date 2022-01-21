@@ -2,7 +2,7 @@
 # Install all tools and builds binaries.
 install: update-tools bins
 
-# Rebuild binaries (used by Dockerfile).
+# Rebuild binaries (used by Dockerfile and Buildkite).
 bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
@@ -25,9 +25,10 @@ update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-
 
 ##### Arguments ######
 
-GOOS ?= $(shell go env GOOS)
-GOARCH ?= $(shell go env GOARCH)
-GOPATH ?= $(shell go env GOPATH)
+GOOS        ?= $(shell go env GOOS)
+GOARCH      ?= $(shell go env GOARCH)
+GOPATH      ?= $(shell go env GOPATH)
+CGO_ENABLED ?= $(shell go env CGO_ENABLED)
 
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra
@@ -40,15 +41,6 @@ VISIBILITY_DB ?= temporal_visibility
 DOCKER_IMAGE_TAG ?= test
 # Pass "registry" to automatically push image to the docker hub.
 DOCKER_BUILDX_OUTPUT ?= image
-
-# Name resolution requires cgo to be enabled on macOS and Windows: https://golang.org/pkg/net/#hdr-Name_Resolution.
-ifndef CGO_ENABLED
-	ifeq ($(GOOS),linux)
-	CGO_ENABLED := 0
-	else
-	CGO_ENABLED := 1
-	endif
-endif
 
 ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
@@ -191,25 +183,25 @@ clean-bins:
 	@rm -f temporal-sql-tool
 
 temporal-server:
-	@printf $(COLOR) "Build temporal-server with OS: $(GOOS), ARCH: $(GOARCH)..."
+	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	@./develop/scripts/create_build_info_data.sh
-	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-server cmd/server/main.go
+	go build -o temporal-server ./cmd/server
 
 tctl:
-	@printf $(COLOR) "Build tctl with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build -o tctl cmd/tools/cli/main.go
+	@printf $(COLOR) "Build tctl with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	go build -o tctl ./cmd/tools/cli
 
 plugins:
-	@printf $(COLOR) "Build tctl-authorization-plugin with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build -o tctl-authorization-plugin cmd/tools/cli/plugins/authorization/main.go
+	@printf $(COLOR) "Build tctl-authorization-plugin with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	go build -o tctl-authorization-plugin ./cmd/tools/cli/plugins/authorization
 
 temporal-cassandra-tool:
-	@printf $(COLOR) "Build temporal-cassandra-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-cassandra-tool cmd/tools/cassandra/main.go
+	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	go build -o temporal-cassandra-tool ./cmd/tools/cassandra
 
 temporal-sql-tool:
-	@printf $(COLOR) "Build temporal-sql-tool with OS: $(GOOS), ARCH: $(GOARCH)..."
-	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-sql-tool cmd/tools/sql/main.go
+	@printf $(COLOR) "Build temporal-sql-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	go build -o temporal-sql-tool ./cmd/tools/sql
 
 ##### Checks #####
 copyright-check:

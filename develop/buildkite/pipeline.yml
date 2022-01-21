@@ -3,7 +3,7 @@ steps:
     agents:
       queue: "default"
       docker: "*"
-    command: "make ci-build"
+    command: "CGO_ENABLED=0 make bins; CGO_ENABLED=1 make ci-build"
     plugins:
       - docker-compose#v3.8.0:
           run: build

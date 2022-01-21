@@ -1,7 +1,5 @@
 // The MIT License
 //
-// Copyright (c) 2021 Datadog, Inc.
-//
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
 // Copyright (c) 2020 Uber Technologies, Inc.
@@ -26,17 +24,8 @@
 
 //go:build cgo
 
-package sqlite
+package main
 
 import (
-	"github.com/mattn/go-sqlite3"
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to load sqlite plugin
 )
-
-const (
-	goSqlDriverName = "sqlite3"
-)
-
-func (mdb *db) IsDupEntryError(err error) bool {
-	sqlErr, ok := err.(sqlite3.Error)
-	return ok && sqlErr.Code == sqlite3.ErrConstraint
-}
