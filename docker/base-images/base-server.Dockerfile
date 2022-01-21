@@ -8,7 +8,6 @@ RUN apk add --update --no-cache \
 RUN mkdir -p /xsrc && \
     git clone https://github.com/jwilder/dockerize.git && \
     cd dockerize && \
-    go mod init github.com/jwilder/dockerize && \
     go mod tidy && \
     go build -o /usr/local/bin/dockerize . && \
     rm -rf /xsrc
