@@ -2,7 +2,7 @@
 # Install all tools and builds binaries.
 install: update-tools bins
 
-# Rebuild binaries (used by Dockerfile and Buildkite).
+# Rebuild binaries (used by Dockerfile).
 bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
