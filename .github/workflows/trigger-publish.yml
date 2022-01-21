@@ -1,0 +1,26 @@
+name: 'Trigger Docker image build'
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  trigger:
+    name: 'trigger Docker image build'
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Dispatch docker builds Github Action
+        env:
+          PAT: ${{ secrets.COMMANDER_DATA_TOKEN }}
+          PARENT_REPO: temporalio/docker-builds
+          PARENT_BRANCH: main
+          WORKFLOW_ID: update-submodules.yml
+        run: |
+          curl -fL -X POST -H "Accept: application/vnd.github.v3+json" -H "Authorization: token ${{ env.PAT }}" https://api.github.com/repos/${{ env.PARENT_REPO }}/actions/workflows/${{ env.WORKFLOW_ID }}/dispatches -d '{"ref":"${{ env.PARENT_BRANCH }}"}'
