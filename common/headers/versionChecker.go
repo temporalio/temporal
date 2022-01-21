@@ -98,6 +98,14 @@ func NewVersionChecker(supportedClients map[string]string, serverVersion string)
 	}
 }
 
+// GetClientNameAndVersion extracts SDK name and version from context headers
+func GetClientNameAndVersion(ctx context.Context) (string, string) {
+	headers := GetValues(ctx, ClientNameHeaderName, ClientVersionHeaderName)
+	clientName := headers[0]
+	clientVersion := headers[1]
+	return clientName, clientVersion
+}
+
 // ClientSupported returns an error if client is unsupported, nil otherwise.
 func (vc *versionChecker) ClientSupported(ctx context.Context, enableClientVersionCheck bool) error {
 	if !enableClientVersionCheck {
