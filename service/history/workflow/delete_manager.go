@@ -157,6 +157,12 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		// currentBranchToken == nil means don't delete history.
 		currentBranchToken = nil
 	}
+
+	completionEvent, err := ms.GetCompletionEvent()
+	if err != nil {
+		return err
+	}
+
 	if err := m.shard.DeleteWorkflowExecution(
 		definition.WorkflowKey{
 			NamespaceID: namespaceID.String(),
@@ -165,6 +171,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		},
 		currentBranchToken,
 		newTaskVersion,
+		*completionEvent.GetEventTime(),
 	); err != nil {
 		return err
 	}
