@@ -118,7 +118,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
-	err := s.deleteManager.DeleteDeletedWorkflowExecution(
+	err := s.deleteManager.DeleteWorkflowExecution(
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
@@ -149,7 +149,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		int64(1),
 	).Return(serviceerror.NewInternal("test error"))
 
-	err := s.deleteManager.DeleteDeletedWorkflowExecution(
+	err := s.deleteManager.DeleteWorkflowExecution(
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
@@ -214,7 +214,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
-	err := s.deleteManager.DeleteWorkflowExecutionRetention(
+	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
@@ -266,7 +266,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	s.mockArchivalClient.EXPECT().Archive(gomock.Any(), archiverClientRequestMatcher{inline: false}).Return(nil, errors.New("failed to send signal"))
 	// =============================================================
 
-	err := s.deleteManager.DeleteWorkflowExecutionRetention(
+	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
 		tests.NamespaceID,
 		we,
 		mockWeCtx,

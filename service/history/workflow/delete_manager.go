@@ -44,8 +44,8 @@ import (
 
 type (
 	DeleteManager interface {
-		DeleteDeletedWorkflowExecution(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, transferTaskVersion int64) error
-		DeleteWorkflowExecutionRetention(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, timerTaskVersion int64) error
+		DeleteWorkflowExecution(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		DeleteWorkflowExecutionByRetention(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 	}
 
 	DeleteManagerImpl struct {
@@ -76,12 +76,12 @@ func NewDeleteManager(
 	return deleteManager
 }
 
-func (m *DeleteManagerImpl) DeleteDeletedWorkflowExecution(
+func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
-	transferTaskVersion int64,
+	sourceTaskVersion int64,
 ) error {
 
 	err := m.deleteWorkflowExecutionInternal(
@@ -89,7 +89,7 @@ func (m *DeleteManagerImpl) DeleteDeletedWorkflowExecution(
 		we,
 		weCtx,
 		ms,
-		transferTaskVersion,
+		sourceTaskVersion,
 		false,
 		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
 	)
@@ -97,12 +97,12 @@ func (m *DeleteManagerImpl) DeleteDeletedWorkflowExecution(
 	return err
 }
 
-func (m *DeleteManagerImpl) DeleteWorkflowExecutionRetention(
+func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
-	timerTaskVersion int64,
+	sourceTaskVersion int64,
 ) error {
 
 	if ms.IsWorkflowExecutionRunning() {
@@ -117,7 +117,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionRetention(
 		we,
 		weCtx,
 		ms,
-		timerTaskVersion,
+		sourceTaskVersion,
 		true,
 		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)
@@ -130,7 +130,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
-	deleteVisibilityTaskVersion int64,
+	newTaskVersion int64,
 	archiveIfEnabled bool,
 	scope metrics.Scope,
 ) error {
@@ -159,7 +159,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 			RunID:       we.GetRunId(),
 		},
 		currentBranchToken,
-		deleteVisibilityTaskVersion,
+		newTaskVersion,
 	); err != nil {
 		return err
 	}
