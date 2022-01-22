@@ -97,7 +97,8 @@ func newTimerQueueStandbyProcessor(
 		timerGate:       timerGate,
 		taskExecutor: newTimerQueueStandbyTaskExecutor(
 			shard,
-			historyService,
+			historyService.workflowDeleteManager,
+			historyService.historyCache,
 			nDCHistoryResender,
 			logger,
 			historyService.metricsClient,

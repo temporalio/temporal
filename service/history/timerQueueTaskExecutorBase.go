@@ -28,49 +28,42 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
 	timerQueueTaskExecutorBase struct {
-		shard                    shard.Context
-		historyService           *historyEngineImpl
-		cache                    workflow.Cache
-		logger                   log.Logger
-		metricsClient            metrics.Client
-		config                   *configs.Config
-		searchAttributesProvider searchattribute.Provider
+		shard         shard.Context
+		deleteManager workflow.DeleteManager
+		cache         workflow.Cache
+		logger        log.Logger
+		metricsClient metrics.Client
+		config        *configs.Config
 	}
 )
 
 func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	deleteManager workflow.DeleteManager,
+	cache workflow.Cache,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
-		shard:                    shard,
-		historyService:           historyEngine,
-		cache:                    historyEngine.historyCache,
-		logger:                   logger,
-		metricsClient:            metricsClient,
-		config:                   config,
-		searchAttributesProvider: shard.GetSearchAttributesProvider(),
+		shard:         shard,
+		deleteManager: deleteManager,
+		cache:         cache,
+		logger:        logger,
+		metricsClient: metricsClient,
+		config:        config,
 	}
 }
 
@@ -78,16 +71,19 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx context.Context,
 	task *tasks.DeleteHistoryEventTask,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
 
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: task.GetWorkflowID(),
+		RunId:      task.GetRunID(),
+	}
+
 	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
 		ctx,
-		namespaceID,
-		execution,
+		namespace.ID(task.GetNamespaceID()),
+		workflowExecution,
 		workflow.CallerTypeTask,
 	)
 	if err != nil {
@@ -99,9 +95,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || mutableState.IsWorkflowExecutionRunning() {
-		return nil
-	}
 
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()
 	if err != nil {
@@ -112,131 +105,13 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 
-	namespaceRegistryEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.NamespaceID))
-	if err != nil {
-		return err
-	}
-	clusterConfiguredForHistoryArchival := t.shard.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
-	namespaceConfiguredForHistoryArchival := namespaceRegistryEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
-	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
-
-	// TODO: @ycyang once archival backfill is in place cluster:paused && namespace:enabled should be a nop rather than a delete
-	if archiveHistory {
-		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupArchiveCount)
-		return t.archiveWorkflow(task, weContext, mutableState, namespaceRegistryEntry)
-	}
-
-	t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteCount)
-	return t.deleteWorkflow(task, weContext, mutableState)
-}
-
-func (t *timerQueueTaskExecutorBase) deleteWorkflow(
-	task *tasks.DeleteHistoryEventTask,
-	workflowContext workflow.Context,
-	msBuilder workflow.MutableState,
-) error {
-	branchToken, err := msBuilder.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-
-	if err := t.shard.DeleteWorkflowExecution(
-		definition.WorkflowKey{
-			NamespaceID: task.NamespaceID,
-			WorkflowID:  task.WorkflowID,
-			RunID:       task.RunID,
-		},
-		branchToken,
-		task.Version,
-	); err != nil {
-		return err
-	}
-
-	// calling clear here to force accesses of mutable state to read database
-	// if this is not called then callers will get mutable state even though its been removed from database
-	workflowContext.Clear()
-	return nil
-}
-
-func (t *timerQueueTaskExecutorBase) archiveWorkflow(
-	task *tasks.DeleteHistoryEventTask,
-	workflowContext workflow.Context,
-	msBuilder workflow.MutableState,
-	namespaceRegistryEntry *namespace.Namespace,
-) error {
-	branchToken, err := msBuilder.GetCurrentBranchToken()
-	if err != nil {
-		return err
-	}
-	closeFailoverVersion, err := msBuilder.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
-
-	req := &archiver.ClientRequest{
-		ArchiveRequest: &archiver.ArchiveRequest{
-			NamespaceID:          task.NamespaceID,
-			WorkflowID:           task.WorkflowID,
-			RunID:                task.RunID,
-			Namespace:            namespaceRegistryEntry.Name().String(),
-			ShardID:              t.shard.GetShardID(),
-			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
-			HistoryURI:           namespaceRegistryEntry.HistoryArchivalState().URI,
-			NextEventID:          msBuilder.GetNextEventID(),
-			BranchToken:          branchToken,
-			CloseFailoverVersion: closeFailoverVersion,
-		},
-		CallerService:        common.HistoryServiceName,
-		AttemptArchiveInline: false, // archive in workflow by default
-	}
-	executionStats, err := workflowContext.LoadExecutionStats()
-	if err == nil && executionStats.HistorySize < int64(t.config.TimerProcessorHistoryArchivalSizeLimit()) {
-		req.AttemptArchiveInline = true
-	}
-
-	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.config.DefaultVisibilityIndexName, false)
-	if err != nil {
-		return err
-	}
-	// Setting search attributes types here because archival client needs to stringify them
-	// and it might not have access to typeMap (i.e. type needs to be embedded).
-	searchattribute.ApplyTypeMap(req.ArchiveRequest.SearchAttributes, saTypeMap)
-
-	ctx, cancel := context.WithTimeout(context.Background(), t.config.TimerProcessorArchivalTimeLimit())
-	defer cancel()
-	resp, err := t.historyService.archivalClient.Archive(ctx, req)
-	if err != nil {
-		return err
-	}
-
-	// delete visibility record here regardless if it's been archived inline or not
-	// since the entire record is included as part of the archive request.
-
-	// delete workflow history if history archival is not needed or history has been archived inline
-	if resp.HistoryArchivedInline {
-		// branchToken was retrieved above
-		t.metricsClient.IncCounter(metrics.HistoryProcessDeleteHistoryEventScope, metrics.WorkflowCleanupDeleteHistoryInlineCount)
-	} else {
-		// branchToken == nil means don't delete history
-		branchToken = nil
-	}
-
-	if err := t.shard.DeleteWorkflowExecution(
-		definition.WorkflowKey{
-			NamespaceID: task.NamespaceID,
-			WorkflowID:  task.WorkflowID,
-			RunID:       task.RunID,
-		},
-		branchToken,
-		task.Version,
-	); err != nil {
-		return err
-	}
-
-	// calling clear here to force accesses of mutable state to read database
-	// if this is not called then callers will get mutable state even though its been removed from database
-	workflowContext.Clear()
-	return nil
+	return t.deleteManager.DeleteWorkflowExecutionByRetention(
+		namespace.ID(task.GetNamespaceID()),
+		workflowExecution,
+		weContext,
+		mutableState,
+		task.GetVersion(),
+	)
 }
 
 func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(

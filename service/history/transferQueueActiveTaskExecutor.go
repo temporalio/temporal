@@ -84,6 +84,7 @@ func newTransferQueueActiveTaskExecutor(
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
 			historyEngine,
+			historyEngine.workflowDeleteManager,
 			logger,
 			metricsClient,
 			config,

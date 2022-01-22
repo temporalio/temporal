@@ -78,6 +78,7 @@ type (
 		mockClusterMetadata      *cluster.MockMetadata
 		mockAdminClient          *adminservicemock.MockAdminServiceClient
 		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
+		mockDeleteManager        *workflow.MockDeleteManager
 
 		logger               log.Logger
 		namespaceID          namespace.ID
@@ -162,18 +163,20 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	historyCache := workflow.NewCache(s.mockShard)
+	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
-		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shard:              s.mockShard,
-		clusterMetadata:    s.mockClusterMetadata,
-		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
-		logger:             s.logger,
-		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
-		metricsClient:      s.mockShard.GetMetricsClient(),
-		eventNotifier:      events.NewNotifier(s.timeSource, metrics.NewNoopMetricsClient(), func(namespace.ID, string) int32 { return 1 }),
-		txProcessor:        s.mockTxProcessor,
-		timerProcessor:     s.mockTimerProcessor,
+		currentClusterName:    s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
+		shard:                 s.mockShard,
+		clusterMetadata:       s.mockClusterMetadata,
+		executionManager:      s.mockExecutionMgr,
+		historyCache:          historyCache,
+		logger:                s.logger,
+		tokenSerializer:       common.NewProtoTaskTokenSerializer(),
+		metricsClient:         s.mockShard.GetMetricsClient(),
+		eventNotifier:         events.NewNotifier(s.timeSource, metrics.NewNoopMetricsClient(), func(namespace.ID, string) int32 { return 1 }),
+		txProcessor:           s.mockTxProcessor,
+		timerProcessor:        s.mockTimerProcessor,
+		workflowDeleteManager: s.mockDeleteManager,
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.mockBean = client.NewMockBean(s.controller)
@@ -181,7 +184,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.timerQueueStandbyTaskExecutor = newTimerQueueStandbyTaskExecutor(
 		s.mockShard,
-		h,
+		s.mockDeleteManager,
+		historyCache,
 		s.mockNDCHistoryResender,
 		s.logger,
 		s.mockShard.GetMetricsClient(),
