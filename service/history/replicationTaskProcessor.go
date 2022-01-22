@@ -258,6 +258,14 @@ func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError e
 		}
 
 		replicationTask := task.(*replicationspb.ReplicationTask)
+		taskCreationTime := replicationTask.GetVisibilityTime()
+		if taskCreationTime != nil {
+			now := p.shard.GetTimeSource().Now()
+			p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope).RecordTimer(
+				metrics.ReplicationLatency,
+				now.Sub(*taskCreationTime),
+			)
+		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
 			return err
 		}
@@ -323,19 +331,11 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 func (p *ReplicationTaskProcessorImpl) handleReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
-	ts := p.shard.GetTimeSource()
-	startTime := ts.Now()
-	p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope).RecordTimer(
-		metrics.ReplicationLatency,
-		startTime.Sub(*replicationTask.GetVisibilityTime()),
-	)
 	_ = p.rateLimiter.Wait(context.Background())
 
 	operation := func() error {
-		startTime = ts.Now()
 		scope, err := p.replicationTaskExecutor.execute(replicationTask, false)
-		endTime := ts.Now()
-		p.emitTaskMetrics(scope, endTime.Sub(startTime), err)
+		p.emitTaskMetrics(scope, err)
 		return err
 	}
 	return backoff.Retry(operation, p.taskRetryPolicy, p.isRetryableError)
@@ -513,7 +513,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 	return err
 }
 
-func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, taskLatency time.Duration, err error) {
+func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, err error) {
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
 		return
@@ -523,7 +523,6 @@ func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, taskLatency ti
 	switch err.(type) {
 	case nil:
 		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksApplied)
-		p.metricsClient.RecordTimer(scope, metrics.ReplicationTasksAppliedLatency, taskLatency)
 	case *serviceerrors.ShardOwnershipLost:
 		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
 		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
