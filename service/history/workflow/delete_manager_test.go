@@ -105,6 +105,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
@@ -136,7 +137,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
-
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(

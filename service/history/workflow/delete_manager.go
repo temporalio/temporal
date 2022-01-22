@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -83,6 +84,10 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ms MutableState,
 	sourceTaskVersion int64,
 ) error {
+
+	if ms.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowNotCompleted
+	}
 
 	err := m.deleteWorkflowExecutionInternal(
 		namespaceID,
