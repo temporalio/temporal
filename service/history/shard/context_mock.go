@@ -161,7 +161,7 @@ func (mr *MockContextMockRecorder) DeleteTransferFailoverLevel(failoverID interf
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockContext) DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64, closeTime time.Time) error {
+func (m *MockContext) DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64, closeTime *time.Time) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", workflowKey, branchToken, version, closeTime)
 	ret0, _ := ret[0].(error)

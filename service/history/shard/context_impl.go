@@ -785,7 +785,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	key definition.WorkflowKey,
 	branchToken []byte,
 	newTaskVersion int64,
-	closeTime time.Time,
+	closeTime *time.Time,
 ) error {
 	if err := s.errorByState(); err != nil {
 		return err
