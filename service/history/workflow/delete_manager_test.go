@@ -126,7 +126,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		},
 		[]byte{22, 8, 78},
 		int64(1),
-		closeTime,
+		&closeTime,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
@@ -166,7 +166,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		},
 		[]byte{22, 8, 78},
 		int64(1),
-		closeTime,
+		&closeTime,
 	).Return(serviceerror.NewInternal("test error"))
 
 	err := s.deleteManager.DeleteWorkflowExecution(
@@ -238,7 +238,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		},
 		nil,
 		int64(1),
-		closeTime,
+		&closeTime,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
