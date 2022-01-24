@@ -88,10 +88,6 @@ type (
 	}
 )
 
-func (c *ControllerImpl) SetEngineFactory(engineFactory EngineFactory) {
-	c.engineFactory = engineFactory
-}
-
 func (c *ControllerImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&c.status,
