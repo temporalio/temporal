@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -77,10 +78,12 @@ var Module = fx.Options(
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(ServiceResolverProvider),
+	fx.Provide(EventNotifierProvider),
+	fx.Provide(ReplicationTaskFetchersProvider),
+	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
 	fx.Invoke(ServiceLifetimeHooks),
-	fx.Invoke(func(h *Handler, c *shard.ControllerImpl) { c.SetEngineFactory(h) }), // create cycle
 )
 
 func ServiceProvider(
@@ -113,17 +116,10 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 
 func HandlerProvider(
 	config *configs.Config,
-	visibilityMrg manager.VisibilityManager,
-	newCacheFn workflow.NewCacheFn,
 	logger resource.SnTaggedLogger,
 	throttledLogger resource.ThrottledLogger,
 	persistenceExecutionManager persistence.ExecutionManager,
 	persistenceShardManager persistence.ShardManager,
-	clientBean client.Bean,
-	historyClient historyservice.HistoryServiceClient,
-	matchingRawClient resource.MatchingRawClient,
-	matchingClient resource.MatchingClient,
-	sdkSystemClient sdkclient.Client,
 	historyServiceResolver membership.ServiceResolver,
 	metricsClient metrics.Client,
 	payloadSerializer serialization.Serializer,
@@ -134,22 +130,16 @@ func HandlerProvider(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider resource.HostInfoProvider,
-	archiverProvider provider.ArchiverProvider,
 	shardController *shard.ControllerImpl,
+	eventNotifier events.Notifier,
+	replicationTaskFetchers ReplicationTaskFetchers,
 ) *Handler {
 	args := NewHandlerArgs{
 		config,
-		visibilityMrg,
-		newCacheFn,
 		logger,
 		throttledLogger,
 		persistenceExecutionManager,
 		persistenceShardManager,
-		clientBean,
-		historyClient,
-		matchingRawClient,
-		matchingClient,
-		sdkSystemClient,
 		historyServiceResolver,
 		metricsClient,
 		payloadSerializer,
@@ -160,10 +150,41 @@ func HandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		hostInfoProvider,
-		archiverProvider,
 		shardController,
+		eventNotifier,
+		replicationTaskFetchers,
 	}
 	return NewHandler(args)
+}
+
+func HistoryEngineFactoryProvider(
+	visibilityMgr manager.VisibilityManager,
+	matchingClient resource.MatchingClient,
+	historyClient historyservice.HistoryServiceClient,
+	publicClient sdkclient.Client,
+	eventNotifier events.Notifier,
+	config *configs.Config,
+	replicationTaskFetchers ReplicationTaskFetchers,
+	rawMatchingClient resource.MatchingRawClient,
+	newCacheFn workflow.NewCacheFn,
+	clientBean client.Bean,
+	archiverProvider provider.ArchiverProvider,
+	registry namespace.Registry,
+) shard.EngineFactory {
+	return NewEngineFactory(
+		visibilityMgr,
+		matchingClient,
+		historyClient,
+		publicClient,
+		eventNotifier,
+		config,
+		replicationTaskFetchers,
+		rawMatchingClient,
+		newCacheFn,
+		clientBean,
+		archiverProvider,
+		registry,
+	)
 }
 
 func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
@@ -256,6 +277,32 @@ func VisibilityManagerProvider(
 		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
 		params.MetricsClient,
 		logger,
+	)
+}
+
+func EventNotifierProvider(
+	timeSource clock.TimeSource,
+	metricsClient metrics.Client,
+	config *configs.Config,
+) events.Notifier {
+	return events.NewNotifier(
+		timeSource,
+		metricsClient,
+		config.GetShardID,
+	)
+}
+
+func ReplicationTaskFetchersProvider(
+	logger log.Logger,
+	config *configs.Config,
+	clusterMetadata cluster.Metadata,
+	clientBean client.Bean,
+) ReplicationTaskFetchers {
+	return NewReplicationTaskFetchers(
+		logger,
+		config,
+		clusterMetadata,
+		clientBean,
 	)
 }
 

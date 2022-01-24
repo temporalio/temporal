@@ -66,6 +66,7 @@ func ShardControllerProvider(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider resource.HostInfoProvider,
+	engineFactory EngineFactory,
 ) *ControllerImpl {
 	return &ControllerImpl{
 		status:                      common.DaemonStatusInitialized,
@@ -91,5 +92,6 @@ func ShardControllerProvider(
 		clusterMetadata:             clusterMetadata,
 		archivalMetadata:            archivalMetadata,
 		hostInfoProvider:            hostInfoProvider,
+		engineFactory:               engineFactory,
 	}
 }
