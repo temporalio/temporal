@@ -390,6 +390,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
@@ -404,6 +405,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   2,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -416,6 +418,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -428,6 +431,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -438,6 +442,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   5,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
 				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
@@ -450,6 +455,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   6,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -468,6 +474,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
@@ -481,6 +488,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -491,6 +499,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   9,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -503,6 +512,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -515,6 +525,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -525,6 +536,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   12,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -535,6 +547,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   13,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -545,6 +558,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   14,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -560,6 +574,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   32,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{
@@ -573,6 +588,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{
@@ -583,6 +599,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   16,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
@@ -597,6 +614,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   17,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -609,6 +627,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   18,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -621,6 +640,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   19,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -631,6 +651,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
 			},
 			{
 				EventId:   20,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
@@ -701,6 +722,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
@@ -715,6 +737,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 			{
 				EventId:   2,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -727,6 +750,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -739,6 +763,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -749,6 +774,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 			{
 				EventId:   5,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
 				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
@@ -761,6 +787,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 			{
 				EventId:   6,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -779,6 +806,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
@@ -792,6 +820,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -802,6 +831,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 			{
 				EventId:   9,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -814,6 +844,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -826,6 +857,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -836,6 +868,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 			{
 				EventId:   12,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -846,6 +879,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 			{
 				EventId:   13,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -856,6 +890,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 			{
 				EventId:   14,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -871,6 +906,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   33,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -887,6 +923,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -897,6 +934,7 @@ func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranchesWithZombieConti
 			},
 			{
 				EventId:   16,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CONTINUED_AS_NEW,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionContinuedAsNewEventAttributes{WorkflowExecutionContinuedAsNewEventAttributes: &historypb.WorkflowExecutionContinuedAsNewEventAttributes{
@@ -1186,6 +1224,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   1,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
@@ -1200,6 +1239,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   2,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -1212,6 +1252,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   3,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1224,6 +1265,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   4,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1234,6 +1276,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   5,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_MARKER_RECORDED,
 				Attributes: &historypb.HistoryEvent_MarkerRecordedEventAttributes{MarkerRecordedEventAttributes: &historypb.MarkerRecordedEventAttributes{
@@ -1246,6 +1289,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   6,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -1264,6 +1308,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   7,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskStartedEventAttributes{ActivityTaskStartedEventAttributes: &historypb.ActivityTaskStartedEventAttributes{
@@ -1277,6 +1322,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   8,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -1287,6 +1333,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   9,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -1299,6 +1346,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   10,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1311,6 +1359,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   11,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1321,6 +1370,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   12,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_SIGNALED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionSignaledEventAttributes{WorkflowExecutionSignaledEventAttributes: &historypb.WorkflowExecutionSignaledEventAttributes{
@@ -1331,6 +1381,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   13,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -1341,6 +1392,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   14,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   22,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1356,6 +1408,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   32,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1366,6 +1419,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   16,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   32,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
@@ -1387,6 +1441,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   15,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskTimedOutEventAttributes{WorkflowTaskTimedOutEventAttributes: &historypb.WorkflowTaskTimedOutEventAttributes{
@@ -1397,6 +1452,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   16,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_ActivityTaskTimedOutEventAttributes{ActivityTaskTimedOutEventAttributes: &historypb.ActivityTaskTimedOutEventAttributes{
@@ -1411,6 +1467,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   17,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskScheduledEventAttributes{WorkflowTaskScheduledEventAttributes: &historypb.WorkflowTaskScheduledEventAttributes{
@@ -1423,6 +1480,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   18,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskStartedEventAttributes{WorkflowTaskStartedEventAttributes: &historypb.WorkflowTaskStartedEventAttributes{
@@ -1435,6 +1493,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   19,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED,
 				Attributes: &historypb.HistoryEvent_WorkflowTaskCompletedEventAttributes{WorkflowTaskCompletedEventAttributes: &historypb.WorkflowTaskCompletedEventAttributes{
@@ -1445,6 +1504,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			},
 			{
 				EventId:   20,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   31,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionFailedEventAttributes{WorkflowExecutionFailedEventAttributes: &historypb.WorkflowExecutionFailedEventAttributes{
@@ -1459,6 +1519,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		{Events: []*historypb.HistoryEvent{
 			{
 				EventId:   17,
+				EventTime: timestamp.TimePtr(time.Now().UTC()),
 				Version:   33,
 				EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
 				Attributes: &historypb.HistoryEvent_WorkflowExecutionTimedOutEventAttributes{WorkflowExecutionTimedOutEventAttributes: &historypb.WorkflowExecutionTimedOutEventAttributes{

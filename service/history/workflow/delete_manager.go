@@ -162,6 +162,11 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	if err != nil {
 		return err
 	}
+	closeTime := completionEvent.GetEventTime()
+	if closeTime == nil {
+		// This should never happen unless wrongly created synthetic workflow history in tests.
+		panic("completion event doesn't have event time set")
+	}
 
 	if err := m.shard.DeleteWorkflowExecution(
 		definition.WorkflowKey{
@@ -171,7 +176,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		},
 		currentBranchToken,
 		newTaskVersion,
-		*completionEvent.GetEventTime(),
+		*closeTime,
 	); err != nil {
 		return err
 	}
