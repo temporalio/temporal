@@ -508,7 +508,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 func (s *VisibilityPersistenceSuite) TestDelete() {
 	nRows := 5
 	testNamespaceUUID := namespace.ID(uuid.New())
-	startTime := time.Now().UTC().Add(time.Second * -5)
+	closeTime := time.Now().UTC()
+	startTime := closeTime.Add(-5 * time.Second)
 	for i := 0; i < nRows; i++ {
 		workflowExecution := commonpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
@@ -531,7 +532,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 				StartTime:        startTime,
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			},
-			CloseTime:     time.Now(),
+			CloseTime:     closeTime,
 			HistoryLength: 3,
 		}
 		err1 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
@@ -541,7 +542,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 	resp, err3 := s.VisibilityMgr.ListClosedWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
 		EarliestStartTime: startTime,
-		LatestStartTime:   time.Now(),
+		LatestStartTime:   closeTime,
 		PageSize:          10,
 	})
 	s.Nil(err3)
@@ -553,13 +554,14 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 			NamespaceID: testNamespaceUUID,
 			WorkflowID:  row.GetExecution().GetWorkflowId(),
 			RunID:       row.GetExecution().GetRunId(),
+			CloseTime:   closeTime,
 		})
 		s.Nil(err4)
 		remaining--
 		resp, err5 := s.VisibilityMgr.ListClosedWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
 			NamespaceID:       testNamespaceUUID,
 			EarliestStartTime: startTime,
-			LatestStartTime:   time.Now(),
+			LatestStartTime:   closeTime,
 			PageSize:          10,
 		})
 		s.Nil(err5)

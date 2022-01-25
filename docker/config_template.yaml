@@ -33,15 +33,19 @@ persistence:
                     serverName: {{ default .Env.CASSANDRA_HOST_NAME "" }}
         visibility:
             cassandra:
-                {{ $visibility_seeds := default .Env.VISIBILITY_CASSANDRA_SEEDS .Env.CASSANDRA_SEEDS }}
-                {{ $visibility_port := default .Env.VISIBILITY_CASSANDRA_PORT .Env.CASSANDRA_PORT }}
-                {{ $visibility_user := default .Env.VISIBILITY_CASSANDRA_USER .Env.CASSANDRA_USER }}
-                {{ $visibility_pwd := default .Env.VISIBILITY_CASSANDRA_PASSWORD .Env.CASSANDRA_PASSWORD }}
-                hosts: "{{ default $visibility_seeds "" }}"
+                {{ $visibility_seeds_default := default .Env.CASSANDRA_SEEDS "" }}
+                {{ $visibility_seeds := default .Env.VISIBILITY_CASSANDRA_SEEDS $visibility_seeds_default }}
+                {{ $visibility_port_default := default .Env.CASSANDRA_PORT "9042" }}
+                {{ $visibility_port := default .Env.VISIBILITY_CASSANDRA_PORT $visibility_port_default }}
+                {{ $visibility_user_default := default .Env.CASSANDRA_USER "" }}
+                {{ $visibility_user := default .Env.VISIBILITY_CASSANDRA_USER $visibility_user_default }}
+                {{ $visibility_pwd_default := default .Env.CASSANDRA_PASSWORD "" }}
+                {{ $visibility_pwd := default .Env.VISIBILITY_CASSANDRA_PASSWORD $visibility_pwd_default }}
+                hosts: "{{ $visibility_seeds }}"
                 keyspace: "{{ default .Env.VISIBILITY_KEYSPACE "temporal_visibility" }}"
-                user: "{{ default $visibility_user "" }}"
-                password: "{{ default $visibility_pwd "" }}"
-                port: {{ default $visibility_port "9042" }}
+                user: "{{ $visibility_user }}"
+                password: "{{ $visibility_pwd }}"
+                port: {{ $visibility_port }}
                 maxConns: {{ default .Env.CASSANDRA_MAX_CONNS "10" }}
                 tls:
                     enabled: {{ default .Env.CASSANDRA_TLS_ENABLED "false" }}
@@ -71,23 +75,27 @@ persistence:
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
-                    сaFile: {{ default .Env.SQL_CA "" }}
+                    caFile: {{ default .Env.SQL_CA "" }}
                     certFile: {{ default .Env.SQL_CERT "" }}
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.SQL_HOST_NAME "" }}
         visibility:
-            sql:
-                {{ $visibility_seeds := default .Env.VISIBILITY_MYSQL_SEEDS .Env.MYSQL_SEEDS }}
-                {{ $visibility_port := default .Env.VISIBILITY_DB_PORT .Env.DB_PORT }}
-                {{ $visibility_user := default .Env.VISIBILITY_MYSQL_USER .Env.MYSQL_USER }}
-                {{ $visibility_pwd := default .Env.VISIBILITY_MYSQL_PWD .Env.MYSQL_PWD }}
+            sql:                
+                {{ $visibility_seeds_default := default .Env.MYSQL_SEEDS "" }}
+                {{ $visibility_seeds := default .Env.VISIBILITY_MYSQL_SEEDS $visibility_seeds_default }}
+                {{ $visibility_port_default := default .Env.DB_PORT "3306" }}
+                {{ $visibility_port := default .Env.VISIBILITY_DB_PORT $visibility_port_default }}
+                {{ $visibility_user_default := default .Env.MYSQL_USER "" }}
+                {{ $visibility_user := default .Env.VISIBILITY_MYSQL_USER $visibility_user_default }}
+                {{ $visibility_pwd_default := default .Env.MYSQL_PWD "" }}
+                {{ $visibility_pwd := default .Env.VISIBILITY_MYSQL_PWD $visibility_pwd_default }}
                 pluginName: "mysql"
                 databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
-                connectAddr: "{{ default $visibility_seeds "" }}:{{ default $visibility_port "3306" }}"
+                connectAddr: "{{ $visibility_seeds }}:{{ $visibility_port }}"
                 connectProtocol: "tcp"
-                user: "{{ default $visibility_user "" }}"
-                password: "{{ default $visibility_pwd "" }}"
+                user: "{{ $visibility_user }}"
+                password: "{{ $visibility_pwd }}"
                 {{- if .Env.MYSQL_TX_ISOLATION_COMPAT }}
                 connectAttributes:
                     tx_isolation: "'READ-COMMITTED'"
@@ -97,7 +105,7 @@ persistence:
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
-                    сaFile: {{ default .Env.SQL_CA "" }}
+                    caFile: {{ default .Env.SQL_CA "" }}
                     certFile: {{ default .Env.SQL_CERT "" }}
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
@@ -116,29 +124,33 @@ persistence:
                 maxConnLifetime: {{ default .Env.SQL_MAX_CONN_TIME "1h" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
-                    сaFile: {{ default .Env.SQL_CA "" }}
+                    caFile: {{ default .Env.SQL_CA "" }}
                     certFile: {{ default .Env.SQL_CERT "" }}
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
                     serverName: {{ default .Env.SQL_HOST_NAME "" }}
         visibility:
             sql:
-                {{ $visibility_seeds := default .Env.VISIBILITY_POSTGRES_SEEDS .Env.POSTGRES_SEEDS }}
-                {{ $visibility_port := default .Env.VISIBILITY_DB_PORT .Env.DB_PORT }}
-                {{ $visibility_user := default .Env.VISIBILITY_POSTGRES_USER .Env.POSTGRES_USER }}
-                {{ $visibility_pwd := default .Env.VISIBILITY_POSTGRES_PWD .Env.POSTGRES_PWD }}
+                {{ $visibility_seeds_default := default .Env.POSTGRES_SEEDS "" }}
+                {{ $visibility_seeds := default .Env.VISIBILITY_POSTGRES_SEEDS $visibility_seeds_default }}
+                {{ $visibility_port_default := default .Env.DB_PORT "5432" }}
+                {{ $visibility_port := default .Env.VISIBILITY_DB_PORT $visibility_port_default }}
+                {{ $visibility_user_default := default .Env.POSTGRES_USER "" }}
+                {{ $visibility_user := default .Env.VISIBILITY_POSTGRES_USER $visibility_user_default }}
+                {{ $visibility_pwd_default := default .Env.POSTGRES_PWD "" }}
+                {{ $visibility_pwd := default .Env.VISIBILITY_POSTGRES_PWD $visibility_pwd_default }}
                 pluginName: "postgres"
                 databaseName: "{{ default .Env.VISIBILITY_DBNAME "temporal_visibility" }}"
-                connectAddr: "{{ default $visibility_seeds "" }}:{{ default $visibility_port "5432" }}"
+                connectAddr: "{{ $visibility_seeds }}:{{ $visibility_port }}"
                 connectProtocol: "tcp"
-                user: "{{ default $visibility_user "" }}"
-                password: "{{ default $visibility_pwd "" }}"
+                user: "{{ $visibility_user }}"
+                password: "{{ $visibility_pwd }}"
                 maxConns: {{ default .Env.SQL_VIS_MAX_CONNS "10" }}
                 maxIdleConns: {{ default .Env.SQL_VIS_MAX_IDLE_CONNS "10" }}
                 maxConnLifetime: {{ default .Env.SQL_VIS_MAX_CONN_TIME "1h" }}
                 tls:
                     enabled: {{ default .Env.SQL_TLS_ENABLED "false" }}
-                    сaFile: {{ default .Env.SQL_CA "" }}
+                    caFile: {{ default .Env.SQL_CA "" }}
                     certFile: {{ default .Env.SQL_CERT "" }}
                     keyFile: {{ default .Env.SQL_CERT_KEY "" }}
                     enableHostVerification: {{ default .Env.SQL_HOST_VERIFICATION "false" }}
@@ -171,7 +183,7 @@ global:
             checkInterval: {{ default .Env.TEMPORAL_TLS_EXPIRATION_CHECKS_CHECK_INTERVAL "0s" }}
         internode:
             # This server section configures the TLS certificate that internal temporal
-            # cluster nodes (history or matching) present to other clients within the Temporal Cluster. 
+            # cluster nodes (history or matching) present to other clients within the Temporal Cluster.
             server:
                 requireClientAuth: {{ default .Env.TEMPORAL_TLS_REQUIRE_CLIENT_AUTH "false" }}
 

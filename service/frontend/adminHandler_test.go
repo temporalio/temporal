@@ -1156,3 +1156,24 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.Equal(resp.GetInitialFailoverVersion(), int64(0))
 	s.True(resp.GetIsGlobalNamespaceEnabled())
 }
+
+func (s *adminHandlerSuite) Test_ListClusters_Success() {
+	var pageSize int32 = 1
+
+	s.mockClusterMetadataManager.EXPECT().ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+		PageSize: int(pageSize),
+	}).Return(
+		&persistence.ListClusterMetadataResponse{
+			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
+				{
+					ClusterMetadata: persistencespb.ClusterMetadata{ClusterName: "test"},
+				},
+			}}, nil)
+
+	resp, err := s.handler.ListClusters(context.Background(), &adminservice.ListClustersRequest{
+		PageSize: pageSize,
+	})
+	s.NoError(err)
+	s.Equal(1, len(resp.Clusters))
+	s.Equal(0, len(resp.GetNextPageToken()))
+}

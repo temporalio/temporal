@@ -784,7 +784,8 @@ func (s *ContextImpl) AppendHistoryEvents(
 func (s *ContextImpl) DeleteWorkflowExecution(
 	key definition.WorkflowKey,
 	branchToken []byte,
-	deleteVisibilityTaskVersion int64,
+	newTaskVersion int64,
+	closeTime *time.Time,
 ) error {
 	if err := s.errorByState(); err != nil {
 		return err
@@ -855,7 +856,8 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			// TaskID is set by addTasksLocked
 			WorkflowKey:         key,
 			VisibilityTimestamp: s.timeSource.Now(),
-			Version:             deleteVisibilityTaskVersion,
+			Version:             newTaskVersion,
+			CloseTime:           closeTime,
 		}},
 	}
 	err = s.addTasksLocked(addTasksRequest, namespaceEntry)

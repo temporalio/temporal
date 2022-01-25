@@ -22,51 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+//go:build cgo
+
+package main
 
 import (
-	"time"
-
-	"go.temporal.io/server/common/definition"
+	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to load sqlite plugin
 )
-
-type (
-	DeleteExecutionVisibilityTask struct {
-		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
-		CloseTime           *time.Time
-	}
-)
-
-func (t *DeleteExecutionVisibilityTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   t.TaskID,
-	}
-}
-
-func (t *DeleteExecutionVisibilityTask) GetVersion() int64 {
-	return t.Version
-}
-
-func (t *DeleteExecutionVisibilityTask) SetVersion(version int64) {
-	t.Version = version
-}
-
-func (t *DeleteExecutionVisibilityTask) GetTaskID() int64 {
-	return t.TaskID
-}
-
-func (t *DeleteExecutionVisibilityTask) SetTaskID(id int64) {
-	t.TaskID = id
-}
-
-func (t *DeleteExecutionVisibilityTask) GetVisibilityTime() time.Time {
-	return t.VisibilityTimestamp
-}
-
-func (t *DeleteExecutionVisibilityTask) SetVisibilityTime(timestamp time.Time) {
-	t.VisibilityTimestamp = timestamp
-}

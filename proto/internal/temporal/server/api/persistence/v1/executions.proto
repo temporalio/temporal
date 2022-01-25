@@ -188,6 +188,7 @@ message VisibilityTaskInfo {
     int64 version = 5;
     int64 task_id = 6;
     google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp close_time = 8 [(gogoproto.stdtime) = true];
 }
 
 // tiered_storage_task_data column

@@ -78,6 +78,7 @@ import (
 const (
 	getNamespaceReplicationMessageBatchSize = 100
 	defaultLastMessageID                    = -1
+	listClustersPageSize                    = 100
 )
 
 type (
@@ -865,7 +866,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	return result, nil
 }
 
-// DescribeCluster return information about temporal deployment
+// DescribeCluster return information about a temporal cluster
 func (adh *AdminHandler) DescribeCluster(
 	_ context.Context,
 	request *adminservice.DescribeClusterRequest,
@@ -942,8 +943,43 @@ func (adh *AdminHandler) DescribeCluster(
 	}, nil
 }
 
+// ListClusters return information about temporal clusters
+func (adh *AdminHandler) ListClusters(
+	_ context.Context,
+	request *adminservice.ListClustersRequest,
+) (_ *adminservice.ListClustersResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminListClustersScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+	if request.GetPageSize() <= 0 {
+		request.PageSize = listClustersPageSize
+	}
+
+	resp, err := adh.clusterMetadataManager.ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+		PageSize:      int(request.GetPageSize()),
+		NextPageToken: request.GetNextPageToken(),
+	})
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	var clusterMetadataList []*persistencespb.ClusterMetadata
+	for _, clusterResp := range resp.ClusterMetadata {
+		clusterMetadataList = append(clusterMetadataList, &clusterResp.ClusterMetadata)
+	}
+	return &adminservice.ListClustersResponse{
+		Clusters:      clusterMetadataList,
+		NextPageToken: resp.NextPageToken,
+	}, nil
+}
+
 func (adh *AdminHandler) ListClusterMembers(
-	ctx context.Context,
+	_ context.Context,
 	request *adminservice.ListClusterMembersRequest,
 ) (_ *adminservice.ListClusterMembersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -977,6 +1013,9 @@ func (adh *AdminHandler) ListClusterMembers(
 		PageSize:            int(request.GetPageSize()),
 		NextPageToken:       request.GetNextPageToken(),
 	})
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
 
 	var activeMembers []*clusterspb.ClusterMember
 	for _, member := range resp.ActiveMembers {
@@ -994,7 +1033,7 @@ func (adh *AdminHandler) ListClusterMembers(
 	return &adminservice.ListClusterMembersResponse{
 		ActiveMembers: activeMembers,
 		NextPageToken: resp.NextPageToken,
-	}, err
+	}, nil
 }
 
 func (adh *AdminHandler) AddOrUpdateRemoteCluster(

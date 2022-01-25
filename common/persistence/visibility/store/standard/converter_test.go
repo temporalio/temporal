@@ -61,6 +61,7 @@ var unsupportedQuery = []string{
 	`ExecutionStatus = "Running" AND WorkflowType = "xyz"`,
 	`WorkflowID = "abc" OR WorkflowType = "xyz"`,
 	`WorkflowID != "abc"`,
+	`StartTime < "2022-01-15T05:43:12.74127Z"`,
 }
 
 func TestSupportedQueryFilters(t *testing.T) {

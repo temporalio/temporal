@@ -2209,6 +2209,8 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	namespaceID := namespaceEntry.ID()
 
 	request := terminateRequest.TerminateRequest
+	parentExecution := terminateRequest.ExternalWorkflowExecution
+	childWorkflowOnly := terminateRequest.ChildWorkflowOnly
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowExecution.WorkflowId,
 	}
@@ -2237,6 +2239,13 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 				return nil, consts.ErrWorkflowExecutionNotFound
 			}
 
+			if childWorkflowOnly {
+				if parentExecution.GetWorkflowId() != executionInfo.ParentWorkflowId ||
+					parentExecution.GetRunId() != executionInfo.ParentRunId {
+					return nil, consts.ErrWorkflowParent
+				}
+			}
+
 			eventBatchFirstEventID := mutableState.GetNextEventID()
 
 			return updateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
@@ -2260,7 +2269,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 		*deleteRequest.GetWorkflowExecution(),
 		func(weCtx workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
 			if mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowIsRunning // workflow is running, cannot be deleted
+				return nil, consts.ErrWorkflowNotCompleted // workflow is running, cannot be deleted
 			}
 
 			taskGenerator := workflow.NewTaskGenerator(
@@ -2272,13 +2281,6 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 			err := taskGenerator.GenerateDeleteExecutionTask(e.timeSource.Now())
 			if err != nil {
 				return nil, err
-			}
-			state, status := mutableState.GetWorkflowStateStatus()
-			if state != enumsspb.WORKFLOW_EXECUTION_STATE_DELETED {
-				err = mutableState.UpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_DELETED, status)
-				if err != nil {
-					return nil, err
-				}
 			}
 
 			return updateWorkflowWithoutWorkflowTask, nil

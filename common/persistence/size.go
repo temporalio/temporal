@@ -195,7 +195,7 @@ func statusOfInternalWorkflowSnapshot(
 		return nil
 	}
 
-	executionInfoSize := sizeOfBlob(snapshot.ExecutionInfo)
+	executionInfoSize := sizeOfBlob(snapshot.ExecutionInfoBlob)
 	executionStateSize := sizeOfBlob(snapshot.ExecutionStateBlob)
 
 	activityInfoCount := len(snapshot.ActivityInfos)

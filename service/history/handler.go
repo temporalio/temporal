@@ -34,19 +34,15 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-	sdkclient "go.temporal.io/sdk/client"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	namespacespb "go.temporal.io/server/api/namespace/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -58,7 +54,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -67,7 +62,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -81,19 +75,11 @@ type (
 		config                      *configs.Config
 		eventNotifier               events.Notifier
 		replicationTaskFetchers     ReplicationTaskFetchers
-		visibilityMrg               manager.VisibilityManager
-		newCacheFn                  workflow.NewCacheFn
 		logger                      log.Logger
 		throttledLogger             log.Logger
 		persistenceExecutionManager persistence.ExecutionManager
 		persistenceShardManager     persistence.ShardManager
-		clientBean                  client.Bean
-		historyClient               historyservice.HistoryServiceClient
-		matchingRawClient           matchingservice.MatchingServiceClient
-		matchingClient              matchingservice.MatchingServiceClient
-		sdkClient                   sdkclient.Client
 		historyServiceResolver      membership.ServiceResolver
-		archiverProvider            provider.ArchiverProvider
 		metricsClient               metrics.Client
 		payloadSerializer           serialization.Serializer
 		timeSource                  clock.TimeSource
@@ -108,17 +94,10 @@ type (
 
 	NewHandlerArgs struct {
 		Config                      *configs.Config
-		VisibilityMrg               manager.VisibilityManager
-		NewCacheFn                  workflow.NewCacheFn
 		Logger                      log.Logger
 		ThrottledLogger             log.Logger
 		PersistenceExecutionManager persistence.ExecutionManager
 		PersistenceShardManager     persistence.ShardManager
-		ClientBean                  client.Bean
-		HistoryClient               historyservice.HistoryServiceClient
-		MatchingRawClient           matchingservice.MatchingServiceClient
-		MatchingClient              matchingservice.MatchingServiceClient
-		SdkSystemClient             sdkclient.Client
 		HistoryServiceResolver      membership.ServiceResolver
 		MetricsClient               metrics.Client
 		PayloadSerializer           serialization.Serializer
@@ -129,8 +108,9 @@ type (
 		ClusterMetadata             cluster.Metadata
 		ArchivalMetadata            archiver.ArchivalMetadata
 		HostInfoProvider            resource.HostInfoProvider
-		ArchiverProvider            provider.ArchiverProvider
 		ShardController             *shard.ControllerImpl
+		EventNotifier               events.Notifier
+		ReplicationTaskFetchers     ReplicationTaskFetchers
 	}
 )
 
@@ -139,7 +119,6 @@ const (
 )
 
 var (
-	_ shard.EngineFactory                 = (*Handler)(nil)
 	_ historyservice.HistoryServiceServer = (*Handler)(nil)
 
 	errNamespaceNotSet         = serviceerror.NewInvalidArgument("Namespace not set on request.")
@@ -163,17 +142,10 @@ func NewHandler(args NewHandlerArgs) *Handler {
 		status:                      common.DaemonStatusInitialized,
 		config:                      args.Config,
 		tokenSerializer:             common.NewProtoTaskTokenSerializer(),
-		visibilityMrg:               args.VisibilityMrg,
-		newCacheFn:                  args.NewCacheFn,
 		logger:                      args.Logger,
 		throttledLogger:             args.ThrottledLogger,
 		persistenceExecutionManager: args.PersistenceExecutionManager,
 		persistenceShardManager:     args.PersistenceShardManager,
-		clientBean:                  args.ClientBean,
-		historyClient:               args.HistoryClient,
-		matchingRawClient:           args.MatchingRawClient,
-		matchingClient:              args.MatchingClient,
-		sdkClient:                   args.SdkSystemClient,
 		historyServiceResolver:      args.HistoryServiceResolver,
 		metricsClient:               args.MetricsClient,
 		payloadSerializer:           args.PayloadSerializer,
@@ -184,8 +156,9 @@ func NewHandler(args NewHandlerArgs) *Handler {
 		clusterMetadata:             args.ClusterMetadata,
 		archivalMetadata:            args.ArchivalMetadata,
 		hostInfoProvider:            args.HostInfoProvider,
-		archiverProvider:            args.ArchiverProvider,
 		controller:                  args.ShardController,
+		eventNotifier:               args.EventNotifier,
+		replicationTaskFetchers:     args.ReplicationTaskFetchers,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -203,16 +176,8 @@ func (h *Handler) Start() {
 		return
 	}
 
-	h.replicationTaskFetchers = NewReplicationTaskFetchers(
-		h.logger,
-		h.config,
-		h.clusterMetadata,
-		h.clientBean,
-	)
-
 	h.replicationTaskFetchers.Start()
 
-	h.eventNotifier = events.NewNotifier(h.timeSource, h.metricsClient, h.config.GetShardID)
 	// events notifier must starts before controller
 	h.eventNotifier.Start()
 	h.controller.Start()
@@ -237,27 +202,6 @@ func (h *Handler) Stop() {
 
 func (h *Handler) isStopped() bool {
 	return atomic.LoadInt32(&h.status) == common.DaemonStatusStopped
-}
-
-// CreateEngine is implementation for HistoryEngineFactory used for creating the engine instance for shard
-func (h *Handler) CreateEngine(
-	shardContext shard.Context,
-) shard.Engine {
-	return NewEngineWithShardContext(
-		shardContext,
-		h.visibilityMrg,
-		h.matchingClient,
-		h.historyClient,
-		h.sdkClient,
-		h.eventNotifier,
-		h.config,
-		h.replicationTaskFetchers,
-		h.matchingRawClient,
-		h.newCacheFn,
-		h.clientBean,
-		h.archiverProvider,
-		h.namespaceRegistry,
-	)
 }
 
 // Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md

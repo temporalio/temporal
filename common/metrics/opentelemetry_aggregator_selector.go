@@ -25,7 +25,6 @@
 package metrics
 
 import (
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/sdkapi"
 	emetric "go.opentelemetry.io/otel/sdk/export/metric"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
@@ -58,7 +57,7 @@ func NewOtelAggregatorSelector(
 	}
 }
 
-func (s OtelAggregatorSelector) AggregatorFor(descriptor *metric.Descriptor, aggPtrs ...*emetric.Aggregator) {
+func (s OtelAggregatorSelector) AggregatorFor(descriptor *sdkapi.Descriptor, aggPtrs ...*emetric.Aggregator) {
 	switch descriptor.InstrumentKind() {
 	case sdkapi.GaugeObserverInstrumentKind:
 		lastValueAggs(aggPtrs)
