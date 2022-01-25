@@ -72,9 +72,6 @@ func setStateStatus(
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
-		case enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:
-			return invalidStateTransitionErr(e.GetState(), state, status)
-
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
@@ -98,9 +95,6 @@ func setStateStatus(
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
-		case enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:
-			return invalidStateTransitionErr(e.GetState(), state, status)
-
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
@@ -119,8 +113,6 @@ func setStateStatus(
 			}
 		case enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
 			return invalidStateTransitionErr(e.GetState(), state, status)
-
-		case enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:
 
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
@@ -147,25 +139,9 @@ func setStateStatus(
 				return invalidStateTransitionErr(e.GetState(), state, status)
 			}
 
-		case enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:
-
 		default:
 			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 		}
-	case enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:
-		switch state {
-		case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-			enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-			enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
-			enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:
-			return invalidStateTransitionErr(e.GetState(), state, status)
-
-		case enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:
-
-		default:
-			return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
-		}
-
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown workflow state: %v", state))
 	}

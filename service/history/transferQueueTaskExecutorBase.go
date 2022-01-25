@@ -246,7 +246,7 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		return err
 	}
 
-	return t.workflowDeleteManager.DeleteDeletedWorkflowExecution(
+	return t.workflowDeleteManager.DeleteWorkflowExecution(
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weCtx,

@@ -2269,7 +2269,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 		*deleteRequest.GetWorkflowExecution(),
 		func(weCtx workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
 			if mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowIsRunning // workflow is running, cannot be deleted
+				return nil, consts.ErrWorkflowNotCompleted // workflow is running, cannot be deleted
 			}
 
 			taskGenerator := workflow.NewTaskGenerator(
@@ -2281,13 +2281,6 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 			err := taskGenerator.GenerateDeleteExecutionTask(e.timeSource.Now())
 			if err != nil {
 				return nil, err
-			}
-			state, status := mutableState.GetWorkflowStateStatus()
-			if state != enumsspb.WORKFLOW_EXECUTION_STATE_DELETED {
-				err = mutableState.UpdateWorkflowStateStatus(enumsspb.WORKFLOW_EXECUTION_STATE_DELETED, status)
-				if err != nil {
-					return nil, err
-				}
 			}
 
 			return updateWorkflowWithoutWorkflowTask, nil
