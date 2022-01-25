@@ -120,3 +120,5 @@ require (
 	go.uber.org/dig v1.13.0 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519 // indirect
 )
+
+replace go.temporal.io/api v1.7.1-0.20211215222122-0be6c74f9c9a => ../temporal-api-go

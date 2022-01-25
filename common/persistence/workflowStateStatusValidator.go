@@ -40,7 +40,6 @@ var (
 		enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED: {},
 		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE:    {},
 		enumsspb.WORKFLOW_EXECUTION_STATE_CORRUPTED: {},
-		enumsspb.WORKFLOW_EXECUTION_STATE_DELETED:   {},
 	}
 
 	validWorkflowStatuses = map[enumspb.WorkflowExecutionStatus]struct{}{
@@ -67,10 +66,6 @@ func ValidateCreateWorkflowStateStatus(
 		return err
 	}
 
-	if state == enumsspb.WORKFLOW_EXECUTION_STATE_DELETED && status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		return nil
-	}
-
 	// validate workflow state & status
 	if (state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) ||
 		(state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
@@ -90,10 +85,6 @@ func ValidateUpdateWorkflowStateStatus(
 	}
 	if err := validateWorkflowStatus(status); err != nil {
 		return err
-	}
-
-	if state == enumsspb.WORKFLOW_EXECUTION_STATE_DELETED && status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
-		return nil
 	}
 
 	// validate workflow state & status
