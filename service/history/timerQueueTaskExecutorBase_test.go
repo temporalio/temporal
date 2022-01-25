@@ -35,14 +35,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -132,7 +131,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 
-	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionRetention(
+	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
@@ -173,7 +172,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 
-	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionRetention(
+	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 		tests.NamespaceID,
 		we,
 		mockWeCtx,

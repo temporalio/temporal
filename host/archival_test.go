@@ -314,9 +314,10 @@ func (s *integrationSuite) startAndFinishWorkflow(id, wt, tq, namespace, namespa
 		taskToken []byte,
 	) (*commonpb.Payloads, bool, error) {
 		s.Equal(id, execution.GetWorkflowId())
+		s.Equal(runIDs[runCounter-1], execution.GetRunId())
 		s.Equal(activityName, activityType.Name)
-		id, _ := strconv.Atoi(activityID)
-		s.Equal(int(expectedActivityID), id)
+		currentActivityId, _ := strconv.Atoi(activityID)
+		s.Equal(int(expectedActivityID), currentActivityId)
 		s.Equal(expectedActivityID, s.decodePayloadsByteSliceInt32(input))
 		expectedActivityID++
 		return payloads.EncodeString("Activity Result"), false, nil

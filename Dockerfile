@@ -1,5 +1,5 @@
 ARG BASE_BUILDER_IMAGE=temporalio/base-builder:1.5.0
-ARG BASE_SERVER_IMAGE=temporalio/base-server:1.4.0
+ARG BASE_SERVER_IMAGE=temporalio/base-server:1.5.0
 ARG BASE_ADMIN_TOOLS_IMAGE=temporalio/base-admin-tools:1.3.0
 ARG GOPROXY
 
@@ -12,7 +12,7 @@ WORKDIR /temporal
 COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
-RUN make bins
+RUN CGO_ENABLED=0 make bins
 
 ##### Temporal server #####
 FROM ${BASE_SERVER_IMAGE} AS temporal-server

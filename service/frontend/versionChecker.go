@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/rpc/interceptor"
 )
 
 const VersionCheckInterval = 24 * time.Hour
@@ -49,18 +50,21 @@ type VersionChecker struct {
 	clusterMetadataManager persistence.ClusterMetadataManager
 	startOnce              sync.Once
 	stopOnce               sync.Once
+	sdkVersionRecorder     *interceptor.SDKVersionInterceptor
 }
 
 func NewVersionChecker(
 	config *Config,
 	metricsClient metrics.Client,
 	clusterMetadataManager persistence.ClusterMetadataManager,
+	sdkVersionRecorder *interceptor.SDKVersionInterceptor,
 ) *VersionChecker {
 	return &VersionChecker{
 		config:                 config,
 		shutdownChan:           make(chan struct{}),
 		metricsScope:           metricsClient.Scope(metrics.VersionCheckScope),
 		clusterMetadataManager: clusterMetadataManager,
+		sdkVersionRecorder:     sdkVersionRecorder,
 	}
 }
 
@@ -140,6 +144,7 @@ func (vc *VersionChecker) createVersionCheckRequest(metadata *persistence.GetClu
 		DB:        vc.clusterMetadataManager.GetName(),
 		ClusterID: metadata.ClusterId,
 		Timestamp: time.Now().UnixNano(),
+		SDKInfo:   vc.sdkVersionRecorder.GetAndResetSDKInfo(),
 	}, nil
 }
 
@@ -152,7 +157,12 @@ func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) erro
 	if err != nil {
 		return err
 	}
-	metadata.VersionInfo = toVersionInfo(resp)
+	// TODO(bergundy): Extract and save version info per SDK
+	versionInfo, err := toVersionInfo(resp)
+	if err != nil {
+		return err
+	}
+	metadata.VersionInfo = versionInfo
 	saved, err := vc.clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: metadata.ClusterMetadata, Version: metadata.Version})
 	if err != nil {
@@ -164,14 +174,19 @@ func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) erro
 	return nil
 }
 
-func toVersionInfo(resp *check.VersionCheckResponse) *versionpb.VersionInfo {
-	return &versionpb.VersionInfo{
-		Current:        convertReleaseInfo(resp.Current),
-		Recommended:    convertReleaseInfo(resp.Recommended),
-		Instructions:   resp.Instructions,
-		Alerts:         convertAlerts(resp.Alerts),
-		LastUpdateTime: timestamp.TimePtr(time.Now().UTC()),
+func toVersionInfo(resp *check.VersionCheckResponse) (*versionpb.VersionInfo, error) {
+	for _, product := range resp.Products {
+		if product.Product == headers.ClientNameServer {
+			return &versionpb.VersionInfo{
+				Current:        convertReleaseInfo(product.Current),
+				Recommended:    convertReleaseInfo(product.Recommended),
+				Instructions:   product.Instructions,
+				Alerts:         convertAlerts(product.Alerts),
+				LastUpdateTime: timestamp.TimePtr(time.Now().UTC()),
+			}, nil
+		}
 	}
+	return nil, serviceerror.NewNotFound("version info update was not found in response")
 }
 
 func convertAlerts(alerts []check.Alert) []*versionpb.Alert {

@@ -49,6 +49,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -783,14 +784,113 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 	s.IsType(&serviceerror.NotFound{}, err)
 }
 
+func (s *engine2Suite) TestRequestCancelWorkflowExecution_ParentMismatch() {
+	namespaceID := tests.NamespaceID
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+	parentInfo := &workflowspb.ParentExecutionInfo{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		Namespace:   tests.ParentNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "parent wId",
+			RunId:      "parent rId",
+		},
+		InitiatedId: 123,
+	}
+
+	identity := "testIdentity"
+	tl := "testTaskQueue"
+
+	msBuilder := s.createExecutionStartedStateWithParent(workflowExecution, tl, parentInfo, identity, false)
+	ms1 := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse1, nil)
+
+	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowExecution.WorkflowId,
+				RunId:      workflowExecution.RunId,
+			},
+			Identity: "identity",
+		},
+		ExternalWorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "unknown wId",
+			RunId:      "unknown rId",
+		},
+		ChildWorkflowOnly: true,
+	})
+	s.Equal(consts.ErrWorkflowParent, err)
+}
+
+func (s *engine2Suite) TestTerminateWorkflowExecution_ParentMismatch() {
+	namespaceID := tests.NamespaceID
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+	parentInfo := &workflowspb.ParentExecutionInfo{
+		NamespaceId: tests.ParentNamespaceID.String(),
+		Namespace:   tests.ParentNamespace.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: "parent wId",
+			RunId:      "parent rId",
+		},
+		InitiatedId: 123,
+	}
+
+	identity := "testIdentity"
+	tl := "testTaskQueue"
+
+	msBuilder := s.createExecutionStartedStateWithParent(workflowExecution, tl, parentInfo, identity, false)
+	ms1 := workflow.TestCloneToProto(msBuilder)
+	currentExecutionResp := &persistence.GetCurrentExecutionResponse{
+		RunID: tests.RunID,
+	}
+	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
+
+	s.mockExecutionMgr.EXPECT().GetCurrentExecution(gomock.Any()).Return(currentExecutionResp, nil)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse1, nil)
+
+	err := s.historyEngine.TerminateWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.TerminateWorkflowExecutionRequest{
+		NamespaceId: namespaceID.String(),
+		TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: workflowExecution.WorkflowId,
+			},
+			Identity:            "identity",
+			FirstExecutionRunId: workflowExecution.RunId,
+		},
+		ExternalWorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "unknown wId",
+			RunId:      "unknown rId",
+		},
+		ChildWorkflowOnly: true,
+	})
+	s.Equal(consts.ErrWorkflowParent, err)
+}
+
 func (s *engine2Suite) createExecutionStartedState(
 	we commonpb.WorkflowExecution, tl string,
 	identity string,
 	startWorkflowTask bool,
 ) workflow.MutableState {
+	return s.createExecutionStartedStateWithParent(we, tl, nil, identity, startWorkflowTask)
+}
+
+func (s *engine2Suite) createExecutionStartedStateWithParent(
+	we commonpb.WorkflowExecution, tl string,
+	parentInfo *workflowspb.ParentExecutionInfo,
+	identity string,
+	startWorkflowTask bool,
+) workflow.MutableState {
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		s.logger, we.GetRunId())
-	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	addWorkflowExecutionStartedEventWithParent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, parentInfo, identity)
 	di := addWorkflowTaskScheduledEvent(msBuilder)
 	if startWorkflowTask {
 		addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)

@@ -105,7 +105,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 
-	return t.deleteManager.DeleteWorkflowExecutionRetention(
+	return t.deleteManager.DeleteWorkflowExecutionByRetention(
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weContext,

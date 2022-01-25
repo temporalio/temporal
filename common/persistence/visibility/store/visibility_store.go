@@ -113,7 +113,6 @@ type (
 		*InternalVisibilityRequestBase
 		CloseTime     time.Time
 		HistoryLength int64
-		Retention     *time.Duration
 	}
 
 	// InternalUpsertWorkflowExecutionRequest is request to UpsertWorkflowExecution
