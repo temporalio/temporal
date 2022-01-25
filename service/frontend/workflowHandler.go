@@ -2699,6 +2699,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		WorkflowExecutionInfo: response.GetWorkflowExecutionInfo(),
 		PendingActivities:     response.GetPendingActivities(),
 		PendingChildren:       response.GetPendingChildren(),
+		PendingWorkflowTask:   response.GetPendingWorkflowTask(),
 	}, nil
 }
 
