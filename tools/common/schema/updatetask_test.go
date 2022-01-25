@@ -25,6 +25,8 @@
 package schema
 
 import (
+	"github.com/stretchr/testify/assert"
+	"go.temporal.io/server/common/log"
 	"os"
 	"testing"
 
@@ -35,55 +37,91 @@ import (
 )
 
 type UpdateTaskTestSuite struct {
-	*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test, not merely log an error
+	*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(n) will stop the test, not merely log an error
 	suite.Suite
+	versionsDir string
+	emptyDir string
+	logger log.Logger
 }
 
 func TestUpdateTaskTestSuite(t *testing.T) {
 	suite.Run(t, new(UpdateTaskTestSuite))
 }
 
+var updateTaskTestData = struct {
+	versions []string
+}{
+	versions: []string{"v0.5", "v1.5", "v2.5", "v2.5.1", "v2.5.2", "v2.7.17", "v3.5", "v10.2", "abc", "2.0", "3.0"},
+}
+
 func (s *UpdateTaskTestSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
+
+	s.versionsDir = testhelper.MkdirTemp(s.T(), "", "update_schema_test")
+
+	for _, d := range updateTaskTestData.versions {
+		s.NoError(os.Mkdir(s.versionsDir+"/"+d, os.FileMode(0444)))
+	}
+
+	s.emptyDir = testhelper.MkdirTemp(s.T(), "", "update_schema_test_empty")
+
+	s.logger = log.NewUnitTestLogger(s.T())
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
-	emptyDir := testhelper.MkdirTemp(s.T(), "", "update_schema_test_empty")
-	tmpDir := testhelper.MkdirTemp(s.T(), "", "update_schema_test")
-
-	subDirs := []string{"v0.5", "v1.5", "v2.5", "v3.5", "v10.2", "abc", "2.0", "3.0"}
-	for _, d := range subDirs {
-		s.NoError(os.Mkdir(tmpDir+"/"+d, os.FileMode(0444)))
-	}
-
-	_, err := readSchemaDir(tmpDir, "11.0", "11.2")
-	s.Error(err)
-	_, err = readSchemaDir(tmpDir, "0.5", "10.3")
-	s.Error(err)
-	_, err = readSchemaDir(tmpDir, "1.5", "0.5")
-	s.Error(err)
-	_, err = readSchemaDir(tmpDir, "10.3", "")
-	s.Error(err)
-	_, err = readSchemaDir(emptyDir, "11.0", "")
-	s.Error(err)
-	_, err = readSchemaDir(emptyDir, "10.1", "")
-	s.Error(err)
-
-	ans, err := readSchemaDir(tmpDir, "1.5", "1.5")
+	ans, err := readSchemaDir(s.versionsDir, "10.3", "", s.logger)
 	s.NoError(err)
 	s.Equal(0, len(ans))
 
-	ans, err = readSchemaDir(tmpDir, "0.4", "10.2")
+	ans, err = readSchemaDir(s.versionsDir, "0.5", "1.5", s.logger)
 	s.NoError(err)
-	s.Equal([]string{"v0.5", "v1.5", "v2.5", "v3.5", "v10.2"}, ans)
+	s.Equal([]string{"v1.5"}, ans)
 
-	ans, err = readSchemaDir(tmpDir, "0.5", "3.5")
+	ans, err = readSchemaDir(s.versionsDir, "0.4", "10.2", s.logger)
 	s.NoError(err)
-	s.Equal([]string{"v1.5", "v2.5", "v3.5"}, ans)
+	s.Equal([]string{"v0.5", "v1.5", "v2.5", "v2.5.1", "v2.5.2", "v2.7.17", "v3.5", "v10.2"}, ans)
 
-	ans, err = readSchemaDir(tmpDir, "10.2", "")
+	ans, err = readSchemaDir(s.versionsDir, "0.5", "3.5", s.logger)
+	s.NoError(err)
+	s.Equal([]string{"v1.5", "v2.5", "v2.5.1", "v2.5.2", "v2.7.17", "v3.5"}, ans)
+
+	ans, err = readSchemaDir(s.versionsDir, "10.2", "", s.logger)
 	s.NoError(err)
 	s.Equal(0, len(ans))
+}
+
+func (s *UpdateTaskTestSuite) TestSortAndFilterVersionsWithEndLessThanStart_ReturnsError() {
+	_, err := sortAndFilterVersions(updateTaskTestData.versions, "1.5", "0.5", s.logger)
+	s.Error(err)
+	assert.Containsf(s.T(), err.Error(), "less than end version", "Unexpected error message")
+}
+
+func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEndVersion_ReturnsErrorWhenNotFound() {
+	// No versions in range
+	_, err := readSchemaDir(s.versionsDir, "11.0", "11.2", s.logger)
+	s.Error(err)
+	assert.Containsf(s.T(), err.Error(), "specified but not found", "Unexpected error message")
+
+	// Versions in range, but nothing for v10.3
+	_, err = readSchemaDir(s.versionsDir, "0.5", "10.3", s.logger)
+	s.Error(err)
+	assert.Containsf(s.T(), err.Error(), "specified but not found", "Unexpected error message")
+}
+
+func (s *UpdateTaskTestSuite) TestReadSchemaDirWithInvalidInput_ReturnsError() {
+	_, err := readSchemaDir(s.versionsDir, "1.7", "1.7", s.logger)
+	s.Error(err)
+	assert.Containsf(s.T(), err.Error(), "must be less than end version", "Unexpected error message")
+}
+
+func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEmptyDir_ReturnsError() {
+	_, err := readSchemaDir(s.emptyDir, "11.0", "", s.logger)
+	s.Error(err)
+	assert.Containsf(s.T(), err.Error(), "contains no subdirs", "Unexpected error message")
+
+	_, err = readSchemaDir(s.emptyDir, "10.1", "", s.logger)
+	s.Error(err)
+	assert.Containsf(s.T(), err.Error(), "contains no subdirs", "Unexpected error message")
 }
 
 func (s *UpdateTaskTestSuite) TestReadManifest() {
@@ -139,8 +177,10 @@ func (s *UpdateTaskTestSuite) TestReadManifest() {
 	}
 }
 
-func (s *UpdateTaskTestSuite) runReadManifestTest(dir, input, currVer, minVer, desc string,
-	files []string, isErr bool) {
+func (s *UpdateTaskTestSuite) runReadManifestTest(
+	dir, input, currVer, minVer, desc string,
+	files []string, isErr bool,
+) {
 
 	file := dir + "/manifest.json"
 	err := os.WriteFile(file, []byte(input), os.FileMode(0644))
