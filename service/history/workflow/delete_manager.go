@@ -86,6 +86,10 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 ) error {
 
 	if ms.IsWorkflowExecutionRunning() {
+		// DeleteWorkflowExecution is called from transfer task queue processor
+		// and corresponding transfer task is created only if workflow is not running.
+		// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
+		// workflow should not be deleted. NotFound errors are ignored by task processor.
 		return consts.ErrWorkflowNotCompleted
 	}
 
