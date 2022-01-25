@@ -632,7 +632,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if err != nil {
 		return err
 	}
-	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+	if mutableState == nil {
 		return nil
 	}
 
@@ -644,6 +644,40 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if !ok {
 		return nil
 	}
+
+	// workflow running or not, child started or not, parent close policy is abandon or not
+	// 8 cases in total
+	workflowRunning := mutableState.IsWorkflowExecutionRunning()
+	childStarted := childInfo.StartedId != common.EmptyEventID
+	if !workflowRunning && (!childStarted || childInfo.ParentClosePolicy != enumspb.PARENT_CLOSE_POLICY_ABANDON) {
+		// three cases here:
+		// case 1: workflow not running, child started, parent close policy is not abandon
+		// case 2 & 3: workflow not running, child not started, parent close policy is or is not abandon
+		return nil
+	}
+
+	// ChildExecution already started, just create WorkflowTask and complete transfer task
+	// If parent already closed, since child workflow started event already written to history,
+	// still schedule the workflowTask if the parent close policy is Abandon.
+	// If parent close policy cancel or terminate, parent close policy will be applied in another
+	// transfer task.
+	// case 4, 5: workflow started, child started, parent close policy is or is not abandon
+	// case 6: workflow closed, child started, parent close policy is abandon
+	if childStarted {
+		childExecution := &commonpb.WorkflowExecution{
+			WorkflowId: childInfo.StartedWorkflowId,
+			RunId:      childInfo.StartedRunId,
+		}
+		childClock := childInfo.Clock
+		// NOTE: do not access anything related mutable state after this lock release
+		// release the context lock since we no longer need mutable state builder and
+		// the rest of logic is making RPC call, which takes time.
+		release(nil)
+		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, childClock)
+	}
+
+	// remaining 2 cases:
+	// case 7, 8: workflow running, child not started, parent close policy is or is not abandon
 
 	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, task.InitiatedID)
 	if err != nil {
@@ -679,20 +713,6 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	} else {
 		targetNamespaceName = namespaceEntry.Name()
-	}
-
-	// ChildExecution already started, just create WorkflowTask and complete transfer task
-	if childInfo.StartedId != common.EmptyEventID {
-		childExecution := &commonpb.WorkflowExecution{
-			WorkflowId: childInfo.StartedWorkflowId,
-			RunId:      childInfo.StartedRunId,
-		}
-		childClock := childInfo.Clock
-		// NOTE: do not access anything related mutable state after this lock release
-		// release the context lock since we no longer need mutable state builder and
-		// the rest of logic is making RPC call, which takes time.
-		release(nil)
-		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, childClock)
 	}
 
 	childRunID, childClock, err := t.startWorkflowWithRetry(
