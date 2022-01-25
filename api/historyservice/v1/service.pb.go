@@ -218,9 +218,8 @@ type HistoryServiceClient interface {
 	// TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 	// in the history and immediately terminating the execution instance.
 	TerminateWorkflowExecution(ctx context.Context, in *TerminateWorkflowExecutionRequest, opts ...grpc.CallOption) (*TerminateWorkflowExecutionResponse, error)
-	// DeleteWorkflowExecution delete closed workflow execution (workflow must be completed or terminated before) and its history synchronously.
-	// Visibility record is deleted asynchronously.
-	// If call to DeleteWorkflowExecution fails, it must be retried to prevent orphan DB records.
+	// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
+	// This method is EXPERIMENTAL and may be changed or removed in a later release.
 	DeleteWorkflowExecution(ctx context.Context, in *DeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*DeleteWorkflowExecutionResponse, error)
 	// ResetWorkflowExecution reset an existing workflow execution by a firstEventId of a existing event batch
 	// in the history and immediately terminating the current execution instance.
@@ -727,9 +726,8 @@ type HistoryServiceServer interface {
 	// TerminateWorkflowExecution terminates an existing workflow execution by recording WorkflowExecutionTerminated event
 	// in the history and immediately terminating the execution instance.
 	TerminateWorkflowExecution(context.Context, *TerminateWorkflowExecutionRequest) (*TerminateWorkflowExecutionResponse, error)
-	// DeleteWorkflowExecution delete closed workflow execution (workflow must be completed or terminated before) and its history synchronously.
-	// Visibility record is deleted asynchronously.
-	// If call to DeleteWorkflowExecution fails, it must be retried to prevent orphan DB records.
+	// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
+	// This method is EXPERIMENTAL and may be changed or removed in a later release.
 	DeleteWorkflowExecution(context.Context, *DeleteWorkflowExecutionRequest) (*DeleteWorkflowExecutionResponse, error)
 	// ResetWorkflowExecution reset an existing workflow execution by a firstEventId of a existing event batch
 	// in the history and immediately terminating the current execution instance.
