@@ -2786,11 +2786,6 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 		return nil, errRequestNotSet
 	}
 
-	_, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
 	return &workflowservice.GetSystemInfoResponse{
 		ServerVersion: headers.ServerVersion,
 		// Capabilities should be added as needed. In many cases, capabilities are
