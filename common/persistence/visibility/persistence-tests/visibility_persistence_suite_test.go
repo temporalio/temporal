@@ -33,13 +33,13 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/cassandra"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -194,72 +194,6 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 	s.NoError(err4)
 	s.Equal(1, len(resp.Executions))
 	s.assertClosedExecutionEquals(closedRecord, resp.Executions[0])
-}
-
-func (s *VisibilityPersistenceSuite) TestVisibilityRetention() {
-	if _, ok := s.DefaultTestCluster.(*cassandra.TestCluster); !ok {
-		return
-	}
-
-	testNamespaceUUID := namespace.ID(uuid.New())
-
-	workflowExecution := commonpb.WorkflowExecution{
-		WorkflowId: "visibility-workflow-test-visibility-retention",
-		RunId:      "3c095198-0c33-4136-939a-c29fbbb6a802",
-	}
-
-	startTime := time.Now().UTC().Add(-1 * time.Hour)
-	err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&manager.RecordWorkflowExecutionStartedRequest{
-		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID:      testNamespaceUUID,
-			Execution:        workflowExecution,
-			WorkflowTypeName: "visibility-workflow",
-			StartTime:        startTime,
-		},
-	})
-	s.NoError(err0)
-
-	retention := 1 * time.Second
-	err2 := s.VisibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{
-		VisibilityRequestBase: &manager.VisibilityRequestBase{
-			NamespaceID:      testNamespaceUUID,
-			Execution:        workflowExecution,
-			WorkflowTypeName: "visibility-workflow",
-			StartTime:        startTime,
-		},
-		CloseTime: startTime.Add(1 * time.Minute),
-		Retention: &retention,
-	})
-	s.NoError(err2)
-
-	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
-		NamespaceID:       testNamespaceUUID,
-		PageSize:          1,
-		EarliestStartTime: startTime,
-		LatestStartTime:   startTime,
-	})
-	s.NoError(err3)
-	s.Equal(0, len(resp.Executions))
-
-	resp, err4 := s.VisibilityMgr.ListClosedWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
-		NamespaceID:       testNamespaceUUID,
-		PageSize:          1,
-		EarliestStartTime: startTime.Add(1 * time.Minute), // This is actually close_time
-		LatestStartTime:   startTime.Add(1 * time.Minute),
-	})
-	s.NoError(err4)
-	s.Equal(1, len(resp.Executions))
-
-	// Sleep for retention to fire.
-	time.Sleep(retention)
-	resp2, err5 := s.VisibilityMgr.ListClosedWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
-		NamespaceID:       testNamespaceUUID,
-		PageSize:          1,
-		EarliestStartTime: startTime.Add(1 * time.Minute), // This is actually close_time
-		LatestStartTime:   startTime.Add(1 * time.Minute),
-	})
-	s.NoError(err5)
-	s.Equal(0, len(resp2.Executions))
 }
 
 // TestVisibilityPagination test
@@ -572,13 +506,10 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 
 // TestDelete test
 func (s *VisibilityPersistenceSuite) TestDelete() {
-	if s.VisibilityMgr.GetName() == "cassandra" {
-		// This test is not applicable for cassandra.
-		return
-	}
 	nRows := 5
 	testNamespaceUUID := namespace.ID(uuid.New())
-	startTime := time.Now().UTC().Add(time.Second * -5)
+	closeTime := time.Now().UTC()
+	startTime := closeTime.Add(-5 * time.Second)
 	for i := 0; i < nRows; i++ {
 		workflowExecution := commonpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
@@ -601,7 +532,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 				StartTime:        startTime,
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
 			},
-			CloseTime:     time.Now(),
+			CloseTime:     closeTime,
 			HistoryLength: 3,
 		}
 		err1 := s.VisibilityMgr.RecordWorkflowExecutionClosed(closeReq)
@@ -611,7 +542,7 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 	resp, err3 := s.VisibilityMgr.ListClosedWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
 		EarliestStartTime: startTime,
-		LatestStartTime:   time.Now(),
+		LatestStartTime:   closeTime,
 		PageSize:          10,
 	})
 	s.Nil(err3)
@@ -621,14 +552,16 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 	for _, row := range resp.Executions {
 		err4 := s.VisibilityMgr.DeleteWorkflowExecution(&manager.VisibilityDeleteWorkflowExecutionRequest{
 			NamespaceID: testNamespaceUUID,
+			WorkflowID:  row.GetExecution().GetWorkflowId(),
 			RunID:       row.GetExecution().GetRunId(),
+			CloseTime:   closeTime,
 		})
 		s.Nil(err4)
 		remaining--
 		resp, err5 := s.VisibilityMgr.ListClosedWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
 			NamespaceID:       testNamespaceUUID,
 			EarliestStartTime: startTime,
-			LatestStartTime:   time.Now(),
+			LatestStartTime:   closeTime,
 			PageSize:          10,
 		})
 		s.Nil(err5)

@@ -28,6 +28,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -42,9 +43,6 @@ import (
 const (
 	namespacePartition       = 0
 	cassandraPersistenceName = "cassandra"
-
-	// ref: https://docs.datastax.com/en/dse-trblshoot/doc/troubleshooting/recoveringTtlYear2038Problem.html
-	maxCassandraTTL = int64(315360000) // Cassandra max support time is 2038-01-19T03:14:06+00:00. Updated this to 10 years to support until year 2028
 )
 
 const (
@@ -58,13 +56,15 @@ const (
 		`AND start_time = ? ` +
 		`AND run_id = ?`
 
-	templateCreateWorkflowExecutionClosedWithTTL = `INSERT INTO closed_executions (` +
-		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) using TTL ?`
-
 	templateCreateWorkflowExecutionClosed = `INSERT INTO closed_executions (` +
 		`namespace_id, namespace_partition, workflow_id, run_id, start_time, execution_time, close_time, workflow_type_name, status, history_length, memo, encoding, task_queue) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+
+	templateDeleteWorkflowExecutionClosed = `DELETE FROM closed_executions ` +
+		`WHERE namespace_id = ? ` +
+		`AND namespace_partition = ? ` +
+		`AND close_time = ? ` +
+		`AND run_id = ?`
 
 	templateGetOpenWorkflowExecutions = `SELECT workflow_id, run_id, start_time, execution_time, workflow_type_name, memo, encoding, task_queue ` +
 		`FROM open_executions ` +
@@ -190,49 +190,21 @@ func (v *visibilityStore) RecordWorkflowExecutionClosed(request *store.InternalR
 	)
 
 	// Next, add a row in the closed table.
-
-	// Find how long to keep the row
-	var retentionSeconds int64
-	if request.Retention != nil {
-		retentionSeconds = int64(request.Retention.Seconds())
-	} else {
-		retentionSeconds = maxCassandraTTL + 1
-	}
-
-	if retentionSeconds > maxCassandraTTL {
-		batch.Query(templateCreateWorkflowExecutionClosed,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			persistence.UnixMilliseconds(request.StartTime),
-			persistence.UnixMilliseconds(request.ExecutionTime),
-			persistence.UnixMilliseconds(request.CloseTime),
-			request.WorkflowTypeName,
-			request.Status,
-			request.HistoryLength,
-			request.Memo.Data,
-			request.Memo.EncodingType.String(),
-			request.TaskQueue,
-		)
-	} else {
-		batch.Query(templateCreateWorkflowExecutionClosedWithTTL,
-			request.NamespaceID,
-			namespacePartition,
-			request.WorkflowID,
-			request.RunID,
-			persistence.UnixMilliseconds(request.StartTime),
-			persistence.UnixMilliseconds(request.ExecutionTime),
-			persistence.UnixMilliseconds(request.CloseTime),
-			request.WorkflowTypeName,
-			request.Status,
-			request.HistoryLength,
-			request.Memo.Data,
-			request.Memo.EncodingType.String(),
-			request.TaskQueue,
-			retentionSeconds,
-		)
-	}
+	batch.Query(templateCreateWorkflowExecutionClosed,
+		request.NamespaceID,
+		namespacePartition,
+		request.WorkflowID,
+		request.RunID,
+		persistence.UnixMilliseconds(request.StartTime),
+		persistence.UnixMilliseconds(request.ExecutionTime),
+		persistence.UnixMilliseconds(request.CloseTime),
+		request.WorkflowTypeName,
+		request.Status,
+		request.HistoryLength,
+		request.Memo.Data,
+		request.Memo.EncodingType.String(),
+		request.TaskQueue,
+	)
 
 	// RecordWorkflowExecutionStarted is using StartTime as the timestamp for every query in `open_executions` table.
 	// Due to the fact that cross DC using mutable state creation time as workflow start time and visibility using event time
@@ -460,8 +432,16 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	return response, nil
 }
 
-// DeleteWorkflowExecution is a no-op since deletes are auto-handled by cassandra TTLs
-func (v *visibilityStore) DeleteWorkflowExecution(_ *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+func (v *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+	query := v.session.Query(templateDeleteWorkflowExecutionClosed,
+		request.NamespaceID.String(),
+		namespacePartition,
+		persistence.UnixMilliseconds(request.CloseTime),
+		request.RunID).
+		Consistency(v.lowConslevel)
+	if err := query.Exec(); err != nil {
+		return gocql.ConvertError("DeleteWorkflowExecution", err)
+	}
 	return nil
 }
 

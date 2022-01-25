@@ -36,6 +36,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
+		CloseTime           *time.Time
 	}
 )
 
