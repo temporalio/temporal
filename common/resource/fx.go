@@ -99,7 +99,7 @@ var Module = fx.Options(
 	fx.Provide(MembershipMonitorProvider),
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
-	client.BeanLifetimeHooksModule,
+	fx.Provide(ClientBeanProvider),
 	sdk.Module,
 	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(FrontedClientProvider),
@@ -208,6 +208,16 @@ func ClientFactoryProvider(
 		dynamicCollection,
 		persistenceConfig.NumHistoryShards,
 		logger,
+	)
+}
+
+func ClientBeanProvider(
+	clientFactory client.Factory,
+	clusterMetadata cluster.Metadata,
+) (client.Bean, error) {
+	return client.NewClientBean(
+		clientFactory,
+		clusterMetadata,
 	)
 }
 
