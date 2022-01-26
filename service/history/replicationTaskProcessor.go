@@ -258,6 +258,14 @@ func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError e
 		}
 
 		replicationTask := task.(*replicationspb.ReplicationTask)
+		taskCreationTime := replicationTask.GetVisibilityTime()
+		if taskCreationTime != nil {
+			now := p.shard.GetTimeSource().Now()
+			p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope).RecordTimer(
+				metrics.ReplicationLatency,
+				now.Sub(*taskCreationTime),
+			)
+		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
 			return err
 		}
@@ -323,7 +331,6 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 func (p *ReplicationTaskProcessorImpl) handleReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
-
 	_ = p.rateLimiter.Wait(context.Background())
 
 	operation := func() error {
