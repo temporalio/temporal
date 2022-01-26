@@ -228,6 +228,7 @@ func (task *UpdateTask) parseSQLStmts(dir string, manifest *manifest) ([]string,
 
 	for _, file := range manifest.SchemaUpdateCqlFiles {
 		path := dir + "/" + file
+		task.logger.Info("Processing schema file: " + path)
 		stmts, err := ParseFile(path)
 		if err != nil {
 			return nil, fmt.Errorf("error parsing file %v, err=%v", path, err)
@@ -317,8 +318,18 @@ func sortAndFilterVersions(versions []string, startVerExcl string, endVerIncl st
 		}
 		endVersionInclusive = &evi
 
-		if startVersionExclusive.Compare(*endVersionInclusive) >= 0 {
+		cmp := startVersionExclusive.Compare(*endVersionInclusive)
+		if cmp > 0 {
 			return nil, fmt.Errorf("start version '%s' must be less than end version '%s'", startVerExcl, endVerIncl)
+		} else if cmp == 0 {
+			logger.Warn(
+				fmt.Sprintf(
+					"Start version '%s' is equal to end version '%s'. Returning empty version list",
+					startVerExcl,
+					endVerIncl,
+				),
+			)
+			return []string{}, nil
 		}
 	}
 
@@ -372,17 +383,17 @@ func sortAndFilterVersions(versions []string, startVerExcl string, endVerIncl st
 // when endVer is empty this method returns all subdir names that are greater than startVer
 func readSchemaDir(dir string, startVer string, endVer string, logger log.Logger) ([]string, error) {
 
-	subdirs, err := os.ReadDir(dir)
+	subDirs, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	if len(subdirs) == 0 {
-		return nil, fmt.Errorf("directory '%s' contains no subdirs", dir)
+	if len(subDirs) == 0 {
+		return nil, fmt.Errorf("directory '%s' contains no subDirs", dir)
 	}
 
-	dirNames := make([]string, 0, len(subdirs))
-	for _, d := range subdirs {
+	dirNames := make([]string, 0, len(subDirs))
+	for _, d := range subDirs {
 		if !d.IsDir() {
 			logger.Warn("not a directory: " + d.Name())
 			continue

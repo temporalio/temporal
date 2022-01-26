@@ -69,11 +69,7 @@ func (s *UpdateTaskTestSuite) SetupSuite() {
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
-	ans, err := readSchemaDir(s.versionsDir, "10.3", "", s.logger)
-	s.NoError(err)
-	s.Equal(0, len(ans))
-
-	ans, err = readSchemaDir(s.versionsDir, "0.5", "1.5", s.logger)
+	ans, err := readSchemaDir(s.versionsDir, "0.5", "1.5", s.logger)
 	s.NoError(err)
 	s.Equal([]string{"v1.5"}, ans)
 
@@ -85,9 +81,19 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
 	s.NoError(err)
 	s.Equal([]string{"v1.5", "v2.5", "v2.5.1", "v2.5.2", "v2.7.17", "v3.5"}, ans)
 
+	// Start version found, no later versions. Return nothing.
 	ans, err = readSchemaDir(s.versionsDir, "10.2", "", s.logger)
 	s.NoError(err)
 	s.Equal(0, len(ans))
+
+	// Start version not found, no later versions. Return nothing.
+	ans, err = readSchemaDir(s.versionsDir, "10.3", "", s.logger)
+	s.NoError(err)
+	s.Equal(0, len(ans))
+
+	ans, err = readSchemaDir(s.versionsDir, "2.5.2", "", s.logger)
+	s.NoError(err)
+	s.Equal([]string{"v2.7.17", "v3.5", "v10.2"}, ans)
 }
 
 func (s *UpdateTaskTestSuite) TestSortAndFilterVersionsWithEndLessThanStart_ReturnsError() {
@@ -108,20 +114,20 @@ func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEndVersion_ReturnsErrorWhenNo
 	assert.Containsf(s.T(), err.Error(), "specified but not found", "Unexpected error message")
 }
 
-func (s *UpdateTaskTestSuite) TestReadSchemaDirWithInvalidInput_ReturnsError() {
-	_, err := readSchemaDir(s.versionsDir, "1.7", "1.7", s.logger)
-	s.Error(err)
-	assert.Containsf(s.T(), err.Error(), "must be less than end version", "Unexpected error message")
+func (s *UpdateTaskTestSuite) TestReadSchemaDirWithSameStartAndEnd_ReturnsEmptyList() {
+	ans, err := readSchemaDir(s.versionsDir, "1.7", "1.7", s.logger)
+	s.NoError(err)
+	assert.Equal(s.T(), 0, len(ans))
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDirWithEmptyDir_ReturnsError() {
 	_, err := readSchemaDir(s.emptyDir, "11.0", "", s.logger)
 	s.Error(err)
-	assert.Containsf(s.T(), err.Error(), "contains no subdirs", "Unexpected error message")
+	assert.Containsf(s.T(), err.Error(), "contains no subDirs", "Unexpected error message")
 
 	_, err = readSchemaDir(s.emptyDir, "10.1", "", s.logger)
 	s.Error(err)
-	assert.Containsf(s.T(), err.Error(), "contains no subdirs", "Unexpected error message")
+	assert.Containsf(s.T(), err.Error(), "contains no subDirs", "Unexpected error message")
 }
 
 func (s *UpdateTaskTestSuite) TestReadManifest() {
