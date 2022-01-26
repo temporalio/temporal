@@ -31,6 +31,8 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"go.temporal.io/server/common"
+
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -44,6 +46,8 @@ import (
 type (
 	// Bean is a collection of clients
 	Bean interface {
+		common.Daemon
+
 		GetHistoryClient() historyservice.HistoryServiceClient
 		SetHistoryClient(client historyservice.HistoryServiceClient)
 		GetMatchingClient(namespaceIDToName NamespaceIDToNameFunc) (matchingservice.MatchingServiceClient, error)
@@ -57,6 +61,7 @@ type (
 
 	clientBeanImpl struct {
 		sync.Mutex
+		status         int32
 		historyClient  historyservice.HistoryServiceClient
 		matchingClient atomic.Value
 		clusterMetdata cluster.Metadata
@@ -102,12 +107,59 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 	}
 
 	return &clientBeanImpl{
+		status:                common.DaemonStatusInitialized,
 		factory:               factory,
 		historyClient:         historyClient,
 		clusterMetdata:        clusterMetadata,
 		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
 	}, nil
+}
+
+func (h *clientBeanImpl) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&h.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
+	currentCluster := h.clusterMetdata.GetCurrentClusterName()
+	// Remote admin clients and frontend clients are lazy initialization.
+	// It listens to the cluster metadata changes to invalid clients.
+	h.clusterMetdata.RegisterMetadataChangeCallback(
+		currentCluster,
+		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
+			for clusterName := range newClusterMetadata {
+				if clusterName == currentCluster {
+					continue
+				}
+				h.remoteAdminClientsLock.Lock()
+				if _, ok := h.remoteAdminClients[clusterName]; ok {
+					delete(h.remoteAdminClients, clusterName)
+				}
+				h.remoteAdminClientsLock.Unlock()
+				h.remoteFrontendClientsLock.Lock()
+				if _, ok := h.remoteFrontendClients[clusterName]; ok {
+					delete(h.remoteFrontendClients, clusterName)
+				}
+				h.remoteFrontendClientsLock.Unlock()
+			}
+		})
+}
+
+func (h *clientBeanImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&h.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
+	currentCluster := h.clusterMetdata.GetCurrentClusterName()
+	h.clusterMetdata.UnRegisterMetadataChangeCallback(currentCluster)
 }
 
 func (h *clientBeanImpl) GetHistoryClient() historyservice.HistoryServiceClient {
