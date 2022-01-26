@@ -1748,11 +1748,7 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 
 	wh := s.getWorkflowHandler(config)
 
-	s.mockNamespaceCache.EXPECT().GetNamespaceID(gomock.Any()).Return(s.testNamespaceID, nil).AnyTimes()
-
-	resp, err := wh.GetSystemInfo(context.Background(), &workflowservice.GetSystemInfoRequest{
-		Namespace: s.testNamespace.String(),
-	})
+	resp, err := wh.GetSystemInfo(context.Background(), &workflowservice.GetSystemInfoRequest{})
 	s.NoError(err)
 	s.Equal(headers.ServerVersion, resp.ServerVersion)
 	s.True(resp.Capabilities.SignalAndQueryHeader)
