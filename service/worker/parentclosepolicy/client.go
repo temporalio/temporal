@@ -57,8 +57,10 @@ type (
 var _ Client = (*clientImpl)(nil)
 
 const (
-	signalTimeout    = 400 * time.Millisecond
-	workflowIDPrefix = "parent-close-policy-workflow"
+	signalTimeout         = 400 * time.Millisecond
+	workflowIDPrefix      = "parent-close-policy-workflow"
+	workflowTaskTimeout   = time.Minute
+	workflowIDReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE
 )
 
 // NewClient creates a new Client
@@ -77,16 +79,19 @@ func NewClient(
 }
 
 func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
-	randomID := rand.Intn(c.numWorkflows)
-	workflowID := fmt.Sprintf("%v-%v", workflowIDPrefix, randomID)
+	workflowID := getWorkflowID(c.numWorkflows)
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                    workflowID,
 		TaskQueue:             processorTaskQueueName,
-		WorkflowTaskTimeout:   time.Minute,
-		WorkflowIDReusePolicy: enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
+		WorkflowTaskTimeout:   workflowTaskTimeout,
+		WorkflowIDReusePolicy: workflowIDReusePolicy,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
 	_, err := c.temporalClient.SignalWithStartWorkflow(signalCtx, workflowID, processorChannelName, request, workflowOptions, processorWFTypeName, nil)
 	return err
+}
+
+func getWorkflowID(numWorkflows int) string {
+	return fmt.Sprintf("%v-%v", workflowIDPrefix, rand.Intn(numWorkflows))
 }
