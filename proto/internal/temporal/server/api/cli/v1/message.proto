@@ -37,6 +37,7 @@ message DescribeWorkflowExecutionResponse {
     WorkflowExecutionInfo workflow_execution_info = 2;
     repeated PendingActivityInfo pending_activities = 3;
     repeated temporal.api.workflow.v1.PendingChildExecutionInfo pending_children = 4;
+    temporal.api.workflow.v1.PendingWorkflowTaskInfo pending_workflow_task = 5;
 }
 
 message WorkflowExecutionInfo {

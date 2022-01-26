@@ -1283,6 +1283,20 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 	}
 
+	if di, ok := mutableState.GetPendingWorkflowTask(); ok {
+		pendingWorkflowTask := &workflowpb.PendingWorkflowTaskInfo{
+			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
+			ScheduledTime:         di.ScheduledTime,
+			OriginalScheduledTime: di.OriginalScheduledTime,
+			Attempt:               di.Attempt,
+		}
+		if di.StartedID != common.EmptyEventID {
+			pendingWorkflowTask.State = enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED
+			pendingWorkflowTask.StartedTime = di.StartedTime
+		}
+		result.PendingWorkflowTask = pendingWorkflowTask
+	}
+
 	return result, nil
 }
 
