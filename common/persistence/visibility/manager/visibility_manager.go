@@ -89,7 +89,6 @@ type (
 		*VisibilityRequestBase
 		CloseTime     time.Time
 		HistoryLength int64
-		Retention     *time.Duration // not persisted, used for cassandra ttl
 	}
 
 	// UpsertWorkflowExecutionRequest is used to upsert workflow execution
@@ -168,6 +167,7 @@ type (
 		RunID       string
 		WorkflowID  string
 		TaskID      int64
+		CloseTime   time.Time
 	}
 )
 

@@ -47,6 +47,7 @@ type (
 var (
 	frontendAPIExcluded = map[string]struct{}{
 		"GetClusterInfo":      {},
+		"GetSystemInfo":       {},
 		"GetSearchAttributes": {},
 		"ListNamespaces":      {},
 	}

@@ -785,6 +785,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	key definition.WorkflowKey,
 	branchToken []byte,
 	newTaskVersion int64,
+	closeTime *time.Time,
 ) error {
 	if err := s.errorByState(); err != nil {
 		return err
@@ -856,6 +857,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			WorkflowKey:         key,
 			VisibilityTimestamp: s.timeSource.Now(),
 			Version:             newTaskVersion,
+			CloseTime:           closeTime,
 		}},
 	}
 	err = s.addTasksLocked(addTasksRequest, namespaceEntry)

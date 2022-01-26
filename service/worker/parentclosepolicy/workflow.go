@@ -28,18 +28,24 @@ import (
 	"context"
 	"time"
 
+	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/primitives/timestamp"
 )
 
 const (
@@ -113,6 +119,8 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 	// will cause terminate or cancel request to return mismatch error
 	childWorkflowOnly := request.ParentExecution.GetWorkflowId() != "" &&
 		request.ParentExecution.GetRunId() != ""
+
+	remoteExecutions := make(map[string][]RequestDetail)
 	for _, execution := range request.Executions {
 		namespaceId := execution.NamespaceID
 		if len(execution.NamespaceID) == 0 {
@@ -160,19 +168,83 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 			})
 		}
 
-		if err != nil {
-			if _, ok := err.(*serviceerror.NotFound); ok {
-				err = nil
-			}
-		}
-
-		if err != nil {
+		switch typedErr := err.(type) {
+		case nil:
+			processor.metricsClient.IncCounter(metrics.ParentClosePolicyProcessorScope, metrics.ParentClosePolicyProcessorSuccess)
+		case *serviceerror.NotFound:
+			// no-op
+		case *serviceerror.NamespaceNotActive:
+			remoteExecutions[typedErr.ActiveCluster] = append(remoteExecutions[typedErr.ActiveCluster], execution)
+		default:
 			processor.metricsClient.IncCounter(metrics.ParentClosePolicyProcessorScope, metrics.ParentClosePolicyProcessorFailures)
 			getActivityLogger(ctx).Error("failed to process parent close policy", tag.Error(err))
 			return err
 		}
-		processor.metricsClient.IncCounter(metrics.ParentClosePolicyProcessorScope, metrics.ParentClosePolicyProcessorSuccess)
 	}
+
+	if err := signalRemoteCluster(
+		ctx,
+		processor.currentCluster,
+		processor.clientBean,
+		request.ParentExecution,
+		remoteExecutions,
+		processor.cfg.NumParentClosePolicySystemWorkflows(),
+	); err != nil {
+		getActivityLogger(ctx).Error("Failed to signal remote parent close policy workflow", tag.Error(err))
+		return err
+	}
+
+	return nil
+}
+
+func signalRemoteCluster(
+	ctx context.Context,
+	currentCluster string,
+	clientBean client.Bean,
+	parentExecution commonpb.WorkflowExecution,
+	remoteExecutions map[string][]RequestDetail,
+	numWorkflows int,
+) error {
+	for cluster, executions := range remoteExecutions {
+		remoteClient := clientBean.GetRemoteFrontendClient(cluster)
+
+		signalValue := Request{
+			ParentExecution: parentExecution,
+			Executions:      executions,
+		}
+		signalInput, err := converter.GetDefaultDataConverter().ToPayloads(signalValue)
+		if err != nil {
+			return err
+		}
+
+		signalCtx, cancel := context.WithTimeout(ctx, signalTimeout)
+		_, err = remoteClient.SignalWithStartWorkflowExecution(
+			signalCtx,
+			&workflowservice.SignalWithStartWorkflowExecutionRequest{
+				Namespace:  common.SystemLocalNamespace,
+				RequestId:  uuid.New(),
+				WorkflowId: getWorkflowID(numWorkflows),
+				WorkflowType: &commonpb.WorkflowType{
+					Name: processorWFTypeName,
+				},
+				TaskQueue: &taskqueue.TaskQueue{
+					Name: processorTaskQueueName,
+				},
+				Input:                 nil,
+				WorkflowTaskTimeout:   timestamp.DurationPtr(workflowTaskTimeout),
+				Identity:              currentCluster + "-" + common.WorkerServiceName + "-service",
+				WorkflowIdReusePolicy: workflowIDReusePolicy,
+				SignalName:            processorChannelName,
+				SignalInput:           signalInput,
+			},
+		)
+		cancel()
+
+		if err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 

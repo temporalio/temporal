@@ -47,6 +47,7 @@ type (
 		MaxConcurrentWorkflowTaskExecutionSize dynamicconfig.IntPropertyFn
 		MaxConcurrentActivityTaskPollers       dynamicconfig.IntPropertyFn
 		MaxConcurrentWorkflowTaskPollers       dynamicconfig.IntPropertyFn
+		NumParentClosePolicySystemWorkflows    dynamicconfig.IntPropertyFn
 	}
 
 	// BootstrapParams contains the set of params needed to bootstrap
@@ -62,43 +63,49 @@ type (
 		Config Config
 		// ClientBean is an instance of client.Bean for a collection of clients
 		ClientBean client.Bean
+		// CurrentCluster is the name of current cluster
+		CurrentCluster string
 	}
 
 	// Processor is the background sub-system that execute workflow for ParentClosePolicy
 	Processor struct {
-		svcClient     sdkclient.Client
-		clientBean    client.Bean
-		metricsClient metrics.Client
-		cfg           Config
-		logger        log.Logger
+		svcClient      sdkclient.Client
+		clientBean     client.Bean
+		metricsClient  metrics.Client
+		cfg            Config
+		logger         log.Logger
+		currentCluster string
 	}
 )
 
 // New returns a new instance as daemon
 func New(params *BootstrapParams) *Processor {
 	return &Processor{
-		svcClient:     params.SdkSystemClient,
-		metricsClient: params.MetricsClient,
-		cfg:           params.Config,
-		logger:        log.With(params.Logger, tag.ComponentBatcher),
-		clientBean:    params.ClientBean,
+		svcClient:      params.SdkSystemClient,
+		metricsClient:  params.MetricsClient,
+		cfg:            params.Config,
+		logger:         log.With(params.Logger, tag.ComponentBatcher),
+		clientBean:     params.ClientBean,
+		currentCluster: params.CurrentCluster,
 	}
 }
 
 // Start starts the scanner
 func (s *Processor) Start() error {
-	ctx := context.WithValue(context.Background(), processorContextKey, s)
-	workerOpts := worker.Options{
-		MaxConcurrentActivityExecutionSize:     s.cfg.MaxConcurrentActivityExecutionSize(),
-		MaxConcurrentWorkflowTaskExecutionSize: s.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
-		MaxConcurrentActivityTaskPollers:       s.cfg.MaxConcurrentActivityTaskPollers(),
-		MaxConcurrentWorkflowTaskPollers:       s.cfg.MaxConcurrentWorkflowTaskPollers(),
-		BackgroundActivityContext:              ctx,
-	}
-	processorWorker := worker.New(s.svcClient, processorTaskQueueName, workerOpts)
-
+	processorWorker := worker.New(s.svcClient, processorTaskQueueName, getWorkerOptions(s))
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
 
 	return processorWorker.Start()
+}
+
+func getWorkerOptions(p *Processor) worker.Options {
+	ctx := context.WithValue(context.Background(), processorContextKey, p)
+	return worker.Options{
+		MaxConcurrentActivityExecutionSize:     p.cfg.MaxConcurrentActivityExecutionSize(),
+		MaxConcurrentWorkflowTaskExecutionSize: p.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
+		MaxConcurrentActivityTaskPollers:       p.cfg.MaxConcurrentActivityTaskPollers(),
+		MaxConcurrentWorkflowTaskPollers:       p.cfg.MaxConcurrentWorkflowTaskPollers(),
+		BackgroundActivityContext:              ctx,
+	}
 }
