@@ -397,6 +397,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 		MetricsClient:   s.metricsClient,
 		Logger:          s.logger,
 		ClientBean:      s.clientBean,
+		CurrentCluster:  s.clusterMetadata.GetCurrentClusterName(),
 	}
 	processor := parentclosepolicy.New(params)
 	if err := processor.Start(); err != nil {

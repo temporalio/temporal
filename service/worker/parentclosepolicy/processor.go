@@ -63,26 +63,30 @@ type (
 		Config Config
 		// ClientBean is an instance of client.Bean for a collection of clients
 		ClientBean client.Bean
+		// CurrentCluster is the name of current cluster
+		CurrentCluster string
 	}
 
 	// Processor is the background sub-system that execute workflow for ParentClosePolicy
 	Processor struct {
-		svcClient     sdkclient.Client
-		clientBean    client.Bean
-		metricsClient metrics.Client
-		cfg           Config
-		logger        log.Logger
+		svcClient      sdkclient.Client
+		clientBean     client.Bean
+		metricsClient  metrics.Client
+		cfg            Config
+		logger         log.Logger
+		currentCluster string
 	}
 )
 
 // New returns a new instance as daemon
 func New(params *BootstrapParams) *Processor {
 	return &Processor{
-		svcClient:     params.SdkSystemClient,
-		metricsClient: params.MetricsClient,
-		cfg:           params.Config,
-		logger:        log.With(params.Logger, tag.ComponentBatcher),
-		clientBean:    params.ClientBean,
+		svcClient:      params.SdkSystemClient,
+		metricsClient:  params.MetricsClient,
+		cfg:            params.Config,
+		logger:         log.With(params.Logger, tag.ComponentBatcher),
+		clientBean:     params.ClientBean,
+		currentCluster: params.CurrentCluster,
 	}
 }
 

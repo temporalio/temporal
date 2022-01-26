@@ -184,6 +184,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 
 	if err := signalRemoteCluster(
 		ctx,
+		processor.currentCluster,
 		processor.clientBean,
 		request.ParentExecution,
 		remoteExecutions,
@@ -198,6 +199,7 @@ func ProcessorActivity(ctx context.Context, request Request) error {
 
 func signalRemoteCluster(
 	ctx context.Context,
+	currentCluster string,
 	clientBean client.Bean,
 	parentExecution commonpb.WorkflowExecution,
 	remoteExecutions map[string][]RequestDetail,
@@ -230,7 +232,7 @@ func signalRemoteCluster(
 				},
 				Input:                 nil,
 				WorkflowTaskTimeout:   timestamp.DurationPtr(workflowTaskTimeout),
-				Identity:              common.WorkerServiceName + "-service",
+				Identity:              currentCluster + "-" + common.WorkerServiceName + "-service",
 				WorkflowIdReusePolicy: workflowIDReusePolicy,
 				SignalName:            processorChannelName,
 				SignalInput:           signalInput,
