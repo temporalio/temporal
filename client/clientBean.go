@@ -31,8 +31,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go.temporal.io/server/common"
-
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
@@ -61,7 +59,6 @@ type (
 
 	clientBeanImpl struct {
 		sync.Mutex
-		status          int32
 		historyClient   historyservice.HistoryServiceClient
 		matchingClient  atomic.Value
 		clusterMetadata cluster.Metadata
@@ -107,7 +104,6 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 	}
 
 	bean := &clientBeanImpl{
-		status:                common.DaemonStatusInitialized,
 		factory:               factory,
 		historyClient:         historyClient,
 		clusterMetadata:       clusterMetadata,
