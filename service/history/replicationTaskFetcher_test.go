@@ -95,7 +95,7 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 		cluster.TestAlternativeClusterName,
 		cluster.TestCurrentClusterName,
 		s.config,
-		s.frontendClient,
+		s.mockResource.ClientBean,
 	)
 }
 
@@ -306,7 +306,7 @@ func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
 		cluster.TestAlternativeClusterName,
 		cluster.TestCurrentClusterName,
 		s.config,
-		s.frontendClient,
+		s.mockResource.ClientBean,
 	)
 
 	s.frontendClient.EXPECT().GetReplicationMessages(
@@ -350,7 +350,7 @@ func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Error() {
 		cluster.TestAlternativeClusterName,
 		cluster.TestCurrentClusterName,
 		s.config,
-		s.frontendClient,
+		s.mockResource.ClientBean,
 	)
 
 	s.frontendClient.EXPECT().GetReplicationMessages(
