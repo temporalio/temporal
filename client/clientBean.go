@@ -43,6 +43,8 @@ import (
 	"go.temporal.io/server/common/cluster"
 )
 
+const clientBeanCallbackID = "clientBean"
+
 type (
 	// Bean is a collection of clients
 	Bean interface {
@@ -129,7 +131,7 @@ func (h *clientBeanImpl) Start() {
 	// Remote admin clients and frontend clients are lazy initialization.
 	// It listens to the cluster metadata changes to invalid clients.
 	h.clusterMetdata.RegisterMetadataChangeCallback(
-		currentCluster,
+		clientBeanCallbackID,
 		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
 			for clusterName := range newClusterMetadata {
 				if clusterName == currentCluster {
@@ -158,8 +160,7 @@ func (h *clientBeanImpl) Stop() {
 		return
 	}
 
-	currentCluster := h.clusterMetdata.GetCurrentClusterName()
-	h.clusterMetdata.UnRegisterMetadataChangeCallback(currentCluster)
+	h.clusterMetdata.UnRegisterMetadataChangeCallback(clientBeanCallbackID)
 }
 
 func (h *clientBeanImpl) GetHistoryClient() historyservice.HistoryServiceClient {
