@@ -32,11 +32,12 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"github.com/blang/semver/v4"
 	"os"
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/blang/semver/v4"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -77,7 +78,7 @@ const (
 
 var (
 	whitelistedCQLPrefixes = [4]string{"CREATE", "ALTER", "INSERT", "DROP"}
-	versionDirectoryRegex = regexp.MustCompile(`^v[\d.]+`)
+	versionDirectoryRegex  = regexp.MustCompile(`^v[\d.]+`)
 )
 
 // NewUpdateSchemaTask returns a new instance of UpdateTask

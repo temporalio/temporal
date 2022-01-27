@@ -25,11 +25,12 @@
 package schema
 
 import (
+	"os"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/log"
 	"go.uber.org/zap/zaptest"
-	"os"
-	"testing"
 
 	"go.temporal.io/server/tests/testhelper"
 
@@ -41,8 +42,8 @@ type UpdateTaskTestSuite struct {
 	*require.Assertions // override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(n) will stop the test, not merely log an error
 	suite.Suite
 	versionsDir string
-	emptyDir string
-	logger log.Logger
+	emptyDir    string
+	logger      log.Logger
 }
 
 func TestUpdateTaskTestSuite(t *testing.T) {
