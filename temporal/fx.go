@@ -593,25 +593,12 @@ func ApplyClusterMetadataConfigProvider(
 			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 		}
 
-		// Verify current cluster metadata
-		var persistedShardCount = resp.HistoryShardCount
-		if config.Persistence.NumHistoryShards != persistedShardCount {
-			logger.Warn(
-				mismatchLogMessage,
-				tag.Key("persistence.numHistoryShards"),
-				tag.IgnoredValue(config.Persistence.NumHistoryShards),
-				tag.Value(persistedShardCount))
-			config.Persistence.NumHistoryShards = persistedShardCount
-		}
-		if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
-			logger.Warn(
-				mismatchLogMessage,
-				tag.Key("clusterMetadata.FailoverVersionIncrement"),
-				tag.IgnoredValue(clusterData.FailoverVersionIncrement),
-				tag.Value(resp.FailoverVersionIncrement))
-			config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
-		}
 		if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
+			// Allow updating versions if global namespace is disabled
+			if !resp.IsGlobalNamespaceEnabled {
+				resp.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
+				resp.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
+			}
 			applied, err = clusterMetadataManager.SaveClusterMetadata(
 				&persistence.SaveClusterMetadataRequest{
 					ClusterMetadata: persistencespb.ClusterMetadata{
@@ -629,6 +616,25 @@ func ApplyClusterMetadataConfigProvider(
 			if !applied || err != nil {
 				return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while updating cluster metadata: %w", err)
 			}
+		}
+
+		// Verify current cluster metadata
+		var persistedShardCount = resp.HistoryShardCount
+		if config.Persistence.NumHistoryShards != persistedShardCount {
+			logger.Warn(
+				mismatchLogMessage,
+				tag.Key("persistence.numHistoryShards"),
+				tag.IgnoredValue(config.Persistence.NumHistoryShards),
+				tag.Value(persistedShardCount))
+			config.Persistence.NumHistoryShards = persistedShardCount
+		}
+		if resp.FailoverVersionIncrement != clusterData.FailoverVersionIncrement {
+			logger.Warn(
+				mismatchLogMessage,
+				tag.Key("clusterMetadata.FailoverVersionIncrement"),
+				tag.IgnoredValue(clusterData.FailoverVersionIncrement),
+				tag.Value(resp.FailoverVersionIncrement))
+			config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
 		}
 	}
 	err = loadClusterInformationFromStore(config, clusterMetadataManager, logger)
