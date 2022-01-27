@@ -208,7 +208,8 @@ func (m *clusterMetadataManagerImpl) convertInternalGetClusterMetadataResponse(
 func immutableFieldsChanged(old persistencespb.ClusterMetadata, cur persistencespb.ClusterMetadata) bool {
 	if (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
 		(old.ClusterId != "" && old.ClusterId != cur.ClusterId) ||
-		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount) {
+		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount) ||
+		(old.IsGlobalNamespaceEnabled && !cur.IsGlobalNamespaceEnabled) {
 		return true
 	}
 	if old.IsGlobalNamespaceEnabled {
