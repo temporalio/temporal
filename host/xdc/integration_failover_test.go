@@ -40,6 +40,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/api/adminservice/v1"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -127,6 +129,26 @@ func (s *integrationClustersTestSuite) SetupSuite() {
 	c, err = host.NewCluster(clusterConfigs[1], log.With(s.logger, tag.ClusterName(clusterName[1])))
 	s.Require().NoError(err)
 	s.cluster2 = c
+
+	cluster1Address := clusterConfigs[0].ClusterMetadata.ClusterInformation[clusterConfigs[0].ClusterMetadata.CurrentClusterName].RPCAddress
+	cluster2Address := clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].RPCAddress
+	_, err = s.cluster1.GetAdminClient().AddOrUpdateRemoteCluster(
+		host.NewContext(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{
+			FrontendAddress:               cluster2Address,
+			EnableRemoteClusterConnection: true,
+		})
+	s.Require().NoError(err)
+
+	_, err = s.cluster2.GetAdminClient().AddOrUpdateRemoteCluster(
+		host.NewContext(),
+		&adminservice.AddOrUpdateRemoteClusterRequest{
+			FrontendAddress:               cluster1Address,
+			EnableRemoteClusterConnection: true,
+		})
+	s.Require().NoError(err)
+	// Wait for cluster metadata to refresh new added clusters
+	time.Sleep(time.Millisecond * 200)
 }
 
 func (s *integrationClustersTestSuite) SetupTest() {
