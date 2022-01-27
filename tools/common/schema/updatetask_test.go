@@ -27,6 +27,7 @@ package schema
 import (
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/server/common/log"
+	"go.uber.org/zap/zaptest"
 	"os"
 	"testing"
 
@@ -65,7 +66,7 @@ func (s *UpdateTaskTestSuite) SetupSuite() {
 
 	s.emptyDir = testhelper.MkdirTemp(s.T(), "", "update_schema_test_empty")
 
-	s.logger = log.NewUnitTestLogger(s.T())
+	s.logger = log.NewZapLogger(zaptest.NewLogger(s.T()))
 }
 
 func (s *UpdateTaskTestSuite) TestReadSchemaDir() {
