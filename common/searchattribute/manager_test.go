@@ -35,9 +35,9 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 )
@@ -53,6 +53,7 @@ type (
 		timeSource                 *clock.EventTimeSource
 		mockClusterMetadataManager *persistence.MockClusterMetadataManager
 		manager                    *managerImpl
+		forceCacheRefresh          bool
 	}
 )
 
@@ -69,13 +70,17 @@ func (s *searchAttributesManagerSuite) TearDownSuite() {
 
 func (s *searchAttributesManagerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-
 	s.controller = gomock.NewController(s.T())
-
 	s.logger = log.NewTestLogger()
 	s.timeSource = clock.NewEventTimeSource()
 	s.mockClusterMetadataManager = persistence.NewMockClusterMetadataManager(s.controller)
-	s.manager = NewManager(s.timeSource, s.mockClusterMetadataManager)
+	s.manager = NewManager(
+		s.timeSource,
+		s.mockClusterMetadataManager,
+		func(opts ...dynamicconfig.FilterOption) bool {
+			return s.forceCacheRefresh
+		},
+	)
 }
 
 func (s *searchAttributesManagerSuite) TearDownTest() {
@@ -210,6 +215,44 @@ func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_EmptyIndex()
 	}, nil)
 
 	searchAttributes, err := s.manager.GetSearchAttributes("", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 1)
+}
+
+func (s *searchAttributesManagerSuite) TestGetSearchAttributesCache_RefreshIfAbsent() {
+	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 0, 0, time.UTC))
+
+	// First call populates cache.
+	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{},
+		},
+		Version: 1,
+	}, nil)
+
+	s.mockClusterMetadataManager.EXPECT().GetCurrentClusterMetadata().Return(&persistence.GetClusterMetadataResponse{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			IndexSearchAttributes: map[string]*persistencespb.IndexSearchAttributes{
+				"index-name": {
+					CustomSearchAttributes: map[string]enumspb.IndexedValueType{
+						"OrderId": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
+					}}},
+		},
+		Version: 2,
+	}, nil)
+
+	searchAttributes, err := s.manager.GetSearchAttributes("index-name", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 0)
+
+	s.timeSource.Update(time.Date(2020, 8, 22, 1, 0, 1, 0, time.UTC))
+
+	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
+	s.NoError(err)
+	s.Len(searchAttributes.Custom(), 0)
+
+	s.forceCacheRefresh = true
+	searchAttributes, err = s.manager.GetSearchAttributes("index-name", false)
 	s.NoError(err)
 	s.Len(searchAttributes.Custom(), 1)
 }
