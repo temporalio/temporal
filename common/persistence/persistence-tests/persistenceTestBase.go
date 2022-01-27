@@ -32,8 +32,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/dynamicconfig"
-
 	"github.com/gogo/protobuf/types"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/suite"

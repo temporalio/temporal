@@ -88,7 +88,7 @@ var Keys = map[Key]string{
 	EnableAuthorization:                     "system.enableAuthorization",
 	EnableCrossNamespaceCommands:            "system.enableCrossNamespaceCommands",
 	ForceSearchAttributesCacheRefreshOnRead: "system.forceSearchAttributesCacheRefreshOnRead",
-  ClusterMetadataRefreshInterval:          "system.clusterMetadataRefreshInterval",
+	ClusterMetadataRefreshInterval:          "system.clusterMetadataRefreshInterval",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
