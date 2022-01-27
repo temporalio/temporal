@@ -737,8 +737,8 @@ func (s *ContextImpl) addTasksLocked(
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
-	s.engine.NotifyNewTransferTasks(namespaceEntry.IsGlobalNamespace(), request.TransferTasks)
-	s.engine.NotifyNewTimerTasks(namespaceEntry.IsGlobalNamespace(), request.TimerTasks)
+	s.engine.NotifyNewTransferTasks(namespaceEntry.ActiveClusterName(), request.TransferTasks)
+	s.engine.NotifyNewTimerTasks(namespaceEntry.ActiveClusterName(), request.TimerTasks)
 	s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
 	s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
 	return nil

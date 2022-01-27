@@ -31,9 +31,9 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -46,6 +46,7 @@ type (
 	managerImpl struct {
 		timeSource             clock.TimeSource
 		clusterMetadataManager persistence.ClusterMetadataManager
+		forceRefresh           dynamicconfig.BoolPropertyFn
 
 		cacheUpdateMutex sync.Mutex
 		cache            atomic.Value // of type cache
@@ -64,6 +65,7 @@ var _ Manager = (*managerImpl)(nil)
 func NewManager(
 	timeSource clock.TimeSource,
 	clusterMetadataManager persistence.ClusterMetadataManager,
+	forceRefresh dynamicconfig.BoolPropertyFn,
 ) *managerImpl {
 
 	var saCache atomic.Value
@@ -77,6 +79,7 @@ func NewManager(
 		timeSource:             timeSource,
 		cache:                  saCache,
 		clusterMetadataManager: clusterMetadataManager,
+		forceRefresh:           forceRefresh,
 	}
 }
 
@@ -113,7 +116,7 @@ func (m *managerImpl) GetSearchAttributes(
 }
 
 func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, now time.Time) bool {
-	return forceRefreshCache || saCache.expireOn.Before(now)
+	return forceRefreshCache || saCache.expireOn.Before(now) || m.forceRefresh()
 }
 
 func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {

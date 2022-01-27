@@ -58,6 +58,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	sw "go.temporal.io/server/service/worker"
 	"gopkg.in/yaml.v3"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -71,6 +72,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
+	"go.temporal.io/server/service/worker/migration"
 )
 
 type (
@@ -1866,7 +1868,7 @@ func (s *integrationClustersTestSuite) TestWorkflowRetryFailover() {
 
 func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	namespace := "test-activity-heartbeat-workflow-failover-" + common.GenerateRandomString(5)
-	s.registerNamespace(namespace)
+	s.registerNamespace(namespace, true)
 
 	taskqueue := "integration-activity-heartbeat-workflow-failover-test-taskqueue"
 	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
@@ -1971,6 +1973,167 @@ func (s *integrationClustersTestSuite) TestActivityHeartbeatFailover() {
 	s.Equal(2, lastAttemptCount)
 }
 
+func (s *integrationClustersTestSuite) printHistory(frontendClient workflowservice.WorkflowServiceClient, namespace, workflowID, runID string) {
+	events := s.getHistory(frontendClient, namespace, &commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
+	})
+	history := &historypb.History{Events: events}
+	common.PrettyPrintHistory(history, s.logger)
+}
+
+func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
+	namespace := "local-ns-to-be-promote-" + common.GenerateRandomString(5)
+	s.registerNamespace(namespace, false)
+
+	taskqueue := "integration-local-ns-to-be-promote-taskqueue"
+	client1, worker1 := s.newClientAndWorker(s.cluster1.GetHost().FrontendGRPCAddress(), namespace, taskqueue, "worker1")
+
+	testWorkflowFn := func(ctx workflow.Context, sleepInterval time.Duration) error {
+		err := workflow.Sleep(ctx, sleepInterval)
+		return err
+	}
+	worker1.RegisterWorkflow(testWorkflowFn)
+	worker1.Start()
+
+	// Start wf1 (in local ns)
+	workflowID := "local-ns-wf-1"
+	run1, err := client1.ExecuteWorkflow(host.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn, time.Millisecond*10)
+
+	s.NoError(err)
+	s.NotEmpty(run1.GetRunID())
+	s.logger.Info("start wf1", tag.WorkflowRunID(run1.GetRunID()))
+	// wait until wf1 complete
+	err = run1.Get(context.Background(), nil)
+	s.NoError(err)
+
+	// Start wf2 (start in local ns, and then promote to global ns, wf2 close in global ns)
+	workflowID2 := "local-ns-wf-2"
+	run2, err := client1.ExecuteWorkflow(host.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID2,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn, time.Second*15 /* longer than ns refresh */)
+	s.NoError(err)
+	s.NotEmpty(run2.GetRunID())
+	s.logger.Info("start wf2", tag.WorkflowRunID(run2.GetRunID()))
+
+	// promote ns
+	frontendClient1 := s.cluster1.GetFrontendClient()
+	_, err = frontendClient1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace:        namespace,
+		PromoteNamespace: true,
+	})
+	s.NoError(err)
+	nsResp, err := frontendClient1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	s.True(nsResp.IsGlobalNamespace)
+	s.Equal(1, len(nsResp.ReplicationConfig.Clusters))
+
+	// wait until wf2 complete
+	err = run2.Get(context.Background(), nil)
+	s.NoError(err)
+
+	// update ns to have 2 clusters
+	_, err = frontendClient1.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			Clusters: clusterReplicationConfig,
+		},
+	})
+	s.NoError(err)
+	// wait for ns cache to pick up the change
+	time.Sleep(cacheRefreshInterval)
+
+	nsResp, err = frontendClient1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	s.True(nsResp.IsGlobalNamespace)
+	s.Equal(2, len(nsResp.ReplicationConfig.Clusters))
+
+	// start wf3 (start in global ns)
+	workflowID3 := "local-ns-wf-3"
+	run3, err := client1.ExecuteWorkflow(host.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID3,
+		TaskQueue:          taskqueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, testWorkflowFn, time.Millisecond*10)
+	s.NoError(err)
+	s.NotEmpty(run3.GetRunID())
+	s.logger.Info("start wf3", tag.WorkflowRunID(run3.GetRunID()))
+	// wait until wf3 complete
+	err = run3.Get(context.Background(), nil)
+	s.NoError(err)
+
+	// start force-replicate wf
+	sysClient, err := sdkclient.NewClient(sdkclient.Options{
+		HostPort:  s.cluster1.GetHost().FrontendGRPCAddress(),
+		Namespace: "temporal-system",
+	})
+	workflowID4 := "force-replication-wf-4"
+	run4, err := sysClient.ExecuteWorkflow(host.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID4,
+		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "force-replication", migration.ForceReplicationParams{
+		Namespace:      namespace,
+		RpsPerActivity: 10,
+	})
+
+	s.NoError(err)
+	err = run4.Get(context.Background(), nil)
+	s.NoError(err)
+
+	// start namespace-handover wf
+	workflowID5 := "namespace-handover-wf-5"
+	run5, err := sysClient.ExecuteWorkflow(host.NewContext(), sdkclient.StartWorkflowOptions{
+		ID:                 workflowID5,
+		TaskQueue:          sw.DefaultWorkerTaskQueue,
+		WorkflowRunTimeout: time.Second * 30,
+	}, "namespace-handover", migration.NamespaceHandoverParams{
+		Namespace:              namespace,
+		RemoteCluster:          clusterName[1],
+		AllowedLaggingSeconds:  10,
+		HandoverTimeoutSeconds: 30,
+	})
+	s.NoError(err)
+	err = run5.Get(context.Background(), nil)
+	s.NoError(err)
+
+	// at this point ns migration is done.
+	// verify namespace is now active in cluster2
+	nsResp2, err := frontendClient1.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	s.True(nsResp2.IsGlobalNamespace)
+	s.Equal(2, len(nsResp2.ReplicationConfig.Clusters))
+	s.Equal(clusterName[1], nsResp2.ReplicationConfig.ActiveClusterName)
+
+	// verify all wf in ns is now available in cluster2
+	client2, err := sdkclient.NewClient(sdkclient.Options{
+		HostPort:  s.cluster2.GetHost().FrontendGRPCAddress(),
+		Namespace: namespace,
+	})
+	s.NoError(err)
+	verify := func(wfID string, expectedRunID string) {
+		desc1, err := client2.DescribeWorkflowExecution(host.NewContext(), wfID, "")
+		s.NoError(err)
+		s.Equal(expectedRunID, desc1.WorkflowExecutionInfo.Execution.RunId)
+		s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, desc1.WorkflowExecutionInfo.Status)
+	}
+	verify(workflowID, run1.GetRunID())
+	verify(workflowID2, run2.GetRunID())
+	verify(workflowID3, run3.GetRunID())
+}
+
 func (s *integrationClustersTestSuite) getHistory(client host.FrontendClient, namespace string, execution *commonpb.WorkflowExecution) []*historypb.HistoryEvent {
 	historyResponse, err := client.GetWorkflowExecutionHistory(host.NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:       namespace,
@@ -2018,12 +2181,16 @@ func (s *integrationClustersTestSuite) failover(
 	time.Sleep(cacheRefreshInterval)
 }
 
-func (s *integrationClustersTestSuite) registerNamespace(namespace string) {
+func (s *integrationClustersTestSuite) registerNamespace(namespace string, isGlobalNamespace bool) {
+	clusters := clusterReplicationConfig
+	if !isGlobalNamespace {
+		clusters = clusterReplicationConfig[0:1]
+	}
 	client1 := s.cluster1.GetFrontendClient() // active
 	regReq := &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
-		IsGlobalNamespace:                true,
-		Clusters:                         clusterReplicationConfig,
+		IsGlobalNamespace:                isGlobalNamespace,
+		Clusters:                         clusters,
 		ActiveClusterName:                clusterName[0],
 		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(1 * time.Hour * 24),
 	}
@@ -2039,7 +2206,7 @@ func (s *integrationClustersTestSuite) registerNamespace(namespace string) {
 	s.NoError(err)
 	s.NotNil(resp)
 	s.Equal(namespace, resp.NamespaceInfo.Name)
-	s.Equal(true, resp.IsGlobalNamespace)
+	s.Equal(isGlobalNamespace, resp.IsGlobalNamespace)
 }
 
 func (s *integrationClustersTestSuite) newClientAndWorker(hostport, namespace, taskqueue, identity string) (sdkclient.Client, sdkworker.Worker) {

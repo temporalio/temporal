@@ -70,13 +70,10 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 	createMode persistence.CreateWorkflowMode,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	clusterName string,
 ) (int64, error) {
 
 	engine, err := t.shard.GetEngine()
-	if err != nil {
-		return 0, err
-	}
-	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(newWorkflowSnapshot.ExecutionInfo.NamespaceId))
 	if err != nil {
 		return 0, err
 	}
@@ -89,7 +86,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		NewWorkflowEvents:   newWorkflowEventsSeq,
 	})
 	if operationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
 	}
 	if err != nil {
 		return 0, err
@@ -110,13 +107,10 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
+	clusterName string,
 ) (int64, int64, int64, error) {
 
 	engine, err := t.shard.GetEngine()
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(resetWorkflowSnapshot.ExecutionInfo.NamespaceId))
 	if err != nil {
 		return 0, 0, 0, err
 	}
@@ -133,9 +127,9 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		CurrentWorkflowEvents:   currentWorkflowEventsSeq,
 	})
 	if operationPossiblySucceeded(err) {
-		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, nsEntry.IsGlobalNamespace())
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
-		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
+		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, clusterName)
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
+		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, clusterName)
 	}
 	if err != nil {
 		return 0, 0, 0, err
@@ -168,17 +162,13 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
+	clusterName string,
 ) (int64, int64, error) {
 
 	engine, err := t.shard.GetEngine()
 	if err != nil {
 		return 0, 0, err
 	}
-	nsEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(currentWorkflowMutation.ExecutionInfo.NamespaceId))
-	if err != nil {
-		return 0, 0, err
-	}
-
 	resp, err := updateWorkflowExecutionWithRetry(t.shard, &persistence.UpdateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
@@ -189,8 +179,8 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		NewWorkflowEvents:      newWorkflowEventsSeq,
 	})
 	if operationPossiblySucceeded(err) {
-		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, nsEntry.IsGlobalNamespace())
-		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, nsEntry.IsGlobalNamespace())
+		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, clusterName)
+		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
 	}
 	if err != nil {
 		return 0, 0, err
@@ -522,7 +512,7 @@ func updateWorkflowExecutionWithRetry(
 func NotifyWorkflowSnapshotTasks(
 	engine shard.Engine,
 	workflowSnapshot *persistence.WorkflowSnapshot,
-	isGlobalNamespace bool,
+	clusterName string,
 ) {
 	if workflowSnapshot == nil {
 		return
@@ -533,14 +523,14 @@ func NotifyWorkflowSnapshotTasks(
 		workflowSnapshot.TimerTasks,
 		workflowSnapshot.ReplicationTasks,
 		workflowSnapshot.VisibilityTasks,
-		isGlobalNamespace,
+		clusterName,
 	)
 }
 
 func NotifyWorkflowMutationTasks(
 	engine shard.Engine,
 	workflowMutation *persistence.WorkflowMutation,
-	isGlobalNamespace bool,
+	clusterName string,
 ) {
 	if workflowMutation == nil {
 		return
@@ -551,7 +541,7 @@ func NotifyWorkflowMutationTasks(
 		workflowMutation.TimerTasks,
 		workflowMutation.ReplicationTasks,
 		workflowMutation.VisibilityTasks,
-		isGlobalNamespace,
+		clusterName,
 	)
 }
 
@@ -561,10 +551,10 @@ func notifyTasks(
 	timerTasks []tasks.Task,
 	replicationTasks []tasks.Task,
 	visibilityTasks []tasks.Task,
-	isGlobalNamespace bool,
+	clusterName string,
 ) {
-	engine.NotifyNewTransferTasks(isGlobalNamespace, transferTasks)
-	engine.NotifyNewTimerTasks(isGlobalNamespace, timerTasks)
+	engine.NotifyNewTransferTasks(clusterName, transferTasks)
+	engine.NotifyNewTimerTasks(clusterName, timerTasks)
 	engine.NotifyNewVisibilityTasks(visibilityTasks)
 	engine.NotifyNewReplicationTasks(replicationTasks)
 }
