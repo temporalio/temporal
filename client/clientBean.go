@@ -41,6 +41,8 @@ import (
 	"go.temporal.io/server/common/cluster"
 )
 
+const clientBeanCallbackID = "clientBean"
+
 type (
 	// Bean is a collection of clients
 	Bean interface {
@@ -57,10 +59,10 @@ type (
 
 	clientBeanImpl struct {
 		sync.Mutex
-		historyClient  historyservice.HistoryServiceClient
-		matchingClient atomic.Value
-		clusterMetdata cluster.Metadata
-		factory        Factory
+		historyClient   historyservice.HistoryServiceClient
+		matchingClient  atomic.Value
+		clusterMetadata cluster.Metadata
+		factory         Factory
 
 		remoteAdminClientsLock    sync.RWMutex
 		remoteAdminClients        map[string]adminservice.AdminServiceClient
@@ -101,13 +103,38 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 		remoteFrontendClients[clusterName] = remoteFrontendClient
 	}
 
-	return &clientBeanImpl{
+	bean := &clientBeanImpl{
 		factory:               factory,
 		historyClient:         historyClient,
-		clusterMetdata:        clusterMetadata,
+		clusterMetadata:       clusterMetadata,
 		remoteAdminClients:    remoteAdminClients,
 		remoteFrontendClients: remoteFrontendClients,
-	}, nil
+	}
+	bean.registerClientEviction()
+	return bean, nil
+}
+
+func (h *clientBeanImpl) registerClientEviction() {
+	currentCluster := h.clusterMetadata.GetCurrentClusterName()
+	h.clusterMetadata.RegisterMetadataChangeCallback(
+		clientBeanCallbackID,
+		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
+			for clusterName := range newClusterMetadata {
+				if clusterName == currentCluster {
+					continue
+				}
+				h.remoteAdminClientsLock.Lock()
+				if _, ok := h.remoteAdminClients[clusterName]; ok {
+					delete(h.remoteAdminClients, clusterName)
+				}
+				h.remoteAdminClientsLock.Unlock()
+				h.remoteFrontendClientsLock.Lock()
+				if _, ok := h.remoteFrontendClients[clusterName]; ok {
+					delete(h.remoteFrontendClients, clusterName)
+				}
+				h.remoteFrontendClientsLock.Unlock()
+			}
+		})
 }
 
 func (h *clientBeanImpl) GetHistoryClient() historyservice.HistoryServiceClient {
@@ -134,13 +161,13 @@ func (h *clientBeanImpl) SetMatchingClient(
 }
 
 func (h *clientBeanImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
-	return h.remoteFrontendClients[h.clusterMetdata.GetCurrentClusterName()]
+	return h.remoteFrontendClients[h.clusterMetadata.GetCurrentClusterName()]
 }
 
 func (h *clientBeanImpl) SetFrontendClient(
 	client workflowservice.WorkflowServiceClient,
 ) {
-	h.remoteFrontendClients[h.clusterMetdata.GetCurrentClusterName()] = client
+	h.remoteFrontendClients[h.clusterMetadata.GetCurrentClusterName()] = client
 }
 
 func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
@@ -149,7 +176,7 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.Admin
 	h.remoteAdminClientsLock.RUnlock()
 
 	if !ok {
-		clusterInfo, clusterFound := h.clusterMetdata.GetAllClusterInfo()[cluster]
+		clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
 		if !clusterFound {
 			panic(fmt.Sprintf(
 				"Unknown cluster name: %v with given cluster information map: %v.",
@@ -189,7 +216,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice
 	h.remoteFrontendClientsLock.RUnlock()
 
 	if !ok {
-		clusterInfo, clusterFound := h.clusterMetdata.GetAllClusterInfo()[cluster]
+		clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
 		if !clusterFound {
 			panic(fmt.Sprintf(
 				"Unknown cluster name: %v with given cluster information map: %v.",
