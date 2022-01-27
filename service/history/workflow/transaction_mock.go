@@ -59,9 +59,9 @@ func (m *MockTransaction) EXPECT() *MockTransactionMockRecorder {
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockTransaction) ConflictResolveWorkflowExecution(conflictResolveMode persistence.ConflictResolveWorkflowMode, resetWorkflowSnapshot *persistence.WorkflowSnapshot, resetWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents) (int64, int64, int64, error) {
+func (m *MockTransaction) ConflictResolveWorkflowExecution(conflictResolveMode persistence.ConflictResolveWorkflowMode, resetWorkflowSnapshot *persistence.WorkflowSnapshot, resetWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents, clusterName string) (int64, int64, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", conflictResolveMode, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowMutation, currentWorkflowEventsSeq)
+	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", conflictResolveMode, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowMutation, currentWorkflowEventsSeq, clusterName)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(int64)
@@ -70,30 +70,30 @@ func (m *MockTransaction) ConflictResolveWorkflowExecution(conflictResolveMode p
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.
-func (mr *MockTransactionMockRecorder) ConflictResolveWorkflowExecution(conflictResolveMode, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowMutation, currentWorkflowEventsSeq interface{}) *gomock.Call {
+func (mr *MockTransactionMockRecorder) ConflictResolveWorkflowExecution(conflictResolveMode, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowMutation, currentWorkflowEventsSeq, clusterName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).ConflictResolveWorkflowExecution), conflictResolveMode, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowMutation, currentWorkflowEventsSeq)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).ConflictResolveWorkflowExecution), conflictResolveMode, resetWorkflowSnapshot, resetWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, currentWorkflowMutation, currentWorkflowEventsSeq, clusterName)
 }
 
 // CreateWorkflowExecution mocks base method.
-func (m *MockTransaction) CreateWorkflowExecution(createMode persistence.CreateWorkflowMode, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents) (int64, error) {
+func (m *MockTransaction) CreateWorkflowExecution(createMode persistence.CreateWorkflowMode, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, clusterName string) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateWorkflowExecution", createMode, newWorkflowSnapshot, newWorkflowEventsSeq)
+	ret := m.ctrl.Call(m, "CreateWorkflowExecution", createMode, newWorkflowSnapshot, newWorkflowEventsSeq, clusterName)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateWorkflowExecution indicates an expected call of CreateWorkflowExecution.
-func (mr *MockTransactionMockRecorder) CreateWorkflowExecution(createMode, newWorkflowSnapshot, newWorkflowEventsSeq interface{}) *gomock.Call {
+func (mr *MockTransactionMockRecorder) CreateWorkflowExecution(createMode, newWorkflowSnapshot, newWorkflowEventsSeq, clusterName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).CreateWorkflowExecution), createMode, newWorkflowSnapshot, newWorkflowEventsSeq)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).CreateWorkflowExecution), createMode, newWorkflowSnapshot, newWorkflowEventsSeq, clusterName)
 }
 
 // UpdateWorkflowExecution mocks base method.
-func (m *MockTransaction) UpdateWorkflowExecution(updateMode persistence.UpdateWorkflowMode, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents) (int64, int64, error) {
+func (m *MockTransaction) UpdateWorkflowExecution(updateMode persistence.UpdateWorkflowMode, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, clusterName string) (int64, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", updateMode, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", updateMode, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, clusterName)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(error)
@@ -101,7 +101,7 @@ func (m *MockTransaction) UpdateWorkflowExecution(updateMode persistence.UpdateW
 }
 
 // UpdateWorkflowExecution indicates an expected call of UpdateWorkflowExecution.
-func (mr *MockTransactionMockRecorder) UpdateWorkflowExecution(updateMode, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq interface{}) *gomock.Call {
+func (mr *MockTransactionMockRecorder) UpdateWorkflowExecution(updateMode, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, clusterName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).UpdateWorkflowExecution), updateMode, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).UpdateWorkflowExecution), updateMode, currentWorkflowMutation, currentWorkflowEventsSeq, newWorkflowSnapshot, newWorkflowEventsSeq, clusterName)
 }

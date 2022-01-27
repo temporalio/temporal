@@ -365,6 +365,7 @@ func (r *workflowResetterImpl) persistToDB(
 			currentWorkflowEventsSeq,
 			resetWorkflowSnapshot,
 			resetWorkflowEventsSeq,
+			resetWorkflow.getMutableState().GetNamespaceEntry().ActiveClusterName(),
 		); err != nil {
 			return err
 		} else {

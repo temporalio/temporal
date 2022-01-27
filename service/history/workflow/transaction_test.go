@@ -26,7 +26,6 @@ package workflow
 
 import (
 	"errors"
-
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -127,6 +126,7 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 			},
 		},
 		[]*persistence.WorkflowEvents{},
+		"active-cluster-name",
 	)
 	s.Equal(timeoutErr, err)
 }
@@ -153,6 +153,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 		[]*persistence.WorkflowEvents{},
 		&persistence.WorkflowSnapshot{},
 		[]*persistence.WorkflowEvents{},
+		"active-cluster-name",
 	)
 	s.Equal(timeoutErr, err)
 }
@@ -182,6 +183,7 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 		[]*persistence.WorkflowEvents{},
 		&persistence.WorkflowMutation{},
 		[]*persistence.WorkflowEvents{},
+		"active-cluster-name",
 	)
 	s.Equal(timeoutErr, err)
 }

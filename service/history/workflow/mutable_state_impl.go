@@ -4263,6 +4263,9 @@ func (e *MutableStateImpl) closeTransactionWithPolicyCheck(
 		return nil
 	}
 
+	// Cannot use e.namespaceEntry.ActiveClusterName() because currentVersion may be updated during this transaction in
+	// passive cluster. For example: if passive cluster sees conflict and decided to terminate this workflow. The
+	// currentVersion on mutable state would be updated to point to last write version which is current (passive) cluster.
 	activeCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), e.GetCurrentVersion())
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 
