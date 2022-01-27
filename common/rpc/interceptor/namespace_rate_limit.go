@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
@@ -40,7 +41,7 @@ const (
 )
 
 var (
-	ErrNamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted("namespace rate limit exceeded")
+	ErrNamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SERVICE_RATE_LIMIT, "namespace rate limit exceeded")
 )
 
 type (

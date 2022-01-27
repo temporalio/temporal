@@ -44,6 +44,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"github.com/uber-go/tally/v4"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -327,7 +328,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewResourceExhausted("")),
+		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SERVICE_RATE_LIMIT, "")),
 	)
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)

@@ -166,7 +166,7 @@ func (w *taskWriter) appendTask(
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
-		return nil, serviceerror.NewResourceExhausted("Too many outstanding appends to the TaskQueue")
+		return nil, serviceerror.NewUnavailable("Too many outstanding appends to the TaskQueue")
 	}
 }
 

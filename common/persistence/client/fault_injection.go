@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/config"
@@ -95,7 +96,8 @@ var defaultErrors = []FaultWeight{
 	},
 	{
 		errFactory: func(msg string) error {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("serviceerror.NewResourceExhausted: %s", msg))
+			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_RATE_LIMIT,
+				fmt.Sprintf("serviceerror.NewResourceExhausted: %s", msg))
 		},
 		weight: 1,
 	},

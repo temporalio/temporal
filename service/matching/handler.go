@@ -64,8 +64,6 @@ const (
 
 var (
 	_ matchingservice.MatchingServiceServer = (*Handler)(nil)
-
-	errMatchingHostThrottle = serviceerror.NewResourceExhausted("Matching host RPS exceeded.")
 )
 
 // NewHandler creates a gRPC handler for the matchingservice
