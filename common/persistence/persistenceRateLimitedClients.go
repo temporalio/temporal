@@ -35,7 +35,7 @@ import (
 
 var (
 	// ErrPersistenceLimitExceeded is the error indicating QPS limit reached.
-	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_RATE_LIMIT, "Persistence Max QPS Reached.")
+	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "Persistence Max QPS Reached.")
 )
 
 type (

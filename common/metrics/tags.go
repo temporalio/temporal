@@ -199,10 +199,6 @@ func VisibilityTypeTag(value string) Tag {
 	return &tagImpl{key: visibilityTypeTagName, value: value}
 }
 
-func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
-	return &tagImpl{key: "resource_exhausted_cause", value: cause.String()}
-}
-
 var standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)
 var advancedVisibilityTypeTag = VisibilityTypeTag(advancedVisibilityTagValue)
 
@@ -217,4 +213,8 @@ func AdvancedVisibilityTypeTag() Tag {
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return &tagImpl{key: httpStatusTagName, value: strconv.Itoa(value)}
+}
+
+func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
+	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
 }

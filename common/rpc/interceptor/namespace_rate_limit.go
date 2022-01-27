@@ -41,7 +41,7 @@ const (
 )
 
 var (
-	ErrNamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SERVICE_RATE_LIMIT, "namespace rate limit exceeded")
+	ErrNamespaceRateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "namespace rate limit exceeded")
 )
 
 type (

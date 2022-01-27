@@ -39,7 +39,7 @@ import (
 )
 
 var (
-	ErrNamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_POLLER_LIMIT, "namespace concurrent poller limit exceeded")
+	ErrNamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, "namespace concurrent poller limit exceeded")
 )
 
 type (

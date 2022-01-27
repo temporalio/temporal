@@ -96,7 +96,7 @@ var defaultErrors = []FaultWeight{
 	},
 	{
 		errFactory: func(msg string) error {
-			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_RATE_LIMIT,
+			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 				fmt.Sprintf("serviceerror.NewResourceExhausted: %s", msg))
 		},
 		weight: 1,

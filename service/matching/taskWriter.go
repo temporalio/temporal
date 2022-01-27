@@ -168,8 +168,8 @@ func (w *taskWriter) appendTask(
 		}
 	default: // channel is full, throttle
 		return nil, serviceerror.NewResourceExhausted(
-			enumspb.RESOURCE_EXHAUSTED_CAUSE_SERVICE_RATE_LIMIT,
-			"Too many outstanding appends to the TaskQueue")
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+			"Too many outstanding appends to the task queue")
 	}
 }
 
