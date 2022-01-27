@@ -25,6 +25,7 @@
 package visibility
 
 import (
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -180,7 +181,8 @@ func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err er
 		scope.IncCounter(metrics.VisibilityPersistenceTimeout)
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.VisibilityPersistenceResourceExhausted)
+		scope.Tagged(metrics.ResourceExhaustedCauseTag(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_RATE_LIMIT)).
+			IncCounter(metrics.VisibilityPersistenceResourceExhausted)
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *serviceerror.Internal:
 		scope.IncCounter(metrics.VisibilityPersistenceInternal)

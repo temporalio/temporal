@@ -31,6 +31,7 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -166,7 +167,9 @@ func (w *taskWriter) appendTask(
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
-		return nil, serviceerror.NewUnavailable("Too many outstanding appends to the TaskQueue")
+		return nil, serviceerror.NewResourceExhausted(
+			enumspb.RESOURCE_EXHAUSTED_CAUSE_SERVICE_RATE_LIMIT,
+			"Too many outstanding appends to the TaskQueue")
 	}
 }
 

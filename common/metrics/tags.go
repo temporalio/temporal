@@ -26,6 +26,8 @@ package metrics
 
 import (
 	"strconv"
+
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 const (
@@ -195,6 +197,10 @@ func VisibilityTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: visibilityTypeTagName, value: value}
+}
+
+func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
+	return &tagImpl{key: "resource_exhausted_cause", value: cause.String()}
 }
 
 var standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)

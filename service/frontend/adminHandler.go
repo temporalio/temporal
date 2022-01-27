@@ -1704,7 +1704,7 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 }
 
 func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
-	switch err.(type) {
+	switch err := err.(type) {
 	case *serviceerror.Unavailable:
 		adh.logger.Error("unavailable error", tag.Error(err))
 		scope.IncCounter(metrics.ServiceFailures)
@@ -1713,7 +1713,7 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
 		return err
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.ServiceErrResourceExhaustedCounter)
+		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
 		return err
 	case *serviceerror.NotFound:
 		return err
