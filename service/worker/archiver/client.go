@@ -278,7 +278,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	c.metricsScope.IncCounter(metrics.ArchiverClientSendSignalCount)
 	if ok := c.rateLimiter.Allow(); !ok {
 		c.logger.Error(tooManyRequestsErrMsg)
-		c.metricsScope.Tagged(metrics.ResourceExhaustedCauseTag(enumspb.RESOURCE_EXHAUSTED_CAUSE_SERVICE_RATE_LIMIT)).
+		c.metricsScope.Tagged(metrics.ResourceExhaustedCauseTag(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT)).
 			IncCounter(metrics.ServiceErrResourceExhaustedCounter)
 		return errors.New(tooManyRequestsErrMsg)
 	}

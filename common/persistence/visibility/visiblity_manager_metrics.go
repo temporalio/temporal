@@ -181,7 +181,7 @@ func (m *visibilityManagerMetrics) updateErrorMetric(scope metrics.Scope, err er
 		scope.IncCounter(metrics.VisibilityPersistenceTimeout)
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *serviceerror.ResourceExhausted:
-		scope.Tagged(metrics.ResourceExhaustedCauseTag(enumspb.RESOURCE_EXHAUSTED_CAUSE_PERSISTENCE_RATE_LIMIT)).
+		scope.Tagged(metrics.ResourceExhaustedCauseTag(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED)).
 			IncCounter(metrics.VisibilityPersistenceResourceExhausted)
 		scope.IncCounter(metrics.VisibilityPersistenceFailures)
 	case *serviceerror.Internal:
