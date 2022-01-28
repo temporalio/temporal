@@ -4,7 +4,7 @@ set -eu
 
 build_info_data_file="build/info/data.json"
 
-git_revision="${GITHUB_SHA_SHORT:-$(git rev-parse --short HEAD)}}" # "6cbfa2a3a"
+git_revision="${GITHUB_SHA_SHORT:-$(git rev-parse --short HEAD)}" # "6cbfa2a3a"
 
 build_time_unix=$(date '+%s')              # seconds since epoch
 
