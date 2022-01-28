@@ -101,6 +101,7 @@ const (
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
 	httpStatusTagName     = "http_status"
+	resourceExhaustedTag  = "resource_exhausted_cause"
 )
 
 // This package should hold all the metrics and tags for temporal

@@ -26,6 +26,8 @@ package metrics
 
 import (
 	"strconv"
+
+	enumspb "go.temporal.io/api/enums/v1"
 )
 
 const (
@@ -211,4 +213,8 @@ func AdvancedVisibilityTypeTag() Tag {
 // HttpStatusTag returns a new httpStatusTag.
 func HttpStatusTag(value int) Tag {
 	return &tagImpl{key: httpStatusTagName, value: strconv.Itoa(value)}
+}
+
+func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
+	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
 }

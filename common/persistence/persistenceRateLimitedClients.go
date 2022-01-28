@@ -26,6 +26,7 @@ package persistence
 
 import (
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
@@ -34,7 +35,7 @@ import (
 
 var (
 	// ErrPersistenceLimitExceeded is the error indicating QPS limit reached.
-	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted("Persistence Max QPS Reached.")
+	ErrPersistenceLimitExceeded = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED, "Persistence Max QPS Reached.")
 )
 
 type (

@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
@@ -39,7 +40,7 @@ const (
 )
 
 var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted("service rate limit exceeded")
+	RateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "service rate limit exceeded")
 )
 
 type (
