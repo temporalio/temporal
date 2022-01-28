@@ -372,7 +372,7 @@ retry:
 
 		if response == nil || len(response.TaskToken) == 0 {
 			p.Logger.Info("Empty Activity task: Polling again")
-			return nil
+			continue retry
 		}
 
 		if dropTask {
