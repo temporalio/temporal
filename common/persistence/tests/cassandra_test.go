@@ -58,7 +58,7 @@ const (
 )
 
 func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
-	cfg := NewCassandraConfig()
+	cfg := newCassandraConfig()
 	SetupCassandraDatabase(cfg)
 	SetupCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
@@ -86,7 +86,7 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 }
 
 func TestCassandraHistoryStoreSuite(t *testing.T) {
-	cfg := NewCassandraConfig()
+	cfg := newCassandraConfig()
 	SetupCassandraDatabase(cfg)
 	SetupCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
@@ -110,7 +110,7 @@ func TestCassandraHistoryStoreSuite(t *testing.T) {
 }
 
 func TestCassandraTaskQueueSuite(t *testing.T) {
-	cfg := NewCassandraConfig()
+	cfg := newCassandraConfig()
 	SetupCassandraDatabase(cfg)
 	SetupCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
@@ -134,7 +134,7 @@ func TestCassandraTaskQueueSuite(t *testing.T) {
 }
 
 func TestCassandraTaskQueueTaskSuite(t *testing.T) {
-	cfg := NewCassandraConfig()
+	cfg := newCassandraConfig()
 	SetupCassandraDatabase(cfg)
 	SetupCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
@@ -157,8 +157,8 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-// NewCassandraConfig returns a new Cassandra config for test
-func NewCassandraConfig() *config.Cassandra {
+// newCassandraConfig returns a new Cassandra config for test
+func newCassandraConfig() *config.Cassandra {
 	return &config.Cassandra{
 		User:     testCassandraUser,
 		Password: testCassandraPassword,
