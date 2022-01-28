@@ -118,32 +118,6 @@ func (d *AttrValidatorImpl) validateNamespaceReplicationConfigForGlobalNamespace
 	return nil
 }
 
-func (d *AttrValidatorImpl) validateNamespaceReplicationConfigClustersDoesNotRemove(
-	clustersOld []string,
-	clustersNew []string,
-) error {
-
-	clusterNamesOld := make(map[string]bool)
-	for _, clusterName := range clustersOld {
-		clusterNamesOld[clusterName] = true
-	}
-	clusterNamesNew := make(map[string]bool)
-	for _, clusterName := range clustersNew {
-		clusterNamesNew[clusterName] = true
-	}
-
-	if len(clusterNamesNew) < len(clusterNamesOld) {
-		return errCannotRemoveClustersFromNamespace
-	}
-
-	for clusterName := range clusterNamesOld {
-		if _, ok := clusterNamesNew[clusterName]; !ok {
-			return errCannotRemoveClustersFromNamespace
-		}
-	}
-	return nil
-}
-
 func (d *AttrValidatorImpl) validateClusterName(
 	clusterName string,
 ) error {

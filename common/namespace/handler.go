@@ -501,13 +501,6 @@ func (d *HandlerImpl) UpdateNamespace(
 			for _, clusterConfig := range updateReplicationConfig.Clusters {
 				clustersNew = append(clustersNew, clusterConfig.GetClusterName())
 			}
-
-			if err := d.namespaceAttrValidator.validateNamespaceReplicationConfigClustersDoesNotRemove(
-				replicationConfig.Clusters,
-				clustersNew,
-			); err != nil {
-				return nil, err
-			}
 			replicationConfig.Clusters = clustersNew
 		}
 		if updateReplicationConfig.State != enumspb.REPLICATION_STATE_UNSPECIFIED &&
