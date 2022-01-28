@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -68,6 +69,8 @@ type (
 		taskProcessor *taskProcessor
 	}
 )
+
+var typeOfCtx = gomock.AssignableToTypeOf(reflect.TypeOf((*context.Context)(nil)).Elem())
 
 func TestTaskProcessorSuite(t *testing.T) {
 	s := new(taskProcessorSuite)
@@ -144,7 +147,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilterErr)
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
-	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().process(typeOfCtx, task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
@@ -160,7 +163,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 		return false, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
-	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().process(typeOfCtx, task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
@@ -174,8 +177,9 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
 		return true, nil
 	}
+
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
-	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().process(typeOfCtx, task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
 	s.taskProcessor.processTaskAndAck(
@@ -191,8 +195,8 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr
 		return true, nil
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
-	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, err)
-	s.mockProcessor.EXPECT().process(context.Background(), task).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().process(typeOfCtx, task).Return(s.scopeIdx, err)
+	s.mockProcessor.EXPECT().process(typeOfCtx, task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil).Times(2)
 	s.taskProcessor.processTaskAndAck(
@@ -254,6 +258,28 @@ func (s *taskProcessorSuite) TestHandleTaskError_RandomErr() {
 
 	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
 	s.Equal(err, s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
+}
+
+func (s *taskProcessorSuite) TestProcessTaskAndAck_SetsUserLatencyCorrectly() {
+	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	task.shouldProcessTask = false
+	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
+		return false, nil
+	}
+	expectedUserLatency := int64(133)
+	updateContext := func(ctx context.Context, taskInfo interface{}) {
+		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, expectedUserLatency)
+	}
+
+	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
+	s.mockProcessor.EXPECT().process(typeOfCtx, task).Do(updateContext).Return(s.scopeIdx, nil)
+	s.mockProcessor.EXPECT().complete(task)
+	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
+	s.taskProcessor.processTaskAndAck(
+		s.notificationChan,
+		task,
+	)
+	s.Equal(time.Duration(expectedUserLatency), task.userLatency)
 }
 
 func (t *taskForTest) GetKey() tasks.Key {
