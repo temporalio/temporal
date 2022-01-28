@@ -201,6 +201,7 @@ func New(
 		params.ClusterMetadataConfig.CurrentClusterName,
 		params.ClusterMetadataConfig.ClusterInformation,
 		persistenceBean.GetClusterMetadataManager(),
+		nil,
 		logger,
 	)
 
@@ -252,8 +253,14 @@ func New(
 		return nil, err
 	}
 
-	saProvider := searchattribute.NewManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
-	saManager := searchattribute.NewManager(clock.NewRealTimeSource(), persistenceBean.GetClusterMetadataManager())
+	saProvider := searchattribute.NewManager(
+		clock.NewRealTimeSource(),
+		persistenceBean.GetClusterMetadataManager(),
+		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+	saManager := searchattribute.NewManager(
+		clock.NewRealTimeSource(),
+		persistenceBean.GetClusterMetadataManager(),
+		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
 
 	namespaceRegistry := namespace.NewRegistry(
 		persistenceBean.GetMetadataManager(),

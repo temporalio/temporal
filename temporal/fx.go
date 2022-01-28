@@ -527,6 +527,7 @@ func ServerOptionsProvider(opts []ServerOption) (*serverOptions, error) {
 // ApplyClusterMetadataConfigProvider performs a config check against the configured persistence store for cluster metadata.
 // If there is a mismatch, the persisted values take precedence and will be written over in the config objects.
 // This is to keep this check hidden from downstream calls.
+// TODO: move this to cluster.fx
 func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
 	config *config.Config,
@@ -593,6 +594,37 @@ func ApplyClusterMetadataConfigProvider(
 			return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while fetching cluster metadata: %w", err)
 		}
 
+		// Allow updating cluster metadata if global namespace is disabled
+		if !resp.IsGlobalNamespaceEnabled && clusterData.EnableGlobalNamespace {
+			resp.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
+			resp.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
+
+			applied, err = clusterMetadataManager.SaveClusterMetadata(
+				&persistence.SaveClusterMetadataRequest{
+					ClusterMetadata: persistencespb.ClusterMetadata{
+						HistoryShardCount:        resp.HistoryShardCount,
+						ClusterName:              resp.ClusterName,
+						ClusterId:                resp.ClusterId,
+						ClusterAddress:           resp.ClusterAddress,
+						FailoverVersionIncrement: resp.FailoverVersionIncrement,
+						InitialFailoverVersion:   resp.InitialFailoverVersion,
+						IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
+						IsConnectionEnabled:      resp.IsConnectionEnabled,
+					},
+					Version: resp.Version,
+				})
+			if !applied || err != nil {
+				return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while updating cluster metadata: %w", err)
+			}
+		} else if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
+			logger.Warn(
+				mismatchLogMessage,
+				tag.Key("clusterMetadata.EnableGlobalNamespace"),
+				tag.IgnoredValue(clusterData.EnableGlobalNamespace),
+				tag.Value(resp.IsGlobalNamespaceEnabled))
+			config.ClusterMetadata.EnableGlobalNamespace = resp.IsGlobalNamespaceEnabled
+		}
+
 		// Verify current cluster metadata
 		var persistedShardCount = resp.HistoryShardCount
 		if config.Persistence.NumHistoryShards != persistedShardCount {
@@ -611,25 +643,6 @@ func ApplyClusterMetadataConfigProvider(
 				tag.Value(resp.FailoverVersionIncrement))
 			config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
 		}
-		if resp.IsGlobalNamespaceEnabled != clusterData.EnableGlobalNamespace {
-			applied, err = clusterMetadataManager.SaveClusterMetadata(
-				&persistence.SaveClusterMetadataRequest{
-					ClusterMetadata: persistencespb.ClusterMetadata{
-						HistoryShardCount:        resp.HistoryShardCount,
-						ClusterName:              resp.ClusterName,
-						ClusterId:                resp.ClusterId,
-						ClusterAddress:           resp.ClusterAddress,
-						FailoverVersionIncrement: resp.FailoverVersionIncrement,
-						InitialFailoverVersion:   resp.InitialFailoverVersion,
-						IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
-						IsConnectionEnabled:      resp.IsConnectionEnabled,
-					},
-					Version: resp.Version,
-				})
-			if !applied || err != nil {
-				return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while updating cluster metadata: %w", err)
-			}
-		}
 	}
 	err = loadClusterInformationFromStore(config, clusterMetadataManager, logger)
 	if err != nil {
@@ -638,6 +651,7 @@ func ApplyClusterMetadataConfigProvider(
 	return config.ClusterMetadata, config.Persistence, nil
 }
 
+// TODO: move this to cluster.fx
 func loadClusterInformationFromStore(config *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
 	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
 		request := &persistence.ListClusterMetadataRequest{

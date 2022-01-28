@@ -74,19 +74,21 @@ var Keys = map[Key]string{
 	EnableReadVisibilityFromES:                "system.enableReadVisibilityFromES",
 	EnableReadFromSecondaryAdvancedVisibility: "system.enableReadFromSecondaryAdvancedVisibility",
 
-	HistoryArchivalState:                   "system.historyArchivalState",
-	EnableReadFromHistoryArchival:          "system.enableReadFromHistoryArchival",
-	VisibilityArchivalState:                "system.visibilityArchivalState",
-	EnableReadFromVisibilityArchival:       "system.enableReadFromVisibilityArchival",
-	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
-	TransactionSizeLimit:                   "system.transactionSizeLimit",
-	DisallowQuery:                          "system.disallowQuery",
-	EnableBatcher:                          "worker.enableBatcher",
-	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
-	EnableStickyQuery:                      "system.enableStickyQuery",
-	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
-	EnableAuthorization:                    "system.enableAuthorization",
-	EnableCrossNamespaceCommands:           "system.enableCrossNamespaceCommands",
+	HistoryArchivalState:                    "system.historyArchivalState",
+	EnableReadFromHistoryArchival:           "system.enableReadFromHistoryArchival",
+	VisibilityArchivalState:                 "system.visibilityArchivalState",
+	EnableReadFromVisibilityArchival:        "system.enableReadFromVisibilityArchival",
+	EnableNamespaceNotActiveAutoForwarding:  "system.enableNamespaceNotActiveAutoForwarding",
+	TransactionSizeLimit:                    "system.transactionSizeLimit",
+	DisallowQuery:                           "system.disallowQuery",
+	EnableBatcher:                           "worker.enableBatcher",
+	EnableParentClosePolicyWorker:           "system.enableParentClosePolicyWorker",
+	EnableStickyQuery:                       "system.enableStickyQuery",
+	EnablePriorityTaskProcessor:             "system.enablePriorityTaskProcessor",
+	EnableAuthorization:                     "system.enableAuthorization",
+	EnableCrossNamespaceCommands:            "system.enableCrossNamespaceCommands",
+	ForceSearchAttributesCacheRefreshOnRead: "system.forceSearchAttributesCacheRefreshOnRead",
+	ClusterMetadataRefreshInterval:          "system.clusterMetadataRefreshInterval",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -417,6 +419,8 @@ const (
 	EnableAuthorization
 	// EnableCrossNamespaceCommands is the key to enable commands for external namespaces
 	EnableCrossNamespaceCommands
+	// ClusterMetadataRefreshInterval is config to manage cluster metadata table refresh interval
+	ClusterMetadataRefreshInterval
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
@@ -437,6 +441,11 @@ const (
 	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit
+
+	// ForceSearchAttributesCacheRefreshOnRead forces refreshing search attributes cache on a read operation, so we always
+	// get the latest data from DB. This effectively bypasses cache value and is used to facilitate testing of changes in
+	// search attributes. This should not be turned on in production.
+	ForceSearchAttributesCacheRefreshOnRead
 
 	// key for frontend
 

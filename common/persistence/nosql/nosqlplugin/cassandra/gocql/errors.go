@@ -29,6 +29,7 @@ import (
 	"fmt"
 
 	"github.com/gocql/gocql"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/persistence"
@@ -52,8 +53,9 @@ func ConvertError(
 	case *gocql.RequestErrWriteTimeout:
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("operation %v encountered %v", operation, err.Error())}
 	case gocql.RequestError:
-		if v.Code() == 0x1001 {
-			return serviceerror.NewResourceExhausted(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
+		if v.Code() == gocql.ErrCodeOverloaded {
+			return serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
+				fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 		}
 		return serviceerror.NewUnavailable(fmt.Sprintf("operation %v encountered %v", operation, err.Error()))
 	default:

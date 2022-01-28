@@ -170,7 +170,7 @@ func (ti *TelemetryInterceptor) handleError(
 	case *serviceerror.NotFound:
 		scope.IncCounter(metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.ResourceExhausted:
-		scope.IncCounter(metrics.ServiceErrResourceExhaustedCounter)
+		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
 	case *serviceerrors.RetryReplication:
 		scope.IncCounter(metrics.ServiceErrRetryTaskCounter)
 	case *serviceerror.NamespaceAlreadyExists:

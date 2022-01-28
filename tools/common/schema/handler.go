@@ -82,7 +82,7 @@ func validateSetupConfig(config *SetupConfig) error {
 			flag(CLIOptVersion) + " but not both must be specified")
 	}
 	if !config.DisableVersioning {
-		ver, err := parseValidateVersion(config.InitialVersion)
+		ver, err := normalizeVersionString(config.InitialVersion)
 		if err != nil {
 			return NewConfigError("invalid " + flag(CLIOptVersion) + " argument:" + err.Error())
 		}
@@ -96,7 +96,7 @@ func validateUpdateConfig(config *UpdateConfig) error {
 		return NewConfigError("missing " + flag(CLIOptSchemaDir) + " argument ")
 	}
 	if len(config.TargetVersion) > 0 {
-		ver, err := parseValidateVersion(config.TargetVersion)
+		ver, err := normalizeVersionString(config.TargetVersion)
 		if err != nil {
 			return NewConfigError("invalid " + flag(CLIOptTargetVersion) + " argument:" + err.Error())
 		}

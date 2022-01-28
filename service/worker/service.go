@@ -239,6 +239,10 @@ func NewConfig(logger log.Logger, dcClient dynamicconfig.Client, params *resourc
 				dynamicconfig.WorkerParentCloseMaxConcurrentWorkflowTaskPollers,
 				4,
 			),
+			NumParentClosePolicySystemWorkflows: dc.GetIntProperty(
+				dynamicconfig.NumParentClosePolicySystemWorkflows,
+				10,
+			),
 		},
 		ScannerCfg: &scanner.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
@@ -393,6 +397,7 @@ func (s *Service) startParentClosePolicyProcessor() {
 		MetricsClient:   s.metricsClient,
 		Logger:          s.logger,
 		ClientBean:      s.clientBean,
+		CurrentCluster:  s.clusterMetadata.GetCurrentClusterName(),
 	}
 	processor := parentclosepolicy.New(params)
 	if err := processor.Start(); err != nil {

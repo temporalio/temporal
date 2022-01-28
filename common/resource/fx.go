@@ -159,15 +159,23 @@ func TimeSourceProvider() clock.TimeSource {
 func SearchAttributeProviderProvider(
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
+	dynamicCollection *dynamicconfig.Collection,
 ) searchattribute.Provider {
-	return searchattribute.NewManager(timeSource, cmMgr)
+	return searchattribute.NewManager(
+		timeSource,
+		cmMgr,
+		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
 }
 
 func SearchAttributeManagerProvider(
 	timeSource clock.TimeSource,
 	cmMgr persistence.ClusterMetadataManager,
+	dynamicCollection *dynamicconfig.Collection,
 ) searchattribute.Manager {
-	return searchattribute.NewManager(timeSource, cmMgr)
+	return searchattribute.NewManager(
+		timeSource,
+		cmMgr,
+		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
 }
 
 func NamespaceRegistryProvider(

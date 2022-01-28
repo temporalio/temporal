@@ -1283,6 +1283,20 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 		}
 	}
 
+	if di, ok := mutableState.GetPendingWorkflowTask(); ok {
+		pendingWorkflowTask := &workflowpb.PendingWorkflowTaskInfo{
+			State:                 enumspb.PENDING_WORKFLOW_TASK_STATE_SCHEDULED,
+			ScheduledTime:         di.ScheduledTime,
+			OriginalScheduledTime: di.OriginalScheduledTime,
+			Attempt:               di.Attempt,
+		}
+		if di.StartedID != common.EmptyEventID {
+			pendingWorkflowTask.State = enumspb.PENDING_WORKFLOW_TASK_STATE_STARTED
+			pendingWorkflowTask.StartedTime = di.StartedTime
+		}
+		result.PendingWorkflowTask = pendingWorkflowTask
+	}
+
 	return result, nil
 }
 
@@ -2665,24 +2679,20 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 }
 
 func (e *historyEngineImpl) NotifyNewTransferTasks(
-	isGlobalNamespace bool,
+	clusterName string,
 	tasks []tasks.Task,
 ) {
 	if len(tasks) > 0 {
-		task := tasks[0]
-		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(isGlobalNamespace, task.GetVersion())
 		e.txProcessor.NotifyNewTask(clusterName, tasks)
 	}
 }
 
 func (e *historyEngineImpl) NotifyNewTimerTasks(
-	isGlobalNamespace bool,
+	clusterName string,
 	tasks []tasks.Task,
 ) {
 
 	if len(tasks) > 0 {
-		task := tasks[0]
-		clusterName := e.clusterMetadata.ClusterNameForFailoverVersion(isGlobalNamespace, task.GetVersion())
 		e.timerProcessor.NotifyNewTimers(clusterName, tasks)
 	}
 }
@@ -3009,6 +3019,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 		return nil, err
 	}
 	e.logger.Debug("Successfully fetched replication messages.", tag.Counter(len(replicationMessages.ReplicationTasks)))
+
 	return replicationMessages, nil
 }
 

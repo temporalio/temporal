@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 	querypb "go.temporal.io/api/query/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.uber.org/atomic"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -47,6 +48,8 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 )
+
+var errMatchingHostThrottleTest = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "Matching host RPS exceeded.")
 
 type MatcherTestSuite struct {
 	suite.Suite
@@ -199,7 +202,7 @@ func (t *MatcherTestSuite) TestSyncMatchFailure() {
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
 			req = arg1
 		},
-	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottle)
+	).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 
 	syncMatch, err := t.matcher.Offer(ctx, task)
 	cancel()
@@ -322,7 +325,7 @@ func (t *MatcherTestSuite) TestQueryRemoteSyncMatchError() {
 			close(pollSigC)
 			time.Sleep(10 * time.Millisecond)
 		},
-	).Return(nil, errMatchingHostThrottle)
+	).Return(nil, errMatchingHostThrottleTest)
 
 	result, err := t.matcher.OfferQuery(ctx, task)
 	cancel()
@@ -400,7 +403,7 @@ func (t *MatcherTestSuite) TestMustOfferRemoteMatch() {
 	var err error
 	var remoteSyncMatch bool
 	var req *matchingservice.AddWorkflowTaskRequest
-	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottle)
+	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, errMatchingHostThrottleTest)
 	t.client.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Do(
 		func(arg0 context.Context, arg1 *matchingservice.AddWorkflowTaskRequest, arg2 ...interface{}) {
 			req = arg1

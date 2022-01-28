@@ -26,6 +26,9 @@ package cluster
 import (
 	"context"
 	"testing"
+	"time"
+
+	"go.temporal.io/server/common/dynamicconfig"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
@@ -95,6 +98,7 @@ func (s *metadataSuite) SetupTest() {
 		s.clusterName,
 		clusterInfo,
 		s.mockClusterMetadataStore,
+		dynamicconfig.GetDurationPropertyFn(time.Second),
 		log.NewNoopLogger(),
 	).(*metadataImpl)
 }
