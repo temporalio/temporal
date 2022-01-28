@@ -201,6 +201,7 @@ func New(
 		params.ClusterMetadataConfig.CurrentClusterName,
 		params.ClusterMetadataConfig.ClusterInformation,
 		persistenceBean.GetClusterMetadataManager(),
+		nil,
 		logger,
 	)
 

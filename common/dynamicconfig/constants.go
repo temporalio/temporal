@@ -88,6 +88,7 @@ var Keys = map[Key]string{
 	EnableAuthorization:                     "system.enableAuthorization",
 	EnableCrossNamespaceCommands:            "system.enableCrossNamespaceCommands",
 	ForceSearchAttributesCacheRefreshOnRead: "system.forceSearchAttributesCacheRefreshOnRead",
+	ClusterMetadataRefreshInterval:          "system.clusterMetadataRefreshInterval",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -418,6 +419,8 @@ const (
 	EnableAuthorization
 	// EnableCrossNamespaceCommands is the key to enable commands for external namespaces
 	EnableCrossNamespaceCommands
+	// ClusterMetadataRefreshInterval is config to manage cluster metadata table refresh interval
+	ClusterMetadataRefreshInterval
 	// BlobSizeLimitError is the per event blob size limit
 	BlobSizeLimitError
 	// BlobSizeLimitWarn is the per event blob size limit for warning
