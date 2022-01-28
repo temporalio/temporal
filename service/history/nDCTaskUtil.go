@@ -176,6 +176,8 @@ func getTransferTaskEventIDAndRetryable(
 		retryable = !(executionInfo.WorkflowTaskScheduleId == task.ScheduleID && executionInfo.WorkflowTaskAttempt > 1)
 	case *tasks.CloseExecutionTask:
 		eventID = common.FirstEventID
+	case *tasks.DeleteExecutionTask:
+		eventID = common.FirstEventID
 	case *tasks.CancelExecutionTask:
 		eventID = task.InitiatedID
 	case *tasks.SignalExecutionTask:

@@ -207,3 +207,50 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 
 	return err
 }
+
+func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
+	ctx context.Context,
+	task *tasks.DeleteExecutionTask,
+) (retError error) {
+
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
+	defer cancel()
+
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: task.GetWorkflowID(),
+		RunId:      task.GetRunID(),
+	}
+
+	weCtx, release, err := t.cache.GetOrCreateWorkflowExecution(
+		ctx,
+		namespace.ID(task.GetNamespaceID()),
+		workflowExecution,
+		workflow.CallerTypeTask,
+	)
+	if err != nil {
+		return err
+	}
+	defer func() { release(retError) }()
+
+	mutableState, err := loadMutableStateForTransferTask(weCtx, task, t.metricsClient, t.logger)
+	if err != nil {
+		return err
+	}
+
+	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), lastWriteVersion, task.Version, task)
+	if err != nil || !ok {
+		return err
+	}
+
+	return t.workflowDeleteManager.DeleteWorkflowExecution(
+		namespace.ID(task.GetNamespaceID()),
+		workflowExecution,
+		weCtx,
+		mutableState,
+		task.GetVersion(),
+	)
+}

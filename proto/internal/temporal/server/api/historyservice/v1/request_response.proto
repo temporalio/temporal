@@ -271,6 +271,14 @@ message TerminateWorkflowExecutionRequest {
 message TerminateWorkflowExecutionResponse {
 }
 
+message DeleteWorkflowExecutionRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+}
+
+message DeleteWorkflowExecutionResponse {
+}
+
 message ResetWorkflowExecutionRequest {
     string namespace_id = 1;
     temporal.api.workflowservice.v1.ResetWorkflowExecutionRequest reset_request = 2;

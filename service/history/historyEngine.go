@@ -2272,6 +2272,35 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 		})
 }
 
+func (e *historyEngineImpl) DeleteWorkflowExecution(
+	ctx context.Context,
+	deleteRequest *historyservice.DeleteWorkflowExecutionRequest,
+) error {
+
+	return e.updateWorkflow(
+		ctx,
+		namespace.ID(deleteRequest.NamespaceId),
+		*deleteRequest.GetWorkflowExecution(),
+		func(weCtx workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
+			if mutableState.IsWorkflowExecutionRunning() {
+				return nil, consts.ErrWorkflowNotCompleted // workflow is running, cannot be deleted
+			}
+
+			taskGenerator := workflow.NewTaskGenerator(
+				e.shard.GetNamespaceRegistry(),
+				e.logger,
+				mutableState,
+			)
+
+			err := taskGenerator.GenerateDeleteExecutionTask(e.timeSource.Now())
+			if err != nil {
+				return nil, err
+			}
+
+			return updateWorkflowWithoutWorkflowTask, nil
+		})
+}
+
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history
 func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	ctx context.Context,

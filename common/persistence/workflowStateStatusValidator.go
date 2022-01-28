@@ -90,7 +90,7 @@ func ValidateUpdateWorkflowStateStatus(
 	// validate workflow state & status
 	if (state == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) ||
 		(state != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
-		return serviceerror.NewInternal(fmt.Sprintf("Create workflow with invalid state: %v or status: %v", state, status))
+		return serviceerror.NewInternal(fmt.Sprintf("Update workflow with invalid state: %v or status: %v", state, status))
 	}
 	return nil
 }

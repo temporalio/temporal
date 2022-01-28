@@ -123,6 +123,8 @@ func (t *transferQueueStandbyTaskExecutor) execute(
 		return nil
 	case *tasks.CloseExecutionTask:
 		return t.processCloseExecution(ctx, task)
+	case *tasks.DeleteExecutionTask:
+		return t.processDeleteExecutionTask(ctx, task)
 	default:
 		return errUnknownTransferTask
 	}
