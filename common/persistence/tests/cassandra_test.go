@@ -50,7 +50,7 @@ const (
 
 func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 	cfg := newCassandraConfig()
-	SetupCassandraDatabase(cfg)
+	SetUpCassandraDatabase(cfg)
 	SetUpCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
 	factory := cassandra.NewFactory(
@@ -78,7 +78,7 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 
 func TestCassandraHistoryStoreSuite(t *testing.T) {
 	cfg := newCassandraConfig()
-	SetupCassandraDatabase(cfg)
+	SetUpCassandraDatabase(cfg)
 	SetUpCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
 	factory := cassandra.NewFactory(
@@ -102,7 +102,7 @@ func TestCassandraHistoryStoreSuite(t *testing.T) {
 
 func TestCassandraTaskQueueSuite(t *testing.T) {
 	cfg := newCassandraConfig()
-	SetupCassandraDatabase(cfg)
+	SetUpCassandraDatabase(cfg)
 	SetUpCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
 	factory := cassandra.NewFactory(
@@ -126,7 +126,7 @@ func TestCassandraTaskQueueSuite(t *testing.T) {
 
 func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	cfg := newCassandraConfig()
-	SetupCassandraDatabase(cfg)
+	SetUpCassandraDatabase(cfg)
 	SetUpCassandraSchema(cfg)
 	logger := log.NewNoopLogger()
 	factory := cassandra.NewFactory(

@@ -42,7 +42,7 @@ const (
 	testCassandraVisibilitySchema = "../../../schema/cassandra/visibility/schema.cql"
 )
 
-func SetupCassandraDatabase(cfg *config.Cassandra) {
+func SetUpCassandraDatabase(cfg *config.Cassandra) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.Keyspace = "system"
