@@ -519,12 +519,12 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	})
 	s.NoError(err)
 
+	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
 	resp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 	})
-	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Nil(resp)
+	s.NoError(err)
+	s.NotNil(resp)
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdateGetNamespace_GlobalNamespace_AllAttrSet() {
@@ -578,6 +578,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	})
 	s.NoError(err)
 
+	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
@@ -598,9 +599,8 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 			Clusters:          clusters,
 		},
 	})
-	s.Error(err)
-	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Nil(updateResp)
+	s.NoError(err)
+	s.NotNil(updateResp)
 }
 
 func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdateGetNamespace_GlobalNamespace_Failover() {

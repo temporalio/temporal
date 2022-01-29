@@ -542,10 +542,6 @@ func (d *HandlerImpl) UpdateNamespace(
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
 	} else if configurationChanged || activeClusterChanged || needsNamespacePromotion {
-		if configurationChanged && isGlobalNamespace && !d.clusterMetadata.IsMasterCluster() {
-			return nil, errNotMasterCluster
-		}
-
 		// set the versions
 		if configurationChanged {
 			configVersion++
@@ -574,10 +570,6 @@ func (d *HandlerImpl) UpdateNamespace(
 		if err != nil {
 			return nil, err
 		}
-	} else if isGlobalNamespace && !d.clusterMetadata.IsMasterCluster() {
-		// although there is no attr updated, just prevent customer to use the non master cluster
-		// for update namespace, ever (except if customer want to do a namespace failover)
-		return nil, errNotMasterCluster
 	}
 
 	if isGlobalNamespace {
