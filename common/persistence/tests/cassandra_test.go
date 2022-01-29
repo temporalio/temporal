@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"go.uber.org/zap/zaptest"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -48,103 +49,87 @@ const (
 	testCassandraDatabaseNameSuffix = "temporal_persistence"
 )
 
-func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
-	cfg := newCassandraConfig()
-	SetUpCassandraDatabase(cfg)
-	SetUpCassandraSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := cassandra.NewFactory(
-		*cfg,
+type cassandraTestData struct {
+	cfg *config.Cassandra
+	factory *cassandra.Factory
+	logger log.Logger
+}
+
+func setUpCassandraTest(t *testing.T) (cassandraTestData, func()) {
+	var td cassandraTestData
+	td.cfg = newCassandraConfig()
+	td.logger = log.NewZapLogger(zaptest.NewLogger(t))
+	SetUpCassandraDatabase(td.cfg)
+	SetUpCassandraSchema(td.cfg, td.logger)
+
+	td.factory = cassandra.NewFactory(
+		*td.cfg,
 		resolver.NewNoopResolver(),
 		testCassandraClusterName,
-		logger,
+		td.logger,
 	)
-	shardStore, err := factory.NewShardStore()
-	if err != nil {
-		t.Fatalf("unable to create Cassandra DB: %v", err)
-	}
-	executionStore, err := factory.NewExecutionStore()
-	if err != nil {
-		t.Fatalf("unable to create Cassandra DB: %v", err)
-	}
-	defer func() {
-		factory.Close()
-		TearDownCassandraKeyspace(cfg)
-	}()
 
-	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, logger)
+	tearDown := func() {
+		td.factory.Close()
+		TearDownCassandraKeyspace(td.cfg)
+	}
+
+	return td, tearDown
+}
+
+func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	shardStore, err := testData.factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+	executionStore, err := testData.factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+
+	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, testData.logger)
 	suite.Run(t, s)
 }
 
 func TestCassandraHistoryStoreSuite(t *testing.T) {
-	cfg := newCassandraConfig()
-	SetUpCassandraDatabase(cfg)
-	SetUpCassandraSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := cassandra.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testCassandraClusterName,
-		logger,
-	)
-	store, err := factory.NewExecutionStore()
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	store, err := testData.factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownCassandraKeyspace(cfg)
-	}()
 
-	s := NewHistoryEventsSuite(t, store, logger)
+	s := NewHistoryEventsSuite(t, store, testData.logger)
 	suite.Run(t, s)
 }
 
 func TestCassandraTaskQueueSuite(t *testing.T) {
-	cfg := newCassandraConfig()
-	SetUpCassandraDatabase(cfg)
-	SetUpCassandraSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := cassandra.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testCassandraClusterName,
-		logger,
-	)
-	taskQueueStore, err := factory.NewTaskStore()
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.factory.NewTaskStore()
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownCassandraKeyspace(cfg)
-	}()
 
-	s := NewTaskQueueSuite(t, taskQueueStore, logger)
+	s := NewTaskQueueSuite(t, taskQueueStore, testData.logger)
 	suite.Run(t, s)
 }
 
 func TestCassandraTaskQueueTaskSuite(t *testing.T) {
-	cfg := newCassandraConfig()
-	SetUpCassandraDatabase(cfg)
-	SetUpCassandraSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := cassandra.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testCassandraClusterName,
-		logger,
-	)
-	taskQueueStore, err := factory.NewTaskStore()
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.factory.NewTaskStore()
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownCassandraKeyspace(cfg)
-	}()
 
-	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.logger)
 	suite.Run(t, s)
 }
 
