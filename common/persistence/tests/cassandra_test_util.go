@@ -26,13 +26,14 @@ package tests
 
 import (
 	"fmt"
+	"path/filepath"
+
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
-	"path/filepath"
 )
 
 const (
