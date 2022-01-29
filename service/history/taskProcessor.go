@@ -271,11 +271,13 @@ func (t *taskProcessor) processTaskOnce(
 	}
 
 	ctx := context.Background()
+	ctx = metrics.AddMetricsContext(ctx)
 	startTime := t.timeSource.Now()
 	scopeIdx, err := task.processor.process(ctx, task)
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
 		task.userLatency += time.Duration(duration)
 	}
+
 	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(namespace.ID(task.GetNamespaceID())))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
