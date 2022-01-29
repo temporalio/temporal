@@ -27,11 +27,13 @@ package query
 import (
 	"errors"
 	"fmt"
+
+	"go.temporal.io/api/serviceerror"
 )
 
 type (
 	ConverterError struct {
-		text string
+		message string
 	}
 )
 
@@ -42,12 +44,16 @@ var (
 )
 
 func NewConverterError(format string, a ...interface{}) error {
-	text := fmt.Sprintf(format, a...)
-	return &ConverterError{text: text}
+	message := fmt.Sprintf(format, a...)
+	return &ConverterError{message: message}
 }
 
 func (c *ConverterError) Error() string {
-	return c.text
+	return c.message
+}
+
+func (c *ConverterError) ToInvalidArgument() error {
+	return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid query: %v", c))
 }
 
 func wrapConverterError(message string, err error) error {

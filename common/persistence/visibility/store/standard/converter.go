@@ -25,11 +25,12 @@
 package standard
 
 import (
-	"fmt"
+	"errors"
 	"time"
 
 	"github.com/xwb1989/sqlparser"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
@@ -69,7 +70,12 @@ func newQueryConverter() *converter {
 func (c *converter) GetFilter(whereOrderBy string) (*sqlplugin.VisibilitySelectFilter, error) {
 	_, _, err := c.ConvertWhereOrderBy(whereOrderBy)
 	if err != nil {
-		return nil, fmt.Errorf("invalid query: %v", err)
+		// Convert ConverterError to InvalidArgument and pass through all other errors.
+		var converterErr *query.ConverterError
+		if errors.As(err, &converterErr) {
+			return nil, converterErr.ToInvalidArgument()
+		}
+		return nil, err
 	}
 
 	filter := c.fvInterceptor.filter
