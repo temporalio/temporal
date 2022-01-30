@@ -78,7 +78,9 @@ func NewTestCluster(
 	}
 
 	if pluginName == "sqlite" {
-		result.cfg.ConnectAttributes["mode"] = sqliteMode
+		result.cfg.ConnectAttributes = map[string]string{
+			"mode": sqliteMode,
+		}
 	}
 
 	result.faultInjection = faultInjection
