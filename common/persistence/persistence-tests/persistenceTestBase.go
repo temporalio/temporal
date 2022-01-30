@@ -40,6 +40,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -60,6 +61,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -84,7 +86,8 @@ type (
 		DBUsername      string
 		DBPassword      string
 		DBHost          string
-		DBPort          int                    `yaml:"-"`
+		DBPort          int `yaml:"-"`
+		SQLiteMode      string
 		StoreType       string                 `yaml:"-"`
 		SchemaDir       string                 `yaml:"-"`
 		FaultInjection  *config.FaultInjection `yaml:"faultinjection"`
@@ -152,6 +155,8 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 			options.DBPort = environment.GetMySQLPort()
 		case postgresql.PluginName:
 			options.DBPort = environment.GetPostgreSQLPort()
+		case sqlite.PluginName:
+			options.DBPort = 0
 		default:
 			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
 		}
@@ -162,11 +167,13 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 			options.DBHost = environment.GetMySQLAddress()
 		case postgresql.PluginName:
 			options.DBHost = environment.GetPostgreSQLAddress()
+		case sqlite.PluginName:
+			options.DBHost = environment.Localhost
 		default:
 			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SQLiteMode, options.SchemaDir, options.FaultInjection, logger)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 

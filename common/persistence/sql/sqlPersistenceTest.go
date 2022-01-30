@@ -58,6 +58,7 @@ func NewTestCluster(
 	password string,
 	host string,
 	port int,
+	sqliteMode string,
 	schemaDir string,
 	faultInjection *config.FaultInjection,
 	logger log.Logger,
@@ -66,9 +67,6 @@ func NewTestCluster(
 	result.logger = logger
 	result.dbName = dbName
 
-	if schemaDir == "" {
-		panic("must provide schema dir")
-	}
 	result.schemaDir = schemaDir
 	result.cfg = config.SQL{
 		User:               username,
@@ -78,6 +76,9 @@ func NewTestCluster(
 		PluginName:         pluginName,
 		DatabaseName:       dbName,
 		TaskScanPartitions: 4,
+		ConnectAttributes: map[string]string{
+			"mode": sqliteMode, // Used by SQLite only.
+		},
 	}
 	result.faultInjection = faultInjection
 	return &result
@@ -91,6 +92,11 @@ func (s *TestCluster) DatabaseName() string {
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase() {
 	s.CreateDatabase()
+
+	if s.schemaDir == "" {
+		s.logger.Info("No schema directory provided, skipping schema setup")
+		return
+	}
 
 	schemaDir := s.schemaDir + "/"
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {

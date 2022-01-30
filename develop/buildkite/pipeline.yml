@@ -179,6 +179,21 @@ steps:
           run: integration-test-xdc-postgresql
           config: ./develop/buildkite/docker-compose.yml
 
+  - label: ":golang: integration test with sqlite"
+    agents:
+      queue: "default"
+      docker: "*"
+    command: "make integration-test-coverage"
+    artifact_paths:
+      - ".coverage/*.out"
+    retry:
+      automatic:
+        limit: 1
+    plugins:
+      - docker-compose#v3.8.0:
+          run: integration-test-sqlite
+          config: ./develop/buildkite/docker-compose.yml
+
   - label: ":tiger2: fossa"
     agents:
       queue: "default"
