@@ -30,10 +30,8 @@ import (
 	"path"
 	"strings"
 
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -79,7 +77,7 @@ func NewTestCluster(
 		TaskScanPartitions: 4,
 	}
 
-	if pluginName == sqlite.PluginName {
+	if pluginName == "sqlite" {
 		result.cfg.ConnectAttributes["mode"] = sqliteMode
 	}
 
