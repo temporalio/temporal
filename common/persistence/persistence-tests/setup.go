@@ -76,13 +76,13 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 // GetSQLiteTestClusterOption return test options
 func GetSQLiteTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
-		SQLDBPluginName: sqlite.PluginName,
-		DBUsername:      testSQLiteUser,
-		DBPassword:      testSQLitePassword,
-		DBHost:          environment.Localhost,
-		DBPort:          0,
-		SchemaDir:       testSQLiteSchemaDir,
-		StoreType:       config.StoreTypeSQL,
-		SQLiteMode:      testSQLiteMode,
+		SQLDBPluginName:   sqlite.PluginName,
+		DBUsername:        testSQLiteUser,
+		DBPassword:        testSQLitePassword,
+		DBHost:            environment.Localhost,
+		DBPort:            0,
+		SchemaDir:         testSQLiteSchemaDir,
+		StoreType:         config.StoreTypeSQL,
+		ConnectAttributes: map[string]string{"mode": testSQLiteMode},
 	}
 }

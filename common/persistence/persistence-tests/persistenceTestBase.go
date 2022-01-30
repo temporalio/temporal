@@ -81,16 +81,16 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		SQLDBPluginName string
-		DBName          string
-		DBUsername      string
-		DBPassword      string
-		DBHost          string
-		DBPort          int `yaml:"-"`
-		SQLiteMode      string
-		StoreType       string                 `yaml:"-"`
-		SchemaDir       string                 `yaml:"-"`
-		FaultInjection  *config.FaultInjection `yaml:"faultinjection"`
+		SQLDBPluginName   string
+		DBName            string
+		DBUsername        string
+		DBPassword        string
+		DBHost            string
+		DBPort            int `yaml:"-"`
+		ConnectAttributes map[string]string
+		StoreType         string                 `yaml:"-"`
+		SchemaDir         string                 `yaml:"-"`
+		FaultInjection    *config.FaultInjection `yaml:"faultinjection"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -173,7 +173,7 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SQLiteMode, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, logger)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 

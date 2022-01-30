@@ -57,7 +57,7 @@ func NewTestCluster(
 	password string,
 	host string,
 	port int,
-	sqliteMode string,
+	connectAttributes map[string]string,
 	schemaDir string,
 	faultInjection *config.FaultInjection,
 	logger log.Logger,
@@ -75,12 +75,7 @@ func NewTestCluster(
 		PluginName:         pluginName,
 		DatabaseName:       dbName,
 		TaskScanPartitions: 4,
-	}
-
-	if pluginName == "sqlite" {
-		result.cfg.ConnectAttributes = map[string]string{
-			"mode": sqliteMode,
-		}
+		ConnectAttributes:  connectAttributes,
 	}
 
 	result.faultInjection = faultInjection

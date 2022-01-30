@@ -134,7 +134,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		options.Persistence.DBHost = ops.DBHost
 		options.Persistence.DBPort = ops.DBPort
 		options.Persistence.SchemaDir = ops.SchemaDir
-		options.Persistence.SQLiteMode = ops.SQLiteMode
+		options.Persistence.ConnectAttributes = ops.ConnectAttributes
 	case config.StoreTypeNoSQL:
 		// noop for now
 	default:
