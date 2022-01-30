@@ -1,13 +1,9 @@
-log:
-  stdout: true
-  level: error
-
 persistence:
-  defaultStore: default
-  visibilityStore: visibility
+  defaultStore: sqlite-default
+  visibilityStore: sqlite-visibility
   numHistoryShards: 1
   datastores:
-    default:
+    sqlite-default:
       sql:
         user: ""
         password: ""
@@ -18,7 +14,6 @@ persistence:
         connectAttributes:
           mode: "memory"
           cache: "private"
-          setup: true
         maxConns: 1
         maxIdleConns: 1
         maxConnLifetime: "1h"
@@ -30,7 +25,7 @@ persistence:
           enableHostVerification: false
           serverName: ""
 
-    visibility:
+    sqlite-visibility:
       sql:
         user: ""
         password: ""
@@ -52,6 +47,15 @@ persistence:
           keyFile: ""
           enableHostVerification: false
           serverName: ""
+global:
+  membership:
+    maxJoinDuration: 30s
+  pprof:
+    port: 7936
+  metrics:
+    prometheus:
+      timerType: "histogram"
+      listenAddress: "127.0.0.1:8000"
 
 services:
   frontend:
@@ -59,45 +63,24 @@ services:
       grpcPort: 7233
       membershipPort: 6933
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal"
+
   matching:
     rpc:
       grpcPort: 7235
       membershipPort: 6935
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal"
+
   history:
     rpc:
       grpcPort: 7234
       membershipPort: 6934
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal"
+
   worker:
     rpc:
       grpcPort: 7239
       membershipPort: 6939
       bindOnLocalHost: true
-    metrics:
-      statsd:
-        hostPort: "127.0.0.1:8125"
-        prefix: "temporal"
-
-publicClient:
-  hostPort: "localhost:7233"
-
-global:
-  membership:
-    maxJoinDuration: 30s
-    broadcastAddress: "127.0.0.1"
 
 clusterMetadata:
   enableGlobalNamespace: false
@@ -110,3 +93,35 @@ clusterMetadata:
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
+
+dcRedirectionPolicy:
+  policy: "noop"
+  toDC: ""
+
+archival:
+  history:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+  visibility:
+    state: "enabled"
+    enableRead: true
+    provider:
+      filestore:
+        fileMode: "0666"
+        dirMode: "0766"
+
+namespaceDefaults:
+  archival:
+    history:
+      state: "disabled"
+      URI: "file:///tmp/temporal_archival/development"
+    visibility:
+      state: "disabled"
+      URI: "file:///tmp/temporal_vis_archival/development"
+
+publicClient:
+  hostPort: "127.0.0.1:7233"

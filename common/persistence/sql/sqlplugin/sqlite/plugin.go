@@ -94,9 +94,9 @@ func (p *plugin) CreateAdminDB(
 }
 
 // createDBConnection creates a returns a reference to a logical connection to the
-// underlying SQL database. The returned object is to tied to a single
+// underlying SQL database. The returned object is tied to a single
 // SQL database and the object can be used to perform CRUD operations on
-// the tables in the database
+// the tables in the database.
 func (p *plugin) createDBConnection(
 	cfg *config.SQL,
 	_ resolver.ServiceResolver,
@@ -126,7 +126,7 @@ func (p *plugin) createDBConnection(
 	db.MapperFunc(strcase.ToSnake)
 
 	// only suitable for in memory databases!
-	if mode := cfg.ConnectAttributes["mode"]; mode == "memory" {
+	if cfg.ConnectAttributes["mode"] == "memory" {
 		// creates temporary DB overlay in order to configure database and schemas
 		err := p.setupSQLiteDatabase(cfg, db)
 		if err != nil {
@@ -139,11 +139,6 @@ func (p *plugin) createDBConnection(
 }
 
 func (p *plugin) setupSQLiteDatabase(cfg *config.SQL, conn *sqlx.DB) error {
-	adminCfg := *cfg
-
-	// NOTE need to connect with empty name to create new database
-	adminCfg.DatabaseName = ""
-
 	db := newDB(sqlplugin.DbKindUnknown, cfg.DatabaseName, conn, nil)
 	defer func() { _ = db.Close() }()
 
