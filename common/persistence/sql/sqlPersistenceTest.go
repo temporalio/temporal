@@ -31,6 +31,7 @@ import (
 	"strings"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -76,10 +77,12 @@ func NewTestCluster(
 		PluginName:         pluginName,
 		DatabaseName:       dbName,
 		TaskScanPartitions: 4,
-		ConnectAttributes: map[string]string{
-			"mode": sqliteMode, // Used by SQLite only.
-		},
 	}
+
+	if pluginName == sqlite.PluginName {
+		result.cfg.ConnectAttributes["mode"] = sqliteMode
+	}
+
 	result.faultInjection = faultInjection
 	return &result
 }
