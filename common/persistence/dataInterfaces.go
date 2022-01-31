@@ -891,6 +891,8 @@ type (
 	ReadHistoryBranchByBatchResponse struct {
 		// History events by batch
 		History []*historypb.History
+		// TransactionID for relevant History batch
+		TransactionIDs []int64
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
