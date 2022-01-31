@@ -3666,7 +3666,7 @@ func (e *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 
-	flushBeforeReady, err := e.startTransactionHandleWorkflowTaskFailover(false)
+	flushBeforeReady, err := e.startTransactionHandleWorkflowTaskFailover()
 	if err != nil {
 		return false, err
 	}
@@ -3674,19 +3674,6 @@ func (e *MutableStateImpl) StartTransaction(
 	e.startTransactionHandleWorkflowTaskTTL()
 
 	return flushBeforeReady, nil
-}
-
-func (e *MutableStateImpl) StartTransactionSkipWorkflowTaskFail(
-	namespaceEntry *namespace.Namespace,
-) error {
-
-	e.namespaceEntry = namespaceEntry
-	if err := e.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
-		return err
-	}
-
-	_, err := e.startTransactionHandleWorkflowTaskFailover(true)
-	return err
 }
 
 func (e *MutableStateImpl) CloseTransactionAsMutation(
@@ -4163,9 +4150,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
 	}
 }
 
-func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
-	skipWorkflowTaskFailed bool,
-) (bool, error) {
+func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, error) {
 
 	if !e.IsWorkflowExecutionRunning() ||
 		!e.canReplicateEvents() {
@@ -4232,10 +4217,6 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 	// event batch shard the same version
 	if err := e.UpdateCurrentVersion(flushBufferVersion, true); err != nil {
 		return false, err
-	}
-
-	if skipWorkflowTaskFailed {
-		return false, nil
 	}
 
 	// we have a workflow task with buffered events on the fly with a lower version, fail it
