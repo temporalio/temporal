@@ -3660,7 +3660,10 @@ func (e *MutableStateImpl) UpdateWorkflowStateStatus(
 func (e *MutableStateImpl) StartTransaction(
 	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
-
+	namespaceEntry, err := e.startTransactionHandleNamespaceMigration(namespaceEntry)
+	if err != nil {
+		return false, err
+	}
 	e.namespaceEntry = namespaceEntry
 	if err := e.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
 		return false, err
@@ -4150,6 +4153,30 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
 	}
 }
 
+func (e *MutableStateImpl) startTransactionHandleNamespaceMigration(
+	namespaceEntry *namespace.Namespace,
+) (*namespace.Namespace, error) {
+	// NOTE:
+	// the main idea here is to guarantee that buffered events & namespace migration works
+	// e.g. handle buffered events during version 0 => version > 0 by postponing namespace migration
+	// * flush buffered events as if namespace is still local
+	// * use updated namespace for actual call
+
+	lastWriteVersion, err := e.GetLastWriteVersion()
+	if err != nil {
+		return nil, err
+	}
+
+	// local namespace -> global namespace && with buffered events
+	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && e.HasBufferedEvents() {
+		localNamespaceMutation := namespace.NewCurrentLocalNamespace(
+			e.clusterMetadata.GetCurrentClusterName(),
+		)
+		return namespaceEntry.Clone(localNamespaceMutation), nil
+	}
+	return namespaceEntry, nil
+}
+
 func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, error) {
 
 	if !e.IsWorkflowExecutionRunning() ||
@@ -4207,7 +4234,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, e
 	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
 		// do a sanity check on buffered events
 		if e.HasBufferedEvents() {
-			return false, serviceerror.NewInternal("MutableStateImpl encounter previous passive workflow with buffered events")
+			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")
 		}
 		flushBufferVersion = currentVersion
 	}
