@@ -119,7 +119,11 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 	}
 }
 
-func GetVersionedSchemaFilesInOrder(schemaDir string, logger log.Logger) []string {
+// GetSchemaFiles takes a root directory which contains subdirectories whose names are semantic versions and returns
+// the .cql files within. E.g.: //schema/cassandra/temporal/versioned
+// Subdirectories are ordered by semantic version, but files within the same subdirectory are in arbitrary order.
+// All .cql files are returned regardless of whether they are named in manifest.json.
+func GetSchemaFiles(schemaDir string, logger log.Logger) []string {
 	var retVal []string
 
 	versionDirPath := path.Join(schemaDir, "versioned")
