@@ -432,6 +432,8 @@ const (
 	FrontendClientDescribeWorkflowExecutionScope
 	// FrontendClientGetWorkflowExecutionHistoryScope tracks RPC calls to frontend service
 	FrontendClientGetWorkflowExecutionHistoryScope
+	// FrontendClientGetWorkflowExecutionHistoryReverseScope tracks RPC calls to frontend service
+	FrontendClientGetWorkflowExecutionHistoryReverseScope
 	// FrontendClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to frontend service
 	FrontendClientGetWorkflowExecutionRawHistoryScope
 	// FrontendClientPollForWorkflowExecutionRawHistoryScope tracks RPC calls to frontend service
@@ -570,6 +572,8 @@ const (
 	DCRedirectionDescribeWorkflowExecutionScope
 	// DCRedirectionGetWorkflowExecutionHistoryScope tracks RPC calls for dc redirection
 	DCRedirectionGetWorkflowExecutionHistoryScope
+	// DCRedirectionGetWorkflowExecutionHistoryReverseScope tracks RPC calls for dc redirection
+	DCRedirectionGetWorkflowExecutionHistoryReverseScope
 	// DCRedirectionGetWorkflowExecutionRawHistoryScope tracks RPC calls for dc redirection
 	DCRedirectionGetWorkflowExecutionRawHistoryScope
 	// DCRedirectionPollForWorkflowExecutionRawHistoryScope tracks RPC calls for dc redirection
@@ -1343,6 +1347,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientDescribeTaskQueueScope:                  {operation: "FrontendClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeWorkflowExecutionScope:          {operation: "FrontendClientDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetWorkflowExecutionHistoryScope:        {operation: "FrontendClientGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetWorkflowExecutionHistoryReverseScope: {operation: "FrontendClientGetWorkflowExecutionHistoryReverse", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetWorkflowExecutionRawHistoryScope:     {operation: "FrontendClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientPollForWorkflowExecutionRawHistoryScope: {operation: "FrontendClientPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListArchivedWorkflowExecutionsScope:     {operation: "FrontendClientListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1412,6 +1417,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionDescribeTaskQueueScope:                   {operation: "DCRedirectionDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeWorkflowExecutionScope:           {operation: "DCRedirectionDescribeWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkflowExecutionHistoryScope:         {operation: "DCRedirectionGetWorkflowExecutionHistory", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionGetWorkflowExecutionHistoryReverseScope:  {operation: "DCRedirectionGetWorkflowExecutionHistoryReverse", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionGetWorkflowExecutionRawHistoryScope:      {operation: "DCRedirectionGetWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionPollForWorkflowExecutionRawHistoryScope:  {operation: "DCRedirectionPollForWorkflowExecutionRawHistoryScope", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListArchivedWorkflowExecutionsScope:      {operation: "DCRedirectionListArchivedWorkflowExecutions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},

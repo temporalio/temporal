@@ -839,6 +839,37 @@ type (
 		Size int
 	}
 
+	// ReadHistoryBranchRequest is used to read a history branch
+	ReadHistoryBranchReverseRequest struct {
+		// The shard to get history branch data
+		ShardID int32
+		// The branch to be read
+		BranchToken []byte
+		// Get the history nodes upto MaxEventID.  Exclusive.
+		MaxEventID int64
+		// Maximum number of batches of events per page. Not that number of events in a batch >=1, it is not number of events per page.
+		// However for a single page, it is also possible that the returned events is less than PageSize (event zero events) due to stale events.
+		PageSize int
+		// LastFirstTransactionID specified in mutable state. Only used for reading in reverse order.
+		LastFirstTransactionID int64
+		// Whether we want to return events in reverse order.
+		ReverseOrder bool
+		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
+		NextPageToken []byte
+	}
+
+	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
+	ReadHistoryBranchReverseResponse struct {
+		// History events
+		HistoryEvents []*historypb.HistoryEvent
+		// Token to read next page if there are more events beyond page size.
+		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
+		// Empty means we have reached the last page, not need to continue
+		NextPageToken []byte
+		// Size of history read from store
+		Size int
+	}
+
 	// ReadHistoryBranchByBatchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchByBatchResponse struct {
 		// History events by batch
@@ -1112,6 +1143,8 @@ type (
 		ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch
 		ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error)
+		// ReadHistoryBranch returns history node data for a branch
+		ReadHistoryBranchReverse(request *ReadHistoryBranchReverseRequest) (*ReadHistoryBranchReverseResponse, error)
 		// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
 		// NOTE: this API should only be used by 3+DC
 		ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error)
