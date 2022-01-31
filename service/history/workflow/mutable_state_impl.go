@@ -4169,7 +4169,7 @@ func (e *MutableStateImpl) startTransactionHandleNamespaceMigration(
 
 	// local namespace -> global namespace && with buffered events
 	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && e.HasBufferedEvents() {
-		localNamespaceMutation := namespace.NewCurrentLocalNamespace(
+		localNamespaceMutation := namespace.NewPretendAsLocalNamespace(
 			e.clusterMetadata.GetCurrentClusterName(),
 		)
 		return namespaceEntry.Clone(localNamespaceMutation), nil

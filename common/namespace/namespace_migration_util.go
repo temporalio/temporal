@@ -31,26 +31,28 @@ import (
 )
 
 type (
-	CurrentLocalNamespace struct {
-		currentClusterName string
+	PretendAsLocalNamespace struct {
+		localClusterName string
 	}
 )
 
-var _ Mutation = CurrentLocalNamespace{}
+var _ Mutation = PretendAsLocalNamespace{}
 
-func NewCurrentLocalNamespace(
-	currentClusterName string,
-) CurrentLocalNamespace {
-	return CurrentLocalNamespace{
-		currentClusterName: currentClusterName,
+// NewPretendAsLocalNamespace create a Mutation which update namespace replication
+// config as if this namespace is local
+func NewPretendAsLocalNamespace(
+	localClusterName string,
+) PretendAsLocalNamespace {
+	return PretendAsLocalNamespace{
+		localClusterName: localClusterName,
 	}
 }
 
-func (c CurrentLocalNamespace) apply(response *persistence.GetNamespaceResponse) {
+func (c PretendAsLocalNamespace) apply(response *persistence.GetNamespaceResponse) {
 	response.IsGlobalNamespace = false
 	response.Namespace.ReplicationConfig = &persistencespb.NamespaceReplicationConfig{
-		ActiveClusterName: c.currentClusterName,
-		Clusters:          persistence.GetOrUseDefaultClusters(c.currentClusterName, nil),
+		ActiveClusterName: c.localClusterName,
+		Clusters:          persistence.GetOrUseDefaultClusters(c.localClusterName, nil),
 	}
 	response.Namespace.FailoverVersion = common.EmptyVersion
 }
