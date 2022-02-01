@@ -164,7 +164,7 @@ func SearchAttributeProviderProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+		dynamicCollection.GetBoolProperty(dynamicconfig.IsDevMode, false))
 }
 
 func SearchAttributeManagerProvider(
@@ -175,7 +175,7 @@ func SearchAttributeManagerProvider(
 	return searchattribute.NewManager(
 		timeSource,
 		cmMgr,
-		dynamicCollection.GetBoolProperty(dynamicconfig.ForceSearchAttributesCacheRefreshOnRead, false))
+		dynamicCollection.GetBoolProperty(dynamicconfig.IsDevMode, false))
 }
 
 func NamespaceRegistryProvider(

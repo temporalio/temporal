@@ -59,6 +59,8 @@ var Keys = map[Key]string{
 	testGetBoolPropertyFilteredByNamespaceIDKey:       "testGetBoolPropertyFilteredByNamespaceIDKey",
 	testGetBoolPropertyFilteredByTaskQueueInfoKey:     "testGetBoolPropertyFilteredByTaskQueueInfoKey",
 
+	IsDevMode: "system.isDevMode",
+
 	// admin settings
 	// NOTE: admin settings are not guaranteed to be compatible across different versions
 	AdminMatchingNamespaceToPartitionDispatchRate:          "admin.matchingNamespaceToPartitionDispatchRate",
@@ -74,21 +76,20 @@ var Keys = map[Key]string{
 	EnableReadVisibilityFromES:                "system.enableReadVisibilityFromES",
 	EnableReadFromSecondaryAdvancedVisibility: "system.enableReadFromSecondaryAdvancedVisibility",
 
-	HistoryArchivalState:                    "system.historyArchivalState",
-	EnableReadFromHistoryArchival:           "system.enableReadFromHistoryArchival",
-	VisibilityArchivalState:                 "system.visibilityArchivalState",
-	EnableReadFromVisibilityArchival:        "system.enableReadFromVisibilityArchival",
-	EnableNamespaceNotActiveAutoForwarding:  "system.enableNamespaceNotActiveAutoForwarding",
-	TransactionSizeLimit:                    "system.transactionSizeLimit",
-	DisallowQuery:                           "system.disallowQuery",
-	EnableBatcher:                           "worker.enableBatcher",
-	EnableParentClosePolicyWorker:           "system.enableParentClosePolicyWorker",
-	EnableStickyQuery:                       "system.enableStickyQuery",
-	EnablePriorityTaskProcessor:             "system.enablePriorityTaskProcessor",
-	EnableAuthorization:                     "system.enableAuthorization",
-	EnableCrossNamespaceCommands:            "system.enableCrossNamespaceCommands",
-	ForceSearchAttributesCacheRefreshOnRead: "system.forceSearchAttributesCacheRefreshOnRead",
-	ClusterMetadataRefreshInterval:          "system.clusterMetadataRefreshInterval",
+	HistoryArchivalState:                   "system.historyArchivalState",
+	EnableReadFromHistoryArchival:          "system.enableReadFromHistoryArchival",
+	VisibilityArchivalState:                "system.visibilityArchivalState",
+	EnableReadFromVisibilityArchival:       "system.enableReadFromVisibilityArchival",
+	EnableNamespaceNotActiveAutoForwarding: "system.enableNamespaceNotActiveAutoForwarding",
+	TransactionSizeLimit:                   "system.transactionSizeLimit",
+	DisallowQuery:                          "system.disallowQuery",
+	EnableBatcher:                          "worker.enableBatcher",
+	EnableParentClosePolicyWorker:          "system.enableParentClosePolicyWorker",
+	EnableStickyQuery:                      "system.enableStickyQuery",
+	EnablePriorityTaskProcessor:            "system.enablePriorityTaskProcessor",
+	EnableAuthorization:                    "system.enableAuthorization",
+	EnableCrossNamespaceCommands:           "system.enableCrossNamespaceCommands",
+	ClusterMetadataRefreshInterval:         "system.clusterMetadataRefreshInterval",
 
 	// size limit
 	BlobSizeLimitError:     "limit.blobSize.error",
@@ -371,6 +372,9 @@ const (
 	testGetBoolPropertyFilteredByNamespaceIDKey
 	testGetBoolPropertyFilteredByTaskQueueInfoKey
 
+	// IsDevMode will bypass search attributes cache (and later on namespace cache) to facilitate unit tests and demos.
+	IsDevMode
+
 	// AdminMatchingNamespaceToPartitionDispatchRate is the max qps of any task queue partition for a given namespace
 	AdminMatchingNamespaceToPartitionDispatchRate
 	// AdminMatchingNamespaceTaskqueueToPartitionDispatchRate is the max qps of a task queue partition for a given namespace & task queue
@@ -440,11 +444,6 @@ const (
 	// MaxIDLengthLimit is the length limit for various IDs, including: Namespace, TaskQueue, WorkflowID, ActivityID, TimerID,
 	// WorkflowType, ActivityType, SignalName, MarkerName, ErrorReason/FailureReason/CancelCause, Identity, RequestID
 	MaxIDLengthLimit
-
-	// ForceSearchAttributesCacheRefreshOnRead forces refreshing search attributes cache on a read operation, so we always
-	// get the latest data from DB. This effectively bypasses cache value and is used to facilitate testing of changes in
-	// search attributes. This should not be turned on in production.
-	ForceSearchAttributesCacheRefreshOnRead
 
 	// key for frontend
 

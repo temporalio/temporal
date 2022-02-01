@@ -46,7 +46,7 @@ type (
 	managerImpl struct {
 		timeSource             clock.TimeSource
 		clusterMetadataManager persistence.ClusterMetadataManager
-		forceRefresh           dynamicconfig.BoolPropertyFn
+		isDevMode              dynamicconfig.BoolPropertyFn
 
 		cacheUpdateMutex sync.Mutex
 		cache            atomic.Value // of type cache
@@ -65,7 +65,7 @@ var _ Manager = (*managerImpl)(nil)
 func NewManager(
 	timeSource clock.TimeSource,
 	clusterMetadataManager persistence.ClusterMetadataManager,
-	forceRefresh dynamicconfig.BoolPropertyFn,
+	isDevMode dynamicconfig.BoolPropertyFn,
 ) *managerImpl {
 
 	var saCache atomic.Value
@@ -79,7 +79,7 @@ func NewManager(
 		timeSource:             timeSource,
 		cache:                  saCache,
 		clusterMetadataManager: clusterMetadataManager,
-		forceRefresh:           forceRefresh,
+		isDevMode:              isDevMode,
 	}
 }
 
@@ -93,6 +93,8 @@ func (m *managerImpl) GetSearchAttributes(
 	now := m.timeSource.Now()
 	saCache := m.cache.Load().(cache)
 
+	// Always force cache refresh in dev mode, so we get a consistent view in unit tests and demos.
+	forceRefreshCache = forceRefreshCache || m.isDevMode()
 	if m.needRefreshCache(saCache, forceRefreshCache, now) {
 		m.cacheUpdateMutex.Lock()
 		saCache = m.cache.Load().(cache)
@@ -116,7 +118,7 @@ func (m *managerImpl) GetSearchAttributes(
 }
 
 func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, now time.Time) bool {
-	return forceRefreshCache || saCache.expireOn.Before(now) || m.forceRefresh()
+	return forceRefreshCache || saCache.expireOn.Before(now)
 }
 
 func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
