@@ -786,7 +786,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, int64, int64, bool, error) {
+	) ([]byte, string, int64, bool, error) {
 		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID.String(),
 			Execution:           execution,
@@ -795,14 +795,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		})
 
 		if err != nil {
-			return nil, "", 0, 0, 0, false, err
+			return nil, "", 0, false, err
 		}
 		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
-			response.GetLastFirstEventId(),
-			response.GetNextEventId(),
 			response.GetLastFirstEventTxnId(),
 			isWorkflowRunning,
 			nil
@@ -816,7 +814,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 
 	if request.NextPageToken == nil {
 		continuationToken = &tokenspb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, _, _, lastFirstTxnID, _, err =
+		continuationToken.BranchToken, runID, lastFirstTxnID, _, err =
 			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
 		if err != nil {
 			return nil, err
