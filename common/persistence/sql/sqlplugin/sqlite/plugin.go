@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/resolver"
+	sqliteschema "go.temporal.io/server/schema/sqlite"
 )
 
 const (
@@ -47,12 +48,15 @@ const (
 	PluginName = "sqlite"
 )
 
-type plugin struct{}
+type plugin struct {
+	connPool *connPool
+}
 
-var _ sqlplugin.Plugin = (*plugin)(nil)
+var sqlitePlugin = &plugin{}
 
 func init() {
-	sql.RegisterPlugin(PluginName, &plugin{})
+	sqlitePlugin.connPool = newConnPool()
+	sql.RegisterPlugin(PluginName, sqlitePlugin)
 }
 
 // CreateDB initialize the db object
@@ -61,11 +65,14 @@ func (p *plugin) CreateDB(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 ) (sqlplugin.DB, error) {
-	conn, err := p.createDBConnection(cfg, r)
+	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
 	if err != nil {
 		return nil, err
 	}
+
 	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
+
 	return db, nil
 }
 
@@ -75,18 +82,21 @@ func (p *plugin) CreateAdminDB(
 	cfg *config.SQL,
 	r resolver.ServiceResolver,
 ) (sqlplugin.AdminDB, error) {
-	conn, err := p.createDBConnection(cfg, r)
+	conn, err := p.connPool.Allocate(cfg, r, p.createDBConnection)
 	if err != nil {
 		return nil, err
 	}
+
 	db := newDB(dbKind, cfg.DatabaseName, conn, nil)
+	db.OnClose(func() { p.connPool.Close(cfg) }) // remove reference
+
 	return db, nil
 }
 
 // createDBConnection creates a returns a reference to a logical connection to the
-// underlying SQL database. The returned object is to tied to a single
+// underlying SQL database. The returned object is tied to a single
 // SQL database and the object can be used to perform CRUD operations on
-// the tables in the database
+// the tables in the database.
 func (p *plugin) createDBConnection(
 	cfg *config.SQL,
 	_ resolver.ServiceResolver,
@@ -95,6 +105,7 @@ func (p *plugin) createDBConnection(
 	if err != nil {
 		return nil, fmt.Errorf("error building DSN: %w", err)
 	}
+
 	db, err := sqlx.Connect(goSqlDriverName, dsn)
 	if err != nil {
 		return nil, err
@@ -114,7 +125,30 @@ func (p *plugin) createDBConnection(
 	// Maps struct names in CamelCase to snake without need for db struct tags.
 	db.MapperFunc(strcase.ToSnake)
 
+	// only suitable for in memory databases!
+	if cfg.ConnectAttributes["mode"] == "memory" {
+		// creates temporary DB overlay in order to configure database and schemas
+		err := p.setupSQLiteDatabase(cfg, db)
+		if err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+	}
+
 	return db, nil
+}
+
+func (p *plugin) setupSQLiteDatabase(cfg *config.SQL, conn *sqlx.DB) error {
+	db := newDB(sqlplugin.DbKindUnknown, cfg.DatabaseName, conn, nil)
+	defer func() { _ = db.Close() }()
+
+	err := db.CreateDatabase(cfg.DatabaseName)
+	if err != nil {
+		return err
+	}
+
+	// init tables
+	return sqliteschema.SetupSchemaOnDB(db)
 }
 
 func buildDSN(cfg *config.SQL) (string, error) {

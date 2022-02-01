@@ -164,6 +164,26 @@ services:
         aliases:
           - integration-test
 
+  integration-test-sqlite:
+    build:
+      context: ../..
+      dockerfile: ./develop/buildkite/Dockerfile
+    environment:
+      - "PERSISTENCE_TYPE=sql"
+      - "PERSISTENCE_DRIVER=sqlite"
+      - "TEMPORAL_VERSION_CHECK_DISABLED=1"
+      - BUILDKITE_AGENT_ACCESS_TOKEN
+      - BUILDKITE_JOB_ID
+      - BUILDKITE_BUILD_ID
+      - BUILDKITE_BUILD_NUMBER
+    volumes:
+      - ../..:/temporal
+      - /usr/bin/buildkite-agent:/usr/bin/buildkite-agent
+    networks:
+      services-network:
+        aliases:
+          - integration-test
+
   integration-test-xdc-cassandra:
     build:
       context: ../..

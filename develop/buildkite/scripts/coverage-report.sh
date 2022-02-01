@@ -24,4 +24,7 @@ buildkite-agent artifact download ".coverage/integ_postgres_coverprofile.out" . 
 buildkite-agent artifact download ".coverage/integ_xdc_postgres_coverprofile.out" . --step ":golang: integration xdc test with postgresql" --build "${BUILDKITE_BUILD_ID}"
 buildkite-agent artifact download ".coverage/integ_ndc_postgres_coverprofile.out" . --step ":golang: integration ndc test with postgresql" --build "${BUILDKITE_BUILD_ID}"
 
+# SQLite.
+buildkite-agent artifact download ".coverage/integ_sqlite_coverprofile.out" . --step ":golang: integration test with sqlite" --build "${BUILDKITE_BUILD_ID}"
+
 make ci-coverage-report
