@@ -218,225 +218,225 @@ func NewTest(
 }
 
 // Start for testing
-func (s *Test) Start() {
+func (t *Test) Start() {
 
 }
 
 // Stop for testing
-func (s *Test) Stop() {
+func (t *Test) Stop() {
 
 }
 
 // static infos
 
 // GetServiceName for testing
-func (s *Test) GetServiceName() string {
+func (t *Test) GetServiceName() string {
 	panic("user should implement this method for test")
 }
 
 // GetHostName for testing
-func (s *Test) GetHostName() string {
+func (t *Test) GetHostName() string {
 	return testHostInfo.Identity()
 }
 
 // GetHostInfo for testing
-func (s *Test) GetHostInfo() *membership.HostInfo {
+func (t *Test) GetHostInfo() *membership.HostInfo {
 	return testHostInfo
 }
 
 // GetClusterMetadata for testing
-func (s *Test) GetClusterMetadata() cluster.Metadata {
-	return s.ClusterMetadata
+func (t *Test) GetClusterMetadata() cluster.Metadata {
+	return t.ClusterMetadata
 }
 
 // GetClusterMetadata for testing
-func (s *Test) GetClusterMetadataManager() persistence.ClusterMetadataManager {
-	return s.ClusterMetadataMgr
+func (t *Test) GetClusterMetadataManager() persistence.ClusterMetadataManager {
+	return t.ClusterMetadataMgr
 }
 
 // other common resources
 
 // GetNamespaceRegistry for testing
-func (s *Test) GetNamespaceRegistry() namespace.Registry {
-	return s.NamespaceCache
+func (t *Test) GetNamespaceRegistry() namespace.Registry {
+	return t.NamespaceCache
 }
 
 // GetTimeSource for testing
-func (s *Test) GetTimeSource() clock.TimeSource {
-	return s.TimeSource
+func (t *Test) GetTimeSource() clock.TimeSource {
+	return t.TimeSource
 }
 
 // GetPayloadSerializer for testing
-func (s *Test) GetPayloadSerializer() serialization.Serializer {
-	return s.PayloadSerializer
+func (t *Test) GetPayloadSerializer() serialization.Serializer {
+	return t.PayloadSerializer
 }
 
 // GetMetricsClient for testing
-func (s *Test) GetMetricsClient() metrics.Client {
-	return s.MetricsClient
+func (t *Test) GetMetricsClient() metrics.Client {
+	return t.MetricsClient
 }
 
 // GetArchivalMetadata for testing
-func (s *Test) GetArchivalMetadata() archiver.ArchivalMetadata {
-	return s.ArchivalMetadata
+func (t *Test) GetArchivalMetadata() archiver.ArchivalMetadata {
+	return t.ArchivalMetadata
 }
 
 // GetArchiverProvider for testing
-func (s *Test) GetArchiverProvider() provider.ArchiverProvider {
-	return s.ArchiverProvider
+func (t *Test) GetArchiverProvider() provider.ArchiverProvider {
+	return t.ArchiverProvider
 }
 
 // membership infos
 
 // GetMembershipMonitor for testing
-func (s *Test) GetMembershipMonitor() membership.Monitor {
-	return s.MembershipMonitor
+func (t *Test) GetMembershipMonitor() membership.Monitor {
+	return t.MembershipMonitor
 }
 
 // GetFrontendServiceResolver for testing
-func (s *Test) GetFrontendServiceResolver() membership.ServiceResolver {
-	return s.FrontendServiceResolver
+func (t *Test) GetFrontendServiceResolver() membership.ServiceResolver {
+	return t.FrontendServiceResolver
 }
 
 // GetMatchingServiceResolver for testing
-func (s *Test) GetMatchingServiceResolver() membership.ServiceResolver {
-	return s.MatchingServiceResolver
+func (t *Test) GetMatchingServiceResolver() membership.ServiceResolver {
+	return t.MatchingServiceResolver
 }
 
 // GetHistoryServiceResolver for testing
-func (s *Test) GetHistoryServiceResolver() membership.ServiceResolver {
-	return s.HistoryServiceResolver
+func (t *Test) GetHistoryServiceResolver() membership.ServiceResolver {
+	return t.HistoryServiceResolver
 }
 
 // GetWorkerServiceResolver for testing
-func (s *Test) GetWorkerServiceResolver() membership.ServiceResolver {
-	return s.WorkerServiceResolver
+func (t *Test) GetWorkerServiceResolver() membership.ServiceResolver {
+	return t.WorkerServiceResolver
 }
 
 // internal services clients
 
 // GetSDKClientFactory for testing
-func (s *Test) GetSDKClientFactory() sdk.ClientFactory {
-	return s.SDKClientFactory
+func (t *Test) GetSDKClientFactory() sdk.ClientFactory {
+	return t.SDKClientFactory
 }
 
 // GetFrontendClient for testing
-func (s *Test) GetFrontendClient() workflowservice.WorkflowServiceClient {
-	return s.FrontendClient
+func (t *Test) GetFrontendClient() workflowservice.WorkflowServiceClient {
+	return t.FrontendClient
 }
 
 // GetMatchingRawClient for testing
-func (s *Test) GetMatchingRawClient() matchingservice.MatchingServiceClient {
-	return s.MatchingClient
+func (t *Test) GetMatchingRawClient() matchingservice.MatchingServiceClient {
+	return t.MatchingClient
 }
 
 // GetMatchingClient for testing
-func (s *Test) GetMatchingClient() matchingservice.MatchingServiceClient {
-	return s.MatchingClient
+func (t *Test) GetMatchingClient() matchingservice.MatchingServiceClient {
+	return t.MatchingClient
 }
 
 // GetHistoryRawClient for testing
-func (s *Test) GetHistoryRawClient() historyservice.HistoryServiceClient {
-	return s.HistoryClient
+func (t *Test) GetHistoryRawClient() historyservice.HistoryServiceClient {
+	return t.HistoryClient
 }
 
 // GetHistoryClient for testing
-func (s *Test) GetHistoryClient() historyservice.HistoryServiceClient {
-	return s.HistoryClient
+func (t *Test) GetHistoryClient() historyservice.HistoryServiceClient {
+	return t.HistoryClient
 }
 
 // GetRemoteAdminClient for testing
-func (s *Test) GetRemoteAdminClient(
+func (t *Test) GetRemoteAdminClient(
 	cluster string,
 ) adminservice.AdminServiceClient {
 
-	return s.RemoteAdminClient
+	return t.RemoteAdminClient
 }
 
 // GetRemoteFrontendClient for testing
-func (s *Test) GetRemoteFrontendClient(
+func (t *Test) GetRemoteFrontendClient(
 	cluster string,
 ) workflowservice.WorkflowServiceClient {
 
-	return s.RemoteFrontendClient
+	return t.RemoteFrontendClient
 }
 
 // GetClientBean for testing
-func (s *Test) GetClientBean() client.Bean {
-	return s.ClientBean
+func (t *Test) GetClientBean() client.Bean {
+	return t.ClientBean
 }
 
 // GetClientFactory for testing
-func (s *Test) GetClientFactory() client.Factory {
-	return s.ClientFactory
+func (t *Test) GetClientFactory() client.Factory {
+	return t.ClientFactory
 }
 
 // persistence clients
 
 // GetMetadataManager for testing
-func (s *Test) GetMetadataManager() persistence.MetadataManager {
-	return s.MetadataMgr
+func (t *Test) GetMetadataManager() persistence.MetadataManager {
+	return t.MetadataMgr
 }
 
 // GetTaskManager for testing
-func (s *Test) GetTaskManager() persistence.TaskManager {
-	return s.TaskMgr
+func (t *Test) GetTaskManager() persistence.TaskManager {
+	return t.TaskMgr
 }
 
 // GetNamespaceReplicationQueue for testing
-func (s *Test) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
+func (t *Test) GetNamespaceReplicationQueue() persistence.NamespaceReplicationQueue {
 	// user should implement this method for test
-	return s.NamespaceReplicationQueue
+	return t.NamespaceReplicationQueue
 }
 
 // GetShardManager for testing
-func (s *Test) GetShardManager() persistence.ShardManager {
-	return s.ShardMgr
+func (t *Test) GetShardManager() persistence.ShardManager {
+	return t.ShardMgr
 }
 
 // GetExecutionManager for testing
-func (s *Test) GetExecutionManager() persistence.ExecutionManager {
-	return s.ExecutionMgr
+func (t *Test) GetExecutionManager() persistence.ExecutionManager {
+	return t.ExecutionMgr
 }
 
 // GetPersistenceBean for testing
-func (s *Test) GetPersistenceBean() persistenceClient.Bean {
-	return s.PersistenceBean
+func (t *Test) GetPersistenceBean() persistenceClient.Bean {
+	return t.PersistenceBean
 }
 
 // loggers
 
 // GetLogger for testing
-func (s *Test) GetLogger() log.Logger {
-	return s.Logger
+func (t *Test) GetLogger() log.Logger {
+	return t.Logger
 }
 
 // GetThrottledLogger for testing
-func (s *Test) GetThrottledLogger() log.Logger {
-	return s.Logger
+func (t *Test) GetThrottledLogger() log.Logger {
+	return t.Logger
 }
 
 // GetGRPCListener for testing
-func (s *Test) GetGRPCListener() net.Listener {
+func (t *Test) GetGRPCListener() net.Listener {
 	panic("user should implement this method for test")
 }
 
-func (h *Test) GetSearchAttributesProvider() searchattribute.Provider {
-	return h.SearchAttributesProvider
+func (t *Test) GetSearchAttributesProvider() searchattribute.Provider {
+	return t.SearchAttributesProvider
 }
 
-func (h *Test) GetSearchAttributesManager() searchattribute.Manager {
-	return h.SearchAttributesManager
+func (t *Test) GetSearchAttributesManager() searchattribute.Manager {
+	return t.SearchAttributesManager
 }
 
-func (h *Test) GetSearchAttributesMapper() searchattribute.Mapper {
-	return h.SearchAttributesMapper
+func (t *Test) GetSearchAttributesMapper() searchattribute.Mapper {
+	return t.SearchAttributesMapper
 }
 
-func (h *Test) RefreshNamespaceCache() {
-	h.NamespaceCache.Refresh()
+func (t *Test) RefreshNamespaceCache() {
+	t.NamespaceCache.Refresh()
 }
 
-func (h *Test) GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory {
+func (t *Test) GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory {
 	return nil
 }
