@@ -25,6 +25,7 @@
 package authorization
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -131,25 +132,36 @@ func parseJWT(tokenString string, keyProvider TokenKeyProvider) (jwt.MapClaims, 
 func parseJWTWithAudience(tokenString string, keyProvider TokenKeyProvider, audience string) (jwt.MapClaims, error) {
 
 	parser := jwt.NewParser(jwt.WithValidMethods(keyProvider.SupportedMethods()))
-	token, err := parser.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
 
-		kid, ok := token.Header["kid"].(string)
-		if !ok {
-			return nil, fmt.Errorf("malformed token - no \"kid\" header")
+	var keyFunc jwt.Keyfunc
+	if provider, _ := keyProvider.(RawTokenKeyProvider); provider != nil {
+		keyFunc = func(token *jwt.Token) (interface{}, error) {
+			// reserve context
+			// impl may introduce network request to get public key
+			return provider.GetKey(context.Background(), token)
 		}
-		alg := token.Header["alg"].(string)
-		switch token.Method.(type) {
-		case *jwt.SigningMethodHMAC:
-			return keyProvider.HmacKey(alg, kid)
-		case *jwt.SigningMethodRSA:
-			return keyProvider.RsaKey(alg, kid)
-		case *jwt.SigningMethodECDSA:
-			return keyProvider.EcdsaKey(alg, kid)
-		default:
-			return nil, serviceerror.NewPermissionDenied(
-				fmt.Sprintf("unexpected signing method: %v for algorithm: %v", token.Method, token.Header["alg"]), "")
+	} else {
+		keyFunc = func(token *jwt.Token) (interface{}, error) {
+			kid, ok := token.Header["kid"].(string)
+			if !ok {
+				return nil, fmt.Errorf("malformed token - no \"kid\" header")
+			}
+			alg := token.Header["alg"].(string)
+			switch token.Method.(type) {
+			case *jwt.SigningMethodHMAC:
+				return keyProvider.HmacKey(alg, kid)
+			case *jwt.SigningMethodRSA:
+				return keyProvider.RsaKey(alg, kid)
+			case *jwt.SigningMethodECDSA:
+				return keyProvider.EcdsaKey(alg, kid)
+			default:
+				return nil, serviceerror.NewPermissionDenied(
+					fmt.Sprintf("unexpected signing method: %v for algorithm: %v", token.Method, token.Header["alg"]), "")
+			}
 		}
-	})
+	}
+
+	token, err := parser.Parse(tokenString, keyFunc)
 
 	if err != nil {
 		return nil, err
