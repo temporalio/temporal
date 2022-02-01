@@ -56,25 +56,25 @@ type cassandraTestData struct {
 }
 
 func setUpCassandraTest(t *testing.T) (cassandraTestData, func()) {
-	var td cassandraTestData
-	td.cfg = newCassandraConfig()
-	td.logger = log.NewZapLogger(zaptest.NewLogger(t))
-	SetUpCassandraDatabase(td.cfg)
-	SetUpCassandraSchema(td.cfg, td.logger)
+	var testData cassandraTestData
+	testData.cfg = newCassandraConfig()
+	testData.logger = log.NewZapLogger(zaptest.NewLogger(t))
+	SetUpCassandraDatabase(testData.cfg)
+	SetUpCassandraSchema(testData.cfg, testData.logger)
 
-	td.factory = cassandra.NewFactory(
-		*td.cfg,
+	testData.factory = cassandra.NewFactory(
+		*testData.cfg,
 		resolver.NewNoopResolver(),
 		testCassandraClusterName,
-		td.logger,
+		testData.logger,
 	)
 
 	tearDown := func() {
-		td.factory.Close()
-		TearDownCassandraKeyspace(td.cfg)
+		testData.factory.Close()
+		TearDownCassandraKeyspace(testData.cfg)
 	}
 
-	return td, tearDown
+	return testData, tearDown
 }
 
 func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
