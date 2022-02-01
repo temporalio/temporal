@@ -2341,20 +2341,6 @@ func (mr *MockMutableStateMockRecorder) StartTransaction(entry interface{}) *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransaction", reflect.TypeOf((*MockMutableState)(nil).StartTransaction), entry)
 }
 
-// StartTransactionSkipWorkflowTaskFail mocks base method.
-func (m *MockMutableState) StartTransactionSkipWorkflowTaskFail(entry *namespace.Namespace) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "StartTransactionSkipWorkflowTaskFail", entry)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// StartTransactionSkipWorkflowTaskFail indicates an expected call of StartTransactionSkipWorkflowTaskFail.
-func (mr *MockMutableStateMockRecorder) StartTransactionSkipWorkflowTaskFail(entry interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "StartTransactionSkipWorkflowTaskFail", reflect.TypeOf((*MockMutableState)(nil).StartTransactionSkipWorkflowTaskFail), entry)
-}
-
 // UpdateActivity mocks base method.
 func (m *MockMutableState) UpdateActivity(arg0 *v19.ActivityInfo) error {
 	m.ctrl.T.Helper()

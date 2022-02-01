@@ -302,6 +302,13 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 		return m.currentClusterName
 	}
 
+	if !isGlobalNamespace {
+		panic(fmt.Sprintf(
+			"ClusterMetadata encountered local namesapce with failover version %v",
+			failoverVersion,
+		))
+	}
+
 	initialFailoverVersion := failoverVersion % m.failoverVersionIncrement
 	// Failover version starts with 1.  Zero is an invalid value for failover version
 	if initialFailoverVersion == common.EmptyVersion {

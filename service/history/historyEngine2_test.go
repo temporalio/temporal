@@ -1275,6 +1275,11 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
 		log.NewTestLogger(), runID)
+	addWorkflowExecutionStartedEvent(msBuilder, commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
+	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, identity)
+	_ = addWorkflowTaskScheduledEvent(msBuilder)
 	ms := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
