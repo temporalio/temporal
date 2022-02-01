@@ -26,8 +26,13 @@ package tests
 
 import (
 	"fmt"
+	"os"
+	"path"
 	"path/filepath"
+	"sort"
+	"strings"
 
+	"github.com/blang/semver/v4"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -65,14 +70,19 @@ func SetUpCassandraDatabase(cfg *config.Cassandra) {
 	}
 }
 
-func SetUpCassandraSchema(cfg *config.Cassandra) {
-	session, err := gocql.NewSession(*cfg, resolver.NewNoopResolver(), log.NewNoopLogger())
+func SetUpCassandraSchema(cfg *config.Cassandra, logger log.Logger) {
+	ApplySchemaUpdate(cfg, testCassandraExecutionSchema, logger)
+	ApplySchemaUpdate(cfg, testCassandraVisibilitySchema, logger)
+}
+
+func ApplySchemaUpdate(cfg *config.Cassandra, schemaFile string, logger log.Logger) {
+	session, err := gocql.NewSession(*cfg, resolver.NewNoopResolver(), logger)
 	if err != nil {
-		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
+		panic(err)
 	}
 	defer session.Close()
 
-	schemaPath, err := filepath.Abs(testCassandraExecutionSchema)
+	schemaPath, err := filepath.Abs(schemaFile)
 	if err != nil {
 		panic(err)
 	}
@@ -84,22 +94,7 @@ func SetUpCassandraSchema(cfg *config.Cassandra) {
 
 	for _, stmt := range statements {
 		if err = session.Query(stmt).Exec(); err != nil {
-			panic(err)
-		}
-	}
-
-	schemaPath, err = filepath.Abs(testCassandraVisibilitySchema)
-	if err != nil {
-		panic(err)
-	}
-
-	statements, err = p.LoadAndSplitQuery([]string{schemaPath})
-	if err != nil {
-		panic(err)
-	}
-
-	for _, stmt := range statements {
-		if err = session.Query(stmt).Exec(); err != nil {
+			logger.Error(fmt.Sprintf("Unable to execute statement from file: %s\n  %s", schemaFile, stmt))
 			panic(err)
 		}
 	}
@@ -123,4 +118,61 @@ func TearDownCassandraKeyspace(cfg *config.Cassandra) {
 	); err != nil {
 		panic(fmt.Sprintf("unable to drop Cassandra keyspace: %v", err))
 	}
+}
+
+// GetSchemaFiles takes a root directory which contains subdirectories whose names are semantic versions and returns
+// the .cql files within. E.g.: //schema/cassandra/temporal/versioned
+// Subdirectories are ordered by semantic version, but files within the same subdirectory are in arbitrary order.
+// All .cql files are returned regardless of whether they are named in manifest.json.
+func GetSchemaFiles(schemaDir string, logger log.Logger) []string {
+	var retVal []string
+
+	versionDirPath := path.Join(schemaDir, "versioned")
+	subDirs, err := os.ReadDir(versionDirPath)
+	if err != nil {
+		panic(err)
+	}
+
+	versionDirNames := make([]string, 0, len(subDirs))
+	for _, subDir := range subDirs {
+		if !subDir.IsDir() {
+			logger.Warn(fmt.Sprintf("Skipping non-directory file: '%s'", subDir.Name()))
+			continue
+		}
+		if _, ve := semver.ParseTolerant(subDir.Name()); ve != nil {
+			logger.Warn(fmt.Sprintf("Skipping directory which is not a valid semver: '%s'", subDir.Name()))
+		}
+		versionDirNames = append(versionDirNames, subDir.Name())
+	}
+
+	sort.Slice(versionDirNames, func(i, j int) bool {
+		vLeft, err := semver.ParseTolerant(versionDirNames[i])
+		if err != nil {
+			panic(err) // Logic error
+		}
+		vRight, err := semver.ParseTolerant(versionDirNames[j])
+		if err != nil {
+			panic(err) // Logic error
+		}
+		return vLeft.Compare(vRight) < 0
+	})
+
+	for _, dir := range versionDirNames {
+		vDirPath := path.Join(versionDirPath, dir)
+		files, err := os.ReadDir(vDirPath)
+		if err != nil {
+			panic(err)
+		}
+		for _, file := range files {
+			if file.IsDir() {
+				continue
+			}
+			if !strings.HasSuffix(file.Name(), ".cql") {
+				continue
+			}
+			retVal = append(retVal, path.Join(vDirPath, file.Name()))
+		}
+	}
+
+	return retVal
 }
