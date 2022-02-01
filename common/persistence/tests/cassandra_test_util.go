@@ -26,6 +26,12 @@ package tests
 
 import (
 	"fmt"
+	"os"
+	"path"
+	"path/filepath"
+	"sort"
+	"strings"
+
 	"github.com/blang/semver/v4"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -33,11 +39,6 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
-	"os"
-	"path"
-	"path/filepath"
-	"sort"
-	"strings"
 )
 
 const (

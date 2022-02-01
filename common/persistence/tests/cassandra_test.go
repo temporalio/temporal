@@ -25,8 +25,9 @@
 package tests
 
 import (
-	"go.uber.org/zap/zaptest"
 	"testing"
+
+	"go.uber.org/zap/zaptest"
 
 	"github.com/stretchr/testify/suite"
 
@@ -50,9 +51,9 @@ const (
 )
 
 type cassandraTestData struct {
-	cfg *config.Cassandra
+	cfg     *config.Cassandra
 	factory *cassandra.Factory
-	logger log.Logger
+	logger  log.Logger
 }
 
 func setUpCassandraTest(t *testing.T) (cassandraTestData, func()) {
