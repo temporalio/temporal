@@ -534,7 +534,7 @@ func (s *ESVisibilitySuite) Test_convertQuery() {
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
-	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "unable to parse query: unable to convert 'order by' column name: unable to sort by field of Text type, use field of type Keyword")
+	s.Equal(err.(*serviceerror.InvalidArgument).Error(), "invalid query: unable to convert 'order by' column name: unable to sort by field of Text type, use field of type Keyword")
 
 	query = `order by CustomIntField asc`
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
@@ -591,7 +591,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
-	s.EqualError(err, "unable to parse query: unable to convert filter expression: unable to convert left part of comparison expression: invalid search attribute: AliasForUnknownField")
+	s.EqualError(err, "invalid query: unable to convert filter expression: unable to convert left part of comparison expression: invalid search attribute: AliasForUnknownField")
 
 	query = `order by ExecutionTime`
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
@@ -615,7 +615,7 @@ func (s *ESVisibilitySuite) Test_convertQuery_Mapper() {
 	qry, srt, err = s.visibilityStore.convertQuery(testNamespace, testNamespaceID, query)
 	s.Error(err)
 	s.ErrorAs(err, &invalidArgumentErr)
-	s.EqualError(err, "unable to parse query: unable to convert 'order by' column name: invalid search attribute: AliasForUnknownField")
+	s.EqualError(err, "invalid query: unable to convert 'order by' column name: invalid search attribute: AliasForUnknownField")
 	s.visibilityStore.searchAttributesMapper = nil
 }
 
@@ -952,7 +952,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 	s.Error(err)
 	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
+	s.True(strings.HasPrefix(err.Error(), "invalid query"))
 }
 
 func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
@@ -1027,7 +1027,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	s.Error(err)
 	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
+	s.True(strings.HasPrefix(err.Error(), "invalid query"))
 
 	// test scroll
 	scrollID := "scrollID-1"
@@ -1092,7 +1092,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 	s.Error(err)
 	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
+	s.True(strings.HasPrefix(err.Error(), "invalid query"))
 
 	// test scroll
 	scrollID := "scrollID-1"
@@ -1167,7 +1167,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_PIT() {
 	s.Error(err)
 	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
+	s.True(strings.HasPrefix(err.Error(), "invalid query"))
 
 	// test search
 	request.Query = `ExecutionStatus = "Terminated"`
@@ -1252,7 +1252,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 	s.Error(err)
 	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
-	s.True(strings.HasPrefix(err.Error(), "unable to parse query"))
+	s.True(strings.HasPrefix(err.Error(), "invalid query"), err.Error())
 }
 
 func (s *ESVisibilitySuite) Test_detailedErrorMessage() {
