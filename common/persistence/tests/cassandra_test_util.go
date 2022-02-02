@@ -48,12 +48,12 @@ const (
 	testCassandraVisibilitySchema = "../../../schema/cassandra/visibility/schema.cql"
 )
 
-func SetUpCassandraDatabase(cfg *config.Cassandra) {
+func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
 	adminCfg := *cfg
 	// NOTE need to connect with empty name to create new database
 	adminCfg.Keyspace = "system"
 
-	session, err := gocql.NewSession(adminCfg, resolver.NewNoopResolver(), log.NewNoopLogger())
+	session, err := gocql.NewSession(adminCfg, resolver.NewNoopResolver(), logger)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create Cassandra session: %v", err))
 	}
