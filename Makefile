@@ -80,7 +80,6 @@ UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(IN
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 PINNED_DEPENDENCIES := \
-	github.com/DataDog/sketches-go@v0.0.1 \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
 	github.com/go-sql-driver/mysql@v1.5.0
 
