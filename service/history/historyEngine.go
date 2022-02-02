@@ -831,7 +831,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 	// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
 	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
 	// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
-	safeToDispatchDirectly := de.ActiveClusterName() != e.clusterMetadata.GetCurrentClusterName() ||
+	safeToDispatchDirectly := !de.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName()) ||
 		!mutableState.IsWorkflowExecutionRunning() ||
 		(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
 	if safeToDispatchDirectly {
