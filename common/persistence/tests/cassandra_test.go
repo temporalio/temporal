@@ -60,7 +60,7 @@ func setUpCassandraTest(t *testing.T) (cassandraTestData, func()) {
 	var testData cassandraTestData
 	testData.cfg = newCassandraConfig()
 	testData.logger = log.NewZapLogger(zaptest.NewLogger(t))
-	SetUpCassandraDatabase(testData.cfg)
+	SetUpCassandraDatabase(testData.cfg, testData.logger)
 	SetUpCassandraSchema(testData.cfg, testData.logger)
 
 	testData.factory = cassandra.NewFactory(
