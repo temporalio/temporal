@@ -200,7 +200,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 func (r *nDCStateRebuilderImpl) initializeBuilders(
 	namespaceEntry *namespace.Namespace,
 	now time.Time,
-) (*workflow.MutableStateImpl, workflow.MutableStateRebuilder) {
+) (workflow.MutableState, workflow.MutableStateRebuilder) {
 	resetMutableStateBuilder := workflow.NewMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),
