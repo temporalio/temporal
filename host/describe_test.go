@@ -46,7 +46,7 @@ import (
 func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	id := "integration-describe-wfe-test"
 	wt := "integration-describe-wfe-test-type"
-	tl := "integration-describe-wfe-test-taskqueue"
+	tq := "integration-describe-wfe-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution
@@ -55,7 +55,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 		Namespace:           s.namespace,
 		WorkflowId:          id,
 		WorkflowType:        &commonpb.WorkflowType{Name: wt},
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
 		Input:               nil,
 		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
 		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
@@ -81,6 +81,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	s.Nil(dweResponse.WorkflowExecutionInfo.CloseTime)
 	s.Equal(int64(2), dweResponse.WorkflowExecutionInfo.HistoryLength) // WorkflowStarted, WorkflowTaskScheduled
 	s.Equal(dweResponse.WorkflowExecutionInfo.GetStartTime(), dweResponse.WorkflowExecutionInfo.GetExecutionTime())
+	s.Equal(tq, dweResponse.WorkflowExecutionInfo.TaskQueue)
 
 	// workflow logic
 	workflowComplete := false
@@ -96,7 +97,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             "1",
 					ActivityType:           &commonpb.ActivityType{Name: "test-activity-type"},
-					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+					TaskQueue:              &taskqueuepb.TaskQueue{Name: tq},
 					Input:                  payloads.EncodeString("test-input"),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
 					ScheduleToStartTimeout: timestamp.DurationPtr(2 * time.Second),
@@ -123,7 +124,7 @@ func (s *integrationSuite) TestDescribeWorkflowExecution() {
 	poller := &TaskPoller{
 		Engine:              s.engine,
 		Namespace:           s.namespace,
-		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tq},
 		Identity:            identity,
 		WorkflowTaskHandler: wtHandler,
 		ActivityTaskHandler: atHandler,
