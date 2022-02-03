@@ -446,7 +446,7 @@ func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 
 	resp := &ReadHistoryBranchByBatchResponse{}
 	var err error
-	_, resp.History, resp.NextPageToken, resp.Size, err = m.readHistoryBranch(true, request)
+	_, resp.History, resp.TransactionIDs, resp.NextPageToken, resp.Size, err = m.readHistoryBranch(true, request)
 	return resp, err
 }
 
@@ -458,7 +458,7 @@ func (m *executionManagerImpl) ReadHistoryBranch(
 
 	resp := &ReadHistoryBranchResponse{}
 	var err error
-	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, err = m.readHistoryBranch(false, request)
+	resp.HistoryEvents, _, _, resp.NextPageToken, resp.Size, err = m.readHistoryBranch(false, request)
 	return resp, err
 }
 
@@ -469,7 +469,7 @@ func (m *executionManagerImpl) ReadRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
 ) (*ReadRawHistoryBranchResponse, error) {
 
-	dataBlobs, token, dataSize, err := m.readRawHistoryBranchAndFilter(request)
+	dataBlobs, _, token, dataSize, err := m.readRawHistoryBranchAndFilter(request)
 	if err != nil {
 		return nil, err
 	}
@@ -575,7 +575,7 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 
 func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	request *ReadHistoryBranchRequest,
-) ([]*commonpb.DataBlob, *historyPagingToken, int, error) {
+) ([]*commonpb.DataBlob, []int64, *historyPagingToken, int, error) {
 
 	shardID := request.ShardID
 	branchToken := request.BranchToken
@@ -584,7 +584,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 
 	branch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 	treeID := branch.TreeId
 	branchID := branch.BranchId
@@ -606,7 +606,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		request.MinEventID-1,
 	)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
 	nodes, token, err := m.readRawHistoryBranch(
@@ -620,10 +620,10 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		false,
 	)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 	if len(nodes) == 0 && len(request.NextPageToken) == 0 {
-		return nil, nil, 0, serviceerror.NewNotFound("Workflow execution history not found.")
+		return nil, nil, nil, 0, serviceerror.NewNotFound("Workflow execution history not found.")
 	}
 
 	nodes, err = m.filterHistoryNodes(
@@ -632,33 +632,35 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		nodes,
 	)
 	if err != nil {
-		return nil, nil, 0, err
+		return nil, nil, nil, 0, err
 	}
 
 	var dataBlobs []*commonpb.DataBlob
+	transactionIDs := make([]int64, 0, len(nodes))
 	dataSize := 0
 	if len(nodes) > 0 {
 		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
 		for index, node := range nodes {
 			dataBlobs[index] = node.Events
 			dataSize += len(node.Events.Data)
+			transactionIDs = append(transactionIDs, node.TransactionID)
 		}
 		lastNode := nodes[len(nodes)-1]
 		token.LastNodeID = lastNode.NodeID
 		token.LastTransactionID = lastNode.TransactionID
 	}
 
-	return dataBlobs, token, dataSize, nil
+	return dataBlobs, transactionIDs, token, dataSize, nil
 }
 
 func (m *executionManagerImpl) readHistoryBranch(
 	byBatch bool,
 	request *ReadHistoryBranchRequest,
-) ([]*historypb.HistoryEvent, []*historypb.History, []byte, int, error) {
+) ([]*historypb.HistoryEvent, []*historypb.History, []int64, []byte, int, error) {
 
-	dataBlobs, token, dataSize, err := m.readRawHistoryBranchAndFilter(request)
+	dataBlobs, transactionIDs, token, dataSize, err := m.readRawHistoryBranchAndFilter(request)
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, err
 	}
 
 	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
@@ -667,11 +669,11 @@ func (m *executionManagerImpl) readHistoryBranch(
 	for _, batch := range dataBlobs {
 		events, err := m.serializer.DeserializeEvents(batch)
 		if err != nil {
-			return historyEvents, historyEventBatches, nil, dataSize, err
+			return nil, nil, nil, nil, dataSize, err
 		}
 		if len(events) == 0 {
 			m.logger.Error("Empty events in a batch")
-			return historyEvents, historyEventBatches, nil, dataSize, serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
+			return nil, nil, nil, nil, dataSize, serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
 		}
 
 		firstEvent := events[0]           // first
@@ -684,7 +686,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
 				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.Counter(eventCount))
-			return historyEvents, historyEventBatches, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
 		}
 		if firstEvent.GetEventId() != token.LastEventID+1 {
 			m.logger.Error("Corrupted non-contiguous event batch",
@@ -692,7 +694,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 				tag.WorkflowNextEventID(lastEvent.GetEventId()),
 				tag.TokenLastEventID(token.LastEventID),
 				tag.Counter(eventCount))
-			return historyEvents, historyEventBatches, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
+			return historyEvents, historyEventBatches, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
 		}
 
 		if byBatch {
@@ -705,9 +707,9 @@ func (m *executionManagerImpl) readHistoryBranch(
 
 	nextPageToken, err := m.serializeToken(token)
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, err
 	}
-	return historyEvents, historyEventBatches, nextPageToken, dataSize, nil
+	return historyEvents, historyEventBatches, transactionIDs, nextPageToken, dataSize, nil
 }
 
 func (m *executionManagerImpl) filterHistoryNodes(
