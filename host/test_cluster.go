@@ -45,6 +45,7 @@ import (
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/pprof"
 	"go.temporal.io/server/common/searchattribute"
@@ -122,6 +123,8 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 			ops = persistencetests.GetMySQLTestClusterOption()
 		case postgresql.PluginName:
 			ops = persistencetests.GetPostgreSQLTestClusterOption()
+		case sqlite.PluginName:
+			ops = persistencetests.GetSQLiteTestClusterOption()
 		default:
 			panic(fmt.Sprintf("unknown sql store drier: %v", TestFlags.PersistenceDriver))
 		}
@@ -131,6 +134,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		options.Persistence.DBHost = ops.DBHost
 		options.Persistence.DBPort = ops.DBPort
 		options.Persistence.SchemaDir = ops.SchemaDir
+		options.Persistence.ConnectAttributes = ops.ConnectAttributes
 	case config.StoreTypeNoSQL:
 		// noop for now
 	default:

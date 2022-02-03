@@ -206,9 +206,17 @@ func (m *clusterMetadataManagerImpl) convertInternalGetClusterMetadataResponse(
 
 // immutableFieldsChanged returns true if any of immutable fields changed.
 func immutableFieldsChanged(old persistencespb.ClusterMetadata, cur persistencespb.ClusterMetadata) bool {
-	return (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
+	if (old.ClusterName != "" && old.ClusterName != cur.ClusterName) ||
 		(old.ClusterId != "" && old.ClusterId != cur.ClusterId) ||
 		(old.HistoryShardCount != 0 && old.HistoryShardCount != cur.HistoryShardCount) ||
-		(old.FailoverVersionIncrement != 0 && old.FailoverVersionIncrement != cur.FailoverVersionIncrement) ||
-		(old.InitialFailoverVersion != 0 && old.InitialFailoverVersion != cur.InitialFailoverVersion)
+		(old.IsGlobalNamespaceEnabled && !cur.IsGlobalNamespaceEnabled) {
+		return true
+	}
+	if old.IsGlobalNamespaceEnabled {
+		if (old.FailoverVersionIncrement != 0 && old.FailoverVersionIncrement != cur.FailoverVersionIncrement) ||
+			(old.InitialFailoverVersion != 0 && old.InitialFailoverVersion != cur.InitialFailoverVersion) {
+			return true
+		}
+	}
+	return false
 }

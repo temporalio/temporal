@@ -603,19 +603,13 @@ func (s *TaskSerializer) TransferDeleteExecutionTaskToProto(
 	deleteExecutionTask *tasks.DeleteExecutionTask,
 ) *persistencespb.TransferTaskInfo {
 	return &persistencespb.TransferTaskInfo{
-		NamespaceId:             deleteExecutionTask.WorkflowKey.NamespaceID,
-		WorkflowId:              deleteExecutionTask.WorkflowKey.WorkflowID,
-		RunId:                   deleteExecutionTask.WorkflowKey.RunID,
-		TaskType:                enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
-		TargetNamespaceId:       "",
-		TargetWorkflowId:        "",
-		TargetRunId:             "",
-		TargetChildWorkflowOnly: false,
-		TaskQueue:               "",
-		ScheduleId:              0,
-		Version:                 deleteExecutionTask.Version,
-		TaskId:                  deleteExecutionTask.TaskID,
-		VisibilityTime:          timestamp.TimePtr(deleteExecutionTask.VisibilityTimestamp),
+		NamespaceId:    deleteExecutionTask.WorkflowKey.NamespaceID,
+		WorkflowId:     deleteExecutionTask.WorkflowKey.WorkflowID,
+		RunId:          deleteExecutionTask.WorkflowKey.RunID,
+		TaskType:       enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
+		Version:        deleteExecutionTask.Version,
+		TaskId:         deleteExecutionTask.TaskID,
+		VisibilityTime: timestamp.TimePtr(deleteExecutionTask.VisibilityTimestamp),
 	}
 }
 

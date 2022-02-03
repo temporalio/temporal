@@ -29,6 +29,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
@@ -38,7 +39,7 @@ import (
 )
 
 var (
-	ErrNamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted("namespace count limit exceeded")
+	ErrNamespaceCountLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_CONCURRENT_LIMIT, "namespace concurrent poller limit exceeded")
 )
 
 type (

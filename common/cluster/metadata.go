@@ -33,6 +33,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/log"
@@ -44,7 +46,6 @@ import (
 const (
 	defaultClusterMetadataPageSize = 100
 	refreshInterval                = time.Minute
-	refreshFailureInterval         = time.Second * 30
 
 	FakeClusterForEmptyVersion = "fake-cluster-for-empty-version"
 )
@@ -106,6 +107,7 @@ type (
 		status               int32
 		clusterMetadataStore persistence.ClusterMetadataManager
 		refresher            *goro.Handle
+		refreshDuration      dynamicconfig.DurationPropertyFn
 		logger               log.Logger
 
 		// Immutable fields
@@ -139,6 +141,7 @@ func NewMetadata(
 	currentClusterName string,
 	clusterInfo map[string]ClusterInformation,
 	clusterMetadataStore persistence.ClusterMetadataManager,
+	refreshDuration dynamicconfig.DurationPropertyFn,
 	logger log.Logger,
 ) Metadata {
 	if len(clusterInfo) == 0 {
@@ -166,6 +169,9 @@ func NewMetadata(
 	for k, v := range clusterInfo {
 		copyClusterInfo[k] = v
 	}
+	if refreshDuration == nil {
+		refreshDuration = dynamicconfig.GetDurationPropertyFn(refreshInterval)
+	}
 	return &metadataImpl{
 		status:                   common.DaemonStatusInitialized,
 		enableGlobalNamespace:    enableGlobalNamespace,
@@ -177,12 +183,14 @@ func NewMetadata(
 		clusterChangeCallback:    make(map[string]CallbackFn),
 		clusterMetadataStore:     clusterMetadataStore,
 		logger:                   logger,
+		refreshDuration:          refreshDuration,
 	}
 }
 
 func NewMetadataFromConfig(
 	config *Config,
 	clusterMetadataStore persistence.ClusterMetadataManager,
+	dynamicCollection *dynamicconfig.Collection,
 	logger log.Logger,
 ) Metadata {
 	return NewMetadata(
@@ -192,6 +200,7 @@ func NewMetadataFromConfig(
 		config.CurrentClusterName,
 		config.ClusterInformation,
 		clusterMetadataStore,
+		dynamicCollection.GetDurationProperty(dynamicconfig.ClusterMetadataRefreshInterval, refreshInterval),
 		logger,
 	)
 }
@@ -205,6 +214,7 @@ func NewMetadataForTest(
 		config.MasterClusterName,
 		config.CurrentClusterName,
 		config.ClusterInformation,
+		nil,
 		nil,
 		log.NewNoopLogger(),
 	)
@@ -292,6 +302,13 @@ func (m *metadataImpl) ClusterNameForFailoverVersion(isGlobalNamespace bool, fai
 		return m.currentClusterName
 	}
 
+	if !isGlobalNamespace {
+		panic(fmt.Sprintf(
+			"ClusterMetadata encountered local namesapce with failover version %v",
+			failoverVersion,
+		))
+	}
+
 	initialFailoverVersion := failoverVersion % m.failoverVersionIncrement
 	// Failover version starts with 1.  Zero is an invalid value for failover version
 	if initialFailoverVersion == common.EmptyVersion {
@@ -344,7 +361,7 @@ func (m *metadataImpl) UnRegisterMetadataChangeCallback(callbackId string) {
 }
 
 func (m *metadataImpl) refreshLoop(ctx context.Context) error {
-	timer := time.NewTicker(refreshInterval)
+	timer := time.NewTicker(m.refreshDuration())
 	defer timer.Stop()
 
 	for {
@@ -355,7 +372,7 @@ func (m *metadataImpl) refreshLoop(ctx context.Context) error {
 			for err := m.refreshClusterMetadata(ctx); err != nil; err = m.refreshClusterMetadata(ctx) {
 				m.logger.Error("Error refreshing remote cluster metadata", tag.Error(err))
 				select {
-				case <-time.After(refreshFailureInterval):
+				case <-time.After(m.refreshDuration() / 2):
 				case <-ctx.Done():
 					return nil
 				}

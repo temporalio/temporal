@@ -197,8 +197,11 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{}},
 	}
 	history1 := []*historypb.History{{Events: []*historypb.HistoryEvent{event1, event2, event3}}}
+	transactionID1 := int64(10)
 	history2 := []*historypb.History{{Events: []*historypb.HistoryEvent{event4, event5}}}
-	history := append(history1, history2...)
+	transactionID2 := int64(20)
+	expectedHistory := append(history1, history2...)
+	expectedTransactionIDs := []int64{transactionID1, transactionID2}
 	pageToken := []byte("some random token")
 
 	shardID := s.mockShard.GetShardID()
@@ -210,9 +213,10 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		NextPageToken: nil,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       history1,
-		NextPageToken: pageToken,
-		Size:          12345,
+		History:        history1,
+		TransactionIDs: []int64{transactionID1},
+		NextPageToken:  pageToken,
+		Size:           12345,
 	}, nil)
 	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
@@ -222,22 +226,30 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		NextPageToken: pageToken,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       history2,
-		NextPageToken: nil,
-		Size:          67890,
+		History:        history2,
+		TransactionIDs: []int64{transactionID2},
+		NextPageToken:  nil,
+		Size:           67890,
 	}, nil)
 
 	paginationFn := s.nDCStateRebuilder.getPaginationFn(firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
 
-	var result []*historypb.History
+	var result []*HistoryBlobsPaginationItem
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		result = append(result, item.(*historypb.History))
+		result = append(result, item.(*HistoryBlobsPaginationItem))
+	}
+	var historyResult []*historypb.History
+	var transactionIDsResult []int64
+	for _, item := range result {
+		historyResult = append(historyResult, item.History)
+		transactionIDsResult = append(transactionIDsResult, item.TransactionID)
 	}
 
-	s.Equal(history, result)
+	s.Equal(expectedHistory, historyResult)
+	s.Equal(expectedTransactionIDs, transactionIDsResult)
 }
 
 func (s *nDCStateRebuilderSuite) TestRebuild() {
@@ -293,10 +305,12 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		NextPageToken: nil,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       history1,
-		NextPageToken: pageToken,
-		Size:          historySize1,
+		History:        history1,
+		TransactionIDs: []int64{10},
+		NextPageToken:  pageToken,
+		Size:           historySize1,
 	}, nil)
+	expectedLastFirstTransactionID := int64(20)
 	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
@@ -305,9 +319,10 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		NextPageToken: pageToken,
 		ShardID:       shardID,
 	}).Return(&persistence.ReadHistoryBranchByBatchResponse{
-		History:       history2,
-		NextPageToken: nil,
-		Size:          historySize2,
+		History:        history2,
+		TransactionIDs: []int64{expectedLastFirstTransactionID},
+		NextPageToken:  nil,
+		Size:           historySize2,
 	}, nil)
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(targetNamespaceID).Return(namespace.NewGlobalNamespaceForTest(
@@ -349,4 +364,5 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		),
 	), rebuildMutableState.GetExecutionInfo().GetVersionHistories())
 	s.Equal(timestamp.TimeValue(rebuildMutableState.GetExecutionInfo().StartTime), s.now)
+	s.Equal(expectedLastFirstTransactionID, rebuildExecutionInfo.LastFirstEventTxnId)
 }

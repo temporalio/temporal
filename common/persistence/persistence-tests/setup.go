@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/environment"
 )
 
@@ -39,6 +40,11 @@ const (
 	testPostgreSQLUser      = "temporal"
 	testPostgreSQLPassword  = "temporal"
 	testPostgreSQLSchemaDir = "schema/postgresql/v96"
+
+	testSQLiteUser      = ""
+	testSQLitePassword  = ""
+	testSQLiteMode      = "memory"
+	testSQLiteSchemaDir = "" // specify if mode is not "memory"
 )
 
 // GetMySQLTestClusterOption return test options
@@ -64,5 +70,19 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 		DBPort:          environment.GetPostgreSQLPort(),
 		SchemaDir:       testPostgreSQLSchemaDir,
 		StoreType:       config.StoreTypeSQL,
+	}
+}
+
+// GetSQLiteTestClusterOption return test options
+func GetSQLiteTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName:   sqlite.PluginName,
+		DBUsername:        testSQLiteUser,
+		DBPassword:        testSQLitePassword,
+		DBHost:            environment.Localhost,
+		DBPort:            0,
+		SchemaDir:         testSQLiteSchemaDir,
+		StoreType:         config.StoreTypeSQL,
+		ConnectAttributes: map[string]string{"mode": testSQLiteMode},
 	}
 }

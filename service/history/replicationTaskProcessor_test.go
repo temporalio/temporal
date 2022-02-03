@@ -182,6 +182,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_SyncActivity()
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
+	now := time.Now()
 	attempt := int32(2)
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
@@ -193,6 +194,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_SyncActivity()
 				Attempt:     attempt,
 			},
 		},
+		VisibilityTime: &now,
 	}
 
 	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil)
@@ -204,6 +206,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
+	now := time.Now()
 	events := []*historypb.HistoryEvent{{
 		EventId: 1,
 		Version: 1,
@@ -230,6 +233,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_History() {
 				VersionHistoryItems: versionHistory,
 			},
 		},
+		VisibilityTime: &now,
 	}
 
 	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil)

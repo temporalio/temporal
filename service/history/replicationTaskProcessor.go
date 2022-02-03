@@ -258,6 +258,14 @@ func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError e
 		}
 
 		replicationTask := task.(*replicationspb.ReplicationTask)
+		taskCreationTime := replicationTask.GetVisibilityTime()
+		if taskCreationTime != nil {
+			now := p.shard.GetTimeSource().Now()
+			p.metricsClient.Scope(metrics.ReplicationTaskFetcherScope).RecordTimer(
+				metrics.ReplicationLatency,
+				now.Sub(*taskCreationTime),
+			)
+		}
 		if err = p.applyReplicationTask(replicationTask); err != nil {
 			return err
 		}
@@ -323,7 +331,6 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 func (p *ReplicationTaskProcessorImpl) handleReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
-
 	_ = p.rateLimiter.Wait(context.Background())
 
 	operation := func() error {
@@ -507,38 +514,39 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 }
 
 func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, err error) {
+	metricsScope := p.metricsClient.Scope(scope)
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrContextTimeoutCounter)
+		metricsScope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
 		return
 	}
 
 	// Also update counter to distinguish between type of failures
-	switch err.(type) {
+	switch err := err.(type) {
 	case nil:
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksApplied)
+		metricsScope.IncCounter(metrics.ReplicationTasksApplied)
 	case *serviceerrors.ShardOwnershipLost:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrShardOwnershipLostCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
+		metricsScope.IncCounter(metrics.ServiceErrShardOwnershipLostCounter)
+		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	case *serviceerror.InvalidArgument:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrInvalidArgumentCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
+		metricsScope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
+		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	case *serviceerror.NamespaceNotActive:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrNamespaceNotActiveCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
+		metricsScope.IncCounter(metrics.ServiceErrNamespaceNotActiveCounter)
+		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrExecutionAlreadyStartedCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
+		metricsScope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
+		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	case *serviceerror.NotFound:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrNotFoundCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
+		metricsScope.IncCounter(metrics.ServiceErrNotFoundCounter)
+		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	case *serviceerror.ResourceExhausted:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrResourceExhaustedCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
+		metricsScope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
+		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	case *serviceerrors.RetryReplication:
-		p.metricsClient.IncCounter(scope, metrics.ServiceErrRetryTaskCounter)
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
+		metricsScope.IncCounter(metrics.ServiceErrRetryTaskCounter)
+		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	default:
-		p.metricsClient.IncCounter(scope, metrics.ReplicationTasksFailed)
+		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	}
 }
 

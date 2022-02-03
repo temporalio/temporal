@@ -87,7 +87,6 @@ type (
 		config         *configs.Config
 		numWorker      int
 		logger         log.Logger
-		remotePeer     adminservice.AdminServiceClient
 		rateLimiter    quotas.RateLimiter
 		requestChan    chan *replicationTaskRequest
 		shutdownChan   chan struct{}
@@ -101,7 +100,7 @@ type (
 		sourceCluster  string
 		config         *configs.Config
 		logger         log.Logger
-		remotePeer     adminservice.AdminServiceClient
+		clientBean     client.Bean
 		rateLimiter    quotas.RateLimiter
 		requestChan    chan *replicationTaskRequest
 		shutdownChan   chan struct{}
@@ -175,13 +174,12 @@ func (f *ReplicationTaskFetchersImpl) GetOrCreateFetcher(clusterName string) Rep
 
 func (f *ReplicationTaskFetchersImpl) createReplicationFetcherLocked(clusterName string) ReplicationTaskFetcher {
 	currentCluster := f.clusterMetadata.GetCurrentClusterName()
-	remoteAdminClient := f.clientBean.GetRemoteAdminClient(clusterName)
 	fetcher := newReplicationTaskFetcher(
 		f.logger,
 		clusterName,
 		currentCluster,
 		f.config,
-		remoteAdminClient,
+		f.clientBean,
 	)
 	fetcher.Start()
 	f.fetchers[clusterName] = fetcher
@@ -196,16 +194,16 @@ func (f *ReplicationTaskFetchersImpl) listenClusterMetadataChange() {
 			f.fetchersLock.Lock()
 			defer f.fetchersLock.Unlock()
 
-			for clusterName := range newClusterMetadata {
+			// Fetcher is lazy init. The callback only need to handle remove case.
+			for clusterName, newClusterInfo := range newClusterMetadata {
 				if clusterName == currentCluster {
 					continue
 				}
 				if fetcher, ok := f.fetchers[clusterName]; ok {
-					fetcher.Stop()
-					delete(f.fetchers, clusterName)
-				}
-				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-					f.createReplicationFetcherLocked(clusterName)
+					if newClusterInfo == nil || !newClusterInfo.Enabled {
+						fetcher.Stop()
+						delete(f.fetchers, clusterName)
+					}
 				}
 			}
 		},
@@ -218,7 +216,7 @@ func newReplicationTaskFetcher(
 	sourceCluster string,
 	currentCluster string,
 	config *configs.Config,
-	sourceFrontend adminservice.AdminServiceClient,
+	clientBean client.Bean,
 ) *ReplicationTaskFetcherImpl {
 	numWorker := config.ReplicationTaskFetcherParallelism()
 	requestChan := make(chan *replicationTaskRequest, requestChanBufferSize)
@@ -234,7 +232,7 @@ func newReplicationTaskFetcher(
 			sourceCluster,
 			currentCluster,
 			config,
-			sourceFrontend,
+			clientBean,
 			rateLimiter,
 			requestChan,
 			shutdownChan,
@@ -246,7 +244,6 @@ func newReplicationTaskFetcher(
 		config:         config,
 		numWorker:      numWorker,
 		logger:         log.With(logger, tag.ClusterName(sourceCluster)),
-		remotePeer:     sourceFrontend,
 		currentCluster: currentCluster,
 		sourceCluster:  sourceCluster,
 		rateLimiter:    rateLimiter,
@@ -309,7 +306,7 @@ func newReplicationTaskFetcherWorker(
 	sourceCluster string,
 	currentCluster string,
 	config *configs.Config,
-	sourceFrontend adminservice.AdminServiceClient,
+	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	requestChan chan *replicationTaskRequest,
 	shutdownChan chan struct{},
@@ -320,7 +317,7 @@ func newReplicationTaskFetcherWorker(
 		sourceCluster:  sourceCluster,
 		config:         config,
 		logger:         logger,
-		remotePeer:     sourceFrontend,
+		clientBean:     clientBean,
 		rateLimiter:    rateLimiter,
 		requestChan:    requestChan,
 		shutdownChan:   shutdownChan,
@@ -426,7 +423,8 @@ func (f *replicationTaskFetcherWorker) getMessages() error {
 		Tokens:      tokens,
 		ClusterName: f.currentCluster,
 	}
-	response, err := f.remotePeer.GetReplicationMessages(ctx, request)
+	remoteClient := f.clientBean.GetRemoteAdminClient(f.sourceCluster)
+	response, err := remoteClient.GetReplicationMessages(ctx, request)
 	if err != nil {
 		f.logger.Error("Failed to get replication tasks", tag.Error(err))
 		for _, req := range requestByShard {

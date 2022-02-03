@@ -39,6 +39,7 @@ import (
 	"github.com/olivere/elastic/v7"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -639,10 +640,10 @@ func (s *visibilityStore) convertQuery(namespace namespace.Name, namespaceID nam
 	)
 	requestQuery, fieldSorts, err := queryConverter.ConvertWhereOrderBy(requestQueryStr)
 	if err != nil {
-		// Convert query.ConverterError to serviceerror.InvalidArgument and pass through all other errors (which should be only mapper errors).
+		// Convert ConverterError to InvalidArgument and pass through all other errors (which should be only mapper errors).
 		var converterErr *query.ConverterError
 		if errors.As(err, &converterErr) {
-			return nil, nil, serviceerror.NewInvalidArgument(fmt.Sprintf("unable to parse query: %v", converterErr))
+			return nil, nil, converterErr.ToInvalidArgument()
 		}
 		return nil, nil, err
 	}

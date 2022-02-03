@@ -31,6 +31,7 @@ package sqlite
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/jmoiron/sqlx"
 
@@ -42,6 +43,9 @@ import (
 type db struct {
 	dbKind sqlplugin.DbKind
 	dbName string
+
+	mu      sync.RWMutex
+	onClose []func()
 
 	db        *sqlx.DB
 	tx        *sqlx.Tx
@@ -62,10 +66,11 @@ func newDB(
 	tx *sqlx.Tx,
 ) *db {
 	mdb := &db{
-		dbKind: dbKind,
-		dbName: dbName,
-		db:     xdb,
-		tx:     tx,
+		dbKind:  dbKind,
+		dbName:  dbName,
+		onClose: make([]func(), 0),
+		db:      xdb,
+		tx:      tx,
 	}
 	mdb.conn = xdb
 	if tx != nil {
@@ -94,11 +99,24 @@ func (mdb *db) Rollback() error {
 	return mdb.tx.Rollback()
 }
 
+func (mdb *db) OnClose(hook func()) {
+	mdb.mu.Lock()
+	mdb.onClose = append(mdb.onClose, hook)
+	mdb.mu.Unlock()
+}
+
 // Close closes the connection to the sqlite db
 func (mdb *db) Close() error {
+	mdb.mu.RLock()
+	defer mdb.mu.RUnlock()
+
+	for _, hook := range mdb.onClose {
+		// de-registers the database from conn pool
+		hook()
+	}
+
+	// database connection will be automatically closed by the hook handler when all references are removed
 	return nil
-	// TODO: fix `Error: sql: database is closed` when Close() is enabled
-	// return mdb.db.Close()
 }
 
 // PluginName returns the name of the plugin

@@ -22,64 +22,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package interceptor
+package namespace
 
 import (
-	"context"
-	"time"
-
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-	"google.golang.org/grpc"
-
-	"go.temporal.io/server/common/quotas"
-)
-
-const (
-	RateLimitDefaultToken = 1
-)
-
-var (
-	RateLimitServerBusy = serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "service rate limit exceeded")
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/persistence"
 )
 
 type (
-	RateLimitInterceptor struct {
-		rateLimiter quotas.RequestRateLimiter
-		tokens      map[string]int
+	PretendAsLocalNamespace struct {
+		localClusterName string
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*RateLimitInterceptor)(nil).Intercept
+var _ Mutation = PretendAsLocalNamespace{}
 
-func NewRateLimitInterceptor(
-	rateLimiter quotas.RequestRateLimiter,
-	tokens map[string]int,
-) *RateLimitInterceptor {
-	return &RateLimitInterceptor{
-		rateLimiter: rateLimiter,
-		tokens:      tokens,
+// NewPretendAsLocalNamespace create a Mutation which update namespace replication
+// config as if this namespace is local
+func NewPretendAsLocalNamespace(
+	localClusterName string,
+) PretendAsLocalNamespace {
+	return PretendAsLocalNamespace{
+		localClusterName: localClusterName,
 	}
 }
 
-func (i *RateLimitInterceptor) Intercept(
-	ctx context.Context,
-	req interface{},
-	info *grpc.UnaryServerInfo,
-	handler grpc.UnaryHandler,
-) (interface{}, error) {
-	_, methodName := splitMethodName(info.FullMethod)
-	token, ok := i.tokens[methodName]
-	if !ok {
-		token = RateLimitDefaultToken
+func (c PretendAsLocalNamespace) apply(response *persistence.GetNamespaceResponse) {
+	response.IsGlobalNamespace = false
+	response.Namespace.ReplicationConfig = &persistencespb.NamespaceReplicationConfig{
+		ActiveClusterName: c.localClusterName,
+		Clusters:          persistence.GetOrUseDefaultClusters(c.localClusterName, nil),
 	}
-
-	if !i.rateLimiter.Allow(time.Now().UTC(), quotas.NewRequest(
-		methodName,
-		token,
-		"", // this interceptor layer does not throttle based on caller
-	)) {
-		return nil, RateLimitServerBusy
-	}
-	return handler(ctx, req)
+	response.Namespace.FailoverVersion = common.EmptyVersion
 }

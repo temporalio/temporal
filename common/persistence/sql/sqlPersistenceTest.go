@@ -30,9 +30,8 @@ import (
 	"path"
 	"strings"
 
-	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -58,6 +57,7 @@ func NewTestCluster(
 	password string,
 	host string,
 	port int,
+	connectAttributes map[string]string,
 	schemaDir string,
 	faultInjection *config.FaultInjection,
 	logger log.Logger,
@@ -66,9 +66,6 @@ func NewTestCluster(
 	result.logger = logger
 	result.dbName = dbName
 
-	if schemaDir == "" {
-		panic("must provide schema dir")
-	}
 	result.schemaDir = schemaDir
 	result.cfg = config.SQL{
 		User:               username,
@@ -78,7 +75,9 @@ func NewTestCluster(
 		PluginName:         pluginName,
 		DatabaseName:       dbName,
 		TaskScanPartitions: 4,
+		ConnectAttributes:  connectAttributes,
 	}
+
 	result.faultInjection = faultInjection
 	return &result
 }
@@ -91,6 +90,11 @@ func (s *TestCluster) DatabaseName() string {
 // SetupTestDatabase from PersistenceTestCluster interface
 func (s *TestCluster) SetupTestDatabase() {
 	s.CreateDatabase()
+
+	if s.schemaDir == "" {
+		s.logger.Info("No schema directory provided, skipping schema setup")
+		return
+	}
 
 	schemaDir := s.schemaDir + "/"
 	if !strings.HasPrefix(schemaDir, "/") && !strings.HasPrefix(schemaDir, "../") {

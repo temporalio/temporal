@@ -184,6 +184,16 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		gomock.Any(),
 		workflow.TransactionPolicyActive,
 	).Return(resetSnapshot, resetEventsSeq, nil)
+	resetMutableState.EXPECT().GetNamespaceEntry().Return(namespace.FromPersistentState(&persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info:   &persistencespb.NamespaceInfo{},
+			Config: &persistencespb.NamespaceConfig{},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: "active-cluster-name",
+			},
+		},
+		IsGlobalNamespace: false,
+	}))
 	resetContext.EXPECT().GetHistorySize().Return(resetEventsSize).AnyTimes()
 	resetContext.EXPECT().SetHistorySize(resetEventsSize + resetNewEventsSize)
 
@@ -193,6 +203,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentTerminated() {
 		currentEventsSeq,
 		resetSnapshot,
 		resetEventsSeq,
+		"active-cluster-name",
 	).Return(currentNewEventsSize, resetNewEventsSize, nil)
 
 	err := s.workflowResetter.persistToDB(currentWorkflow, currentMutation, currentEventsSeq, resetWorkflow)

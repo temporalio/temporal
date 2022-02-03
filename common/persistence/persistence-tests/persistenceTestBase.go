@@ -51,6 +51,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -60,6 +61,7 @@ import (
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
@@ -79,15 +81,16 @@ type (
 
 	// TestBaseOptions options to configure workflow test base.
 	TestBaseOptions struct {
-		SQLDBPluginName string
-		DBName          string
-		DBUsername      string
-		DBPassword      string
-		DBHost          string
-		DBPort          int                    `yaml:"-"`
-		StoreType       string                 `yaml:"-"`
-		SchemaDir       string                 `yaml:"-"`
-		FaultInjection  *config.FaultInjection `yaml:"faultinjection"`
+		SQLDBPluginName   string
+		DBName            string
+		DBUsername        string
+		DBPassword        string
+		DBHost            string
+		DBPort            int `yaml:"-"`
+		ConnectAttributes map[string]string
+		StoreType         string                 `yaml:"-"`
+		SchemaDir         string                 `yaml:"-"`
+		FaultInjection    *config.FaultInjection `yaml:"faultinjection"`
 	}
 
 	// TestBase wraps the base setup needed to create workflows over persistence layer.
@@ -152,6 +155,8 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 			options.DBPort = environment.GetMySQLPort()
 		case postgresql.PluginName:
 			options.DBPort = environment.GetPostgreSQLPort()
+		case sqlite.PluginName:
+			options.DBPort = 0
 		default:
 			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
 		}
@@ -162,11 +167,13 @@ func NewTestBaseWithSQL(options *TestBaseOptions) TestBase {
 			options.DBHost = environment.GetMySQLAddress()
 		case postgresql.PluginName:
 			options.DBHost = environment.GetPostgreSQLAddress()
+		case sqlite.PluginName:
+			options.DBHost = environment.Localhost
 		default:
 			panic(fmt.Sprintf("unknown sql store drier: %v", options.SQLDBPluginName))
 		}
 	}
-	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.SchemaDir, options.FaultInjection, logger)
+	testCluster := sql.NewTestCluster(options.SQLDBPluginName, options.DBName, options.DBUsername, options.DBPassword, options.DBHost, options.DBPort, options.ConnectAttributes, options.SchemaDir, options.FaultInjection, logger)
 	return NewTestBaseForCluster(testCluster, logger)
 }
 
@@ -212,8 +219,8 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ClusterMetadataManager, err = factory.NewClusterMetadataManager()
 	s.fatalOnError("NewClusterMetadataManager", err)
 
-	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, s.ClusterMetadataManager, s.Logger)
-	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager)
+	s.ClusterMetadata = cluster.NewMetadataFromConfig(clusterMetadataConfig, s.ClusterMetadataManager, dynamicconfig.NewNoopCollection(), s.Logger)
+	s.SearchAttributesManager = searchattribute.NewManager(clock.NewRealTimeSource(), s.ClusterMetadataManager, dynamicconfig.GetBoolPropertyFn(true))
 
 	s.MetadataManager, err = factory.NewMetadataManager()
 	s.fatalOnError("NewMetadataManager", err)

@@ -32,11 +32,12 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"go.temporal.io/server/common/headers"
+	"go.temporal.io/version/check"
 )
 
 func TestSDKVersionRecorder(t *testing.T) {
 	interceptor := &SDKVersionInterceptor{
-		sdkInfoSet: make(map[sdkNameVersion]struct{}),
+		sdkInfoSet: make(map[check.SDKInfo]struct{}),
 		maxSetSize: 2,
 	}
 

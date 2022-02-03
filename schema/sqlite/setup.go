@@ -31,8 +31,9 @@ import (
 	"fmt"
 	"io"
 
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/server/api/persistence/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/config"
 	p "go.temporal.io/server/common/persistence"
@@ -61,6 +62,13 @@ func SetupSchema(cfg *config.SQL) error {
 	}
 	defer func() { _ = db.Close() }()
 
+	return SetupSchemaOnDB(db)
+}
+
+// SetupSchemaOnDB initializes the SQLite schema in an empty database using existing DB connection.
+//
+// Note: this function may receive breaking changes or be removed in the future.
+func SetupSchemaOnDB(db sqlplugin.AdminDB) error {
 	statements, err := p.LoadAndSplitQueryFromReaders([]io.Reader{bytes.NewBuffer(executionSchema)})
 	if err != nil {
 		return fmt.Errorf("error loading execution schema: %w", err)
@@ -91,7 +99,7 @@ func SetupSchema(cfg *config.SQL) error {
 // Note: this struct may receive breaking changes or be removed in the future.
 type NamespaceConfig struct {
 	// Low level representation of a Namespace used by Temporal persistence drivers.
-	Detail *persistence.NamespaceDetail
+	Detail *persistencespb.NamespaceDetail
 	// Global Namespaces provide support for replication of Workflow execution across clusters.
 	IsGlobal bool
 }
@@ -125,18 +133,18 @@ func CreateNamespaces(cfg *config.SQL, namespaces ...*NamespaceConfig) error {
 //
 // Note: this function may receive breaking changes or be removed in the future.
 func NewNamespaceConfig(activeClusterName, namespace string, global bool) *NamespaceConfig {
-	detail := persistence.NamespaceDetail{
-		Info: &persistence.NamespaceInfo{
+	detail := persistencespb.NamespaceDetail{
+		Info: &persistencespb.NamespaceInfo{
 			Id:    primitives.NewUUID().String(),
-			State: enums.NAMESPACE_STATE_REGISTERED,
+			State: enumspb.NAMESPACE_STATE_REGISTERED,
 			Name:  namespace,
 		},
-		Config: &persistence.NamespaceConfig{
+		Config: &persistencespb.NamespaceConfig{
 			Retention:               timestamp.DurationFromHours(24),
-			HistoryArchivalState:    enums.ARCHIVAL_STATE_DISABLED,
-			VisibilityArchivalState: enums.ARCHIVAL_STATE_DISABLED,
+			HistoryArchivalState:    enumspb.ARCHIVAL_STATE_DISABLED,
+			VisibilityArchivalState: enumspb.ARCHIVAL_STATE_DISABLED,
 		},
-		ReplicationConfig: &persistence.NamespaceReplicationConfig{
+		ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
 			ActiveClusterName: activeClusterName,
 			Clusters:          p.GetOrUseDefaultClusters(activeClusterName, nil),
 		},
@@ -163,7 +171,7 @@ func createNamespaceIfNotExists(db sqlplugin.DB, namespace *NamespaceConfig) err
 		return nil
 	}
 
-	blob, err := serialization.NewSerializer().NamespaceDetailToBlob(namespace.Detail, enums.ENCODING_TYPE_PROTO3)
+	blob, err := serialization.NewSerializer().NamespaceDetailToBlob(namespace.Detail, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return err
 	}

@@ -69,6 +69,10 @@ func TestGlobalMutableState(
 func TestCloneToProto(
 	mutableState MutableState,
 ) *persistencespb.WorkflowMutableState {
-	_, _, _ = mutableState.CloseTransactionAsSnapshot(time.Now().UTC(), TransactionPolicyActive)
+	if mutableState.HasBufferedEvents() {
+		_, _, _ = mutableState.CloseTransactionAsMutation(time.Now().UTC(), TransactionPolicyActive)
+	} else {
+		_, _, _ = mutableState.CloseTransactionAsSnapshot(time.Now().UTC(), TransactionPolicyActive)
+	}
 	return mutableState.CloneToProto()
 }

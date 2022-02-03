@@ -2736,6 +2736,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		WorkflowExecutionInfo: response.GetWorkflowExecutionInfo(),
 		PendingActivities:     response.GetPendingActivities(),
 		PendingChildren:       response.GetPendingChildren(),
+		PendingWorkflowTask:   response.GetPendingWorkflowTask(),
 	}, nil
 }
 
@@ -2821,11 +2822,6 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 
 	if request == nil {
 		return nil, errRequestNotSet
-	}
-
-	_, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
 	}
 
 	return &workflowservice.GetSystemInfoResponse{

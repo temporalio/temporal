@@ -3660,13 +3660,16 @@ func (e *MutableStateImpl) UpdateWorkflowStateStatus(
 func (e *MutableStateImpl) StartTransaction(
 	namespaceEntry *namespace.Namespace,
 ) (bool, error) {
-
+	namespaceEntry, err := e.startTransactionHandleNamespaceMigration(namespaceEntry)
+	if err != nil {
+		return false, err
+	}
 	e.namespaceEntry = namespaceEntry
 	if err := e.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
 		return false, err
 	}
 
-	flushBeforeReady, err := e.startTransactionHandleWorkflowTaskFailover(false)
+	flushBeforeReady, err := e.startTransactionHandleWorkflowTaskFailover()
 	if err != nil {
 		return false, err
 	}
@@ -3674,19 +3677,6 @@ func (e *MutableStateImpl) StartTransaction(
 	e.startTransactionHandleWorkflowTaskTTL()
 
 	return flushBeforeReady, nil
-}
-
-func (e *MutableStateImpl) StartTransactionSkipWorkflowTaskFail(
-	namespaceEntry *namespace.Namespace,
-) error {
-
-	e.namespaceEntry = namespaceEntry
-	if err := e.UpdateCurrentVersion(namespaceEntry.FailoverVersion(), false); err != nil {
-		return err
-	}
-
-	_, err := e.startTransactionHandleWorkflowTaskFailover(true)
-	return err
 }
 
 func (e *MutableStateImpl) CloseTransactionAsMutation(
@@ -4163,9 +4153,31 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
 	}
 }
 
-func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
-	skipWorkflowTaskFailed bool,
-) (bool, error) {
+func (e *MutableStateImpl) startTransactionHandleNamespaceMigration(
+	namespaceEntry *namespace.Namespace,
+) (*namespace.Namespace, error) {
+	// NOTE:
+	// the main idea here is to guarantee that buffered events & namespace migration works
+	// e.g. handle buffered events during version 0 => version > 0 by postponing namespace migration
+	// * flush buffered events as if namespace is still local
+	// * use updated namespace for actual call
+
+	lastWriteVersion, err := e.GetLastWriteVersion()
+	if err != nil {
+		return nil, err
+	}
+
+	// local namespace -> global namespace && with buffered events
+	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && e.HasBufferedEvents() {
+		localNamespaceMutation := namespace.NewPretendAsLocalNamespace(
+			e.clusterMetadata.GetCurrentClusterName(),
+		)
+		return namespaceEntry.Clone(localNamespaceMutation), nil
+	}
+	return namespaceEntry, nil
+}
+
+func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, error) {
 
 	if !e.IsWorkflowExecutionRunning() ||
 		!e.canReplicateEvents() {
@@ -4222,7 +4234,7 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
 		// do a sanity check on buffered events
 		if e.HasBufferedEvents() {
-			return false, serviceerror.NewInternal("MutableStateImpl encounter previous passive workflow with buffered events")
+			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")
 		}
 		flushBufferVersion = currentVersion
 	}
@@ -4232,10 +4244,6 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover(
 	// event batch shard the same version
 	if err := e.UpdateCurrentVersion(flushBufferVersion, true); err != nil {
 		return false, err
-	}
-
-	if skipWorkflowTaskFailed {
-		return false, nil
 	}
 
 	// we have a workflow task with buffered events on the fly with a lower version, fail it
@@ -4263,6 +4271,9 @@ func (e *MutableStateImpl) closeTransactionWithPolicyCheck(
 		return nil
 	}
 
+	// Cannot use e.namespaceEntry.ActiveClusterName() because currentVersion may be updated during this transaction in
+	// passive cluster. For example: if passive cluster sees conflict and decided to terminate this workflow. The
+	// currentVersion on mutable state would be updated to point to last write version which is current (passive) cluster.
 	activeCluster := e.clusterMetadata.ClusterNameForFailoverVersion(e.namespaceEntry.IsGlobalNamespace(), e.GetCurrentVersion())
 	currentCluster := e.clusterMetadata.GetCurrentClusterName()
 

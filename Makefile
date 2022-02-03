@@ -80,7 +80,6 @@ UNIT_TEST_DIRS  := $(filter-out $(INTEG_TEST_ROOT)% $(INTEG_TEST_XDC_ROOT)% $(IN
 ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 PINNED_DEPENDENCIES := \
-	github.com/DataDog/sketches-go@v0.0.1 \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
 	github.com/go-sql-driver/mysql@v1.5.0
 
@@ -102,12 +101,12 @@ INTEG_TEST_COVERPKG := -coverpkg="$(MODULE_ROOT)/client/...,$(MODULE_ROOT)/commo
 ##### Tools #####
 update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
-	@go install golang.org/x/lint/golint@latest # golint doesn't have releases.
-	@go install golang.org/x/tools/cmd/goimports@v0.1.5
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.2.1
+	@go install golang.org/x/lint/golint@latest
+	@go install golang.org/x/tools/cmd/goimports@latest
+	@go install honnef.co/go/tools/cmd/staticcheck@v0.2.2
 	@go install github.com/kisielk/errcheck@v1.6.0
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.27.0
-	@go install github.com/bufbuild/buf/cmd/buf@v0.54.1
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.29.4
+	@go install github.com/bufbuild/buf/cmd/buf@v0.56.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
