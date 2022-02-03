@@ -121,3 +121,5 @@ require (
 	google.golang.org/protobuf v1.27.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 )
+
+replace go.temporal.io/api v1.7.1-0.20220131203817-08fe71b1361d => ../temporal-api-go
