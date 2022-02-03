@@ -2,7 +2,7 @@
 # Install all tools and builds binaries.
 install: update-tools bins
 
-# Rebuild binaries (used by Dockerfile).
+# Rebuild binaries (used for docker builds).
 bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
@@ -37,10 +37,6 @@ PERSISTENCE_DRIVER ?= cassandra
 # make install-schema TEMPORAL_DB=temporal2 VISIBILITY_DB=temporal_visibility2
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
-
-DOCKER_IMAGE_TAG ?= test
-# Pass "registry" to automatically push image to the docker hub.
-DOCKER_BUILDX_OUTPUT ?= image
 
 ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
@@ -456,55 +452,6 @@ fossa-test:
 	fossa test --timeout 1800
 
 build-fossa: bins fossa-analyze fossa-delay fossa-test
-
-##### Docker #####
-docker-server:
-	@printf $(COLOR) "Building docker image temporalio/server:$(DOCKER_IMAGE_TAG)..."
-	docker build . -t temporalio/server:$(DOCKER_IMAGE_TAG) --target temporal-server
-
-docker-auto-setup:
-	@printf $(COLOR) "Build docker image temporalio/auto-setup:$(DOCKER_IMAGE_TAG)..."
-	docker build . -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) --target temporal-auto-setup
-
-docker-tctl:
-	@printf $(COLOR) "Build docker image temporalio/tctl:$(DOCKER_IMAGE_TAG)..."
-	docker build . -t temporalio/tctl:$(DOCKER_IMAGE_TAG) --target temporal-tctl
-
-docker-admin-tools:
-	@printf $(COLOR) "Build docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
-	docker build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --target temporal-admin-tools
-
-docker-buildx-container:
-	docker buildx create --name builder-x --driver docker-container --use
-
-docker-server-x:
-	@printf $(COLOR) "Building cross-platform docker image temporalio/server:$(DOCKER_IMAGE_TAG)..."
-	docker buildx build . -t temporalio/server:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-server
-
-docker-auto-setup-x:
-	@printf $(COLOR) "Build cross-platform docker image temporalio/auto-setup:$(DOCKER_IMAGE_TAG)..."
-	docker buildx build . -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-auto-setup
-
-docker-tctl-x:
-	@printf $(COLOR) "Build cross-platform docker image temporalio/tctl:$(DOCKER_IMAGE_TAG)..."
-	docker buildx build . -t temporalio/tctl:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-tctl
-
-docker-admin-tools-x:
-	@printf $(COLOR) "Build cross-platform docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
-	docker buildx build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-admin-tools
-
-##### goreleaser #####
-goreleaser-install:
-	@printf $(COLOR) "Install/update goreleaser tool..."
-	@go install github.com/goreleaser/goreleaser@latest
-
-goreleaser-build:
-	@printf $(COLOR) "Build release binaries from current commit..."
-	@goreleaser release --snapshot --rm-dist
-
-goreleaser-release:
-	@printf $(COLOR) "Build and publish release binaries to the latest release tag..."
-	@goreleaser release --rm-dist
 
 ##### Grafana #####
 update-dashboards:

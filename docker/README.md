@@ -1,6 +1,6 @@
 # Build docker image
 
-Temporal builds 4 Docker images with [every release](https://github.com/temporalio/temporal/releases): Server, Server [with Auto Setup](https://docs.temporal.io/blog/auto-setup), tctl CLI, and Admin-Tools. There are [other builds e.g. for CI](https://hub.docker.com/u/temporalio) as well.
+Temporal builds 3 Docker images with [every release](https://github.com/temporalio/temporal/releases): Server, Server [with Auto Setup](https://docs.temporal.io/blog/auto-setup), and Admin-Tools. Docker images are built via [Github Actions docker-builds](https://github.com/temporalio/docker-builds/actions) There are [other builds e.g. for CI](https://hub.docker.com/u/temporalio) as well.
 
 ## Prerequisites
 
@@ -21,11 +21,7 @@ To *run* the docker image with dependencies (e.g. PostgreSQL and Elasticsearch),
 
 ## Build docker image for any commit
 
-Replace **YOUR_TAG** and **YOUR_CHECKOUT_COMMIT** in the below command to build:
-```bash
-git checkout YOUR_CHECKOUT_COMMIT
-docker build . -t temporalio/auto-setup:YOUR_TAG --target temporal-auto-setup
-```
+Refer to [docker-builds](https://github.com/temporalio/docker-builds) to build the images manually
 
 ## Run Temporal with custom docker image
 

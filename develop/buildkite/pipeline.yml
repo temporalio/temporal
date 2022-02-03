@@ -11,12 +11,6 @@ steps:
 
   - wait
 
-  - label: ":docker: build docker images"
-    agents:
-      queue: "default"
-      docker: "*"
-    command: "docker build ."
-
   - label: ":golang: unit test"
     agents:
       queue: "default"
