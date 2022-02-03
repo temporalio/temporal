@@ -209,7 +209,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	// active has initial version 0
 	historyClient := s.active.GetHistoryClient()
 
-	versions := []int64{102, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
+	versions := []int64{0, 102, 2, 202, 302, 402, 602, 502, 802, 1002, 902, 702, 1102}
 	for _, version := range versions {
 		runID := uuid.New()
 		var historyBatch []*historypb.History
@@ -371,6 +371,66 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 			historyClient,
 		)
 	}
+}
+
+func (s *nDCIntegrationTestSuite) TestEmptyVersionAndNonEmptyVersion() {
+	workflowID := "ndc-migration-test" + uuid.New()
+
+	workflowType := "event-generator-workflow-type"
+	taskqueue := "event-generator-taskQueue"
+
+	// active has initial version 0
+	historyClient := s.active.GetHistoryClient()
+
+	runID := uuid.New()
+
+	version := common.EmptyVersion
+	var baseBranch []*historypb.History
+	baseGenerator := test.InitializeHistoryEventGenerator(s.namespace, version)
+	baseGenerator.SetVersion(version)
+
+	for i := 0; i < 10 && baseGenerator.HasNextVertex(); i++ {
+		events := baseGenerator.GetNextVertices()
+		historyEvents := &historypb.History{}
+		for _, event := range events {
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+		}
+		baseBranch = append(baseBranch, historyEvents)
+	}
+	baseVersionHistory := s.eventBatchesToVersionHistory(nil, baseBranch)
+
+	var branch1 []*historypb.History
+	branchVersionHistory1 := versionhistory.CopyVersionHistory(baseVersionHistory)
+	branchGenerator1 := baseGenerator.DeepCopy()
+	branchGenerator1.SetVersion(2)
+	for i := 0; i < 10 && branchGenerator1.HasNextVertex(); i++ {
+		events := branchGenerator1.GetNextVertices()
+		historyEvents := &historypb.History{}
+		for _, event := range events {
+			historyEvents.Events = append(historyEvents.Events, event.GetData().(*historypb.HistoryEvent))
+		}
+		branch1 = append(branch1, historyEvents)
+	}
+	branchVersionHistory1 = s.eventBatchesToVersionHistory(branchVersionHistory1, branch1)
+
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		taskqueue,
+		baseVersionHistory,
+		baseBranch,
+		historyClient,
+	)
+	s.applyEvents(
+		workflowID,
+		runID,
+		workflowType,
+		taskqueue,
+		branchVersionHistory1,
+		branch1,
+		historyClient,
+	)
 }
 
 func (s *nDCIntegrationTestSuite) TestHandcraftedMultipleBranches() {
