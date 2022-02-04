@@ -1088,4 +1088,3 @@ func getCurrentBranchLastWriteVersion(
 	}
 	return versionHistoryItem.GetVersion(), nil
 }
-
