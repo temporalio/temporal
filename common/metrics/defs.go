@@ -1274,7 +1274,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
 		PersistenceDeleteHistoryNodesScope:         {operation: "DeleteHistoryNodes"},
 		PersistenceReadHistoryBranchScope:          {operation: "ReadHistoryBranch"},
-		PersistenceReadHistoryBranchReverseScope:          {operation: "ReadHistoryBranchReverse"},
+		PersistenceReadHistoryBranchReverseScope:   {operation: "ReadHistoryBranchReverse"},
 		PersistenceForkHistoryBranchScope:          {operation: "ForkHistoryBranch"},
 		PersistenceDeleteHistoryBranchScope:        {operation: "DeleteHistoryBranch"},
 		PersistenceTrimHistoryBranchScope:          {operation: "TrimHistoryBranch"},
