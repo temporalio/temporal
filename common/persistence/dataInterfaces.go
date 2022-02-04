@@ -852,8 +852,6 @@ type (
 		PageSize int
 		// LastFirstTransactionID specified in mutable state. Only used for reading in reverse order.
 		LastFirstTransactionID int64
-		// Whether we want to return events in reverse order.
-		ReverseOrder bool
 		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
 		NextPageToken []byte
 	}
