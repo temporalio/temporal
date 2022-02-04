@@ -431,7 +431,7 @@ func (s *localStoreRPCSuite) setupInternodeRingpop() {
 	rpcCfgB := &config.RPC{GRPCPort: 0, MembershipPort: 7601, BindOnIP: localhostIPv4}
 
 	dcClient := dynamicconfig.NewMockClient(s.controller)
-	dcClient.EXPECT().GetBoolValue(dynamicconfig.EnableRingpopTLS, gomock.Any(), false).Return(true, nil).AnyTimes()
+	dcClient.EXPECT().GetBoolValue(dynamicconfig.Key(dynamicconfig.EnableRingpopTLS), gomock.Any(), false).Return(true, nil).AnyTimes()
 	dc := dynamicconfig.NewCollection(dcClient, s.logger)
 
 	provider, err := encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, nil, s.logger, nil)

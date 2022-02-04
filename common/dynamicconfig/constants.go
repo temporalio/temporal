@@ -109,6 +109,7 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
+
 	// key for size limit
 
 	// BlobSizeLimitError is the per event blob size limit
