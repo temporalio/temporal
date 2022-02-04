@@ -582,8 +582,6 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse() {
 		return nil
 	}
 
-	var err1 error
-
 	activityId := "heartbeat_retry"
 	workflowFn := func(ctx workflow.Context) error {
 		activityRetryPolicy := &temporal.RetryPolicy{
@@ -600,7 +598,7 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse() {
 			RetryPolicy:            activityRetryPolicy,
 		})
 		f1 := workflow.ExecuteActivity(ctx1, activityFn)
-		err1 = f1.Get(ctx1, nil)
+		err1 := f1.Get(ctx1, nil)
 		s.NoError(err1)
 
 		return nil
@@ -652,8 +650,6 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse_MultipleBranches() {
 		return nil
 	}
 
-	var err1, err2 error
-
 	activityId := "activity-gethistory-reverse-multiple-branches"
 	workflowFn := func(ctx workflow.Context) error {
 		activityRetryPolicy := &temporal.RetryPolicy{
@@ -669,6 +665,8 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse_MultipleBranches() {
 			StartToCloseTimeout:    2 * time.Second,
 			RetryPolicy:            activityRetryPolicy,
 		})
+
+		var err1, err2 error
 
 		f1 := workflow.ExecuteActivity(ctx1, activityFn)
 		err1 = f1.Get(ctx1, nil)
@@ -704,9 +702,6 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse_MultipleBranches() {
 
 	// we want to reset workflow in the middle of execution
 	time.Sleep(time.Second)
-
-	s.NoError(err1)
-	s.NoError(err2)
 
 	wfeResponse, err := s.sdkClient.DescribeWorkflowExecution(ctx, workflowRun.GetID(), workflowRun.GetRunID())
 	s.NoError(err)
