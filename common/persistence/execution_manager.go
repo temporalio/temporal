@@ -1057,24 +1057,6 @@ func (m *executionManagerImpl) toWorkflowMutableState(internState *InternalWorkf
 	return state, nil
 }
 
-func getLastWriteVersion(
-	versionHistories *historyspb.VersionHistories,
-) (int64, error) {
-	// TODO remove this if check once legacy execution tests are removed
-	if versionHistories == nil {
-		return common.EmptyVersion, nil
-	}
-	versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
-	if err != nil {
-		return 0, err
-	}
-	versionHistoryItem, err := versionhistory.GetLastVersionHistoryItem(versionHistory)
-	if err != nil {
-		return 0, err
-	}
-	return versionHistoryItem.GetVersion(), nil
-}
-
 func getCurrentBranchToken(
 	versionHistories *historyspb.VersionHistories,
 ) ([]byte, error) {
