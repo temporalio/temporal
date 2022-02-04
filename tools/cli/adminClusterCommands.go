@@ -25,7 +25,13 @@
 package cli
 
 import (
+	"fmt"
+
 	"github.com/urfave/cli"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/cassandra"
 
 	"go.temporal.io/server/api/adminservice/v1"
 )
@@ -75,4 +81,109 @@ func AdminRemoveRemoteCluster(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Operation RemoveRemoteCluster failed.", err)
 	}
+}
+
+func AdminUpdateClusterName(c *cli.Context) {
+	currentCluster := c.String(FlagCluster)
+	newCluster := c.String(FlagNewCluster)
+
+	session := connectToCassandra(c)
+	clusterStore, err := cassandra.NewClusterMetadataStore(session, log.NewNoopLogger())
+	if err != nil {
+		ErrorAndExit("Failed to connect to Cassandra", err)
+	}
+	clusterMetadataManager := persistence.NewClusterMetadataManagerImpl(clusterStore, currentCluster, log.NewNoopLogger())
+
+	currentClusterMetadata, err := clusterMetadataManager.GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: currentCluster})
+	if err != nil {
+		ErrorAndExit("Failed to get current cluster metadata", err)
+	}
+
+	applied, err := clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+		ClusterMetadata: persistencespb.ClusterMetadata{
+			ClusterName:              newCluster,
+			HistoryShardCount:        currentClusterMetadata.HistoryShardCount,
+			ClusterId:                currentClusterMetadata.ClusterId,
+			VersionInfo:              currentClusterMetadata.VersionInfo,
+			IndexSearchAttributes:    currentClusterMetadata.IndexSearchAttributes,
+			ClusterAddress:           currentClusterMetadata.ClusterAddress,
+			FailoverVersionIncrement: currentClusterMetadata.FailoverVersionIncrement,
+			InitialFailoverVersion:   currentClusterMetadata.InitialFailoverVersion,
+			IsGlobalNamespaceEnabled: currentClusterMetadata.IsGlobalNamespaceEnabled,
+			IsConnectionEnabled:      currentClusterMetadata.IsConnectionEnabled,
+		},
+		Version: 0,
+	})
+	if !applied || err != nil {
+		ErrorAndExit("Failed to create new cluster metadata", err)
+	}
+	// Use raw store client to delete
+	err = clusterStore.DeleteClusterMetadata(&persistence.InternalDeleteClusterMetadataRequest{ClusterName: currentCluster})
+	if err != nil {
+		ErrorAndExit("Failed to delete old cluster metadata", err)
+	}
+	fmt.Println("Successfully updated cluster name from ", currentCluster, " to ", newCluster)
+}
+
+func AdminBackfillNamespaceWithClusterName(c *cli.Context) {
+	newCluster := c.String(FlagNewCluster)
+
+	session := connectToCassandra(c)
+	metadataStore, err := cassandra.NewMetadataStore(newCluster, session, log.NewNoopLogger())
+	if err != nil {
+		ErrorAndExit("Failed to connect to Cassandra", err)
+	}
+	metadataManager := persistence.NewMetadataManagerImpl(metadataStore, log.NewNoopLogger(), newCluster)
+
+	var backfillNamepsaceList []*persistencespb.NamespaceDetail
+	var nextPageToken []byte
+	for {
+		listResp, err := metadataManager.ListNamespaces(&persistence.ListNamespacesRequest{PageSize: 1000, NextPageToken: nextPageToken})
+		if err != nil {
+			ErrorAndExit("Failed to list all namespaces", err)
+		}
+		for _, resp := range listResp.Namespaces {
+			if resp.IsGlobalNamespace {
+				ErrorAndExit(fmt.Sprintf("Validation failed. Found global namespace: %s", resp.Namespace.String()), err)
+			}
+			if len(resp.Namespace.ReplicationConfig.Clusters) > 1 {
+				ErrorAndExit(fmt.Sprintf("Validation failed. Found non single cluster namespace: %s", resp.Namespace.String()), err)
+			}
+			backfillNamepsaceList = append(backfillNamepsaceList, resp.Namespace)
+		}
+
+		if len(listResp.NextPageToken) == 0 {
+			break
+		}
+		nextPageToken = listResp.NextPageToken
+	}
+
+	for _, namespace := range backfillNamepsaceList {
+		metadata, err := metadataManager.GetMetadata()
+		if err != nil {
+			ErrorAndExit("Failed to get namespace metadata", err)
+		}
+
+		err = metadataManager.UpdateNamespace(&persistence.UpdateNamespaceRequest{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info:   namespace.Info,
+				Config: namespace.Config,
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+					ActiveClusterName: newCluster,
+					Clusters:          []string{newCluster},
+					State:             namespace.ReplicationConfig.State,
+				},
+				ConfigVersion:               namespace.ConfigVersion + 1,
+				FailoverNotificationVersion: namespace.FailoverNotificationVersion,
+				FailoverVersion:             namespace.FailoverVersion,
+				FailoverEndTime:             namespace.FailoverEndTime,
+			},
+			IsGlobalNamespace:   false,
+			NotificationVersion: metadata.NotificationVersion,
+		})
+		if err != nil {
+			ErrorAndExit(fmt.Sprintf("Failed to update namespace: %s", namespace.Info.Name), err)
+		}
+	}
+	fmt.Println("Successfully backfill all namespace cluster to: ", newCluster)
 }

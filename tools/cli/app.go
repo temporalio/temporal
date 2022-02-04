@@ -180,6 +180,12 @@ func NewCliApp() *cli.App {
 					Subcommands: newAdminClusterCommands(),
 				},
 				{
+					Name:        "namespace",
+					Aliases:     []string{"n"},
+					Usage:       "Run admin operation on namespace",
+					Subcommands: newAdminNamespaceCommands(),
+				},
+				{
 					Name:        "dlq",
 					Aliases:     []string{"dlq"},
 					Usage:       "Run admin operation on DLQ",

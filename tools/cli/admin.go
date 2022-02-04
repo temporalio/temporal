@@ -534,6 +534,48 @@ func newAdminClusterCommands() []cli.Command {
 				AdminRemoveRemoteCluster(c)
 			},
 		},
+		{
+			Name:    "update-name",
+			Aliases: []string{"up"},
+			Usage:   "Update cluster name",
+			Flags: append(
+				getDBFlags(),
+				cli.StringFlag{
+					Name:     FlagCluster,
+					Usage:    "Original cluster name",
+					Required: true,
+				},
+				cli.StringFlag{
+					Name:     FlagNewCluster,
+					Usage:    "New cluster name",
+					Required: true,
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminUpdateClusterName(c)
+			},
+		},
+	}
+}
+
+func newAdminNamespaceCommands() []cli.Command {
+	return []cli.Command{
+		{
+			Name:    "backfill",
+			Aliases: []string{"bf"},
+			Usage:   "Update cluster name",
+			Flags: append(
+				getDBFlags(),
+				cli.StringFlag{
+					Name:     FlagNewCluster,
+					Usage:    "New cluster name",
+					Required: true,
+				},
+			),
+			Action: func(c *cli.Context) {
+				AdminBackfillNamespaceWithClusterName(c)
+			},
+		},
 	}
 }
 
