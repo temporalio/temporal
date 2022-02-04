@@ -878,7 +878,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 	return &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
 		History:       history,
 		NextPageToken: nextToken,
-		Archived:      false,
 	}, nil
 }
 
