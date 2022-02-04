@@ -924,6 +924,13 @@ func (m *executionManagerImpl) readHistoryBranchReverse(
 	return historyEvents, transactionIDs, nextPageToken, dataSize, nil
 }
 
+func (m *executionManagerImpl) reverseSlice(events []*historypb.HistoryEvent) []*historypb.HistoryEvent {
+	for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
+		events[i], events[j] = events[j], events[i]
+	}
+	return events
+}
+
 func (m *executionManagerImpl) filterHistoryNodes(
 	lastNodeID int64,
 	lastTransactionID int64,
