@@ -177,7 +177,7 @@ func (bc *basicClient) getValueWithFilters(
 	filters map[Filter]interface{},
 	defaultValue interface{},
 ) (interface{}, error) {
-	keyName := strings.ToLower(Keys[key])
+	keyName := strings.ToLower(key.String())
 	values := bc.values.Load().(configValueMap)
 	found := false
 	for _, constrainedValue := range values[keyName] {

@@ -26,7 +26,6 @@ package dynamicconfig
 
 import (
 	"errors"
-	"fmt"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -137,130 +136,109 @@ func (s *configSuite) SetupSuite() {
 }
 
 func (s *configSuite) TestGetProperty() {
-	key := testGetPropertyKey
-	value := s.cln.GetProperty(key, "a")
+	value := s.cln.GetProperty(testGetPropertyKey, "a")
 	s.Equal("a", value())
-	s.client.SetValue(key, "b")
+	s.client.SetValue(testGetPropertyKey, "b")
 	s.Equal("b", value())
 }
 
 func (s *configSuite) TestGetIntProperty() {
-	key := testGetIntPropertyKey
-	value := s.cln.GetIntProperty(key, 10)
+	value := s.cln.GetIntProperty(testGetIntPropertyKey, 10)
 	s.Equal(10, value())
-	s.client.SetValue(key, 50)
+	s.client.SetValue(testGetIntPropertyKey, 50)
 	s.Equal(50, value())
 }
 
 func (s *configSuite) TestGetIntPropertyFilteredByNamespace() {
-	key := testGetIntPropertyFilteredByNamespaceKey
 	namespace := "testNamespace"
-	value := s.cln.GetIntPropertyFilteredByNamespace(key, 10)
+	value := s.cln.GetIntPropertyFilteredByNamespace(testGetIntPropertyFilteredByNamespaceKey, 10)
 	s.Equal(10, value(namespace))
-	s.client.SetValue(key, 50)
+	s.client.SetValue(testGetIntPropertyFilteredByNamespaceKey, 50)
 	s.Equal(50, value(namespace))
 }
 
 func (s *configSuite) TestGetStringPropertyFnWithNamespaceFilter() {
-	key := DefaultEventEncoding
 	namespace := "testNamespace"
-	value := s.cln.GetStringPropertyFnWithNamespaceFilter(key, "abc")
+	value := s.cln.GetStringPropertyFnWithNamespaceFilter(DefaultEventEncoding, "abc")
 	s.Equal("abc", value(namespace))
-	s.client.SetValue(key, "efg")
+	s.client.SetValue(DefaultEventEncoding, "efg")
 	s.Equal("efg", value(namespace))
 }
 
 func (s *configSuite) TestGetIntPropertyFilteredByTaskQueueInfo() {
-	key := testGetIntPropertyFilteredByTaskQueueInfoKey
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
-	value := s.cln.GetIntPropertyFilteredByTaskQueueInfo(key, 10)
+	value := s.cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyFilteredByTaskQueueInfoKey, 10)
 	s.Equal(10, value(namespace, taskQueue, 0))
-	s.client.SetValue(key, 50)
+	s.client.SetValue(testGetIntPropertyFilteredByTaskQueueInfoKey, 50)
 	s.Equal(50, value(namespace, taskQueue, 0))
 }
 
 func (s *configSuite) TestGetFloat64Property() {
-	key := testGetFloat64PropertyKey
-	value := s.cln.GetFloat64Property(key, 0.1)
+	value := s.cln.GetFloat64Property(testGetFloat64PropertyKey, 0.1)
 	s.Equal(0.1, value())
-	s.client.SetValue(key, 0.01)
+	s.client.SetValue(testGetFloat64PropertyKey, 0.01)
 	s.Equal(0.01, value())
 }
 
 func (s *configSuite) TestGetBoolProperty() {
-	key := testGetBoolPropertyKey
-	value := s.cln.GetBoolProperty(key, true)
+	value := s.cln.GetBoolProperty(testGetBoolPropertyKey, true)
 	s.Equal(true, value())
-	s.client.SetValue(key, false)
+	s.client.SetValue(testGetBoolPropertyKey, false)
 	s.Equal(false, value())
 }
 
 func (s *configSuite) TestGetBoolPropertyFilteredByNamespaceID() {
-	key := testGetBoolPropertyFilteredByNamespaceIDKey
 	namespaceID := "testNamespaceID"
-	value := s.cln.GetBoolPropertyFnWithNamespaceIDFilter(key, true)
+	value := s.cln.GetBoolPropertyFnWithNamespaceIDFilter(testGetBoolPropertyFilteredByNamespaceIDKey, true)
 	s.Equal(true, value(namespaceID))
-	s.client.SetValue(key, false)
+	s.client.SetValue(testGetBoolPropertyFilteredByNamespaceIDKey, false)
 	s.Equal(false, value(namespaceID))
 }
 
 func (s *configSuite) TestGetBoolPropertyFilteredByTaskQueueInfo() {
-	key := testGetBoolPropertyFilteredByTaskQueueInfoKey
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
-	value := s.cln.GetBoolPropertyFilteredByTaskQueueInfo(key, false)
+	value := s.cln.GetBoolPropertyFilteredByTaskQueueInfo(testGetBoolPropertyFilteredByTaskQueueInfoKey, false)
 	s.Equal(false, value(namespace, taskQueue, 0))
-	s.client.SetValue(key, true)
+	s.client.SetValue(testGetBoolPropertyFilteredByTaskQueueInfoKey, true)
 	s.Equal(true, value(namespace, taskQueue, 0))
 }
 
 func (s *configSuite) TestGetDurationProperty() {
-	key := testGetDurationPropertyKey
-	value := s.cln.GetDurationProperty(key, time.Second)
+	value := s.cln.GetDurationProperty(testGetDurationPropertyKey, time.Second)
 	s.Equal(time.Second, value())
-	s.client.SetValue(key, time.Minute)
+	s.client.SetValue(testGetDurationPropertyKey, time.Minute)
 	s.Equal(time.Minute, value())
 }
 
 func (s *configSuite) TestGetDurationPropertyFilteredByNamespace() {
-	key := testGetDurationPropertyFilteredByNamespaceKey
 	namespace := "testNamespace"
-	value := s.cln.GetDurationPropertyFilteredByNamespace(key, time.Second)
+	value := s.cln.GetDurationPropertyFilteredByNamespace(testGetDurationPropertyFilteredByNamespaceKey, time.Second)
 	s.Equal(time.Second, value(namespace))
-	s.client.SetValue(key, time.Minute)
+	s.client.SetValue(testGetDurationPropertyFilteredByNamespaceKey, time.Minute)
 	s.Equal(time.Minute, value(namespace))
 }
 
 func (s *configSuite) TestGetDurationPropertyFilteredByTaskQueueInfo() {
-	key := testGetDurationPropertyFilteredByTaskQueueInfoKey
 	namespace := "testNamespace"
 	taskQueue := "testTaskQueue"
-	value := s.cln.GetDurationPropertyFilteredByTaskQueueInfo(key, time.Second)
+	value := s.cln.GetDurationPropertyFilteredByTaskQueueInfo(testGetDurationPropertyFilteredByTaskQueueInfoKey, time.Second)
 	s.Equal(time.Second, value(namespace, taskQueue, 0))
-	s.client.SetValue(key, time.Minute)
+	s.client.SetValue(testGetDurationPropertyFilteredByTaskQueueInfoKey, time.Minute)
 	s.Equal(time.Minute, value(namespace, taskQueue, 0))
 }
 
 func (s *configSuite) TestGetMapProperty() {
-	key := testGetMapPropertyKey
 	val := map[string]interface{}{
 		"testKey": 123,
 	}
-	value := s.cln.GetMapProperty(key, val)
+	value := s.cln.GetMapProperty(testGetMapPropertyKey, val)
 	s.Equal(val, value())
 	val["testKey"] = "321"
-	s.client.SetValue(key, val)
+	s.client.SetValue(testGetMapPropertyKey, val)
 	s.Equal(val, value())
 	s.Equal("321", value()["testKey"])
-}
-
-func TestDynamicConfigKeyIsMapped(t *testing.T) {
-	for i := unknownKey; i < lastKeyForTest; i++ {
-		key, ok := Keys[i]
-		require.True(t, ok, fmt.Sprintf("key %d is not mapped", i))
-		require.NotEmpty(t, key)
-	}
 }
 
 func TestDynamicConfigFilterTypeIsMapped(t *testing.T) {
