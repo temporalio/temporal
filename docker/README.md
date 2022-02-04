@@ -21,7 +21,7 @@ To *run* the docker image with dependencies (e.g. PostgreSQL and Elasticsearch),
 
 ## Build docker image for any commit
 
-Refer to [docker-builds](https://github.com/temporalio/docker-builds) to build the images manually
+Refer to [docker-builds](https://github.com/temporalio/docker-builds) to build the images manually.
 
 ## Run Temporal with custom docker image
 
