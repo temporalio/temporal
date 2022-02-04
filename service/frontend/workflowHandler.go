@@ -786,7 +786,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		execution *commonpb.WorkflowExecution,
 		expectedNextEventID int64,
 		currentBranchToken []byte,
-	) ([]byte, string, int64, bool, error) {
+	) ([]byte, string, int64, error) {
 		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
 			NamespaceId:         namespaceUUID.String(),
 			Execution:           execution,
@@ -795,14 +795,12 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		})
 
 		if err != nil {
-			return nil, "", 0, false, err
+			return nil, "", 0, err
 		}
-		isWorkflowRunning := response.GetWorkflowStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
 		return response.CurrentBranchToken,
 			response.Execution.GetRunId(),
 			response.GetLastFirstEventTxnId(),
-			isWorkflowRunning,
 			nil
 	}
 
@@ -814,7 +812,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 
 	if request.NextPageToken == nil {
 		continuationToken = &tokenspb.HistoryContinuation{}
-		continuationToken.BranchToken, runID, lastFirstTxnID, _, err =
+		continuationToken.BranchToken, runID, lastFirstTxnID, err =
 			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
 		if err != nil {
 			return nil, err
@@ -854,7 +852,6 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		namespaceID,
 		namespace.Name(request.GetNamespace()),
 		*execution,
-		continuationToken.FirstEventId,
 		continuationToken.NextEventId,
 		lastFirstTxnID,
 		request.GetMaximumPageSize(),
@@ -3144,7 +3141,6 @@ func (wh *WorkflowHandler) getHistoryReverse(
 	namespaceID namespace.ID,
 	namespace namespace.Name,
 	execution commonpb.WorkflowExecution,
-	firstEventID int64,
 	nextEventID int64,
 	lastFirstTxnID int64,
 	pageSize int32,
@@ -3152,7 +3148,6 @@ func (wh *WorkflowHandler) getHistoryReverse(
 	branchToken []byte,
 ) (*historypb.History, []byte, int64, error) {
 	var size int
-	// isFirstPage := len(nextPageToken) == 0
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
