@@ -1113,4 +1113,3 @@ func (m *executionManagerImpl) reverseSlice(events []*historypb.HistoryEvent) []
 	}
 	return events
 }
-
