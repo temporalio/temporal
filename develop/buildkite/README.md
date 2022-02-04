@@ -4,6 +4,12 @@ Buildkite simply runs docker containers. So it is easy to perform the
 same build locally that BuildKite will do.
 
 ## Testing the build locally
+
+### One-Time Setup
+Create an empty directory at `/usr/bin/buildkite-agent`. This directory is mounted as a volume and must be
+present for the container to start.
+
+### Run Locally
 To run tests locally use `docker-compose run` command in `develop/buildkite` directory:
 
 ```bash
