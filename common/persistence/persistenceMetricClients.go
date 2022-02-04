@@ -858,12 +858,12 @@ func (p *executionPersistenceClient) ReadHistoryBranchReverse(request *ReadHisto
 	*ReadHistoryBranchReverseResponse,
 	error,
 ) {
-	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceRequests)
-	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceLatency)
+	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchReverseScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchReverseScope, metrics.PersistenceLatency)
 	response, err := p.persistence.ReadHistoryBranchReverse(request)
 	sw.Stop()
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchScope, err)
+		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchReverseScope, err)
 	}
 	return response, err
 }

@@ -667,6 +667,8 @@ const (
 	PersistenceDeleteHistoryNodesScope
 	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
 	PersistenceReadHistoryBranchScope
+	// PersistenceReadHistoryBranchScope tracks ReadHistoryBranch calls made by service to persistence layer
+	PersistenceReadHistoryBranchReverseScope
 	// PersistenceForkHistoryBranchScope tracks ForkHistoryBranch calls made by service to persistence layer
 	PersistenceForkHistoryBranchScope
 	// PersistenceDeleteHistoryBranchScope tracks DeleteHistoryBranch calls made by service to persistence layer
@@ -820,6 +822,8 @@ const (
 	FrontendRespondActivityTaskCanceledByIdScope
 	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
 	FrontendGetWorkflowExecutionHistoryScope
+	// FrontendGetWorkflowExecutionHistoryScope is the metric scope for non-long-poll frontend.GetWorkflowExecutionHistory
+	FrontendGetWorkflowExecutionHistoryReverseScope
 	// FrontendPollWorkflowExecutionHistoryScope is the metric scope for long poll case of frontend.GetWorkflowExecutionHistory
 	FrontendPollWorkflowExecutionHistoryScope
 	// FrontendGetWorkflowExecutionRawHistoryScope is the metric scope for frontend.GetWorkflowExecutionRawHistory
@@ -1270,6 +1274,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceAppendHistoryNodesScope:         {operation: "AppendHistoryNodes"},
 		PersistenceDeleteHistoryNodesScope:         {operation: "DeleteHistoryNodes"},
 		PersistenceReadHistoryBranchScope:          {operation: "ReadHistoryBranch"},
+		PersistenceReadHistoryBranchReverseScope:          {operation: "ReadHistoryBranchReverse"},
 		PersistenceForkHistoryBranchScope:          {operation: "ForkHistoryBranch"},
 		PersistenceDeleteHistoryBranchScope:        {operation: "DeleteHistoryBranch"},
 		PersistenceTrimHistoryBranchScope:          {operation: "TrimHistoryBranch"},
@@ -1530,6 +1535,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendRespondActivityTaskFailedByIdScope:      {operation: "RespondActivityTaskFailedById"},
 		FrontendRespondActivityTaskCanceledByIdScope:    {operation: "RespondActivityTaskCanceledById"},
 		FrontendGetWorkflowExecutionHistoryScope:        {operation: "GetWorkflowExecutionHistory"},
+		FrontendGetWorkflowExecutionHistoryReverseScope: {operation: "GetWorkflowExecutionHistoryReverse"},
 		FrontendPollWorkflowExecutionHistoryScope:       {operation: "PollWorkflowExecutionHistory"},
 		FrontendGetWorkflowExecutionRawHistoryScope:     {operation: "GetWorkflowExecutionRawHistory"},
 		FrontendPollForWorkflowExecutionRawHistoryScope: {operation: "PollForWorkflowExecutionRawHistory"},
