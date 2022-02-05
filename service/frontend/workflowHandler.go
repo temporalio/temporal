@@ -82,6 +82,11 @@ var _ Handler = (*WorkflowHandler)(nil)
 var (
 	minTime = time.Unix(0, 0).UTC()
 	maxTime = time.Date(2100, 1, 1, 1, 0, 0, 0, time.UTC)
+
+	// This error is used to bail out retry if context is near its deadline. (Cannot be retryable error).
+	errContextNearDeadline = serviceerror.NewDeadlineExceeded("context near deadline")
+	// Tail room for context deadline to bail out from retry for long poll.
+	longPollTailRoom = time.Second
 )
 
 type (
@@ -786,6 +791,9 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 	pollerID := uuid.New()
 	var matchingResp *matchingservice.PollWorkflowTaskQueueResponse
 	op := func() error {
+		if contextNearDeadline(ctx, longPollTailRoom) {
+			return errContextNearDeadline
+		}
 		var err error
 		matchingResp, err = wh.matchingClient.PollWorkflowTaskQueue(ctx, &matchingservice.PollWorkflowTaskQueueRequest{
 			NamespaceId: namespaceID.String(),
@@ -797,6 +805,10 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
+		if err == errContextNearDeadline {
+			return &workflowservice.PollWorkflowTaskQueueResponse{}, nil
+		}
+
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_WORKFLOW, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
@@ -821,6 +833,13 @@ func (wh *WorkflowHandler) PollWorkflowTaskQueue(ctx context.Context, request *w
 		return nil, err
 	}
 	return resp, nil
+}
+
+func contextNearDeadline(ctx context.Context, tailroom time.Duration) bool {
+	if ctxDeadline, ok := ctx.Deadline(); ok {
+		return time.Now().Add(tailroom).After(ctxDeadline)
+	}
+	return false
 }
 
 // RespondWorkflowTaskCompleted is called by application worker to complete a WorkflowTask handed as a result of
@@ -1012,6 +1031,10 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 	pollerID := uuid.New()
 	var matchingResponse *matchingservice.PollActivityTaskQueueResponse
 	op := func() error {
+		if contextNearDeadline(ctx, longPollTailRoom) {
+			return errContextNearDeadline
+		}
+
 		var err error
 		matchingResponse, err = wh.matchingClient.PollActivityTaskQueue(ctx, &matchingservice.PollActivityTaskQueueRequest{
 			NamespaceId: namespaceID.String(),
@@ -1023,6 +1046,9 @@ func (wh *WorkflowHandler) PollActivityTaskQueue(ctx context.Context, request *w
 
 	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
+		if err == errContextNearDeadline {
+			return &workflowservice.PollActivityTaskQueueResponse{}, nil
+		}
 		contextWasCanceled := wh.cancelOutstandingPoll(ctx, namespaceID, enumspb.TASK_QUEUE_TYPE_ACTIVITY, request.TaskQueue, pollerID)
 		if contextWasCanceled {
 			// Clear error as we don't want to report context cancellation error to count against our SLA.
@@ -1930,26 +1956,16 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
-	var runId string
-	op := func() error {
-		var err error
-		resp, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
-			NamespaceId:            namespaceID.String(),
-			SignalWithStartRequest: request,
-		})
-		if err != nil {
-			return err
-		}
-		runId = resp.GetRunId()
-		return nil
-	}
+	resp, err := wh.historyClient.SignalWithStartWorkflowExecution(ctx, &historyservice.SignalWithStartWorkflowExecutionRequest{
+		NamespaceId:            namespaceID.String(),
+		SignalWithStartRequest: request,
+	})
 
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
 	if err != nil {
 		return nil, err
 	}
 
-	return &workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: runId}, nil
+	return &workflowservice.SignalWithStartWorkflowExecutionResponse{RunId: resp.GetRunId()}, nil
 }
 
 // ResetWorkflowExecution reset an existing workflow execution to WorkflowTaskCompleted event(exclusive).
@@ -2746,17 +2762,10 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 		return nil, err
 	}
 
-	var matchingResponse *matchingservice.DescribeTaskQueueResponse
-	op := func() error {
-		var err error
-		matchingResponse, err = wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
-			NamespaceId: namespaceID.String(),
-			DescRequest: request,
-		})
-		return err
-	}
-
-	err = backoff.Retry(op, frontendServiceRetryPolicy, common.IsServiceTransientError)
+	matchingResponse, err := wh.matchingClient.DescribeTaskQueue(ctx, &matchingservice.DescribeTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		DescRequest: request,
+	})
 	if err != nil {
 		return nil, err
 	}

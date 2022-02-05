@@ -32,6 +32,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
@@ -1851,4 +1852,14 @@ func listArchivedWorkflowExecutionsTestRequest() *workflowservice.ListArchivedWo
 		PageSize:  10,
 		Query:     "some random query string",
 	}
+}
+
+func TestContextNearDeadline(t *testing.T) {
+	assert.False(t, contextNearDeadline(context.Background(), longPollTailRoom))
+
+	ctx, _ := context.WithTimeout(context.Background(), time.Millisecond*500)
+	assert.True(t, contextNearDeadline(ctx, longPollTailRoom))
+	assert.False(t, contextNearDeadline(ctx, time.Millisecond))
+
+	assert.False(t, common.IsServiceTransientError(errContextNearDeadline))
 }
