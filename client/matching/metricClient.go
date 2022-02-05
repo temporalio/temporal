@@ -65,7 +65,9 @@ func (c *metricClient) AddActivityTask(
 ) (_ *matchingservice.AddActivityTaskResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientAddActivityTaskScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	c.emitForwardedSourceStats(
 		scope,
@@ -83,7 +85,9 @@ func (c *metricClient) AddWorkflowTask(
 ) (_ *matchingservice.AddWorkflowTaskResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientAddWorkflowTaskScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	c.emitForwardedSourceStats(
 		scope,
@@ -101,7 +105,9 @@ func (c *metricClient) PollActivityTaskQueue(
 ) (_ *matchingservice.PollActivityTaskQueueResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientPollActivityTaskQueueScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	if request.PollRequest != nil {
 		c.emitForwardedSourceStats(
@@ -121,7 +127,9 @@ func (c *metricClient) PollWorkflowTaskQueue(
 ) (_ *matchingservice.PollWorkflowTaskQueueResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientPollWorkflowTaskQueueScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	if request.PollRequest != nil {
 		c.emitForwardedSourceStats(
@@ -141,7 +149,9 @@ func (c *metricClient) QueryWorkflow(
 ) (_ *matchingservice.QueryWorkflowResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientQueryWorkflowScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	c.emitForwardedSourceStats(
 		scope,
@@ -159,7 +169,9 @@ func (c *metricClient) RespondQueryTaskCompleted(
 ) (_ *matchingservice.RespondQueryTaskCompletedResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientRespondQueryTaskCompletedScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	return c.client.RespondQueryTaskCompleted(ctx, request, opts...)
 }
@@ -171,7 +183,9 @@ func (c *metricClient) CancelOutstandingPoll(
 ) (_ *matchingservice.CancelOutstandingPollResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientCancelOutstandingPollScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	return c.client.CancelOutstandingPoll(ctx, request, opts...)
 }
@@ -183,7 +197,9 @@ func (c *metricClient) DescribeTaskQueue(
 ) (_ *matchingservice.DescribeTaskQueueResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientDescribeTaskQueueScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	return c.client.DescribeTaskQueue(ctx, request, opts...)
 }
@@ -195,7 +211,9 @@ func (c *metricClient) ListTaskQueuePartitions(
 ) (_ *matchingservice.ListTaskQueuePartitionsResponse, retError error) {
 
 	scope, stopwatch := c.startMetricsRecording(metrics.MatchingClientListTaskQueuePartitionsScope)
-	defer c.finishMetricsRecording(scope, stopwatch, retError)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
 
 	return c.client.ListTaskQueuePartitions(ctx, request, opts...)
 }
