@@ -781,43 +781,32 @@ func (v *commandAttrValidator) createCrossNamespaceCallError(
 func (v *commandAttrValidator) validateCommandSequence(
 	commands []*commandpb.Command,
 ) error {
-	encounterTerminalCommand := false
+	closeCommand := enumspb.COMMAND_TYPE_UNSPECIFIED
 
 	for _, command := range commands {
-		if encounterTerminalCommand {
+		if closeCommand != enumspb.COMMAND_TYPE_UNSPECIFIED {
 			return serviceerror.NewInvalidArgument(fmt.Sprintf(
-				"encouter invalid commands sequence: %v",
-				strings.Join(v.commandTypes(commands), ", "),
+				"invalid command sequence: [%v], command %s must be the last command.",
+				strings.Join(v.commandTypes(commands), ", "), closeCommand.String(),
 			))
 		}
 
 		switch command.GetCommandType() {
-		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
+		case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK,
+			enumspb.COMMAND_TYPE_START_TIMER,
+			enumspb.COMMAND_TYPE_CANCEL_TIMER,
+			enumspb.COMMAND_TYPE_RECORD_MARKER,
+			enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION,
+			enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION,
+			enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+			enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
 			// noop
-		case enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
-			// noop
-		case enumspb.COMMAND_TYPE_START_TIMER:
-			// noop
-		case enumspb.COMMAND_TYPE_CANCEL_TIMER:
-			// noop
-		case enumspb.COMMAND_TYPE_RECORD_MARKER:
-			// noop
-		case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
-			// noop
-		case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
-			// noop
-		case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-			// noop
-		case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-			// noop
-		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
-			encounterTerminalCommand = true
-		case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-			encounterTerminalCommand = true
-		case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
-			encounterTerminalCommand = true
-		case enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
-			encounterTerminalCommand = true
+		case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION,
+			enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION,
+			enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION,
+			enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
+			closeCommand = command.GetCommandType()
 		default:
 			return serviceerror.NewInvalidArgument(fmt.Sprintf("unknown command type: %v", command.GetCommandType()))
 		}
