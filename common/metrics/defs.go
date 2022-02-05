@@ -1831,6 +1831,7 @@ const (
 	HistoryArchiverHistoryMutatedCount
 	HistoryArchiverTotalUploadSize
 	HistoryArchiverHistorySize
+	HistoryArchiverDuplicateArchivalsCount
 
 	// The following metrics are only used by internal history archiver implemention.
 	// TODO: move them to internal repo once temporal plugin model is in place.
@@ -1841,7 +1842,6 @@ const (
 	HistoryArchiverDeterministicConstructionCheckFailedCount
 	HistoryArchiverRunningBlobIntegrityCheckCount
 	HistoryArchiverBlobIntegrityCheckFailedCount
-	HistoryArchiverDuplicateArchivalsCount
 
 	VisibilityArchiverArchiveNonRetryableErrorCount
 	VisibilityArchiverArchiveTransientErrorCount
@@ -2298,13 +2298,13 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryArchiverHistoryMutatedCount:                        NewCounterDef("history_archiver_history_mutated"),
 		HistoryArchiverTotalUploadSize:                            NewBytesHistogramDef("history_archiver_total_upload_size"),
 		HistoryArchiverHistorySize:                                NewBytesHistogramDef("history_archiver_history_size"),
+		HistoryArchiverDuplicateArchivalsCount:                    NewCounterDef("history_archiver_duplicate_archivals"),
 		HistoryArchiverBlobExistsCount:                            NewCounterDef("history_archiver_blob_exists"),
 		HistoryArchiverBlobSize:                                   NewBytesHistogramDef("history_archiver_blob_size"),
 		HistoryArchiverRunningDeterministicConstructionCheckCount: NewCounterDef("history_archiver_running_deterministic_construction_check"),
 		HistoryArchiverDeterministicConstructionCheckFailedCount:  NewCounterDef("history_archiver_deterministic_construction_check_failed"),
 		HistoryArchiverRunningBlobIntegrityCheckCount:             NewCounterDef("history_archiver_running_blob_integrity_check"),
 		HistoryArchiverBlobIntegrityCheckFailedCount:              NewCounterDef("history_archiver_blob_integrity_check_failed"),
-		HistoryArchiverDuplicateArchivalsCount:                    NewCounterDef("history_archiver_duplicate_archivals"),
 		VisibilityArchiverArchiveNonRetryableErrorCount:           NewCounterDef("visibility_archiver_archive_non_retryable_error"),
 		VisibilityArchiverArchiveTransientErrorCount:              NewCounterDef("visibility_archiver_archive_transient_error"),
 		VisibilityArchiveSuccessCount:                             NewCounterDef("visibility_archiver_archive_success"),

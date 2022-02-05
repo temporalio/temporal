@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/codec"
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -151,13 +152,22 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 	for historyIterator.HasNext() {
 		part := progress.CurrentPageNumber
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
-
 		if err != nil {
+			if common.IsNotFoundError(err) {
+				// workflow history no longer exists, may due to duplicated archival signal
+				// this may happen even in the middle of iterating history as two archival signals
+				// can be processed concurrently.
+				logger.Info(archiver.ArchiveSkippedInfoMsg)
+				scope.IncCounter(metrics.HistoryArchiverDuplicateArchivalsCount)
+				return nil
+			}
+
+			logger = log.With(logger, tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
 			if !common.IsPersistenceTransientError(err) {
-				logger.Error(archiver.ArchiveNonRetryableErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
+				logger.Error(archiver.ArchiveNonRetryableErrorMsg)
 				return errUploadNonRetryable
 			}
-			logger.Error(archiver.ArchiveTransientErrorMsg, tag.ArchivalArchiveFailReason(archiver.ErrReasonReadHistory), tag.Error(err))
+			logger.Error(archiver.ArchiveTransientErrorMsg)
 			return err
 		}
 

@@ -269,6 +269,11 @@ func IsResourceExhausted(err error) bool {
 	return false
 }
 
+func IsNotFoundError(err error) bool {
+	var notFoundError *serviceerror.NotFound
+	return errors.As(err, &notFoundError)
+}
+
 // WorkflowIDToHistoryShard is used to map namespaceID-workflowID pair to a shardID
 func WorkflowIDToHistoryShard(
 	namespaceID string,
