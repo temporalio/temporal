@@ -44,7 +44,7 @@ const (
 		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT $8 `
 
 	getHistoryNodesReverseQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
-		`WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND node_id > $4 AND ((node_id = $5 AND txn_id < $6) OR node_id < $7) ` +
+		`WHERE shard_id = $1 AND tree_id = $2 AND branch_id = $3 AND node_id >= $4 AND ((node_id = $5 AND txn_id < $6) OR node_id < $7) ` +
 		`ORDER BY shard_id, tree_id, branch_id DESC, node_id DESC, txn_id DESC LIMIT $8 `
 
 	getHistoryNodeMetadataQuery = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
