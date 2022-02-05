@@ -57,7 +57,6 @@ type (
 )
 
 func convertErrors(
-	record map[string]interface{},
 	iter gocql.Iter,
 	requestShardID int32,
 	requestRangeID int64,
@@ -65,16 +64,10 @@ func convertErrors(
 	requestExecutionCASConditions []executionCASCondition,
 ) error {
 
-	records := []map[string]interface{}{record}
-	errors := extractErrors(
-		record,
-		requestShardID,
-		requestRangeID,
-		requestCurrentRunID,
-		requestExecutionCASConditions,
-	)
+	var records []map[string]interface{}
+	var errors []error
 
-	record = make(map[string]interface{})
+	record := make(map[string]interface{})
 	for iter.MapScan(record) {
 		records = append(records, record)
 		errors = append(errors, extractErrors(
@@ -91,7 +84,7 @@ func convertErrors(
 	errors = sortErrors(errors)
 	if len(errors) == 0 {
 		return &p.ConditionFailedError{
-			Msg: fmt.Sprintf("Encounter unknown error: shard ID: %v, range ID: %v, error: %v",
+			Msg: fmt.Sprintf("Encounter unknown error: shard ID: %v, range ID: %v, conflicting records: %v",
 				requestShardID,
 				requestRangeID,
 				printRecords(records),
@@ -218,7 +211,7 @@ func extractCurrentWorkflowConflictError(
 		// TODO maybe assert actualCurrentRunID == executionState.RunId ?
 
 		return &p.CurrentWorkflowConditionFailedError{
-			Msg: fmt.Sprintf("Encounter concurrent workflow error, request run ID: %v, actual run ID: %v",
+			Msg: fmt.Sprintf("Encounter current workflow error, request run ID: %v, actual run ID: %v",
 				requestCurrentRunID,
 				actualCurrentRunID,
 			),
@@ -246,12 +239,13 @@ func extractWorkflowConflictError(
 	if rowType != rowTypeExecution {
 		return nil
 	}
-	if runID := gocql.UUIDToString(record["run_id"]); runID != requestRunID {
+	runID := gocql.UUIDToString(record["run_id"])
+	if runID != requestRunID {
 		return nil
 	}
 
 	actualNextEventID, _ := record["next_event_id"].(int64)
-	actualDBVersion, _ := record["db_version"].(int64)
+	actualDBVersion, _ := record["db_record_version"].(int64)
 
 	// TODO remove this block once DB version comparison is the default
 	if requestDBVersion == 0 {
@@ -270,7 +264,7 @@ func extractWorkflowConflictError(
 
 	if actualDBVersion != requestDBVersion {
 		return &p.WorkflowConditionFailedError{
-			Msg: fmt.Sprintf("Encounter workflow db version mismatch, request db version ID: %v, actual db version ID: %v",
+			Msg: fmt.Sprintf("Encounter workflow db version mismatch, request db version: %v, actual db version: %v",
 				requestDBVersion,
 				actualDBVersion,
 			),
@@ -278,7 +272,18 @@ func extractWorkflowConflictError(
 			DBRecordVersion: actualDBVersion,
 		}
 	}
-	return nil
+
+	// run_id and db_record_version of returned record are the same as in request, but update failed.
+	// It means that this record was returned in response of failed current_run_id update (not workflow execution update).
+	workflowID, _ := record["workflow_id"].(string)
+	currentRunID := gocql.UUIDToString(record["current_run_id"])
+	return &p.CurrentWorkflowConditionFailedError{
+		Msg: fmt.Sprintf("Current workflow not found error. Returned record with workflow ID: %v, run ID: %v, current run ID: %v",
+			workflowID,
+			runID,
+			currentRunID,
+		),
+	}
 }
 
 func printRecords(
