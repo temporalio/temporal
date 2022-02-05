@@ -45,6 +45,10 @@ const (
 		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND ((node_id = ? AND txn_id > ?) OR node_id > ?) AND node_id < ? ` +
 		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
 
+	getHistoryNodesReverseQuery = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
+		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND  node_id > ? AND ((node_id = ? AND txn_id < ?) OR node_id < ?) ` +
+		`ORDER BY shard_id, tree_id, branch_id DESC, node_id DESC, txn_id DESC LIMIT ? `
+
 	getHistoryNodeMetadataQuery = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
 		`WHERE shard_id = ? AND tree_id = ? AND branch_id = ? AND ((node_id = ? AND txn_id > ?) OR node_id > ?) AND node_id < ? ` +
 		`ORDER BY shard_id, tree_id, branch_id, node_id, txn_id LIMIT ? `
@@ -104,13 +108,14 @@ func (mdb *db) RangeSelectFromHistoryNode(
 	if filter.MetadataOnly {
 		query = getHistoryNodeMetadataQuery
 	} else {
-		query = getHistoryNodesQuery
+		if filter.ReverseOrder {
+			query = getHistoryNodesReverseQuery
+		} else {
+			query = getHistoryNodesQuery
+		}
 	}
 
-	var rows []sqlplugin.HistoryNodeRow
-	if err := mdb.conn.SelectContext(ctx,
-		&rows,
-		query,
+	args := []interface{}{
 		filter.ShardID,
 		filter.TreeID,
 		filter.BranchID,
@@ -119,13 +124,21 @@ func (mdb *db) RangeSelectFromHistoryNode(
 		filter.MinNodeID,
 		filter.MaxNodeID,
 		filter.PageSize,
-	); err != nil {
+	}
+	if filter.ReverseOrder {
+		args[4] = filter.MaxTxnID
+		args[5] = -filter.MaxTxnID
+	}
+
+	var rows []sqlplugin.HistoryNodeRow
+	if err := mdb.conn.SelectContext(ctx, &rows, query, args...); err != nil {
 		return nil, err
 	}
-	// NOTE: since we let txn_id multiple by -1 when inserting, we have to revert it back here
+
 	for index := range rows {
 		rows[index].TxnID = -rows[index].TxnID
 	}
+
 	return rows, nil
 }
 

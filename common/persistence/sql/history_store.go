@@ -39,7 +39,8 @@ import (
 
 const (
 	// NOTE: transaction ID is *= -1 in DB
-	MinTxnID = math.MaxInt64
+	MinTxnID int64 = math.MaxInt64
+	MaxTxnID int64 = math.MinInt64 + 1 // int overflow
 )
 
 // AppendHistoryNodes add(or override) a node to a history branch
@@ -176,7 +177,11 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 
 	var token historyNodePaginationToken
 	if len(request.NextPageToken) == 0 {
-		token = newHistoryNodePaginationToken(request.MinNodeID, MinTxnID)
+		if request.ReverseOrder {
+			token = newHistoryNodePaginationToken(request.MaxNodeID, MaxTxnID)
+		} else {
+			token = newHistoryNodePaginationToken(request.MinNodeID, MinTxnID)
+		}
 	} else {
 		token, err = deserializeHistoryNodePaginationToken(request.NextPageToken)
 		if err != nil {
@@ -184,15 +189,27 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 		}
 	}
 
+	minNodeId, maxNodeId := request.MinNodeID, request.MaxNodeID
+	minTxnId, maxTxnId := MinTxnID, MaxTxnID
+	if request.ReverseOrder {
+		maxNodeId = token.LastNodeID
+		maxTxnId = token.LastTxnID
+	} else {
+		minNodeId = token.LastNodeID
+		minTxnId = token.LastTxnID
+	}
+
 	rows, err := m.Db.RangeSelectFromHistoryNode(ctx, sqlplugin.HistoryNodeSelectFilter{
 		ShardID:      request.ShardID,
 		TreeID:       treeIDBytes,
 		BranchID:     branchIDBytes,
-		MinNodeID:    token.LastNodeID,
-		MinTxnID:     token.LastTxnID,
-		MaxNodeID:    request.MaxNodeID,
+		MinNodeID:    minNodeId,
+		MinTxnID:     minTxnId,
+		MaxNodeID:    maxNodeId,
+		MaxTxnID:     maxTxnId,
 		PageSize:     request.PageSize,
 		MetadataOnly: request.MetadataOnly,
+		ReverseOrder: request.ReverseOrder,
 	})
 	switch err {
 	case nil:

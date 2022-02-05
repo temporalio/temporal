@@ -650,7 +650,7 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse_MultipleBranches() {
 		return nil
 	}
 
-	activityId := "activity-gethistory-reverse-multiple-branches"
+	activityId := "integration-test-activity-gethistory-reverse-multiple-branches"
 	workflowFn := func(ctx workflow.Context) error {
 		activityRetryPolicy := &temporal.RetryPolicy{
 			InitialInterval:    time.Second * 2,
@@ -684,7 +684,7 @@ func (s *clientIntegrationSuite) TestGetHistoryReverse_MultipleBranches() {
 	s.worker.RegisterActivity(activityFn)
 	s.worker.RegisterWorkflow(workflowFn)
 
-	wfId := "integration-test-gethistory-reverse-branch"
+	wfId := "integration-test-wf-gethistory-reverse-multiple-branches"
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                 wfId,
 		TaskQueue:          s.taskQueue,
