@@ -109,8 +109,6 @@ type (
 		DeserializeTimerTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
 		SerializeVisibilityTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
 		DeserializeVisibilityTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
-		SerializeTieredStorageTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
-		DeserializeTieredStorageTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
 		SerializeReplicationTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
 		DeserializeReplicationTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
 

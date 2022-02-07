@@ -239,24 +239,6 @@ type Config struct {
 	VisibilityProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
 	VisibilityProcessorVisibilityArchivalTimeLimit         dynamicconfig.DurationPropertyFn
 
-	// TieredStorageQueueProcessor settings
-	TieredStorageTaskBatchSize                                dynamicconfig.IntPropertyFn
-	TieredStorageTaskWorkerCount                              dynamicconfig.IntPropertyFn
-	TieredStorageTaskMaxRetryCount                            dynamicconfig.IntPropertyFn
-	TieredStorageProcessorCompleteTaskFailureRetryCount       dynamicconfig.IntPropertyFn
-	TieredStorageProcessorFailoverMaxPollRPS                  dynamicconfig.IntPropertyFn
-	TieredStorageProcessorMaxPollRPS                          dynamicconfig.IntPropertyFn
-	TieredStorageProcessorMaxPollInterval                     dynamicconfig.DurationPropertyFn
-	TieredStorageProcessorMaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
-	TieredStorageProcessorUpdateAckInterval                   dynamicconfig.DurationPropertyFn
-	TieredStorageProcessorUpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
-	TieredStorageProcessorCompleteTaskInterval                dynamicconfig.DurationPropertyFn
-	TieredStorageProcessorRedispatchInterval                  dynamicconfig.DurationPropertyFn
-	TieredStorageProcessorRedispatchIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-	TieredStorageProcessorMaxRedispatchQueueSize              dynamicconfig.IntPropertyFn
-	TieredStorageProcessorEnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
-	TieredStorageProcessorArchivalTimeLimit                   dynamicconfig.DurationPropertyFn
-
 	SearchAttributesNumberOfKeysLimit dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesSizeOfValueLimit  dynamicconfig.IntPropertyFnWithNamespaceFilter
 	SearchAttributesTotalSizeLimit    dynamicconfig.IntPropertyFnWithNamespaceFilter
@@ -436,24 +418,6 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityProcessorMaxRedispatchQueueSize:              dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxRedispatchQueueSize, 10000),
 		VisibilityProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskProcessor, false),
 		VisibilityProcessorVisibilityArchivalTimeLimit:         dc.GetDurationProperty(dynamicconfig.VisibilityProcessorVisibilityArchivalTimeLimit, 200*time.Millisecond),
-
-		// ===== Tiered storage =====
-		TieredStorageTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.TieredStorageTaskBatchSize, 100),
-		TieredStorageProcessorFailoverMaxPollRPS:                  dc.GetIntProperty(dynamicconfig.TieredStorageProcessorFailoverMaxPollRPS, 1),
-		TieredStorageProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.TieredStorageProcessorMaxPollRPS, 20),
-		TieredStorageTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.TieredStorageTaskWorkerCount, 10),
-		TieredStorageTaskMaxRetryCount:                            dc.GetIntProperty(dynamicconfig.TieredStorageTaskMaxRetryCount, 100),
-		TieredStorageProcessorCompleteTaskFailureRetryCount:       dc.GetIntProperty(dynamicconfig.TieredStorageProcessorCompleteTaskFailureRetryCount, 10),
-		TieredStorageProcessorMaxPollInterval:                     dc.GetDurationProperty(dynamicconfig.TieredStorageProcessorMaxPollInterval, 1*time.Minute),
-		TieredStorageProcessorMaxPollIntervalJitterCoefficient:    dc.GetFloat64Property(dynamicconfig.TieredStorageProcessorMaxPollIntervalJitterCoefficient, 0.15),
-		TieredStorageProcessorUpdateAckInterval:                   dc.GetDurationProperty(dynamicconfig.TieredStorageProcessorUpdateAckInterval, 30*time.Second),
-		TieredStorageProcessorUpdateAckIntervalJitterCoefficient:  dc.GetFloat64Property(dynamicconfig.TieredStorageProcessorUpdateAckIntervalJitterCoefficient, 0.15),
-		TieredStorageProcessorCompleteTaskInterval:                dc.GetDurationProperty(dynamicconfig.TieredStorageProcessorCompleteTaskInterval, 60*time.Second),
-		TieredStorageProcessorRedispatchInterval:                  dc.GetDurationProperty(dynamicconfig.TieredStorageProcessorRedispatchInterval, 5*time.Second),
-		TieredStorageProcessorRedispatchIntervalJitterCoefficient: dc.GetFloat64Property(dynamicconfig.TieredStorageProcessorRedispatchIntervalJitterCoefficient, 0.15),
-		TieredStorageProcessorMaxRedispatchQueueSize:              dc.GetIntProperty(dynamicconfig.TieredStorageProcessorMaxRedispatchQueueSize, 10000),
-		TieredStorageProcessorEnablePriorityTaskProcessor:         dc.GetBoolProperty(dynamicconfig.TieredStorageProcessorEnablePriorityTaskProcessor, false),
-		TieredStorageProcessorArchivalTimeLimit:                   dc.GetDurationProperty(dynamicconfig.TieredStorageProcessorArchivalTimeLimit, 200*time.Millisecond),
 
 		SearchAttributesNumberOfKeysLimit: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesNumberOfKeysLimit, 100),
 		SearchAttributesSizeOfValueLimit:  dc.GetIntPropertyFilteredByNamespace(dynamicconfig.SearchAttributesSizeOfValueLimit, 2*1024),
