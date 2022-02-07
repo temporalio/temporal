@@ -1728,22 +1728,54 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 func getTaskType(task tasks.Task) (enumsspb.TaskType, error) {
 	var taskType enumsspb.TaskType
 	switch task := task.(type) {
+	// Replication
+	case *tasks.HistoryReplicationTask:
+		taskType = enumsspb.TASK_TYPE_REPLICATION_HISTORY
+	case *tasks.SyncActivityTask:
+		taskType = enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
+	// Transfer
+	case *tasks.WorkflowTask:
+		taskType = enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK
+	case *tasks.ActivityTask:
+		taskType = enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK
+	case *tasks.CloseExecutionTask:
+		taskType = enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION
+	case *tasks.CancelExecutionTask:
+		taskType = enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION
+	case *tasks.StartChildExecutionTask:
+		taskType = enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION
+	case *tasks.SignalExecutionTask:
+		taskType = enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION
+	case *tasks.ResetWorkflowTask:
+		taskType = enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW
+	case *tasks.DeleteExecutionTask:
+		taskType = enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
+	// Timer
 	case *tasks.WorkflowTaskTimeoutTask:
 		taskType = enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
-	case *tasks.WorkflowBackoffTimerTask:
-		taskType = enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
 	case *tasks.ActivityTimeoutTask:
 		taskType = enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
-	case *tasks.ActivityRetryTimerTask:
-		taskType = enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
 	case *tasks.UserTimerTask:
 		taskType = enumsspb.TASK_TYPE_USER_TIMER
 	case *tasks.WorkflowTimeoutTask:
 		taskType = enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
 	case *tasks.DeleteHistoryEventTask:
 		taskType = enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT
+	case *tasks.ActivityRetryTimerTask:
+		taskType = enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
+	case *tasks.WorkflowBackoffTimerTask:
+		taskType = enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
+	// Visibility
+	case *tasks.StartExecutionVisibilityTask:
+		taskType = enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION
+	case *tasks.UpsertExecutionVisibilityTask:
+		taskType = enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION
+	case *tasks.CloseExecutionVisibilityTask:
+		taskType = enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION
+	case *tasks.DeleteExecutionVisibilityTask:
+		taskType = enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION
 	default:
-		return 0, serviceerror.NewInternal(fmt.Sprintf("Unknown timer task type: %v", task))
+		return 0, serviceerror.NewInternal(fmt.Sprintf("Unknown task type: %v", task))
 	}
 
 	return taskType, nil
