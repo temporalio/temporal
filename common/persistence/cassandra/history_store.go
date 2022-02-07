@@ -44,10 +44,11 @@ const (
 		`tree_id, branch_id, node_id, prev_txn_id, txn_id, data, data_encoding) ` +
 		`VALUES (?, ?, ?, ?, ?, ?, ?) `
 
-	v2templateReadHistoryNodeReverseSuffix = `ORDER BY branch_id DESC, node_id DESC `
-
 	v2templateReadHistoryNode = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
 		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? `
+
+	v2templateReadHistoryNodeReverse = `SELECT node_id, prev_txn_id, txn_id, data, data_encoding FROM history_node ` +
+		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? ORDER BY branch_id DESC, node_id DESC `
 
 	v2templateReadHistoryNodeMetadata = `SELECT node_id, prev_txn_id, txn_id FROM history_node ` +
 		`WHERE tree_id = ? AND branch_id = ? AND node_id >= ? AND node_id < ? `
@@ -165,7 +166,6 @@ func (h *HistoryStore) DeleteHistoryNodes(
 func (h *HistoryStore) ReadHistoryBranch(
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-
 	treeID, err := primitives.ValidateUUID(request.TreeID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(fmt.Sprintf("ReadHistoryBranch - Gocql TreeId UUID cast failed. Error: %v", err))
@@ -179,16 +179,13 @@ func (h *HistoryStore) ReadHistoryBranch(
 	var queryString string
 	if request.MetadataOnly {
 		queryString = v2templateReadHistoryNodeMetadata
+	} else if request.ReverseOrder {
+		queryString = v2templateReadHistoryNodeReverse
 	} else {
 		queryString = v2templateReadHistoryNode
 	}
 
-	var orderSuffix string
-	if request.ReverseOrder {
-		orderSuffix = v2templateReadHistoryNodeReverseSuffix
-	}
-
-	query := h.Session.Query(queryString+orderSuffix, treeID, branchID, request.MinNodeID, request.MaxNodeID)
+	query := h.Session.Query(queryString, treeID, branchID, request.MinNodeID, request.MaxNodeID)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 	var pagingToken []byte

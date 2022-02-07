@@ -107,27 +107,35 @@ func (mdb *db) RangeSelectFromHistoryNode(
 	var query string
 	if filter.MetadataOnly {
 		query = getHistoryNodeMetadataQuery
+	} else if filter.ReverseOrder {
+		query = getHistoryNodesReverseQuery
 	} else {
-		if filter.ReverseOrder {
-			query = getHistoryNodesReverseQuery
-		} else {
-			query = getHistoryNodesQuery
-		}
+		query = getHistoryNodesQuery
 	}
 
-	args := []interface{}{
-		filter.ShardID,
-		filter.TreeID,
-		filter.BranchID,
-		filter.MinNodeID,
-		-filter.MinTxnID, // NOTE: transaction ID is *= -1 when stored
-		filter.MinNodeID,
-		filter.MaxNodeID,
-		filter.PageSize,
-	}
+	var args []interface{}
 	if filter.ReverseOrder {
-		args[4] = filter.MaxTxnID
-		args[5] = -filter.MaxTxnID
+		args = []interface{}{
+			filter.ShardID,
+			filter.TreeID,
+			filter.BranchID,
+			filter.MinNodeID,
+			filter.MaxTxnID,
+			-filter.MaxTxnID,
+			filter.MaxNodeID,
+			filter.PageSize,
+		}
+	} else {
+		args = []interface{}{
+			filter.ShardID,
+			filter.TreeID,
+			filter.BranchID,
+			filter.MinNodeID,
+			-filter.MinTxnID, // NOTE: transaction ID is *= -1 when stored
+			filter.MinNodeID,
+			filter.MaxNodeID,
+			filter.PageSize,
+		}
 	}
 
 	var rows []sqlplugin.HistoryNodeRow
