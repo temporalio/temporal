@@ -75,5 +75,5 @@ func (d *WorkflowTask) SetVisibilityTime(timestamp time.Time) {
 }
 
 func (d *WorkflowTask) GetCategory() Category {
-	return CategoryTimer
+	return CategoryTransfer
 }
