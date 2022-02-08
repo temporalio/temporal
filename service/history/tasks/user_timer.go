@@ -30,6 +30,8 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
+var _ Task = (*UserTimerTask)(nil)
+
 type (
 	UserTimerTask struct {
 		definition.WorkflowKey
@@ -69,4 +71,8 @@ func (u *UserTimerTask) GetVisibilityTime() time.Time {
 
 func (u *UserTimerTask) SetVisibilityTime(t time.Time) {
 	u.VisibilityTimestamp = t
+}
+
+func (u *UserTimerTask) GetCategory() Category {
+	return CategoryTimer
 }

@@ -38,6 +38,8 @@ type (
 
 	Keys []Key
 
+	Category int32
+
 	// Task is the generic task interface
 	Task interface {
 		GetKey() Key
@@ -47,11 +49,19 @@ type (
 		GetTaskID() int64
 		GetVisibilityTime() time.Time
 		GetVersion() int64
+		GetCategory() Category
 
 		SetVersion(version int64)
 		SetTaskID(id int64)
 		SetVisibilityTime(timestamp time.Time)
 	}
+)
+
+const (
+	CategoryTransfer Category = iota + 1
+	CategoryTimer
+	CategoryVisibility
+	CategoryReplication
 )
 
 func (left Key) CompareTo(right Key) int {

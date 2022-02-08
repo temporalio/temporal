@@ -31,6 +31,8 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
+var _ Task = (*WorkflowBackoffTimerTask)(nil)
+
 type (
 	WorkflowBackoffTimerTask struct {
 		definition.WorkflowKey
@@ -70,4 +72,8 @@ func (r *WorkflowBackoffTimerTask) GetVisibilityTime() time.Time {
 
 func (r *WorkflowBackoffTimerTask) SetVisibilityTime(t time.Time) {
 	r.VisibilityTimestamp = t
+}
+
+func (r *WorkflowBackoffTimerTask) GetCategory() Category {
+	return CategoryTimer
 }

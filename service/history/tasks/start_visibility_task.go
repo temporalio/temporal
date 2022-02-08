@@ -30,6 +30,8 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
+var _ Task = (*StartExecutionVisibilityTask)(nil)
+
 type (
 	StartExecutionVisibilityTask struct {
 		definition.WorkflowKey
@@ -68,4 +70,8 @@ func (t *StartExecutionVisibilityTask) GetVisibilityTime() time.Time {
 
 func (t *StartExecutionVisibilityTask) SetVisibilityTime(timestamp time.Time) {
 	t.VisibilityTimestamp = timestamp
+}
+
+func (t *StartExecutionVisibilityTask) GetCategory() Category {
+	return CategoryVisibility
 }

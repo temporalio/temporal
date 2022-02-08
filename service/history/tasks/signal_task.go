@@ -30,6 +30,8 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
+var _ Task = (*SignalExecutionTask)(nil)
+
 type (
 	SignalExecutionTask struct {
 		definition.WorkflowKey
@@ -73,4 +75,8 @@ func (u *SignalExecutionTask) GetVisibilityTime() time.Time {
 
 func (u *SignalExecutionTask) SetVisibilityTime(timestamp time.Time) {
 	u.VisibilityTimestamp = timestamp
+}
+
+func (u *SignalExecutionTask) GetCategory() Category {
+	return CategoryTransfer
 }

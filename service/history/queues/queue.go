@@ -22,56 +22,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package queues
 
 import (
-	"time"
-
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
-var _ Task = (*DeleteHistoryEventTask)(nil)
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
 
 type (
-	DeleteHistoryEventTask struct {
-		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
+	Processor interface {
+		common.Daemon
+		Category() tasks.Category
+		NotifyNewTasks(clusterName string, tasks []tasks.Task)
+		FailoverNamespace(namespaceIDs map[string]struct{})
+		LockTaskProcessing()
+		UnlockTaskProcessing()
+	}
+
+	ProcessorFactory interface {
+		CreateProcessor(shard shard.Context, engine shard.Engine) Processor
 	}
 )
-
-func (a *DeleteHistoryEventTask) GetKey() Key {
-	return Key{
-		FireTime: a.VisibilityTimestamp,
-		TaskID:   a.TaskID,
-	}
-}
-
-func (a *DeleteHistoryEventTask) GetVersion() int64 {
-	return a.Version
-}
-
-func (a *DeleteHistoryEventTask) SetVersion(version int64) {
-	a.Version = version
-}
-
-func (a *DeleteHistoryEventTask) GetTaskID() int64 {
-	return a.TaskID
-}
-
-func (a *DeleteHistoryEventTask) SetTaskID(id int64) {
-	a.TaskID = id
-}
-
-func (a *DeleteHistoryEventTask) GetVisibilityTime() time.Time {
-	return a.VisibilityTimestamp
-}
-
-func (a *DeleteHistoryEventTask) SetVisibilityTime(timestamp time.Time) {
-	a.VisibilityTimestamp = timestamp
-}
-
-func (a *DeleteHistoryEventTask) GetCategory() Category {
-	return CategoryTimer
-}
