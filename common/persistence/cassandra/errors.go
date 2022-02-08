@@ -57,6 +57,7 @@ type (
 )
 
 func convertErrors(
+	record map[string]interface{},
 	iter gocql.Iter,
 	requestShardID int32,
 	requestRangeID int64,
@@ -64,10 +65,16 @@ func convertErrors(
 	requestExecutionCASConditions []executionCASCondition,
 ) error {
 
-	var records []map[string]interface{}
-	var errors []error
+	records := []map[string]interface{}{record}
+	errors := extractErrors(
+		record,
+		requestShardID,
+		requestRangeID,
+		requestCurrentRunID,
+		requestExecutionCASConditions,
+	)
 
-	record := make(map[string]interface{})
+	record = make(map[string]interface{})
 	for iter.MapScan(record) {
 		records = append(records, record)
 		errors = append(errors, extractErrors(

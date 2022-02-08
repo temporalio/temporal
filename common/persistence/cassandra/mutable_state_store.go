@@ -462,6 +462,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 
 	if !applied {
 		return nil, convertErrors(
+			record,
 			iter,
 			shardID,
 			request.RangeID,
@@ -680,6 +681,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 
 	if !applied {
 		return convertErrors(
+			record,
 			iter,
 			request.ShardID,
 			request.RangeID,
@@ -844,6 +846,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			})
 		}
 		return convertErrors(
+			record,
 			iter,
 			request.ShardID,
 			request.RangeID,
