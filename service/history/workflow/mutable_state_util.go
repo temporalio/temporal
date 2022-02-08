@@ -56,17 +56,24 @@ func convertSyncActivityInfos(
 	return outputs
 }
 
+// TODO: can we deprecate this method and
+// let task generator correctly set task version and
+// visibility timestamp?
 func setTaskInfo(
 	version int64,
 	timestamp time.Time,
 	insertTasks map[tasks.Category][]tasks.Task,
 ) {
 	// set the task version,
-	// as well as the Timestamp if not set (non-scheduled tasks)
-	for _, tasks := range insertTasks {
-		for _, task := range tasks {
+	// as well as the Timestamp if not scheduled task
+	for category, tasksByCategory := range insertTasks {
+		if category == tasks.CategoryReplication {
+			continue
+		}
+
+		for _, task := range tasksByCategory {
 			task.SetVersion(version)
-			if task.GetVisibilityTime().IsZero() {
+			if task.GetKey().FireTime.IsZero() {
 				task.SetVisibilityTime(timestamp)
 			}
 		}
