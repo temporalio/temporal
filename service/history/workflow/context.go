@@ -656,22 +656,22 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 	// current workflow is doing continue as new
 
 	// it is possible that continue as new is done as part of passive logic
-	if len(currentWorkflowMutation.ReplicationTasks) == 0 {
+	if len(currentWorkflowMutation.Tasks[tasks.CategoryReplication]) == 0 {
 		return nil
 	}
 
-	if newWorkflowSnapshot == nil || len(newWorkflowSnapshot.ReplicationTasks) != 1 {
+	if newWorkflowSnapshot == nil || len(newWorkflowSnapshot.Tasks[tasks.CategoryReplication]) != 1 {
 		return serviceerror.NewInternal("unable to find replication task from new workflow for continue as new replication")
 	}
 
 	// merge the new run first event batch replication task
 	// to current event batch replication task
-	newRunTask := newWorkflowSnapshot.ReplicationTasks[0].(*tasks.HistoryReplicationTask)
-	newWorkflowSnapshot.ReplicationTasks = nil
+	newRunTask := newWorkflowSnapshot.Tasks[tasks.CategoryReplication][0].(*tasks.HistoryReplicationTask)
+	delete(newWorkflowSnapshot.Tasks, tasks.CategoryReplication)
 
 	newRunBranchToken := newRunTask.BranchToken
 	taskUpdated := false
-	for _, replicationTask := range currentWorkflowMutation.ReplicationTasks {
+	for _, replicationTask := range currentWorkflowMutation.Tasks[tasks.CategoryReplication] {
 		if task, ok := replicationTask.(*tasks.HistoryReplicationTask); ok {
 			taskUpdated = true
 			task.NewRunBranchToken = newRunBranchToken

@@ -229,11 +229,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Fire() {
 	event, _ = addTimerStartedEvent(mutableState, event.GetEventId(), timerID, timerTimeout)
 
 	timerSequence := workflow.NewTimerSequence(s.timeSource, mutableState)
-	mutableState.InsertTimerTasks = nil
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
 	modified, err := timerSequence.CreateNextUserTimer()
 	s.NoError(err)
 	s.True(modified)
-	task := mutableState.InsertTimerTasks[0]
+	task := mutableState.InsertTasks[tasks.CategoryTimer][0]
 
 	timerTask := &tasks.UserTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -300,11 +300,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessUserTimerTimeout_Noop() {
 	event, _ = addTimerStartedEvent(mutableState, event.GetEventId(), timerID, timerTimeout)
 
 	timerSequence := workflow.NewTimerSequence(s.timeSource, mutableState)
-	mutableState.InsertTimerTasks = nil
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
 	modified, err := timerSequence.CreateNextUserTimer()
 	s.NoError(err)
 	s.True(modified)
-	task := mutableState.InsertTimerTasks[0]
+	task := mutableState.InsertTasks[tasks.CategoryTimer][0]
 
 	timerTask := &tasks.UserTimerTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -378,11 +378,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	)
 
 	timerSequence := workflow.NewTimerSequence(s.timeSource, mutableState)
-	mutableState.InsertTimerTasks = nil
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
 	modified, err := timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
 	s.True(modified)
-	task := mutableState.InsertTimerTasks[0]
+	task := mutableState.InsertTasks[tasks.CategoryTimer][0]
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -460,11 +460,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_NoRetryPo
 	startedEvent := addActivityTaskStartedEvent(mutableState, scheduledEvent.GetEventId(), identity)
 
 	timerSequence := workflow.NewTimerSequence(s.timeSource, mutableState)
-	mutableState.InsertTimerTasks = nil
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
 	modified, err := timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
 	s.True(modified)
-	task := mutableState.InsertTimerTasks[0]
+	task := mutableState.InsertTasks[tasks.CategoryTimer][0]
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -550,11 +550,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	s.Nil(startedEvent)
 
 	timerSequence := workflow.NewTimerSequence(s.timeSource, mutableState)
-	mutableState.InsertTimerTasks = nil
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
 	modified, err := timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
 	s.True(modified)
-	task := mutableState.InsertTimerTasks[0]
+	task := mutableState.InsertTasks[tasks.CategoryTimer][0]
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -641,11 +641,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	)
 
 	timerSequence := workflow.NewTimerSequence(s.timeSource, mutableState)
-	mutableState.InsertTimerTasks = nil
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
 	modified, err := timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
 	s.True(modified)
-	task := mutableState.InsertTimerTasks[0]
+	task := mutableState.InsertTasks[tasks.CategoryTimer][0]
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -730,11 +730,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_RetryPoli
 	s.Nil(startedEvent)
 
 	timerSequence := workflow.NewTimerSequence(s.timeSource, mutableState)
-	mutableState.InsertTimerTasks = nil
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
 	modified, err := timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
 	s.True(modified)
-	task := mutableState.InsertTimerTasks[0]
+	task := mutableState.InsertTasks[tasks.CategoryTimer][0]
 
 	timerTask := &tasks.ActivityTimeoutTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -820,11 +820,11 @@ func (s *timerQueueActiveTaskExecutorSuite) TestProcessActivityTimeout_Heartbeat
 	s.Nil(startedEvent)
 
 	timerSequence := workflow.NewTimerSequence(s.timeSource, mutableState)
-	mutableState.InsertTimerTasks = nil
+	mutableState.InsertTasks[tasks.CategoryTimer] = nil
 	modified, err := timerSequence.CreateNextActivityTimer()
 	s.NoError(err)
 	s.True(modified)
-	task := mutableState.InsertTimerTasks[0]
+	task := mutableState.InsertTasks[tasks.CategoryTimer][0]
 	s.Equal(enumspb.TIMEOUT_TYPE_HEARTBEAT, task.(*tasks.ActivityTimeoutTask).TimeoutType)
 
 	timerTask := &tasks.ActivityTimeoutTask{

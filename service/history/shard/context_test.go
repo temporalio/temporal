@@ -127,10 +127,12 @@ func (s *contextSuite) TestAddTasks_Success() {
 		WorkflowID:  task.GetWorkflowId(),
 		RunID:       task.GetRunId(),
 
-		TransferTasks:    transferTasks,
-		TimerTasks:       timerTasks,
-		ReplicationTasks: replicationTasks,
-		VisibilityTasks:  visibilityTasks,
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryTransfer:    transferTasks,
+			tasks.CategoryTimer:       timerTasks,
+			tasks.CategoryReplication: replicationTasks,
+			tasks.CategoryVisibility:  visibilityTasks,
+		},
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)

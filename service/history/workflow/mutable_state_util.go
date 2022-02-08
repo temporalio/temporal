@@ -59,20 +59,16 @@ func convertSyncActivityInfos(
 func setTaskInfo(
 	version int64,
 	timestamp time.Time,
-	transferTasks []tasks.Task,
-	timerTasks []tasks.Task,
-	visibilityTasks []tasks.Task,
+	insertTasks map[tasks.Category][]tasks.Task,
 ) {
-	// set both the task version, as well as the Timestamp on the transfer tasks
-	for _, task := range transferTasks {
-		task.SetVersion(version)
-		task.SetVisibilityTime(timestamp)
-	}
-	for _, task := range timerTasks {
-		task.SetVersion(version)
-	}
-	for _, task := range visibilityTasks {
-		task.SetVersion(version)
-		task.SetVisibilityTime(timestamp)
+	// set the task version,
+	// as well as the Timestamp if not set (non-scheduled tasks)
+	for _, tasks := range insertTasks {
+		for _, task := range tasks {
+			task.SetVersion(version)
+			if task.GetVisibilityTime().IsZero() {
+				task.SetVisibilityTime(timestamp)
+			}
+		}
 	}
 }

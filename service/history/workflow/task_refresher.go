@@ -314,7 +314,7 @@ Loop:
 			return err
 		}
 
-		if err := taskGenerator.GenerateActivityTransferTasks(
+		if err := taskGenerator.GenerateActivityTasks(
 			now,
 			scheduleEvent,
 		); err != nil {

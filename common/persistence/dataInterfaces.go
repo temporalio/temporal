@@ -217,10 +217,7 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		TransferTasks    []tasks.Task
-		TimerTasks       []tasks.Task
-		ReplicationTasks []tasks.Task
-		VisibilityTasks  []tasks.Task
+		Tasks map[tasks.Category][]tasks.Task
 	}
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
@@ -363,10 +360,7 @@ type (
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
-		TransferTasks    []tasks.Task
-		ReplicationTasks []tasks.Task
-		TimerTasks       []tasks.Task
-		VisibilityTasks  []tasks.Task
+		Tasks map[tasks.Category][]tasks.Task
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64
@@ -388,10 +382,7 @@ type (
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 
-		TransferTasks    []tasks.Task
-		ReplicationTasks []tasks.Task
-		TimerTasks       []tasks.Task
-		VisibilityTasks  []tasks.Task
+		Tasks map[tasks.Category][]tasks.Task
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64

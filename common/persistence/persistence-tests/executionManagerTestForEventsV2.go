@@ -138,17 +138,18 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			TransferTasks: []tasks.Task{
-				&tasks.WorkflowTask{
-					WorkflowKey:         workflowKey,
-					TaskID:              s.GetNextSequenceNumber(),
-					TaskQueue:           "taskQueue",
-					ScheduleID:          2,
-					VisibilityTimestamp: time.Now().UTC(),
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: {
+					&tasks.WorkflowTask{
+						WorkflowKey:         workflowKey,
+						TaskID:              s.GetNextSequenceNumber(),
+						TaskQueue:           "taskQueue",
+						ScheduleID:          2,
+						VisibilityTimestamp: time.Now().UTC(),
+					},
 				},
 			},
-			TimerTasks: nil,
-			Checksum:   csum,
+			Checksum: csum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})
@@ -239,21 +240,22 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			NextEventID: common.EmptyEventID,
-			TransferTasks: []tasks.Task{
-				&tasks.WorkflowTask{
-					WorkflowKey: definition.NewWorkflowKey(
-						namespaceID,
-						workflowExecution.WorkflowId,
-						workflowExecution.RunId,
-					),
-					TaskID:              s.GetNextSequenceNumber(),
-					TaskQueue:           "taskQueue",
-					ScheduleID:          2,
-					VisibilityTimestamp: time.Now().UTC(),
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: {
+					&tasks.WorkflowTask{
+						WorkflowKey: definition.NewWorkflowKey(
+							namespaceID,
+							workflowExecution.WorkflowId,
+							workflowExecution.RunId,
+						),
+						TaskID:              s.GetNextSequenceNumber(),
+						TaskQueue:           "taskQueue",
+						ScheduleID:          2,
+						VisibilityTimestamp: time.Now().UTC(),
+					},
 				},
 			},
-			TimerTasks: nil,
-			Checksum:   csum,
+			Checksum: csum,
 		},
 	})
 
@@ -340,11 +342,12 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	_, err2 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
-			ExecutionInfo:       updatedInfo,
-			ExecutionState:      updatedState,
-			NextEventID:         int64(5),
-			TransferTasks:       []tasks.Task{newworkflowTask},
-			TimerTasks:          nil,
+			ExecutionInfo:  updatedInfo,
+			ExecutionState: updatedState,
+			NextEventID:    int64(5),
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: {newworkflowTask},
+			},
 			Condition:           state0.NextEventId,
 			UpsertActivityInfos: nil,
 			DeleteActivityInfos: nil,
@@ -371,9 +374,8 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			NextEventID:   state0.NextEventId,
-			TransferTasks: nil,
-			TimerTasks:    nil,
+			NextEventID: state0.NextEventId,
+			Tasks:       map[tasks.Category][]tasks.Task{},
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})

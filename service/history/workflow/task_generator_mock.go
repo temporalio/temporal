@@ -74,6 +74,20 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateActivityRetryTasks(activitySche
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityRetryTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityRetryTasks), activityScheduleID)
 }
 
+// GenerateActivityTasks mocks base method.
+func (m *MockTaskGenerator) GenerateActivityTasks(now time.Time, event *history.HistoryEvent) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GenerateActivityTasks", now, event)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// GenerateActivityTasks indicates an expected call of GenerateActivityTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateActivityTasks(now, event interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityTasks), now, event)
+}
+
 // GenerateActivityTimerTasks mocks base method.
 func (m *MockTaskGenerator) GenerateActivityTimerTasks(now time.Time) error {
 	m.ctrl.T.Helper()
@@ -86,20 +100,6 @@ func (m *MockTaskGenerator) GenerateActivityTimerTasks(now time.Time) error {
 func (mr *MockTaskGeneratorMockRecorder) GenerateActivityTimerTasks(now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityTimerTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityTimerTasks), now)
-}
-
-// GenerateActivityTransferTasks mocks base method.
-func (m *MockTaskGenerator) GenerateActivityTransferTasks(now time.Time, event *history.HistoryEvent) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateActivityTransferTasks", now, event)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// GenerateActivityTransferTasks indicates an expected call of GenerateActivityTransferTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateActivityTransferTasks(now, event interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateActivityTransferTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateActivityTransferTasks), now, event)
 }
 
 // GenerateChildWorkflowTasks mocks base method.
@@ -159,10 +159,10 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(now, br
 }
 
 // GenerateLastHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateLastHistoryReplicationTasks(now time.Time) (*tasks.HistoryReplicationTask, error) {
+func (m *MockTaskGenerator) GenerateLastHistoryReplicationTasks(now time.Time) (tasks.Task, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", now)
-	ret0, _ := ret[0].(*tasks.HistoryReplicationTask)
+	ret0, _ := ret[0].(tasks.Task)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

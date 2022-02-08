@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -426,19 +427,19 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 	var err error
 
-	transferTasks, err := m.serializer.SerializeTransferTasks(input.TransferTasks)
+	transferTasks, err := m.serializer.SerializeTransferTasks(input.Tasks[tasks.CategoryTransfer])
 	if err != nil {
 		return nil, err
 	}
-	timerTasks, err := m.serializer.SerializeTimerTasks(input.TimerTasks)
+	timerTasks, err := m.serializer.SerializeTimerTasks(input.Tasks[tasks.CategoryTimer])
 	if err != nil {
 		return nil, err
 	}
-	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.ReplicationTasks)
+	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.Tasks[tasks.CategoryReplication])
 	if err != nil {
 		return nil, err
 	}
-	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.Tasks[tasks.CategoryVisibility])
 	if err != nil {
 		return nil, err
 	}
@@ -545,19 +546,19 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 	var err error
 
-	transferTasks, err := m.serializer.SerializeTransferTasks(input.TransferTasks)
+	transferTasks, err := m.serializer.SerializeTransferTasks(input.Tasks[tasks.CategoryTransfer])
 	if err != nil {
 		return nil, err
 	}
-	timerTasks, err := m.serializer.SerializeTimerTasks(input.TimerTasks)
+	timerTasks, err := m.serializer.SerializeTimerTasks(input.Tasks[tasks.CategoryTimer])
 	if err != nil {
 		return nil, err
 	}
-	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.ReplicationTasks)
+	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.Tasks[tasks.CategoryReplication])
 	if err != nil {
 		return nil, err
 	}
-	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.Tasks[tasks.CategoryVisibility])
 	if err != nil {
 		return nil, err
 	}
@@ -700,19 +701,19 @@ func (m *executionManagerImpl) AddTasks(
 	input *AddTasksRequest,
 ) error {
 
-	transferTasks, err := m.serializer.SerializeTransferTasks(input.TransferTasks)
+	transferTasks, err := m.serializer.SerializeTransferTasks(input.Tasks[tasks.CategoryTransfer])
 	if err != nil {
 		return err
 	}
-	timerTasks, err := m.serializer.SerializeTimerTasks(input.TimerTasks)
+	timerTasks, err := m.serializer.SerializeTimerTasks(input.Tasks[tasks.CategoryTimer])
 	if err != nil {
 		return err
 	}
-	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.ReplicationTasks)
+	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.Tasks[tasks.CategoryReplication])
 	if err != nil {
 		return err
 	}
-	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.VisibilityTasks)
+	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.Tasks[tasks.CategoryVisibility])
 	if err != nil {
 		return err
 	}

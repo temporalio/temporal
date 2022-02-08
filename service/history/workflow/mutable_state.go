@@ -238,16 +238,13 @@ type (
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 
-		AddTransferTasks(transferTasks ...tasks.Task)
-		AddTimerTasks(timerTasks ...tasks.Task)
-		AddReplicationTasks(replicationTasks ...tasks.Task)
-		AddVisibilityTasks(visibilityTasks ...tasks.Task)
+		AddTasks(tasks ...tasks.Task)
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
-		GenerateLastHistoryReplicationTasks(now time.Time) (*tasks.HistoryReplicationTask, error)
+		GenerateLastHistoryReplicationTasks(now time.Time) (tasks.Task, error)
 	}
 )

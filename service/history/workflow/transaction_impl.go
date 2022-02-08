@@ -519,10 +519,10 @@ func NotifyWorkflowSnapshotTasks(
 	}
 	notifyTasks(
 		engine,
-		workflowSnapshot.TransferTasks,
-		workflowSnapshot.TimerTasks,
-		workflowSnapshot.ReplicationTasks,
-		workflowSnapshot.VisibilityTasks,
+		workflowSnapshot.Tasks[tasks.CategoryTransfer],
+		workflowSnapshot.Tasks[tasks.CategoryTimer],
+		workflowSnapshot.Tasks[tasks.CategoryReplication],
+		workflowSnapshot.Tasks[tasks.CategoryVisibility],
 		clusterName,
 	)
 }
@@ -537,10 +537,10 @@ func NotifyWorkflowMutationTasks(
 	}
 	notifyTasks(
 		engine,
-		workflowMutation.TransferTasks,
-		workflowMutation.TimerTasks,
-		workflowMutation.ReplicationTasks,
-		workflowMutation.VisibilityTasks,
+		workflowMutation.Tasks[tasks.CategoryTransfer],
+		workflowMutation.Tasks[tasks.CategoryTimer],
+		workflowMutation.Tasks[tasks.CategoryReplication],
+		workflowMutation.Tasks[tasks.CategoryVisibility],
 		clusterName,
 	)
 }
