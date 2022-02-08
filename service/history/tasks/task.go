@@ -58,7 +58,8 @@ type (
 )
 
 const (
-	CategoryTransfer Category = iota + 1
+	CategoryUnspecified Category = iota
+	CategoryTransfer
 	CategoryTimer
 	CategoryVisibility
 	CategoryReplication
