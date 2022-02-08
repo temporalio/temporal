@@ -98,7 +98,6 @@ type (
 		txProcessor                   transferQueueProcessor
 		timerProcessor                timerQueueProcessor
 		visibilityProcessor           visibilityQueueProcessor
-		tieredStorageProcessor        tieredStorageQueueProcessor
 		nDCReplicator                 nDCHistoryReplicator
 		nDCActivityReplicator         nDCActivityReplicator
 		replicatorProcessor           *replicatorQueueProcessorImpl
@@ -190,8 +189,6 @@ func NewEngineWithShardContext(
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl,
 		matchingClient, logger, clientBean)
 	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr,
-		matchingClient, historyClient, logger)
-	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl,
 		matchingClient, historyClient, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 

@@ -203,15 +203,6 @@ const (
 	// PersistenceRangeCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
 	PersistenceRangeCompleteVisibilityTaskScope
 
-	// PersistenceGetTieredStorageTaskScope tracks GetTieredStorageTask calls made by service to persistence layer
-	PersistenceGetTieredStorageTaskScope
-	// PersistenceGetTieredStorageTasksScope tracks GetTieredStorageTasks calls made by service to persistence layer
-	PersistenceGetTieredStorageTasksScope
-	// PersistenceCompleteTieredStorageTaskScope tracks CompleteTieredStorageTasks calls made by service to persistence layer
-	PersistenceCompleteTieredStorageTaskScope
-	// PersistenceRangeCompleteTieredStorageTaskScope tracks CompleteTieredStorageTasks calls made by service to persistence layer
-	PersistenceRangeCompleteTieredStorageTaskScope
-
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetReplicationTaskScope
 	// PersistenceGetReplicationTasksScope tracks GetReplicationTasks calls made by service to persistence layer
@@ -725,9 +716,6 @@ const (
 
 	DynamicConfigScope
 
-	// TieredStorageQueueProcessorScope is the scope used by all metric emitted by tiered storage queue processor
-	TieredStorageQueueProcessorScope
-
 	NumCommonScopes
 )
 
@@ -1226,10 +1214,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetVisibilityTasksScope:                {operation: "GetVisibilityTasks"},
 		PersistenceCompleteVisibilityTaskScope:            {operation: "CompleteVisibilityTask"},
 		PersistenceRangeCompleteVisibilityTaskScope:       {operation: "RangeCompleteVisibilityTask"},
-		PersistenceGetTieredStorageTaskScope:              {operation: "GetTieredStorageTask"},
-		PersistenceGetTieredStorageTasksScope:             {operation: "GetTieredStorageTasks"},
-		PersistenceCompleteTieredStorageTaskScope:         {operation: "CompleteTieredStorageTask"},
-		PersistenceRangeCompleteTieredStorageTaskScope:    {operation: "RangeCompleteTieredStorageTask"},
 		PersistenceGetReplicationTaskScope:                {operation: "GetReplicationTask"},
 		PersistenceGetReplicationTasksScope:               {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:           {operation: "CompleteReplicationTask"},
@@ -1489,8 +1473,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 
-		DynamicConfigScope:               {operation: "DynamicConfig"},
-		TieredStorageQueueProcessorScope: {operation: "TieredStorageQueueProcessor"},
+		DynamicConfigScope: {operation: "DynamicConfig"},
 	},
 	// Frontend Scope Names
 	Frontend: {

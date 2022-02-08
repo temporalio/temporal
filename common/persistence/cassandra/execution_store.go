@@ -64,10 +64,6 @@ const (
 	rowTypeVisibilityTaskNamespaceID = "10000000-6000-f000-f000-000000000000"
 	rowTypeVisibilityTaskWorkflowID  = "20000000-6000-f000-f000-000000000000"
 	rowTypeVisibilityTaskRunID       = "30000000-6000-f000-f000-000000000000"
-	// Row constants for TieredStorage task row.
-	rowTypeTieredStorageTaskNamespaceID = "10000000-7000-f000-f000-000000000000"
-	rowTypeTieredStorageTaskWorkflowID  = "20000000-7000-f000-f000-000000000000"
-	rowTypeTieredStorageTaskRunID       = "30000000-7000-f000-f000-000000000000"
 	// Row Constants for Replication Task DLQ Row. Source cluster name will be used as WorkflowID.
 	rowTypeDLQNamespaceID = "10000000-6000-f000-f000-000000000000"
 	rowTypeDLQRunID       = "30000000-6000-f000-f000-000000000000"
@@ -86,7 +82,6 @@ const (
 	rowTypeReplicationTask
 	rowTypeDLQ
 	rowTypeVisibilityTask
-	rowTypeTieredStorageTask
 )
 
 const (
@@ -103,9 +98,8 @@ const (
 )
 
 var (
-	defaultDateTime               = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
-	defaultVisibilityTimestamp    = p.UnixMilliseconds(defaultDateTime)
-	defaultTieredStorageTimestamp = p.UnixMilliseconds(defaultDateTime)
+	defaultDateTime            = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
+	defaultVisibilityTimestamp = p.UnixMilliseconds(defaultDateTime)
 )
 
 type (
