@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -61,18 +62,24 @@ type cliAppSuite struct {
 	app               *cli.App
 	mockCtrl          *gomock.Controller
 	frontendClient    *workflowservicemock.MockWorkflowServiceClient
+	operatorClient    *operatorservice.OperatorServiceClient
 	serverAdminClient *adminservicemock.MockAdminServiceClient
 	sdkClient         *sdkmocks.Client
 }
 
 type clientFactoryMock struct {
 	frontendClient    workflowservice.WorkflowServiceClient
+	operatorClient    operatorservice.OperatorServiceClient
 	serverAdminClient adminservice.AdminServiceClient
 	sdkClient         *sdkmocks.Client
 }
 
 func (m *clientFactoryMock) FrontendClient(c *cli.Context) workflowservice.WorkflowServiceClient {
 	return m.frontendClient
+}
+
+func (m *clientFactoryMock) OperatorClient(c *cli.Context) operatorservice.OperatorServiceClient {
+	return m.operatorClient
 }
 
 func (m *clientFactoryMock) AdminClient(c *cli.Context) adminservice.AdminServiceClient {
