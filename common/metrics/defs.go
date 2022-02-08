@@ -100,6 +100,7 @@ const (
 	TaskTypeTagName       = "task_type"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
+	ErrorTypeTagName      = "error_type"
 	httpStatusTagName     = "http_status"
 	resourceExhaustedTag  = "resource_exhausted_cause"
 )
@@ -1715,6 +1716,23 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		TestScope2: {operation: "test_scope_2_operation"},
 	},
 }
+
+// Common error type
+const (
+	ErrorTypeUnknown                   = "unknown_error_type"
+	ErrorTypeInvalidArgument           = "invalid_argument_error_type"
+	ErrorTypeInternal                  = "internal_error_type"
+	ErrorTypeUnavailable               = "unavailable_error_type"
+	ErrorTypeCanceled                  = "canceled_error_type"
+	ErrorTypeTimedOut                  = "timed_out_error_type"
+	ErrorTypeNotFound                  = "not_found_error_type"
+	ErrorTypeNamespaceNotActive        = "namespace_not_active_error_type"
+	ErrorTypeQueryFailed               = "query_failed_error_type"
+	ErrorTypeClientVersionNotSupported = "client_version_not_supported_error_type"
+	ErrorTypeServerVersionNotSupported = "server_version_not_supported_error_type"
+	ErrorTypePermissionDenied          = "permission_denied_error_type"
+	ErrorTypeResourceExhausted         = "resource_exhausted_error_type"
+)
 
 // Common Metrics enum
 const (
