@@ -40,9 +40,10 @@ import (
 var _ matchingservice.MatchingServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
-	client        matchingservice.MatchingServiceClient
-	metricsClient metrics.Client
-	logger        log.Logger
+	client          matchingservice.MatchingServiceClient
+	metricsClient   metrics.Client
+	logger          log.Logger
+	throttledLogger log.Logger
 }
 
 // NewMetricClient creates a new instance of matchingservice.MatchingServiceClient that emits metrics
@@ -50,11 +51,13 @@ func NewMetricClient(
 	client matchingservice.MatchingServiceClient,
 	metricsClient metrics.Client,
 	logger log.Logger,
+	throttledLogger log.Logger,
 ) matchingservice.MatchingServiceClient {
 	return &metricClient{
-		client:        client,
-		metricsClient: metricsClient,
-		logger:        logger,
+		client:          client,
+		metricsClient:   metricsClient,
+		logger:          logger,
+		throttledLogger: throttledLogger,
 	}
 }
 
@@ -253,8 +256,8 @@ func (c *metricClient) finishMetricsRecording(
 	err error,
 ) {
 	if err != nil {
-		c.logger.Error("matching client encountered error", tag.Error(err))
-		scope.IncCounter(metrics.ClientFailures)
+		c.throttledLogger.Error("matching client encountered error", tag.Error(err))
+		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
 	}
 	stopwatch.Stop()
 }
