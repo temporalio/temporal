@@ -932,48 +932,6 @@ func (m *executionManagerImpl) RangeCompleteVisibilityTask(
 	return m.persistence.RangeCompleteVisibilityTask(request)
 }
 
-// TieredStorage task related methods
-
-func (m *executionManagerImpl) GetTieredStorageTask(
-	request *GetTieredStorageTaskRequest,
-) (*GetTieredStorageTaskResponse, error) {
-	resp, err := m.persistence.GetTieredStorageTask(request)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := m.serializer.DeserializeTieredStorageTasks([]commonpb.DataBlob{resp.Task})
-	if err != nil {
-		return nil, err
-	}
-	return &GetTieredStorageTaskResponse{Task: tasks[0]}, nil
-}
-
-func (m *executionManagerImpl) GetTieredStorageTasks(
-	request *GetTieredStorageTasksRequest,
-) (*GetTieredStorageTasksResponse, error) {
-	resp, err := m.persistence.GetTieredStorageTasks(request)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := m.serializer.DeserializeTieredStorageTasks(resp.Tasks)
-	if err != nil {
-		return nil, err
-	}
-	return &GetTieredStorageTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
-}
-
-func (m *executionManagerImpl) CompleteTieredStorageTask(
-	request *CompleteTieredStorageTaskRequest,
-) error {
-	return m.persistence.CompleteTieredStorageTask(request)
-}
-
-func (m *executionManagerImpl) RangeCompleteTieredStorageTask(
-	request *RangeCompleteTieredStorageTaskRequest,
-) error {
-	return m.persistence.RangeCompleteTieredStorageTask(request)
-}
-
 func (m *executionManagerImpl) Close() {
 	m.persistence.Close()
 }

@@ -366,34 +366,6 @@ func (p *executionPersistenceClient) GetVisibilityTasks(request *GetVisibilityTa
 	return response, err
 }
 
-func (p *executionPersistenceClient) GetTieredStorageTask(request *GetTieredStorageTaskRequest) (*GetTieredStorageTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTieredStorageTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTieredStorageTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTieredStorageTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTieredStorageTaskScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) GetTieredStorageTasks(request *GetTieredStorageTasksRequest) (*GetTieredStorageTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTieredStorageTasksScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTieredStorageTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTieredStorageTasks(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTieredStorageTasksScope, err)
-	}
-
-	return response, err
-}
-
 func (p *executionPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTaskScope, metrics.PersistenceRequests)
 
@@ -473,34 +445,6 @@ func (p *executionPersistenceClient) RangeCompleteVisibilityTask(request *RangeC
 
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceRangeCompleteVisibilityTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) CompleteTieredStorageTask(request *CompleteTieredStorageTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteTieredStorageTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTieredStorageTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteTieredStorageTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteTieredStorageTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) RangeCompleteTieredStorageTask(request *RangeCompleteTieredStorageTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteTieredStorageTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteTieredStorageTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteTieredStorageTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteTieredStorageTaskScope, err)
 	}
 
 	return err

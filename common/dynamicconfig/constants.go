@@ -394,39 +394,6 @@ const (
 	// VisibilityProcessorVisibilityArchivalTimeLimit is the upper time limit for archiving visibility records
 	VisibilityProcessorVisibilityArchivalTimeLimit = "history.visibilityProcessorVisibilityArchivalTimeLimit"
 
-	// TieredStorageTaskBatchSize is batch size for TieredStorageQueueProcessor
-	TieredStorageTaskBatchSize = "history.tieredStorageTaskBatchSize"
-	// TieredStorageProcessorFailoverMaxPollRPS is max poll rate per second for TieredStorageQueueProcessor
-	TieredStorageProcessorFailoverMaxPollRPS = "history.tieredStorageProcessorFailoverMaxPollRPS"
-	// TieredStorageProcessorMaxPollRPS is max poll rate per second for TieredStorageQueueProcessor
-	TieredStorageProcessorMaxPollRPS = "history.tieredStorageProcessorMaxPollRPS"
-	// TieredStorageTaskWorkerCount is number of worker for TieredStorageQueueProcessor
-	TieredStorageTaskWorkerCount = "history.tieredStorageTaskWorkerCount"
-	// TieredStorageTaskMaxRetryCount is max times of retry for TieredStorageQueueProcessor
-	TieredStorageTaskMaxRetryCount = "history.tieredStorageTaskMaxRetryCount"
-	// TieredStorageProcessorCompleteTaskFailureRetryCount is times of retry for failure
-	TieredStorageProcessorCompleteTaskFailureRetryCount = "history.tieredStorageProcessorCompleteTaskFailureRetryCount"
-	// TieredStorageProcessorMaxPollInterval max poll interval for TieredStorageQueueProcessor
-	TieredStorageProcessorMaxPollInterval = "history.tieredStorageProcessorMaxPollInterval"
-	// TieredStorageProcessorMaxPollIntervalJitterCoefficient is the max poll interval jitter coefficient
-	TieredStorageProcessorMaxPollIntervalJitterCoefficient = "history.tieredStorageProcessorMaxPollIntervalJitterCoefficient"
-	// TieredStorageProcessorUpdateAckInterval is update interval for TieredStorageQueueProcessor
-	TieredStorageProcessorUpdateAckInterval = "history.tieredStorageProcessorUpdateAckInterval"
-	// TieredStorageProcessorUpdateAckIntervalJitterCoefficient is the update interval jitter coefficient
-	TieredStorageProcessorUpdateAckIntervalJitterCoefficient = "history.tieredStorageProcessorUpdateAckIntervalJitterCoefficient"
-	// TieredStorageProcessorCompleteTaskInterval is complete timer interval for TieredStorageQueueProcessor
-	TieredStorageProcessorCompleteTaskInterval = "history.tieredStorageProcessorCompleteTaskInterval"
-	// TieredStorageProcessorRedispatchInterval is the redispatch interval for TieredStorageQueueProcessor
-	TieredStorageProcessorRedispatchInterval = "history.tieredStorageProcessorRedispatchInterval"
-	// TieredStorageProcessorRedispatchIntervalJitterCoefficient is the redispatch interval jitter coefficient
-	TieredStorageProcessorRedispatchIntervalJitterCoefficient = "history.tieredStorageProcessorRedispatchIntervalJitterCoefficient"
-	// TieredStorageProcessorMaxRedispatchQueueSize is the threshold of the number of tasks in the redispatch queue for TieredStorageQueueProcessor
-	TieredStorageProcessorMaxRedispatchQueueSize = "history.tieredStorageProcessorMaxRedispatchQueueSize"
-	// TieredStorageProcessorEnablePriorityTaskProcessor indicates whether priority task processor should be used for TieredStorageQueueProcessor
-	TieredStorageProcessorEnablePriorityTaskProcessor = "history.tieredStorageProcessorEnablePriorityTaskProcessor"
-	// TieredStorageProcessorArchivalTimeLimit is the upper time limit for archiving TieredStorage records
-	TieredStorageProcessorArchivalTimeLimit = "history.tieredStorageProcessorArchivalTimeLimit"
-
 	// ReplicatorTaskBatchSize is batch size for ReplicatorProcessor
 	ReplicatorTaskBatchSize = "history.replicatorTaskBatchSize"
 	// ReplicatorTaskWorkerCount is number of worker for ReplicatorProcessor
