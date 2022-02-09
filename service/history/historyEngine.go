@@ -2267,31 +2267,47 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 
 func (e *historyEngineImpl) DeleteWorkflowExecution(
 	ctx context.Context,
-	deleteRequest *historyservice.DeleteWorkflowExecutionRequest,
-) error {
+	request *historyservice.DeleteWorkflowExecutionRequest,
+) (retError error) {
+	nsID := namespace.ID(request.GetNamespaceId())
 
-	return e.updateWorkflow(
-		ctx,
-		namespace.ID(deleteRequest.NamespaceId),
-		*deleteRequest.GetWorkflowExecution(),
-		func(weCtx workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
-			if mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowNotCompleted // workflow is running, cannot be deleted
-			}
+	wfCtx, err := e.loadWorkflow(ctx, nsID, request.GetWorkflowExecution().GetWorkflowId(), request.GetWorkflowExecution().GetRunId())
+	if err != nil {
+		return err
+	}
+	defer func() { wfCtx.getReleaseFn()(retError) }()
 
-			taskGenerator := workflow.NewTaskGenerator(
-				e.shard.GetNamespaceRegistry(),
-				e.logger,
-				mutableState,
-			)
+	mutableState := wfCtx.getMutableState()
 
-			err := taskGenerator.GenerateDeleteExecutionTask(e.timeSource.Now())
-			if err != nil {
-				return nil, err
-			}
+	if mutableState.IsWorkflowExecutionRunning() {
+		// Running workflow cannot be deleted. Close or terminate it first.
+		return consts.ErrWorkflowNotCompleted
+	}
 
-			return updateWorkflowWithoutWorkflowTask, nil
-		})
+	taskGenerator := workflow.NewTaskGenerator(
+		e.shard.GetNamespaceRegistry(),
+		e.logger,
+		mutableState,
+	)
+
+	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask(e.timeSource.Now())
+	if err != nil {
+		return err
+	}
+
+	err = e.shard.AddTasks(&persistence.AddTasksRequest{
+		ShardID: e.shard.GetShardID(),
+		// RangeID is set by shard
+		NamespaceID:   nsID.String(),
+		WorkflowID:    request.GetWorkflowExecution().GetWorkflowId(),
+		RunID:         request.GetWorkflowExecution().GetRunId(),
+		TransferTasks: []tasks.Task{deleteTask},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history

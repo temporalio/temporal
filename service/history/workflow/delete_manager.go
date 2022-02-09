@@ -76,6 +76,12 @@ func NewDeleteManager(
 
 	return deleteManager
 }
+func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
+	namespaceID namespace.ID,
+	we commonpb.WorkflowExecution,
+) {
+
+}
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	namespaceID namespace.ID,
