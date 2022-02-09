@@ -53,6 +53,9 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	wt := "integration-continue-as-new-workflow-test-type"
 	tl := "integration-continue-as-new-workflow-test-taskqueue"
 	identity := "worker1"
+	saName := "CustomKeywordField"
+	// Uncomment this line to test with mapper.
+	// saName = "AliasForCustomKeywordField"
 
 	workflowType := &commonpb.WorkflowType{Name: wt}
 
@@ -64,10 +67,9 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	memo := &commonpb.Memo{
 		Fields: map[string]*commonpb.Payload{"memoKey": payload.EncodeString("memoVal")},
 	}
-	searchAttrPayload := payload.EncodeString("random keyword")
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": searchAttrPayload,
+			saName: payload.EncodeString("random"),
 		},
 	}
 
@@ -152,8 +154,8 @@ func (s *integrationSuite) TestContinueAsNewWorkflow() {
 	s.Equal(previousRunID, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetContinuedExecutionRunId())
 	s.Equal(header, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().Memo)
-	s.Equal(searchAttr.GetIndexedFields()["CustomKeywordField"].GetData(), lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetData())
-	s.Equal([]byte("Keyword"), lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetMetadata()["type"])
+	s.Equal(searchAttr.GetIndexedFields()[saName].GetData(), lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetData())
+	s.Equal("Keyword", string(lastRunStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetMetadata()["type"]))
 }
 
 func (s *integrationSuite) TestContinueAsNewRun_Timeout() {

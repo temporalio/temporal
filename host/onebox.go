@@ -383,6 +383,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.ESConfig = c.esConfig
 	params.ESClient = c.esClient
 	params.Authorizer = authorization.NewNoopAuthorizer()
+	// params.SearchAttributesMapper = NewSearchAttributeTestMapper()
 
 	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
@@ -454,6 +455,7 @@ func (c *temporalImpl) startHistory(
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 		params.DynamicConfigClient = integrationClient
+		// params.SearchAttributesMapper = NewSearchAttributeTestMapper()
 
 		var err error
 		params.SdkClient, err = sdkclient.NewClient(sdkclient.Options{

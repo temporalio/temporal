@@ -470,11 +470,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 
-	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace)
-	if err != nil {
-		return nil, err
-	}
-
 	workflowID := request.GetWorkflowId()
 	// grab the current context as a Lock, nothing more
 	_, currentRelease, err := e.historyCache.GetOrCreateCurrentWorkflowExecution(
@@ -1952,11 +1947,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	err = searchattribute.SubstituteAliases(e.searchAttributesMapper, request.GetSearchAttributes(), namespace)
-	if err != nil {
-		return nil, err
-	}
-
 	if err := common.CheckEventBlobSizeLimit(
 		sRequest.GetSignalInput().Size(),
 		e.config.BlobSizeLimitWarn(namespace),
@@ -2634,12 +2624,6 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
-		return err
-	}
-	if err := e.searchAttributesValidator.Validate(request.SearchAttributes, namespace, e.config.DefaultVisibilityIndexName); err != nil {
-		return err
-	}
-	if err := e.searchAttributesValidator.ValidateSize(request.SearchAttributes, namespace); err != nil {
 		return err
 	}
 

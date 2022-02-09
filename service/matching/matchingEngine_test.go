@@ -1655,7 +1655,7 @@ func (s *matchingEngineSuite) TestTaskQueueManagerGetTaskBatch_ReadBatchDone() {
 }
 
 func (s *matchingEngineSuite) TestTaskQueueManager_CyclingBehavior() {
-	namespaceID := namespace.ID(uuid.New())
+	namespaceID := uuid.New()
 	tl := "makeToast"
 	tlID := newTestTaskQueueID(namespaceID, tl, enumspb.TASK_QUEUE_TYPE_ACTIVITY)
 	tlNormal := enumspb.TASK_QUEUE_KIND_NORMAL

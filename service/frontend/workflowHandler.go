@@ -38,7 +38,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -57,6 +56,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
@@ -94,6 +94,7 @@ type (
 		namespaceHandler                namespace.Handler
 		getDefaultWorkflowRetrySettings dynamicconfig.MapPropertyFnWithNamespaceFilter
 		visibilityMrg                   manager.VisibilityManager
+		saValidator                     *searchattribute.Validator
 	}
 
 	// HealthStatus is an enum that refers to the rpc handler health status
@@ -130,6 +131,12 @@ func NewWorkflowHandler(
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMrg:                   visibilityMrg,
+		saValidator: searchattribute.NewValidator(
+			resource.GetSearchAttributesProvider(),
+			resource.GetSearchAttributesMapper(),
+			config.SearchAttributesNumberOfKeysLimit,
+			config.SearchAttributesSizeOfValueLimit,
+			config.SearchAttributesTotalSizeLimit),
 	}
 
 	return handler
@@ -421,6 +428,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 	}
 
 	wh.GetLogger().Debug("Start workflow execution request namespaceID", tag.WorkflowNamespaceID(namespaceID))
+	err = wh.processIncomingSearchAttributes(request.GetSearchAttributes(), namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	resp, err := wh.GetHistoryClient().StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID, request, nil, time.Now().UTC()))
 
 	if err != nil {
@@ -2048,6 +2060,11 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
+	err = wh.processIncomingSearchAttributes(request.GetSearchAttributes(), namespace)
+	if err != nil {
+		return nil, err
+	}
+
 	var runId string
 	op := func() error {
 		var err error
@@ -3122,7 +3139,7 @@ func (wh *WorkflowHandler) getHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.ScheduledEvent, transientWorkflowTaskInfo.StartedEvent)
 	}
 
-	if err := wh.processSearchAttributes(historyEvents, namespace); err != nil {
+	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
 		return nil, nil, err
 	}
 
@@ -3132,7 +3149,7 @@ func (wh *WorkflowHandler) getHistory(
 	return executionHistory, nextPageToken, nil
 }
 
-func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEvent, namespace string) error {
+func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.HistoryEvent, namespace string) error {
 	saTypeMap, err := wh.GetSearchAttributesProvider().GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -3158,6 +3175,20 @@ func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEv
 		}
 	}
 
+	return nil
+}
+
+func (wh *WorkflowHandler) processIncomingSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName string) error {
+	// Validate search attributes before substitution because in case of error, error message should contain alias but not field name.
+	if err := wh.saValidator.Validate(searchAttributes, namespaceName, wh.config.ESIndexName); err != nil {
+		return err
+	}
+	if err := wh.saValidator.ValidateSize(searchAttributes, namespaceName); err != nil {
+		return err
+	}
+	if err := searchattribute.SubstituteAliases(wh.GetSearchAttributesMapper(), searchAttributes, namespaceName); err != nil {
+		return err
+	}
 	return nil
 }
 

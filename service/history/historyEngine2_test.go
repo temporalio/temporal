@@ -27,7 +27,6 @@ package history
 import (
 	"context"
 	"errors"
-	"strings"
 	"testing"
 	"time"
 
@@ -864,6 +863,74 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	s.False(executionBuilder.HasPendingWorkflowTask())
 }
 
+func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttributes() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: "wId",
+		RunId:      tests.RunID,
+	}
+	tl := "testTaskQueue"
+	taskToken := &tokenspb.Task{
+		ScheduleAttempt: 1,
+		WorkflowId:      "wId",
+		RunId:           we.GetRunId(),
+		ScheduleId:      2,
+	}
+	serializedTaskToken, _ := taskToken.Marshal()
+	identity := "testIdentity"
+
+	msBuilder := workflow.TestLocalMutableState(s.historyEngine.shard, s.mockEventsCache, tests.LocalNamespaceEntry,
+		log.NewTestLogger(), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, nil, 100*time.Second, 50*time.Second, 200*time.Second, identity)
+	di := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+
+	commands := []*commandpb.Command{{
+		CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+		Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+			Namespace:    tests.Namespace,
+			WorkflowId:   tests.WorkflowID,
+			WorkflowType: &commonpb.WorkflowType{Name: "wType"},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: tl},
+			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
+				"AliasForCustomTextField": payload.EncodeString("search attribute value")},
+			},
+		}},
+	}}
+
+	ms := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
+	s.mockNamespaceCache.EXPECT().GetNamespace(tests.Namespace).Return(tests.LocalNamespaceEntry, nil).AnyTimes()
+
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).DoAndReturn(func(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+		eventsToSave := request.UpdateWorkflowEvents[0].Events
+		s.Len(eventsToSave, 2)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED, eventsToSave[0].GetEventType())
+		s.Equal(enumspb.EVENT_TYPE_START_CHILD_WORKFLOW_EXECUTION_INITIATED, eventsToSave[1].GetEventType())
+		startChildEventAttributes := eventsToSave[1].GetStartChildWorkflowExecutionInitiatedEventAttributes()
+		// Search attribute name was mapped and saved under field name.
+		s.Equal(
+			payload.EncodeString("search attribute value"),
+			startChildEventAttributes.GetSearchAttributes().GetIndexedFields()["CustomTextField"])
+		return tests.UpdateWorkflowExecutionResponse, nil
+	})
+
+	s.mockShard.Resource.SearchAttributesMapper.EXPECT().
+		GetFieldName("AliasForCustomTextField", tests.Namespace).Return("CustomTextField", nil).
+		Times(2) // One for validator, one for actual mapper
+
+	_, err := s.historyEngine.RespondWorkflowTaskCompleted(metrics.AddMetricsContext(context.Background()), &historyservice.RespondWorkflowTaskCompletedRequest{
+		NamespaceId: tests.NamespaceID,
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			TaskToken: serializedTaskToken,
+			Commands:  commands,
+			Identity:  identity,
+		},
+	})
+	s.Nil(err)
+}
+
 func (s *engine2Suite) TestStartWorkflowExecution_BrandNew() {
 	namespaceID := tests.NamespaceID
 	workflowID := "workflowID"
@@ -900,11 +967,17 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 
-	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(tests.CreateWorkflowExecutionResponse, nil)
-	s.mockShard.Resource.SearchAttributesMapper.EXPECT().GetFieldName(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(alias string, namespace string) (string, error) {
-			return strings.TrimPrefix(alias, "AliasFor"), nil
-		}).Times(2)
+	s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(gomock.Any()).DoAndReturn(func(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+		eventsToSave := request.NewWorkflowEvents[0].Events
+		s.Len(eventsToSave, 2)
+		s.Equal(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED, eventsToSave[0].GetEventType())
+		startEventAttributes := eventsToSave[0].GetWorkflowExecutionStartedEventAttributes()
+		// Search attribute name was mapped and saved under field name.
+		s.Equal(
+			payload.EncodeString("test"),
+			startEventAttributes.GetSearchAttributes().GetIndexedFields()["CustomKeywordField"])
+		return tests.CreateWorkflowExecutionResponse, nil
+	})
 
 	requestID := uuid.New()
 	resp, err := s.historyEngine.StartWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.StartWorkflowExecutionRequest{
@@ -921,7 +994,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_BrandNew_SearchAttributes() {
 			Identity:                 identity,
 			RequestId:                requestID,
 			SearchAttributes: &commonpb.SearchAttributes{IndexedFields: map[string]*commonpb.Payload{
-				"AliasForCustomKeywordField": payload.EncodeString("test"),
+				"CustomKeywordField": payload.EncodeString("test"),
 			}}},
 	})
 	s.Nil(err)
