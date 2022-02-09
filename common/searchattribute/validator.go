@@ -91,6 +91,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 
 		fieldName := saName
 		if IsMappable(saName) && v.searchAttributesMapper != nil {
+			// Call mapper here because original saName is needed to generate a proper error message (it should contain an alias but not a field name).
 			fieldName, err = v.searchAttributesMapper.GetFieldName(saName, namespace)
 			if err != nil {
 				return err

@@ -423,6 +423,8 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() authorization.JWTAudienceMapper { return nil }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
+		// Comment the line above and uncomment the line bellow to test with search attributes mapper.
+		// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
@@ -516,6 +518,8 @@ func (c *temporalImpl) startHistory(
 			),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
+			// Comment the line above and uncomment the line bellow to test with search attributes mapper.
+			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 			fx.Provide(func() dynamicconfig.Client { return integrationClient }),
