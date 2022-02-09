@@ -76,6 +76,10 @@ func convertErrors(
 
 	record = make(map[string]interface{})
 	for iter.MapScan(record) {
+		if record["[applied]"].(bool) {
+			continue
+		}
+
 		records = append(records, record)
 		errors = append(errors, extractErrors(
 			record,
@@ -98,6 +102,7 @@ func convertErrors(
 			),
 		}
 	}
+	println(printRecords(records))
 	return errors[0]
 }
 
@@ -279,18 +284,7 @@ func extractWorkflowConflictError(
 			DBRecordVersion: actualDBVersion,
 		}
 	}
-
-	// run_id and db_record_version of returned record are the same as in request, but update failed.
-	// It means that this record was returned in response of failed current_run_id update (not workflow execution update).
-	workflowID, _ := record["workflow_id"].(string)
-	currentRunID := gocql.UUIDToString(record["current_run_id"])
-	return &p.CurrentWorkflowConditionFailedError{
-		Msg: fmt.Sprintf("Current workflow not found error. Returned record with workflow ID: %v, run ID: %v, current run ID: %v",
-			workflowID,
-			runID,
-			currentRunID,
-		),
-	}
+	return nil
 }
 
 func printRecords(
