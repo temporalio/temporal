@@ -100,6 +100,7 @@ const (
 	TaskTypeTagName       = "task_type"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
+	ErrorTypeTagName      = "error_type"
 	httpStatusTagName     = "http_status"
 	resourceExhaustedTag  = "resource_exhausted_cause"
 )
@@ -202,15 +203,6 @@ const (
 	PersistenceCompleteVisibilityTaskScope
 	// PersistenceRangeCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
 	PersistenceRangeCompleteVisibilityTaskScope
-
-	// PersistenceGetTieredStorageTaskScope tracks GetTieredStorageTask calls made by service to persistence layer
-	PersistenceGetTieredStorageTaskScope
-	// PersistenceGetTieredStorageTasksScope tracks GetTieredStorageTasks calls made by service to persistence layer
-	PersistenceGetTieredStorageTasksScope
-	// PersistenceCompleteTieredStorageTaskScope tracks CompleteTieredStorageTasks calls made by service to persistence layer
-	PersistenceCompleteTieredStorageTaskScope
-	// PersistenceRangeCompleteTieredStorageTaskScope tracks CompleteTieredStorageTasks calls made by service to persistence layer
-	PersistenceRangeCompleteTieredStorageTaskScope
 
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetReplicationTaskScope
@@ -727,9 +719,6 @@ const (
 
 	DynamicConfigScope
 
-	// TieredStorageQueueProcessorScope is the scope used by all metric emitted by tiered storage queue processor
-	TieredStorageQueueProcessorScope
-
 	NumCommonScopes
 )
 
@@ -1228,10 +1217,6 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetVisibilityTasksScope:                {operation: "GetVisibilityTasks"},
 		PersistenceCompleteVisibilityTaskScope:            {operation: "CompleteVisibilityTask"},
 		PersistenceRangeCompleteVisibilityTaskScope:       {operation: "RangeCompleteVisibilityTask"},
-		PersistenceGetTieredStorageTaskScope:              {operation: "GetTieredStorageTask"},
-		PersistenceGetTieredStorageTasksScope:             {operation: "GetTieredStorageTasks"},
-		PersistenceCompleteTieredStorageTaskScope:         {operation: "CompleteTieredStorageTask"},
-		PersistenceRangeCompleteTieredStorageTaskScope:    {operation: "RangeCompleteTieredStorageTask"},
 		PersistenceGetReplicationTaskScope:                {operation: "GetReplicationTask"},
 		PersistenceGetReplicationTasksScope:               {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:           {operation: "CompleteReplicationTask"},
@@ -1491,8 +1476,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		BlobstoreClientDeleteScope:          {operation: "BlobstoreClientDelete", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 		BlobstoreClientDirectoryExistsScope: {operation: "BlobstoreClientDirectoryExists", tags: map[string]string{ServiceRoleTagName: BlobstoreRoleTagValue}},
 
-		DynamicConfigScope:               {operation: "DynamicConfig"},
-		TieredStorageQueueProcessorScope: {operation: "TieredStorageQueueProcessor"},
+		DynamicConfigScope: {operation: "DynamicConfig"},
 	},
 	// Frontend Scope Names
 	Frontend: {
@@ -1735,6 +1719,23 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 }
 
+// Common error type
+const (
+	ErrorTypeUnknown                   = "unknown_error_type"
+	ErrorTypeInvalidArgument           = "invalid_argument_error_type"
+	ErrorTypeInternal                  = "internal_error_type"
+	ErrorTypeUnavailable               = "unavailable_error_type"
+	ErrorTypeCanceled                  = "canceled_error_type"
+	ErrorTypeTimedOut                  = "timed_out_error_type"
+	ErrorTypeNotFound                  = "not_found_error_type"
+	ErrorTypeNamespaceNotActive        = "namespace_not_active_error_type"
+	ErrorTypeQueryFailed               = "query_failed_error_type"
+	ErrorTypeClientVersionNotSupported = "client_version_not_supported_error_type"
+	ErrorTypeServerVersionNotSupported = "server_version_not_supported_error_type"
+	ErrorTypePermissionDenied          = "permission_denied_error_type"
+	ErrorTypeResourceExhausted         = "resource_exhausted_error_type"
+)
+
 // Common Metrics enum
 const (
 	ServiceRequests = iota
@@ -1833,6 +1834,7 @@ const (
 	HistoryArchiverHistoryMutatedCount
 	HistoryArchiverTotalUploadSize
 	HistoryArchiverHistorySize
+	HistoryArchiverDuplicateArchivalsCount
 
 	// The following metrics are only used by internal history archiver implemention.
 	// TODO: move them to internal repo once temporal plugin model is in place.
@@ -1843,7 +1845,6 @@ const (
 	HistoryArchiverDeterministicConstructionCheckFailedCount
 	HistoryArchiverRunningBlobIntegrityCheckCount
 	HistoryArchiverBlobIntegrityCheckFailedCount
-	HistoryArchiverDuplicateArchivalsCount
 
 	VisibilityArchiverArchiveNonRetryableErrorCount
 	VisibilityArchiverArchiveTransientErrorCount
@@ -2300,13 +2301,13 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryArchiverHistoryMutatedCount:                        NewCounterDef("history_archiver_history_mutated"),
 		HistoryArchiverTotalUploadSize:                            NewBytesHistogramDef("history_archiver_total_upload_size"),
 		HistoryArchiverHistorySize:                                NewBytesHistogramDef("history_archiver_history_size"),
+		HistoryArchiverDuplicateArchivalsCount:                    NewCounterDef("history_archiver_duplicate_archivals"),
 		HistoryArchiverBlobExistsCount:                            NewCounterDef("history_archiver_blob_exists"),
 		HistoryArchiverBlobSize:                                   NewBytesHistogramDef("history_archiver_blob_size"),
 		HistoryArchiverRunningDeterministicConstructionCheckCount: NewCounterDef("history_archiver_running_deterministic_construction_check"),
 		HistoryArchiverDeterministicConstructionCheckFailedCount:  NewCounterDef("history_archiver_deterministic_construction_check_failed"),
 		HistoryArchiverRunningBlobIntegrityCheckCount:             NewCounterDef("history_archiver_running_blob_integrity_check"),
 		HistoryArchiverBlobIntegrityCheckFailedCount:              NewCounterDef("history_archiver_blob_integrity_check_failed"),
-		HistoryArchiverDuplicateArchivalsCount:                    NewCounterDef("history_archiver_duplicate_archivals"),
 		VisibilityArchiverArchiveNonRetryableErrorCount:           NewCounterDef("visibility_archiver_archive_non_retryable_error"),
 		VisibilityArchiverArchiveTransientErrorCount:              NewCounterDef("visibility_archiver_archive_transient_error"),
 		VisibilityArchiveSuccessCount:                             NewCounterDef("visibility_archiver_archive_success"),

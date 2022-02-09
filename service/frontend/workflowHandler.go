@@ -107,6 +107,7 @@ type (
 		namespaceRegistry               namespace.Registry
 		saMapper                        searchattribute.Mapper
 		saProvider                      searchattribute.Provider
+		saValidator                     *searchattribute.Validator
 		archivalMetadata                archiver.ArchivalMetadata
 	}
 
@@ -167,7 +168,13 @@ func NewWorkflowHandler(
 		namespaceRegistry:               namespaceRegistry,
 		saProvider:                      saProvider,
 		saMapper:                        saMapper,
-		archivalMetadata:                archivalMetadata,
+		saValidator: searchattribute.NewValidator(
+			saProvider,
+			saMapper,
+			config.SearchAttributesNumberOfKeysLimit,
+			config.SearchAttributesSizeOfValueLimit,
+			config.SearchAttributesTotalSizeLimit),
+		archivalMetadata: archivalMetadata,
 	}
 
 	return handler
@@ -428,6 +435,11 @@ func (wh *WorkflowHandler) StartWorkflowExecution(ctx context.Context, request *
 		return nil, err
 	}
 	wh.logger.Debug("Start workflow execution request namespaceID.", tag.WorkflowNamespaceID(namespaceID.String()))
+
+	err = wh.processIncomingSearchAttributes(request.GetSearchAttributes(), namespaceName)
+	if err != nil {
+		return nil, err
+	}
 
 	resp, err := wh.historyClient.StartWorkflowExecution(ctx, common.CreateHistoryStartWorkflowRequest(namespaceID.String(), request, nil, time.Now().UTC()))
 
@@ -1913,6 +1925,11 @@ func (wh *WorkflowHandler) SignalWithStartWorkflowExecution(ctx context.Context,
 		return nil, err
 	}
 
+	err = wh.processIncomingSearchAttributes(request.GetSearchAttributes(), namespaceName)
+	if err != nil {
+		return nil, err
+	}
+
 	var runId string
 	op := func() error {
 		var err error
@@ -3001,7 +3018,7 @@ func (wh *WorkflowHandler) getHistory(
 		historyEvents = append(historyEvents, transientWorkflowTaskInfo.ScheduledEvent, transientWorkflowTaskInfo.StartedEvent)
 	}
 
-	if err := wh.processSearchAttributes(historyEvents, namespace); err != nil {
+	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
 		return nil, nil, err
 	}
 
@@ -3011,7 +3028,7 @@ func (wh *WorkflowHandler) getHistory(
 	return executionHistory, nextPageToken, nil
 }
 
-func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEvent, namespace namespace.Name) error {
+func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.HistoryEvent, namespace namespace.Name) error {
 	saTypeMap, err := wh.saProvider.GetSearchAttributes(wh.config.ESIndexName, false)
 	if err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf(errUnableToGetSearchAttributesMessage, err))
@@ -3037,6 +3054,20 @@ func (wh *WorkflowHandler) processSearchAttributes(events []*historypb.HistoryEv
 		}
 	}
 
+	return nil
+}
+
+func (wh *WorkflowHandler) processIncomingSearchAttributes(searchAttributes *commonpb.SearchAttributes, namespaceName namespace.Name) error {
+	// Validate search attributes before substitution because in case of error, error message should contain alias but not field name.
+	if err := wh.saValidator.Validate(searchAttributes, namespaceName.String(), wh.config.ESIndexName); err != nil {
+		return err
+	}
+	if err := wh.saValidator.ValidateSize(searchAttributes, namespaceName.String()); err != nil {
+		return err
+	}
+	if err := searchattribute.SubstituteAliases(wh.saMapper, searchAttributes, namespaceName.String()); err != nil {
+		return err
+	}
 	return nil
 }
 

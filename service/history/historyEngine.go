@@ -98,7 +98,6 @@ type (
 		txProcessor                   transferQueueProcessor
 		timerProcessor                timerQueueProcessor
 		visibilityProcessor           visibilityQueueProcessor
-		tieredStorageProcessor        tieredStorageQueueProcessor
 		nDCReplicator                 nDCHistoryReplicator
 		nDCActivityReplicator         nDCActivityReplicator
 		replicatorProcessor           *replicatorQueueProcessorImpl
@@ -190,8 +189,6 @@ func NewEngineWithShardContext(
 	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl,
 		matchingClient, logger, clientBean)
 	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr,
-		matchingClient, historyClient, logger)
-	historyEngImpl.tieredStorageProcessor = newTieredStorageQueueProcessor(shard, historyEngImpl,
 		matchingClient, historyClient, logger)
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
@@ -519,11 +516,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	request := startRequest.StartRequest
 	e.overrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope)
 	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "StartWorkflowExecution")
-	if err != nil {
-		return nil, err
-	}
-
-	err = searchattribute.SubstituteAliases(e.shard.GetSearchAttributesMapper(), request.GetSearchAttributes(), namespace.String())
 	if err != nil {
 		return nil, err
 	}
@@ -1196,12 +1188,13 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 			},
 			Type:                 &commonpb.WorkflowType{Name: executionInfo.WorkflowTypeName},
 			StartTime:            executionInfo.StartTime,
-			ExecutionTime:        executionInfo.ExecutionTime,
+			Status:               executionState.Status,
 			HistoryLength:        mutableState.GetNextEventID() - common.FirstEventID,
-			AutoResetPoints:      executionInfo.AutoResetPoints,
+			ExecutionTime:        executionInfo.ExecutionTime,
 			Memo:                 &commonpb.Memo{Fields: executionInfo.Memo},
 			SearchAttributes:     &commonpb.SearchAttributes{IndexedFields: executionInfo.SearchAttributes},
-			Status:               executionState.Status,
+			AutoResetPoints:      executionInfo.AutoResetPoints,
+			TaskQueue:            executionInfo.TaskQueue,
 			StateTransitionCount: executionInfo.StateTransitionCount,
 		},
 	}
@@ -2035,11 +2028,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	err = searchattribute.SubstituteAliases(e.shard.GetSearchAttributesMapper(), request.GetSearchAttributes(), namespace.String())
-	if err != nil {
-		return nil, err
-	}
-
 	if err := common.CheckEventBlobSizeLimit(
 		sRequest.GetSignalInput().Size(),
 		e.config.BlobSizeLimitWarn(namespace.String()),
@@ -2759,12 +2747,6 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		return serviceerror.NewInvalidArgument("WorkflowType exceeds length limit.")
 	}
 	if err := common.ValidateRetryPolicy(request.RetryPolicy); err != nil {
-		return err
-	}
-	if err := e.searchAttributesValidator.Validate(request.SearchAttributes, namespace.String(), e.config.DefaultVisibilityIndexName); err != nil {
-		return err
-	}
-	if err := e.searchAttributesValidator.ValidateSize(request.SearchAttributes, namespace.String()); err != nil {
 		return err
 	}
 

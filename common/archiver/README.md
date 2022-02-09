@@ -23,13 +23,15 @@ Create a new directory in the `archiver` folder. The structure should look like 
 
 ```go
 type HistoryArchiver interface {
-	// Archive is used to archive a workflow history. When the context expires the method should stop trying to archive.
-	// Implementors are free to archive however they want, including implementing retries of sub-operations. The URI defines
-	// the resource that histories should be archived into. The implementor gets to determine how to interpret the URI.
-	// The Archive method may or may not be automatically retried by the caller. The ArchiveOptions are used
-	// to interact with these retries including giving the implementor the ability to cancel retries and record progress
-  // between retry attempts. 
-  // This method will be invoked after a workflow passes its retention period.
+    // Archive is used to archive a workflow history. When the context expires the method should stop trying to archive.
+    // Implementors are free to archive however they want, including implementing retries of sub-operations. The URI defines
+    // the resource that histories should be archived into. The implementor gets to determine how to interpret the URI.
+    // The Archive method may or may not be automatically retried by the caller. The ArchiveOptions are used
+    // to interact with these retries including giving the implementor the ability to cancel retries and record progress
+    // between retry attempts. 
+    // This method will be invoked after a workflow passes its retention period.
+    // It's possible that this method will be invoked for one workflow multiple times and potentially concurrently,
+    // implementation should correctly handle the workflow not exist case and return nil error.
     Archive(context.Context, URI, *ArchiveHistoryRequest, ...ArchiveOption) error
     
     // Get is used to access an archived history. When context expires method should stop trying to fetch history.

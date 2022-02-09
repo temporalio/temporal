@@ -22,50 +22,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package host
 
 import (
-	"time"
+	"fmt"
+	"strings"
 
-	"go.temporal.io/server/common/definition"
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
-	TieredStorageTask struct {
-		definition.WorkflowKey
-		VisibilityTimestamp time.Time
-		TaskID              int64
-		Version             int64
-	}
+	SearchAttributeTestMapper struct{}
 )
 
-func (t *TieredStorageTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   t.TaskID,
+func NewSearchAttributeTestMapper() *SearchAttributeTestMapper {
+	return &SearchAttributeTestMapper{}
+}
+
+func (t *SearchAttributeTestMapper) GetAlias(fieldName string, namespace string) (string, error) {
+	if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
+		return "AliasFor" + fieldName, nil
 	}
+	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("fieldname '%s' has no search-attribute defined for '%s' namespace", fieldName, namespace))
 }
 
-func (t *TieredStorageTask) GetVersion() int64 {
-	return t.Version
-}
-
-func (t *TieredStorageTask) SetVersion(version int64) {
-	t.Version = version
-}
-
-func (t *TieredStorageTask) GetTaskID() int64 {
-	return t.TaskID
-}
-
-func (t *TieredStorageTask) SetTaskID(id int64) {
-	t.TaskID = id
-}
-
-func (t *TieredStorageTask) GetVisibilityTime() time.Time {
-	return t.VisibilityTimestamp
-}
-
-func (t *TieredStorageTask) SetVisibilityTime(timestamp time.Time) {
-	t.VisibilityTimestamp = timestamp
+func (t *SearchAttributeTestMapper) GetFieldName(alias string, namespace string) (string, error) {
+	if strings.HasPrefix(alias, "AliasFor") {
+		fieldName := strings.TrimPrefix(alias, "AliasFor")
+		if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
+			return fieldName, nil
+		}
+	}
+	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("search-attribute '%s' not found for '%s' namespace", alias, namespace))
 }

@@ -300,9 +300,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
-	mockCtrl := gomock.NewController(s.T())
-	defer mockCtrl.Finish()
-	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
+	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next().Return(nil, errors.New("some random error")),
@@ -323,9 +321,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
-	mockCtrl := gomock.NewController(s.T())
-	defer mockCtrl.Finish()
-	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
+	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewResourceExhausted(enumspb.RESOURCE_EXHAUSTED_CAUSE_RPS_LIMIT, "")),
@@ -346,9 +342,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
-	mockCtrl := gomock.NewController(s.T())
-	defer mockCtrl.Finish()
-	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
+	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	historyBatches := []*historypb.History{
 		{
 			Events: []*historypb.HistoryEvent{
@@ -386,9 +380,7 @@ func (s *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 }
 
 func (s *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
-	mockCtrl := gomock.NewController(s.T())
-	defer mockCtrl.Finish()
-	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
+	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next().Return(nil, errors.New("some random error")),
@@ -409,10 +401,52 @@ func (s *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 	s.Equal(nonRetryableErr, err)
 }
 
+func (s *historyArchiverSuite) TestArchive_Skip() {
+	historyIterator := archiver.NewMockHistoryIterator(s.controller)
+	historyBlob := &archiverspb.HistoryBlob{
+		Header: &archiverspb.HistoryBlobHeader{
+			IsLast: false,
+		},
+		Body: []*historypb.History{
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   common.FirstEventID,
+						EventTime: timestamp.TimePtr(time.Now().UTC()),
+						Version:   testCloseFailoverVersion,
+					},
+				},
+			},
+		},
+	}
+	gomock.InOrder(
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next().Return(historyBlob, nil),
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next().Return(nil, &serviceerror.NotFound{Message: "workflow not found"}),
+	)
+
+	historyArchiver := s.newTestHistoryArchiver(historyIterator)
+	request := &archiver.ArchiveHistoryRequest{
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
+		WorkflowID:           testWorkflowID,
+		RunID:                testRunID,
+		BranchToken:          testBranchToken,
+		NextEventID:          testNextEventID,
+		CloseFailoverVersion: testCloseFailoverVersion,
+	}
+	URI, err := archiver.NewURI(testBucketURI + "/TestArchive_Skip")
+	s.NoError(err)
+	err = historyArchiver.Archive(context.Background(), URI, request)
+	s.NoError(err)
+
+	expectedkey := constructHistoryKey("", testNamespaceID, testWorkflowID, testRunID, testCloseFailoverVersion, 0)
+	s.assertKeyExists(expectedkey)
+}
+
 func (s *historyArchiverSuite) TestArchive_Success() {
-	mockCtrl := gomock.NewController(s.T())
-	defer mockCtrl.Finish()
-	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
+	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	historyBatches := []*historypb.History{
 		{
 			Events: []*historypb.HistoryEvent{
@@ -602,10 +636,7 @@ func (s *historyArchiverSuite) TestGet_Success_SmallPageSize() {
 }
 
 func (s *historyArchiverSuite) TestArchiveAndGet() {
-	mockCtrl := gomock.NewController(s.T())
-	defer mockCtrl.Finish()
-	historyIterator := archiver.NewMockHistoryIterator(mockCtrl)
-
+	historyIterator := archiver.NewMockHistoryIterator(s.controller)
 	gomock.InOrder(
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next().Return(s.historyBatchesV100[0], nil),

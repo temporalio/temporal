@@ -72,6 +72,7 @@ type (
 			dc *dynamicconfig.Collection,
 			numberOfHistoryShards int32,
 			logger log.Logger,
+			throttledLogger log.Logger,
 		) Factory
 	}
 
@@ -85,6 +86,7 @@ type (
 		dynConfig             *dynamicconfig.Collection
 		numberOfHistoryShards int32
 		logger                log.Logger
+		throttledLogger       log.Logger
 	}
 
 	factoryProviderImpl struct {
@@ -111,6 +113,7 @@ func (p *factoryProviderImpl) NewFactory(
 	dc *dynamicconfig.Collection,
 	numberOfHistoryShards int32,
 	logger log.Logger,
+	throttledLogger log.Logger,
 ) Factory {
 	return &rpcClientFactory{
 		rpcFactory:            rpcFactory,
@@ -119,6 +122,7 @@ func (p *factoryProviderImpl) NewFactory(
 		dynConfig:             dc,
 		numberOfHistoryShards: numberOfHistoryShards,
 		logger:                logger,
+		throttledLogger:       throttledLogger,
 	}
 }
 
@@ -148,7 +152,7 @@ func (cf *rpcClientFactory) NewHistoryClientWithTimeout(timeout time.Duration) (
 	clientCache := common.NewClientCache(keyResolver, clientProvider)
 	client := history.NewClient(cf.numberOfHistoryShards, timeout, clientCache, cf.logger)
 	if cf.metricsClient != nil {
-		client = history.NewMetricClient(client, cf.metricsClient, cf.logger)
+		client = history.NewMetricClient(client, cf.metricsClient, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 }
@@ -176,7 +180,7 @@ func (cf *rpcClientFactory) NewMatchingClientWithTimeout(
 	)
 
 	if cf.metricsClient != nil {
-		client = matching.NewMetricClient(client, cf.metricsClient, cf.logger)
+		client = matching.NewMetricClient(client, cf.metricsClient, cf.logger, cf.throttledLogger)
 	}
 	return client, nil
 

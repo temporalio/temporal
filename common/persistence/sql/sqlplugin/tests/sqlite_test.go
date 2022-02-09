@@ -271,22 +271,6 @@ func TestSQLiteHistoryVisibilityTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestSQLiteHistoryTieredStorageTaskSuite(t *testing.T) {
-	cfg := newSQLiteConfig()
-	setupSQLiteDatabase(cfg, t)
-	store, err := sql.NewSQLDB(sqlplugin.DbKindMain, cfg, resolver.NewNoopResolver())
-	if err != nil {
-		t.Fatalf("unable to create SQLite DB: %v", err)
-	}
-	defer func() {
-		_ = store.Close()
-		tearDownSQLiteDatabase(cfg, t)
-	}()
-
-	s := newHistoryTieredStorageTaskSuite(t, store)
-	suite.Run(t, s)
-}
-
 func TestSQLiteHistoryReplicationDLQTaskSuite(t *testing.T) {
 	cfg := newSQLiteConfig()
 	setupSQLiteDatabase(cfg, t)

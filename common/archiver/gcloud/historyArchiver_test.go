@@ -164,10 +164,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidURI() {
 
 func (h *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
-	h.NoError(err)
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, "").Return(true, nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 
@@ -182,16 +180,14 @@ func (h *historyArchiverSuite) TestArchive_Fail_InvalidRequest() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 
-	err = historyArchiver.Archive(ctx, h.testArchivalURI, request)
+	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
 	h.Error(err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
-	h.NoError(err)
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, "").Return(true, nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	gomock.InOrder(
@@ -209,7 +205,7 @@ func (h *historyArchiverSuite) TestArchive_Fail_ErrorOnReadHistory() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err = historyArchiver.Archive(ctx, h.testArchivalURI, request)
+	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
 	h.Error(err)
 }
 
@@ -241,10 +237,8 @@ func (h *historyArchiverSuite) TestArchive_Fail_TimeoutWhenReadingHistory() {
 
 func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
-	h.NoError(err)
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, "").Return(true, nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyBatches := []*historypb.History{
@@ -279,17 +273,15 @@ func (h *historyArchiverSuite) TestArchive_Fail_HistoryMutated() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err = historyArchiver.Archive(ctx, h.testArchivalURI, request)
+	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
 	h.Error(err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
-	h.NoError(err)
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, "").Return(true, nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	gomock.InOrder(
@@ -307,19 +299,63 @@ func (h *historyArchiverSuite) TestArchive_Fail_NonRetryableErrorOption() {
 		NextEventID:          testNextEventID,
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
-	err = historyArchiver.Archive(ctx, h.testArchivalURI, request, archiver.GetNonRetryableErrorOption(errUploadNonRetryable))
+	err := historyArchiver.Archive(ctx, h.testArchivalURI, request, archiver.GetNonRetryableErrorOption(errUploadNonRetryable))
 	h.Equal(errUploadNonRetryable, err)
+}
+
+func (h *historyArchiverSuite) TestArchive_Skip() {
+	ctx := context.Background()
+
+	storageWrapper := connector.NewMockClient(h.controller)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, gomock.Any()).Return(false, nil)
+	storageWrapper.EXPECT().Upload(ctx, h.testArchivalURI, gomock.Any(), gomock.Any()).Return(nil)
+
+	historyIterator := archiver.NewMockHistoryIterator(h.controller)
+	historyBlob := &archiverspb.HistoryBlob{
+		Header: &archiverspb.HistoryBlobHeader{
+			IsLast: false,
+		},
+		Body: []*historypb.History{
+			{
+				Events: []*historypb.HistoryEvent{
+					{
+						EventId:   common.FirstEventID,
+						EventTime: timestamp.TimePtr(time.Now().UTC()),
+						Version:   testCloseFailoverVersion,
+					},
+				},
+			},
+		},
+	}
+	gomock.InOrder(
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next().Return(historyBlob, nil),
+		historyIterator.EXPECT().HasNext().Return(true),
+		historyIterator.EXPECT().Next().Return(nil, &serviceerror.NotFound{Message: "workflow not found"}),
+	)
+
+	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
+	request := &archiver.ArchiveHistoryRequest{
+		NamespaceID:          testNamespaceID,
+		Namespace:            testNamespace,
+		WorkflowID:           testWorkflowID,
+		RunID:                testRunID,
+		BranchToken:          testBranchToken,
+		NextEventID:          testNextEventID,
+		CloseFailoverVersion: testCloseFailoverVersion,
+	}
+	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
+	h.NoError(err)
 }
 
 func (h *historyArchiverSuite) TestArchive_Success() {
 
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
-	h.NoError(err)
 
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, gomock.Any()).Return(false, nil).Times(2)
-	storageWrapper.EXPECT().Upload(ctx, URI, gomock.Any(), gomock.Any()).Return(nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, gomock.Any()).Return(false, nil).Times(2)
+	storageWrapper.EXPECT().Upload(ctx, h.testArchivalURI, gomock.Any(), gomock.Any()).Return(nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyBatches := []*historypb.History{
@@ -371,7 +407,7 @@ func (h *historyArchiverSuite) TestArchive_Success() {
 		CloseFailoverVersion: testCloseFailoverVersion,
 	}
 
-	err = historyArchiver.Archive(ctx, URI, request)
+	err := historyArchiver.Archive(ctx, h.testArchivalURI, request)
 	h.NoError(err)
 }
 
@@ -418,11 +454,10 @@ func (h *historyArchiverSuite) TestGet_Fail_InvalidToken() {
 
 func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, "").Return(true, nil)
-	storageWrapper.EXPECT().Query(ctx, URI, gomock.Any()).Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
-	storageWrapper.EXPECT().Get(ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
+	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, gomock.Any()).Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
@@ -432,8 +467,7 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 		PageSize:    testPageSize,
 	}
 
-	h.NoError(err)
-	response, err := historyArchiver.Get(ctx, URI, request)
+	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
 	h.NoError(err)
 	h.Nil(response.NextPageToken)
 }
@@ -441,11 +475,10 @@ func (h *historyArchiverSuite) TestGet_Success_PickHighestVersion() {
 func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, "").Return(true, nil)
-	storageWrapper.EXPECT().Query(ctx, URI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
-	storageWrapper.EXPECT().Get(ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-25_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
+	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-25_0.history").Return([]byte(exampleHistoryRecord), nil)
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
 	request := &archiver.GetHistoryRequest{
@@ -456,8 +489,7 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 		CloseFailoverVersion: convert.Int64Ptr(-25),
 	}
 
-	h.NoError(err)
-	response, err := historyArchiver.Get(ctx, URI, request)
+	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
 	h.NoError(err)
 	h.Nil(response.NextPageToken)
 }
@@ -465,12 +497,11 @@ func (h *historyArchiverSuite) TestGet_Success_UseProvidedVersion() {
 func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, "").Return(true, nil)
-	storageWrapper.EXPECT().Query(ctx, URI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
-	storageWrapper.EXPECT().Get(ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.EXPECT().Get(ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
+	storageWrapper.EXPECT().Query(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470").Return([]string{"905702227796330300141628222723188294514017512010591354159_-24_0.history", "905702227796330300141628222723188294514017512010591354159_-24_1.history", "905702227796330300141628222723188294514017512010591354159_-24_2.history", "905702227796330300141628222723188294514017512010591354159_-24_3.history", "905702227796330300141628222723188294514017512010591354159_-25_0.history"}, nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_0.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_1.history").Return([]byte(exampleHistoryRecord), nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -481,8 +512,7 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 		PageSize:    2,
 	}
 
-	h.NoError(err)
-	response, err := historyArchiver.Get(ctx, URI, request)
+	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
 	h.NoError(err)
 	h.NotNil(response.NextPageToken)
 	h.EqualValues(len(response.HistoryBatches), 2)
@@ -491,12 +521,11 @@ func (h *historyArchiverSuite) TestGet_Success_PageSize() {
 func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 
 	ctx := context.Background()
-	URI, err := archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 	storageWrapper := connector.NewMockClient(h.controller)
-	storageWrapper.EXPECT().Exist(ctx, URI, "").Return(true, nil)
-	storageWrapper.EXPECT().Get(ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_2.history").Return([]byte(exampleHistoryRecord), nil)
-	storageWrapper.EXPECT().Get(ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_3.history").Return([]byte(twoEventsExampleHistoryRecord), nil)
-	storageWrapper.EXPECT().Get(ctx, URI, "141323698701063509081739672280485489488911532452831150339470_-24_4.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Exist(ctx, h.testArchivalURI, "").Return(true, nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_2.history").Return([]byte(exampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_3.history").Return([]byte(twoEventsExampleHistoryRecord), nil)
+	storageWrapper.EXPECT().Get(ctx, h.testArchivalURI, "141323698701063509081739672280485489488911532452831150339470_-24_4.history").Return([]byte(exampleHistoryRecord), nil)
 
 	historyIterator := archiver.NewMockHistoryIterator(h.controller)
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)
@@ -520,7 +549,7 @@ func (h *historyArchiverSuite) TestGet_Success_FromToken() {
 	}
 
 	h.NoError(err)
-	response, err := historyArchiver.Get(ctx, URI, request)
+	response, err := historyArchiver.Get(ctx, h.testArchivalURI, request)
 	h.NoError(err)
 	h.NotNil(response.NextPageToken)
 

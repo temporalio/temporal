@@ -72,7 +72,7 @@ func (s *fileBasedClientSuite) TestGetValue() {
 
 func (s *fileBasedClientSuite) TestGetValue_NonExistKey() {
 	defaultValue := true
-	v, err := s.client.GetValue(lastKeyForTest, defaultValue)
+	v, err := s.client.GetValue(unknownKey, defaultValue)
 	s.Error(err)
 	s.Equal(defaultValue, v)
 }
