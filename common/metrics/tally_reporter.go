@@ -36,7 +36,7 @@ type TallyReporter struct {
 	clientConfig *ClientConfig
 }
 
-func newTallyReporter(
+func NewTallyReporter(
 	scope tally.Scope,
 	clientConfig *ClientConfig,
 ) *TallyReporter {

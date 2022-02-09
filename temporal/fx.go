@@ -709,7 +709,7 @@ func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReport
 	var sdkReporter SdkReporter
 	if so.config.Global.Metrics != nil {
 		var err error
-		serverReporter, sdkReporter, err = so.config.Global.Metrics.InitMetricReporters(logger, so.metricsReporter)
+		serverReporter, sdkReporter, err = metrics.InitMetricReporters(logger, so.config.Global.Metrics, so.metricsReporter)
 		if err != nil {
 			return nil, nil, err
 		}

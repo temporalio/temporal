@@ -65,7 +65,7 @@ type (
 	}
 )
 
-func newOpentelemeteryReporter(
+func NewOpentelemeteryReporter(
 	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
