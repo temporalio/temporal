@@ -617,7 +617,7 @@ func (c *metricClient) finishMetricsRecording(
 	err error,
 ) {
 	if err != nil {
-		c.throttledLogger.Error("history client encountered error", tag.Error(err))
+		c.throttledLogger.Error("history client encountered error", tag.Error(err), tag.ErrorType(err))
 		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
 	}
 	stopwatch.Stop()
