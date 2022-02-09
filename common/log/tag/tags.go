@@ -26,6 +26,7 @@ package tag
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -45,7 +46,8 @@ import (
 const (
 	LoggingCallAtKey = "logging-call-at"
 
-	getType = "%T"
+	getType     = "%T"
+	errorPrefix = "*"
 )
 
 ///////////////////  Common tags defined here ///////////////////
@@ -62,7 +64,7 @@ func Error(err error) ZapTag {
 
 // ErrorType returns tag for ErrorType
 func ErrorType(err error) ZapTag {
-	return NewStringTag("service-error-type", fmt.Sprintf(getType, err))
+	return NewStringTag("service-error-type", strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix))
 }
 
 // IsRetryable returns tag for IsRetryable
@@ -80,7 +82,7 @@ func Timestamp(timestamp time.Time) ZapTag {
 	return NewTimeTag("timestamp", timestamp)
 }
 
-// Timestamp returns tag for Timestamp
+// TimestampPtr returns tag for TimestampPtr
 func TimestampPtr(t *time.Time) ZapTag {
 	return NewTimeTag("timestamp", timestamp.TimeValue(t))
 }
