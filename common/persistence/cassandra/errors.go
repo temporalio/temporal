@@ -256,8 +256,7 @@ func extractWorkflowConflictError(
 	if rowType != rowTypeExecution {
 		return nil
 	}
-	runID := gocql.UUIDToString(conflictRecord["run_id"])
-	if runID != requestRunID {
+	if runID := gocql.UUIDToString(conflictRecord["run_id"]); runID != requestRunID {
 		return nil
 	}
 
