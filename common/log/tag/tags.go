@@ -42,7 +42,11 @@ import (
 //   2. System : these tags are internal information which usually cannot be understood by our customers,
 
 // LoggingCallAtKey is reserved tag
-const LoggingCallAtKey = "logging-call-at"
+const (
+	LoggingCallAtKey = "logging-call-at"
+
+	getType = "%T"
+)
 
 ///////////////////  Common tags defined here ///////////////////
 
@@ -54,6 +58,11 @@ func Operation(operation string) ZapTag {
 // Error returns tag for Error
 func Error(err error) ZapTag {
 	return NewErrorTag(err)
+}
+
+// ErrorType returns tag for ErrorType
+func ErrorType(err error) ZapTag {
+	return NewStringTag("service-error-type", fmt.Sprintf(getType, err))
 }
 
 // IsRetryable returns tag for IsRetryable

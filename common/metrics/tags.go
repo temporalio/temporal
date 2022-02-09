@@ -25,9 +25,8 @@
 package metrics
 
 import (
+	"fmt"
 	"strconv"
-
-	"go.temporal.io/api/serviceerror"
 
 	enumspb "go.temporal.io/api/enums/v1"
 )
@@ -51,6 +50,8 @@ const (
 	unknownValue      = "_unknown_"
 	totalMetricSuffix = "_total"
 	tagExcludedValue  = "_tag_excluded_"
+
+	getType = "%T"
 )
 
 // Tag is an interface to define metrics tags
@@ -202,7 +203,7 @@ func VisibilityTypeTag(value string) Tag {
 }
 
 func ServiceErrorTypeTag(err error) Tag {
-	return &tagImpl{key: ErrorTypeTagName, value: getErrorType(err)}
+	return &tagImpl{key: ErrorTypeTagName, value: fmt.Sprintf(getType, err)}
 }
 
 var standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)
@@ -223,38 +224,4 @@ func HttpStatusTag(value int) Tag {
 
 func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
-}
-
-func getErrorType(err error) string {
-	switch err.(type) {
-	case *serviceerror.InvalidArgument,
-		*serviceerror.CancellationAlreadyRequested,
-		*serviceerror.NamespaceAlreadyExists,
-		*serviceerror.WorkflowExecutionAlreadyStarted:
-		return ErrorTypeInvalidArgument
-	case *serviceerror.Internal, *serviceerror.DataLoss:
-		return ErrorTypeInternal
-	case *serviceerror.Unavailable:
-		return ErrorTypeUnavailable
-	case *serviceerror.NotFound:
-		return ErrorTypeNotFound
-	case *serviceerror.Canceled:
-		return ErrorTypeCanceled
-	case *serviceerror.DeadlineExceeded:
-		return ErrorTypeTimedOut
-	case *serviceerror.NamespaceNotActive:
-		return ErrorTypeNamespaceNotActive
-	case *serviceerror.QueryFailed:
-		return ErrorTypeQueryFailed
-	case *serviceerror.ClientVersionNotSupported:
-		return ErrorTypeClientVersionNotSupported
-	case *serviceerror.ServerVersionNotSupported:
-		return ErrorTypeServerVersionNotSupported
-	case *serviceerror.PermissionDenied:
-		return ErrorTypePermissionDenied
-	case *serviceerror.ResourceExhausted:
-		return ErrorTypeResourceExhausted
-	default:
-		return ErrorTypeUnknown
-	}
 }
