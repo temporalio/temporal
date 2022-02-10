@@ -315,6 +315,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if err0 != nil {
 		return nil, consts.ErrDeserializingToken
 	}
+	scheduleID := token.GetScheduleId()
 
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: token.GetWorkflowId(),
@@ -332,283 +333,285 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 	defer func() { release(retError) }()
 
-Update_History_Loop:
-	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
-		msBuilder, err := weContext.LoadWorkflowExecution()
+	var msBuilder workflow.MutableState
+	var currentWorkflowTask *workflow.WorkflowTaskInfo
+	var currentWorkflowTaskRunning bool
+	for attempt := 1; ; attempt++ {
+		msBuilder, err = weContext.LoadWorkflowExecution()
 		if err != nil {
 			return nil, err
 		}
 		if !msBuilder.IsWorkflowExecutionRunning() {
 			return nil, consts.ErrWorkflowCompleted
 		}
-		executionStats, err := weContext.LoadExecutionStats()
-		if err != nil {
-			return nil, err
-		}
 
-		executionInfo := msBuilder.GetExecutionInfo()
-
-		scheduleID := token.GetScheduleId()
-		currentWorkflowTask, isRunning := msBuilder.GetWorkflowTaskInfo(scheduleID)
+		currentWorkflowTask, currentWorkflowTaskRunning = msBuilder.GetWorkflowTaskInfo(scheduleID)
 
 		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
 		// some extreme cassandra failure cases.
-		if !isRunning && scheduleID >= msBuilder.GetNextEventID() {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.StaleMutableStateCounter)
-			// Reload workflow execution history
-			weContext.Clear()
-			continue Update_History_Loop
+		if currentWorkflowTaskRunning || scheduleID < msBuilder.GetNextEventID() {
+			break
 		}
 
-		if !msBuilder.IsWorkflowExecutionRunning() || !isRunning || currentWorkflowTask.Attempt != token.ScheduleAttempt ||
-			currentWorkflowTask.StartedID == common.EmptyEventID {
-			return nil, serviceerror.NewNotFound("Workflow task not found.")
+		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.StaleMutableStateCounter)
+		if attempt == conditionalRetryCount {
+			return nil, consts.ErrMaxAttemptsExceeded
 		}
 
-		startedID := currentWorkflowTask.StartedID
-		maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name().String())
-		if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
-		}
+		// Reload workflow execution history
+		weContext.Clear()
+	}
 
-		workflowTaskHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0
-		var workflowTaskHeartbeatTimeout bool
-		var completedEvent *historypb.HistoryEvent
-		if workflowTaskHeartbeating {
-			namespace := namespaceEntry.Name()
-			timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace.String())
-			origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTime)
-			if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
-				workflowTaskHeartbeatTimeout = true
-				scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace.String()))
-				scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
-				completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduleID, currentWorkflowTask.StartedID)
-				if err != nil {
-					return nil, err
-				}
-				msBuilder.ClearStickyness()
-			} else {
-				completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
-				if err != nil {
-					return nil, err
-				}
+	executionInfo := msBuilder.GetExecutionInfo()
+	executionStats, err := weContext.LoadExecutionStats()
+	if err != nil {
+		return nil, err
+	}
+
+	if !msBuilder.IsWorkflowExecutionRunning() || !currentWorkflowTaskRunning || currentWorkflowTask.Attempt != token.ScheduleAttempt ||
+		currentWorkflowTask.StartedID == common.EmptyEventID {
+		return nil, serviceerror.NewNotFound("Workflow task not found.")
+	}
+
+	startedID := currentWorkflowTask.StartedID
+	maxResetPoints := handler.config.MaxAutoResetPoints(namespaceEntry.Name().String())
+	if msBuilder.GetExecutionInfo().AutoResetPoints != nil && maxResetPoints == len(msBuilder.GetExecutionInfo().AutoResetPoints.Points) {
+		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.AutoResetPointsLimitExceededCounter)
+	}
+
+	workflowTaskHeartbeating := request.GetForceCreateNewWorkflowTask() && len(request.Commands) == 0
+	var workflowTaskHeartbeatTimeout bool
+	var completedEvent *historypb.HistoryEvent
+	if workflowTaskHeartbeating {
+		namespace := namespaceEntry.Name()
+		timeout := handler.config.WorkflowTaskHeartbeatTimeout(namespace.String())
+		origSchedTime := timestamp.TimeValue(currentWorkflowTask.OriginalScheduledTime)
+		if origSchedTime.UnixNano() > 0 && handler.timeSource.Now().After(origSchedTime.Add(timeout)) {
+			workflowTaskHeartbeatTimeout = true
+			scope := handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace.String()))
+			scope.IncCounter(metrics.WorkflowTaskHeartbeatTimeoutCounter)
+			completedEvent, err = msBuilder.AddWorkflowTaskTimedOutEvent(currentWorkflowTask.ScheduleID, currentWorkflowTask.StartedID)
+			if err != nil {
+				return nil, err
 			}
+			msBuilder.ClearStickyness()
 		} else {
 			completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
 			if err != nil {
 				return nil, err
 			}
 		}
+	} else {
+		completedEvent, err = msBuilder.AddWorkflowTaskCompletedEvent(scheduleID, startedID, request, maxResetPoints)
+		if err != nil {
+			return nil, err
+		}
+	}
 
-		var (
-			wtFailedCause               *workflowTaskFailedCause
-			activityNotStartedCancelled bool
-			newStateBuilder             workflow.MutableState
+	var (
+		wtFailedCause               *workflowTaskFailedCause
+		activityNotStartedCancelled bool
+		newStateBuilder             workflow.MutableState
 
-			hasUnhandledEvents bool
+		hasUnhandledEvents bool
+	)
+	hasUnhandledEvents = msBuilder.HasBufferedEvents()
+
+	if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
+		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyDisabledCounter)
+		executionInfo.StickyTaskQueue = ""
+		executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
+	} else {
+		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyEnabledCounter)
+		executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
+		executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeout()
+	}
+
+	binChecksum := request.GetBinaryChecksum()
+	if err := namespaceEntry.VerifyBinaryChecksum(binChecksum); err != nil {
+		wtFailedCause = NewWorkflowTaskFailedCause(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)))
+	} else {
+		namespace := namespaceEntry.Name()
+		workflowSizeChecker := newWorkflowSizeChecker(
+			handler.config.BlobSizeLimitWarn(namespace.String()),
+			handler.config.BlobSizeLimitError(namespace.String()),
+			handler.config.MemoSizeLimitWarn(namespace.String()),
+			handler.config.MemoSizeLimitError(namespace.String()),
+			handler.config.HistorySizeLimitWarn(namespace.String()),
+			handler.config.HistorySizeLimitError(namespace.String()),
+			handler.config.HistoryCountLimitWarn(namespace.String()),
+			handler.config.HistoryCountLimitError(namespace.String()),
+			completedEvent.GetEventId(),
+			msBuilder,
+			handler.historyEngine.searchAttributesValidator,
+			executionStats,
+			handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace.String())),
+			handler.throttledLogger,
 		)
-		hasUnhandledEvents = msBuilder.HasBufferedEvents()
 
-		if request.StickyAttributes == nil || request.StickyAttributes.WorkerTaskQueue == nil {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyDisabledCounter)
-			executionInfo.StickyTaskQueue = ""
-			executionInfo.StickyScheduleToStartTimeout = timestamp.DurationFromSeconds(0)
-		} else {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.CompleteWorkflowTaskWithStickyEnabledCounter)
-			executionInfo.StickyTaskQueue = request.StickyAttributes.WorkerTaskQueue.GetName()
-			executionInfo.StickyScheduleToStartTimeout = request.StickyAttributes.GetScheduleToStartTimeout()
+		workflowTaskHandler := newWorkflowTaskHandler(
+			request.GetIdentity(),
+			completedEvent.GetEventId(),
+			msBuilder,
+			handler.commandAttrValidator,
+			workflowSizeChecker,
+			handler.logger,
+			handler.namespaceRegistry,
+			handler.metricsClient,
+			handler.config,
+			handler.shard,
+			handler.searchAttributesMapper,
+		)
+
+		if err := workflowTaskHandler.handleCommands(
+			request.Commands,
+		); err != nil {
+			return nil, err
 		}
 
-		binChecksum := request.GetBinaryChecksum()
-		if err := namespaceEntry.VerifyBinaryChecksum(binChecksum); err != nil {
-			wtFailedCause = NewWorkflowTaskFailedCause(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_BINARY, serviceerror.NewInvalidArgument(fmt.Sprintf("binary %v is already marked as bad deployment", binChecksum)))
+		// set the vars used by following logic
+		// further refactor should also clean up the vars used below
+		wtFailedCause = workflowTaskHandler.workflowTaskFailedCause
+
+		// failMessage is not used by workflowTaskHandlerCallbacks
+		activityNotStartedCancelled = workflowTaskHandler.activityNotStartedCancelled
+		// continueAsNewTimerTasks is not used by workflowTaskHandlerCallbacks
+
+		newStateBuilder = workflowTaskHandler.newStateBuilder
+
+		hasUnhandledEvents = workflowTaskHandler.hasBufferedEvents
+	}
+
+	if wtFailedCause != nil {
+		handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.FailedWorkflowTasksCounter)
+		handler.logger.Info("Failing the workflow task.",
+			tag.Value(wtFailedCause.Message()),
+			tag.WorkflowID(token.GetWorkflowId()),
+			tag.WorkflowRunID(token.GetRunId()),
+			tag.WorkflowNamespaceID(namespaceID.String()))
+		msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, wtFailedCause, request)
+		if err != nil {
+			return nil, err
+		}
+		hasUnhandledEvents = true
+		newStateBuilder = nil
+	}
+
+	createNewWorkflowTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
+	var newWorkflowTaskScheduledID int64
+	if createNewWorkflowTask {
+		bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
+		var newWorkflowTask *workflow.WorkflowTaskInfo
+		var err error
+		if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
+			newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(
+				bypassTaskGeneration,
+				currentWorkflowTask.OriginalScheduledTime,
+			)
 		} else {
-			namespace := namespaceEntry.Name()
-			workflowSizeChecker := newWorkflowSizeChecker(
-				handler.config.BlobSizeLimitWarn(namespace.String()),
-				handler.config.BlobSizeLimitError(namespace.String()),
-				handler.config.MemoSizeLimitWarn(namespace.String()),
-				handler.config.MemoSizeLimitError(namespace.String()),
-				handler.config.HistorySizeLimitWarn(namespace.String()),
-				handler.config.HistorySizeLimitError(namespace.String()),
-				handler.config.HistoryCountLimitWarn(namespace.String()),
-				handler.config.HistoryCountLimitError(namespace.String()),
-				completedEvent.GetEventId(),
-				msBuilder,
-				handler.historyEngine.searchAttributesValidator,
-				executionStats,
-				handler.metricsClient.Scope(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.NamespaceTag(namespace.String())),
-				handler.throttledLogger,
-			)
+			newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEvent(bypassTaskGeneration)
+		}
+		if err != nil {
+			return nil, err
+		}
 
-			workflowTaskHandler := newWorkflowTaskHandler(
-				request.GetIdentity(),
-				completedEvent.GetEventId(),
-				msBuilder,
-				handler.commandAttrValidator,
-				workflowSizeChecker,
-				handler.logger,
-				handler.namespaceRegistry,
-				handler.metricsClient,
-				handler.config,
+		newWorkflowTaskScheduledID = newWorkflowTask.ScheduleID
+		// skip transfer task for workflow task if request asking to return new workflow task
+		if bypassTaskGeneration {
+			// start the new workflow task if request asked to do so
+			// TODO: replace the poll request
+			_, _, err := msBuilder.AddWorkflowTaskStartedEvent(
+				newWorkflowTask.ScheduleID,
+				"request-from-RespondWorkflowTaskCompleted",
+				newWorkflowTask.TaskQueue,
+				request.Identity,
+			)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
+	var updateErr error
+	if newStateBuilder != nil {
+		newWorkflowExecutionInfo := newStateBuilder.GetExecutionInfo()
+		newWorkflowExecutionState := newStateBuilder.GetExecutionState()
+		updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
+			handler.shard.GetTimeSource().Now(),
+			workflow.NewContext(
+				namespace.ID(newWorkflowExecutionInfo.NamespaceId),
+				commonpb.WorkflowExecution{
+					WorkflowId: newWorkflowExecutionInfo.WorkflowId,
+					RunId:      newWorkflowExecutionState.RunId,
+				},
 				handler.shard,
-				handler.searchAttributesMapper,
-			)
+				handler.logger,
+			),
+			newStateBuilder,
+		)
+	} else {
+		updateErr = weContext.UpdateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
+	}
 
-			if err := workflowTaskHandler.handleCommands(
-				request.Commands,
+	if updateErr != nil {
+		if updateErr == consts.ErrConflict {
+			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.ConcurrencyUpdateFailureCounter)
+		}
+
+		// if updateErr resulted in TransactionSizeLimitError then fail workflow
+		switch updateErr.(type) {
+		case *persistence.TransactionSizeLimitError:
+			// must reload mutable state because the first call to updateWorkflowExecutionWithContext or continueAsNewWorkflowExecution
+			// clears mutable state if error is returned
+			msBuilder, err = weContext.LoadWorkflowExecution()
+			if err != nil {
+				return nil, err
+			}
+
+			eventBatchFirstEventID := msBuilder.GetNextEventID()
+			if err := workflow.TerminateWorkflow(
+				msBuilder,
+				eventBatchFirstEventID,
+				common.FailureReasonTransactionSizeExceedsLimit,
+				payloads.EncodeString(updateErr.Error()),
+				consts.IdentityHistoryService,
 			); err != nil {
 				return nil, err
 			}
-
-			// set the vars used by following logic
-			// further refactor should also clean up the vars used below
-			wtFailedCause = workflowTaskHandler.workflowTaskFailedCause
-
-			// failMessage is not used by workflowTaskHandlerCallbacks
-			activityNotStartedCancelled = workflowTaskHandler.activityNotStartedCancelled
-			// continueAsNewTimerTasks is not used by workflowTaskHandlerCallbacks
-
-			newStateBuilder = workflowTaskHandler.newStateBuilder
-
-			hasUnhandledEvents = workflowTaskHandler.hasBufferedEvents
-		}
-
-		if wtFailedCause != nil {
-			handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.FailedWorkflowTasksCounter)
-			handler.logger.Info("Failing the workflow task.",
-				tag.Value(wtFailedCause.Message()),
-				tag.WorkflowID(token.GetWorkflowId()),
-				tag.WorkflowRunID(token.GetRunId()),
-				tag.WorkflowNamespaceID(namespaceID.String()))
-			msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, wtFailedCause, request)
-			if err != nil {
-				return nil, err
-			}
-			hasUnhandledEvents = true
-			newStateBuilder = nil
-		}
-
-		createNewWorkflowTask := msBuilder.IsWorkflowExecutionRunning() && (hasUnhandledEvents || request.GetForceCreateNewWorkflowTask() || activityNotStartedCancelled)
-		var newWorkflowTaskScheduledID int64
-		if createNewWorkflowTask {
-			bypassTaskGeneration := request.GetReturnNewWorkflowTask() && wtFailedCause == nil
-			var newWorkflowTask *workflow.WorkflowTaskInfo
-			var err error
-			if workflowTaskHeartbeating && !workflowTaskHeartbeatTimeout {
-				newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEventAsHeartbeat(
-					bypassTaskGeneration,
-					currentWorkflowTask.OriginalScheduledTime,
-				)
-			} else {
-				newWorkflowTask, err = msBuilder.AddWorkflowTaskScheduledEvent(bypassTaskGeneration)
-			}
-			if err != nil {
-				return nil, err
-			}
-
-			newWorkflowTaskScheduledID = newWorkflowTask.ScheduleID
-			// skip transfer task for workflow task if request asking to return new workflow task
-			if bypassTaskGeneration {
-				// start the new workflow task if request asked to do so
-				// TODO: replace the poll request
-				_, _, err := msBuilder.AddWorkflowTaskStartedEvent(
-					newWorkflowTask.ScheduleID,
-					"request-from-RespondWorkflowTaskCompleted",
-					newWorkflowTask.TaskQueue,
-					request.Identity,
-				)
-				if err != nil {
-					return nil, err
-				}
-			}
-		}
-
-		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
-		// the history and try the operation again.
-		var updateErr error
-		if newStateBuilder != nil {
-			newWorkflowExecutionInfo := newStateBuilder.GetExecutionInfo()
-			newWorkflowExecutionState := newStateBuilder.GetExecutionState()
-			updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
+			if err := weContext.UpdateWorkflowExecutionAsActive(
 				handler.shard.GetTimeSource().Now(),
-				workflow.NewContext(
-					namespace.ID(newWorkflowExecutionInfo.NamespaceId),
-					commonpb.WorkflowExecution{
-						WorkflowId: newWorkflowExecutionInfo.WorkflowId,
-						RunId:      newWorkflowExecutionState.RunId,
-					},
-					handler.shard,
-					handler.logger,
-				),
-				newStateBuilder,
-			)
-		} else {
-			updateErr = weContext.UpdateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
-		}
-
-		if updateErr != nil {
-			if updateErr == consts.ErrConflict {
-				handler.metricsClient.IncCounter(metrics.HistoryRespondWorkflowTaskCompletedScope, metrics.ConcurrencyUpdateFailureCounter)
-				continue Update_History_Loop
-			}
-
-			// if updateErr resulted in TransactionSizeLimitError then fail workflow
-			switch updateErr.(type) {
-			case *persistence.TransactionSizeLimitError:
-				// must reload mutable state because the first call to updateWorkflowExecutionWithContext or continueAsNewWorkflowExecution
-				// clears mutable state if error is returned
-				msBuilder, err = weContext.LoadWorkflowExecution()
-				if err != nil {
-					return nil, err
-				}
-
-				eventBatchFirstEventID := msBuilder.GetNextEventID()
-				if err := workflow.TerminateWorkflow(
-					msBuilder,
-					eventBatchFirstEventID,
-					common.FailureReasonTransactionSizeExceedsLimit,
-					payloads.EncodeString(updateErr.Error()),
-					consts.IdentityHistoryService,
-				); err != nil {
-					return nil, err
-				}
-				if err := weContext.UpdateWorkflowExecutionAsActive(
-					handler.shard.GetTimeSource().Now(),
-				); err != nil {
-					return nil, err
-				}
-			}
-
-			return nil, updateErr
-		}
-
-		handler.handleBufferedQueries(msBuilder, req.GetCompleteRequest().GetQueryResults(), createNewWorkflowTask, namespaceEntry, workflowTaskHeartbeating)
-
-		if workflowTaskHeartbeatTimeout {
-			// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
-			return nil, serviceerror.NewNotFound("workflow task heartbeat timeout")
-		}
-
-		if wtFailedCause != nil {
-			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
-		}
-
-		resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
-		if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
-			workflowTask, _ := msBuilder.GetWorkflowTaskInfo(newWorkflowTaskScheduledID)
-			resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(msBuilder, workflowTask, request.GetIdentity())
-			if err != nil {
+			); err != nil {
 				return nil, err
 			}
-			// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
-			resp.StartedResponse.StickyExecutionEnabled = true
 		}
 
-		return resp, nil
+		return nil, updateErr
 	}
 
-	return nil, consts.ErrMaxAttemptsExceeded
+	handler.handleBufferedQueries(msBuilder, req.GetCompleteRequest().GetQueryResults(), createNewWorkflowTask, namespaceEntry, workflowTaskHeartbeating)
+
+	if workflowTaskHeartbeatTimeout {
+		// at this point, update is successful, but we still return an error to client so that the worker will give up this workflow
+		return nil, serviceerror.NewNotFound("workflow task heartbeat timeout")
+	}
+
+	if wtFailedCause != nil {
+		return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
+	}
+
+	resp = &historyservice.RespondWorkflowTaskCompletedResponse{}
+	if request.GetReturnNewWorkflowTask() && createNewWorkflowTask {
+		workflowTask, _ := msBuilder.GetWorkflowTaskInfo(newWorkflowTaskScheduledID)
+		resp.StartedResponse, err = handler.createRecordWorkflowTaskStartedResponse(msBuilder, workflowTask, request.GetIdentity())
+		if err != nil {
+			return nil, err
+		}
+		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
+		resp.StartedResponse.StickyExecutionEnabled = true
+	}
+
+	return resp, nil
+
 }
 
 func (handler *workflowTaskHandlerCallbacksImpl) createRecordWorkflowTaskStartedResponse(
