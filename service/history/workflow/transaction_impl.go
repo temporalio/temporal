@@ -472,41 +472,44 @@ func updateWorkflowExecutionWithRetry(
 		op, PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,
 	)
-	switch err.(type) {
-	case nil:
-		if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
-			namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
-		); err == nil {
-			emitMutationMetrics(
-				shard,
-				namespaceEntry,
-				&resp.UpdateMutableStateStats,
-				resp.NewMutableStateStats,
-			)
-			emitCompletionMetrics(
-				shard,
-				namespaceEntry,
-				mutationToCompletionMetric(&request.UpdateWorkflowMutation),
-				snapshotToCompletionMetric(request.NewWorkflowSnapshot),
-			)
-		}
-		return resp, nil
-	case *persistence.CurrentWorkflowConditionFailedError,
-		*persistence.WorkflowConditionFailedError,
-		*persistence.ConditionFailedError:
-		// TODO get rid of ErrConflict
-		return nil, consts.ErrConflict
-	default:
+	if err != nil {
 		shard.GetLogger().Error(
-			"Persistent store operation Failure",
+			"Update workflow execution operation failed.",
 			tag.WorkflowNamespaceID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
 			tag.WorkflowID(request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId),
 			tag.WorkflowRunID(request.UpdateWorkflowMutation.ExecutionState.RunId),
 			tag.StoreOperationUpdateWorkflowExecution,
 			tag.Error(err),
 		)
-		return nil, err
+		switch err.(type) {
+		case *persistence.CurrentWorkflowConditionFailedError,
+			*persistence.WorkflowConditionFailedError,
+			*persistence.ConditionFailedError:
+			// TODO get rid of ErrConflict
+			return nil, consts.ErrConflict
+		default:
+			return nil, err
+		}
 	}
+
+	if namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(
+		namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId),
+	); err == nil {
+		emitMutationMetrics(
+			shard,
+			namespaceEntry,
+			&resp.UpdateMutableStateStats,
+			resp.NewMutableStateStats,
+		)
+		emitCompletionMetrics(
+			shard,
+			namespaceEntry,
+			mutationToCompletionMetric(&request.UpdateWorkflowMutation),
+			snapshotToCompletionMetric(request.NewWorkflowSnapshot),
+		)
+	}
+
+	return resp, nil
 }
 
 func NotifyWorkflowSnapshotTasks(
@@ -727,6 +730,10 @@ func emitCompletionMetrics(
 }
 
 func operationPossiblySucceeded(err error) bool {
+	if err == consts.ErrConflict {
+		return false
+	}
+
 	switch err.(type) {
 	case *persistence.CurrentWorkflowConditionFailedError,
 		*persistence.WorkflowConditionFailedError,
@@ -736,7 +743,7 @@ func operationPossiblySucceeded(err error) bool {
 		*persistence.TransactionSizeLimitError,
 		*serviceerror.ResourceExhausted,
 		*serviceerror.NotFound:
-		// Persistence failure that means the write was definitely not committed:
+		// Persistence failure that means that write was definitely not committed.
 		return false
 	default:
 		return true

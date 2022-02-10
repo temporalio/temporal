@@ -22,81 +22,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package host
 
 import (
-	"time"
+	"fmt"
+	"strings"
+
+	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common/searchattribute"
 )
 
 type (
-	Key struct {
-		// FireTime is the scheduled time of the task
-		FireTime time.Time
-		// TaskID is the ID of the task
-		TaskID int64
-	}
-
-	Keys []Key
-
-	Category int32
-
-	// Task is the generic task interface
-	Task interface {
-		GetKey() Key
-		GetNamespaceID() string
-		GetWorkflowID() string
-		GetRunID() string
-		GetTaskID() int64
-		GetVisibilityTime() time.Time
-		GetVersion() int64
-		GetCategory() Category
-
-		SetVersion(version int64)
-		SetTaskID(id int64)
-		SetVisibilityTime(timestamp time.Time)
-	}
+	SearchAttributeTestMapper struct{}
 )
 
-const (
-	CategoryUnspecified Category = iota
-	CategoryTransfer
-	CategoryTimer
-	CategoryVisibility
-	CategoryReplication
-)
+func NewSearchAttributeTestMapper() *SearchAttributeTestMapper {
+	return &SearchAttributeTestMapper{}
+}
 
-func (left Key) CompareTo(right Key) int {
-	if left.FireTime.Before(right.FireTime) {
-		return -1
-	} else if left.FireTime.After(right.FireTime) {
-		return 1
+func (t *SearchAttributeTestMapper) GetAlias(fieldName string, namespace string) (string, error) {
+	if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
+		return "AliasFor" + fieldName, nil
 	}
+	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("fieldname '%s' has no search-attribute defined for '%s' namespace", fieldName, namespace))
+}
 
-	if left.TaskID < right.TaskID {
-		return -1
-	} else if left.TaskID > right.TaskID {
-		return 1
+func (t *SearchAttributeTestMapper) GetFieldName(alias string, namespace string) (string, error) {
+	if strings.HasPrefix(alias, "AliasFor") {
+		fieldName := strings.TrimPrefix(alias, "AliasFor")
+		if _, err := searchattribute.TestNameTypeMap.GetType(fieldName); err == nil {
+			return fieldName, nil
+		}
 	}
-	return 0
-}
-
-// Len implements sort.Interface
-func (s Keys) Len() int {
-	return len(s)
-}
-
-// Swap implements sort.Interface.
-func (s Keys) Swap(
-	this int,
-	that int,
-) {
-	s[this], s[that] = s[that], s[this]
-}
-
-// Less implements sort.Interface
-func (s Keys) Less(
-	this int,
-	that int,
-) bool {
-	return s[this].CompareTo(s[that]) < 0
+	return "", serviceerror.NewInvalidArgument(fmt.Sprintf("search-attribute '%s' not found for '%s' namespace", alias, namespace))
 }

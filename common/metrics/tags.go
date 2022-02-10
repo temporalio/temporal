@@ -25,7 +25,9 @@
 package metrics
 
 import (
+	"fmt"
 	"strconv"
+	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 )
@@ -49,6 +51,9 @@ const (
 	unknownValue      = "_unknown_"
 	totalMetricSuffix = "_total"
 	tagExcludedValue  = "_tag_excluded_"
+
+	getType     = "%T"
+	errorPrefix = "*"
 )
 
 // Tag is an interface to define metrics tags
@@ -197,6 +202,10 @@ func VisibilityTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: visibilityTypeTagName, value: value}
+}
+
+func ServiceErrorTypeTag(err error) Tag {
+	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix)}
 }
 
 var standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)

@@ -451,19 +451,19 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 		request.RangeID,
 	)
 
-	record := make(map[string]interface{})
-	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, record)
+	conflictRecord := make(map[string]interface{})
+	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
 	if err != nil {
 		return nil, gocql.ConvertError("CreateWorkflowExecution", err)
 	}
 	defer func() {
-		_ = iter.Close()
+		_ = conflictIter.Close()
 	}()
 
 	if !applied {
 		return nil, convertErrors(
-			record,
-			iter,
+			conflictRecord,
+			conflictIter,
 			shardID,
 			request.RangeID,
 			requestCurrentRunID,
@@ -670,19 +670,19 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		request.RangeID,
 	)
 
-	record := make(map[string]interface{})
-	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, record)
+	conflictRecord := make(map[string]interface{})
+	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
 	if err != nil {
 		return gocql.ConvertError("UpdateWorkflowExecution", err)
 	}
 	defer func() {
-		_ = iter.Close()
+		_ = conflictIter.Close()
 	}()
 
 	if !applied {
 		return convertErrors(
-			record,
-			iter,
+			conflictRecord,
+			conflictIter,
 			request.ShardID,
 			request.RangeID,
 			updateWorkflow.ExecutionState.RunId,
@@ -819,13 +819,13 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 		request.RangeID,
 	)
 
-	record := make(map[string]interface{})
-	applied, iter, err := d.Session.MapExecuteBatchCAS(batch, record)
+	conflictRecord := make(map[string]interface{})
+	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
 	if err != nil {
 		return gocql.ConvertError("ConflictResolveWorkflowExecution", err)
 	}
 	defer func() {
-		_ = iter.Close()
+		_ = conflictIter.Close()
 	}()
 
 	if !applied {
@@ -846,8 +846,8 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			})
 		}
 		return convertErrors(
-			record,
-			iter,
+			conflictRecord,
+			conflictIter,
 			request.ShardID,
 			request.RangeID,
 			currentRunID,

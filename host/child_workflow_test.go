@@ -54,6 +54,9 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	tlParent := "integration-child-workflow-test-parent-taskqueue"
 	tlChild := "integration-child-workflow-test-child-taskqueue"
 	identity := "worker1"
+	saName := "CustomKeywordField"
+	// Uncomment this line to test with mapper.
+	// saName = "AliasForCustomKeywordField"
 
 	parentWorkflowType := &commonpb.WorkflowType{}
 	parentWorkflowType.Name = wtParent
@@ -101,7 +104,7 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	attrValPayload := payload.EncodeString("attrVal")
 	searchAttr := &commonpb.SearchAttributes{
 		IndexedFields: map[string]*commonpb.Payload{
-			"CustomKeywordField": attrValPayload,
+			saName: attrValPayload,
 		},
 	}
 
@@ -217,8 +220,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.Equal(header, startedEvent.GetChildWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(header, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().Header)
 	s.Equal(memo, childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetMemo())
-	s.Equal(searchAttr.GetIndexedFields()["CustomKeywordField"].GetData(), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetData())
-	s.Equal([]byte("Keyword"), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()["CustomKeywordField"].GetMetadata()["type"])
+	s.Equal(searchAttr.GetIndexedFields()[saName].GetData(), childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetData())
+	s.Equal("Keyword", string(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetSearchAttributes().GetIndexedFields()[saName].GetMetadata()["type"]))
 	s.Equal(time.Duration(0), timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowExecutionTimeout()))
 	s.Equal(200*time.Second, timestamp.DurationValue(childStartedEvent.GetWorkflowExecutionStartedEventAttributes().GetWorkflowRunTimeout()))
 

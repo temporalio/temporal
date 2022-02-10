@@ -100,6 +100,7 @@ const (
 	TaskTypeTagName       = "task_type"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
+	ErrorTypeTagName      = "error_type"
 	httpStatusTagName     = "http_status"
 	resourceExhaustedTag  = "resource_exhausted_cause"
 )

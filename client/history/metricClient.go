@@ -38,9 +38,10 @@ import (
 var _ historyservice.HistoryServiceClient = (*metricClient)(nil)
 
 type metricClient struct {
-	client        historyservice.HistoryServiceClient
-	metricsClient metrics.Client
-	logger        log.Logger
+	client          historyservice.HistoryServiceClient
+	metricsClient   metrics.Client
+	logger          log.Logger
+	throttledLogger log.Logger
 }
 
 // NewMetricClient creates a new instance of historyservice.HistoryServiceClient that emits metrics
@@ -48,11 +49,13 @@ func NewMetricClient(
 	client historyservice.HistoryServiceClient,
 	metricsClient metrics.Client,
 	logger log.Logger,
+	throttledLogger log.Logger,
 ) historyservice.HistoryServiceClient {
 	return &metricClient{
-		client:        client,
-		metricsClient: metricsClient,
-		logger:        logger,
+		client:          client,
+		metricsClient:   metricsClient,
+		logger:          logger,
+		throttledLogger: throttledLogger,
 	}
 }
 
@@ -614,8 +617,8 @@ func (c *metricClient) finishMetricsRecording(
 	err error,
 ) {
 	if err != nil {
-		c.logger.Error("history client encountered error", tag.Error(err))
-		scope.IncCounter(metrics.ClientFailures)
+		c.throttledLogger.Error("history client encountered error", tag.Error(err), tag.ErrorType(err))
+		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
 	}
 	stopwatch.Stop()
 }

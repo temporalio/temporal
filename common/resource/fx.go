@@ -208,6 +208,7 @@ func ClientFactoryProvider(
 	dynamicCollection *dynamicconfig.Collection,
 	persistenceConfig *config.Persistence,
 	logger SnTaggedLogger,
+	throttledLogger ThrottledLogger,
 ) client.Factory {
 	return factoryProvider.NewFactory(
 		rpcFactory,
@@ -216,6 +217,7 @@ func ClientFactoryProvider(
 		dynamicCollection,
 		persistenceConfig.NumHistoryShards,
 		logger,
+		throttledLogger,
 	)
 }
 
