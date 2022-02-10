@@ -159,6 +159,7 @@ func NewEngineWithShardContext(
 		historyCache,
 		config,
 		archivalClient,
+		shard.GetTimeSource(),
 	)
 
 	historyEngImpl := &historyEngineImpl{
@@ -2272,37 +2273,13 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	}
 	defer func() { wfCtx.getReleaseFn()(retError) }()
 
-	mutableState := wfCtx.getMutableState()
-
-	if mutableState.IsWorkflowExecutionRunning() {
-		// Running workflow cannot be deleted. Close or terminate it first.
-		return consts.ErrWorkflowNotCompleted
-	}
-
-	taskGenerator := workflow.NewTaskGenerator(
-		e.shard.GetNamespaceRegistry(),
-		e.logger,
-		mutableState,
-	)
-
-	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask(e.timeSource.Now())
-	if err != nil {
-		return err
-	}
-
-	err = e.shard.AddTasks(&persistence.AddTasksRequest{
-		ShardID: e.shard.GetShardID(),
-		// RangeID is set by shard
-		NamespaceID:   nsID.String(),
-		WorkflowID:    request.GetWorkflowExecution().GetWorkflowId(),
-		RunID:         request.GetWorkflowExecution().GetRunId(),
-		TransferTasks: []tasks.Task{deleteTask},
-	})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return e.workflowDeleteManager.AddDeleteWorkflowExecutionTask(
+		nsID,
+		commonpb.WorkflowExecution{
+			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
+			RunId:      request.GetWorkflowExecution().GetRunId(),
+		},
+		wfCtx.getMutableState())
 }
 
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history

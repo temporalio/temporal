@@ -77,7 +77,6 @@ func (r *TaskRefresherImpl) RefreshTasks(
 
 	taskGenerator := NewTaskGenerator(
 		r.namespaceRegistry,
-		r.logger,
 		mutableState,
 	)
 

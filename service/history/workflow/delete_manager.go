@@ -33,20 +33,24 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
 	DeleteManager interface {
-		DeleteWorkflowExecution(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
-		DeleteWorkflowExecutionByRetention(namespaceID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		AddDeleteWorkflowExecutionTask(nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState) error
+		DeleteWorkflowExecution(nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		DeleteWorkflowExecutionByRetention(nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 	}
 
 	DeleteManagerImpl struct {
@@ -55,6 +59,7 @@ type (
 		config         *configs.Config
 		metricsClient  metrics.Client
 		archivalClient archiver.Client
+		timeSource     clock.TimeSource
 	}
 )
 
@@ -65,6 +70,7 @@ func NewDeleteManager(
 	cache Cache,
 	config *configs.Config,
 	archiverClient archiver.Client,
+	timeSource clock.TimeSource,
 ) *DeleteManagerImpl {
 	deleteManager := &DeleteManagerImpl{
 		shard:          shard,
@@ -72,19 +78,49 @@ func NewDeleteManager(
 		metricsClient:  shard.GetMetricsClient(),
 		config:         config,
 		archivalClient: archiverClient,
+		timeSource:     timeSource,
 	}
 
 	return deleteManager
 }
 func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
-	namespaceID namespace.ID,
+	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
-) {
+	ms MutableState,
+) error {
 
+	if ms.IsWorkflowExecutionRunning() {
+		// Running workflow cannot be deleted. Close or terminate it first.
+		return consts.ErrWorkflowNotCompleted
+	}
+
+	taskGenerator := NewTaskGenerator(
+		m.shard.GetNamespaceRegistry(),
+		ms,
+	)
+
+	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask(m.timeSource.Now())
+	if err != nil {
+		return err
+	}
+
+	err = m.shard.AddTasks(&persistence.AddTasksRequest{
+		ShardID: m.shard.GetShardID(),
+		// RangeID is set by shard
+		NamespaceID:   nsID.String(),
+		WorkflowID:    we.GetWorkflowId(),
+		RunID:         we.GetRunId(),
+		TransferTasks: []tasks.Task{deleteTask},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecution(
-	namespaceID namespace.ID,
+	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
@@ -100,7 +136,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	}
 
 	err := m.deleteWorkflowExecutionInternal(
-		namespaceID,
+		nsID,
 		we,
 		weCtx,
 		ms,
@@ -113,7 +149,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
-	namespaceID namespace.ID,
+	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
 	ms MutableState,
@@ -128,7 +164,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	}
 
 	err := m.deleteWorkflowExecutionInternal(
-		namespaceID,
+		nsID,
 		we,
 		weCtx,
 		ms,
