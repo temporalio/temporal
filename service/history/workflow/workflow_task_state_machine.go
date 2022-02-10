@@ -41,6 +41,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -58,7 +59,15 @@ func newWorkflowTaskStateMachine(
 	}
 }
 
-func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(version int64, scheduleID int64, taskQueue *taskqueuepb.TaskQueue, startToCloseTimeoutSeconds int32, attempt int32, scheduleTimestamp *time.Time, originalScheduledTimestamp *time.Time) (*WorkflowTaskInfo, error) {
+func (m *workflowTaskStateMachine) ReplicateWorkflowTaskScheduledEvent(
+	version int64,
+	scheduleID int64,
+	taskQueue *taskqueuepb.TaskQueue,
+	startToCloseTimeoutSeconds int32,
+	attempt int32,
+	scheduleTimestamp *time.Time,
+	originalScheduledTimestamp *time.Time,
+) (*WorkflowTaskInfo, error) {
 
 	// set workflow state to running, since workflow task is scheduled
 	// NOTE: for zombie workflow, should not change the state
@@ -394,6 +403,9 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	}
 
 	workflowTask, err := m.ReplicateWorkflowTaskStartedEvent(workflowTask, m.ms.GetCurrentVersion(), scheduleID, startedID, requestID, startTime)
+
+	m.emitWorkflowTaskAttemptStats(workflowTask.Attempt)
+
 	// TODO merge active & passive task generation
 	if err := m.ms.taskGenerator.GenerateStartWorkflowTaskTasks(
 		startTime, // start time is now
@@ -402,6 +414,24 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 		return nil, nil, err
 	}
 	return event, workflowTask, err
+}
+
+func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
+	attempt int32,
+) {
+	namespaceName := m.ms.GetNamespaceEntry().Name().String()
+	m.ms.metricsClient.Scope(
+		metrics.WorkflowContextScope,
+		metrics.NamespaceTag(namespaceName),
+	).RecordDistribution(metrics.WorkflowTaskAttempt, int(attempt))
+	if attempt >= int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()) {
+		m.ms.logger.Warn("Critical attempts processing workflow task",
+			tag.WorkflowNamespace(namespaceName),
+			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
+			tag.Attempt(attempt),
+		)
+	}
 }
 
 func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(

@@ -455,6 +455,8 @@ const (
 	StickyTTL = "history.stickyTTL"
 	// WorkflowTaskHeartbeatTimeout for workflow task heartbeat
 	WorkflowTaskHeartbeatTimeout = "history.workflowTaskHeartbeatTimeout"
+	// WorkflowTaskCriticalAttempts is the number of attempts for a workflow task that's regarded as critical
+	WorkflowTaskCriticalAttempts = "history.workflowTaskCriticalAttempt"
 	// DefaultWorkflowTaskTimeout for a workflow task
 	DefaultWorkflowTaskTimeout = "history.defaultWorkflowTaskTimeout"
 	// SkipReapplicationByNamespaceID is whether skipping a event re-application for a namespace
