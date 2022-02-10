@@ -26,28 +26,28 @@ package log
 
 import (
 	"fmt"
-	"runtime/debug"
+	"testing"
 
-	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/common/log/tag"
+	"github.com/stretchr/testify/assert"
 )
 
-// CapturePanic is used to capture panic, it will log the panic and also return the error through pointer.
-// If the panic value is not error then a default error is returned
-// We have to use pointer is because in golang: "recover return nil if was not called directly by a deferred function."
-// And we have to set the returned error otherwise our handler will return nil as error which is incorrect
-func CapturePanic(logger Logger, retError *error) {
-	if panicObj := recover(); panicObj != nil {
-		err, ok := panicObj.(error)
-		if !ok {
-			err = fmt.Errorf("panic: %v", panicObj)
-		}
+func TestCapturePanic(t *testing.T) {
+	fooErr := testCapture("foo")
+	assert.Error(t, fooErr)
+	assert.Equal(t, "panic: foo", fooErr.Error())
 
-		st := string(debug.Stack())
+	barErr := testCapture(fmt.Errorf("error: %v", "bar"))
+	assert.Error(t, barErr)
+	assert.Equal(t, "error: bar", barErr.Error())
+}
 
-		logger.Error("Panic is captured", tag.SysStackTrace(st), tag.Error(err))
+func testCapture(panicObj interface{}) (retErr error) {
+	defer CapturePanic(NewNoopLogger(), &retErr)
 
-		*retError = serviceerror.NewInternal(err.Error())
-	}
+	testPanic(panicObj)
+	return nil
+}
+
+func testPanic(panicObj interface{}) {
+	panic(panicObj)
 }
