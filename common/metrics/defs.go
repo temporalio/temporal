@@ -1884,6 +1884,7 @@ const (
 	TaskLatency
 	TaskFailures
 	TaskDiscarded
+	TaskSkipped
 	TaskAttemptTimer
 	TaskStandbyRetryCounter
 	TaskNotActiveCounter
@@ -2346,6 +2347,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskAttemptTimer:         NewDimensionlessHistogramDef("task_attempt"),
 		TaskFailures:             NewCounterDef("task_errors"),
 		TaskDiscarded:            NewCounterDef("task_errors_discarded"),
+		TaskSkipped:              NewCounterDef("task_skipped"),
 		TaskStandbyRetryCounter:  NewCounterDef("task_errors_standby_retry_counter"),
 		TaskNotActiveCounter:     NewCounterDef("task_errors_not_active_counter"),
 		TaskLimitExceededCounter: NewCounterDef("task_errors_limit_exceeded_counter"),
