@@ -32,6 +32,8 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
+var _ Task = (*ActivityTimeoutTask)(nil)
+
 type (
 	ActivityTimeoutTask struct {
 		definition.WorkflowKey
@@ -73,4 +75,8 @@ func (a *ActivityTimeoutTask) GetVisibilityTime() time.Time {
 
 func (a *ActivityTimeoutTask) SetVisibilityTime(t time.Time) {
 	a.VisibilityTimestamp = t
+}
+
+func (a *ActivityTimeoutTask) GetCategory() Category {
+	return CategoryTimer
 }

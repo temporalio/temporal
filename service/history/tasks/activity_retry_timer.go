@@ -30,6 +30,8 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
+var _ Task = (*ActivityRetryTimerTask)(nil)
+
 type (
 	ActivityRetryTimerTask struct {
 		definition.WorkflowKey
@@ -70,4 +72,8 @@ func (r *ActivityRetryTimerTask) GetVisibilityTime() time.Time {
 
 func (r *ActivityRetryTimerTask) SetVisibilityTime(t time.Time) {
 	r.VisibilityTimestamp = t
+}
+
+func (r *ActivityRetryTimerTask) GetCategory() Category {
+	return CategoryTimer
 }

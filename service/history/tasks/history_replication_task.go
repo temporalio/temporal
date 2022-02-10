@@ -30,6 +30,8 @@ import (
 	"go.temporal.io/server/common/definition"
 )
 
+var _ Task = (*HistoryReplicationTask)(nil)
+
 type (
 	HistoryReplicationTask struct {
 		definition.WorkflowKey
@@ -72,4 +74,8 @@ func (a *HistoryReplicationTask) GetVisibilityTime() time.Time {
 
 func (a *HistoryReplicationTask) SetVisibilityTime(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
+}
+
+func (a *HistoryReplicationTask) GetCategory() Category {
+	return CategoryReplication
 }

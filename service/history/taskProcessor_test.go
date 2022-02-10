@@ -310,3 +310,4 @@ func (t *taskForTest) GetVersion() int64             { panic("implement me") }
 func (t *taskForTest) SetVersion(_ int64)            { panic("implement me") }
 func (t *taskForTest) SetTaskID(_ int64)             { panic("implement me") }
 func (t *taskForTest) SetVisibilityTime(_ time.Time) { panic("implement me") }
+func (t *taskForTest) GetCategory() tasks.Category   { panic("implement me") }
