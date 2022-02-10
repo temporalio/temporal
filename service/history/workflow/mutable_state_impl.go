@@ -156,10 +156,7 @@ type (
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
 
-		InsertTransferTasks    []tasks.Task
-		InsertTimerTasks       []tasks.Task
-		InsertReplicationTasks []tasks.Task
-		InsertVisibilityTasks  []tasks.Task
+		InsertTasks map[tasks.Category][]tasks.Task
 
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -226,6 +223,7 @@ func NewMutableState(
 		dbRecordVersion:  1,
 		namespaceEntry:   namespaceEntry,
 		appliedEvents:    make(map[string]struct{}),
+		InsertTasks:      make(map[tasks.Category][]tasks.Task),
 
 		QueryRegistry: NewQueryRegistry(),
 
@@ -1821,7 +1819,7 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 	ai, err := e.ReplicateActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
-	if err := e.taskGenerator.GenerateActivityTransferTasks(
+	if err := e.taskGenerator.GenerateActivityTasks(
 		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	); err != nil {
@@ -3596,40 +3594,17 @@ func (e *MutableStateImpl) RetryActivity(
 // TODO mutable state should generate corresponding transfer / timer tasks according to
 //  updates accumulated, while currently all transfer / timer tasks are managed manually
 
-// TODO convert AddTransferTasks to prepareTransferTasks
+// TODO convert AddTasks to prepareTasks
 
-// AddTransferTasks append transfer tasks
-func (e *MutableStateImpl) AddTransferTasks(
-	transferTasks ...tasks.Task,
+// AddTasks append transfer tasks
+func (e *MutableStateImpl) AddTasks(
+	tasks ...tasks.Task,
 ) {
 
-	e.InsertTransferTasks = append(e.InsertTransferTasks, transferTasks...)
-}
-
-// TODO convert AddTransferTasks to prepareTimerTasks
-
-// AddTimerTasks append timer tasks
-func (e *MutableStateImpl) AddTimerTasks(
-	timerTasks ...tasks.Task,
-) {
-
-	e.InsertTimerTasks = append(e.InsertTimerTasks, timerTasks...)
-}
-
-// AddReplicationTasks append visibility tasks
-func (e *MutableStateImpl) AddReplicationTasks(
-	replicationTasks ...tasks.Task,
-) {
-
-	e.InsertReplicationTasks = append(e.InsertReplicationTasks, replicationTasks...)
-}
-
-// AddVisibilityTasks append visibility tasks
-func (e *MutableStateImpl) AddVisibilityTasks(
-	visibilityTasks ...tasks.Task,
-) {
-
-	e.InsertVisibilityTasks = append(e.InsertVisibilityTasks, visibilityTasks...)
+	for _, task := range tasks {
+		category := task.GetCategory()
+		e.InsertTasks[category] = append(e.InsertTasks[category], task)
+	}
 }
 
 func (e *MutableStateImpl) SetUpdateCondition(
@@ -3707,7 +3682,7 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTransferTasks, e.InsertTimerTasks, e.InsertVisibilityTasks)
+	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
@@ -3746,10 +3721,7 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 		NewBufferedEvents:         bufferEvents,
 		ClearBufferedEvents:       clearBuffer,
 
-		TransferTasks:    e.InsertTransferTasks,
-		ReplicationTasks: e.InsertReplicationTasks,
-		TimerTasks:       e.InsertTimerTasks,
-		VisibilityTasks:  e.InsertVisibilityTasks,
+		Tasks: e.InsertTasks,
 
 		Condition:       e.nextEventIDInDB,
 		DBRecordVersion: e.dbRecordVersion,
@@ -3796,7 +3768,7 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTransferTasks, e.InsertTimerTasks, e.InsertVisibilityTasks)
+	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
@@ -3827,10 +3799,7 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 		SignalInfos:         e.pendingSignalInfoIDs,
 		SignalRequestedIDs:  e.pendingSignalRequestedIDs,
 
-		TransferTasks:    e.InsertTransferTasks,
-		ReplicationTasks: e.InsertReplicationTasks,
-		TimerTasks:       e.InsertTimerTasks,
-		VisibilityTasks:  e.InsertVisibilityTasks,
+		Tasks: e.InsertTasks,
 
 		Condition:       e.nextEventIDInDB,
 		DBRecordVersion: e.dbRecordVersion,
@@ -3859,7 +3828,9 @@ func (e *MutableStateImpl) UpdateDuplicatedResource(
 	e.appliedEvents[id] = struct{}{}
 }
 
-func (e *MutableStateImpl) GenerateLastHistoryReplicationTasks(now time.Time) (*tasks.HistoryReplicationTask, error) {
+func (e *MutableStateImpl) GenerateLastHistoryReplicationTasks(
+	now time.Time,
+) (tasks.Task, error) {
 	return e.taskGenerator.GenerateLastHistoryReplicationTasks(now)
 }
 
@@ -3933,10 +3904,7 @@ func (e *MutableStateImpl) cleanupTransaction(
 		e.bufferEventsInDB,
 	)
 
-	e.InsertTransferTasks = nil
-	e.InsertReplicationTasks = nil
-	e.InsertTimerTasks = nil
-	e.InsertVisibilityTasks = nil
+	e.InsertTasks = make(map[tasks.Category][]tasks.Task)
 
 	return nil
 }
@@ -3995,12 +3963,13 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 		}
 	}
 
-	e.InsertReplicationTasks = append(
-		e.InsertReplicationTasks,
+	e.InsertTasks[tasks.CategoryReplication] = append(
+		e.InsertTasks[tasks.CategoryReplication],
 		e.syncActivityToReplicationTask(now, transactionPolicy)...,
 	)
 
-	if transactionPolicy == TransactionPolicyPassive && len(e.InsertReplicationTasks) > 0 {
+	if transactionPolicy == TransactionPolicyPassive &&
+		len(e.InsertTasks[tasks.CategoryReplication]) > 0 {
 		return nil, nil, false, serviceerror.NewInternal("should not generate replication task when close transaction as passive")
 	}
 

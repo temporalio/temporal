@@ -136,7 +136,7 @@ func (t *timerSequenceImpl) CreateNextUserTimer() (bool, error) {
 	if err := t.mutableState.UpdateUserTimer(timerInfo); err != nil {
 		return false, err
 	}
-	t.mutableState.AddTimerTasks(&tasks.UserTimerTask{
+	t.mutableState.AddTasks(&tasks.UserTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         t.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: firstTimerTask.Timestamp,
@@ -183,7 +183,7 @@ func (t *timerSequenceImpl) CreateNextActivityTimer() (bool, error) {
 	if err != nil {
 		return false, err
 	}
-	t.mutableState.AddTimerTasks(&tasks.ActivityTimeoutTask{
+	t.mutableState.AddTasks(&tasks.ActivityTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         t.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: firstTimerTask.Timestamp,

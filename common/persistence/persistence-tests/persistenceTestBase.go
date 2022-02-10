@@ -319,21 +319,23 @@ func (s *TestBase) CreateWorkflowExecutionWithBranchToken(namespaceID string, wo
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			NextEventID: nextEventID,
-			TransferTasks: []tasks.Task{
-				&tasks.WorkflowTask{
-					WorkflowKey: definition.NewWorkflowKey(
-						namespaceID,
-						workflowExecution.WorkflowId,
-						workflowExecution.RunId,
-					),
-					TaskID:              s.GetNextSequenceNumber(),
-					TaskQueue:           taskQueue,
-					ScheduleID:          workflowTaskScheduleID,
-					VisibilityTimestamp: time.Now().UTC(),
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: {
+					&tasks.WorkflowTask{
+						WorkflowKey: definition.NewWorkflowKey(
+							namespaceID,
+							workflowExecution.WorkflowId,
+							workflowExecution.RunId,
+						),
+						TaskID:              s.GetNextSequenceNumber(),
+						TaskQueue:           taskQueue,
+						ScheduleID:          workflowTaskScheduleID,
+						VisibilityTimestamp: time.Now().UTC(),
+					},
 				},
+				tasks.CategoryTimer: timerTasks,
 			},
-			TimerTasks: timerTasks,
-			Checksum:   testWorkflowChecksum,
+			Checksum: testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})
@@ -401,8 +403,10 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(namespaceID string, workflow
 				State:           enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
-			TransferTasks: transferTasks,
-			Checksum:      testWorkflowChecksum,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: transferTasks,
+			},
+			Checksum: testWorkflowChecksum,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})
@@ -444,19 +448,21 @@ func (s *TestBase) CreateChildWorkflowExecution(namespaceID string, workflowExec
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			NextEventID: nextEventID,
-			TransferTasks: []tasks.Task{
-				&tasks.WorkflowTask{
-					WorkflowKey: definition.NewWorkflowKey(
-						namespaceID,
-						workflowExecution.WorkflowId,
-						workflowExecution.RunId,
-					),
-					TaskID:     s.GetNextSequenceNumber(),
-					TaskQueue:  taskQueue,
-					ScheduleID: workflowTaskScheduleID,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: {
+					&tasks.WorkflowTask{
+						WorkflowKey: definition.NewWorkflowKey(
+							namespaceID,
+							workflowExecution.WorkflowId,
+							workflowExecution.RunId,
+						),
+						TaskID:     s.GetNextSequenceNumber(),
+						TaskQueue:  taskQueue,
+						ScheduleID: workflowTaskScheduleID,
+					},
 				},
+				tasks.CategoryTimer: timerTasks,
 			},
-			TimerTasks: timerTasks,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	})
@@ -512,11 +518,12 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 	req := &persistence.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: persistence.WorkflowMutation{
-			ExecutionInfo:       updatedInfo,
-			ExecutionState:      updatedState,
-			NextEventID:         updatedNextEventID,
-			TransferTasks:       []tasks.Task{newworkflowTask},
-			TimerTasks:          nil,
+			ExecutionInfo:  updatedInfo,
+			ExecutionState: updatedState,
+			NextEventID:    updatedNextEventID,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: {newworkflowTask},
+			},
 			Condition:           condition,
 			UpsertActivityInfos: nil,
 			DeleteActivityInfos: nil,
@@ -547,8 +554,7 @@ func (s *TestBase) ContinueAsNewExecution(updatedInfo *persistencespb.WorkflowEx
 				State:           updatedState.State,
 				Status:          updatedState.Status,
 			},
-			TransferTasks: nil,
-			TimerTasks:    nil,
+			Tasks: map[tasks.Category][]tasks.Task{},
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
 	}
@@ -586,11 +592,12 @@ func (s *TestBase) UpdateWorkflowExecutionAndFinish(updatedInfo *persistencespb.
 		ShardID: s.ShardInfo.GetShardId(),
 		RangeID: s.ShardInfo.GetRangeId(),
 		UpdateWorkflowMutation: persistence.WorkflowMutation{
-			ExecutionInfo:       updatedInfo,
-			ExecutionState:      updatedState,
-			NextEventID:         nextEventID,
-			TransferTasks:       transferTasks,
-			TimerTasks:          nil,
+			ExecutionInfo:  updatedInfo,
+			ExecutionState: updatedState,
+			NextEventID:    nextEventID,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: transferTasks,
+			},
 			Condition:           condition,
 			UpsertActivityInfos: nil,
 			DeleteActivityInfos: nil,
@@ -767,9 +774,11 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(updatedInfo *persisten
 			UpsertSignalRequestedIDs:  convert.StringSliceToSet(upsertSignalRequestedIDs),
 			DeleteSignalRequestedIDs:  convert.StringSliceToSet(deleteSignalRequestedIDs),
 
-			TransferTasks:    transferTasks,
-			ReplicationTasks: replicationTasks,
-			TimerTasks:       timerTasks,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer:    transferTasks,
+				tasks.CategoryTimer:       timerTasks,
+				tasks.CategoryReplication: replicationTasks,
+			},
 
 			Condition: condition,
 			Checksum:  testWorkflowChecksum,
@@ -784,10 +793,12 @@ func (s *TestBase) UpdateWorkflowExecutionWithTransferTasks(
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&persistence.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: persistence.WorkflowMutation{
-			ExecutionInfo:       updatedInfo,
-			ExecutionState:      updatedState,
-			NextEventID:         updatedNextEventID,
-			TransferTasks:       transferTasks,
+			ExecutionInfo:  updatedInfo,
+			ExecutionState: updatedState,
+			NextEventID:    updatedNextEventID,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: transferTasks,
+			},
 			Condition:           condition,
 			UpsertActivityInfos: convertActivityInfos(upsertActivityInfo),
 		},
@@ -802,9 +813,11 @@ func (s *TestBase) UpdateWorkflowExecutionForChildExecutionsInitiated(
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&persistence.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: persistence.WorkflowMutation{
-			ExecutionInfo:             updatedInfo,
-			NextEventID:               updatedNextEventID,
-			TransferTasks:             transferTasks,
+			ExecutionInfo: updatedInfo,
+			NextEventID:   updatedNextEventID,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: transferTasks,
+			},
 			Condition:                 condition,
 			UpsertChildExecutionInfos: convertChildExecutionInfos(childInfos),
 		},
@@ -820,9 +833,11 @@ func (s *TestBase) UpdateWorkflowExecutionForRequestCancel(
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&persistence.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: persistence.WorkflowMutation{
-			ExecutionInfo:            updatedInfo,
-			NextEventID:              updatedNextEventID,
-			TransferTasks:            transferTasks,
+			ExecutionInfo: updatedInfo,
+			NextEventID:   updatedNextEventID,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: transferTasks,
+			},
 			Condition:                condition,
 			UpsertRequestCancelInfos: convertRequestCancelInfos(upsertRequestCancelInfo),
 		},
@@ -838,9 +853,11 @@ func (s *TestBase) UpdateWorkflowExecutionForSignal(
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(&persistence.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: persistence.WorkflowMutation{
-			ExecutionInfo:     updatedInfo,
-			NextEventID:       updatedNextEventID,
-			TransferTasks:     transferTasks,
+			ExecutionInfo: updatedInfo,
+			NextEventID:   updatedNextEventID,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: transferTasks,
+			},
 			Condition:         condition,
 			UpsertSignalInfos: convertSignalInfos(upsertSignalInfos),
 		},

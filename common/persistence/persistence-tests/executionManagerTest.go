@@ -1055,15 +1055,16 @@ func (s *ExecutionManagerSuite) TestPersistenceStartWorkflow() {
 				Status:          enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 			},
 			NextEventID: int64(3),
-			TransferTasks: []tasks.Task{
-				&tasks.WorkflowTask{
-					WorkflowKey: workflowKey,
-					TaskID:      s.GetNextSequenceNumber(),
-					TaskQueue:   "queue1",
-					ScheduleID:  int64(2),
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryTransfer: {
+					&tasks.WorkflowTask{
+						WorkflowKey: workflowKey,
+						TaskID:      s.GetNextSequenceNumber(),
+						TaskQueue:   "queue1",
+						ScheduleID:  int64(2),
+					},
 				},
 			},
-			TimerTasks: nil,
 		},
 		RangeID: s.ShardInfo.GetRangeId() - 1,
 	})

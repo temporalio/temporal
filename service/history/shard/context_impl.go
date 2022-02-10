@@ -539,10 +539,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	if err := s.allocateTaskIDsLocked(
 		namespaceEntry,
 		workflowID,
-		request.NewWorkflowSnapshot.TransferTasks,
-		request.NewWorkflowSnapshot.ReplicationTasks,
-		request.NewWorkflowSnapshot.TimerTasks,
-		request.NewWorkflowSnapshot.VisibilityTasks,
+		request.NewWorkflowSnapshot.Tasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return nil, err
@@ -580,10 +577,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	if err := s.allocateTaskIDsLocked(
 		namespaceEntry,
 		workflowID,
-		request.UpdateWorkflowMutation.TransferTasks,
-		request.UpdateWorkflowMutation.ReplicationTasks,
-		request.UpdateWorkflowMutation.TimerTasks,
-		request.UpdateWorkflowMutation.VisibilityTasks,
+		request.UpdateWorkflowMutation.Tasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return nil, err
@@ -592,10 +586,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		if err := s.allocateTaskIDsLocked(
 			namespaceEntry,
 			workflowID,
-			request.NewWorkflowSnapshot.TransferTasks,
-			request.NewWorkflowSnapshot.ReplicationTasks,
-			request.NewWorkflowSnapshot.TimerTasks,
-			request.NewWorkflowSnapshot.VisibilityTasks,
+			request.NewWorkflowSnapshot.Tasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return nil, err
@@ -635,10 +626,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		if err := s.allocateTaskIDsLocked(
 			namespaceEntry,
 			workflowID,
-			request.CurrentWorkflowMutation.TransferTasks,
-			request.CurrentWorkflowMutation.ReplicationTasks,
-			request.CurrentWorkflowMutation.TimerTasks,
-			request.CurrentWorkflowMutation.VisibilityTasks,
+			request.CurrentWorkflowMutation.Tasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return nil, err
@@ -647,10 +635,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	if err := s.allocateTaskIDsLocked(
 		namespaceEntry,
 		workflowID,
-		request.ResetWorkflowSnapshot.TransferTasks,
-		request.ResetWorkflowSnapshot.ReplicationTasks,
-		request.ResetWorkflowSnapshot.TimerTasks,
-		request.ResetWorkflowSnapshot.VisibilityTasks,
+		request.ResetWorkflowSnapshot.Tasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return nil, err
@@ -659,10 +644,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 		if err := s.allocateTaskIDsLocked(
 			namespaceEntry,
 			workflowID,
-			request.NewWorkflowSnapshot.TransferTasks,
-			request.NewWorkflowSnapshot.ReplicationTasks,
-			request.NewWorkflowSnapshot.TimerTasks,
-			request.NewWorkflowSnapshot.VisibilityTasks,
+			request.NewWorkflowSnapshot.Tasks,
 			&transferMaxReadLevel,
 		); err != nil {
 			return nil, err
@@ -707,10 +689,7 @@ func (s *ContextImpl) addTasksLocked(
 	if err := s.allocateTaskIDsLocked(
 		namespaceEntry,
 		request.WorkflowID,
-		request.TransferTasks,
-		request.ReplicationTasks,
-		request.TimerTasks,
-		request.VisibilityTasks,
+		request.Tasks,
 		&transferMaxReadLevel,
 	); err != nil {
 		return err
@@ -721,10 +700,10 @@ func (s *ContextImpl) addTasksLocked(
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
-	s.engine.NotifyNewTransferTasks(namespaceEntry.ActiveClusterName(), request.TransferTasks)
-	s.engine.NotifyNewTimerTasks(namespaceEntry.ActiveClusterName(), request.TimerTasks)
-	s.engine.NotifyNewVisibilityTasks(request.VisibilityTasks)
-	s.engine.NotifyNewReplicationTasks(request.ReplicationTasks)
+	s.engine.NotifyNewTransferTasks(namespaceEntry.ActiveClusterName(), request.Tasks[tasks.CategoryTransfer])
+	s.engine.NotifyNewTimerTasks(namespaceEntry.ActiveClusterName(), request.Tasks[tasks.CategoryTimer])
+	s.engine.NotifyNewVisibilityTasks(request.Tasks[tasks.CategoryVisibility])
+	s.engine.NotifyNewReplicationTasks(request.Tasks[tasks.CategoryReplication])
 	return nil
 }
 
@@ -806,16 +785,17 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		WorkflowID:  key.WorkflowID,
 		RunID:       key.RunID,
 
-		TransferTasks:    nil,
-		TimerTasks:       nil,
-		ReplicationTasks: nil,
-		VisibilityTasks: []tasks.Task{&tasks.DeleteExecutionVisibilityTask{
-			// TaskID is set by addTasksLocked
-			WorkflowKey:         key,
-			VisibilityTimestamp: s.timeSource.Now(),
-			Version:             newTaskVersion,
-			CloseTime:           closeTime,
-		}},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryVisibility: {
+				&tasks.DeleteExecutionVisibilityTask{
+					// TaskID is set by addTasksLocked
+					WorkflowKey:         key,
+					VisibilityTimestamp: s.timeSource.Now(),
+					Version:             newTaskVersion,
+					CloseTime:           closeTime,
+				},
+			},
+		},
 	}
 	err = s.addTasksLocked(addTasksRequest, namespaceEntry)
 	if err != nil {
@@ -1074,94 +1054,48 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 func (s *ContextImpl) allocateTaskIDsLocked(
 	namespaceEntry *namespace.Namespace,
 	workflowID string,
-	transferTasks []tasks.Task,
-	replicationTasks []tasks.Task,
-	timerTasks []tasks.Task,
-	visibilityTasks []tasks.Task,
+	newTasks map[tasks.Category][]tasks.Task,
 	transferMaxReadLevel *int64,
 ) error {
-
-	if err := s.allocateTransferIDsLocked(
-		transferTasks,
-		transferMaxReadLevel); err != nil {
-		return err
-	}
-	if err := s.allocateTransferIDsLocked(
-		replicationTasks,
-		transferMaxReadLevel); err != nil {
-		return err
-	}
-	if err := s.allocateTransferIDsLocked(
-		visibilityTasks,
-		transferMaxReadLevel); err != nil {
-		return err
-	}
-	return s.allocateTimerIDsLocked(
-		namespaceEntry,
-		workflowID,
-		timerTasks,
-		transferMaxReadLevel)
-}
-
-func (s *ContextImpl) allocateTransferIDsLocked(
-	tasks []tasks.Task,
-	transferMaxReadLevel *int64,
-) error {
-
-	for _, task := range tasks {
-		id, err := s.generateTransferTaskIDLocked()
-		if err != nil {
-			return err
-		}
-		s.contextTaggedLogger.Debug("Assigning task ID", tag.TaskID(id))
-		task.SetTaskID(id)
-		*transferMaxReadLevel = id
-	}
-	return nil
-}
-
-// NOTE: allocateTimerIDsLocked should always been called after assigning taskID for transferTasks when assigning taskID together,
-// because Temporal Indexer assume timer taskID of deleteWorkflowExecution is larger than transfer taskID of closeWorkflowExecution
-// for a given workflow.
-func (s *ContextImpl) allocateTimerIDsLocked(
-	namespaceEntry *namespace.Namespace,
-	workflowID string,
-	timerTasks []tasks.Task,
-	transferMaxReadLevel *int64,
-) error {
-
-	// assign IDs for the timer tasks. They need to be assigned under shard lock.
 	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
-	for _, task := range timerTasks {
-		ts := task.GetVisibilityTime()
-		if task.GetVersion() != common.EmptyVersion {
-			// cannot use version to determine the corresponding cluster for timer task
-			// this is because during failover, timer task should be created as active
-			// or otherwise, failover + active processing logic may not pick up the task.
-			currentCluster = namespaceEntry.ActiveClusterName()
-		}
-		readCursorTS := s.timerMaxReadLevelMap[currentCluster]
-		if ts.Before(readCursorTS) {
-			// This can happen if shard move and new host have a time SKU, or there is db write delay.
-			// We generate a new timer ID using timerMaxReadLevel.
-			s.contextTaggedLogger.Debug("New timer generated is less than read level",
-				tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
-				tag.WorkflowID(workflowID),
-				tag.Timestamp(ts),
-				tag.CursorTimestamp(readCursorTS),
-				tag.ValueShardAllocateTimerBeforeRead)
-			task.SetVisibilityTime(s.timerMaxReadLevelMap[currentCluster].Add(time.Millisecond))
-		}
+	for _, tasks := range newTasks {
+		for _, task := range tasks {
+			// set taskID
+			id, err := s.generateTransferTaskIDLocked()
+			if err != nil {
+				return err
+			}
+			s.contextTaggedLogger.Debug("Assigning task ID", tag.TaskID(id))
+			task.SetTaskID(id)
+			*transferMaxReadLevel = id
 
-		seqNum, err := s.generateTransferTaskIDLocked()
-		if err != nil {
-			return err
+			// if scheduled task, check if fire time is in the past
+			if !task.GetKey().FireTime.IsZero() {
+				ts := task.GetVisibilityTime()
+				if task.GetVersion() != common.EmptyVersion {
+					// cannot use version to determine the corresponding cluster for timer task
+					// this is because during failover, timer task should be created as active
+					// or otherwise, failover + active processing logic may not pick up the task.
+					currentCluster = namespaceEntry.ActiveClusterName()
+				}
+				readCursorTS := s.timerMaxReadLevelMap[currentCluster]
+				if ts.Before(readCursorTS) {
+					// This can happen if shard move and new host have a time SKU, or there is db write delay.
+					// We generate a new timer ID using timerMaxReadLevel.
+					s.contextTaggedLogger.Debug("New timer generated is less than read level",
+						tag.WorkflowNamespaceID(namespaceEntry.ID().String()),
+						tag.WorkflowID(workflowID),
+						tag.Timestamp(ts),
+						tag.CursorTimestamp(readCursorTS),
+						tag.ValueShardAllocateTimerBeforeRead)
+					task.SetVisibilityTime(s.timerMaxReadLevelMap[currentCluster].Add(time.Millisecond))
+				}
+
+				visibilityTs := task.GetVisibilityTime()
+				s.contextTaggedLogger.Debug("Assigning new timer",
+					tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevelTime))
+			}
 		}
-		task.SetTaskID(seqNum)
-		*transferMaxReadLevel = seqNum
-		visibilityTs := task.GetVisibilityTime()
-		s.contextTaggedLogger.Debug("Assigning new timer",
-			tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevelTime))
 	}
 	return nil
 }

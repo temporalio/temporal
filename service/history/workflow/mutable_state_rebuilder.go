@@ -294,7 +294,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				return nil, err
 			}
 
-			if err := taskGenerator.GenerateActivityTransferTasks(
+			if err := taskGenerator.GenerateActivityTasks(
 				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {

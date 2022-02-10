@@ -1070,7 +1070,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeActivityTaskScheduled() {
 	s.executionInfo.TaskQueue = taskqueue
 	s.mockMutableState.EXPECT().ReplicateActivityTaskScheduledEvent(event.GetEventId(), event).Return(ai, nil)
 	s.mockUpdateVersion(event)
-	s.mockTaskGenerator.EXPECT().GenerateActivityTransferTasks(
+	s.mockTaskGenerator.EXPECT().GenerateActivityTasks(
 		timestamp.TimeValue(event.GetEventTime()),
 		event,
 	).Return(nil)
