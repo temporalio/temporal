@@ -416,24 +416,6 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskStartedEvent(
 	return event, workflowTask, err
 }
 
-func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
-	attempt int32,
-) {
-	namespaceName := m.ms.GetNamespaceEntry().Name().String()
-	m.ms.metricsClient.Scope(
-		metrics.WorkflowContextScope,
-		metrics.NamespaceTag(namespaceName),
-	).RecordDistribution(metrics.WorkflowTaskAttempt, int(attempt))
-	if attempt >= int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()) {
-		m.ms.logger.Warn("Critical attempts processing workflow task",
-			tag.WorkflowNamespace(namespaceName),
-			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
-			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
-			tag.Attempt(attempt),
-		)
-	}
-}
-
 func (m *workflowTaskStateMachine) AddWorkflowTaskCompletedEvent(
 	scheduleEventID int64,
 	startedEventID int64,
@@ -768,4 +750,22 @@ func (m *workflowTaskStateMachine) afterAddWorkflowTaskCompletedEvent(
 ) error {
 	m.ms.executionInfo.LastWorkflowTaskStartId = event.GetWorkflowTaskCompletedEventAttributes().GetStartedEventId()
 	return m.ms.addBinaryCheckSumIfNotExists(event, maxResetPoints)
+}
+
+func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
+	attempt int32,
+) {
+	namespaceName := m.ms.GetNamespaceEntry().Name().String()
+	m.ms.metricsClient.Scope(
+		metrics.WorkflowContextScope,
+		metrics.NamespaceTag(namespaceName),
+	).RecordDistribution(metrics.WorkflowTaskAttempt, int(attempt))
+	if attempt >= int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()) {
+		m.ms.logger.Warn("Critical attempts processing workflow task",
+			tag.WorkflowNamespace(namespaceName),
+			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
+			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
+			tag.Attempt(attempt),
+		)
+	}
 }
