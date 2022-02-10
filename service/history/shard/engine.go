@@ -84,9 +84,6 @@ type (
 		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
-		NotifyNewTransferTasks(clusterName string, tasks []tasks.Task)
-		NotifyNewTimerTasks(clusterName string, tasks []tasks.Task)
-		NotifyNewVisibilityTasks(tasks []tasks.Task)
-		NotifyNewReplicationTasks(tasks []tasks.Task)
+		NotifyNewTasks(clusterName string, tasks map[tasks.Category][]tasks.Task)
 	}
 )

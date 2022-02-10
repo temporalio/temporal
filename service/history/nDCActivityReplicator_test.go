@@ -51,7 +51,9 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -63,8 +65,8 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockTxProcessor     *MocktransferQueueProcessor
-		mockTimerProcessor  *MocktimerQueueProcessor
+		mockTxProcessor     *queues.MockProcessor
+		mockTimerProcessor  *queues.MockProcessor
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
 		mockMutableState    *workflow.MockMutableState
@@ -96,10 +98,12 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMutableState = workflow.NewMockMutableState(s.controller)
-	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
-	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
-	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
+	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -137,8 +141,10 @@ func (s *activityReplicatorSuite) SetupTest() {
 			metrics.NewNoopMetricsClient(),
 			func(namespace.ID, string) int32 { return 1 },
 		),
-		txProcessor:    s.mockTxProcessor,
-		timerProcessor: s.mockTimerProcessor,
+		queueProcessors: map[tasks.Category]queues.Processor{
+			s.mockTxProcessor.Category():    s.mockTxProcessor,
+			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
+		},
 	}
 	s.mockShard.SetEngineForTesting(engine)
 

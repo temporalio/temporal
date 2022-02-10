@@ -71,7 +71,9 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -81,16 +83,17 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller           *gomock.Controller
-		mockShard            *shard.ContextTest
-		mockTxProcessor      *MocktransferQueueProcessor
-		mockTimerProcessor   *MocktimerQueueProcessor
-		mockNamespaceCache   *namespace.MockRegistry
-		mockMatchingClient   *matchingservicemock.MockMatchingServiceClient
-		mockHistoryClient    *historyservicemock.MockHistoryServiceClient
-		mockClusterMetadata  *cluster.MockMetadata
-		mockEventsReapplier  *MocknDCEventsReapplier
-		mockWorkflowResetter *MockworkflowResetter
+		controller              *gomock.Controller
+		mockShard               *shard.ContextTest
+		mockTxProcessor         *queues.MockProcessor
+		mockTimerProcessor      *queues.MockProcessor
+		mockVisibilityProcessor *queues.MockProcessor
+		mockNamespaceCache      *namespace.MockRegistry
+		mockMatchingClient      *matchingservicemock.MockMatchingServiceClient
+		mockHistoryClient       *historyservicemock.MockHistoryServiceClient
+		mockClusterMetadata     *cluster.MockMetadata
+		mockEventsReapplier     *MocknDCEventsReapplier
+		mockWorkflowResetter    *MockworkflowResetter
 
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *persistence.MockExecutionManager
@@ -117,12 +120,17 @@ func (s *engineSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
-	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockEventsReapplier = NewMocknDCEventsReapplier(s.controller)
 	s.mockWorkflowResetter = NewMockworkflowResetter(s.controller)
-	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
+	s.mockVisibilityProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
+	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
+	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
@@ -181,10 +189,13 @@ func (s *engineSuite) SetupTest() {
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		eventNotifier:      eventNotifier,
 		config:             s.config,
-		txProcessor:        s.mockTxProcessor,
-		timerProcessor:     s.mockTimerProcessor,
-		eventsReapplier:    s.mockEventsReapplier,
-		workflowResetter:   s.mockWorkflowResetter,
+		queueProcessors: map[tasks.Category]queues.Processor{
+			s.mockTxProcessor.Category():         s.mockTxProcessor,
+			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
+			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
+		},
+		eventsReapplier:  s.mockEventsReapplier,
+		workflowResetter: s.mockWorkflowResetter,
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)

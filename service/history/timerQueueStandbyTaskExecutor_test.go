@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
@@ -68,17 +69,16 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller               *gomock.Controller
-		mockExecutionMgr         *persistence.MockExecutionManager
-		mockShard                *shard.ContextTest
-		mockTxProcessor          *MocktransferQueueProcessor
-		mockReplicationProcessor *MockReplicatorQueueProcessor
-		mockTimerProcessor       *MocktimerQueueProcessor
-		mockNamespaceCache       *namespace.MockRegistry
-		mockClusterMetadata      *cluster.MockMetadata
-		mockAdminClient          *adminservicemock.MockAdminServiceClient
-		mockNDCHistoryResender   *xdc.MockNDCHistoryResender
-		mockDeleteManager        *workflow.MockDeleteManager
+		controller             *gomock.Controller
+		mockExecutionMgr       *persistence.MockExecutionManager
+		mockShard              *shard.ContextTest
+		mockTxProcessor        *queues.MockProcessor
+		mockTimerProcessor     *queues.MockProcessor
+		mockNamespaceCache     *namespace.MockRegistry
+		mockClusterMetadata    *cluster.MockMetadata
+		mockAdminClient        *adminservicemock.MockAdminServiceClient
+		mockNDCHistoryResender *xdc.MockNDCHistoryResender
+		mockDeleteManager      *workflow.MockDeleteManager
 
 		logger               log.Logger
 		namespaceID          namespace.ID
@@ -119,13 +119,13 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.discardDuration = config.StandbyTaskMissingEventsDiscardDelay() * 2
 
 	s.controller = gomock.NewController(s.T())
-	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
-	s.mockReplicationProcessor = NewMockReplicatorQueueProcessor(s.controller)
-	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
 	s.mockNDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
-	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockReplicationProcessor.EXPECT().notifyNewTask().AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
+	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
@@ -165,17 +165,19 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	historyCache := workflow.NewCache(s.mockShard)
 	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
-		currentClusterName:    s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
-		shard:                 s.mockShard,
-		clusterMetadata:       s.mockClusterMetadata,
-		executionManager:      s.mockExecutionMgr,
-		historyCache:          historyCache,
-		logger:                s.logger,
-		tokenSerializer:       common.NewProtoTaskTokenSerializer(),
-		metricsClient:         s.mockShard.GetMetricsClient(),
-		eventNotifier:         events.NewNotifier(s.timeSource, metrics.NewNoopMetricsClient(), func(namespace.ID, string) int32 { return 1 }),
-		txProcessor:           s.mockTxProcessor,
-		timerProcessor:        s.mockTimerProcessor,
+		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
+		shard:              s.mockShard,
+		clusterMetadata:    s.mockClusterMetadata,
+		executionManager:   s.mockExecutionMgr,
+		historyCache:       historyCache,
+		logger:             s.logger,
+		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
+		metricsClient:      s.mockShard.GetMetricsClient(),
+		eventNotifier:      events.NewNotifier(s.timeSource, metrics.NewNoopMetricsClient(), func(namespace.ID, string) int32 { return 1 }),
+		queueProcessors: map[tasks.Category]queues.Processor{
+			s.mockTxProcessor.Category():    s.mockTxProcessor,
+			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
+		},
 		workflowDeleteManager: s.mockDeleteManager,
 	}
 	s.mockShard.SetEngineForTesting(h)

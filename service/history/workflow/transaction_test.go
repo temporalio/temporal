@@ -189,8 +189,5 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 }
 
 func (s *transactionSuite) setupMockForTaskNotification() {
-	s.mockEngine.EXPECT().NotifyNewTransferTasks(gomock.Any(), gomock.Any()).Times(1)
-	s.mockEngine.EXPECT().NotifyNewTimerTasks(gomock.Any(), gomock.Any()).Times(1)
-	s.mockEngine.EXPECT().NotifyNewVisibilityTasks(gomock.Any()).Times(1)
-	s.mockEngine.EXPECT().NotifyNewReplicationTasks(gomock.Any()).Times(1)
+	s.mockEngine.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).Times(1)
 }

@@ -227,52 +227,16 @@ func (mr *MockEngineMockRecorder) NotifyNewHistoryEvent(event interface{}) *gomo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewHistoryEvent", reflect.TypeOf((*MockEngine)(nil).NotifyNewHistoryEvent), event)
 }
 
-// NotifyNewReplicationTasks mocks base method.
-func (m *MockEngine) NotifyNewReplicationTasks(tasks []tasks.Task) {
+// NotifyNewTasks mocks base method.
+func (m *MockEngine) NotifyNewTasks(clusterName string, tasks map[tasks.Category][]tasks.Task) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewReplicationTasks", tasks)
+	m.ctrl.Call(m, "NotifyNewTasks", clusterName, tasks)
 }
 
-// NotifyNewReplicationTasks indicates an expected call of NotifyNewReplicationTasks.
-func (mr *MockEngineMockRecorder) NotifyNewReplicationTasks(tasks interface{}) *gomock.Call {
+// NotifyNewTasks indicates an expected call of NotifyNewTasks.
+func (mr *MockEngineMockRecorder) NotifyNewTasks(clusterName, tasks interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewReplicationTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewReplicationTasks), tasks)
-}
-
-// NotifyNewTimerTasks mocks base method.
-func (m *MockEngine) NotifyNewTimerTasks(clusterName string, tasks []tasks.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTimerTasks", clusterName, tasks)
-}
-
-// NotifyNewTimerTasks indicates an expected call of NotifyNewTimerTasks.
-func (mr *MockEngineMockRecorder) NotifyNewTimerTasks(clusterName, tasks interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTimerTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTimerTasks), clusterName, tasks)
-}
-
-// NotifyNewTransferTasks mocks base method.
-func (m *MockEngine) NotifyNewTransferTasks(clusterName string, tasks []tasks.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewTransferTasks", clusterName, tasks)
-}
-
-// NotifyNewTransferTasks indicates an expected call of NotifyNewTransferTasks.
-func (mr *MockEngineMockRecorder) NotifyNewTransferTasks(clusterName, tasks interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTransferTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTransferTasks), clusterName, tasks)
-}
-
-// NotifyNewVisibilityTasks mocks base method.
-func (m *MockEngine) NotifyNewVisibilityTasks(tasks []tasks.Task) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "NotifyNewVisibilityTasks", tasks)
-}
-
-// NotifyNewVisibilityTasks indicates an expected call of NotifyNewVisibilityTasks.
-func (mr *MockEngineMockRecorder) NotifyNewVisibilityTasks(tasks interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewVisibilityTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewVisibilityTasks), tasks)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NotifyNewTasks", reflect.TypeOf((*MockEngine)(nil).NotifyNewTasks), clusterName, tasks)
 }
 
 // PollMutableState mocks base method.
