@@ -137,7 +137,11 @@ func loadMutableStateForTask(
 	}
 	// after refresh, still mutable state's next event ID <= task's event ID
 	if eventID >= mutableState.GetNextEventID() {
-		logger.Info("Timer Task Processor: task event ID >= MS NextEventID, skip.",
+		scope.IncCounter(metrics.TaskSkipped)
+		logger.Info("Task Processor: task event ID >= MS NextEventID, skip.",
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()),
 			tag.WorkflowEventID(eventID),
 			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 		)
