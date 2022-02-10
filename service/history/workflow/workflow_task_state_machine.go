@@ -761,7 +761,7 @@ func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 		metrics.NamespaceTag(namespaceName),
 	).RecordDistribution(metrics.WorkflowTaskAttempt, int(attempt))
 	if attempt >= int32(m.ms.shard.GetConfig().WorkflowTaskCriticalAttempts()) {
-		m.ms.logger.Warn("Critical attempts processing workflow task",
+		m.ms.shard.GetThrottledLogger().Warn("Critical attempts processing workflow task",
 			tag.WorkflowNamespace(namespaceName),
 			tag.WorkflowID(m.ms.GetExecutionInfo().WorkflowId),
 			tag.WorkflowRunID(m.ms.GetExecutionState().RunId),
