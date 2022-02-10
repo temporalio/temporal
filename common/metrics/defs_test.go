@@ -29,9 +29,6 @@ import (
 	"regexp"
 	"testing"
 
-	"go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -110,34 +107,5 @@ func TestMetricDefs(t *testing.T) {
 			matched := IsMetric(string(metricDef.metricName))
 			assert.True(t, matched, fmt.Sprintf("Service: %v, metric_name: %v", service, metricDef.metricName))
 		}
-	}
-}
-
-func TestGetServiceErrorType(t *testing.T) {
-	testData := []struct {
-		err            error
-		expectedResult string
-	}{
-		{serviceerror.NewInvalidArgument(""), ErrorTypeInvalidArgument},
-		{serviceerror.NewCanceled(""), ErrorTypeCanceled},
-		{serviceerror.NewDataLoss(""), ErrorTypeInternal},
-		{serviceerror.NewInternal(""), ErrorTypeInternal},
-		{serviceerror.NewCancellationAlreadyRequested(""), ErrorTypeInvalidArgument},
-		{serviceerror.NewNamespaceAlreadyExists(""), ErrorTypeInvalidArgument},
-		{serviceerror.NewWorkflowExecutionAlreadyStarted("", "", ""), ErrorTypeInvalidArgument},
-		{serviceerror.NewClientVersionNotSupported("", "", ""), ErrorTypeClientVersionNotSupported},
-		{serviceerror.NewServerVersionNotSupported("", ""), ErrorTypeServerVersionNotSupported},
-		{serviceerror.NewDeadlineExceeded(""), ErrorTypeTimedOut},
-		{serviceerror.NewNamespaceNotActive("", "", ""), ErrorTypeNamespaceNotActive},
-		{serviceerror.NewNotFound(""), ErrorTypeNotFound},
-		{serviceerror.NewPermissionDenied("", ""), ErrorTypePermissionDenied},
-		{serviceerror.NewQueryFailed(""), ErrorTypeQueryFailed},
-		{serviceerror.NewResourceExhausted(enums.RESOURCE_EXHAUSTED_CAUSE_UNSPECIFIED, ""), ErrorTypeResourceExhausted},
-		{serviceerror.NewUnavailable(""), ErrorTypeUnavailable},
-		{serviceerror.NewUnimplemented(""), ErrorTypeUnknown},
-	}
-
-	for id, data := range testData {
-		assert.Equal(t, data.expectedResult, getErrorType(data.err), "Unexpected error type in index", id)
 	}
 }
