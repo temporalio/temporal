@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -95,12 +96,10 @@ type (
 		workflowTaskHandler           workflowTaskHandlerCallbacks
 		clusterMetadata               cluster.Metadata
 		executionManager              persistence.ExecutionManager
-		txProcessor                   transferQueueProcessor
-		timerProcessor                timerQueueProcessor
-		visibilityProcessor           visibilityQueueProcessor
+		queueProcessors               map[tasks.Category]queues.Processor
+		replicatorProcessor           *replicatorQueueProcessorImpl
 		nDCReplicator                 nDCHistoryReplicator
 		nDCActivityReplicator         nDCActivityReplicator
-		replicatorProcessor           *replicatorQueueProcessorImpl
 		eventNotifier                 events.Notifier
 		tokenSerializer               common.TaskTokenSerializer
 		historyCache                  workflow.Cache
@@ -184,12 +183,17 @@ func NewEngineWithShardContext(
 		workflowDeleteManager:     workflowDeleteManager,
 	}
 
-	historyEngImpl.txProcessor = newTransferQueueProcessor(shard, historyEngImpl,
+	txProcessor := newTransferQueueProcessor(shard, historyEngImpl,
 		matchingClient, historyClient, logger, clientBean, registry)
-	historyEngImpl.timerProcessor = newTimerQueueProcessor(shard, historyEngImpl,
+	timerProcessor := newTimerQueueProcessor(shard, historyEngImpl,
 		matchingClient, logger, clientBean)
-	historyEngImpl.visibilityProcessor = newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr,
+	visibilityProcessor := newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr,
 		matchingClient, historyClient, logger)
+	historyEngImpl.queueProcessors = map[tasks.Category]queues.Processor{
+		txProcessor.Category():         txProcessor,
+		timerProcessor.Category():      timerProcessor,
+		visibilityProcessor.Category(): visibilityProcessor,
+	}
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -246,10 +250,8 @@ func (e *historyEngineImpl) Start() {
 	e.logger.Info("", tag.LifeCycleStarting)
 	defer e.logger.Info("", tag.LifeCycleStarted)
 
-	e.txProcessor.Start()
-	e.timerProcessor.Start()
-	if e.visibilityProcessor != nil {
-		e.visibilityProcessor.Start()
+	for _, queueProcessor := range e.queueProcessors {
+		queueProcessor.Start()
 	}
 
 	// failover callback will try to create a failover queue processor to scan all inflight tasks
@@ -276,11 +278,10 @@ func (e *historyEngineImpl) Stop() {
 	e.logger.Info("", tag.LifeCycleStopping)
 	defer e.logger.Info("", tag.LifeCycleStopped)
 
-	e.txProcessor.Stop()
-	e.timerProcessor.Stop()
-	if e.visibilityProcessor != nil {
-		e.visibilityProcessor.Stop()
+	for _, queueProcessor := range e.queueProcessors {
+		queueProcessor.Stop()
 	}
+
 	callbackID := getMetadataChangeCallbackID(common.HistoryServiceName, e.shard.GetShardID())
 	e.clusterMetadata.UnRegisterMetadataChangeCallback(callbackID)
 	e.replicationTaskProcessorsLock.Lock()
@@ -330,13 +331,15 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 		e.shard.GetShardID(),
 		0, /* always want callback so UpdateHandoverNamespaces() can be called after shard reload */
 		func() {
-			e.txProcessor.LockTaskProcessing()
-			e.timerProcessor.LockTaskProcessing()
+			for _, queueProcessor := range e.queueProcessors {
+				queueProcessor.LockTaskProcessing()
+			}
 		},
 		func(prevNamespaces []*namespace.Namespace, nextNamespaces []*namespace.Namespace) {
 			defer func() {
-				e.txProcessor.UnlockTaskProcessing()
-				e.timerProcessor.UnlockTaskProcessing()
+				for _, queueProcessor := range e.queueProcessors {
+					queueProcessor.UnlockTaskProcessing()
+				}
 			}()
 
 			if len(nextNamespaces) == 0 {
@@ -365,16 +368,18 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			if len(failoverNamespaceIDs) > 0 {
 				e.logger.Info("Namespace Failover Start.", tag.WorkflowNamespaceIDs(failoverNamespaceIDs))
 
-				e.txProcessor.FailoverNamespace(failoverNamespaceIDs)
-				e.timerProcessor.FailoverNamespace(failoverNamespaceIDs)
+				for _, queueProcessor := range e.queueProcessors {
+					queueProcessor.FailoverNamespace(failoverNamespaceIDs)
+				}
 
-				now := e.shard.GetTimeSource().Now()
 				// the fake tasks will not be actually used, we just need to make sure
 				// its length > 0 and has correct timestamp, to trigger a db scan
-				fakeWorkflowTask := []tasks.Task{&tasks.WorkflowTask{}}
-				fakeWorkflowTaskTimeoutTask := []tasks.Task{&tasks.WorkflowTaskTimeoutTask{VisibilityTimestamp: now}}
-				e.txProcessor.NotifyNewTask(e.currentClusterName, fakeWorkflowTask)
-				e.timerProcessor.NotifyNewTimers(e.currentClusterName, fakeWorkflowTaskTimeoutTask)
+				now := e.shard.GetTimeSource().Now()
+				fakeTasks := make(map[tasks.Category][]tasks.Task)
+				for category := range e.queueProcessors {
+					fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(category, now)}
+				}
+				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
 			}
 
 			// nolint:errcheck
@@ -2380,8 +2385,9 @@ func (e *historyEngineImpl) SyncShardStatus(
 	// 2. notify the timer gate in the timer queue standby processor
 	// 3, notify the transfer (essentially a no op, just put it here so it looks symmetric)
 	e.shard.SetCurrentTime(clusterName, now)
-	e.txProcessor.NotifyNewTask(clusterName, []tasks.Task{})
-	e.timerProcessor.NotifyNewTimers(clusterName, []tasks.Task{})
+	for _, processor := range e.queueProcessors {
+		processor.NotifyNewTasks(clusterName, []tasks.Task{})
+	}
 	return nil
 }
 
@@ -2666,40 +2672,23 @@ func (e *historyEngineImpl) NotifyNewHistoryEvent(
 	e.eventNotifier.NotifyNewHistoryEvent(notification)
 }
 
-func (e *historyEngineImpl) NotifyNewTransferTasks(
+func (e *historyEngineImpl) NotifyNewTasks(
 	clusterName string,
-	tasks []tasks.Task,
+	newTasks map[tasks.Category][]tasks.Task,
 ) {
-	if len(tasks) > 0 {
-		e.txProcessor.NotifyNewTask(clusterName, tasks)
-	}
-}
+	for category, tasksByCategory := range newTasks {
+		// TODO: make replicatorProcessor part of queueProcessors list
+		// and get rid of the special case here.
+		if category == tasks.CategoryReplication {
+			if e.replicatorProcessor != nil {
+				e.replicatorProcessor.NotifyNewTasks(tasksByCategory)
+			}
+			continue
+		}
 
-func (e *historyEngineImpl) NotifyNewTimerTasks(
-	clusterName string,
-	tasks []tasks.Task,
-) {
-
-	if len(tasks) > 0 {
-		e.timerProcessor.NotifyNewTimers(clusterName, tasks)
-	}
-}
-
-func (e *historyEngineImpl) NotifyNewReplicationTasks(
-	tasks []tasks.Task,
-) {
-
-	if len(tasks) > 0 && e.replicatorProcessor != nil {
-		e.replicatorProcessor.NotifyNewTasks(tasks)
-	}
-}
-
-func (e *historyEngineImpl) NotifyNewVisibilityTasks(
-	tasks []tasks.Task,
-) {
-
-	if len(tasks) > 0 && e.visibilityProcessor != nil {
-		e.visibilityProcessor.NotifyNewTask(tasks)
+		if len(tasksByCategory) > 0 {
+			e.queueProcessors[category].NotifyNewTasks(clusterName, tasksByCategory)
+		}
 	}
 }
 

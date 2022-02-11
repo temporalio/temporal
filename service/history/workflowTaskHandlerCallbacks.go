@@ -76,8 +76,6 @@ type (
 		historyEngine          *historyEngineImpl
 		namespaceRegistry      namespace.Registry
 		historyCache           workflow.Cache
-		txProcessor            transferQueueProcessor
-		timerProcessor         timerQueueProcessor
 		tokenSerializer        common.TaskTokenSerializer
 		metricsClient          metrics.Client
 		logger                 log.Logger
@@ -96,8 +94,6 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		historyEngine:      historyEngine,
 		namespaceRegistry:  historyEngine.shard.GetNamespaceRegistry(),
 		historyCache:       historyEngine.historyCache,
-		txProcessor:        historyEngine.txProcessor,
-		timerProcessor:     historyEngine.timerProcessor,
 		tokenSerializer:    historyEngine.tokenSerializer,
 		metricsClient:      historyEngine.metricsClient,
 		logger:             historyEngine.logger,

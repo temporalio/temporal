@@ -39,7 +39,6 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -48,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -58,14 +58,6 @@ var (
 )
 
 type (
-	transferQueueProcessor interface {
-		common.Daemon
-		FailoverNamespace(namespaceIDs map[string]struct{})
-		NotifyNewTask(clusterName string, transferTasks []tasks.Task)
-		LockTaskProcessing()
-		UnlockTaskProcessing()
-	}
-
 	taskFilter func(task tasks.Task) (bool, error)
 
 	transferQueueProcessorImpl struct {
@@ -99,7 +91,7 @@ func newTransferQueueProcessor(
 	logger log.Logger,
 	clientBean client.Bean,
 	registry namespace.Registry,
-) *transferQueueProcessorImpl {
+) queues.Processor {
 
 	logger = log.With(logger, tag.ComponentTransferQueue)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -163,9 +155,9 @@ func (t *transferQueueProcessorImpl) Stop() {
 	close(t.shutdownChan)
 }
 
-// NotifyNewTask - Notify the processor about the new active / standby transfer task arrival.
+// NotifyNewTasks - Notify the processor about the new active / standby transfer task arrival.
 // This should be called each time new transfer task arrives, otherwise tasks maybe delayed.
-func (t *transferQueueProcessorImpl) NotifyNewTask(
+func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	clusterName string,
 	transferTasks []tasks.Task,
 ) {
@@ -246,6 +238,10 @@ func (t *transferQueueProcessorImpl) LockTaskProcessing() {
 
 func (t *transferQueueProcessorImpl) UnlockTaskProcessing() {
 	t.taskAllocator.unlock()
+}
+
+func (t *transferQueueProcessorImpl) Category() tasks.Category {
+	return tasks.CategoryTransfer
 }
 
 func (t *transferQueueProcessorImpl) completeTransferLoop() {

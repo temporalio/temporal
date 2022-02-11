@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -520,14 +519,7 @@ func NotifyWorkflowSnapshotTasks(
 	if workflowSnapshot == nil {
 		return
 	}
-	notifyTasks(
-		engine,
-		workflowSnapshot.Tasks[tasks.CategoryTransfer],
-		workflowSnapshot.Tasks[tasks.CategoryTimer],
-		workflowSnapshot.Tasks[tasks.CategoryReplication],
-		workflowSnapshot.Tasks[tasks.CategoryVisibility],
-		clusterName,
-	)
+	engine.NotifyNewTasks(clusterName, workflowSnapshot.Tasks)
 }
 
 func NotifyWorkflowMutationTasks(
@@ -538,28 +530,7 @@ func NotifyWorkflowMutationTasks(
 	if workflowMutation == nil {
 		return
 	}
-	notifyTasks(
-		engine,
-		workflowMutation.Tasks[tasks.CategoryTransfer],
-		workflowMutation.Tasks[tasks.CategoryTimer],
-		workflowMutation.Tasks[tasks.CategoryReplication],
-		workflowMutation.Tasks[tasks.CategoryVisibility],
-		clusterName,
-	)
-}
-
-func notifyTasks(
-	engine shard.Engine,
-	transferTasks []tasks.Task,
-	timerTasks []tasks.Task,
-	replicationTasks []tasks.Task,
-	visibilityTasks []tasks.Task,
-	clusterName string,
-) {
-	engine.NotifyNewTransferTasks(clusterName, transferTasks)
-	engine.NotifyNewTimerTasks(clusterName, timerTasks)
-	engine.NotifyNewVisibilityTasks(visibilityTasks)
-	engine.NotifyNewReplicationTasks(replicationTasks)
+	engine.NotifyNewTasks(clusterName, workflowMutation.Tasks)
 }
 
 func NotifyNewHistorySnapshotEvent(

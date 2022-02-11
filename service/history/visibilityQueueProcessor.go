@@ -32,23 +32,18 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
-	visibilityQueueProcessor interface {
-		common.Daemon
-		NotifyNewTask(visibilityTasks []tasks.Task)
-	}
-
 	updateVisibilityAckLevel func(ackLevel int64) error
 	visibilityQueueShutdown  func() error
 
@@ -84,7 +79,7 @@ func newVisibilityQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	logger log.Logger,
-) *visibilityQueueProcessorImpl {
+) queues.Processor {
 
 	config := shard.GetConfig()
 	logger = log.With(logger, tag.ComponentVisibilityQueue)
@@ -187,14 +182,33 @@ func (t *visibilityQueueProcessorImpl) Stop() {
 	close(t.shutdownChan)
 }
 
-// NotifyNewTask - Notify the processor about the new visibility task arrival.
+// NotifyNewTasks - Notify the processor about the new visibility task arrival.
 // This should be called each time new visibility task arrives, otherwise tasks maybe delayed.
-func (t *visibilityQueueProcessorImpl) NotifyNewTask(
+func (t *visibilityQueueProcessorImpl) NotifyNewTasks(
+	_ string,
 	visibilityTasks []tasks.Task,
 ) {
 	if len(visibilityTasks) != 0 {
 		t.notifyNewTask()
 	}
+}
+
+func (t *visibilityQueueProcessorImpl) FailoverNamespace(
+	namespaceIDs map[string]struct{},
+) {
+	// no-op
+}
+
+func (t *visibilityQueueProcessorImpl) LockTaskProcessing() {
+	// no-op
+}
+
+func (t *visibilityQueueProcessorImpl) UnlockTaskProcessing() {
+	// no-op
+}
+
+func (t *visibilityQueueProcessorImpl) Category() tasks.Category {
+	return tasks.CategoryVisibility
 }
 
 func (t *visibilityQueueProcessorImpl) completeTaskLoop() {

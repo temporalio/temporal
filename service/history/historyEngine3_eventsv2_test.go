@@ -54,7 +54,9 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -64,13 +66,14 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller          *gomock.Controller
-		mockShard           *shard.ContextTest
-		mockTxProcessor     *MocktransferQueueProcessor
-		mockTimerProcessor  *MocktimerQueueProcessor
-		mockEventsCache     *events.MockCache
-		mockNamespaceCache  *namespace.MockRegistry
-		mockClusterMetadata *cluster.MockMetadata
+		controller              *gomock.Controller
+		mockShard               *shard.ContextTest
+		mockTxProcessor         *queues.MockProcessor
+		mockTimerProcessor      *queues.MockProcessor
+		mockVisibilityProcessor *queues.MockProcessor
+		mockEventsCache         *events.MockCache
+		mockNamespaceCache      *namespace.MockRegistry
+		mockClusterMetadata     *cluster.MockMetadata
 
 		historyEngine    *historyEngineImpl
 		mockExecutionMgr *persistence.MockExecutionManager
@@ -96,10 +99,16 @@ func (s *engine3Suite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
-	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
-	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
-	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+
+	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
+	s.mockVisibilityProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
+	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
+	s.mockVisibilityProcessor.EXPECT().Category().Return(tasks.CategoryVisibility).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -137,8 +146,11 @@ func (s *engine3Suite) SetupTest() {
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewNoopMetricsClient(), func(namespace.ID, string) int32 { return 1 }),
-		txProcessor:        s.mockTxProcessor,
-		timerProcessor:     s.mockTimerProcessor,
+		queueProcessors: map[tasks.Category]queues.Processor{
+			s.mockTxProcessor.Category():         s.mockTxProcessor,
+			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
+			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
+		},
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)

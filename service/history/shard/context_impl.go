@@ -700,10 +700,7 @@ func (s *ContextImpl) addTasksLocked(
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
-	s.engine.NotifyNewTransferTasks(namespaceEntry.ActiveClusterName(), request.Tasks[tasks.CategoryTransfer])
-	s.engine.NotifyNewTimerTasks(namespaceEntry.ActiveClusterName(), request.Tasks[tasks.CategoryTimer])
-	s.engine.NotifyNewVisibilityTasks(request.Tasks[tasks.CategoryVisibility])
-	s.engine.NotifyNewReplicationTasks(request.Tasks[tasks.CategoryReplication])
+	s.engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
 	return nil
 }
 

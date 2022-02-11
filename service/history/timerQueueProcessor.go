@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -56,14 +57,6 @@ var (
 )
 
 type (
-	timerQueueProcessor interface {
-		common.Daemon
-		FailoverNamespace(namespaceIDs map[string]struct{})
-		NotifyNewTimers(clusterName string, timerTask []tasks.Task)
-		LockTaskProcessing()
-		UnlockTaskProcessing()
-	}
-
 	timeNow                 func() time.Time
 	updateTimerAckLevel     func(timerKey) error
 	timerQueueShutdown      func() error
@@ -94,7 +87,7 @@ func newTimerQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
 	clientBean client.Bean,
-) timerQueueProcessor {
+) queues.Processor {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
@@ -157,9 +150,9 @@ func (t *timerQueueProcessorImpl) Stop() {
 	common.AwaitWaitGroup(&t.shutdownWG, time.Minute)
 }
 
-// NotifyNewTimers - Notify the processor about the new active / standby timer arrival.
+// NotifyNewTasks - Notify the processor about the new active / standby timer arrival.
 // This should be called each time new timer arrives, otherwise timers maybe fired unexpected.
-func (t *timerQueueProcessorImpl) NotifyNewTimers(
+func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	clusterName string,
 	timerTasks []tasks.Task,
 ) {
@@ -243,6 +236,10 @@ func (t *timerQueueProcessorImpl) LockTaskProcessing() {
 
 func (t *timerQueueProcessorImpl) UnlockTaskProcessing() {
 	t.taskAllocator.unlock()
+}
+
+func (t *timerQueueProcessorImpl) Category() tasks.Category {
+	return tasks.CategoryTimer
 }
 
 func (t *timerQueueProcessorImpl) completeTimersLoop() {

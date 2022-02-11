@@ -116,10 +116,12 @@ func (s *contextSuite) TestAddTasks_Success() {
 		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
 
-	transferTasks := []tasks.Task{&tasks.ActivityTask{}}              // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
-	timerTasks := []tasks.Task{&tasks.ActivityRetryTimerTask{}}       // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
-	replicationTasks := []tasks.Task{&tasks.HistoryReplicationTask{}} // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
-	visibilityTasks := []tasks.Task{&tasks.DeleteExecutionVisibilityTask{}}
+	tasks := map[tasks.Category][]tasks.Task{
+		tasks.CategoryTransfer:    {&tasks.ActivityTask{}},           // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryTimer:       {&tasks.ActivityRetryTimerTask{}}, // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryReplication: {&tasks.HistoryReplicationTask{}}, // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryVisibility:  {&tasks.DeleteExecutionVisibilityTask{}},
+	}
 
 	addTasksRequest := &persistence.AddTasksRequest{
 		ShardID:     s.shardContext.GetShardID(),
@@ -127,21 +129,13 @@ func (s *contextSuite) TestAddTasks_Success() {
 		WorkflowID:  task.GetWorkflowId(),
 		RunID:       task.GetRunId(),
 
-		Tasks: map[tasks.Category][]tasks.Task{
-			tasks.CategoryTransfer:    transferTasks,
-			tasks.CategoryTimer:       timerTasks,
-			tasks.CategoryReplication: replicationTasks,
-			tasks.CategoryVisibility:  visibilityTasks,
-		},
+		Tasks: tasks,
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	s.mockExecutionManager.EXPECT().AddTasks(addTasksRequest).Return(nil)
-	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(gomock.Any(), transferTasks)
-	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(gomock.Any(), timerTasks)
-	s.mockHistoryEngine.EXPECT().NotifyNewVisibilityTasks(visibilityTasks)
-	s.mockHistoryEngine.EXPECT().NotifyNewReplicationTasks(replicationTasks)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), tasks)
 
 	err := s.shardContext.AddTasks(addTasksRequest)
 	s.NoError(err)

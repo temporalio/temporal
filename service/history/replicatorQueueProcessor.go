@@ -54,6 +54,8 @@ import (
 )
 
 type (
+	// TODO: define a new interface for replication queue processor in queues/queue.go
+
 	replicatorQueueProcessorImpl struct {
 		currentClusterName string
 		shard              shard.Context
