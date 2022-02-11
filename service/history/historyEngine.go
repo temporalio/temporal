@@ -2677,6 +2677,8 @@ func (e *historyEngineImpl) NotifyNewTasks(
 	newTasks map[tasks.Category][]tasks.Task,
 ) {
 	for category, tasksByCategory := range newTasks {
+		// TODO: make replicatorProcessor part of queueProcessors list
+		// and get rid of the special case here.
 		if category == tasks.CategoryReplication {
 			if e.replicatorProcessor != nil {
 				e.replicatorProcessor.NotifyNewTasks(tasksByCategory)
