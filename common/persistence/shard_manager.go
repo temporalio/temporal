@@ -40,10 +40,11 @@ type shardManagerImpl struct {
 // NewShardManager create a new instance of ShardManager
 func NewShardManager(
 	shardStore ShardStore,
+	serializer serialization.Serializer,
 ) ShardManager {
 	return &shardManagerImpl{
 		shardStore: shardStore,
-		serializer: serialization.NewSerializer(),
+		serializer: serializer,
 	}
 }
 

@@ -292,7 +292,12 @@ func scanShard(
 		closeFn()
 	}()
 	workflowStore := cassp.NewExecutionStore(session, log.NewNoopLogger())
-	execMan := persistence.NewExecutionManager(workflowStore, log.NewNoopLogger(), dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit))
+	execMan := persistence.NewExecutionManager(
+		workflowStore,
+		serialization.NewSerializer(),
+		log.NewNoopLogger(),
+		dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
+	)
 
 	var token []byte
 	isFirstIteration := true

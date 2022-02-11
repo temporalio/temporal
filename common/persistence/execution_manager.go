@@ -58,12 +58,13 @@ var _ ExecutionManager = (*executionManagerImpl)(nil)
 // NewExecutionManager returns new ExecutionManager
 func NewExecutionManager(
 	persistence ExecutionStore,
+	serializer serialization.Serializer,
 	logger log.Logger,
 	transactionSizeLimit dynamicconfig.IntPropertyFn,
 ) ExecutionManager {
 
 	return &executionManagerImpl{
-		serializer:            serialization.NewSerializer(),
+		serializer:            serializer,
 		persistence:           persistence,
 		logger:                logger,
 		pagingTokenSerializer: newJSONHistoryTokenSerializer(),
@@ -427,19 +428,19 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 
 	var err error
 
-	transferTasks, err := m.serializer.SerializeTransferTasks(input.Tasks[tasks.CategoryTransfer])
+	transferTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTransfer])
 	if err != nil {
 		return nil, err
 	}
-	timerTasks, err := m.serializer.SerializeTimerTasks(input.Tasks[tasks.CategoryTimer])
+	timerTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTimer])
 	if err != nil {
 		return nil, err
 	}
-	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.Tasks[tasks.CategoryReplication])
+	replicationTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryReplication])
 	if err != nil {
 		return nil, err
 	}
-	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.Tasks[tasks.CategoryVisibility])
+	visibilityTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryVisibility])
 	if err != nil {
 		return nil, err
 	}
@@ -546,19 +547,19 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 
 	var err error
 
-	transferTasks, err := m.serializer.SerializeTransferTasks(input.Tasks[tasks.CategoryTransfer])
+	transferTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTransfer])
 	if err != nil {
 		return nil, err
 	}
-	timerTasks, err := m.serializer.SerializeTimerTasks(input.Tasks[tasks.CategoryTimer])
+	timerTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTimer])
 	if err != nil {
 		return nil, err
 	}
-	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.Tasks[tasks.CategoryReplication])
+	replicationTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryReplication])
 	if err != nil {
 		return nil, err
 	}
-	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.Tasks[tasks.CategoryVisibility])
+	visibilityTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryVisibility])
 	if err != nil {
 		return nil, err
 	}
@@ -701,19 +702,19 @@ func (m *executionManagerImpl) AddTasks(
 	input *AddTasksRequest,
 ) error {
 
-	transferTasks, err := m.serializer.SerializeTransferTasks(input.Tasks[tasks.CategoryTransfer])
+	transferTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTransfer])
 	if err != nil {
 		return err
 	}
-	timerTasks, err := m.serializer.SerializeTimerTasks(input.Tasks[tasks.CategoryTimer])
+	timerTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTimer])
 	if err != nil {
 		return err
 	}
-	replicationTasks, err := m.serializer.SerializeReplicationTasks(input.Tasks[tasks.CategoryReplication])
+	replicationTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryReplication])
 	if err != nil {
 		return err
 	}
-	visibilityTasks, err := m.serializer.SerializeVisibilityTasks(input.Tasks[tasks.CategoryVisibility])
+	visibilityTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryVisibility])
 	if err != nil {
 		return err
 	}
@@ -742,7 +743,7 @@ func (m *executionManagerImpl) GetTransferTask(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTransferTasks([]commonpb.DataBlob{resp.Task})
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryTransfer, []commonpb.DataBlob{resp.Task})
 	if err != nil {
 		return nil, err
 	}
@@ -756,7 +757,7 @@ func (m *executionManagerImpl) GetTransferTasks(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTransferTasks(resp.Tasks)
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryTransfer, resp.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -784,7 +785,7 @@ func (m *executionManagerImpl) GetTimerTask(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTimerTasks([]commonpb.DataBlob{resp.Task})
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryTimer, []commonpb.DataBlob{resp.Task})
 	if err != nil {
 		return nil, err
 	}
@@ -798,7 +799,7 @@ func (m *executionManagerImpl) GetTimerTasks(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTimerTasks(resp.Tasks)
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryTimer, resp.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -826,7 +827,7 @@ func (m *executionManagerImpl) GetReplicationTask(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeReplicationTasks([]commonpb.DataBlob{resp.Task})
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryReplication, []commonpb.DataBlob{resp.Task})
 	if err != nil {
 		return nil, err
 	}
@@ -840,7 +841,7 @@ func (m *executionManagerImpl) GetReplicationTasks(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeReplicationTasks(resp.Tasks)
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryReplication, resp.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -872,7 +873,7 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeReplicationTasks(resp.Tasks)
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryReplication, resp.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -900,7 +901,7 @@ func (m *executionManagerImpl) GetVisibilityTask(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeVisibilityTasks([]commonpb.DataBlob{resp.Task})
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryVisibility, []commonpb.DataBlob{resp.Task})
 	if err != nil {
 		return nil, err
 	}
@@ -914,7 +915,7 @@ func (m *executionManagerImpl) GetVisibilityTasks(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeVisibilityTasks(resp.Tasks)
+	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryVisibility, resp.Tasks)
 	if err != nil {
 		return nil, err
 	}

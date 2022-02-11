@@ -41,10 +41,13 @@ type taskManagerImpl struct {
 }
 
 // NewTaskManager creates a new instance of TaskManager
-func NewTaskManager(store TaskStore) TaskManager {
+func NewTaskManager(
+	store TaskStore,
+	serializer serialization.Serializer,
+) TaskManager {
 	return &taskManagerImpl{
 		taskStore:  store,
-		serializer: serialization.NewSerializer(),
+		serializer: serializer,
 	}
 }
 

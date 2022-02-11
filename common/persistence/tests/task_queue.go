@@ -38,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -62,9 +63,12 @@ func NewTaskQueueSuite(
 	logger log.Logger,
 ) *TaskQueueSuite {
 	return &TaskQueueSuite{
-		Assertions:  require.New(t),
-		taskManager: p.NewTaskManager(taskManager),
-		logger:      logger,
+		Assertions: require.New(t),
+		taskManager: p.NewTaskManager(
+			taskManager,
+			serialization.NewSerializer(),
+		),
+		logger: logger,
 	}
 }
 

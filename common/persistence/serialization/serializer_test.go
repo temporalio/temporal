@@ -35,8 +35,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/payloads"
@@ -92,15 +90,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 
 	history0 := &historypb.History{Events: []*historypb.HistoryEvent{event0, event0}}
 
-	visibilityTaskInfo0 := &persistencespb.VisibilityTaskInfo{
-		NamespaceId:    "test-namespace-id",
-		WorkflowId:     "test-workflow-id",
-		RunId:          "test-run-id",
-		TaskType:       enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION,
-		Version:        0,
-		TaskId:         123,
-		VisibilityTime: timestamp.TimePtr(time.Date(2020, 8, 22, 0, 0, 0, 0, time.UTC)),
-	}
 	for i := 0; i < concurrency; i++ {
 
 		go func() {
@@ -158,20 +147,6 @@ func (s *temporalSerializerSuite) TestSerializer() {
 			history2 := &historypb.History{Events: events}
 			s.Nil(err)
 			s.True(reflect.DeepEqual(history0, history2))
-
-			// VisibilityTaskInfo
-			nilVisibilityTaskInfo, err := serializer.VisibilityTaskInfoToBlob(nil, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(nilVisibilityTaskInfo)
-
-			_, err = serializer.VisibilityTaskInfoToBlob(visibilityTaskInfo0, enumspb.ENCODING_TYPE_UNSPECIFIED)
-			s.NotNil(err)
-			_, ok = err.(*UnknownEncodingTypeError)
-			s.True(ok)
-
-			visibilityTaskInfoProto, err := serializer.VisibilityTaskInfoToBlob(visibilityTaskInfo0, enumspb.ENCODING_TYPE_PROTO3)
-			s.Nil(err)
-			s.NotNil(visibilityTaskInfoProto)
 		}()
 	}
 
