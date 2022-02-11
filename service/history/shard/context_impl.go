@@ -1436,11 +1436,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
 	timerMaxReadLevelMap := make(map[string]time.Time)
-	for clusterName, info := range s.GetClusterMetadata().GetAllClusterInfo() {
-		if !info.Enabled {
-			continue
-		}
-
+	for clusterName := range s.GetClusterMetadata().GetAllClusterInfo() {
 		currentReadTime := timestamp.TimeValue(shardInfo.TimerAckLevelTime)
 		if clusterName != s.GetClusterMetadata().GetCurrentClusterName() {
 			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
