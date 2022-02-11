@@ -458,6 +458,9 @@ func buildCAPoolFromData(caData []string) (*x509.CertPool, []*x509.Certificate, 
 }
 
 func (s *localStoreCertProvider) buildCAPoolFromFiles(caFiles []string) (*x509.CertPool, []*x509.Certificate, error) {
+	if len(caFiles) == 0 {
+		return nil, nil, nil
+	}
 
 	s.logger.Info("loading CA certs from", tag.TLSCertFiles(caFiles))
 	return buildCAPool(caFiles, os.ReadFile)
