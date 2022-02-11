@@ -19,7 +19,7 @@ persistence:
         maxConnLifetime: "1h"
         tls:
           enabled: false
-          сaFile: ""
+          caFile: ""
           certFile: ""
           keyFile: ""
           enableHostVerification: false
@@ -42,7 +42,7 @@ persistence:
         maxConnLifetime: "1h"
         tls:
           enabled: false
-          сaFile: ""
+          caFile: ""
           certFile: ""
           keyFile: ""
           enableHostVerification: false
