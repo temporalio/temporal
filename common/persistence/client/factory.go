@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resolver"
@@ -96,6 +97,7 @@ type (
 	factoryImpl struct {
 		sync.RWMutex
 		config                   *config.Persistence
+		serializer               serialization.Serializer
 		abstractDataStoreFactory AbstractDataStoreFactory
 		faultInjection           *FaultInjectionDataStoreFactory
 		metricsClient            metrics.Client
@@ -158,6 +160,7 @@ func NewFactoryImpl(
 ) *factoryImpl {
 	factory := &factoryImpl{
 		config:                   cfg,
+		serializer:               serialization.NewSerializer(),
 		abstractDataStoreFactory: abstractDataStoreFactory,
 		metricsClient:            metricsClient,
 		logger:                   logger,
@@ -175,7 +178,7 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewTaskManager(taskStore)
+	result := p.NewTaskManager(taskStore, f.serializer)
 	if ds.ratelimit != nil {
 		result = p.NewTaskPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -189,7 +192,7 @@ func (f *factoryImpl) NewTaskManager() (p.TaskManager, error) {
 func (f *factoryImpl) NewShardManager() (p.ShardManager, error) {
 	ds := f.datastores[storeTypeShard]
 	shardStore, err := ds.factory.NewShardStore()
-	result := p.NewShardManager(shardStore)
+	result := p.NewShardManager(shardStore, f.serializer)
 	if err != nil {
 		return nil, err
 	}
@@ -212,7 +215,7 @@ func (f *factoryImpl) NewMetadataManager() (p.MetadataManager, error) {
 		return nil, err
 	}
 
-	result := p.NewMetadataManagerImpl(store, f.logger, f.clusterName)
+	result := p.NewMetadataManagerImpl(store, f.serializer, f.logger, f.clusterName)
 	if ds.ratelimit != nil {
 		result = p.NewMetadataPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -232,7 +235,7 @@ func (f *factoryImpl) NewClusterMetadataManager() (p.ClusterMetadataManager, err
 		return nil, err
 	}
 
-	result := p.NewClusterMetadataManagerImpl(store, f.clusterName, f.logger)
+	result := p.NewClusterMetadataManagerImpl(store, f.serializer, f.clusterName, f.logger)
 	if ds.ratelimit != nil {
 		result = p.NewClusterMetadataPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -250,7 +253,7 @@ func (f *factoryImpl) NewExecutionManager() (p.ExecutionManager, error) {
 	if err != nil {
 		return nil, err
 	}
-	result := p.NewExecutionManager(store, f.logger, f.config.TransactionSizeLimit)
+	result := p.NewExecutionManager(store, f.serializer, f.logger, f.config.TransactionSizeLimit)
 	if ds.ratelimit != nil {
 		result = p.NewExecutionPersistenceRateLimitedClient(result, ds.ratelimit, f.logger)
 	}
@@ -273,7 +276,7 @@ func (f *factoryImpl) NewNamespaceReplicationQueue() (p.NamespaceReplicationQueu
 		result = p.NewQueuePersistenceMetricsClient(result, f.metricsClient, f.logger)
 	}
 
-	return p.NewNamespaceReplicationQueue(result, f.clusterName, f.metricsClient, f.logger)
+	return p.NewNamespaceReplicationQueue(result, f.serializer, f.clusterName, f.metricsClient, f.logger)
 }
 
 // Close closes this factory

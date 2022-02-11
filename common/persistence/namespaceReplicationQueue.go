@@ -55,11 +55,11 @@ var _ NamespaceReplicationQueue = (*namespaceReplicationQueueImpl)(nil)
 // NewNamespaceReplicationQueue creates a new NamespaceReplicationQueue instance
 func NewNamespaceReplicationQueue(
 	queue Queue,
+	serializer serialization.Serializer,
 	clusterName string,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (NamespaceReplicationQueue, error) {
-	serializer := serialization.NewSerializer()
 
 	blob, err := serializer.QueueMetadataToBlob(
 		&persistence.QueueMetadata{

@@ -102,26 +102,8 @@ type (
 		ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error)
 
-		SerializeTransferTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
-		DeserializeTransferTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
-
-		SerializeTimerTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
-		DeserializeTimerTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
-		SerializeVisibilityTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
-		DeserializeVisibilityTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
-		SerializeReplicationTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
-		DeserializeReplicationTasks(blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
-
-		// TODO deprecate method below in favor of methods above (tasks)
-
-		TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		TransferTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TransferTaskInfo, error)
-		TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		TimerTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerTaskInfo, error)
-		ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		ReplicationTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ReplicationTaskInfo, error)
-		VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
-		VisibilityTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.VisibilityTaskInfo, error)
+		SerializeTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
+		DeserializeTasks(category tasks.Category, blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
 	}
 
 	// SerializationError is an error type for serialization
@@ -439,42 +421,6 @@ func (t *serializerImpl) TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo,
 
 func (t *serializerImpl) TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error) {
 	result := &persistencespb.TaskQueueInfo{}
-	return result, proto3DecodeBlob(data, result)
-}
-
-func (t *serializerImpl) TransferTaskInfoToBlob(info *persistencespb.TransferTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
-}
-
-func (t *serializerImpl) TransferTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TransferTaskInfo, error) {
-	result := &persistencespb.TransferTaskInfo{}
-	return result, proto3DecodeBlob(data, result)
-}
-
-func (t *serializerImpl) TimerTaskInfoToBlob(info *persistencespb.TimerTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
-}
-
-func (t *serializerImpl) TimerTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerTaskInfo, error) {
-	result := &persistencespb.TimerTaskInfo{}
-	return result, proto3DecodeBlob(data, result)
-}
-
-func (t *serializerImpl) ReplicationTaskInfoToBlob(info *persistencespb.ReplicationTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
-}
-
-func (t *serializerImpl) ReplicationTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ReplicationTaskInfo, error) {
-	result := &persistencespb.ReplicationTaskInfo{}
-	return result, proto3DecodeBlob(data, result)
-}
-
-func (t *serializerImpl) VisibilityTaskInfoToBlob(info *persistencespb.VisibilityTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
-}
-
-func (t *serializerImpl) VisibilityTaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.VisibilityTaskInfo, error) {
-	result := &persistencespb.VisibilityTaskInfo{}
 	return result, proto3DecodeBlob(data, result)
 }
 

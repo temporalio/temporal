@@ -50,9 +50,14 @@ type (
 var _ MetadataManager = (*metadataManagerImpl)(nil)
 
 //NewMetadataManagerImpl returns new MetadataManager
-func NewMetadataManagerImpl(persistence MetadataStore, logger log.Logger, clusterName string) MetadataManager {
+func NewMetadataManagerImpl(
+	persistence MetadataStore,
+	serializer serialization.Serializer,
+	logger log.Logger,
+	clusterName string,
+) MetadataManager {
 	return &metadataManagerImpl{
-		serializer:  serialization.NewSerializer(),
+		serializer:  serializer,
 		persistence: persistence,
 		logger:      logger,
 		clusterName: clusterName,

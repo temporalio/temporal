@@ -61,11 +61,12 @@ var _ ClusterMetadataManager = (*clusterMetadataManagerImpl)(nil)
 //NewClusterMetadataManagerImpl returns new ClusterMetadataManager
 func NewClusterMetadataManagerImpl(
 	persistence ClusterMetadataStore,
+	serializer serialization.Serializer,
 	currentClusterName string,
 	logger log.Logger,
 ) ClusterMetadataManager {
 	return &clusterMetadataManagerImpl{
-		serializer:         serialization.NewSerializer(),
+		serializer:         serializer,
 		persistence:        persistence,
 		currentClusterName: currentClusterName,
 		logger:             logger,

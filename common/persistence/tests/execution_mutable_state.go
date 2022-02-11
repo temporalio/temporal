@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 )
 
 type (
@@ -69,10 +70,14 @@ func NewExecutionMutableStateSuite(
 	logger log.Logger,
 ) *ExecutionMutableStateSuite {
 	return &ExecutionMutableStateSuite{
-		Assertions:   require.New(t),
-		ShardManager: p.NewShardManager(shardStore),
+		Assertions: require.New(t),
+		ShardManager: p.NewShardManager(
+			shardStore,
+			serialization.NewSerializer(),
+		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
+			serialization.NewSerializer(),
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
