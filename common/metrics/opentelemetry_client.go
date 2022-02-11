@@ -40,7 +40,7 @@ type (
 		serviceIdx   ServiceIdx
 		scopeWrapper func(impl internalScope) internalScope
 		gaugeCache   OtelGaugeCache
-		userScope    *opentelemetryUserScope
+		userScope    UserScope
 	}
 )
 
@@ -53,9 +53,7 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
-	userScope := newOpentelemetryUserScope(reporter, clientConfig.Tags, gaugeCache)
-
-	globalRootScope := newOpentelemetryScope(serviceIdx, reporter, nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
+	globalRootScope := newOpentelemetryScope(serviceIdx, reporter.GetMeterMust(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &opentelemetryClient{
@@ -65,7 +63,7 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 		serviceIdx:   serviceIdx,
 		scopeWrapper: scopeWrapper,
 		gaugeCache:   gaugeCache,
-		userScope:    userScope,
+		userScope:    reporter.UserScope(),
 	}
 
 	for idx, def := range ScopeDefs[Common] {

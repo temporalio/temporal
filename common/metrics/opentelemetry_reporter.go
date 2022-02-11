@@ -48,6 +48,7 @@ type (
 		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
 		Stop(logger log.Logger)
 		GetMeterMust() metric.MeterMust
+		UserScope() UserScope
 	}
 
 	// opentelemetryReporterImpl is a base class for reporting metrics to opentelemetry.
@@ -59,6 +60,7 @@ type (
 		server       *http.Server
 		clientConfig *ClientConfig
 		gaugeCache   OtelGaugeCache
+		userScope    UserScope
 	}
 
 	OpentelemetryListener struct {
@@ -97,14 +99,20 @@ func NewOpentelemeteryReporter(
 	metricServer := initPrometheusListener(prometheusConfig, logger, exporter)
 
 	meter := c.Meter("temporal")
+	meterMust := metric.Must(meter)
+	gaugeCache := NewOtelGaugeCache(meterMust)
+	userScope := newOpentelemetryUserScope(meterMust, clientConfig.Tags, gaugeCache)
 	reporter := &opentelemetryReporterImpl{
 		exporter:     exporter,
 		meter:        meter,
-		meterMust:    metric.Must(meter),
+		meterMust:    meterMust,
 		config:       prometheusConfig,
 		server:       metricServer,
 		clientConfig: clientConfig,
+		gaugeCache:   gaugeCache,
+		userScope:    userScope,
 	}
+
 	return reporter, nil
 }
 
@@ -137,9 +145,6 @@ func (r *opentelemetryReporterImpl) GetMeterMust() metric.MeterMust {
 }
 
 func (r *opentelemetryReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	if r.gaugeCache == nil {
-		r.gaugeCache = NewOtelGaugeCache(r)
-	}
 
 	return newOpentelemeteryClient(r.clientConfig, serviceIdx, r, logger, r.gaugeCache)
 }
@@ -150,4 +155,8 @@ func (r *opentelemetryReporterImpl) Stop(logger log.Logger) {
 	if err := r.server.Shutdown(ctx); !(err == nil || err == http.ErrServerClosed) {
 		logger.Error("Prometheus metrics server shutdown failure.", tag.Address(r.config.ListenAddress), tag.Error(err))
 	}
+}
+
+func (r *opentelemetryReporterImpl) UserScope() UserScope {
+	return r.UserScope()
 }

@@ -41,9 +41,9 @@ type (
 	}
 
 	otelGaugeCache struct {
-		lock     sync.RWMutex
-		gauges   map[string]*gaugeValues
-		reporter OpentelemetryReporter
+		lock      sync.RWMutex
+		gauges    map[string]*gaugeValues
+		meterMust metric.MeterMust
 	}
 
 	gaugeValues struct {
@@ -94,11 +94,11 @@ func (o *gaugeValues) Update(tags map[string]string, value float64) {
 	gaugeValue.value.Store(value)
 }
 
-func NewOtelGaugeCache(reporter OpentelemetryReporter) OtelGaugeCache {
+func NewOtelGaugeCache(meterMust metric.MeterMust) OtelGaugeCache {
 	return &otelGaugeCache{
-		lock:     sync.RWMutex{},
-		gauges:   make(map[string]*gaugeValues),
-		reporter: reporter,
+		lock:      sync.RWMutex{},
+		gauges:    make(map[string]*gaugeValues),
+		meterMust: meterMust,
 	}
 }
 
@@ -120,7 +120,7 @@ func (o *otelGaugeCache) getGaugeValues(name string) *gaugeValues {
 	}
 
 	o.gauges[name] = values
-	o.reporter.GetMeterMust().NewFloat64GaugeObserver(name,
+	o.meterMust.NewFloat64GaugeObserver(name,
 		func(ctx context.Context, result metric.Float64ObserverResult) {
 			values.lock.RLock()
 			defer values.lock.RUnlock()

@@ -39,6 +39,7 @@ type TallyClient struct {
 	serviceIdx      ServiceIdx
 	scopeWrapper    func(impl internalScope) internalScope
 	perUnitBuckets  map[MetricUnit]tally.Buckets
+	userScope       UserScope
 }
 
 // NewClient creates and returns a new instance of
@@ -65,6 +66,7 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 		serviceIdx:      serviceIdx,
 		scopeWrapper:    scopeWrapper,
 		perUnitBuckets:  perUnitBuckets,
+		userScope:       newTallyUserScope(scope),
 	}
 
 	for idx, def := range ScopeDefs[Common] {
@@ -156,5 +158,5 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 // UserScope returns a new metrics scope that can be used to add additional
 // information to the metrics emitted by user code
 func (m *TallyClient) UserScope() UserScope {
-	return newTallyUserScope(m.globalRootScope)
+	return m.userScope
 }
