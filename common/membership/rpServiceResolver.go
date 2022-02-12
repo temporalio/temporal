@@ -216,7 +216,7 @@ func (r *ringpopServiceResolver) HandleEvent(
 	// We only care about RingChangedEvent
 	e, ok := event.(events.RingChangedEvent)
 	if ok {
-		r.logger.Info("Received a ring changed event")
+		r.logger.Debug("Received a ring changed event")
 		// Note that we receive events asynchronously, possibly out of order.
 		// We cannot rely on the content of the event, rather we load everything
 		// from ringpop when we get a notification that something changed.
