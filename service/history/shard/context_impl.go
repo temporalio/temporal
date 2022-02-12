@@ -512,9 +512,9 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
-	newClusterMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
-	if newClusterMaxReadLevel.After(s.timerMaxReadLevelMap[cluster]) {
-		s.timerMaxReadLevelMap[cluster] = newClusterMaxReadLevel
+	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
+	if newMaxReadLevel.After(s.timerMaxReadLevelMap[cluster]) {
+		s.timerMaxReadLevelMap[cluster] = newMaxReadLevel
 	}
 	return s.timerMaxReadLevelMap[cluster]
 }
