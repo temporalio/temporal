@@ -241,7 +241,8 @@ Loop:
 			break Loop
 		}
 
-		timeoutFailure := failure.NewTimeoutFailure("activity timeout", timerSequenceID.TimerType)
+		failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
+		timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
 		var retryState enumspb.RetryState
 		if retryState, err = mutableState.RetryActivity(
 			activityInfo,

@@ -118,8 +118,14 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	}
 
 	if failure.GetTimeoutFailureInfo() != nil {
-		return failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-			failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_HEARTBEAT
+		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
+		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+			// TODO change type format
+			return !matchNonRetryableTypes(timeoutType.String(), nonRetryableTypes)
+		}
+
+		return false
 	}
 
 	if failure.GetServerFailureInfo() != nil {
@@ -131,14 +137,21 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			return false
 		}
 
-		failureType := failure.GetApplicationFailureInfo().GetType()
-		for _, nrt := range nonRetryableTypes {
-			if nrt == failureType {
-				return false
-			}
-		}
+		return !matchNonRetryableTypes(
+			failure.GetApplicationFailureInfo().GetType(),
+			nonRetryableTypes,
+		)
 	}
 	return true
+}
+
+func matchNonRetryableTypes(failureType string, nonRetryableTypes []string) bool {
+	for _, nrt := range nonRetryableTypes {
+		if nrt == failureType {
+			return true
+		}
+	}
+	return false
 }
 
 // Helpers for creating new retry/cron workflows:

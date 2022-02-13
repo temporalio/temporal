@@ -68,10 +68,24 @@ func Test_IsRetryable(t *testing.T) {
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE,
+		}},
+	}
+	a.False(isRetryable(f, []string{enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()})) // TODO
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
 			TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
 		}},
 	}
 	a.False(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START,
+		}},
+	}
+	a.False(isRetryable(f, []string{enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()})) // TODO
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -86,6 +100,20 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.True(isRetryable(f, nil))
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		}},
+	}
+	a.False(isRetryable(f, []string{enumspb.TIMEOUT_TYPE_HEARTBEAT.String()})) // TODO
+
+	f = &failurepb.Failure{
+		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
+			TimeoutType: enumspb.TIMEOUT_TYPE_HEARTBEAT,
+		}},
+	}
+	a.True(isRetryable(f, []string{enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()})) // TODO
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{
