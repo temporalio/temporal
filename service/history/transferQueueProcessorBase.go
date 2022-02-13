@@ -79,11 +79,9 @@ func (t *transferQueueProcessorBase) readTasks(
 		MaxReadLevel: t.maxReadAckLevel(),
 		BatchSize:    t.options.BatchSize(),
 	})
-
 	if err != nil {
 		return nil, false, err
 	}
-
 	return response.Tasks, len(response.NextPageToken) != 0, nil
 }
 

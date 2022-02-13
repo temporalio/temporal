@@ -32,7 +32,6 @@ import (
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 
@@ -415,19 +414,9 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 		BatchSize:     batchSize,
 		NextPageToken: pageToken,
 	}
-
-	var response *persistence.GetTimerTasksResponse
-	var err error
-	op := func() error {
-		response, err = t.executionMgr.GetTimerTasks(request)
-		return err
-	}
-
-	err = backoff.Retry(op, timerRetryPolicy, func(err error) bool {
-		return true
-	})
+	response, err := t.executionMgr.GetTimerTasks(request)
 	if err != nil {
-		return nil, nil, consts.ErrMaxAttemptsExceeded
+		return nil, nil, err
 	}
 	return response.Tasks, response.NextPageToken, nil
 }
