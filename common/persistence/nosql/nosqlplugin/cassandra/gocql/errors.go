@@ -63,28 +63,6 @@ func ConvertError(
 	}
 }
 
-func IsTimeoutError(err error) bool {
-	if err == context.DeadlineExceeded {
-		return true
-	}
-	if err == gocql.ErrTimeoutNoResponse {
-		return true
-	}
-	if err == gocql.ErrConnectionClosed {
-		return true
-	}
-	_, ok := err.(*gocql.RequestErrWriteTimeout)
-	return ok
-}
-
 func IsNotFoundError(err error) bool {
 	return err == gocql.ErrNotFound
-}
-
-func IsThrottlingError(err error) bool {
-	if req, ok := err.(gocql.RequestError); ok {
-		// gocql does not expose the constant errOverloaded = 0x1001
-		return req.Code() == 0x1001
-	}
-	return false
 }
