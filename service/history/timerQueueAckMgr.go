@@ -43,8 +43,6 @@ import (
 
 var (
 	maximumTime = time.Unix(0, math.MaxInt64).UTC()
-
-	timerRetryPolicy = createTimerRetryPolicy()
 )
 
 const (
