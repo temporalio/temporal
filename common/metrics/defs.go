@@ -2106,6 +2106,8 @@ const (
 	LoadedTaskQueueGauge
 	TaskQueueStartedCounter
 	TaskQueueStoppedCounter
+	TaskWriteThrottlePerTaskQueueCounter
+	TaskWriteLatencyPerTaskQueue
 
 	NumMatchingMetrics
 )
@@ -2561,6 +2563,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		LoadedTaskQueueGauge:                      NewGaugeDef("loaded_task_queue_count"),
 		TaskQueueStartedCounter:                   NewCounterDef("task_queue_started"),
 		TaskQueueStoppedCounter:                   NewCounterDef("task_queue_stopped"),
+		TaskWriteThrottlePerTaskQueueCounter:      NewRollupCounterDef("task_write_throttle_count_per_tl", "task_write_throttle_count"),
+		TaskWriteLatencyPerTaskQueue:              NewRollupTimerDef("task_write_latency_per_tl", "task_write_latency"),
 	},
 	Worker: {
 		ReplicatorMessages:                            NewCounterDef("replicator_messages"),
