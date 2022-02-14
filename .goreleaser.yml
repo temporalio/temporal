@@ -15,7 +15,7 @@ archives:
       - goos: windows
         format: zip
     files:
-      - config/*
+      - ./config/*
 
   - id: no-cgo
     builds:
@@ -28,7 +28,7 @@ archives:
       - goos: windows
         format: zip
     files:
-      - config/*
+      - ./config/*
 
 builds:
   - id: temporal-server
@@ -118,3 +118,6 @@ checksum:
 
 changelog:
   skip: true
+
+announce:
+  skip: "true"
