@@ -512,7 +512,10 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
 	}
 
-	s.timerMaxReadLevelMap[cluster] = currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
+	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
+	if newMaxReadLevel.After(s.timerMaxReadLevelMap[cluster]) {
+		s.timerMaxReadLevelMap[cluster] = newMaxReadLevel
+	}
 	return s.timerMaxReadLevelMap[cluster]
 }
 
@@ -1433,24 +1436,21 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	// initialize the cluster current time to be the same as ack level
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
 	timerMaxReadLevelMap := make(map[string]time.Time)
+	currentClusterName := s.GetClusterMetadata().GetCurrentClusterName()
 	for clusterName, info := range s.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
 
 		currentReadTime := timestamp.TimeValue(shardInfo.TimerAckLevelTime)
-		if clusterName != s.GetClusterMetadata().GetCurrentClusterName() {
-			if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
-				currentReadTime = timestamp.TimeValue(currentTime)
-			}
-
-			remoteClusterInfos[clusterName] = &remoteClusterInfo{CurrentTime: currentReadTime}
-			timerMaxReadLevelMap[clusterName] = currentReadTime
-		} else { // active cluster
-			timerMaxReadLevelMap[clusterName] = currentReadTime
+		if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
+			currentReadTime = timestamp.TimeValue(currentTime)
 		}
+		timerMaxReadLevelMap[clusterName] = currentReadTime.Truncate(time.Millisecond)
 
-		timerMaxReadLevelMap[clusterName] = timerMaxReadLevelMap[clusterName].Truncate(time.Millisecond)
+		if clusterName != currentClusterName {
+			remoteClusterInfos[clusterName] = &remoteClusterInfo{CurrentTime: currentReadTime}
+		}
 	}
 
 	s.wLock()
