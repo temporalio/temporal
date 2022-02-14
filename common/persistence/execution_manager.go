@@ -426,21 +426,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 	input *WorkflowMutation,
 ) (*InternalWorkflowMutation, error) {
 
-	var err error
-
-	transferTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTransfer])
-	if err != nil {
-		return nil, err
-	}
-	timerTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTimer])
-	if err != nil {
-		return nil, err
-	}
-	replicationTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryReplication])
-	if err != nil {
-		return nil, err
-	}
-	visibilityTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryVisibility])
+	tasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -468,10 +454,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
 		ClearBufferedEvents:      input.ClearBufferedEvents,
 
-		TransferTasks:    transferTasks,
-		TimerTasks:       timerTasks,
-		ReplicationTasks: replicationTasks,
-		VisibilityTasks:  visibilityTasks,
+		Tasks: tasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -545,21 +528,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 	input *WorkflowSnapshot,
 ) (*InternalWorkflowSnapshot, error) {
 
-	var err error
-
-	transferTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTransfer])
-	if err != nil {
-		return nil, err
-	}
-	timerTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTimer])
-	if err != nil {
-		return nil, err
-	}
-	replicationTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryReplication])
-	if err != nil {
-		return nil, err
-	}
-	visibilityTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryVisibility])
+	tasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return nil, err
 	}
@@ -579,10 +548,7 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot(
 		ExecutionState:     input.ExecutionState,
 		SignalRequestedIDs: make(map[string]struct{}),
 
-		TransferTasks:    transferTasks,
-		TimerTasks:       timerTasks,
-		ReplicationTasks: replicationTasks,
-		VisibilityTasks:  visibilityTasks,
+		Tasks: tasks,
 
 		Condition:       input.Condition,
 		DBRecordVersion: input.DBRecordVersion,
@@ -698,28 +664,15 @@ func (m *executionManagerImpl) ListConcreteExecutions(
 	return newResponse, nil
 }
 
-func (m *executionManagerImpl) AddTasks(
-	input *AddTasksRequest,
+func (m *executionManagerImpl) AddHistoryTasks(
+	input *AddHistoryTasksRequest,
 ) error {
-
-	transferTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTransfer])
-	if err != nil {
-		return err
-	}
-	timerTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryTimer])
-	if err != nil {
-		return err
-	}
-	replicationTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryReplication])
-	if err != nil {
-		return err
-	}
-	visibilityTasks, err := m.serializer.SerializeTasks(input.Tasks[tasks.CategoryVisibility])
+	tasks, err := serializeTasks(m.serializer, input.Tasks)
 	if err != nil {
 		return err
 	}
 
-	return m.persistence.AddTasks(&InternalAddTasksRequest{
+	return m.persistence.AddHistoryTasks(&InternalAddHistoryTasksRequest{
 		ShardID: input.ShardID,
 		RangeID: input.RangeID,
 
@@ -727,137 +680,53 @@ func (m *executionManagerImpl) AddTasks(
 		WorkflowID:  input.WorkflowID,
 		RunID:       input.RunID,
 
-		TransferTasks:    transferTasks,
-		TimerTasks:       timerTasks,
-		ReplicationTasks: replicationTasks,
-		VisibilityTasks:  visibilityTasks,
+		Tasks: tasks,
 	})
 }
 
-// Transfer task related methods
-
-func (m *executionManagerImpl) GetTransferTask(
-	request *GetTransferTaskRequest,
-) (*GetTransferTaskResponse, error) {
-	resp, err := m.persistence.GetTransferTask(request)
+func (m *executionManagerImpl) GetHistoryTask(
+	request *GetHistoryTaskRequest,
+) (*GetHistoryTaskResponse, error) {
+	resp, err := m.persistence.GetHistoryTask(request)
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryTransfer, []commonpb.DataBlob{resp.Task})
+	tasks, err := m.serializer.DeserializeTasks(request.TaskCategory, []commonpb.DataBlob{resp.Task})
 	if err != nil {
 		return nil, err
 	}
-	return &GetTransferTaskResponse{Task: tasks[0]}, nil
+	return &GetHistoryTaskResponse{
+		Task: tasks[0],
+	}, nil
 }
 
-func (m *executionManagerImpl) GetTransferTasks(
-	request *GetTransferTasksRequest,
-) (*GetTransferTasksResponse, error) {
-	resp, err := m.persistence.GetTransferTasks(request)
+func (m *executionManagerImpl) GetHistoryTasks(
+	request *GetHistoryTasksRequest,
+) (*GetHistoryTasksResponse, error) {
+	resp, err := m.persistence.GetHistoryTasks(request)
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryTransfer, resp.Tasks)
+	tasks, err := m.serializer.DeserializeTasks(request.TaskCategory, resp.Tasks)
 	if err != nil {
 		return nil, err
 	}
-	return &GetTransferTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
+	return &GetHistoryTasksResponse{
+		Tasks:         tasks,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
-func (m *executionManagerImpl) CompleteTransferTask(
-	request *CompleteTransferTaskRequest,
+func (m *executionManagerImpl) CompleteHistoryTask(
+	request *CompleteHistoryTaskRequest,
 ) error {
-	return m.persistence.CompleteTransferTask(request)
+	return m.persistence.CompleteHistoryTask(request)
 }
 
-func (m *executionManagerImpl) RangeCompleteTransferTask(
-	request *RangeCompleteTransferTaskRequest,
+func (m *executionManagerImpl) RangeCompleteHistoryTasks(
+	request *RangeCompleteHistoryTasksRequest,
 ) error {
-	return m.persistence.RangeCompleteTransferTask(request)
-}
-
-// Timer related methods.
-
-func (m *executionManagerImpl) GetTimerTask(
-	request *GetTimerTaskRequest,
-) (*GetTimerTaskResponse, error) {
-	resp, err := m.persistence.GetTimerTask(request)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryTimer, []commonpb.DataBlob{resp.Task})
-	if err != nil {
-		return nil, err
-	}
-	return &GetTimerTaskResponse{Task: tasks[0]}, nil
-}
-
-func (m *executionManagerImpl) GetTimerTasks(
-	request *GetTimerTasksRequest,
-) (*GetTimerTasksResponse, error) {
-	resp, err := m.persistence.GetTimerTasks(request)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryTimer, resp.Tasks)
-	if err != nil {
-		return nil, err
-	}
-	return &GetTimerTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
-}
-
-func (m *executionManagerImpl) CompleteTimerTask(
-	request *CompleteTimerTaskRequest,
-) error {
-	return m.persistence.CompleteTimerTask(request)
-}
-
-func (m *executionManagerImpl) RangeCompleteTimerTask(
-	request *RangeCompleteTimerTaskRequest,
-) error {
-	return m.persistence.RangeCompleteTimerTask(request)
-}
-
-// Replication task related methods
-
-func (m *executionManagerImpl) GetReplicationTask(
-	request *GetReplicationTaskRequest,
-) (*GetReplicationTaskResponse, error) {
-	resp, err := m.persistence.GetReplicationTask(request)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryReplication, []commonpb.DataBlob{resp.Task})
-	if err != nil {
-		return nil, err
-	}
-	return &GetReplicationTaskResponse{Task: tasks[0]}, nil
-}
-
-func (m *executionManagerImpl) GetReplicationTasks(
-	request *GetReplicationTasksRequest,
-) (*GetReplicationTasksResponse, error) {
-	resp, err := m.persistence.GetReplicationTasks(request)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryReplication, resp.Tasks)
-	if err != nil {
-		return nil, err
-	}
-	return &GetReplicationTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
-}
-
-func (m *executionManagerImpl) CompleteReplicationTask(
-	request *CompleteReplicationTaskRequest,
-) error {
-	return m.persistence.CompleteReplicationTask(request)
-}
-
-func (m *executionManagerImpl) RangeCompleteReplicationTask(
-	request *RangeCompleteReplicationTaskRequest,
-) error {
-	return m.persistence.RangeCompleteReplicationTask(request)
+	return m.persistence.RangeCompleteHistoryTasks(request)
 }
 
 func (m *executionManagerImpl) PutReplicationTaskToDLQ(
@@ -890,48 +759,6 @@ func (m *executionManagerImpl) RangeDeleteReplicationTaskFromDLQ(
 	request *RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 	return m.persistence.RangeDeleteReplicationTaskFromDLQ(request)
-}
-
-// Visibility task related methods
-
-func (m *executionManagerImpl) GetVisibilityTask(
-	request *GetVisibilityTaskRequest,
-) (*GetVisibilityTaskResponse, error) {
-	resp, err := m.persistence.GetVisibilityTask(request)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryVisibility, []commonpb.DataBlob{resp.Task})
-	if err != nil {
-		return nil, err
-	}
-	return &GetVisibilityTaskResponse{Task: tasks[0]}, nil
-}
-
-func (m *executionManagerImpl) GetVisibilityTasks(
-	request *GetVisibilityTasksRequest,
-) (*GetVisibilityTasksResponse, error) {
-	resp, err := m.persistence.GetVisibilityTasks(request)
-	if err != nil {
-		return nil, err
-	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryVisibility, resp.Tasks)
-	if err != nil {
-		return nil, err
-	}
-	return &GetVisibilityTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
-}
-
-func (m *executionManagerImpl) CompleteVisibilityTask(
-	request *CompleteVisibilityTaskRequest,
-) error {
-	return m.persistence.CompleteVisibilityTask(request)
-}
-
-func (m *executionManagerImpl) RangeCompleteVisibilityTask(
-	request *RangeCompleteVisibilityTaskRequest,
-) error {
-	return m.persistence.RangeCompleteVisibilityTask(request)
 }
 
 func (m *executionManagerImpl) Close() {
@@ -1087,4 +914,27 @@ func getCurrentBranchLastWriteVersion(
 		return 0, err
 	}
 	return versionHistoryItem.GetVersion(), nil
+}
+
+func serializeTasks(
+	serializer serialization.Serializer,
+	inputTasks map[tasks.Category][]tasks.Task,
+) (map[tasks.Category][]InternalHistoryTask, error) {
+	outputTasks := make(map[tasks.Category][]InternalHistoryTask)
+	for category, tasksByQueueType := range inputTasks {
+		// TODO: update serializer interface
+		serializedTasks, err := serializer.SerializeTasks(tasksByQueueType)
+		if err != nil {
+			return nil, err
+		}
+
+		outputTasks[category] = make([]InternalHistoryTask, 0, len(serializedTasks))
+		for key, blob := range serializedTasks {
+			outputTasks[category] = append(outputTasks[category], InternalHistoryTask{
+				Key:  key,
+				Blob: blob,
+			})
+		}
+	}
+	return outputTasks, nil
 }

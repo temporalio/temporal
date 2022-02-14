@@ -510,10 +510,15 @@ func (adh *AdminHandler) ListTimerTasks(ctx context.Context, request *adminservi
 
 	executionMgr := adh.persistenceExecutionManager
 
-	resp, err := executionMgr.GetTimerTasks(&persistence.GetTimerTasksRequest{
-		ShardID:       request.GetShardId(),
-		MinTimestamp:  *request.GetMinTime(),
-		MaxTimestamp:  *request.GetMaxTime(),
+	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: tasks.CategoryTimer,
+		MinTaskKey: tasks.Key{
+			FireTime: *request.GetMinTime(),
+		},
+		MaxTaskKey: tasks.Key{
+			FireTime: *request.GetMaxTime(),
+		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
@@ -556,10 +561,15 @@ func (adh *AdminHandler) ListReplicationTasks(ctx context.Context, request *admi
 
 	executionMgr := adh.persistenceExecutionManager
 
-	resp, err := executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
-		ShardID:       request.GetShardId(),
-		MinTaskID:     request.GetMinTaskId(),
-		MaxTaskID:     request.GetMaxTaskId(),
+	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: tasks.CategoryReplication,
+		MinTaskKey: tasks.Key{
+			TaskID: request.GetMinTaskId(),
+		},
+		MaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxTaskId(),
+		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
@@ -602,10 +612,15 @@ func (adh *AdminHandler) ListTransferTasks(ctx context.Context, request *adminse
 
 	executionMgr := adh.persistenceExecutionManager
 
-	resp, err := executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ShardID:       request.GetShardId(),
-		ReadLevel:     request.GetMinTaskId(),
-		MaxReadLevel:  request.GetMaxTaskId(),
+	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: tasks.CategoryTransfer,
+		MinTaskKey: tasks.Key{
+			TaskID: request.GetMinTaskId(),
+		},
+		MaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxTaskId(),
+		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
@@ -648,10 +663,15 @@ func (adh *AdminHandler) ListVisibilityTasks(ctx context.Context, request *admin
 
 	executionMgr := adh.persistenceExecutionManager
 
-	resp, err := executionMgr.GetVisibilityTasks(&persistence.GetVisibilityTasksRequest{
-		ShardID:       request.GetShardId(),
-		ReadLevel:     resendStartEventID,
-		MaxReadLevel:  request.GetMaxReadLevel(),
+	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: tasks.CategoryVisibility,
+		MinTaskKey: tasks.Key{
+			TaskID: resendStartEventID,
+		},
+		MaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxReadLevel(),
+		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})

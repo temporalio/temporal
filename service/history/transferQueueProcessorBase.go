@@ -73,11 +73,16 @@ func (t *transferQueueProcessorBase) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
 
-	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
+	response, err := t.executionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 		ShardID:      t.shard.GetShardID(),
-		ReadLevel:    readLevel,
-		MaxReadLevel: t.maxReadAckLevel(),
-		BatchSize:    t.options.BatchSize(),
+		TaskCategory: tasks.CategoryTransfer,
+		MinTaskKey: tasks.Key{
+			TaskID: readLevel,
+		},
+		MaxTaskKey: tasks.Key{
+			TaskID: t.maxReadAckLevel(),
+		},
+		BatchSize: t.options.BatchSize(),
 	})
 
 	if err != nil {

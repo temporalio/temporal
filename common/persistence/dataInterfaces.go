@@ -208,8 +208,8 @@ type (
 		PreviousRangeID int64
 	}
 
-	// AddTasksRequest is used to write new tasks
-	AddTasksRequest struct {
+	// AddHistoryTasksRequest is used to write new tasks
+	AddHistoryTasksRequest struct {
 		ShardID int32
 		RangeID int64
 
@@ -406,69 +406,44 @@ type (
 		RunID       string
 	}
 
-	// GetTransferTaskRequest is the request for GetTransferTask
-	GetTransferTaskRequest struct {
-		ShardID int32
-		TaskID  int64
+	GetHistoryTaskRequest struct {
+		ShardID      int32
+		TaskCategory tasks.Category
+		TaskKey      tasks.Key
 	}
 
-	// GetTransferTaskResponse is the response to GetTransferTask
-	GetTransferTaskResponse struct {
+	GetHistoryTaskResponse struct {
 		Task tasks.Task
 	}
 
-	// GetTransferTasksRequest is used to read tasks from the transfer task queue
-	GetTransferTasksRequest struct {
+	GetHistoryTasksRequest struct {
 		ShardID       int32
-		ReadLevel     int64
-		MaxReadLevel  int64
+		TaskCategory  tasks.Category
+		MinTaskKey    tasks.Key
+		MaxTaskKey    tasks.Key
 		BatchSize     int
 		NextPageToken []byte
 	}
 
-	// GetTransferTasksResponse is the response to GetTransferTasksRequest
-	GetTransferTasksResponse struct {
+	GetHistoryTasksResponse struct {
 		Tasks         []tasks.Task
 		NextPageToken []byte
 	}
 
-	// GetVisibilityTaskRequest is the request for GetVisibilityTask
-	GetVisibilityTaskRequest struct {
-		ShardID int32
-		TaskID  int64
+	CompleteHistoryTaskRequest struct {
+		ShardID      int32
+		TaskCategory tasks.Category
+		TaskKey      tasks.Key
 	}
 
-	// GetVisibilityTaskResponse is the response to GetVisibilityTask
-	GetVisibilityTaskResponse struct {
-		Task tasks.Task
+	RangeCompleteHistoryTasksRequest struct {
+		ShardID      int32
+		TaskCategory tasks.Category
+		MinTaskKey   tasks.Key
+		MaxTaskKey   tasks.Key
 	}
 
-	// GetVisibilityTasksRequest is used to read tasks from the visibility task queue
-	GetVisibilityTasksRequest struct {
-		ShardID       int32
-		ReadLevel     int64
-		MaxReadLevel  int64
-		BatchSize     int
-		NextPageToken []byte
-	}
-
-	// GetVisibilityTasksResponse is the response to GetVisibilityTasksRequest
-	GetVisibilityTasksResponse struct {
-		Tasks         []tasks.Task
-		NextPageToken []byte
-	}
-
-	// GetReplicationTaskRequest is the request for GetReplicationTask
-	GetReplicationTaskRequest struct {
-		ShardID int32
-		TaskID  int64
-	}
-
-	// GetReplicationTaskResponse is the response to GetReplicationTask
-	GetReplicationTaskResponse struct {
-		Task tasks.Task
-	}
-
+	// TODO: refactor Replication DLQ related methods and struct definition
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
 		ShardID       int32
@@ -476,50 +451,6 @@ type (
 		MaxTaskID     int64
 		BatchSize     int
 		NextPageToken []byte
-	}
-
-	// GetReplicationTasksResponse is the response to GetReplicationTask
-	GetReplicationTasksResponse struct {
-		Tasks         []tasks.Task
-		NextPageToken []byte
-	}
-
-	// CompleteTransferTaskRequest is used to complete a task in the transfer task queue
-	CompleteTransferTaskRequest struct {
-		ShardID int32
-		TaskID  int64
-	}
-
-	// RangeCompleteTransferTaskRequest is used to complete a range of tasks in the transfer task queue
-	RangeCompleteTransferTaskRequest struct {
-		ShardID              int32
-		ExclusiveBeginTaskID int64
-		InclusiveEndTaskID   int64
-	}
-
-	// CompleteVisibilityTaskRequest is used to complete a task in the visibility task queue
-	CompleteVisibilityTaskRequest struct {
-		ShardID int32
-		TaskID  int64
-	}
-
-	// RangeCompleteVisibilityTaskRequest is used to complete a range of tasks in the visibility task queue
-	RangeCompleteVisibilityTaskRequest struct {
-		ShardID              int32
-		ExclusiveBeginTaskID int64
-		InclusiveEndTaskID   int64
-	}
-
-	// CompleteReplicationTaskRequest is used to complete a task in the replication task queue
-	CompleteReplicationTaskRequest struct {
-		ShardID int32
-		TaskID  int64
-	}
-
-	// RangeCompleteReplicationTaskRequest is used to complete a range of task in the replication task queue
-	RangeCompleteReplicationTaskRequest struct {
-		ShardID            int32
-		InclusiveEndTaskID int64
 	}
 
 	// PutReplicationTaskToDLQRequest is used to put a replication task to dlq
@@ -552,21 +483,7 @@ type (
 	}
 
 	// GetReplicationTasksFromDLQResponse is the response for GetReplicationTasksFromDLQ
-	GetReplicationTasksFromDLQResponse = GetReplicationTasksResponse
-
-	// RangeCompleteTimerTaskRequest is used to complete a range of tasks in the timer task queue
-	RangeCompleteTimerTaskRequest struct {
-		ShardID                 int32
-		InclusiveBeginTimestamp time.Time
-		ExclusiveEndTimestamp   time.Time
-	}
-
-	// CompleteTimerTaskRequest is used to complete a task in the timer task queue
-	CompleteTimerTaskRequest struct {
-		ShardID             int32
-		VisibilityTimestamp time.Time
-		TaskID              int64
-	}
+	GetReplicationTasksFromDLQResponse = GetHistoryTasksResponse
 
 	// CreateTaskQueueRequest create a new task queue
 	CreateTaskQueueRequest struct {
@@ -666,34 +583,6 @@ type (
 		TaskType      enumspb.TaskQueueType
 		TaskID        int64 // Tasks less than or equal to this ID will be completed
 		Limit         int   // Limit on the max number of tasks that can be completed. Required param
-	}
-
-	// GetTimerTaskRequest is the request for GetTimerTask
-	GetTimerTaskRequest struct {
-		ShardID             int32
-		TaskID              int64
-		VisibilityTimestamp time.Time
-	}
-
-	// GetTimerTaskResponse is the response to GetTimerTask
-	GetTimerTaskResponse struct {
-		Task tasks.Task
-	}
-
-	// GetTimerTasksRequest is the request for GetTimerTasks
-	// TODO: replace this with an iterator that can configure min and max index.
-	GetTimerTasksRequest struct {
-		ShardID       int32
-		MinTimestamp  time.Time
-		MaxTimestamp  time.Time
-		BatchSize     int
-		NextPageToken []byte
-	}
-
-	// GetTimerTasksResponse is the response for GetTimerTasks
-	GetTimerTasksResponse struct {
-		Tasks         []tasks.Task
-		NextPageToken []byte
 	}
 
 	// CreateNamespaceRequest is used to create the namespace
@@ -1068,39 +957,16 @@ type (
 
 		// Tasks related APIs
 
-		AddTasks(request *AddTasksRequest) error
+		AddHistoryTasks(request *AddHistoryTasksRequest) error
+		GetHistoryTask(request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error)
+		GetHistoryTasks(request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error)
+		CompleteHistoryTask(request *CompleteHistoryTaskRequest) error
+		RangeCompleteHistoryTasks(request *RangeCompleteHistoryTasksRequest) error
 
-		// transfer tasks
-
-		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
-		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
-		CompleteTransferTask(request *CompleteTransferTaskRequest) error
-		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
-
-		// timer tasks
-
-		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
-		GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error)
-		CompleteTimerTask(request *CompleteTimerTaskRequest) error
-		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// replication tasks
-
-		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
-		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
-		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
-		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
 		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
 		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
-
-		// visibility tasks
-
-		GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error)
-		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
-		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
-		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts

@@ -25,12 +25,15 @@
 package persistence
 
 import (
+	"fmt"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -296,183 +299,127 @@ func (p *executionPersistenceClient) ListConcreteExecutions(request *ListConcret
 	return response, err
 }
 
-func (p *executionPersistenceClient) AddTasks(request *AddTasksRequest) error {
+func (p *executionPersistenceClient) AddHistoryTasks(request *AddHistoryTasksRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceAddTasksScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceAddTasksScope, metrics.PersistenceLatency)
-	err := p.persistence.AddTasks(request)
+	err := p.persistence.AddHistoryTasks(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTransferTaskScope, err)
+		p.updateErrorMetric(metrics.PersistenceAddTasksScope, err)
 	}
 
 	return err
 }
 
-func (p *executionPersistenceClient) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTransferTaskScope, metrics.PersistenceRequests)
+func (p *executionPersistenceClient) GetHistoryTask(request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error) {
+	var scopeIdx int
+	switch request.TaskCategory {
+	case tasks.CategoryTransfer:
+		scopeIdx = metrics.PersistenceGetTransferTaskScope
+	case tasks.CategoryTimer:
+		scopeIdx = metrics.PersistenceGetTimerTaskScope
+	case tasks.CategoryVisibility:
+		scopeIdx = metrics.PersistenceGetVisibilityTaskScope
+	case tasks.CategoryReplication:
+		scopeIdx = metrics.PersistenceGetReplicationTaskScope
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
+	}
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTransferTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTransferTask(request)
+	p.metricClient.IncCounter(scopeIdx, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(scopeIdx, metrics.PersistenceLatency)
+	response, err := p.persistence.GetHistoryTask(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTransferTaskScope, err)
+		p.updateErrorMetric(scopeIdx, err)
 	}
 
 	return response, err
 }
 
-func (p *executionPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceRequests)
+func (p *executionPersistenceClient) GetHistoryTasks(request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error) {
+	var scopeIdx int
+	switch request.TaskCategory {
+	case tasks.CategoryTransfer:
+		scopeIdx = metrics.PersistenceGetTransferTasksScope
+	case tasks.CategoryTimer:
+		scopeIdx = metrics.PersistenceGetTimerTasksScope
+	case tasks.CategoryVisibility:
+		scopeIdx = metrics.PersistenceGetVisibilityTasksScope
+	case tasks.CategoryReplication:
+		scopeIdx = metrics.PersistenceGetReplicationTasksScope
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
+	}
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTransferTasks(request)
+	p.metricClient.IncCounter(scopeIdx, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(scopeIdx, metrics.PersistenceLatency)
+	response, err := p.persistence.GetHistoryTasks(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTransferTasksScope, err)
+		p.updateErrorMetric(scopeIdx, err)
 	}
 
 	return response, err
 }
 
-func (p *executionPersistenceClient) GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetVisibilityTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetVisibilityTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetVisibilityTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetVisibilityTaskScope, err)
+func (p *executionPersistenceClient) CompleteHistoryTask(request *CompleteHistoryTaskRequest) error {
+	var scopeIdx int
+	switch request.TaskCategory {
+	case tasks.CategoryTransfer:
+		scopeIdx = metrics.PersistenceCompleteTransferTaskScope
+	case tasks.CategoryTimer:
+		scopeIdx = metrics.PersistenceCompleteTimerTaskScope
+	case tasks.CategoryVisibility:
+		scopeIdx = metrics.PersistenceCompleteVisibilityTaskScope
+	case tasks.CategoryReplication:
+		scopeIdx = metrics.PersistenceCompleteReplicationTaskScope
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
 
-	return response, err
-}
+	p.metricClient.IncCounter(scopeIdx, metrics.PersistenceRequests)
 
-func (p *executionPersistenceClient) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetVisibilityTasksScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetVisibilityTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetVisibilityTasks(request)
+	sw := p.metricClient.StartTimer(scopeIdx, metrics.PersistenceLatency)
+	err := p.persistence.CompleteHistoryTask(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetVisibilityTasksScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetReplicationTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetReplicationTaskScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTasksScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetReplicationTasks(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetReplicationTasksScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteTransferTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTransferTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteTransferTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteTransferTaskScope, err)
+		p.updateErrorMetric(scopeIdx, err)
 	}
 
 	return err
 }
 
-func (p *executionPersistenceClient) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteTransferTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteTransferTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteTransferTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteTransferTaskScope, err)
+func (p *executionPersistenceClient) RangeCompleteHistoryTasks(request *RangeCompleteHistoryTasksRequest) error {
+	var scopeIdx int
+	switch request.TaskCategory {
+	case tasks.CategoryTransfer:
+		scopeIdx = metrics.PersistenceRangeCompleteTransferTasksScope
+	case tasks.CategoryTimer:
+		scopeIdx = metrics.PersistenceRangeCompleteTimerTasksScope
+	case tasks.CategoryVisibility:
+		scopeIdx = metrics.PersistenceRangeCompleteVisibilityTasksScope
+	case tasks.CategoryReplication:
+		scopeIdx = metrics.PersistenceRangeCompleteReplicationTasksScope
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
 
-	return err
-}
+	p.metricClient.IncCounter(scopeIdx, metrics.PersistenceRequests)
 
-func (p *executionPersistenceClient) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteVisibilityTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteVisibilityTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteVisibilityTask(request)
+	sw := p.metricClient.StartTimer(scopeIdx, metrics.PersistenceLatency)
+	err := p.persistence.RangeCompleteHistoryTasks(request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteVisibilityTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteVisibilityTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteVisibilityTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteVisibilityTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteVisibilityTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteReplicationTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteReplicationTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteReplicationTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteReplicationTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteReplicationTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteReplicationTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteReplicationTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteReplicationTaskScope, err)
+		p.updateErrorMetric(scopeIdx, err)
 	}
 
 	return err
@@ -540,62 +487,6 @@ func (p *executionPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
 	}
 
 	return nil
-}
-
-func (p *executionPersistenceClient) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTimerTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTimerTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTimerTaskScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTimerTasksScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTimerTasks(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTimerTasksScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteTimerTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTimerTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteTimerTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteTimerTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteTimerTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteTimerTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteTimerTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteTimerTaskScope, err)
-	}
-
-	return err
 }
 
 func (p *executionPersistenceClient) Close() {

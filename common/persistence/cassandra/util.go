@@ -149,10 +149,7 @@ func applyWorkflowMutationBatch(
 	return applyTasks(
 		batch,
 		shardID,
-		workflowMutation.TransferTasks,
-		workflowMutation.TimerTasks,
-		workflowMutation.ReplicationTasks,
-		workflowMutation.VisibilityTasks,
+		workflowMutation.Tasks,
 	)
 }
 
@@ -262,10 +259,7 @@ func applyWorkflowSnapshotBatchAsReset(
 	return applyTasks(
 		batch,
 		shardID,
-		workflowSnapshot.TransferTasks,
-		workflowSnapshot.TimerTasks,
-		workflowSnapshot.ReplicationTasks,
-		workflowSnapshot.VisibilityTasks,
+		workflowSnapshot.Tasks,
 	)
 }
 
@@ -360,10 +354,7 @@ func applyWorkflowSnapshotBatchAsNew(
 	return applyTasks(
 		batch,
 		shardID,
-		workflowSnapshot.TransferTasks,
-		workflowSnapshot.TimerTasks,
-		workflowSnapshot.ReplicationTasks,
-		workflowSnapshot.VisibilityTasks,
+		workflowSnapshot.Tasks,
 	)
 }
 
@@ -469,42 +460,27 @@ func updateExecution(
 func applyTasks(
 	batch gocql.Batch,
 	shardID int32,
-	transferTasks map[tasks.Key]commonpb.DataBlob,
-	timerTasks map[tasks.Key]commonpb.DataBlob,
-	replicationTasks map[tasks.Key]commonpb.DataBlob,
-	visibilityTasks map[tasks.Key]commonpb.DataBlob,
+	insertTasks map[tasks.Category][]p.InternalHistoryTask,
 ) error {
 
-	if err := createTransferTasks(
-		batch,
-		transferTasks,
-		shardID,
-	); err != nil {
-		return err
-	}
+	var err error
+	for category, tasksByCategory := range insertTasks {
+		switch category {
+		case tasks.CategoryTransfer:
+			err = createTransferTasks(batch, tasksByCategory, shardID)
+		case tasks.CategoryTimer:
+			err = createTimerTasks(batch, tasksByCategory, shardID)
+		case tasks.CategoryVisibility:
+			err = createVisibilityTasks(batch, tasksByCategory, shardID)
+		case tasks.CategoryReplication:
+			err = createReplicationTasks(batch, tasksByCategory, shardID)
+		default:
+			err = createHistoryTasks(batch, tasksByCategory, shardID)
+		}
 
-	if err := createTimerTasks(
-		batch,
-		timerTasks,
-		shardID,
-	); err != nil {
-		return err
-	}
-
-	if err := createReplicationTasks(
-		batch,
-		replicationTasks,
-		shardID,
-	); err != nil {
-		return err
-	}
-
-	if err := createVisibilityTasks(
-		batch,
-		visibilityTasks,
-		shardID,
-	); err != nil {
-		return err
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -512,20 +488,20 @@ func applyTasks(
 
 func createTransferTasks(
 	batch gocql.Batch,
-	transferTasks map[tasks.Key]commonpb.DataBlob,
+	transferTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
-	for key, blob := range transferTasks {
+	for _, task := range transferTasks {
 		batch.Query(templateCreateTransferTaskQuery,
 			shardID,
 			rowTypeTransferTask,
 			rowTypeTransferNamespaceID,
 			rowTypeTransferWorkflowID,
 			rowTypeTransferRunID,
-			blob.Data,
-			blob.EncodingType.String(),
+			task.Blob.Data,
+			task.Blob.EncodingType.String(),
 			defaultVisibilityTimestamp,
-			key.TaskID,
+			task.Key.TaskID,
 		)
 	}
 	return nil
@@ -533,20 +509,20 @@ func createTransferTasks(
 
 func createTimerTasks(
 	batch gocql.Batch,
-	timerTasks map[tasks.Key]commonpb.DataBlob,
+	timerTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
-	for key, blob := range timerTasks {
+	for _, task := range timerTasks {
 		batch.Query(templateCreateTimerTaskQuery,
 			shardID,
 			rowTypeTimerTask,
 			rowTypeTimerNamespaceID,
 			rowTypeTimerWorkflowID,
 			rowTypeTimerRunID,
-			blob.Data,
-			blob.EncodingType.String(),
-			p.UnixMilliseconds(key.FireTime),
-			key.TaskID,
+			task.Blob.Data,
+			task.Blob.EncodingType.String(),
+			p.UnixMilliseconds(task.Key.FireTime),
+			task.Key.TaskID,
 		)
 	}
 	return nil
@@ -554,20 +530,20 @@ func createTimerTasks(
 
 func createReplicationTasks(
 	batch gocql.Batch,
-	replicationTasks map[tasks.Key]commonpb.DataBlob,
+	replicationTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
-	for key, blob := range replicationTasks {
+	for _, task := range replicationTasks {
 		batch.Query(templateCreateReplicationTaskQuery,
 			shardID,
 			rowTypeReplicationTask,
 			rowTypeReplicationNamespaceID,
 			rowTypeReplicationWorkflowID,
 			rowTypeReplicationRunID,
-			blob.Data,
-			blob.EncodingType.String(),
+			task.Blob.Data,
+			task.Blob.EncodingType.String(),
 			defaultVisibilityTimestamp,
-			key.TaskID,
+			task.Key.TaskID,
 		)
 	}
 	return nil
@@ -575,20 +551,45 @@ func createReplicationTasks(
 
 func createVisibilityTasks(
 	batch gocql.Batch,
-	visibilityTasks map[tasks.Key]commonpb.DataBlob,
+	visibilityTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
-	for key, blob := range visibilityTasks {
+	for _, task := range visibilityTasks {
 		batch.Query(templateCreateVisibilityTaskQuery,
 			shardID,
 			rowTypeVisibilityTask,
 			rowTypeVisibilityTaskNamespaceID,
 			rowTypeVisibilityTaskWorkflowID,
 			rowTypeVisibilityTaskRunID,
-			blob.Data,
-			blob.EncodingType.String(),
+			task.Blob.Data,
+			task.Blob.EncodingType.String(),
 			defaultVisibilityTimestamp,
-			key.TaskID,
+			task.Key.TaskID,
+		)
+	}
+	return nil
+}
+
+func createHistoryTasks(
+	batch gocql.Batch,
+	historyTasks []p.InternalHistoryTask,
+	shardID int32,
+) error {
+	for _, task := range historyTasks {
+		visibilityTimestamp := defaultVisibilityTimestamp
+		if !task.Key.FireTime.IsZero() {
+			visibilityTimestamp = p.UnixMilliseconds(task.Key.FireTime)
+		}
+		batch.Query(templateCreateHistoryTaskQuery,
+			shardID,
+			rowTypeHistoryTask,
+			rowTypeHistoryTaskNamespaceID,
+			rowTypeHistoryTaskWorkflowID,
+			rowTypeHistoryTaskRunID,
+			task.Blob.Data,
+			task.Blob.EncodingType.String(),
+			visibilityTimestamp,
+			task.Key.TaskID,
 		)
 	}
 	return nil

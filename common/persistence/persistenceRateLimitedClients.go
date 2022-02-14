@@ -239,120 +239,48 @@ func (p *executionRateLimitedPersistenceClient) ListConcreteExecutions(request *
 	return response, err
 }
 
-func (p *executionRateLimitedPersistenceClient) AddTasks(request *AddTasksRequest) error {
+func (p *executionRateLimitedPersistenceClient) AddHistoryTasks(request *AddHistoryTasksRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.AddTasks(request)
+	err := p.persistence.AddHistoryTasks(request)
 	return err
 }
 
-func (p *executionRateLimitedPersistenceClient) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetHistoryTask(request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.GetTransferTask(request)
+	response, err := p.persistence.GetHistoryTask(request)
 	return response, err
 }
 
-func (p *executionRateLimitedPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
+func (p *executionRateLimitedPersistenceClient) GetHistoryTasks(request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.GetTransferTasks(request)
+	response, err := p.persistence.GetHistoryTasks(request)
 	return response, err
 }
 
-func (p *executionRateLimitedPersistenceClient) GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetVisibilityTask(request)
-	return response, err
-}
-
-func (p *executionRateLimitedPersistenceClient) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetVisibilityTasks(request)
-	return response, err
-}
-
-func (p *executionRateLimitedPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetReplicationTask(request)
-	return response, err
-}
-
-func (p *executionRateLimitedPersistenceClient) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetReplicationTasks(request)
-	return response, err
-}
-
-func (p *executionRateLimitedPersistenceClient) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) CompleteHistoryTask(request *CompleteHistoryTaskRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.CompleteTransferTask(request)
+	err := p.persistence.CompleteHistoryTask(request)
 	return err
 }
 
-func (p *executionRateLimitedPersistenceClient) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
+func (p *executionRateLimitedPersistenceClient) RangeCompleteHistoryTasks(request *RangeCompleteHistoryTasksRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.RangeCompleteTransferTask(request)
-	return err
-}
-
-func (p *executionRateLimitedPersistenceClient) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.CompleteVisibilityTask(request)
-	return err
-}
-
-func (p *executionRateLimitedPersistenceClient) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.RangeCompleteVisibilityTask(request)
-	return err
-}
-
-func (p *executionRateLimitedPersistenceClient) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.CompleteReplicationTask(request)
-	return err
-}
-
-func (p *executionRateLimitedPersistenceClient) RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.RangeCompleteReplicationTask(request)
+	err := p.persistence.RangeCompleteHistoryTasks(request)
 	return err
 }
 
@@ -394,42 +322,6 @@ func (p *executionRateLimitedPersistenceClient) RangeDeleteReplicationTaskFromDL
 	}
 
 	return p.persistence.RangeDeleteReplicationTaskFromDLQ(request)
-}
-
-func (p *executionRateLimitedPersistenceClient) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	response, err := p.persistence.GetTimerTask(request)
-	return response, err
-}
-
-func (p *executionRateLimitedPersistenceClient) GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error) {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return nil, ErrPersistenceLimitExceeded
-	}
-
-	resonse, err := p.persistence.GetTimerTasks(request)
-	return resonse, err
-}
-
-func (p *executionRateLimitedPersistenceClient) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.CompleteTimerTask(request)
-	return err
-}
-
-func (p *executionRateLimitedPersistenceClient) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
-	if ok := p.rateLimiter.Allow(); !ok {
-		return ErrPersistenceLimitExceeded
-	}
-
-	err := p.persistence.RangeCompleteTimerTask(request)
-	return err
 }
 
 func (p *executionRateLimitedPersistenceClient) Close() {

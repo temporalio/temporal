@@ -121,35 +121,16 @@ type (
 		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
 
 		// Tasks related APIs
-		AddTasks(request *InternalAddTasksRequest) error
+		AddHistoryTasks(request *InternalAddHistoryTasksRequest) error
+		GetHistoryTask(request *GetHistoryTaskRequest) (*InternalGetHistoryTaskResponse, error)
+		GetHistoryTasks(request *GetHistoryTasksRequest) (*InternalGetHistoryTasksResponse, error)
+		CompleteHistoryTask(request *CompleteHistoryTaskRequest) error
+		RangeCompleteHistoryTasks(request *RangeCompleteHistoryTasksRequest) error
 
-		// transfer tasks
-		GetTransferTask(request *GetTransferTaskRequest) (*InternalGetTransferTaskResponse, error)
-		GetTransferTasks(request *GetTransferTasksRequest) (*InternalGetTransferTasksResponse, error)
-		CompleteTransferTask(request *CompleteTransferTaskRequest) error
-		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
-
-		// timer tasks
-		GetTimerTask(request *GetTimerTaskRequest) (*InternalGetTimerTaskResponse, error)
-		GetTimerTasks(request *GetTimerTasksRequest) (*InternalGetTimerTasksResponse, error)
-		CompleteTimerTask(request *CompleteTimerTaskRequest) error
-		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// replication tasks
-		GetReplicationTask(request *GetReplicationTaskRequest) (*InternalGetReplicationTaskResponse, error)
-		GetReplicationTasks(request *GetReplicationTasksRequest) (*InternalGetReplicationTasksResponse, error)
-		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
-		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
 		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*InternalGetReplicationTasksFromDLQResponse, error)
 		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
-
-		// visibility tasks
-		GetVisibilityTask(request *GetVisibilityTaskRequest) (*InternalGetVisibilityTaskResponse, error)
-		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*InternalGetVisibilityTasksResponse, error)
-		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
-		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
@@ -358,8 +339,13 @@ type (
 		CurrentWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
 	}
 
-	// InternalAddTasksRequest is used to write new tasks
-	InternalAddTasksRequest struct {
+	InternalHistoryTask struct {
+		Key  tasks.Key
+		Blob commonpb.DataBlob
+	}
+
+	// InternalAddHistoryTasksRequest is used to write new tasks
+	InternalAddHistoryTasksRequest struct {
 		ShardID int32
 		RangeID int64
 
@@ -367,10 +353,7 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		TransferTasks    map[tasks.Key]commonpb.DataBlob
-		TimerTasks       map[tasks.Key]commonpb.DataBlob
-		ReplicationTasks map[tasks.Key]commonpb.DataBlob
-		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
+		Tasks map[tasks.Category][]InternalHistoryTask
 	}
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
@@ -403,10 +386,7 @@ type (
 		NewBufferedEvents         *commonpb.DataBlob
 		ClearBufferedEvents       bool
 
-		TransferTasks    map[tasks.Key]commonpb.DataBlob
-		TimerTasks       map[tasks.Key]commonpb.DataBlob
-		ReplicationTasks map[tasks.Key]commonpb.DataBlob
-		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
+		Tasks map[tasks.Category][]InternalHistoryTask
 
 		Condition int64
 
@@ -436,10 +416,7 @@ type (
 		SignalInfos         map[int64]*commonpb.DataBlob
 		SignalRequestedIDs  map[string]struct{}
 
-		TransferTasks    map[tasks.Key]commonpb.DataBlob
-		TimerTasks       map[tasks.Key]commonpb.DataBlob
-		ReplicationTasks map[tasks.Key]commonpb.DataBlob
-		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
+		Tasks map[tasks.Category][]InternalHistoryTask
 
 		Condition int64
 
@@ -491,43 +468,16 @@ type (
 		NextPageToken []byte
 	}
 
-	InternalGetTransferTaskResponse struct {
+	InternalGetHistoryTaskResponse struct {
 		Task commonpb.DataBlob
 	}
 
-	InternalGetTransferTasksResponse struct {
+	InternalGetHistoryTasksResponse struct {
 		Tasks         []commonpb.DataBlob
 		NextPageToken []byte
 	}
 
-	InternalGetTimerTaskResponse struct {
-		Task commonpb.DataBlob
-	}
-
-	InternalGetTimerTasksResponse struct {
-		Tasks         []commonpb.DataBlob
-		NextPageToken []byte
-	}
-
-	InternalGetReplicationTaskResponse struct {
-		Task commonpb.DataBlob
-	}
-
-	InternalGetReplicationTasksResponse struct {
-		Tasks         []commonpb.DataBlob
-		NextPageToken []byte
-	}
-
-	InternalGetReplicationTasksFromDLQResponse = InternalGetReplicationTasksResponse
-
-	InternalGetVisibilityTaskResponse struct {
-		Task commonpb.DataBlob
-	}
-
-	InternalGetVisibilityTasksResponse struct {
-		Tasks         []commonpb.DataBlob
-		NextPageToken []byte
-	}
+	InternalGetReplicationTasksFromDLQResponse = InternalGetHistoryTasksResponse
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {

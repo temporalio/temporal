@@ -99,10 +99,7 @@ func applyWorkflowMutationTx(
 	if err := applyTasks(ctx,
 		tx,
 		shardID,
-		workflowMutation.TransferTasks,
-		workflowMutation.TimerTasks,
-		workflowMutation.ReplicationTasks,
-		workflowMutation.VisibilityTasks,
+		workflowMutation.Tasks,
 	); err != nil {
 		return err
 	}
@@ -258,10 +255,7 @@ func applyWorkflowSnapshotTxAsReset(
 	if err := applyTasks(ctx,
 		tx,
 		shardID,
-		workflowSnapshot.TransferTasks,
-		workflowSnapshot.TimerTasks,
-		workflowSnapshot.ReplicationTasks,
-		workflowSnapshot.VisibilityTasks,
+		workflowSnapshot.Tasks,
 	); err != nil {
 		return err
 	}
@@ -446,10 +440,7 @@ func (m *sqlExecutionStore) applyWorkflowSnapshotTxAsNew(
 	if err := applyTasks(ctx,
 		tx,
 		shardID,
-		workflowSnapshot.TransferTasks,
-		workflowSnapshot.TimerTasks,
-		workflowSnapshot.ReplicationTasks,
-		workflowSnapshot.VisibilityTasks,
+		workflowSnapshot.Tasks,
 	); err != nil {
 		return err
 	}
@@ -533,42 +524,27 @@ func applyTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
-	transferTasks map[tasks.Key]commonpb.DataBlob,
-	timerTasks map[tasks.Key]commonpb.DataBlob,
-	replicationTasks map[tasks.Key]commonpb.DataBlob,
-	visibilityTasks map[tasks.Key]commonpb.DataBlob,
+	insertTasks map[tasks.Category][]p.InternalHistoryTask,
 ) error {
 
-	if err := createTransferTasks(ctx,
-		tx,
-		shardID,
-		transferTasks,
-	); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("applyTasks failed. Failed to create transfer tasks. Error: %v", err))
-	}
+	var err error
+	for category, tasksByCategory := range insertTasks {
+		switch category {
+		case tasks.CategoryTransfer:
+			err = createTransferTasks(ctx, tx, shardID, tasksByCategory)
+		case tasks.CategoryTimer:
+			err = createTimerTasks(ctx, tx, shardID, tasksByCategory)
+		case tasks.CategoryVisibility:
+			err = createVisibilityTasks(ctx, tx, shardID, tasksByCategory)
+		case tasks.CategoryReplication:
+			err = createReplicationTasks(ctx, tx, shardID, tasksByCategory)
+		default:
+			err = serviceerror.NewInternal(fmt.Sprintf("Unknown queue type: %v", category))
+		}
 
-	if err := createReplicationTasks(ctx,
-		tx,
-		shardID,
-		replicationTasks,
-	); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("applyTasks failed. Failed to create replication tasks. Error: %v", err))
-	}
-
-	if err := createTimerTasks(ctx,
-		tx,
-		shardID,
-		timerTasks,
-	); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("applyTasks failed. Failed to create timer tasks. Error: %v", err))
-	}
-
-	if err := createVisibilityTasks(ctx,
-		tx,
-		shardID,
-		visibilityTasks,
-	); err != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("applyTasks failed. Failed to create timer tasks. Error: %v", err))
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
@@ -724,7 +700,7 @@ func createTransferTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
-	transferTasks map[tasks.Key]commonpb.DataBlob,
+	transferTasks []p.InternalHistoryTask,
 ) error {
 
 	if len(transferTasks) == 0 {
@@ -732,12 +708,12 @@ func createTransferTasks(
 	}
 
 	transferTasksRows := make([]sqlplugin.TransferTasksRow, 0, len(transferTasks))
-	for key, blob := range transferTasks {
+	for _, task := range transferTasks {
 		transferTasksRows = append(transferTasksRows, sqlplugin.TransferTasksRow{
 			ShardID:      shardID,
-			TaskID:       key.TaskID,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			TaskID:       task.Key.TaskID,
+			Data:         task.Blob.Data,
+			DataEncoding: task.Blob.EncodingType.String(),
 		})
 	}
 
@@ -761,7 +737,7 @@ func createTimerTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
-	timerTasks map[tasks.Key]commonpb.DataBlob,
+	timerTasks []p.InternalHistoryTask,
 ) error {
 
 	if len(timerTasks) == 0 {
@@ -769,13 +745,13 @@ func createTimerTasks(
 	}
 
 	timerTasksRows := make([]sqlplugin.TimerTasksRow, 0, len(timerTasks))
-	for key, blob := range timerTasks {
+	for _, task := range timerTasks {
 		timerTasksRows = append(timerTasksRows, sqlplugin.TimerTasksRow{
 			ShardID:             shardID,
-			VisibilityTimestamp: key.FireTime,
-			TaskID:              key.TaskID,
-			Data:                blob.Data,
-			DataEncoding:        blob.EncodingType.String(),
+			VisibilityTimestamp: task.Key.FireTime,
+			TaskID:              task.Key.TaskID,
+			Data:                task.Blob.Data,
+			DataEncoding:        task.Blob.EncodingType.String(),
 		})
 	}
 
@@ -798,7 +774,7 @@ func createReplicationTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
-	replicationTasks map[tasks.Key]commonpb.DataBlob,
+	replicationTasks []p.InternalHistoryTask,
 ) error {
 
 	if len(replicationTasks) == 0 {
@@ -806,12 +782,12 @@ func createReplicationTasks(
 	}
 
 	replicationTasksRows := make([]sqlplugin.ReplicationTasksRow, 0, len(replicationTasks))
-	for key, blob := range replicationTasks {
+	for _, task := range replicationTasks {
 		replicationTasksRows = append(replicationTasksRows, sqlplugin.ReplicationTasksRow{
 			ShardID:      shardID,
-			TaskID:       key.TaskID,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			TaskID:       task.Key.TaskID,
+			Data:         task.Blob.Data,
+			DataEncoding: task.Blob.EncodingType.String(),
 		})
 	}
 
@@ -835,7 +811,7 @@ func createVisibilityTasks(
 	ctx context.Context,
 	tx sqlplugin.Tx,
 	shardID int32,
-	visibilityTasks map[tasks.Key]commonpb.DataBlob,
+	visibilityTasks []p.InternalHistoryTask,
 ) error {
 
 	if len(visibilityTasks) == 0 {
@@ -843,12 +819,12 @@ func createVisibilityTasks(
 	}
 
 	visibilityTasksRows := make([]sqlplugin.VisibilityTasksRow, 0, len(visibilityTasks))
-	for key, blob := range visibilityTasks {
+	for _, task := range visibilityTasks {
 		visibilityTasksRows = append(visibilityTasksRows, sqlplugin.VisibilityTasksRow{
 			ShardID:      shardID,
-			TaskID:       key.TaskID,
-			Data:         blob.Data,
-			DataEncoding: blob.EncodingType.String(),
+			TaskID:       task.Key.TaskID,
+			Data:         task.Blob.Data,
+			DataEncoding: task.Blob.EncodingType.String(),
 		})
 	}
 

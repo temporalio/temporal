@@ -192,8 +192,8 @@ const (
 	PersistenceGetTransferTasksScope
 	// PersistenceCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceCompleteTransferTaskScope
-	// PersistenceRangeCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
-	PersistenceRangeCompleteTransferTaskScope
+	// PersistenceRangeCompleteTransferTasksScope tracks CompleteTransferTasks calls made by service to persistence layer
+	PersistenceRangeCompleteTransferTasksScope
 
 	// PersistenceGetVisibilityTaskScope tracks GetVisibilityTask calls made by service to persistence layer
 	PersistenceGetVisibilityTaskScope
@@ -201,8 +201,8 @@ const (
 	PersistenceGetVisibilityTasksScope
 	// PersistenceCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
 	PersistenceCompleteVisibilityTaskScope
-	// PersistenceRangeCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
-	PersistenceRangeCompleteVisibilityTaskScope
+	// PersistenceRangeCompleteVisibilityTasksScope tracks CompleteVisibilityTasks calls made by service to persistence layer
+	PersistenceRangeCompleteVisibilityTasksScope
 
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetReplicationTaskScope
@@ -210,8 +210,8 @@ const (
 	PersistenceGetReplicationTasksScope
 	// PersistenceCompleteReplicationTaskScope tracks CompleteReplicationTasks calls made by service to persistence layer
 	PersistenceCompleteReplicationTaskScope
-	// PersistenceRangeCompleteReplicationTaskScope tracks RangeCompleteReplicationTasks calls made by service to persistence layer
-	PersistenceRangeCompleteReplicationTaskScope
+	// PersistenceRangeCompleteReplicationTasksScope tracks RangeCompleteReplicationTasks calls made by service to persistence layer
+	PersistenceRangeCompleteReplicationTasksScope
 	// PersistencePutReplicationTaskToDLQScope tracks PersistencePutReplicationTaskToDLQScope calls made by service to persistence layer
 	PersistencePutReplicationTaskToDLQScope
 	// PersistenceGetReplicationTasksFromDLQScope tracks PersistenceGetReplicationTasksFromDLQScope calls made by service to persistence layer
@@ -226,8 +226,8 @@ const (
 	PersistenceGetTimerTasksScope
 	// PersistenceCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
 	PersistenceCompleteTimerTaskScope
-	// PersistenceRangeCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
-	PersistenceRangeCompleteTimerTaskScope
+	// PersistenceRangeCompleteTimerTasksScope tracks CompleteTimerTasks calls made by service to persistence layer
+	PersistenceRangeCompleteTimerTasksScope
 	// PersistenceCreateTaskScope tracks CreateTask calls made by service to persistence layer
 	PersistenceCreateTaskScope
 	// PersistenceGetTasksScope tracks GetTasks calls made by service to persistence layer
@@ -1210,15 +1210,15 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetTransferTaskScope:                   {operation: "GetTransferTask"},
 		PersistenceGetTransferTasksScope:                  {operation: "GetTransferTasks"},
 		PersistenceCompleteTransferTaskScope:              {operation: "CompleteTransferTask"},
-		PersistenceRangeCompleteTransferTaskScope:         {operation: "RangeCompleteTransferTask"},
+		PersistenceRangeCompleteTransferTasksScope:        {operation: "RangeCompleteTransferTask"},
 		PersistenceGetVisibilityTaskScope:                 {operation: "GetVisibilityTask"},
 		PersistenceGetVisibilityTasksScope:                {operation: "GetVisibilityTasks"},
 		PersistenceCompleteVisibilityTaskScope:            {operation: "CompleteVisibilityTask"},
-		PersistenceRangeCompleteVisibilityTaskScope:       {operation: "RangeCompleteVisibilityTask"},
+		PersistenceRangeCompleteVisibilityTasksScope:      {operation: "RangeCompleteVisibilityTask"},
 		PersistenceGetReplicationTaskScope:                {operation: "GetReplicationTask"},
 		PersistenceGetReplicationTasksScope:               {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:           {operation: "CompleteReplicationTask"},
-		PersistenceRangeCompleteReplicationTaskScope:      {operation: "RangeCompleteReplicationTask"},
+		PersistenceRangeCompleteReplicationTasksScope:     {operation: "RangeCompleteReplicationTask"},
 		PersistencePutReplicationTaskToDLQScope:           {operation: "PutReplicationTaskToDLQ"},
 		PersistenceGetReplicationTasksFromDLQScope:        {operation: "GetReplicationTasksFromDLQ"},
 		PersistenceDeleteReplicationTaskFromDLQScope:      {operation: "DeleteReplicationTaskFromDLQ"},
@@ -1226,7 +1226,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetTimerTaskScope:                      {operation: "GetTimerTask"},
 		PersistenceGetTimerTasksScope:                     {operation: "GetTimerTasks"},
 		PersistenceCompleteTimerTaskScope:                 {operation: "CompleteTimerTask"},
-		PersistenceRangeCompleteTimerTaskScope:            {operation: "RangeCompleteTimerTask"},
+		PersistenceRangeCompleteTimerTasksScope:           {operation: "RangeCompleteTimerTask"},
 		PersistenceCreateTaskScope:                        {operation: "CreateTask"},
 		PersistenceGetTasksScope:                          {operation: "GetTasks"},
 		PersistenceCompleteTaskScope:                      {operation: "CompleteTask"},

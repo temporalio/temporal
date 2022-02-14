@@ -308,10 +308,15 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteTransferTask(&persistence.RangeCompleteTransferTaskRequest{
-			ShardID:              t.shard.GetShardID(),
-			ExclusiveBeginTaskID: lowerAckLevel,
-			InclusiveEndTaskID:   upperAckLevel,
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:      t.shard.GetShardID(),
+			TaskCategory: tasks.CategoryTransfer,
+			MinTaskKey: tasks.Key{
+				TaskID: lowerAckLevel,
+			},
+			MaxTaskKey: tasks.Key{
+				TaskID: upperAckLevel,
+			},
 		})
 		if err != nil {
 			return err
