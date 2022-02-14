@@ -484,9 +484,12 @@ func (c *Config) String() string {
 	return maskedYaml
 }
 
-func (r *GroupTLS) IsEnabled() bool {
-	return r.Server.KeyFile != "" || r.Server.KeyData != "" ||
-		len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0 ||
+func (r *GroupTLS) IsServerEnabled() bool {
+	return r.Server.KeyFile != "" || r.Server.KeyData != ""
+}
+
+func (r *GroupTLS) IsClientEnabled() bool {
+	return len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0 ||
 		r.Client.ForceTLS
 }
 
