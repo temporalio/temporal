@@ -2,8 +2,36 @@ before:
   hooks:
     - go mod download
     - ./develop/scripts/create_build_info_data.sh
+
+archives:
+  - id: default
+    builds:
+      - temporal-server
+      - tctl
+      - temporal-cassandra-tool
+      - temporal-sql-tool
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - config/*
+
+  - id: no-cgo
+    builds:
+      - temporal-server-no-cgo
+      - tctl-no-cgo
+      - temporal-cassandra-tool-no-cgo
+      - temporal-sql-tool-no-cgo
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}_no_cgo"
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - config/*
+
 builds:
-  - id: "temporal-server"
+  - id: temporal-server
     dir: cmd/server
     binary: temporal-server
     goos:
@@ -13,7 +41,7 @@ builds:
     goarch:
       - amd64
       - arm64
-  - id: "temporal-server-no-cgo"
+  - id: temporal-server-no-cgo
     dir: cmd/server
     binary: temporal-server
     env:
@@ -23,7 +51,7 @@ builds:
     goarch:
       - amd64
       - arm64
-  - id: "tctl"
+  - id: tctl
     dir: cmd/tools/cli
     binary: tctl
     goos:
@@ -33,7 +61,17 @@ builds:
     goarch:
       - amd64
       - arm64
-  - id: "temporal-cassandra-tool"
+  - id: tctl-no-cgo
+    dir: cmd/tools/cli
+    binary: tctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+  - id: temporal-cassandra-tool
     dir: cmd/tools/cassandra
     binary: temporal-cassandra-tool
     goos:
@@ -43,7 +81,17 @@ builds:
     goarch:
       - amd64
       - arm64
-  - id: "temporal-sql-tool"
+  - id: temporal-cassandra-tool-no-cgo
+    dir: cmd/tools/cassandra
+    binary: temporal-cassandra-tool
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+  - id: temporal-sql-tool
     dir: cmd/tools/sql
     binary: temporal-sql-tool
     goos:
@@ -53,14 +101,20 @@ builds:
     goarch:
       - amd64
       - arm64
+  - id: temporal-sql-tool-no-cgo
+    dir: cmd/tools/sql
+    binary: temporal-sql-tool
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
 checksum:
   name_template: 'checksums.txt'
   algorithm: sha256
-snapshot:
-  name_template: "{{ .Tag }}-next"
+
 changelog:
-  sort: asc
-  filters:
-    exclude:
-      - '^docs:'
-      - '^test:'
+  skip: true
