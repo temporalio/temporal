@@ -3174,7 +3174,7 @@ func (wh *WorkflowHandler) getHistoryReverse(
 
 	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).RecordDistribution(metrics.HistorySize, size)
 
-	if err := wh.processSearchAttributes(historyEvents, namespace); err != nil {
+	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
 		return nil, nil, 0, err
 	}
 
