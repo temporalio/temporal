@@ -84,12 +84,13 @@ func (s *quotasSuite) TestOtherAPIToPriorityMapping() {
 
 func (s *quotasSuite) TestExecutionAPIs() {
 	apis := map[string]struct{}{
-		"StartWorkflowExecution":           {},
-		"SignalWithStartWorkflowExecution": {},
-		"SignalWorkflowExecution":          {},
-		"RequestCancelWorkflowExecution":   {},
-		"TerminateWorkflowExecution":       {},
-		"GetWorkflowExecutionHistory":      {},
+		"StartWorkflowExecution":             {},
+		"SignalWithStartWorkflowExecution":   {},
+		"SignalWorkflowExecution":            {},
+		"RequestCancelWorkflowExecution":     {},
+		"TerminateWorkflowExecution":         {},
+		"GetWorkflowExecutionHistory":        {},
+		"GetWorkflowExecutionHistoryReverse": {},
 
 		"RecordActivityTaskHeartbeat":      {},
 		"RecordActivityTaskHeartbeatById":  {},

@@ -293,6 +293,36 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 	return resp, err
 }
 
+// GetWorkflowExecutionHistoryReverse API call
+func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistoryReverse(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionHistoryReverseRequest,
+) (resp *workflowservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
+
+	var apiName = "GetWorkflowExecutionHistoryReverse"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionHistoryReverseScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.GetWorkflowExecutionHistoryReverse(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.GetWorkflowExecutionHistoryReverse(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
 // ListArchivedWorkflowExecutions API call
 func (handler *DCRedirectionHandlerImpl) ListArchivedWorkflowExecutions(
 	ctx context.Context,

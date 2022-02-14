@@ -58,13 +58,14 @@ var (
 		"RespondWorkflowTaskCompleted":     1,
 
 		// priority 2
-		"ResetWorkflowExecution":    2,
-		"DescribeWorkflowExecution": 2,
-		"RespondWorkflowTaskFailed": 2,
-		"QueryWorkflow":             2,
-		"RespondQueryTaskCompleted": 2,
-		"PollWorkflowTaskQueue":     2,
-		"PollActivityTaskQueue":     2,
+		"ResetWorkflowExecution":             2,
+		"DescribeWorkflowExecution":          2,
+		"RespondWorkflowTaskFailed":          2,
+		"QueryWorkflow":                      2,
+		"RespondQueryTaskCompleted":          2,
+		"PollWorkflowTaskQueue":              2,
+		"PollActivityTaskQueue":              2,
+		"GetWorkflowExecutionHistoryReverse": 2,
 
 		// priority 3
 		"ResetStickyTaskQueue":    3,

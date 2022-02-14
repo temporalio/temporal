@@ -597,6 +597,8 @@ type (
 		ShardID int32
 		// whether to only return metadata, excluding node content
 		MetadataOnly bool
+		// whether we iterate in reverse order
+		ReverseOrder bool
 	}
 
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
