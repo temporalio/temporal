@@ -161,8 +161,7 @@ func (s *MetricsSuite) TestOTCustomReporter() {
 	config := &Config{}
 	config.Prometheus = prom
 	mockReporter := NewMockReporter(s.controller)
-	reporter, sdkReporter, err := InitMetricReporters(log.NewNoopLogger(), config, mockReporter)
+	reporter, err := InitMetricsReporterInternal(log.NewNoopLogger(), config, mockReporter)
 	s.Equal(mockReporter, reporter)
-	s.Equal(mockReporter, sdkReporter)
 	s.Nil(err)
 }
