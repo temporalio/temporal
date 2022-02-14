@@ -158,5 +158,5 @@ func (r *opentelemetryReporterImpl) Stop(logger log.Logger) {
 }
 
 func (r *opentelemetryReporterImpl) UserScope() UserScope {
-	return r.UserScope()
+	return r.userScope
 }

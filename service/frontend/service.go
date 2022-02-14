@@ -193,7 +193,6 @@ type Service struct {
 	server            *grpc.Server
 
 	serverMetricsReporter          metrics.Reporter
-	sdkMetricsReporter             metrics.Reporter
 	logger                         log.Logger
 	grpcListener                   net.Listener
 	userMetricsScope               metrics.UserScope
@@ -293,10 +292,6 @@ func (s *Service) Stop() {
 
 	if s.serverMetricsReporter != nil {
 		s.serverMetricsReporter.Stop(logger)
-	}
-
-	if s.sdkMetricsReporter != nil {
-		s.sdkMetricsReporter.Stop(logger)
 	}
 
 	logger.Info("frontend stopped")

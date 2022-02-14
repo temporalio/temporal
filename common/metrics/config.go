@@ -51,8 +51,6 @@ type (
 		Statsd *StatsdConfig `yaml:"statsd"`
 		// Prometheus is the configuration for prometheus reporter
 		Prometheus *PrometheusConfig `yaml:"prometheus"`
-		// Deprecated {optional} Config for Prometheus metrics reporter for SDK reported metrics.
-		PrometheusSDK *PrometheusConfig `yaml:"prometheusSDK"`
 	}
 
 	ClientConfig struct {
@@ -207,40 +205,30 @@ var (
 	}
 )
 
-// InitMetricReporters is a root function for initializing metrics clients.
+// InitMetricsReporterInternal is a root function for initializing metrics clients used inside temporal server.
 //
-// Usage pattern
-// serverReporter, sdkReporter, err := c.InitMetricReporters(logger, customReporter)
+// Usage pattern;
+// serverReporter, err := c.InitMetricsReporterInternal(logger, config, customReporter)
 // metricsClient := serverReporter.newClient(logger, serviceIdx)
 //
 // customReporter Provide this argument if you want to report metrics to a custom metric platform, otherwise use nil.
 //
-// returns SeverReporter, SDKReporter, error
-func InitMetricReporters(logger log.Logger, c *Config, customReporter interface{}) (Reporter, Reporter, error) {
-	if customReporter != nil {
-		return initMetricsReportersFromCustomReporter(logger, c, customReporter)
+// returns SeverReporter, error
+func InitMetricsReporterInternal(logger log.Logger, c *Config, customReporter interface{}) (Reporter, error) {
+	if customReporter == nil {
+		reporter, err := InitMetricsReporter(logger, c)
+		return reporter, err
 	}
 
-	// TODO deprecated path support, remove once we deprecate custom SDK reporter (target version 1.17)
-	if c.PrometheusSDK != nil {
-		return initReportersFromPrometheusConfig(logger, c)
-	}
-
-	reporter, err := InitMetricsReporter(logger, c)
-	return reporter, reporter, err
-}
-
-// initMetricsReportersFromCustomReporter handles custom reporter from ServerOptions
-func initMetricsReportersFromCustomReporter(logger log.Logger, c *Config, customReporter interface{}) (Reporter, Reporter, error) {
 	switch cReporter := customReporter.(type) {
 	case tally.BaseStatsReporter:
 		scope := NewCustomReporterScope(logger, &c.ClientConfig, cReporter)
 		reporter := NewTallyReporter(scope, &c.ClientConfig)
-		return reporter, reporter, nil
+		return reporter, nil
 	case Reporter:
-		return cReporter, cReporter, nil
+		return cReporter, nil
 	default:
-		return nil, nil, fmt.Errorf(
+		return nil, fmt.Errorf(
 			"specified customReporter does not implement tally.BaseStatsReporter or metrics.Reporter")
 	}
 }
@@ -267,22 +255,6 @@ func NewTallyReporterFromConfig(logger log.Logger, c *Config) (*TallyReporter, e
 	scope := NewScope(logger, c)
 	reporter := NewTallyReporter(scope, &c.ClientConfig)
 	return reporter, nil
-}
-
-// TODO: this method should be removed once we deprecate Config.PrometheusSDK
-func initReportersFromPrometheusConfig(logger log.Logger, c *Config) (Reporter, Reporter, error) {
-	serverReporter, err := InitReporterFromPrometheusConfig(logger, c.Prometheus, &c.ClientConfig)
-	if err != nil {
-		return nil, nil, err
-	}
-	sdkReporter := serverReporter
-	if c.PrometheusSDK != nil {
-		sdkReporter, err = InitReporterFromPrometheusConfig(logger, c.PrometheusSDK, &c.ClientConfig)
-		if err != nil {
-			return nil, nil, err
-		}
-	}
-	return serverReporter, sdkReporter, nil
 }
 
 // InitReporterFromPrometheusConfig initializes reporter from PrometheusConfig

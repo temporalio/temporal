@@ -63,7 +63,6 @@ type (
 		logger           log.Logger
 		namespaceLogger  NamespaceLogger
 		serverReporter   metrics.Reporter
-		sdkReporter      metrics.Reporter
 
 		dynamicConfigClient dynamicconfig.Client
 		dcCollection        *dynamicconfig.Collection
@@ -87,7 +86,6 @@ func NewServerFxImpl(
 	dynamicConfigClient dynamicconfig.Client,
 	dcCollection *dynamicconfig.Collection,
 	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
@@ -99,7 +97,6 @@ func NewServerFxImpl(
 		logger:              logger,
 		namespaceLogger:     namespaceLogger,
 		serverReporter:      serverReporter,
-		sdkReporter:         sdkReporter,
 		dynamicConfigClient: dynamicConfigClient,
 		dcCollection:        dcCollection,
 		persistenceConfig:   persistenceConfig,
@@ -157,10 +154,6 @@ func (s *ServerImpl) Stop() {
 
 	wg.Wait()
 
-	if s.sdkReporter != nil {
-		s.sdkReporter.Stop(s.logger)
-	}
-
 	if s.serverReporter != nil {
 		s.serverReporter.Stop(s.logger)
 	}
@@ -174,7 +167,6 @@ func newBootstrapParams(
 	serviceName ServiceName,
 	dc *dynamicconfig.Collection,
 	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
@@ -214,19 +206,17 @@ func newBootstrapParams(
 		}
 
 	params.ServerMetricsReporter = serverReporter
-	params.SDKMetricsReporter = sdkReporter
 
 	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
 	if serverReporter == nil {
 		var err error
-		serverReporter, sdkReporter, err = metrics.InitMetricReporters(logger, &svcCfg.Metrics, nil)
+		serverReporter, err = metrics.InitMetricsReporterInternal(logger, &svcCfg.Metrics, nil)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"unable to initialize per-service metric client. "+
 					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
 		}
 		params.ServerMetricsReporter = serverReporter
-		params.SDKMetricsReporter = sdkReporter
 	}
 
 	serviceIdx := metrics.GetMetricsServiceIdx(svcName, logger)
@@ -242,12 +232,7 @@ func newBootstrapParams(
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
-	sdkMetricsClient, err := params.SDKMetricsReporter.NewClient(logger, serviceIdx)
-	if err != nil {
-		return nil, fmt.Errorf("unable to init sdk metrics client: %w", err)
-	}
-
-	sdkMetricsHandler := sdk.NewMetricHandler(sdkMetricsClient.UserScope())
+	sdkMetricsHandler := sdk.NewMetricHandler(metricsClient.UserScope())
 	params.SdkClientFactory = sdk.NewClientFactory(
 		cfg.PublicClient.HostPort,
 		tlsFrontendConfig,
