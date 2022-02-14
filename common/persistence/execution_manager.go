@@ -922,7 +922,10 @@ func serializeTasks(
 ) (map[tasks.Category][]InternalHistoryTask, error) {
 	outputTasks := make(map[tasks.Category][]InternalHistoryTask)
 	for category, tasksByQueueType := range inputTasks {
-		// TODO: update serializer interface
+		// TODO: update serializer interface to serialize & deserialize one task at a time
+		// ideally, SerializeTasks should return a list of []InternalHistoryTask, which groups
+		// serialized task with it's key, howeve that will result in a cycle dependency issue
+		// between persistence and serializer package.
 		serializedTasks, err := serializer.SerializeTasks(tasksByQueueType)
 		if err != nil {
 			return nil, err

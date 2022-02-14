@@ -406,16 +406,24 @@ type (
 		RunID       string
 	}
 
+	// GetHistoryTaskRequest is used to get a workflow task
 	GetHistoryTaskRequest struct {
 		ShardID      int32
 		TaskCategory tasks.Category
 		TaskKey      tasks.Key
 	}
 
+	// GetHistoryTaskResponse is the response for GetHistoryTask
 	GetHistoryTaskResponse struct {
 		Task tasks.Task
 	}
 
+	// GetHistoryTasksRequest is used to get a range of history tasks
+	// Either TaskID or FireTime should be specified in both Min and MaxTaskKey
+	// NOTE: currently the range for TaskID is (minTaskID, maxTaskID] and
+	// the range for FireTime is [minFireTime, maxFireTime)
+	// TODO: change the semantics for TaskID to be the same as FireTime
+	// and rename the fields to InclusiveMinTaskKey and ExclusiveMaxTaskKey
 	GetHistoryTasksRequest struct {
 		ShardID       int32
 		TaskCategory  tasks.Category
@@ -425,17 +433,25 @@ type (
 		NextPageToken []byte
 	}
 
+	// GetHistoryTasksResponse is the response for GetHistoryTasks
 	GetHistoryTasksResponse struct {
 		Tasks         []tasks.Task
 		NextPageToken []byte
 	}
 
+	// CompleteHistoryTaskRequest delete one history task
 	CompleteHistoryTaskRequest struct {
 		ShardID      int32
 		TaskCategory tasks.Category
 		TaskKey      tasks.Key
 	}
 
+	// RangeCompleteHistoryTasksRequest deletes a range of history tasks
+	// Either TaskID or FireTime should be specified in both Min and MaxTaskKey
+	// NOTE: currently the range for TaskID is (minTaskID, maxTaskID] and
+	// the range for FireTime is [minFireTime, maxFireTime)
+	// TODO: change the semantics for TaskID to be the same as FireTime
+	// and rename the fields to InclusiveMinTaskKey and ExclusiveMaxTaskKey
 	RangeCompleteHistoryTasksRequest struct {
 		ShardID      int32
 		TaskCategory tasks.Category
@@ -443,7 +459,9 @@ type (
 		MaxTaskKey   tasks.Key
 	}
 
-	// TODO: refactor Replication DLQ related methods and struct definition
+	// TODO: refactor Replication DLQ related methods/struct definition and reuse history task
+	// definition above
+
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
 		ShardID       int32

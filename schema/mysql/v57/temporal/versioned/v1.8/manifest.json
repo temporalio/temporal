@@ -1,0 +1,8 @@
+{
+    "CurrVersion": "1.8",
+    "MinCompatibleVersion": "1.0",
+    "Description": "drop unused tasks table",
+    "SchemaUpdateCqlFiles": [
+        "drop_unused_tasks_table.sql"
+    ]
+}

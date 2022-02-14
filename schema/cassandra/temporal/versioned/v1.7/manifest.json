@@ -1,0 +1,8 @@
+{
+    "CurrVersion": "1.7",
+    "MinCompatibleVersion": "1.0",
+    "Description": "rename history task columns in executions",
+    "SchemaUpdateCqlFiles": [
+        "executions.cql"
+    ]
+}
