@@ -956,16 +956,22 @@ func validateTaskRange(
 ) error {
 	minTaskIDSpecified := minTaskKey.TaskID != 0
 	minFireTimeSpecified := !minTaskKey.FireTime.IsZero()
-	maxTaskIDSpecifiied := maxTaskKey.TaskID != 0
+	maxTaskIDSpecified := maxTaskKey.TaskID != 0
 	maxFireTimeSpecified := !maxTaskKey.FireTime.IsZero()
 
-	if minTaskIDSpecified && maxTaskIDSpecifiied && !minFireTimeSpecified && !maxFireTimeSpecified {
-		return nil
+	if maxTaskIDSpecified {
+		if !minFireTimeSpecified && !maxFireTimeSpecified {
+			return nil
+		}
+		return serviceerror.NewInvalidArgument("invalid task range, fireTime must be empty if taskID is sepcified")
 	}
 
-	if !minTaskIDSpecified && !maxTaskIDSpecifiied && minFireTimeSpecified && maxFireTimeSpecified {
-		return nil
+	if maxFireTimeSpecified {
+		if !minTaskIDSpecified && !maxTaskIDSpecified {
+			return nil
+		}
+		return serviceerror.NewInvalidArgument("invalid task range, taskID must be empty if fireTime is specified")
 	}
 
-	return serviceerror.NewInvalidArgument("invalid task range, please specify taskID or fireTime in both min and max task key")
+	return serviceerror.NewInvalidArgument("invalid task range, maxTaskKey is required")
 }

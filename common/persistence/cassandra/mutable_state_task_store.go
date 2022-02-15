@@ -980,7 +980,7 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 	// Reading history tasks need to be quorum level consistent, otherwise we could lose task
 
 	var query gocql.Query
-	if request.MinTaskKey.TaskID != 0 {
+	if request.MinTaskKey.TaskID != 0 || request.MaxTaskKey.TaskID != 0 {
 		query = d.Session.Query(templateGetHistoryImmediateTasksQuery,
 			request.ShardID,
 			rowTypeHistoryTask,
@@ -1054,7 +1054,7 @@ func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
 ) error {
 	// execution manager should already validated the request
 	var query gocql.Query
-	if request.MinTaskKey.TaskID != 0 {
+	if request.MinTaskKey.TaskID != 0 || request.MaxTaskKey.TaskID != 0 {
 		query = d.Session.Query(templateRangeCompleteHistoryImmediateTasksQuery,
 			request.ShardID,
 			rowTypeHistoryTask,

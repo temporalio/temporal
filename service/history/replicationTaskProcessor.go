@@ -29,7 +29,6 @@ package history
 import (
 	"context"
 	"fmt"
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -507,9 +506,6 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      p.shard.GetShardID(),
 			TaskCategory: tasks.CategoryReplication,
-			MinTaskKey: tasks.Key{
-				TaskID: math.MinInt64,
-			},
 			MaxTaskKey: tasks.Key{
 				TaskID: *minAckedTaskID,
 			},
