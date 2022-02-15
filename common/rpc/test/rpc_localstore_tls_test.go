@@ -76,6 +76,7 @@ type localStoreRPCSuite struct {
 	internodeDynamicTLSFactory              *TestFactory
 	internodeMutualTLSRPCRefreshFactory     *TestFactory
 	frontendMutualTLSRPCRefreshFactory      *TestFactory
+	frontendConfigRootCAForceTLSFactory     *TestFactory
 
 	internodeCertDir        string
 	frontendCertDir         string
@@ -101,6 +102,7 @@ type localStoreRPCSuite struct {
 	frontendConfigMutualTLS        config.GroupTLS
 	frontendConfigPerHostOverrides config.GroupTLS
 	frontendConfigRootCAOnly       config.GroupTLS
+	frontendConfigRootCAForceTLS   config.GroupTLS
 	frontendConfigAltRootCAOnly    config.GroupTLS
 	frontendConfigSystemWorker     config.WorkerTLS
 	frontendConfigMutualTLSRefresh config.GroupTLS
@@ -201,6 +203,9 @@ func (s *localStoreRPCSuite) SetupSuite() {
 			RootCAData: []string{convertFileToBase64(s.frontendChain.CaPubFile)},
 		},
 	}
+	s.frontendConfigRootCAForceTLS = s.frontendConfigRootCAOnly
+	s.frontendConfigRootCAForceTLS.Client.ForceTLS = true
+
 	s.frontendConfigAltRootCAOnly = config.GroupTLS{
 		Server: config.ServerTLS{
 			RequireClientAuth: true,
@@ -319,6 +324,13 @@ func (s *localStoreRPCSuite) setupFrontend() {
 		},
 	}
 
+	localStoreRootCAForceTLS := &config.Global{
+		Membership: s.membershipConfig,
+		TLS: config.RootTLS{
+			Frontend: s.frontendConfigRootCAForceTLS,
+		},
+	}
+
 	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreMutualTLS.TLS, nil, s.logger, nil)
 	s.NoError(err)
 	frontendMutualTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection())
@@ -355,6 +367,12 @@ func (s *localStoreRPCSuite) setupFrontend() {
 	s.internodeDynamicTLSFactory = i(dynamicServerTLSFactory)
 
 	s.frontendMutualTLSRPCRefreshFactory = f(frontendMutualTLSRefreshFactory)
+
+	provider, err = encryption.NewTLSConfigProviderFromConfig(localStoreRootCAForceTLS.TLS, nil, s.logger, nil)
+	s.NoError(err)
+	frontendRootCAForceTLSFactory := rpc.NewFactory(rpcTestCfgDefault, "tester", s.logger, provider, dynamicconfig.NewNoopCollection())
+	s.NotNil(frontendServerTLSFactory)
+	s.frontendConfigRootCAForceTLSFactory = f(frontendRootCAForceTLSFactory)
 }
 
 func (s *localStoreRPCSuite) setupInternode() {
@@ -788,4 +806,10 @@ func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *TestFactory, s
 	} else {
 		s.NoError(err)
 	}
+}
+
+func (s *localStoreRPCSuite) TestClientForceTLS() {
+	options, err := s.frontendConfigRootCAForceTLSFactory.RPCFactory.GetFrontendGRPCServerOptions()
+	s.NoError(err)
+	s.Nil(options)
 }
