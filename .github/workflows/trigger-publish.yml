@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master
-      - release/v[0-9]+.[0-9]+.[0-9]+ # https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#patterns-to-match-branches-and-tags
+      - release/*
   workflow_dispatch:
 
 jobs:
