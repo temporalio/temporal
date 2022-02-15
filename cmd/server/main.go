@@ -47,6 +47,10 @@ import (
 	"go.temporal.io/server/temporal"
 )
 
+var (
+	cgoEnabled = false
+)
+
 // main entry point for the temporal server
 func main() {
 	app := buildCLI()
@@ -139,6 +143,7 @@ func buildCLI() *cli.App {
 					tag.NewStringTag("platform", runtime.GOARCH),
 					tag.NewStringTag("go-version", runtime.Version()),
 					tag.NewStringTag("server-version", headers.ServerVersion),
+					tag.NewBoolTag("cgo-enabled", build.InfoData.CgoEnabled),
 				)
 
 				var dynamicConfigClient dynamicconfig.Client
