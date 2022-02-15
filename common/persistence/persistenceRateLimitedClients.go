@@ -493,6 +493,15 @@ func (p *executionRateLimitedPersistenceClient) ReadHistoryBranch(request *ReadH
 	return response, err
 }
 
+// ReadHistoryBranch returns history node data for a branch
+func (p *executionRateLimitedPersistenceClient) ReadHistoryBranchReverse(request *ReadHistoryBranchReverseRequest) (*ReadHistoryBranchReverseResponse, error) {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return nil, ErrPersistenceLimitExceeded
+	}
+	response, err := p.persistence.ReadHistoryBranchReverse(request)
+	return response, err
+}
+
 // ReadHistoryBranchByBatch returns history node data for a branch
 func (p *executionRateLimitedPersistenceClient) ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {

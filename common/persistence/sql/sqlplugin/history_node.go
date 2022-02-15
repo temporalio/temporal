@@ -53,8 +53,10 @@ type (
 		MinNodeID    int64
 		MinTxnID     int64
 		MaxNodeID    int64
+		MaxTxnID     int64
 		PageSize     int
 		MetadataOnly bool
+		ReverseOrder bool
 	}
 
 	// HistoryNodeDeleteFilter contains the column names within history_node table that

@@ -742,6 +742,142 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 	}, nil
 }
 
+// GetWorkflowExecutionHistory returns the history of specified workflow execution.  It fails with 'EntityNotExistError' if specified workflow
+// execution in unknown to the service.
+func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Context, request *workflowservice.GetWorkflowExecutionHistoryReverseRequest) (_ *workflowservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
+	defer log.CapturePanic(wh.logger, &retError)
+
+	if wh.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := wh.validateExecution(request.Execution); err != nil {
+		return nil, err
+	}
+
+	if request.GetMaximumPageSize() <= 0 {
+		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
+	}
+
+	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	// force limit page size if exceed
+	if request.GetMaximumPageSize() > common.GetHistoryMaxPageSize {
+		wh.throttledLogger.Warn("GetHistory page size is larger than threshold",
+			tag.WorkflowID(request.Execution.GetWorkflowId()),
+			tag.WorkflowRunID(request.Execution.GetRunId()),
+			tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowSize(int64(request.GetMaximumPageSize())))
+		request.MaximumPageSize = common.GetHistoryMaxPageSize
+	}
+
+	queryMutableState := func(
+		namespaceUUID namespace.ID,
+		execution *commonpb.WorkflowExecution,
+		expectedNextEventID int64,
+		currentBranchToken []byte,
+	) ([]byte, string, int64, error) {
+		response, err := wh.historyClient.PollMutableState(ctx, &historyservice.PollMutableStateRequest{
+			NamespaceId:         namespaceUUID.String(),
+			Execution:           execution,
+			ExpectedNextEventId: expectedNextEventID,
+			CurrentBranchToken:  currentBranchToken,
+		})
+
+		if err != nil {
+			return nil, "", 0, err
+		}
+
+		return response.CurrentBranchToken,
+			response.Execution.GetRunId(),
+			response.GetLastFirstEventTxnId(),
+			nil
+	}
+
+	execution := request.Execution
+	var continuationToken *tokenspb.HistoryContinuation
+
+	var runID string
+	var lastFirstTxnID int64
+
+	if request.NextPageToken == nil {
+		continuationToken = &tokenspb.HistoryContinuation{}
+		continuationToken.BranchToken, runID, lastFirstTxnID, err =
+			queryMutableState(namespaceID, execution, common.FirstEventID, nil)
+		if err != nil {
+			return nil, err
+		}
+
+		execution.RunId = runID
+		continuationToken.RunId = runID
+		continuationToken.FirstEventId = common.FirstEventID
+		continuationToken.NextEventId = common.EmptyEventID
+		continuationToken.PersistenceToken = nil
+	} else {
+		continuationToken, err = deserializeHistoryToken(request.NextPageToken)
+		if err != nil {
+			return nil, errInvalidNextPageToken
+		}
+		if execution.GetRunId() != "" && execution.GetRunId() != continuationToken.GetRunId() {
+			return nil, errNextPageTokenRunIDMismatch
+		}
+
+		execution.RunId = continuationToken.GetRunId()
+	}
+
+	// TODO below is a temporal solution to guard against invalid event batch
+	//  when data inconsistency occurs
+	//  long term solution should check event batch pointing backwards within history store
+	defer func() {
+		if _, ok := retError.(*serviceerror.DataLoss); ok {
+			wh.trimHistoryNode(ctx, namespaceID.String(), execution.GetWorkflowId(), execution.GetRunId())
+		}
+	}()
+
+	history := &historypb.History{}
+	history.Events = []*historypb.HistoryEvent{}
+	// return all events
+	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = wh.getHistoryReverse(
+		wh.metricsScope(ctx),
+		namespaceID,
+		namespace.Name(request.GetNamespace()),
+		*execution,
+		continuationToken.NextEventId,
+		lastFirstTxnID,
+		request.GetMaximumPageSize(),
+		continuationToken.PersistenceToken,
+		continuationToken.BranchToken,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if continuationToken.NextEventId < continuationToken.FirstEventId {
+		continuationToken = nil
+	}
+
+	nextToken, err := serializeHistoryToken(continuationToken)
+	if err != nil {
+		return nil, err
+	}
+
+	return &workflowservice.GetWorkflowExecutionHistoryReverseResponse{
+		History:       history,
+		NextPageToken: nextToken,
+	}, nil
+}
+
 // PollWorkflowTaskQueue is called by application worker to process WorkflowTask from a specific task queue.  A
 // WorkflowTask is dispatched to callers for active workflow executions, with pending workflow tasks.
 // Application is then expected to call 'RespondWorkflowTaskCompleted' API when it is done processing the WorkflowTask.
@@ -2998,6 +3134,62 @@ func (wh *WorkflowHandler) getHistory(
 		Events: historyEvents,
 	}
 	return executionHistory, nextPageToken, nil
+}
+
+func (wh *WorkflowHandler) getHistoryReverse(
+	scope metrics.Scope,
+	namespaceID namespace.ID,
+	namespace namespace.Name,
+	execution commonpb.WorkflowExecution,
+	nextEventID int64,
+	lastFirstTxnID int64,
+	pageSize int32,
+	nextPageToken []byte,
+	branchToken []byte,
+) (*historypb.History, []byte, int64, error) {
+	var size int
+	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
+	var err error
+	var historyEvents []*historypb.HistoryEvent
+
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
+		BranchToken:            branchToken,
+		MaxEventID:             nextEventID,
+		LastFirstTransactionID: lastFirstTxnID,
+		PageSize:               int(pageSize),
+		NextPageToken:          nextPageToken,
+		ShardID:                shardID,
+	})
+
+	switch err.(type) {
+	case nil:
+		// noop
+	case *serviceerror.DataLoss:
+		// log event
+		wh.logger.Error("encountered data loss event", tag.WorkflowNamespaceID(namespaceID.String()), tag.WorkflowID(execution.GetWorkflowId()), tag.WorkflowRunID(execution.GetRunId()))
+		return nil, nil, 0, err
+	default:
+		return nil, nil, 0, err
+	}
+
+	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).RecordDistribution(metrics.HistorySize, size)
+
+	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
+		return nil, nil, 0, err
+	}
+
+	executionHistory := &historypb.History{
+		Events: historyEvents,
+	}
+
+	var newNextEventID int64
+	if len(historyEvents) > 0 {
+		newNextEventID = historyEvents[len(historyEvents)-1].EventId - 1
+	} else {
+		newNextEventID = nextEventID
+	}
+
+	return executionHistory, nextPageToken, newNextEventID, nil
 }
 
 func (wh *WorkflowHandler) processOutgoingSearchAttributes(events []*historypb.HistoryEvent, namespace namespace.Name) error {

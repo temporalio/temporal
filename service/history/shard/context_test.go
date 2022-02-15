@@ -26,6 +26,7 @@ package shard
 
 import (
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -33,7 +34,9 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -55,6 +58,7 @@ type (
 		namespaceID        namespace.ID
 		mockNamespaceCache *namespace.MockRegistry
 		namespaceEntry     *namespace.Namespace
+		timeSource         *clock.EventTimeSource
 
 		mockClusterMetadata  *cluster.MockMetadata
 		mockExecutionManager *persistence.MockExecutionManager
@@ -72,7 +76,8 @@ func (s *contextSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	shardContext := NewTestContext(
+	s.timeSource = clock.NewEventTimeSource()
+	shardContext := NewTestContextWithTimeSource(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -81,10 +86,12 @@ func (s *contextSuite) SetupTest() {
 				TransferAckLevel: 0,
 			}},
 		tests.NewDynamicConfig(),
+		s.timeSource,
 	)
 	s.shardContext = shardContext
 
 	s.mockResource = shardContext.Resource
+	shardContext.MockHostInfoProvider.EXPECT().HostInfo().Return(s.mockResource.GetHostInfo()).AnyTimes()
 
 	s.namespaceID = "namespace-Id"
 	s.namespaceEntry = namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID.String()}, &persistencespb.NamespaceConfig{}, "")
@@ -139,4 +146,63 @@ func (s *contextSuite) TestAddTasks_Success() {
 
 	err := s.shardContext.AddTasks(addTasksRequest)
 	s.NoError(err)
+}
+
+func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
+
+	now := time.Now().Truncate(time.Millisecond)
+	persistenceShardInfo := &persistencespb.ShardInfo{
+		ShardId:           0,
+		TimerAckLevelTime: timestamp.TimePtr(now.Add(-time.Minute)),
+		ClusterTimerAckLevel: map[string]*time.Time{
+			cluster.TestCurrentClusterName: timestamp.TimePtr(now),
+		},
+	}
+	s.mockResource.ShardMgr.EXPECT().GetOrCreateShard(gomock.Any()).Return(
+		&persistence.GetOrCreateShardResponse{
+			ShardInfo: persistenceShardInfo,
+		},
+		nil,
+	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
+
+	// clear shardInfo and load from persistence
+	shardContextImpl := s.shardContext.(*ContextTest)
+	shardContextImpl.shardInfo = nil
+	err := shardContextImpl.loadShardMetadata(convert.BoolPtr(false))
+	s.NoError(err)
+
+	for clusterName, info := range s.shardContext.GetClusterMetadata().GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+
+		maxReadLevel := s.shardContext.GetTimerMaxReadLevel(clusterName)
+		s.False(maxReadLevel.Before(*persistenceShardInfo.TimerAckLevelTime))
+
+		if clusterAckLevel, ok := persistenceShardInfo.ClusterTimerAckLevel[clusterName]; ok {
+			s.False(maxReadLevel.Before(*clusterAckLevel))
+		}
+	}
+}
+
+func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
+	clusterName := cluster.TestCurrentClusterName
+	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
+
+	now := time.Now()
+	s.timeSource.Update(now)
+	s.shardContext.UpdateTimerMaxReadLevel(clusterName)
+	maxReadLevel := s.shardContext.GetTimerMaxReadLevel(clusterName)
+
+	s.timeSource.Update(now.Add(-time.Minute))
+	s.shardContext.UpdateTimerMaxReadLevel(clusterName)
+	newMaxReadLevel := s.shardContext.GetTimerMaxReadLevel(clusterName)
+	s.Equal(maxReadLevel, newMaxReadLevel)
+
+	s.timeSource.Update(now.Add(time.Minute))
+	s.shardContext.UpdateTimerMaxReadLevel(clusterName)
+	newMaxReadLevel = s.shardContext.GetTimerMaxReadLevel(clusterName)
+	s.True(newMaxReadLevel.After(maxReadLevel))
 }

@@ -532,6 +532,21 @@ func (mr *MockExecutionManagerMockRecorder) ReadHistoryBranchByBatch(request int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranchByBatch", reflect.TypeOf((*MockExecutionManager)(nil).ReadHistoryBranchByBatch), request)
 }
 
+// ReadHistoryBranchReverse mocks base method.
+func (m *MockExecutionManager) ReadHistoryBranchReverse(request *ReadHistoryBranchReverseRequest) (*ReadHistoryBranchReverseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadHistoryBranchReverse", request)
+	ret0, _ := ret[0].(*ReadHistoryBranchReverseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadHistoryBranchReverse indicates an expected call of ReadHistoryBranchReverse.
+func (mr *MockExecutionManagerMockRecorder) ReadHistoryBranchReverse(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranchReverse", reflect.TypeOf((*MockExecutionManager)(nil).ReadHistoryBranchReverse), request)
+}
+
 // ReadRawHistoryBranch mocks base method.
 func (m *MockExecutionManager) ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()
