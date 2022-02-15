@@ -130,7 +130,7 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 			return newClientTLSConfig(s.internodeClientCertProvider, client.ServerName,
 				s.settings.Internode.Server.RequireClientAuth, false, !client.DisableHostVerification)
 		},
-		s.settings.Internode.IsEnabled(),
+		s.settings.Internode.IsClientEnabled(),
 	)
 }
 
@@ -143,7 +143,7 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 		useTLS = true
 	} else {
 		client = &s.settings.Frontend.Client
-		useTLS = s.settings.Frontend.IsEnabled()
+		useTLS = s.settings.Frontend.IsClientEnabled()
 	}
 	return s.getOrCreateConfig(
 		&s.cachedFrontendClientConfig,
@@ -161,7 +161,7 @@ func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 		func() (*tls.Config, error) {
 			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap, &s.settings.Frontend, s.logger)
 		},
-		s.settings.Frontend.IsEnabled())
+		s.settings.Frontend.IsServerEnabled())
 }
 
 func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) {
@@ -170,7 +170,7 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 		func() (*tls.Config, error) {
 			return newServerTLSConfig(s.internodeCertProvider, nil, &s.settings.Internode, s.logger)
 		},
-		s.settings.Internode.IsEnabled())
+		s.settings.Internode.IsServerEnabled())
 }
 
 func (s *localStoreTlsProvider) GetExpiringCerts(timeWindow time.Duration,

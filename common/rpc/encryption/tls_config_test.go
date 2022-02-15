@@ -51,19 +51,27 @@ func (s *tlsConfigTest) SetupTest() {
 func (s *tlsConfigTest) TestIsEnabled() {
 
 	emptyCfg := config.GroupTLS{}
-	s.False(emptyCfg.IsEnabled())
+	s.False(emptyCfg.IsServerEnabled())
+	s.False(emptyCfg.IsClientEnabled())
 	cfg := config.GroupTLS{Server: config.ServerTLS{KeyFile: "foo"}}
-	s.True(cfg.IsEnabled())
+	s.True(cfg.IsServerEnabled())
+	s.False(cfg.IsClientEnabled())
 	cfg = config.GroupTLS{Server: config.ServerTLS{KeyData: "foo"}}
-	s.True(cfg.IsEnabled())
+	s.True(cfg.IsServerEnabled())
+	s.False(cfg.IsClientEnabled())
 	cfg = config.GroupTLS{Client: config.ClientTLS{RootCAFiles: []string{"bar"}}}
-	s.True(cfg.IsEnabled())
+	s.False(cfg.IsServerEnabled())
+	s.True(cfg.IsClientEnabled())
 	cfg = config.GroupTLS{Client: config.ClientTLS{RootCAData: []string{"bar"}}}
-	s.True(cfg.IsEnabled())
+	s.False(cfg.IsServerEnabled())
+	s.True(cfg.IsClientEnabled())
 	cfg = config.GroupTLS{Client: config.ClientTLS{ForceTLS: true}}
-	s.True(cfg.IsEnabled())
+	s.False(cfg.IsServerEnabled())
+	s.True(cfg.IsClientEnabled())
 	cfg = config.GroupTLS{Client: config.ClientTLS{ForceTLS: false}}
-	s.False(cfg.IsEnabled())
+	s.False(cfg.IsServerEnabled())
+	s.False(cfg.IsClientEnabled())
+
 }
 
 func (s *tlsConfigTest) TestIsSystemWorker() {
