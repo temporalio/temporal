@@ -30,19 +30,23 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
+var _ Reporter = (*TallyReporter)(nil)
+
 // TallyReporter is a base class for reporting metrics to Tally.
 type TallyReporter struct {
 	scope        tally.Scope
 	clientConfig *ClientConfig
+	userScope    UserScope
 }
 
-func newTallyReporter(
+func NewTallyReporter(
 	scope tally.Scope,
 	clientConfig *ClientConfig,
 ) *TallyReporter {
 	return &TallyReporter{
 		scope:        scope,
 		clientConfig: clientConfig,
+		userScope:    newTallyUserScope(scope),
 	}
 }
 
@@ -56,4 +60,8 @@ func (tr *TallyReporter) GetScope() tally.Scope {
 
 func (tr *TallyReporter) Stop(logger log.Logger) {
 	// noop
+}
+
+func (tr *TallyReporter) UserScope() UserScope {
+	return tr.userScope
 }

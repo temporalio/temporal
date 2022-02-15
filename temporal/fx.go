@@ -65,7 +65,6 @@ import (
 
 type (
 	ServerReporter metrics.Reporter
-	SdkReporter    metrics.Reporter
 
 	ServiceStopFn func()
 
@@ -229,7 +228,6 @@ type (
 		NamespaceLogger            NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
 		ServerReporter             ServerReporter
-		SdkReporter                SdkReporter
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
@@ -284,7 +282,6 @@ func HistoryServiceProvider(
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() SdkReporter { return params.SdkReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
@@ -340,7 +337,6 @@ func MatchingServiceProvider(
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() SdkReporter { return params.SdkReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
@@ -396,7 +392,6 @@ func FrontendServiceProvider(
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() SdkReporter { return params.SdkReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
@@ -452,7 +447,6 @@ func WorkerServiceProvider(
 		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() SdkReporter { return params.SdkReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(newBootstrapParams),
@@ -704,17 +698,16 @@ func NamespaceLoggerProvider(so *serverOptions) NamespaceLogger {
 	return so.namespaceLogger
 }
 
-func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReporter, SdkReporter, error) {
+func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReporter, error) {
 	var serverReporter ServerReporter
-	var sdkReporter SdkReporter
 	if so.config.Global.Metrics != nil {
 		var err error
-		serverReporter, sdkReporter, err = so.config.Global.Metrics.InitMetricReporters(logger, so.metricsReporter)
+		serverReporter, err = metrics.InitMetricsReporterInternal(logger, so.config.Global.Metrics, so.metricsReporter)
 		if err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
-	return serverReporter, sdkReporter, nil
+	return serverReporter, nil
 }
 
 func MetricsClientProvider(logger log.Logger, serverReporter ServerReporter) (metrics.Client, error) {

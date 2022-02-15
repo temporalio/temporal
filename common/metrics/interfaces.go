@@ -116,6 +116,7 @@ type (
 	Reporter interface {
 		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
 		Stop(logger log.Logger)
+		UserScope() UserScope
 	}
 )
 
