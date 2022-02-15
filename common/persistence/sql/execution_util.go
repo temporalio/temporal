@@ -539,7 +539,7 @@ func applyTasks(
 		case tasks.CategoryReplication:
 			err = createReplicationTasks(ctx, tx, shardID, tasksByCategory)
 		default:
-			err = serviceerror.NewInternal(fmt.Sprintf("Unknown queue type: %v", category))
+			err = serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
 		}
 
 		if err != nil {

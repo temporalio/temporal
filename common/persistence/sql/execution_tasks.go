@@ -368,7 +368,7 @@ func (m *sqlExecutionStore) getReplicationTasks(
 func getReadLevels(
 	request *p.GetHistoryTasksRequest,
 ) (readLevel int64, maxReadLevelInclusive int64, err error) {
-	readLevel = request.MaxTaskKey.TaskID
+	readLevel = request.MinTaskKey.TaskID
 	if len(request.NextPageToken) > 0 {
 		readLevel, err = deserializePageToken(request.NextPageToken)
 		if err != nil {

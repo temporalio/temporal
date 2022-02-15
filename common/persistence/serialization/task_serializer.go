@@ -91,7 +91,7 @@ func (s *TaskSerializer) DeserializeTasks(
 	case tasks.CategoryReplication:
 		return s.DeserializeReplicationTasks(blobs)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown queue type: %v", Category))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", Category))
 	}
 }
 
