@@ -500,12 +500,10 @@ goreleaser-install:
 
 goreleaser-build:
 	@printf $(COLOR) "Build release binaries from current commit..."
-	@./develop/scripts/create_build_info_data.sh
 	@goreleaser release --snapshot --rm-dist
 
 goreleaser-release:
 	@printf $(COLOR) "Build and publish release binaries to the latest release tag..."
-	@./develop/scripts/create_build_info_data.sh
 	@goreleaser release --rm-dist
 
 ##### Grafana #####
