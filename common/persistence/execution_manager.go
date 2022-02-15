@@ -703,6 +703,10 @@ func (m *executionManagerImpl) GetHistoryTask(
 func (m *executionManagerImpl) GetHistoryTasks(
 	request *GetHistoryTasksRequest,
 ) (*GetHistoryTasksResponse, error) {
+	if err := validateTaskRange(request.MinTaskKey, request.MaxTaskKey); err != nil {
+		return nil, err
+	}
+
 	resp, err := m.persistence.GetHistoryTasks(request)
 	if err != nil {
 		return nil, err
@@ -726,6 +730,10 @@ func (m *executionManagerImpl) CompleteHistoryTask(
 func (m *executionManagerImpl) RangeCompleteHistoryTasks(
 	request *RangeCompleteHistoryTasksRequest,
 ) error {
+	if err := validateTaskRange(request.MinTaskKey, request.MaxTaskKey); err != nil {
+		return err
+	}
+
 	return m.persistence.RangeCompleteHistoryTasks(request)
 }
 
@@ -940,4 +948,24 @@ func serializeTasks(
 		}
 	}
 	return outputTasks, nil
+}
+
+func validateTaskRange(
+	minTaskKey tasks.Key,
+	maxTaskKey tasks.Key,
+) error {
+	minTaskIDSpecified := minTaskKey.TaskID != 0
+	minFireTimeSpecified := !minTaskKey.FireTime.IsZero()
+	maxTaskIDSpecifiied := maxTaskKey.TaskID != 0
+	maxFireTimeSpecified := !maxTaskKey.FireTime.IsZero()
+
+	if minTaskIDSpecified && maxTaskIDSpecifiied && !minFireTimeSpecified && !maxFireTimeSpecified {
+		return nil
+	}
+
+	if !minTaskIDSpecified && !maxTaskIDSpecifiied && minFireTimeSpecified && maxFireTimeSpecified {
+		return nil
+	}
+
+	return serviceerror.NewInvalidArgument("invalid task range, please specify taskID or fireTime in both min and max task key")
 }

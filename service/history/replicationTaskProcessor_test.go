@@ -25,6 +25,7 @@
 package history
 
 import (
+	"math"
 	"math/rand"
 	"testing"
 	"time"
@@ -387,6 +388,9 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      s.shardID,
 			TaskCategory: tasks.CategoryReplication,
+			MinTaskKey: tasks.Key{
+				TaskID: math.MinInt64,
+			},
 			MaxTaskKey: tasks.Key{
 				TaskID: ackedTaskID,
 			},
