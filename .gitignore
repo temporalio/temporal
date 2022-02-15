@@ -24,7 +24,6 @@
 
 # Goreleaser
 /dist
-/bin
 
 # Fossa
 .fossa.yml
