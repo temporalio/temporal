@@ -51,17 +51,27 @@ func NewSdkLogger(logger Logger) *SdkLogger {
 }
 
 func (l *SdkLogger) tags(keyvals []interface{}) []tag.Tag {
-	if len(keyvals)%2 != 0 {
-		return []tag.Tag{tag.Error(fmt.Errorf("odd number of keyvals pairs: %v", keyvals))}
-	}
-
 	var tags []tag.Tag
-	for i := 0; i < len(keyvals); i += 2 {
+	for i := 0; i < len(keyvals); i++ {
+		t, keyvalIsTag := keyvals[i].(tag.Tag)
+		if keyvalIsTag {
+			tags = append(tags, t)
+			continue
+		}
+
 		key, ok := keyvals[i].(string)
 		if !ok {
 			key = fmt.Sprintf("%v", keyvals[i])
 		}
-		tags = append(tags, tag.NewAnyTag(key, keyvals[i+1]))
+		var val interface{}
+		if i+1 == len(keyvals) {
+			val = fmt.Sprintf("last key %q doesn't have value", key)
+		} else {
+			val = keyvals[i+1]
+			i++
+		}
+
+		tags = append(tags, tag.NewAnyTag(key, val))
 	}
 
 	return tags
