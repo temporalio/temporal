@@ -92,10 +92,9 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 
 	s.timerQueueTaskExecutorBase = newTimerQueueTaskExecutorBase(
 		s.testShardContext,
-		s.mockDeleteManager,
 		s.mockCache,
+		s.mockDeleteManager,
 		s.testShardContext.GetLogger(),
-		s.testShardContext.GetMetricsClient(),
 		config,
 	)
 }

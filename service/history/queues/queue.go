@@ -28,6 +28,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination queue_mock.go
@@ -43,6 +44,10 @@ type (
 	}
 
 	ProcessorFactory interface {
-		CreateProcessor(shard shard.Context, engine shard.Engine) Processor
+		// TODO: remove the cache parameter after workflow cache become a host level component
+		// and it can be provided as a parameter when creating a ProcessorFactory instance.
+		// Currently, workflow cache is shard level, but we can't get it from shard or engine interface,
+		// as that will lead to a cycle dependency issue between shard and workflow package.
+		CreateProcessor(shard shard.Context, engine shard.Engine, cache workflow.Cache) Processor
 	}
 )

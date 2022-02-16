@@ -141,7 +141,6 @@ func compareTimerIDLess(first *timerKey, second *timerKey) bool {
 func newTimerQueueAckMgr(
 	scope int,
 	shard shard.Context,
-	metricsClient metrics.Client,
 	minLevel time.Time,
 	timeNow timeNow,
 	updateTimerAckLevel updateTimerAckLevel,
@@ -155,7 +154,7 @@ func newTimerQueueAckMgr(
 		isFailover:          false,
 		shard:               shard,
 		executionMgr:        shard.GetExecutionManager(),
-		metricsClient:       metricsClient,
+		metricsClient:       shard.GetMetricsClient(),
 		logger:              logger,
 		config:              shard.GetConfig(),
 		timeNow:             timeNow,
@@ -177,7 +176,6 @@ func newTimerQueueAckMgr(
 
 func newTimerQueueFailoverAckMgr(
 	shard shard.Context,
-	metricsClient metrics.Client,
 	minLevel time.Time,
 	maxLevel time.Time,
 	timeNow timeNow,
@@ -193,7 +191,7 @@ func newTimerQueueFailoverAckMgr(
 		isFailover:          true,
 		shard:               shard,
 		executionMgr:        shard.GetExecutionManager(),
-		metricsClient:       metricsClient,
+		metricsClient:       shard.GetMetricsClient(),
 		logger:              logger,
 		config:              shard.GetConfig(),
 		timeNow:             timeNow,

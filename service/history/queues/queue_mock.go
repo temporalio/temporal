@@ -34,6 +34,7 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	shard "go.temporal.io/server/service/history/shard"
 	tasks "go.temporal.io/server/service/history/tasks"
+	workflow "go.temporal.io/server/service/history/workflow"
 )
 
 // MockProcessor is a mock of Processor interface.
@@ -169,15 +170,15 @@ func (m *MockProcessorFactory) EXPECT() *MockProcessorFactoryMockRecorder {
 }
 
 // CreateProcessor mocks base method.
-func (m *MockProcessorFactory) CreateProcessor(shard shard.Context, engine shard.Engine) Processor {
+func (m *MockProcessorFactory) CreateProcessor(shard shard.Context, engine shard.Engine, cache workflow.Cache) Processor {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateProcessor", shard, engine)
+	ret := m.ctrl.Call(m, "CreateProcessor", shard, engine, cache)
 	ret0, _ := ret[0].(Processor)
 	return ret0
 }
 
 // CreateProcessor indicates an expected call of CreateProcessor.
-func (mr *MockProcessorFactoryMockRecorder) CreateProcessor(shard, engine interface{}) *gomock.Call {
+func (mr *MockProcessorFactoryMockRecorder) CreateProcessor(shard, engine, cache interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateProcessor", reflect.TypeOf((*MockProcessorFactory)(nil).CreateProcessor), shard, engine)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateProcessor", reflect.TypeOf((*MockProcessorFactory)(nil).CreateProcessor), shard, engine, cache)
 }

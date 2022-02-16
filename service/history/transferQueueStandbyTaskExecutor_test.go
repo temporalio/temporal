@@ -44,7 +44,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/api/matchingservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
@@ -63,6 +62,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
+	warchiver "go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -79,6 +79,7 @@ type (
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
 		mockExecutionMgr     *persistence.MockExecutionManager
+		mockArchivalClient   *warchiver.MockClient
 		mockArchivalMetadata *archiver.MockArchivalMetadata
 		mockArchiverProvider *provider.MockArchiverProvider
 
@@ -93,7 +94,6 @@ type (
 		discardDuration      time.Duration
 
 		transferQueueStandbyTaskExecutor *transferQueueStandbyTaskExecutor
-		mockBean                         *client.MockBean
 	}
 )
 
@@ -122,7 +122,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockNDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
-
+	s.mockArchivalClient = warchiver.NewMockClient(s.controller)
 	s.mockShard = shard.NewTestContextWithTimeSource(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
@@ -179,18 +179,14 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.clusterName = cluster.TestAlternativeClusterName
-	s.mockBean = client.NewMockBean(s.controller)
-	s.mockBean.EXPECT().GetRemoteAdminClient("standby").Return(s.mockAdminClient)
 
 	s.transferQueueStandbyTaskExecutor = newTransferQueueStandbyTaskExecutor(
 		s.mockShard,
-		h,
+		h.historyCache,
+		s.mockArchivalClient,
 		s.mockNDCHistoryResender,
 		s.logger,
-		s.mockShard.GetMetricsClient(),
 		s.clusterName,
-		config,
-		s.mockBean,
 		s.mockShard.Resource.GetMatchingClient(),
 	).(*transferQueueStandbyTaskExecutor)
 }

@@ -28,14 +28,12 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -49,9 +47,7 @@ type (
 		replicationTaskFetchers ReplicationTaskFetchers
 		rawMatchingClient       matchingservice.MatchingServiceClient
 		newCacheFn              workflow.NewCacheFn
-		clientBean              client.Bean
-		archiverProvider        provider.ArchiverProvider
-		registry                namespace.Registry
+		archivalClient          archiver.Client
 	}
 )
 
@@ -65,9 +61,7 @@ func NewEngineFactory(
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
-	clientBean client.Bean,
-	archiverProvider provider.ArchiverProvider,
-	registry namespace.Registry,
+	archivalClient archiver.Client,
 ) shard.EngineFactory {
 	return &historyEngineFactory{
 		visibilityMgr:           visibilityMgr,
@@ -79,9 +73,7 @@ func NewEngineFactory(
 		replicationTaskFetchers: replicationTaskFetchers,
 		rawMatchingClient:       rawMatchingClient,
 		newCacheFn:              newCacheFn,
-		clientBean:              clientBean,
-		archiverProvider:        archiverProvider,
-		registry:                registry,
+		archivalClient:          archivalClient,
 	}
 }
 
@@ -99,8 +91,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.replicationTaskFetchers,
 		f.rawMatchingClient,
 		f.newCacheFn,
-		f.clientBean,
-		f.archiverProvider,
-		f.registry,
+		f.archivalClient,
 	)
 }
