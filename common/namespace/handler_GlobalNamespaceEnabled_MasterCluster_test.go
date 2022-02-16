@@ -441,7 +441,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 		})
 	}
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
+	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(0)
 
 	retention := 1 * time.Hour * 24
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
