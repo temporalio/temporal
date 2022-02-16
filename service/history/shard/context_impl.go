@@ -1007,6 +1007,14 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	return nil
 }
 
+// TODO:
+// 1. when deprecating old ack level related fields, use shardInfo.QueueAckLevels
+// for calculating queue processing lag and diff. Current those old ack level fields
+// are updated together with the new QueueAckLevels, so metrics can still be emitted
+// correctly.
+// 2. instead of having separate metric definition for each task category, we should
+// use one metrics (or two, one for immedidate task, one for scheduled task),
+// and add tags indicating the task category.
 func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
 	clusterInfo := s.GetClusterMetadata().GetAllClusterInfo()
