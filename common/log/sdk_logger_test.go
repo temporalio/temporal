@@ -66,7 +66,7 @@ func (s *SdkLoggerSuite) TestEvenKeyValPairs() {
 }
 
 func (s *SdkLoggerSuite) TestOddKeyValPairs() {
-	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "val1"), tag.NewAnyTag("key2", "last key \"key2\" doesn't have value"))
+	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "val1"), tag.NewAnyTag("key2", "no value"))
 	s.sdkLogger.Info("msg", "key1", "val1", "key2")
 }
 
@@ -85,6 +85,6 @@ func (s *SdkLoggerSuite) TestEmptyKeyValPairs() {
 }
 
 func (s *SdkLoggerSuite) TestSingleKeyValPairs() {
-	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "last key \"key1\" doesn't have value"))
+	s.underlyingLogger.EXPECT().Info("msg", tag.NewAnyTag("key1", "no value"))
 	s.sdkLogger.Info("msg", "key1")
 }

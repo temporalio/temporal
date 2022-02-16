@@ -32,7 +32,10 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-const extraSkipForSdkLogger = 1
+const (
+	extraSkipForSdkLogger = 1
+	noValue               = "no value"
+)
 
 type SdkLogger struct {
 	logger Logger
@@ -53,19 +56,18 @@ func NewSdkLogger(logger Logger) *SdkLogger {
 func (l *SdkLogger) tags(keyvals []interface{}) []tag.Tag {
 	var tags []tag.Tag
 	for i := 0; i < len(keyvals); i++ {
-		t, keyvalIsTag := keyvals[i].(tag.Tag)
-		if keyvalIsTag {
+		if t, keyvalIsTag := keyvals[i].(tag.Tag); keyvalIsTag {
 			tags = append(tags, t)
 			continue
 		}
 
-		key, ok := keyvals[i].(string)
-		if !ok {
+		key, keyIsString := keyvals[i].(string)
+		if !keyIsString {
 			key = fmt.Sprintf("%v", keyvals[i])
 		}
 		var val interface{}
 		if i+1 == len(keyvals) {
-			val = fmt.Sprintf("last key %q doesn't have value", key)
+			val = noValue
 		} else {
 			val = keyvals[i+1]
 			i++
