@@ -3137,6 +3137,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 		TimerAckLevelTime:       currentClusterTimerAck,
 		ClusterReplicationLevel: map[string]int64{},
 		ReplicationDlqAckLevel:  map[string]int64{},
+		QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 	}
 	request := &p.GetOrCreateShardRequest{
 		ShardID:          shardID,
@@ -3195,6 +3196,22 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		NamespaceNotificationVersion: namespaceNotificationVersion,
 		ClusterReplicationLevel:      map[string]int64{},
 		ReplicationDlqAckLevel:       map[string]int64{},
+		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+			int32(tasks.CategoryTransfer): {
+				AckLevel: &persistencespb.TaskKey{TaskId: currentClusterTransferAck},
+				ClusterAckLevel: map[string]*persistencespb.TaskKey{
+					cluster.TestCurrentClusterName:     {TaskId: currentClusterTransferAck},
+					cluster.TestAlternativeClusterName: {TaskId: alternativeClusterTransferAck},
+				},
+			},
+			int32(tasks.CategoryTimer): {
+				AckLevel: &persistencespb.TaskKey{FireTime: currentClusterTimerAck},
+				ClusterAckLevel: map[string]*persistencespb.TaskKey{
+					cluster.TestCurrentClusterName:     {FireTime: currentClusterTimerAck},
+					cluster.TestAlternativeClusterName: {FireTime: alternativeClusterTimerAck},
+				},
+			},
+		},
 	}
 	createRequest := &p.GetOrCreateShardRequest{
 		ShardID:          shardID,
@@ -3238,6 +3255,22 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		NamespaceNotificationVersion: namespaceNotificationVersion,
 		ClusterReplicationLevel:      map[string]int64{cluster.TestAlternativeClusterName: 12345},
 		ReplicationDlqAckLevel:       map[string]int64{},
+		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+			int32(tasks.CategoryTransfer): {
+				AckLevel: &persistencespb.TaskKey{TaskId: currentClusterTransferAck},
+				ClusterAckLevel: map[string]*persistencespb.TaskKey{
+					cluster.TestCurrentClusterName:     {TaskId: currentClusterTransferAck},
+					cluster.TestAlternativeClusterName: {TaskId: alternativeClusterTransferAck},
+				},
+			},
+			int32(tasks.CategoryTimer): {
+				AckLevel: &persistencespb.TaskKey{FireTime: currentClusterTimerAck},
+				ClusterAckLevel: map[string]*persistencespb.TaskKey{
+					cluster.TestCurrentClusterName:     {FireTime: currentClusterTimerAck},
+					cluster.TestAlternativeClusterName: {FireTime: alternativeClusterTimerAck},
+				},
+			},
+		},
 	}
 	updateRequest := &p.UpdateShardRequest{
 		ShardInfo:       shardInfo,
