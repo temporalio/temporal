@@ -267,19 +267,17 @@ func (d *HandlerImpl) RegisterNamespace(
 		return nil, err
 	}
 
-	if namespaceRequest.IsGlobalNamespace && len(replicationConfig.Clusters) > 1 {
-		err = d.namespaceReplicator.HandleTransmissionTask(
-			enumsspb.NAMESPACE_OPERATION_CREATE,
-			namespaceRequest.Namespace.Info,
-			namespaceRequest.Namespace.Config,
-			namespaceRequest.Namespace.ReplicationConfig,
-			namespaceRequest.Namespace.ConfigVersion,
-			namespaceRequest.Namespace.FailoverVersion,
-			namespaceRequest.IsGlobalNamespace,
-		)
-		if err != nil {
-			return nil, err
-		}
+	err = d.namespaceReplicator.HandleTransmissionTask(
+		enumsspb.NAMESPACE_OPERATION_CREATE,
+		namespaceRequest.Namespace.Info,
+		namespaceRequest.Namespace.Config,
+		namespaceRequest.Namespace.ReplicationConfig,
+		namespaceRequest.Namespace.ConfigVersion,
+		namespaceRequest.Namespace.FailoverVersion,
+		namespaceRequest.IsGlobalNamespace,
+	)
+	if err != nil {
+		return nil, err
 	}
 
 	d.logger.Info("Register namespace succeeded",
@@ -572,12 +570,10 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 	}
 
-	if isGlobalNamespace && len(replicationConfig.Clusters) > 1 {
-		err = d.namespaceReplicator.HandleTransmissionTask(enumsspb.NAMESPACE_OPERATION_UPDATE,
-			info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
-		if err != nil {
-			return nil, err
-		}
+	err = d.namespaceReplicator.HandleTransmissionTask(enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	if err != nil {
+		return nil, err
 	}
 
 	response := &workflowservice.UpdateNamespaceResponse{
