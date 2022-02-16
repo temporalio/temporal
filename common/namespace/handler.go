@@ -267,7 +267,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		return nil, err
 	}
 
-	if namespaceRequest.IsGlobalNamespace && len(replicationConfig.Clusters) > 0 {
+	if namespaceRequest.IsGlobalNamespace && len(replicationConfig.Clusters) > 1 {
 		err = d.namespaceReplicator.HandleTransmissionTask(
 			enumsspb.NAMESPACE_OPERATION_CREATE,
 			namespaceRequest.Namespace.Info,
@@ -572,7 +572,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 	}
 
-	if isGlobalNamespace && len(replicationConfig.Clusters) > 0 {
+	if isGlobalNamespace && len(replicationConfig.Clusters) > 1 {
 		err = d.namespaceReplicator.HandleTransmissionTask(enumsspb.NAMESPACE_OPERATION_UPDATE,
 			info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 		if err != nil {
