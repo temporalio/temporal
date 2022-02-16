@@ -53,6 +53,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -483,7 +484,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 			continue
 		}
 
-		ackLevel := p.shard.GetClusterReplicationLevel(clusterName)
+		ackLevel := p.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
 		if minAckedTaskID == nil || ackLevel < *minAckedTaskID {
 			minAckedTaskID = &ackLevel
 		}
@@ -499,7 +500,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		metrics.TargetClusterTag(p.currentCluster),
 	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		int(p.shard.GetTransferMaxReadLevel()-*minAckedTaskID),
+		int(p.shard.GetImmediateTaskMaxReadLevel()-*minAckedTaskID),
 	)
 	err := p.shard.GetExecutionManager().RangeCompleteReplicationTask(
 		&persistence.RangeCompleteReplicationTaskRequest{

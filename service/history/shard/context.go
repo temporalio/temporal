@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 //go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination context_mock.go
@@ -63,49 +64,34 @@ type (
 
 		GetEngine() (Engine, error)
 
-		GenerateTransferTaskID() (int64, error)
-		GenerateTransferTaskIDs(number int) ([]int64, error)
+		GenerateTaskID() (int64, error)
+		GenerateTaskIDs(number int) ([]int64, error)
 
-		GetTransferMaxReadLevel() int64
-		UpdateTimerMaxReadLevel(cluster string) time.Time
+		GetImmediateTaskMaxReadLevel() int64
+		GetScheduledTaskMaxReadLevel(cluster string) time.Time
+		UpdateScheduledTaskMaxReadLevel(cluster string) time.Time
+
+		GetQueueAckLevel(category tasks.Category) tasks.Key
+		UpdateQueueAckLevel(category tasks.Category, ackLevel tasks.Key) error
+		GetQueueClusterAckLevel(category tasks.Category, cluster string) tasks.Key
+		UpdateQueueClusterAckLevel(category tasks.Category, cluster string, ackLevel tasks.Key) error
+
+		GetReplicatorDLQAckLevel(sourceCluster string) int64
+		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
+
+		UpdateFailoverLevel(category tasks.Category, failoverID string, level persistence.FailoverLevel) error
+		DeleteFailoverLevel(category tasks.Category, failoverID string) error
+		GetAllFailoverLevels(category tasks.Category) map[string]persistence.FailoverLevel
+
+		UpdateRemoteClusterInfo(cluster string, ackTaskID int64, ackTimestamp time.Time)
 
 		GetMaxTaskIDForCurrentRangeID() int64
 
 		SetCurrentTime(cluster string, currentTime time.Time)
 		GetCurrentTime(cluster string) time.Time
 		GetLastUpdatedTime() time.Time
-		GetTimerMaxReadLevel(cluster string) time.Time
 
 		GetReplicationStatus(cluster []string) (map[string]*historyservice.ShardReplicationStatusPerCluster, map[string]*historyservice.HandoverNamespaceInfo, error)
-
-		GetTransferAckLevel() int64
-		UpdateTransferAckLevel(ackLevel int64) error
-		GetTransferClusterAckLevel(cluster string) int64
-		UpdateTransferClusterAckLevel(cluster string, ackLevel int64) error
-
-		GetVisibilityAckLevel() int64
-		UpdateVisibilityAckLevel(ackLevel int64) error
-
-		GetReplicatorAckLevel() int64
-		UpdateReplicatorAckLevel(ackLevel int64) error
-		GetReplicatorDLQAckLevel(sourceCluster string) int64
-		UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel int64) error
-
-		GetClusterReplicationLevel(cluster string) int64
-		UpdateClusterReplicationLevel(cluster string, ackTaskID int64, ackTimestamp time.Time) error
-
-		GetTimerAckLevel() time.Time
-		UpdateTimerAckLevel(ackLevel time.Time) error
-		GetTimerClusterAckLevel(cluster string) time.Time
-		UpdateTimerClusterAckLevel(cluster string, ackLevel time.Time) error
-
-		UpdateTransferFailoverLevel(failoverID string, level persistence.TransferFailoverLevel) error
-		DeleteTransferFailoverLevel(failoverID string) error
-		GetAllTransferFailoverLevels() map[string]persistence.TransferFailoverLevel
-
-		UpdateTimerFailoverLevel(failoverID string, level persistence.TimerFailoverLevel) error
-		DeleteTimerFailoverLevel(failoverID string) error
-		GetAllTimerFailoverLevels() map[string]persistence.TimerFailoverLevel
 
 		GetNamespaceNotificationVersion() int64
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error

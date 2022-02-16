@@ -108,7 +108,7 @@ func newTransferQueueProcessor(
 		historyService:           historyService,
 		matchingClient:           matchingClient,
 		historyClient:            historyClient,
-		ackLevel:                 shard.GetTransferAckLevel(),
+		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
 		logger:                   logger,
 		shutdownChan:             make(chan struct{}),
 		activeTaskProcessor: newTransferQueueActiveProcessor(
@@ -184,13 +184,13 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
 
-	minLevel := t.shard.GetTransferClusterAckLevel(t.currentClusterName)
+	minLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, t.currentClusterName).TaskID
 	standbyClusterName := t.currentClusterName
 	for clusterName, info := range t.shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
-		ackLevel := t.shard.GetTransferClusterAckLevel(clusterName)
+		ackLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, clusterName).TaskID
 		if ackLevel < minLevel {
 			minLevel = ackLevel
 			standbyClusterName = clusterName
@@ -293,9 +293,9 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		}
 		t.standbyTaskProcessorsLock.RUnlock()
 
-		for _, failoverInfo := range t.shard.GetAllTransferFailoverLevels() {
-			if upperAckLevel > failoverInfo.MinLevel {
-				upperAckLevel = failoverInfo.MinLevel
+		for _, failoverInfo := range t.shard.GetAllFailoverLevels(tasks.CategoryTransfer) {
+			if upperAckLevel > failoverInfo.MinLevel.TaskID {
+				upperAckLevel = failoverInfo.MinLevel.TaskID
 			}
 		}
 	}
@@ -320,7 +320,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateTransferAckLevel(upperAckLevel)
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryTransfer, tasks.Key{TaskID: upperAckLevel})
 }
 
 func (t *transferQueueProcessorImpl) listenToClusterMetadataChange() {

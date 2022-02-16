@@ -87,10 +87,14 @@ func newTransferQueueActiveProcessor(
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetTransferMaxReadLevel()
+		return shard.GetImmediateTaskMaxReadLevel()
 	}
 	updateTransferAckLevel := func(ackLevel int64) error {
-		return shard.UpdateTransferClusterAckLevel(currentClusterName, ackLevel)
+		return shard.UpdateQueueClusterAckLevel(
+			tasks.CategoryTransfer,
+			currentClusterName,
+			tasks.Key{TaskID: ackLevel},
+		)
 	}
 
 	transferQueueShutdown := func() error {
@@ -126,7 +130,7 @@ func newTransferQueueActiveProcessor(
 		shard,
 		options,
 		processor,
-		shard.GetTransferClusterAckLevel(currentClusterName),
+		shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID,
 		logger,
 	)
 
@@ -193,19 +197,20 @@ func newTransferQueueFailoverProcessor(
 	}
 	failoverStartTime := shard.GetTimeSource().Now()
 	updateTransferAckLevel := func(ackLevel int64) error {
-		return shard.UpdateTransferFailoverLevel(
+		return shard.UpdateFailoverLevel(
+			tasks.CategoryTransfer,
 			failoverUUID,
-			persistence.TransferFailoverLevel{
+			persistence.FailoverLevel{
 				StartTime:    failoverStartTime,
-				MinLevel:     minLevel,
-				CurrentLevel: ackLevel,
-				MaxLevel:     maxLevel,
+				MinLevel:     tasks.Key{TaskID: minLevel},
+				CurrentLevel: tasks.Key{TaskID: ackLevel},
+				MaxLevel:     tasks.Key{TaskID: maxLevel},
 				NamespaceIDs: namespaceIDs,
 			},
 		)
 	}
 	transferQueueShutdown := func() error {
-		return shard.DeleteTransferFailoverLevel(failoverUUID)
+		return shard.DeleteFailoverLevel(tasks.CategoryTransfer, failoverUUID)
 	}
 
 	processor := &transferQueueActiveProcessorImpl{

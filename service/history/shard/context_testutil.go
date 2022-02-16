@@ -30,6 +30,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -70,6 +71,9 @@ func NewTestContext(
 	eventsCache := events.NewMockCache(ctrl)
 	hostInfoProvider := resource.NewMockHostInfoProvider(ctrl)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	if shardInfo.QueueAckLevels == nil {
+		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
+	}
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
 		executionManager:    resourceTest.ExecutionMgr,
@@ -81,14 +85,14 @@ func NewTestContext(
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 
-		state:                     contextStateAcquired,
-		shardInfo:                 shardInfo,
-		transferSequenceNumber:    1,
-		transferMaxReadLevel:      0,
-		maxTransferSequenceNumber: 100000,
-		timerMaxReadLevelMap:      make(map[string]time.Time),
-		remoteClusterInfos:        make(map[string]*remoteClusterInfo),
-		handoverNamespaces:        make(map[string]*namespaceHandOverInfo),
+		state:                        contextStateAcquired,
+		shardInfo:                    shardInfo,
+		taskSequenceNumber:           1,
+		immediateTaskMaxReadLevel:    0,
+		maxTaskSequenceNumber:        100000,
+		scheduledTaskMaxReadLevelMap: make(map[string]time.Time),
+		remoteClusterInfos:           make(map[string]*remoteClusterInfo),
+		handoverNamespaces:           make(map[string]*namespaceHandOverInfo),
 
 		clusterMetadata:         resourceTest.ClusterMetadata,
 		timeSource:              resourceTest.TimeSource,

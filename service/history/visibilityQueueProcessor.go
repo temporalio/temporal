@@ -103,16 +103,17 @@ func newVisibilityQueueProcessor(
 		return true, nil
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetTransferMaxReadLevel()
+		return shard.GetImmediateTaskMaxReadLevel()
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
-		return shard.UpdateVisibilityAckLevel(ackLevel)
+		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: ackLevel})
 	}
 
 	visibilityQueueShutdown := func() error {
 		return nil
 	}
 
+	ackLevel := shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID
 	retProcessor := &visibilityQueueProcessorImpl{
 		shard:                    shard,
 		options:                  options,
@@ -133,7 +134,7 @@ func newVisibilityQueueProcessor(
 		),
 
 		config:       config,
-		ackLevel:     shard.GetVisibilityAckLevel(),
+		ackLevel:     ackLevel,
 		shutdownChan: make(chan struct{}),
 
 		queueAckMgr:        nil, // is set bellow
@@ -145,7 +146,7 @@ func newVisibilityQueueProcessor(
 		shard,
 		options,
 		retProcessor,
-		shard.GetVisibilityAckLevel(),
+		ackLevel,
 		logger,
 	)
 
@@ -269,7 +270,7 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateVisibilityAckLevel(upperAckLevel)
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: upperAckLevel})
 }
 
 // queueProcessor interface

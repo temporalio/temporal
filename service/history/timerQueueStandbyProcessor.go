@@ -69,7 +69,11 @@ func newTimerQueueStandbyProcessor(
 		return shard.GetCurrentTime(clusterName)
 	}
 	updateShardAckLevel := func(ackLevel timerKey) error {
-		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.VisibilityTimestamp)
+		return shard.UpdateQueueClusterAckLevel(
+			tasks.CategoryTimer,
+			clusterName,
+			tasks.Key{FireTime: ackLevel.VisibilityTimestamp},
+		)
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 	timerTaskFilter := func(task tasks.Task) (bool, error) {
@@ -82,7 +86,7 @@ func newTimerQueueStandbyProcessor(
 		metrics.TimerStandbyQueueProcessorScope,
 		shard,
 		historyService.metricsClient,
-		shard.GetTimerClusterAckLevel(clusterName),
+		shard.GetQueueClusterAckLevel(tasks.CategoryTimer, clusterName).FireTime,
 		timeNow,
 		updateShardAckLevel,
 		logger,

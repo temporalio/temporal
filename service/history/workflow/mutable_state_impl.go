@@ -255,7 +255,7 @@ func NewMutableState(
 
 	s.hBuilder = NewMutableHistoryBuilder(
 		s.timeSource,
-		s.shard.GenerateTransferTaskIDs,
+		s.shard.GenerateTaskIDs,
 		s.currentVersion,
 		common.FirstEventID,
 		s.bufferEventsInDB,
@@ -327,7 +327,7 @@ func newMutableStateBuilderFromDB(
 
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
-		mutableState.shard.GenerateTransferTaskIDs,
+		mutableState.shard.GenerateTaskIDs,
 		common.EmptyVersion,
 		dbRecord.NextEventId,
 		dbRecord.BufferedEvents,
@@ -483,7 +483,7 @@ func (e *MutableStateImpl) UpdateCurrentVersion(
 
 	e.hBuilder = NewMutableHistoryBuilder(
 		e.timeSource,
-		e.shard.GenerateTransferTaskIDs,
+		e.shard.GenerateTaskIDs,
 		e.currentVersion,
 		e.nextEventIDInDB,
 		e.bufferEventsInDB,
@@ -3898,7 +3898,7 @@ func (e *MutableStateImpl) cleanupTransaction(
 
 	e.hBuilder = NewMutableHistoryBuilder(
 		e.timeSource,
-		e.shard.GenerateTransferTaskIDs,
+		e.shard.GenerateTaskIDs,
 		e.GetCurrentVersion(),
 		e.nextEventIDInDB,
 		e.bufferEventsInDB,
@@ -3932,7 +3932,7 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 	e.updatePendingEventIDs(historyMutation.ScheduleIDToStartID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
-	historyNodeTxnIDs, err := e.shard.GenerateTransferTaskIDs(len(newEventsBatches))
+	historyNodeTxnIDs, err := e.shard.GenerateTaskIDs(len(newEventsBatches))
 	if err != nil {
 		return nil, nil, false, err
 	}

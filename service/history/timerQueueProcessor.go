@@ -102,7 +102,7 @@ func newTimerQueueProcessor(
 		config:                   config,
 		metricsClient:            historyService.metricsClient,
 		historyService:           historyService,
-		ackLevel:                 timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},
+		ackLevel:                 timerKey{VisibilityTimestamp: shard.GetQueueAckLevel(tasks.CategoryTimer).FireTime},
 		logger:                   logger,
 		matchingClient:           matchingClient,
 		status:                   common.DaemonStatusInitialized,
@@ -183,14 +183,14 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		return
 	}
 
-	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
+	minLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTimer, t.currentClusterName).FireTime
 	standbyClusterName := t.currentClusterName
 	for clusterName, info := range t.shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
 
-		ackLevel := t.shard.GetTimerClusterAckLevel(clusterName)
+		ackLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTimer, clusterName).FireTime
 		if ackLevel.Before(minLevel) {
 			minLevel = ackLevel
 			standbyClusterName = clusterName
@@ -289,9 +289,9 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		}
 		t.standbyTimerProcessorsLock.RUnlock()
 
-		for _, failoverInfo := range t.shard.GetAllTimerFailoverLevels() {
-			if !upperAckLevel.VisibilityTimestamp.Before(failoverInfo.MinLevel) {
-				upperAckLevel = timerKey{VisibilityTimestamp: failoverInfo.MinLevel}
+		for _, failoverInfo := range t.shard.GetAllFailoverLevels(tasks.CategoryTimer) {
+			if !upperAckLevel.VisibilityTimestamp.Before(failoverInfo.MinLevel.FireTime) {
+				upperAckLevel = timerKey{VisibilityTimestamp: failoverInfo.MinLevel.FireTime}
 			}
 		}
 	}
@@ -316,7 +316,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryTimer, tasks.Key{FireTime: t.ackLevel.VisibilityTimestamp})
 }
 
 func (t *timerQueueProcessorImpl) listenToClusterMetadataChange() {
