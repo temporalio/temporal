@@ -347,8 +347,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 
 		currentWorkflowTask, currentWorkflowTaskRunning = msBuilder.GetWorkflowTaskInfo(scheduleID)
 
-		// First check to see if cache needs to be refreshed as we could potentially have stale workflow execution in
-		// some extreme cassandra failure cases.
+		// First check to see if cache is still up-to-date as it could potentially have stale workflow execution in
+		// some extreme Cassandra failure cases.
 		if currentWorkflowTaskRunning || scheduleID < msBuilder.GetNextEventID() {
 			break
 		}
