@@ -68,7 +68,7 @@ func emitMutableStateStatus(
 	sizeScope.RecordDistribution(metrics.ChildInfoSize, stats.ChildInfoSize)
 	countScope.RecordDistribution(metrics.ChildInfoCount, stats.ChildInfoCount)
 
-	countScope.RecordDistribution(metrics.RequestCancelInfoSize, stats.RequestCancelInfoSize)
+	sizeScope.RecordDistribution(metrics.RequestCancelInfoSize, stats.RequestCancelInfoSize)
 	countScope.RecordDistribution(metrics.RequestCancelInfoCount, stats.RequestCancelInfoCount)
 
 	sizeScope.RecordDistribution(metrics.SignalInfoSize, stats.SignalInfoSize)
