@@ -75,11 +75,11 @@ func emitMutableStateStatus(
 	countScope.RecordDistribution(metrics.SignalInfoCount, stats.SignalInfoCount)
 
 	sizeScope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
-	sizeScope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
+	countScope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
 
 	if stats.HistoryStatistics != nil {
 		sizeScope.RecordDistribution(metrics.HistorySize, stats.HistoryStatistics.SizeDiff)
-		sizeScope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
+		countScope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
 	}
 }
 
