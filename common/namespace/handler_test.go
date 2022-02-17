@@ -448,7 +448,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace(
 		Namespace:        namespace,
 		PromoteNamespace: true,
 	}
-	s.mockProducer.EXPECT().Publish(gomock.Any())
 	_, err = s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
 
