@@ -256,6 +256,20 @@ func (mr *MockContextMockRecorder) Unlock(caller interface{}) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Unlock", reflect.TypeOf((*MockContext)(nil).Unlock), caller)
 }
 
+// UpdateClosedWorkflowExecutionAsActive mocks base method.
+func (m *MockContext) UpdateClosedWorkflowExecutionAsActive(now time.Time) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateClosedWorkflowExecutionAsActive", now)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// UpdateClosedWorkflowExecutionAsActive indicates an expected call of UpdateClosedWorkflowExecutionAsActive.
+func (mr *MockContextMockRecorder) UpdateClosedWorkflowExecutionAsActive(now interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateClosedWorkflowExecutionAsActive", reflect.TypeOf((*MockContext)(nil).UpdateClosedWorkflowExecutionAsActive), now)
+}
+
 // UpdateWorkflowExecutionAsActive mocks base method.
 func (m *MockContext) UpdateWorkflowExecutionAsActive(now time.Time) error {
 	m.ctrl.T.Helper()
