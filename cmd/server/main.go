@@ -47,10 +47,6 @@ import (
 	"go.temporal.io/server/temporal"
 )
 
-var (
-	cgoEnabled = false
-)
-
 // main entry point for the temporal server
 func main() {
 	app := buildCLI()
