@@ -520,7 +520,7 @@ func (c *ContextImpl) UpdateClosedWorkflowExecutionAsActive(
 	}
 	if err := c.UpdateWorkflowExecutionWithNew(
 		now,
-		persistence.UpdateWorkflowModeUpdateClosed,
+		persistence.UpdateWorkflowModeUpdateClosedBypassCurrent,
 		nil,
 		nil,
 		TransactionPolicyActive,
@@ -691,7 +691,7 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 		// update current workflow as zombie & continue as new without new zombie workflow
 		// this case can be valid if new workflow is already created by resend
 		return nil
-	} else if updateMode == persistence.UpdateWorkflowModeUpdateClosed {
+	} else if updateMode == persistence.UpdateWorkflowModeUpdateClosedBypassCurrent {
 		return nil
 	}
 

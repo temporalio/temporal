@@ -1560,7 +1560,7 @@ func (s *ExecutionManagerSuite) TestUpdateClosedWorkflow() {
 			NewBufferedEvents: bufferEvents,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
-		Mode:    p.UpdateWorkflowModeUpdateClosed,
+		Mode:    p.UpdateWorkflowModeUpdateClosedBypassCurrent,
 	})
 	s.Error(err4)
 	updatedInfo := copyWorkflowExecutionInfo(state1.ExecutionInfo)
@@ -1579,7 +1579,7 @@ func (s *ExecutionManagerSuite) TestUpdateClosedWorkflow() {
 			Condition:      state1.NextEventId,
 		},
 		RangeID: s.ShardInfo.GetRangeId(),
-		Mode:    p.UpdateWorkflowModeUpdateClosed,
+		Mode:    p.UpdateWorkflowModeUpdateClosedBypassCurrent,
 	})
 	s.NoError(err5)
 

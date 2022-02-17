@@ -389,7 +389,7 @@ func (m *sqlExecutionStore) updateWorkflowExecutionTx(
 		); err != nil {
 			return err
 		}
-	case p.UpdateWorkflowModeUpdateClosed:
+	case p.UpdateWorkflowModeUpdateClosedBypassCurrent:
 		if err := assertClosedWorkflowImmutable(updateWorkflow); err != nil {
 			return err
 		}

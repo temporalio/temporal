@@ -150,7 +150,7 @@ func ValidateUpdateWorkflowModeState(
 			)
 		}
 		return nil
-	case UpdateWorkflowModeUpdateClosed:
+	case UpdateWorkflowModeUpdateClosedBypassCurrent:
 		if newWorkflowState != nil {
 			return newInvalidUpdateWorkflowWithNewMode(mode, currentWorkflowState, *newWorkflowState)
 		}

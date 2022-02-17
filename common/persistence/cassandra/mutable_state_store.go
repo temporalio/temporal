@@ -588,7 +588,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			runID); err != nil {
 			return err
 		}
-	case p.UpdateWorkflowModeUpdateClosed:
+	case p.UpdateWorkflowModeUpdateClosedBypassCurrent:
 		if err := d.assertClosedWorkflowImmutable(updateWorkflow); err != nil {
 			return err
 		}
