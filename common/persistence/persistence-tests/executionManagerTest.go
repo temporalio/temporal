@@ -33,6 +33,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/api/history/v1"
+	"go.temporal.io/server/common/persistence/versionhistory"
+
 	"github.com/gogo/protobuf/proto"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -1466,7 +1470,122 @@ func (s *ExecutionManagerSuite) TestUpdateWorkflow() {
 	s.True(ok)
 	s.Equal(memoVal, memoVal4)
 	s.assertChecksumsEqual(testWorkflowChecksum, state4.Checksum)
+}
 
+// TestUpdateClosedWorkflow test
+func (s *ExecutionManagerSuite) TestUpdateClosedWorkflow() {
+	namespaceID := "b0a8571c-0257-40ea-afcd-3a14eae181c0"
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: "update-closed-workflow-test",
+		RunId:      "5ba5e531-e46b-48d9-b4b3-859919839553",
+	}
+	task0, err0 := s.CreateWorkflowExecution(
+		namespaceID,
+		workflowExecution,
+		"queue1",
+		"wType",
+		timestamp.DurationFromSeconds(20),
+		timestamp.DurationFromSeconds(13),
+		3,
+		0,
+		2,
+		nil)
+	s.NoError(err0)
+	s.NotNil(task0, "Expected non empty task identifier.")
+
+	state0, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	s.NoError(err1)
+	info0 := state0.ExecutionInfo
+	s.NotNil(info0, "Valid Workflow info expected.")
+	s.Equal(namespaceID, info0.NamespaceId)
+	s.Equal("update-closed-workflow-test", info0.WorkflowId)
+	s.Equal("5ba5e531-e46b-48d9-b4b3-859919839553", state0.ExecutionState.GetRunId())
+	s.Equal("queue1", info0.TaskQueue)
+	s.Equal("wType", info0.WorkflowTypeName)
+	s.EqualValues(int64(20), info0.WorkflowRunTimeout.Seconds())
+	s.EqualValues(int64(13), info0.DefaultWorkflowTaskTimeout.Seconds())
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, state0.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, state0.ExecutionState.Status)
+	s.Equal(int64(1), info0.LastFirstEventId)
+	s.Equal(int64(3), state0.NextEventId)
+	s.Equal(int64(0), info0.LastWorkflowTaskStartId)
+	s.True(s.validateTimeRange(*info0.LastUpdateTime, time.Hour))
+	s.Equal(int64(0), info0.WorkflowTaskVersion)
+	s.Equal(int64(2), info0.WorkflowTaskScheduleId)
+	s.Equal(common.EmptyEventID, info0.WorkflowTaskStartedId)
+	s.EqualValues(1, int64(info0.WorkflowTaskTimeout.Seconds()))
+	s.Equal(int32(0), info0.WorkflowTaskAttempt)
+	s.Nil(info0.WorkflowTaskStartedTime)
+	s.Nil(info0.WorkflowTaskScheduledTime)
+	s.Nil(info0.WorkflowTaskOriginalScheduledTime)
+	s.Empty(info0.StickyTaskQueue)
+	s.EqualValues(int64(0), timestamp.DurationValue(info0.StickyScheduleToStartTimeout))
+	s.Equal(int64(0), info0.SignalCount)
+	s.True(reflect.DeepEqual(info0.AutoResetPoints, &workflowpb.ResetPoints{}))
+	s.True(len(info0.SearchAttributes) == 0)
+	s.True(len(info0.Memo) == 0)
+	s.assertChecksumsEqual(testWorkflowChecksum, state0.Checksum)
+
+	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
+	updatedState.Status = enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED
+	updatedState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+
+	err2 := s.UpdateWorkflowExecution(
+		info0,
+		updatedState,
+		int64(5),
+		[]int64{int64(4)},
+		nil,
+		int64(3),
+		nil,
+		nil,
+		nil,
+		nil,
+		nil)
+	s.NoError(err2)
+
+	state1, err3 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	s.NoError(err3)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, state1.ExecutionState.State)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED, state1.ExecutionState.Status)
+
+	bufferEvents := []*historypb.HistoryEvent{{}}
+	_, err4 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:     state1.ExecutionInfo,
+			ExecutionState:    updatedState,
+			NextEventID:       state1.NextEventId,
+			Condition:         state1.NextEventId,
+			NewBufferedEvents: bufferEvents,
+		},
+		RangeID: s.ShardInfo.GetRangeId(),
+		Mode:    p.UpdateWorkflowModeUpdateClosed,
+	})
+	s.Error(err4)
+	updatedInfo := copyWorkflowExecutionInfo(state1.ExecutionInfo)
+	versionHistory := versionhistory.NewVersionHistory(
+		[]byte{1},
+		[]*history.VersionHistoryItem{versionhistory.NewVersionHistoryItem(1, 0)},
+	)
+	versionHistories := versionhistory.NewVersionHistories(versionHistory)
+	updatedInfo.VersionHistories = versionHistories
+	_, err5 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+		ShardID: s.ShardInfo.GetShardId(),
+		UpdateWorkflowMutation: p.WorkflowMutation{
+			ExecutionInfo:  updatedInfo,
+			ExecutionState: updatedState,
+			NextEventID:    state1.NextEventId,
+			Condition:      state1.NextEventId,
+		},
+		RangeID: s.ShardInfo.GetRangeId(),
+		Mode:    p.UpdateWorkflowModeUpdateClosed,
+	})
+	s.NoError(err5)
+
+	state2, err6 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	s.NoError(err6)
+	s.Equal(int32(0), state2.ExecutionInfo.VersionHistories.CurrentVersionHistoryIndex)
 }
 
 // TestDeleteWorkflow test

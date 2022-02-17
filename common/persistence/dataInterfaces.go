@@ -83,6 +83,8 @@ const (
 	// UpdateWorkflowModeBypassCurrent update workflow, without current record
 	// NOTE: current record CANNOT point to the workflow to be updated
 	UpdateWorkflowModeBypassCurrent
+
+	UpdateWorkflowModeUpdateClosed
 )
 
 // ConflictResolveWorkflowMode conflict resolve mode

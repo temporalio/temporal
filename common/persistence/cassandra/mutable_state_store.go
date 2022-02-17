@@ -588,7 +588,10 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 			runID); err != nil {
 			return err
 		}
-
+	case p.UpdateWorkflowModeUpdateClosed:
+		if err := d.assertClosedWorkflowImmutable(updateWorkflow); err != nil {
+			return err
+		}
 	case p.UpdateWorkflowModeUpdateCurrent:
 		if newWorkflow != nil {
 			newLastWriteVersion := newWorkflow.LastWriteVersion
@@ -679,6 +682,10 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 		_ = conflictIter.Close()
 	}()
 
+	var dbVersion int64 = 0
+	if updateWorkflow.DBRecordVersion-1 > dbVersion {
+		dbVersion = updateWorkflow.DBRecordVersion - 1
+	}
 	if !applied {
 		return convertErrors(
 			conflictRecord,
@@ -690,7 +697,7 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 				runID: updateWorkflow.ExecutionState.RunId,
 				// dbVersion is for CAS, so the db record version will be set to `updateWorkflow.DBRecordVersion`
 				// while CAS on `updateWorkflow.DBRecordVersion - 1`
-				dbVersion:   updateWorkflow.DBRecordVersion - 1,
+				dbVersion:   dbVersion,
 				nextEventID: updateWorkflow.Condition,
 			}},
 		)
@@ -853,6 +860,29 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 			currentRunID,
 			executionCASConditions,
 		)
+	}
+	return nil
+}
+
+func (d *MutableStateStore) assertClosedWorkflowImmutable(workflowMutation p.InternalWorkflowMutation) error {
+
+	expectedNoChange := len(workflowMutation.UpsertActivityInfos) +
+		len(workflowMutation.DeleteActivityInfos) +
+		len(workflowMutation.UpsertChildExecutionInfos) +
+		len(workflowMutation.DeleteChildExecutionInfos) +
+		len(workflowMutation.UpsertRequestCancelInfos) +
+		len(workflowMutation.DeleteRequestCancelInfos) +
+		len(workflowMutation.UpsertSignalInfos) +
+		len(workflowMutation.DeleteSignalInfos) +
+		len(workflowMutation.UpsertSignalRequestedIDs) +
+		len(workflowMutation.DeleteSignalRequestedIDs) +
+		len(workflowMutation.UpsertTimerInfos) +
+		len(workflowMutation.DeleteTimerInfos)
+	if expectedNoChange != 0 {
+		return serviceerror.NewInternal("UpdateWorkflowExecution: cannot modify immutable fields with closed workflow")
+	}
+	if workflowMutation.NewBufferedEvents != nil {
+		return serviceerror.NewInternal("UpdateWorkflowExecution: cannot modify immutable fields with closed workflow")
 	}
 	return nil
 }

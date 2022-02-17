@@ -150,7 +150,14 @@ func ValidateUpdateWorkflowModeState(
 			)
 		}
 		return nil
-
+	case UpdateWorkflowModeUpdateClosed:
+		if newWorkflowState != nil {
+			return newInvalidUpdateWorkflowWithNewMode(mode, currentWorkflowState, *newWorkflowState)
+		}
+		if currentWorkflowState != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+			return newInvalidUpdateWorkflowMode(mode, currentWorkflowState)
+		}
+		return nil
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown mode: %v", mode))
 	}

@@ -31,6 +31,8 @@ import (
 	"fmt"
 	"time"
 
+	"go.temporal.io/server/api/enums/v1"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -478,9 +480,14 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		return err
 	}
 
+	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
+	state, _ := c.MutableState.GetWorkflowStateStatus()
+	if state == enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		updateMode = persistence.UpdateWorkflowModeUpdateClosed
+	}
 	if err := c.UpdateWorkflowExecutionWithNew(
 		now,
-		persistence.UpdateWorkflowModeUpdateCurrent,
+		updateMode,
 		nil,
 		nil,
 		TransactionPolicyActive,
@@ -651,6 +658,8 @@ func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
 		// update current workflow as zombie & continue as new without new zombie workflow
 		// this case can be valid if new workflow is already created by resend
 		return nil
+	} else if updateMode == persistence.UpdateWorkflowModeUpdateClosed {
+		return nil
 	}
 
 	// current workflow is doing continue as new
@@ -690,6 +699,10 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 ) error {
 
 	if updateMode != persistence.UpdateWorkflowModeBypassCurrent {
+		return nil
+	}
+
+	if updateMode != persistence.UpdateWorkflowModeUpdateClosed {
 		return nil
 	}
 

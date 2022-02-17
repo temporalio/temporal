@@ -891,6 +891,30 @@ func assertNotCurrentExecution(
 	return assertRunIDMismatch(runID, currentRow)
 }
 
+func assertClosedWorkflowImmutable(
+	workflowMutation p.InternalWorkflowMutation,
+) error {
+	expectedNoChange := len(workflowMutation.UpsertActivityInfos) +
+		len(workflowMutation.DeleteActivityInfos) +
+		len(workflowMutation.UpsertChildExecutionInfos) +
+		len(workflowMutation.DeleteChildExecutionInfos) +
+		len(workflowMutation.UpsertRequestCancelInfos) +
+		len(workflowMutation.DeleteRequestCancelInfos) +
+		len(workflowMutation.UpsertSignalInfos) +
+		len(workflowMutation.DeleteSignalInfos) +
+		len(workflowMutation.UpsertSignalRequestedIDs) +
+		len(workflowMutation.DeleteSignalRequestedIDs) +
+		len(workflowMutation.UpsertTimerInfos) +
+		len(workflowMutation.DeleteTimerInfos)
+	if expectedNoChange != 0 {
+		return serviceerror.NewInternal("UpdateWorkflowExecution: cannot modify immutable fields with closed workflow")
+	}
+	if workflowMutation.NewBufferedEvents != nil {
+		return serviceerror.NewInternal("UpdateWorkflowExecution: cannot modify immutable fields with closed workflow")
+	}
+	return nil
+}
+
 func assertRunIDAndUpdateCurrentExecution(
 	ctx context.Context,
 	tx sqlplugin.Tx,
