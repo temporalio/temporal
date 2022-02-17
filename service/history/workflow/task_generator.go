@@ -36,7 +36,6 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -54,7 +53,7 @@ type (
 		) error
 		GenerateDeleteExecutionTask(
 			now time.Time,
-		) error
+		) (*tasks.DeleteExecutionTask, error)
 		GenerateRecordWorkflowStartedTasks(
 			now time.Time,
 			startEvent *historypb.HistoryEvent,
@@ -120,9 +119,7 @@ type (
 
 	TaskGeneratorImpl struct {
 		namespaceRegistry namespace.Registry
-		logger            log.Logger
-
-		mutableState MutableState
+		mutableState      MutableState
 	}
 )
 
@@ -132,15 +129,12 @@ var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
 func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
-	logger log.Logger,
 	mutableState MutableState,
 ) *TaskGeneratorImpl {
 
 	mstg := &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
-		logger:            logger,
-
-		mutableState: mutableState,
+		mutableState:      mutableState,
 	}
 
 	return mstg
@@ -212,18 +206,16 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 
 func (r *TaskGeneratorImpl) GenerateDeleteExecutionTask(
 	now time.Time,
-) error {
+) (*tasks.DeleteExecutionTask, error) {
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
-	r.mutableState.AddTasks(&tasks.DeleteExecutionTask{
+	return &tasks.DeleteExecutionTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
 		Version:             currentVersion,
-	})
-
-	return nil
+	}, nil
 }
 
 func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
