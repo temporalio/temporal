@@ -107,10 +107,12 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	err = m.shard.AddTasks(&persistence.AddTasksRequest{
 		ShardID: m.shard.GetShardID(),
 		// RangeID is set by shard
-		NamespaceID:   nsID.String(),
-		WorkflowID:    we.GetWorkflowId(),
-		RunID:         we.GetRunId(),
-		TransferTasks: []tasks.Task{deleteTask},
+		NamespaceID: nsID.String(),
+		WorkflowID:  we.GetWorkflowId(),
+		RunID:       we.GetRunId(),
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryTransfer: {deleteTask},
+		},
 	})
 	if err != nil {
 		return err
