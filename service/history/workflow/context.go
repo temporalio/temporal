@@ -112,6 +112,9 @@ type (
 		UpdateWorkflowExecutionAsActive(
 			now time.Time,
 		) error
+		UpdateClosedWorkflowExecutionAsActive(
+			now time.Time,
+		) error
 		UpdateWorkflowExecutionWithNewAsActive(
 			now time.Time,
 			newContext Context,
@@ -480,14 +483,44 @@ func (c *ContextImpl) UpdateWorkflowExecutionAsActive(
 		return err
 	}
 
-	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
+	if err := c.UpdateWorkflowExecutionWithNew(
+		now,
+		persistence.UpdateWorkflowModeUpdateCurrent,
+		nil,
+		nil,
+		TransactionPolicyActive,
+		nil,
+	); err != nil {
+		return err
+	}
+
+	if forceTerminate {
+		// Returns ResourceExhausted error back to caller after workflow execution is forced terminated
+		// Retrying the operation will give appropriate semantics operation should expect in the case of workflow
+		// execution being closed.
+		return consts.ErrSizeExceedsLimit
+	}
+
+	return nil
+}
+
+func (c *ContextImpl) UpdateClosedWorkflowExecutionAsActive(
+	now time.Time,
+) error {
+
 	state, _ := c.MutableState.GetWorkflowStateStatus()
-	if state == enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		updateMode = persistence.UpdateWorkflowModeUpdateClosed
+	if state != enums.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return serviceerror.NewInternal("UpdateClosedWorkflowExecutionAsActive on open workflow")
+	}
+
+	// We only perform this check on active cluster for the namespace
+	forceTerminate, err := c.enforceSizeCheck()
+	if err != nil {
+		return err
 	}
 	if err := c.UpdateWorkflowExecutionWithNew(
 		now,
-		updateMode,
+		persistence.UpdateWorkflowModeUpdateClosed,
 		nil,
 		nil,
 		TransactionPolicyActive,
@@ -699,10 +732,6 @@ func (c *ContextImpl) updateWorkflowExecutionEventReapply(
 ) error {
 
 	if updateMode != persistence.UpdateWorkflowModeBypassCurrent {
-		return nil
-	}
-
-	if updateMode != persistence.UpdateWorkflowModeUpdateClosed {
 		return nil
 	}
 
