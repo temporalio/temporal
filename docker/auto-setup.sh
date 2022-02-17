@@ -186,7 +186,7 @@ setup_postgres_schema() {
 
     SCHEMA_DIR=${TEMPORAL_HOME}/schema/postgresql/v96/temporal/versioned
     # Create database only if its name is different from the user name. Otherwise PostgreSQL container itself will create database.
-    if [ "${DBNAME}" != "${POSTGRES_USER}" ] && [ "${SKIP_DB_CREATE}" != "true" ]; then
+    if [[ ${DBNAME} != "${POSTGRES_USER}" && ${SKIP_DB_CREATE} != true ]]; then
         temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" create --db "${DBNAME}"
     fi
     temporal-sql-tool --plugin postgres --ep "${POSTGRES_SEEDS}" -u "${POSTGRES_USER}" -p "${DB_PORT}" --db "${DBNAME}" setup-schema -v 0.0
