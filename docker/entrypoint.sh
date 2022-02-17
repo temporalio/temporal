@@ -2,7 +2,8 @@
 
 set -eu -o pipefail
 
-export BIND_ON_IP="${BIND_ON_IP:-$(hostname -i)}"
+: "${BIND_ON_IP:=$(hostname -i)}"
+export BIND_ON_IP
 
 if [[ "${BIND_ON_IP}" =~ ":" ]]; then
     # ipv6

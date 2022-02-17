@@ -2,8 +2,8 @@
 
 set -eu -o pipefail
 
-SERVICES="${SERVICES:-}"
-SERVICE_FLAGS="${SERVICE_FLAGS:-}"
+: "${SERVICES:=}"
+: "${SERVICE_FLAGS:=}"
 
 if [ -z "${SERVICE_FLAGS}" ] && [ -n "${SERVICES}" ]; then
     # Convert semicolon (or comma, for backward compatibility) separated string (i.e. "history:matching")
