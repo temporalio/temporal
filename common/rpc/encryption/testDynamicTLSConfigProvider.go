@@ -72,6 +72,11 @@ func (t *TestDynamicTLSConfigProvider) GetExpiringCerts(timeWindow time.Duration
 	panic("implement me")
 }
 
+func (t *TestDynamicTLSConfigProvider) GetRemoteClusterClientConfig(hostName string) (*tls.Config, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 var _ TLSConfigProvider = (*TestDynamicTLSConfigProvider)(nil)
 
 func NewTestDynamicTLSConfigProvider(
