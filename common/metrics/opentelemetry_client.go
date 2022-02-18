@@ -46,7 +46,7 @@ type (
 
 // NewOpentelemeteryClientByReporter creates and returns a new instance of Client implementation
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter OpentelemetryReporter, logger log.Logger, gaugeCache OtelGaugeCache) (Client, error) {
+func NewOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter OpentelemetryReporter, logger log.Logger, gaugeCache OtelGaugeCache) (Client, error) {
 	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
 
 	scopeWrapper := func(impl internalScope) internalScope {

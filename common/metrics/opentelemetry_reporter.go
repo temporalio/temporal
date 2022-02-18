@@ -25,23 +25,15 @@
 package metrics
 
 import (
-	"context"
-	"net/http"
-	"time"
-
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/sdk/export/metric/aggregation"
-	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
-	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
-	"go.opentelemetry.io/otel/sdk/resource"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 )
 
 var _ Reporter = (OpentelemetryReporter)(nil)
 var _ OpentelemetryReporter = (*opentelemetryReporterImpl)(nil)
+var _ OpentelemetryMustProvider = (*opentelemetryMustProviderImpl)(nil)
 
 type (
 	OpentelemetryReporter interface {
@@ -56,105 +48,57 @@ type (
 		exporter     *prometheus.Exporter
 		meter        metric.Meter
 		meterMust    metric.MeterMust
-		config       *PrometheusConfig
-		server       *http.Server
 		clientConfig *ClientConfig
 		gaugeCache   OtelGaugeCache
 		userScope    UserScope
+		mustProvider OpentelemetryMustProvider
 	}
 
 	OpentelemetryListener struct {
 	}
 )
 
-func NewOpentelemeteryReporter(
-	logger log.Logger,
+func NewOpentelemeteryReporterWithMust(
+	logger log.Logger, // keeping this to maintain API in case of adding more logging later
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 ) (*opentelemetryReporterImpl, error) {
-	histogramBoundaries := prometheusConfig.DefaultHistogramBoundaries
-	if len(histogramBoundaries) == 0 {
-		histogramBoundaries = defaultHistogramBoundaries
-	}
-
-	c := controller.New(
-		processor.NewFactory(
-			NewOtelAggregatorSelector(
-				histogramBoundaries,
-				clientConfig.PerUnitHistogramBoundaries,
-			),
-			aggregation.CumulativeTemporalitySelector(),
-			processor.WithMemory(true),
-		),
-		controller.WithResource(resource.Empty()),
-	)
-	exporter, err := prometheus.New(
-		prometheus.Config{DefaultHistogramBoundaries: histogramBoundaries}, c)
-
+	mustProvider, err := NewOpentelemetryMustProvider(logger, prometheusConfig, clientConfig)
 	if err != nil {
-		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
 		return nil, err
 	}
+	return NewOpentelemeteryReporter(logger, clientConfig, mustProvider)
+}
 
-	metricServer := initPrometheusListener(prometheusConfig, logger, exporter)
-
-	meter := c.Meter("temporal")
-	meterMust := metric.Must(meter)
+func NewOpentelemeteryReporter(
+	logger log.Logger, // keeping this to maintain API in case of adding more logging later
+	clientConfig *ClientConfig,
+	mustProvider OpentelemetryMustProvider,
+) (*opentelemetryReporterImpl, error) {
+	meterMust := mustProvider.GetMeterMust()
 	gaugeCache := NewOtelGaugeCache(meterMust)
-	userScope := newOpentelemetryUserScope(meterMust, clientConfig.Tags, gaugeCache)
+	userScope := NewOpentelemetryUserScope(meterMust, clientConfig.Tags, gaugeCache)
 	reporter := &opentelemetryReporterImpl{
-		exporter:     exporter,
-		meter:        meter,
-		meterMust:    meterMust,
-		config:       prometheusConfig,
-		server:       metricServer,
 		clientConfig: clientConfig,
 		gaugeCache:   gaugeCache,
 		userScope:    userScope,
+		mustProvider: mustProvider,
 	}
 
 	return reporter, nil
 }
 
-func initPrometheusListener(config *PrometheusConfig, logger log.Logger, exporter *prometheus.Exporter) *http.Server {
-	handlerPath := config.HandlerPath
-	if handlerPath == "" {
-		handlerPath = "/metrics"
-	}
-
-	handler := http.NewServeMux()
-	handler.HandleFunc(handlerPath, exporter.ServeHTTP)
-
-	if config.ListenAddress == "" {
-		logger.Fatal("Listen address must be specified.", tag.Address(config.ListenAddress))
-	}
-	server := &http.Server{Addr: config.ListenAddress, Handler: handler}
-
-	go func() {
-		err := server.ListenAndServe()
-		if err != http.ErrServerClosed {
-			logger.Fatal("Failed to initialize prometheus listener.", tag.Address(config.ListenAddress))
-		}
-	}()
-
-	return server
-}
-
 func (r *opentelemetryReporterImpl) GetMeterMust() metric.MeterMust {
-	return r.meterMust
+	return r.mustProvider.GetMeterMust()
 }
 
 func (r *opentelemetryReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
 
-	return newOpentelemeteryClient(r.clientConfig, serviceIdx, r, logger, r.gaugeCache)
+	return NewOpentelemeteryClient(r.clientConfig, serviceIdx, r, logger, r.gaugeCache)
 }
 
 func (r *opentelemetryReporterImpl) Stop(logger log.Logger) {
-	ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
-	defer closeCtx()
-	if err := r.server.Shutdown(ctx); !(err == nil || err == http.ErrServerClosed) {
-		logger.Error("Prometheus metrics server shutdown failure.", tag.Address(r.config.ListenAddress), tag.Error(err))
-	}
+	r.mustProvider.Stop(logger)
 }
 
 func (r *opentelemetryReporterImpl) UserScope() UserScope {

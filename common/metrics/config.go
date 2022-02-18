@@ -267,7 +267,7 @@ func InitReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfi
 	case FrameworkTally:
 		return NewTallyReporterFromPrometheusConfig(logger, config, clientConfig), nil
 	case FrameworkOpentelemetry:
-		return NewOpentelemeteryReporter(logger, config, clientConfig)
+		return NewOpentelemeteryReporterWithMust(logger, config, clientConfig)
 	default:
 		err := fmt.Errorf("unsupported framework type specified in config: %q", config.Framework)
 		logger.Error(err.Error())

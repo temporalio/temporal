@@ -40,7 +40,7 @@ type opentelemetryUserScope struct {
 	gaugeCache OtelGaugeCache
 }
 
-func newOpentelemetryUserScope(
+func NewOpentelemetryUserScope(
 	meterMust metric.MeterMust,
 	tags map[string]string,
 	gaugeCache OtelGaugeCache,
@@ -95,5 +95,5 @@ func (o opentelemetryUserScope) Tagged(tags map[string]string) UserScope {
 	for key, value := range tags {
 		tagMap[key] = value
 	}
-	return newOpentelemetryUserScope(o.meterMust, tagMap, o.gaugeCache)
+	return NewOpentelemetryUserScope(o.meterMust, tagMap, o.gaugeCache)
 }
