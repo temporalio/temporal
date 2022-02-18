@@ -78,6 +78,9 @@ services:
   temporal-web:
     image: temporalio/web:1.13.0
     container_name: temporal-dev-web
+  temporal-ui:
+    image: temporalio/ui:0.2.0
+    container_name: temporal-dev-ui
 
 networks:
   temporal-dev-network:
