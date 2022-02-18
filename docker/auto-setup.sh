@@ -56,28 +56,36 @@ set -eux -o pipefail
 
 : "${SKIP_ADD_CUSTOM_SEARCH_ATTRIBUTES:=false}"
 
+# === Helper functions ===
+
+die() {
+    echo "$*" 1>&2
+    exit 1
+}
+
 # === Main database functions ===
 
 validate_db_env() {
-    if [[ ${DB} == mysql ]]; then
-        if [[ -z "${MYSQL_SEEDS}" ]]; then
-            echo "MYSQL_SEEDS env must be set if DB is ${DB}."
-            exit 1
-        fi
-    elif [[ ${DB} == postgresql ]]; then
-        if [[ -z "${POSTGRES_SEEDS}" ]]; then
-            echo "POSTGRES_SEEDS env must be set if DB is ${DB}."
-            exit 1
-        fi
-    elif [[ ${DB} == cassandra ]]; then
-        if [[ -z "${CASSANDRA_SEEDS}" ]]; then
-            echo "CASSANDRA_SEEDS env must be set if DB is ${DB}."
-            exit 1
-        fi
-    else
-        echo "Unsupported DB type: ${DB}."
-        exit 1
-    fi
+    case ${DB} in
+      mysql)
+          if [[ -z ${MYSQL_SEEDS} ]]; then
+              die "MYSQL_SEEDS env must be set if DB is ${DB}."
+          fi
+          ;;
+      postgresql)
+          if [[ -z ${POSTGRES_SEEDS} ]]; then
+              die "POSTGRES_SEEDS env must be set if DB is ${DB}."
+          fi
+          ;;
+      cassandra)
+          if [[ -z ${CASSANDRA_SEEDS} ]]; then
+              die "CASSANDRA_SEEDS env must be set if DB is ${DB}."
+          fi
+          ;;
+      *)
+          die "Unsupported DB type: ${DB}."
+          ;;
+    esac
 }
 
 wait_for_cassandra() {
@@ -117,16 +125,20 @@ wait_for_postgres() {
 }
 
 wait_for_db() {
-    if [[ ${DB} == mysql ]]; then
-        wait_for_mysql
-    elif [[ ${DB} == postgresql ]]; then
-        wait_for_postgres
-    elif [[ ${DB} == cassandra ]]; then
-        wait_for_cassandra
-    else
-        echo "Unsupported DB type: ${DB}."
-        exit 1
-    fi
+    case ${DB} in
+      mysql)
+          wait_for_mysql
+          ;;
+      postgresql)
+          wait_for_postgres
+          ;;
+      cassandra)
+          wait_for_cassandra
+          ;;
+      *)
+          die "Unsupported DB type: ${DB}."
+          ;;
+    esac
 }
 
 setup_cassandra_schema() {
@@ -167,17 +179,17 @@ setup_mysql_schema() {
 
     SCHEMA_DIR=${TEMPORAL_HOME}/schema/mysql/v57/temporal/versioned
     if [[ ${SKIP_DB_CREATE} != true ]]; then
-        temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[[@]]}" create --db "${DBNAME}"
+        temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[@]}" create --db "${DBNAME}"
     fi
-    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[[@]]}" --db "${DBNAME}" setup-schema -v 0.0
-    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[[@]]}" --db "${DBNAME}" update-schema -d "${SCHEMA_DIR}"
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[@]}" --db "${DBNAME}" setup-schema -v 0.0
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[@]}" --db "${DBNAME}" update-schema -d "${SCHEMA_DIR}"
 
     VISIBILITY_SCHEMA_DIR=${TEMPORAL_HOME}/schema/mysql/v57/visibility/versioned
     if [[ ${SKIP_DB_CREATE} != true ]]; then
-        temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[[@]]}" create --db "${VISIBILITY_DBNAME}"
+        temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[@]}" create --db "${VISIBILITY_DBNAME}"
     fi
-    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[[@]]}" --db "${VISIBILITY_DBNAME}" setup-schema -v 0.0
-    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[[@]]}" --db "${VISIBILITY_DBNAME}" update-schema -d "${VISIBILITY_SCHEMA_DIR}"
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[@]}" --db "${VISIBILITY_DBNAME}" setup-schema -v 0.0
+    temporal-sql-tool --ep "${MYSQL_SEEDS}" -u "${MYSQL_USER}" "${MYSQL_CONNECT_ATTR[@]}" --db "${VISIBILITY_DBNAME}" update-schema -d "${VISIBILITY_SCHEMA_DIR}"
 }
 
 setup_postgres_schema() {
@@ -201,28 +213,31 @@ setup_postgres_schema() {
 }
 
 setup_schema() {
-    if [[ ${DB} == mysql ]]; then
-        echo 'Setup MySQL schema.'
-        setup_mysql_schema
-    elif [[ ${DB} == postgresql ]]; then
-        echo 'Setup PostgreSQL schema.'
-        setup_postgres_schema
-    elif [[ ${DB} == cassandra ]]; then
-        echo 'Setup Cassandra schema.'
-        setup_cassandra_schema
-    else
-        echo "Unsupported DB type: ${DB}."
-        exit 1
-    fi
+    case ${DB} in
+      mysql)
+          echo 'Setup MySQL schema.'
+          setup_mysql_schema
+          ;;
+      postgresql)
+          echo 'Setup PostgreSQL schema.'
+          setup_postgres_schema
+          ;;
+      cassandra)
+          echo 'Setup Cassandra schema.'
+          setup_cassandra_schema
+          ;;
+      *)
+          die "Unsupported DB type: ${DB}."
+          ;;
+    esac
 }
 
 # === Elasticsearch functions ===
 
 validate_es_env() {
     if [[ ${ENABLE_ES} == true ]]; then
-        if [[ -z "${ES_SEEDS}" ]]; then
-            echo "ES_SEEDS env must be set if ENABLE_ES is ${ENABLE_ES}"
-            exit 1
+        if [[ -z ${ES_SEEDS} ]]; then
+            die "ES_SEEDS env must be set if ENABLE_ES is ${ENABLE_ES}"
         fi
     fi
 }
@@ -232,7 +247,7 @@ wait_for_es() {
 
     ES_SERVER="${ES_SCHEME}://${ES_SEEDS%%,*}:${ES_PORT}"
 
-    until curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_SERVER}" > /dev/null 2>&1; do
+    until curl --silent --fail --user "${ES_USER}":"${ES_PWD}" "${ES_SERVER}" >& /dev/null; do
         DURATION=${SECONDS}
 
         if [[ ${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS} -gt 0 && ${DURATION} -ge "${ES_SCHEMA_SETUP_TIMEOUT_IN_SECONDS}" ]]; then
@@ -293,7 +308,7 @@ add_custom_search_attributes() {
 setup_server(){
     echo "Temporal CLI address: ${TEMPORAL_CLI_ADDRESS}."
 
-    until tctl cluster health | grep SERVING; do
+    until tctl cluster health | grep -q SERVING; do
         echo "Waiting for Temporal server to start..."
         sleep 1
     done
