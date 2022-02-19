@@ -26,6 +26,7 @@ package workflow
 
 import (
 	"math"
+	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -42,6 +43,13 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+)
+
+const (
+	// timeoutFailureTypePrefix is the prefix for timeout error types
+	// the actual failure type will be prefix + timeoutType.String
+	// e.g. "Temporal Timeout: StartToClose" or "Temporal Timeout: Heartbeat"
+	timeoutFailureTypePrefix = "Temporal Timeout: "
 )
 
 // TODO treat 0 as 0, not infinite
@@ -121,8 +129,7 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
 		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
 			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			// TODO change type format
-			return !matchNonRetryableTypes(timeoutType.String(), nonRetryableTypes)
+			return !matchTimeoutNonRetryableTypes(timeoutType, nonRetryableTypes)
 		}
 
 		return false
@@ -137,7 +144,7 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			return false
 		}
 
-		return !matchNonRetryableTypes(
+		return !matchApplicationNonRetryableTypes(
 			failure.GetApplicationFailureInfo().GetType(),
 			nonRetryableTypes,
 		)
@@ -145,8 +152,29 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	return true
 }
 
-func matchNonRetryableTypes(failureType string, nonRetryableTypes []string) bool {
+func matchTimeoutNonRetryableTypes(
+	timeoutType enumspb.TimeoutType,
+	nonRetryableTypes []string,
+) bool {
+	timeoutFailureType := timeoutFailureTypePrefix + timeoutType.String()
 	for _, nrt := range nonRetryableTypes {
+		if timeoutFailureType == nrt {
+			return true
+		}
+	}
+
+	return false
+}
+
+func matchApplicationNonRetryableTypes(
+	failureType string,
+	nonRetryableTypes []string,
+) bool {
+	for _, nrt := range nonRetryableTypes {
+		if strings.HasPrefix(nrt, timeoutFailureTypePrefix) {
+			continue
+		}
+
 		if nrt == failureType {
 			return true
 		}
