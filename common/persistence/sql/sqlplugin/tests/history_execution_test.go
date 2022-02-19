@@ -41,7 +41,7 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		store sqlplugin.HistoryExecution
+		store sqlplugin.DB
 	}
 )
 
@@ -59,7 +59,7 @@ var (
 
 func newHistoryExecutionSuite(
 	t *testing.T,
-	store sqlplugin.HistoryExecution,
+	store sqlplugin.DB,
 ) *historyExecutionSuite {
 	return &historyExecutionSuite{
 		Assertions: require.New(t),
@@ -268,6 +268,52 @@ func (s *historyExecutionSuite) TestInsertDeleteSelect() {
 
 	_, err = s.store.SelectFromExecutions(newExecutionContext(), filter)
 	s.Error(err) // TODO persistence layer should do proper error translation
+}
+
+func (s *historyExecutionSuite) TestAllMapInsertDeleteSelect() {
+	shardID := rand.Int31()
+	namespaceID := primitives.NewUUID()
+	workflowID := shuffle.String(testHistoryExecutionWorkflowID)
+	runID := primitives.NewUUID()
+	nextEventID := rand.Int63()
+	lastWriteVersion := rand.Int63()
+
+	execution := s.newRandomExecutionRow(shardID, namespaceID, workflowID, runID, nextEventID, lastWriteVersion)
+	result, err := s.store.InsertIntoExecutions(newExecutionContext(), &execution)
+	s.NoError(err)
+	activity := sqlplugin.ActivityInfoMapsRow{
+		ShardID:      shardID,
+		NamespaceID:  namespaceID,
+		WorkflowID:   workflowID,
+		RunID:        runID,
+		Data:         shuffle.Bytes(testHistoryExecutionActivityData),
+		DataEncoding: testHistoryExecutionActivityEncoding,
+	}
+	_, err = s.store.ReplaceIntoActivityInfoMaps(newExecutionContext(), []sqlplugin.ActivityInfoMapsRow{activity})
+	s.NoError(err)
+
+	filter := sqlplugin.ExecutionsFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}
+	result, err = s.store.DeleteFromExecutions(newExecutionContext(), filter)
+	s.NoError(err)
+	rowsAffected, err := result.RowsAffected()
+	s.NoError(err)
+	s.Equal(1, int(rowsAffected))
+
+	_, err = s.store.SelectFromExecutions(newExecutionContext(), filter)
+	s.Error(err) // TODO persistence layer should do proper error translation
+
+	_, err = s.store.SelectAllFromActivityInfoMaps(newExecutionContext(), sqlplugin.ActivityInfoMapsAllFilter{
+		ShardID:     shardID,
+		NamespaceID: namespaceID,
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	})
+	s.Error(err)
 }
 
 func (s *historyExecutionSuite) TestReadLock() {
