@@ -73,7 +73,7 @@ func setTaskInfo(
 
 		for _, task := range tasksByCategory {
 			task.SetVersion(version)
-			if task.GetKey().FireTime.IsZero() {
+			if category.Type() == tasks.CategoryTypeImmediate {
 				task.SetVisibilityTime(timestamp)
 			}
 		}
