@@ -40,16 +40,10 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
-)
-
-const (
-	// timeoutFailureTypePrefix is the prefix for timeout error types
-	// the actual failure type will be prefix + timeoutType.String
-	// e.g. "Temporal Timeout: StartToClose" or "Temporal Timeout: Heartbeat"
-	timeoutFailureTypePrefix = "Temporal Timeout: "
 )
 
 // TODO treat 0 as 0, not infinite
@@ -156,7 +150,7 @@ func matchTimeoutNonRetryableTypes(
 	timeoutType enumspb.TimeoutType,
 	nonRetryableTypes []string,
 ) bool {
-	timeoutFailureType := timeoutFailureTypePrefix + timeoutType.String()
+	timeoutFailureType := common.TimeoutFailureTypePrefix + timeoutType.String()
 	for _, nrt := range nonRetryableTypes {
 		if timeoutFailureType == nrt {
 			return true
@@ -171,7 +165,7 @@ func matchApplicationNonRetryableTypes(
 	nonRetryableTypes []string,
 ) bool {
 	for _, nrt := range nonRetryableTypes {
-		if strings.HasPrefix(nrt, timeoutFailureTypePrefix) {
+		if strings.HasPrefix(nrt, common.TimeoutFailureTypePrefix) {
 			continue
 		}
 

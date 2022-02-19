@@ -111,3 +111,11 @@ const (
 	// DefaultTransactionSizeLimit is the largest allowed transaction size to persistence
 	DefaultTransactionSizeLimit = 4 * 1024 * 1024
 )
+
+const (
+	// TimeoutFailureTypePrefix is the prefix for timeout failure types
+	// used in retry policy
+	// the actual failure type will be prefix + enums.TimeoutType.String()
+	// e.g. "Temporal Timeout: StartToClose" or "Temporal Timeout: Heartbeat"
+	TimeoutFailureTypePrefix = "Temporal Timeout: "
+)
