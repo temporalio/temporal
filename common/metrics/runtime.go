@@ -124,6 +124,7 @@ func (r *RuntimeMetricsReporter) Start() {
 	if !atomic.CompareAndSwapInt32(&r.started, 0, 1) {
 		return
 	}
+	r.report()
 	go func() {
 		ticker := time.NewTicker(r.reportInterval)
 		for {

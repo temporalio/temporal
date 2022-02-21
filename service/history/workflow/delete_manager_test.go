@@ -41,6 +41,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -59,6 +60,7 @@ type (
 		mockCache          *MockCache
 		mockArchivalClient *archiver.MockClient
 		mockShardContext   *shard.MockContext
+		mockClock          *clock.EventTimeSource
 
 		deleteManager DeleteManager
 	}
@@ -83,6 +85,7 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockCache = NewMockCache(s.controller)
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
+	s.mockClock = clock.NewEventTimeSource()
 
 	config := tests.NewDynamicConfig()
 	s.mockShardContext = shard.NewMockContext(s.controller)
@@ -93,6 +96,7 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 		s.mockCache,
 		config,
 		s.mockArchivalClient,
+		s.mockClock,
 	)
 }
 

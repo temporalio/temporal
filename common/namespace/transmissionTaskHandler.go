@@ -47,7 +47,7 @@ type (
 			replicationConfig *persistencespb.NamespaceReplicationConfig,
 			configVersion int64,
 			failoverVersion int64,
-			isGlobalNamespaceEnabled bool,
+			isGlobalNamespace bool,
 		) error
 	}
 
@@ -76,10 +76,13 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 	configVersion int64,
 	failoverVersion int64,
-	isGlobalNamespaceEnabled bool,
+	isGlobalNamespace bool,
 ) error {
 
-	if !isGlobalNamespaceEnabled {
+	if !isGlobalNamespace {
+		return nil
+	}
+	if len(replicationConfig.Clusters) <= 1 {
 		return nil
 	}
 

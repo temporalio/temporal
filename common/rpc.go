@@ -38,7 +38,7 @@ type (
 		GetInternodeGRPCServerOptions() ([]grpc.ServerOption, error)
 		GetGRPCListener() net.Listener
 		GetRingpopChannel() *tchannel.Channel
-		CreateFrontendGRPCConnection(hostName string) *grpc.ClientConn
-		CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn
+		CreateFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn
+		CreateInternodeGRPCConnection(rpcAddress string) *grpc.ClientConn
 	}
 )

@@ -170,6 +170,8 @@ const (
 	PersistenceCreateWorkflowExecutionScope
 	// PersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to persistence layer
 	PersistenceGetWorkflowExecutionScope
+	// PersistenceSetWorkflowExecutionScope tracks SetWorkflowExecution calls made by service to persistence layer
+	PersistenceSetWorkflowExecutionScope
 	// PersistenceUpdateWorkflowExecutionScope tracks UpdateWorkflowExecution calls made by service to persistence layer
 	PersistenceUpdateWorkflowExecutionScope
 	// PersistenceConflictResolveWorkflowExecutionScope tracks ConflictResolveWorkflowExecution calls made by service to persistence layer
@@ -1207,6 +1209,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceUpdateShardScope:                       {operation: "UpdateShard"},
 		PersistenceCreateWorkflowExecutionScope:           {operation: "CreateWorkflowExecution"},
 		PersistenceGetWorkflowExecutionScope:              {operation: "GetWorkflowExecution"},
+		PersistenceSetWorkflowExecutionScope:              {operation: "SetWorkflowExecution"},
 		PersistenceUpdateWorkflowExecutionScope:           {operation: "UpdateWorkflowExecution"},
 		PersistenceConflictResolveWorkflowExecutionScope:  {operation: "ConflictResolveWorkflowExecution"},
 		PersistenceResetWorkflowExecutionScope:            {operation: "ResetWorkflowExecution"},
@@ -2118,6 +2121,8 @@ const (
 	LoadedTaskQueueGauge
 	TaskQueueStartedCounter
 	TaskQueueStoppedCounter
+	TaskWriteThrottlePerTaskQueueCounter
+	TaskWriteLatencyPerTaskQueue
 
 	NumMatchingMetrics
 )
@@ -2573,6 +2578,8 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		LoadedTaskQueueGauge:                      NewGaugeDef("loaded_task_queue_count"),
 		TaskQueueStartedCounter:                   NewCounterDef("task_queue_started"),
 		TaskQueueStoppedCounter:                   NewCounterDef("task_queue_stopped"),
+		TaskWriteThrottlePerTaskQueueCounter:      NewRollupCounterDef("task_write_throttle_count_per_tl", "task_write_throttle_count"),
+		TaskWriteLatencyPerTaskQueue:              NewRollupTimerDef("task_write_latency_per_tl", "task_write_latency"),
 	},
 	Worker: {
 		ReplicatorMessages:                            NewCounterDef("replicator_messages"),

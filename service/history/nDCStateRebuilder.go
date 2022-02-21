@@ -213,7 +213,7 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		r.logger,
 		resetMutableStateBuilder,
 		func(mutableState workflow.MutableState) workflow.TaskGenerator {
-			return workflow.NewTaskGenerator(r.shard.GetNamespaceRegistry(), r.logger, mutableState)
+			return workflow.NewTaskGenerator(r.shard.GetNamespaceRegistry(), mutableState)
 		},
 	)
 	return resetMutableStateBuilder, stateBuilder

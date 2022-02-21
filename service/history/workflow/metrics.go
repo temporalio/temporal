@@ -68,18 +68,18 @@ func emitMutableStateStatus(
 	sizeScope.RecordDistribution(metrics.ChildInfoSize, stats.ChildInfoSize)
 	countScope.RecordDistribution(metrics.ChildInfoCount, stats.ChildInfoCount)
 
-	countScope.RecordDistribution(metrics.RequestCancelInfoSize, stats.RequestCancelInfoSize)
+	sizeScope.RecordDistribution(metrics.RequestCancelInfoSize, stats.RequestCancelInfoSize)
 	countScope.RecordDistribution(metrics.RequestCancelInfoCount, stats.RequestCancelInfoCount)
 
 	sizeScope.RecordDistribution(metrics.SignalInfoSize, stats.SignalInfoSize)
 	countScope.RecordDistribution(metrics.SignalInfoCount, stats.SignalInfoCount)
 
 	sizeScope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
-	sizeScope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
+	countScope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
 
 	if stats.HistoryStatistics != nil {
 		sizeScope.RecordDistribution(metrics.HistorySize, stats.HistoryStatistics.SizeDiff)
-		sizeScope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
+		countScope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
 	}
 }
 

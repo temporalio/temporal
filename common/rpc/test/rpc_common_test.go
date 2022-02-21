@@ -28,19 +28,19 @@ import (
 	"context"
 	"crypto/tls"
 	"math/rand"
+	"net"
 	"strings"
 
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/peer"
-
 	"github.com/stretchr/testify/suite"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/examples/helloworld/helloworld"
-
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/examples/helloworld/helloworld"
+	"google.golang.org/grpc/peer"
 )
 
 // HelloServer is used to implement helloworld.GreeterServer.
@@ -53,6 +53,7 @@ type ServerUsageType int32
 const (
 	Frontend ServerUsageType = iota
 	Internode
+	RemoteCluster
 )
 
 const (
@@ -81,6 +82,10 @@ var (
 			MaxJoinDuration:  5,
 			BroadcastAddress: localhostIPv4,
 		},
+	}
+	clusterMetadata = &cluster.Config{
+		CurrentClusterName: "test",
+		ClusterInformation: map[string]cluster.ClusterInformation{"test": {RPCAddress: localhostIPv4 + ":1234"}},
 	}
 )
 
@@ -166,15 +171,21 @@ func dialHelloAndGetTLSInfo(
 	logger := log.NewNoopLogger()
 	var cfg *tls.Config
 	var err error
-	if serverType == Internode {
+	switch serverType {
+	case Internode:
 		cfg, err = clientFactory.GetInternodeClientTlsConfig()
-	} else {
+	case Frontend:
 		cfg, err = clientFactory.GetFrontendClientTlsConfig()
+	case RemoteCluster:
+		host, _, err := net.SplitHostPort(hostport)
+		s.NoError(err)
+		cfg, err = clientFactory.GetRemoteClusterClientConfig(host)
 	}
-
 	s.NoError(err)
+
 	clientConn, err := rpc.Dial(hostport, cfg, logger)
 	s.NoError(err)
+
 	client := helloworld.NewGreeterClient(clientConn)
 
 	request := &helloworld.HelloRequest{Name: convert.Uint64ToString(rand.Uint64())}

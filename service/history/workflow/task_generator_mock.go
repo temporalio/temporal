@@ -131,11 +131,12 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateDelayedWorkflowTasks(now, start
 }
 
 // GenerateDeleteExecutionTask mocks base method.
-func (m *MockTaskGenerator) GenerateDeleteExecutionTask(now time.Time) error {
+func (m *MockTaskGenerator) GenerateDeleteExecutionTask(now time.Time) (*tasks.DeleteExecutionTask, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GenerateDeleteExecutionTask", now)
-	ret0, _ := ret[0].(error)
-	return ret0
+	ret0, _ := ret[0].(*tasks.DeleteExecutionTask)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GenerateDeleteExecutionTask indicates an expected call of GenerateDeleteExecutionTask.
