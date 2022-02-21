@@ -26,6 +26,7 @@ package tasks
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 )
 
@@ -108,9 +109,13 @@ func NewCategory(
 	categories.Lock()
 	defer categories.Unlock()
 
+	isNewCategory := true
 	for _, existingCategory := range categories.list {
-		if existingCategory.ID() == id && existingCategory.cType != categoryType {
-			panic(fmt.Sprintf("category id: %v has already been used", id))
+		if existingCategory.ID() == id {
+			isNewCategory = false
+			if existingCategory.cType != categoryType {
+				panic(fmt.Sprintf("category id: %v has already been defined as type: %v ", id, existingCategory.cType))
+			}
 		}
 	}
 
@@ -119,7 +124,9 @@ func NewCategory(
 		cType: categoryType,
 		name:  name,
 	}
-	categories.list = append(categories.list, newCategory)
+	if isNewCategory {
+		categories.list = append(categories.list, newCategory)
+	}
 
 	return newCategory
 }
@@ -134,4 +141,15 @@ func (c *Category) Name() string {
 
 func (c *Category) Type() CategoryType {
 	return c.cType
+}
+
+func (t CategoryType) String() string {
+	switch t {
+	case CategoryTypeImmediate:
+		return "Immediate"
+	case CategoryTypeScheduled:
+		return "Scheduled"
+	default:
+		return strconv.Itoa(int(t))
+	}
 }

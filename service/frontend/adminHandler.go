@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
@@ -514,10 +515,10 @@ func (adh *AdminHandler) ListTimerTasks(ctx context.Context, request *adminservi
 		ShardID:      request.GetShardId(),
 		TaskCategory: tasks.CategoryTimer,
 		MinTaskKey: tasks.Key{
-			FireTime: *request.GetMinTime(),
+			FireTime: timestamp.TimeValue(request.GetMinTime()),
 		},
 		MaxTaskKey: tasks.Key{
-			FireTime: *request.GetMaxTime(),
+			FireTime: timestamp.TimeValue(request.GetMaxTime()),
 		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),

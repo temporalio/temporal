@@ -431,7 +431,8 @@ type (
 	}
 
 	// GetHistoryTasksRequest is used to get a range of history tasks
-	// Either TaskID or FireTime should be specified in both Min and MaxTaskKey
+	// Either max TaskID or FireTime is required depending on the
+	// task category type. Min TaskID or FireTime is optional.
 	// NOTE: currently the range for TaskID is (minTaskID, maxTaskID] and
 	// the range for FireTime is [minFireTime, maxFireTime)
 	// TODO: change the semantics for TaskID to be the same as FireTime
@@ -459,7 +460,8 @@ type (
 	}
 
 	// RangeCompleteHistoryTasksRequest deletes a range of history tasks
-	// Either TaskID or FireTime should be specified in both Min and MaxTaskKey
+	// Either max TaskID or FireTime is required depending on the
+	// task category type. Min TaskID or FireTime is optional.
 	// NOTE: currently the range for TaskID is (minTaskID, maxTaskID] and
 	// the range for FireTime is [minFireTime, maxFireTime)
 	// TODO: change the semantics for TaskID to be the same as FireTime
