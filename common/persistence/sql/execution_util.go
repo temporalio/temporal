@@ -529,14 +529,14 @@ func applyTasks(
 
 	var err error
 	for category, tasksByCategory := range insertTasks {
-		switch category {
-		case tasks.CategoryTransfer:
+		switch category.ID() {
+		case tasks.CategoryIDTransfer:
 			err = createTransferTasks(ctx, tx, shardID, tasksByCategory)
-		case tasks.CategoryTimer:
+		case tasks.CategoryIDTimer:
 			err = createTimerTasks(ctx, tx, shardID, tasksByCategory)
-		case tasks.CategoryVisibility:
+		case tasks.CategoryIDVisibility:
 			err = createVisibilityTasks(ctx, tx, shardID, tasksByCategory)
-		case tasks.CategoryReplication:
+		case tasks.CategoryIDReplication:
 			err = createReplicationTasks(ctx, tx, shardID, tasksByCategory)
 		default:
 			err = serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))

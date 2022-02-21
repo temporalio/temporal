@@ -465,14 +465,14 @@ func applyTasks(
 
 	var err error
 	for category, tasksByCategory := range insertTasks {
-		switch category {
-		case tasks.CategoryTransfer:
+		switch category.ID() {
+		case tasks.CategoryIDTransfer:
 			err = createTransferTasks(batch, tasksByCategory, shardID)
-		case tasks.CategoryTimer:
+		case tasks.CategoryIDTimer:
 			err = createTimerTasks(batch, tasksByCategory, shardID)
-		case tasks.CategoryVisibility:
+		case tasks.CategoryIDVisibility:
 			err = createVisibilityTasks(batch, tasksByCategory, shardID)
-		case tasks.CategoryReplication:
+		case tasks.CategoryIDReplication:
 			err = createReplicationTasks(batch, tasksByCategory, shardID)
 		default:
 			err = createHistoryTasks(batch, category, tasksByCategory, shardID)

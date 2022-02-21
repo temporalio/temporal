@@ -63,14 +63,14 @@ func (m *sqlExecutionStore) AddHistoryTasks(
 func (m *sqlExecutionStore) GetHistoryTask(
 	request *persistence.GetHistoryTaskRequest,
 ) (*persistence.InternalGetHistoryTaskResponse, error) {
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		return m.getTransferTask(request)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return m.getTimerTask(request)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return m.getVisibilityTask(request)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return m.getReplicationTask(request)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category: %v", request.TaskCategory))
@@ -80,14 +80,14 @@ func (m *sqlExecutionStore) GetHistoryTask(
 func (m *sqlExecutionStore) GetHistoryTasks(
 	request *persistence.GetHistoryTasksRequest,
 ) (*persistence.InternalGetHistoryTasksResponse, error) {
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		return m.getTransferTasks(request)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return m.getTimerTasks(request)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return m.getVisibilityTasks(request)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return m.getReplicationTasks(request)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category: %v", request.TaskCategory))
@@ -97,14 +97,14 @@ func (m *sqlExecutionStore) GetHistoryTasks(
 func (m *sqlExecutionStore) CompleteHistoryTask(
 	request *persistence.CompleteHistoryTaskRequest,
 ) error {
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		return m.completeTransferTask(request)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return m.completeTimerTask(request)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return m.completeVisibilityTask(request)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return m.completeReplicationTask(request)
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category: %v", request.TaskCategory))
@@ -114,14 +114,14 @@ func (m *sqlExecutionStore) CompleteHistoryTask(
 func (m *sqlExecutionStore) RangeCompleteHistoryTasks(
 	request *persistence.RangeCompleteHistoryTasksRequest,
 ) error {
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		return m.rangeCompleteTransferTasks(request)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return m.rangeCompleteTimerTasks(request)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return m.rangeCompleteVisibilityTasks(request)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return m.rangeCompleteReplicationTasks(request)
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category: %v", request.TaskCategory))

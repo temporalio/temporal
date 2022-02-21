@@ -406,14 +406,14 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 func (d *MutableStateTaskStore) GetHistoryTask(
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		return d.getTransferTask(request)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return d.getTimerTask(request)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return d.getVisibilityTask(request)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return d.getReplicationTask(request)
 	default:
 		return d.getHistoryTask(request)
@@ -423,14 +423,14 @@ func (d *MutableStateTaskStore) GetHistoryTask(
 func (d *MutableStateTaskStore) GetHistoryTasks(
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		return d.getTransferTasks(request)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return d.getTimerTasks(request)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return d.getVisibilityTasks(request)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return d.getReplicationTasks(request)
 	default:
 		return d.getHistoryTasks(request)
@@ -440,14 +440,14 @@ func (d *MutableStateTaskStore) GetHistoryTasks(
 func (d *MutableStateTaskStore) CompleteHistoryTask(
 	request *p.CompleteHistoryTaskRequest,
 ) error {
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		return d.completeTransferTask(request)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return d.completeTimerTask(request)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return d.completeVisibilityTask(request)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return d.completeReplicationTask(request)
 	default:
 		return d.completeHistoryTask(request)
@@ -457,14 +457,14 @@ func (d *MutableStateTaskStore) CompleteHistoryTask(
 func (d *MutableStateTaskStore) RangeCompleteHistoryTasks(
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		return d.rangeCompleteTransferTasks(request)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return d.rangeCompleteTimerTasks(request)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return d.rangeCompleteVisibilityTasks(request)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return d.rangeCompleteReplicationTasks(request)
 	default:
 		return d.rangeCompleteHistoryTasks(request)

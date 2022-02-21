@@ -331,14 +331,14 @@ func (p *executionPersistenceClient) AddHistoryTasks(request *AddHistoryTasksReq
 
 func (p *executionPersistenceClient) GetHistoryTask(request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error) {
 	var scopeIdx int
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		scopeIdx = metrics.PersistenceGetTransferTaskScope
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		scopeIdx = metrics.PersistenceGetTimerTaskScope
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		scopeIdx = metrics.PersistenceGetVisibilityTaskScope
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		scopeIdx = metrics.PersistenceGetReplicationTaskScope
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
@@ -359,14 +359,14 @@ func (p *executionPersistenceClient) GetHistoryTask(request *GetHistoryTaskReque
 
 func (p *executionPersistenceClient) GetHistoryTasks(request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error) {
 	var scopeIdx int
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		scopeIdx = metrics.PersistenceGetTransferTasksScope
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		scopeIdx = metrics.PersistenceGetTimerTasksScope
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		scopeIdx = metrics.PersistenceGetVisibilityTasksScope
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		scopeIdx = metrics.PersistenceGetReplicationTasksScope
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
@@ -387,14 +387,14 @@ func (p *executionPersistenceClient) GetHistoryTasks(request *GetHistoryTasksReq
 
 func (p *executionPersistenceClient) CompleteHistoryTask(request *CompleteHistoryTaskRequest) error {
 	var scopeIdx int
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		scopeIdx = metrics.PersistenceCompleteTransferTaskScope
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		scopeIdx = metrics.PersistenceCompleteTimerTaskScope
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		scopeIdx = metrics.PersistenceCompleteVisibilityTaskScope
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		scopeIdx = metrics.PersistenceCompleteReplicationTaskScope
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
@@ -415,14 +415,14 @@ func (p *executionPersistenceClient) CompleteHistoryTask(request *CompleteHistor
 
 func (p *executionPersistenceClient) RangeCompleteHistoryTasks(request *RangeCompleteHistoryTasksRequest) error {
 	var scopeIdx int
-	switch request.TaskCategory {
-	case tasks.CategoryTransfer:
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
 		scopeIdx = metrics.PersistenceRangeCompleteTransferTasksScope
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		scopeIdx = metrics.PersistenceRangeCompleteTimerTasksScope
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		scopeIdx = metrics.PersistenceRangeCompleteVisibilityTasksScope
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		scopeIdx = metrics.PersistenceRangeCompleteReplicationTasksScope
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
