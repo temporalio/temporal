@@ -62,7 +62,7 @@ func NewOtelMetricTestUtility() *OtelMetricTestUtility {
 }
 
 func (t *OtelMetricTestUtility) GetClient(config *ClientConfig, idx ServiceIdx) Client {
-	result, err := newOpentelemeteryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
+	result, err := NewOpentelemeteryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
 	if err != nil {
 		panic(err)
 	}

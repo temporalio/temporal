@@ -100,6 +100,7 @@ func newTimerQueueProcessor(
 		workflowCache,
 		config,
 		archivalClient,
+		shard.GetTimeSource(),
 	)
 
 	return &timerQueueProcessorImpl{

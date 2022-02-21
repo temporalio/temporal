@@ -85,6 +85,7 @@ func newTransferQueueTaskExecutorBase(
 			workflowCache,
 			shard.GetConfig(),
 			archivalClient,
+			shard.GetTimeSource(),
 		),
 	}
 }

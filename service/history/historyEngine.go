@@ -115,6 +115,7 @@ type (
 		rawMatchingClient             matchingservice.MatchingServiceClient
 		replicationDLQHandler         replicationDLQHandler
 		searchAttributesValidator     *searchattribute.Validator
+		workflowDeleteManager         workflow.DeleteManager
 	}
 )
 
@@ -138,6 +139,14 @@ func NewEngineWithShardContext(
 	executionManager := shard.GetExecutionManager()
 	historyCache := newCacheFn(shard)
 
+	workflowDeleteManager := workflow.NewDeleteManager(
+		shard,
+		historyCache,
+		config,
+		archivalClient,
+		shard.GetTimeSource(),
+	)
+
 	historyEngImpl := &historyEngineImpl{
 		status:                    common.DaemonStatusInitialized,
 		currentClusterName:        currentClusterName,
@@ -157,6 +166,7 @@ func NewEngineWithShardContext(
 		rawMatchingClient:         rawMatchingClient,
 		replicationTaskProcessors: make(map[string]ReplicationTaskProcessor),
 		replicationTaskFetchers:   replicationTaskFetchers,
+		workflowDeleteManager:     workflowDeleteManager,
 	}
 
 	// Please make sure all components needed for initializing a queue processor
@@ -2265,31 +2275,23 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 
 func (e *historyEngineImpl) DeleteWorkflowExecution(
 	ctx context.Context,
-	deleteRequest *historyservice.DeleteWorkflowExecutionRequest,
-) error {
+	request *historyservice.DeleteWorkflowExecutionRequest,
+) (retError error) {
+	nsID := namespace.ID(request.GetNamespaceId())
 
-	return e.updateWorkflow(
-		ctx,
-		namespace.ID(deleteRequest.NamespaceId),
-		*deleteRequest.GetWorkflowExecution(),
-		func(weCtx workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
-			if mutableState.IsWorkflowExecutionRunning() {
-				return nil, consts.ErrWorkflowNotCompleted // workflow is running, cannot be deleted
-			}
+	wfCtx, err := e.loadWorkflow(ctx, nsID, request.GetWorkflowExecution().GetWorkflowId(), request.GetWorkflowExecution().GetRunId())
+	if err != nil {
+		return err
+	}
+	defer func() { wfCtx.getReleaseFn()(retError) }()
 
-			taskGenerator := workflow.NewTaskGenerator(
-				e.shard.GetNamespaceRegistry(),
-				e.logger,
-				mutableState,
-			)
-
-			err := taskGenerator.GenerateDeleteExecutionTask(e.timeSource.Now())
-			if err != nil {
-				return nil, err
-			}
-
-			return updateWorkflowWithoutWorkflowTask, nil
-		})
+	return e.workflowDeleteManager.AddDeleteWorkflowExecutionTask(
+		nsID,
+		commonpb.WorkflowExecution{
+			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
+			RunId:      request.GetWorkflowExecution().GetRunId(),
+		},
+		wfCtx.getMutableState())
 }
 
 // RecordChildExecutionCompleted records the completion of child execution into parent execution history
