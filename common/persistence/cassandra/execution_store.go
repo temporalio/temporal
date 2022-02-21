@@ -64,13 +64,13 @@ const (
 	rowTypeVisibilityTaskNamespaceID = "10000000-6000-f000-f000-000000000000"
 	rowTypeVisibilityTaskWorkflowID  = "20000000-6000-f000-f000-000000000000"
 	rowTypeVisibilityTaskRunID       = "30000000-6000-f000-f000-000000000000"
-	// Row constants for History task row.
-	rowTypeHistoryTaskNamespaceID = "10000000-7000-f000-f000-000000000000"
-	rowTypeHistoryTaskWorkflowID  = "20000000-7000-f000-f000-000000000000"
-	rowTypeHistoryTaskRunID       = "30000000-7000-f000-f000-000000000000"
 	// Row Constants for Replication Task DLQ Row. Source cluster name will be used as WorkflowID.
 	rowTypeDLQNamespaceID = "10000000-6000-f000-f000-000000000000"
 	rowTypeDLQRunID       = "30000000-6000-f000-f000-000000000000"
+	// Row constants for History task row.
+	rowTypeHistoryTaskNamespaceID = "10000000-8000-f000-f000-000000000000"
+	rowTypeHistoryTaskWorkflowID  = "20000000-8000-f000-f000-000000000000"
+	rowTypeHistoryTaskRunID       = "30000000-8000-f000-f000-000000000000"
 	// Special TaskId constants
 	rowTypeExecutionTaskID = int64(-10)
 	rowTypeShardTaskID     = int64(-11)
@@ -86,7 +86,8 @@ const (
 	rowTypeReplicationTask
 	rowTypeDLQ
 	rowTypeVisibilityTask
-	rowTypeHistoryTask
+	// NOTE: the row type for history task is the task category ID
+	// rowTypeHistoryTask
 )
 
 const (

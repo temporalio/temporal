@@ -564,7 +564,11 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	executionMgr := h.persistenceExecutionManager
+	fireTime := timestamp.TimeValue(request.GetVisibilityTime())
+	taskKey := tasks.Key{
+		TaskID:   request.GetTaskId(),
+		FireTime: fireTime,
+	}
 
 	var err error
 	var category tasks.Category
@@ -579,20 +583,21 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 		category = tasks.CategoryReplication
 	default:
 		// persistence manager will validate if category is defined or not
+		categoryType := tasks.CategoryTypeImmediate
+		if !fireTime.IsZero() {
+			categoryType = tasks.CategoryTypeScheduled
+		}
 		category = tasks.NewCategory(
 			int32(request.GetCategory()),
-			tasks.CategoryTypeUnspecified,
+			categoryType,
 			"",
 		)
 	}
 
-	err = executionMgr.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{
+	err = h.persistenceExecutionManager.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: category,
-		TaskKey: tasks.Key{
-			TaskID:   request.GetTaskId(),
-			FireTime: timestamp.TimeValue(request.GetVisibilityTime()),
-		},
+		TaskKey:      taskKey,
 	})
 
 	return &historyservice.RemoveTaskResponse{}, err

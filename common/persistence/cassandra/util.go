@@ -475,7 +475,7 @@ func applyTasks(
 		case tasks.CategoryReplication:
 			err = createReplicationTasks(batch, tasksByCategory, shardID)
 		default:
-			err = createHistoryTasks(batch, tasksByCategory, shardID)
+			err = createHistoryTasks(batch, category, tasksByCategory, shardID)
 		}
 
 		if err != nil {
@@ -572,17 +572,19 @@ func createVisibilityTasks(
 
 func createHistoryTasks(
 	batch gocql.Batch,
+	category tasks.Category,
 	historyTasks []p.InternalHistoryTask,
 	shardID int32,
 ) error {
+	isScheduledTask := category.Type() == tasks.CategoryTypeScheduled
 	for _, task := range historyTasks {
 		visibilityTimestamp := defaultVisibilityTimestamp
-		if !task.Key.FireTime.IsZero() {
+		if isScheduledTask {
 			visibilityTimestamp = p.UnixMilliseconds(task.Key.FireTime)
 		}
 		batch.Query(templateCreateHistoryTaskQuery,
 			shardID,
-			rowTypeHistoryTask,
+			category.ID(),
 			rowTypeHistoryTaskNamespaceID,
 			rowTypeHistoryTaskWorkflowID,
 			rowTypeHistoryTaskRunID,

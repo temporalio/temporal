@@ -951,13 +951,13 @@ func (d *MutableStateTaskStore) getHistoryTask(
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	shardID := request.ShardID
 	ts := defaultVisibilityTimestamp
-	if request.TaskKey.FireTime.IsZero() {
+	if request.TaskCategory.Type() == tasks.CategoryTypeScheduled {
 		ts = p.UnixMilliseconds(request.TaskKey.FireTime)
 	}
 	taskID := request.TaskKey.TaskID
 	query := d.Session.Query(templateGetHistoryTaskQuery,
 		shardID,
-		rowTypeHistoryTask,
+		request.TaskCategory.ID(),
 		rowTypeHistoryTaskNamespaceID,
 		rowTypeHistoryTaskWorkflowID,
 		rowTypeHistoryTaskRunID,
@@ -980,10 +980,10 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 	// Reading history tasks need to be quorum level consistent, otherwise we could lose task
 
 	var query gocql.Query
-	if request.MinTaskKey.TaskID != 0 || request.MaxTaskKey.TaskID != 0 {
+	if request.TaskCategory.Type() == tasks.CategoryTypeImmediate {
 		query = d.Session.Query(templateGetHistoryImmediateTasksQuery,
 			request.ShardID,
-			rowTypeHistoryTask,
+			request.TaskCategory.ID(),
 			rowTypeHistoryTaskNamespaceID,
 			rowTypeHistoryTaskWorkflowID,
 			rowTypeHistoryTaskRunID,
@@ -996,10 +996,10 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 		maxTimestamp := p.UnixMilliseconds(request.MaxTaskKey.FireTime)
 		query = d.Session.Query(templateGetHistoryScheduledTasksQuery,
 			request.ShardID,
-			rowTypeTimerTask,
-			rowTypeTimerNamespaceID,
-			rowTypeTimerWorkflowID,
-			rowTypeTimerRunID,
+			request.TaskCategory.ID(),
+			rowTypeHistoryTaskNamespaceID,
+			rowTypeHistoryTaskWorkflowID,
+			rowTypeHistoryTaskRunID,
 			minTimestamp,
 			maxTimestamp,
 		)
@@ -1032,12 +1032,12 @@ func (d *MutableStateTaskStore) completeHistoryTask(
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	ts := defaultVisibilityTimestamp
-	if !request.TaskKey.FireTime.IsZero() {
+	if request.TaskCategory.Type() == tasks.CategoryTypeScheduled {
 		ts = p.UnixMilliseconds(request.TaskKey.FireTime)
 	}
 	query := d.Session.Query(templateCompleteHistoryTaskQuery,
 		request.ShardID,
-		rowTypeHistoryTask,
+		request.TaskCategory.ID(),
 		rowTypeHistoryTaskNamespaceID,
 		rowTypeHistoryTaskWorkflowID,
 		rowTypeHistoryTaskRunID,
@@ -1054,10 +1054,10 @@ func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
 ) error {
 	// execution manager should already validated the request
 	var query gocql.Query
-	if request.MinTaskKey.TaskID != 0 || request.MaxTaskKey.TaskID != 0 {
+	if request.TaskCategory.Type() == tasks.CategoryTypeImmediate {
 		query = d.Session.Query(templateRangeCompleteHistoryImmediateTasksQuery,
 			request.ShardID,
-			rowTypeHistoryTask,
+			request.TaskCategory.ID(),
 			rowTypeHistoryTaskNamespaceID,
 			rowTypeHistoryTaskWorkflowID,
 			rowTypeHistoryTaskRunID,
@@ -1070,7 +1070,7 @@ func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
 		maxTimestamp := p.UnixMilliseconds(request.MaxTaskKey.FireTime)
 		query = d.Session.Query(templateRangeCompleteHistoryScheduledTasksQuery,
 			request.ShardID,
-			rowTypeHistoryTask,
+			request.TaskCategory.ID(),
 			rowTypeHistoryTaskNamespaceID,
 			rowTypeHistoryTaskWorkflowID,
 			rowTypeHistoryTaskRunID,

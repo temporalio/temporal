@@ -25,6 +25,8 @@
 package persistence
 
 import (
+	"fmt"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -725,7 +727,11 @@ func (m *executionManagerImpl) GetHistoryTask(
 func (m *executionManagerImpl) GetHistoryTasks(
 	request *GetHistoryTasksRequest,
 ) (*GetHistoryTasksResponse, error) {
-	if err := validateTaskRange(request.MinTaskKey, request.MaxTaskKey); err != nil {
+	if err := validateTaskRange(
+		request.TaskCategory.Type(),
+		request.MinTaskKey,
+		request.MaxTaskKey,
+	); err != nil {
 		return nil, err
 	}
 
@@ -752,7 +758,11 @@ func (m *executionManagerImpl) CompleteHistoryTask(
 func (m *executionManagerImpl) RangeCompleteHistoryTasks(
 	request *RangeCompleteHistoryTasksRequest,
 ) error {
-	if err := validateTaskRange(request.MinTaskKey, request.MaxTaskKey); err != nil {
+	if err := validateTaskRange(
+		request.TaskCategory.Type(),
+		request.MinTaskKey,
+		request.MaxTaskKey,
+	); err != nil {
 		return err
 	}
 
@@ -973,6 +983,7 @@ func serializeTasks(
 }
 
 func validateTaskRange(
+	taskCategoryType tasks.CategoryType,
 	minTaskKey tasks.Key,
 	maxTaskKey tasks.Key,
 ) error {
@@ -981,19 +992,24 @@ func validateTaskRange(
 	maxTaskIDSpecified := maxTaskKey.TaskID != 0
 	maxFireTimeSpecified := !maxTaskKey.FireTime.IsZero()
 
-	if maxTaskIDSpecified {
-		if !minFireTimeSpecified && !maxFireTimeSpecified {
-			return nil
+	switch taskCategoryType {
+	case tasks.CategoryTypeImmediate:
+		if !maxTaskIDSpecified {
+			serviceerror.NewInvalidArgument("invalid task range, max taskID must be specified for immediate task category")
 		}
-		return serviceerror.NewInvalidArgument("invalid task range, fireTime must be empty if taskID is sepcified")
+		if minFireTimeSpecified || maxFireTimeSpecified {
+			return serviceerror.NewInvalidArgument("invalid task range, fireTime must be empty for immediate task category")
+		}
+	case tasks.CategoryTypeScheduled:
+		if !maxFireTimeSpecified {
+			serviceerror.NewInvalidArgument("invalid task range, max fire time must be specified for scheduled task category")
+		}
+		if minTaskIDSpecified || maxTaskIDSpecified {
+			return serviceerror.NewInvalidArgument("invalid task range, taskID must be empty for scheduled task category")
+		}
+	default:
+		return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid task category type: %v", taskCategoryType))
 	}
 
-	if maxFireTimeSpecified {
-		if !minTaskIDSpecified && !maxTaskIDSpecified {
-			return nil
-		}
-		return serviceerror.NewInvalidArgument("invalid task range, taskID must be empty if fireTime is specified")
-	}
-
-	return serviceerror.NewInvalidArgument("invalid task range, maxTaskKey is required")
+	return nil
 }

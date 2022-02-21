@@ -108,14 +108,9 @@ func NewCategory(
 	categories.Lock()
 	defer categories.Unlock()
 
-	// TODO: relax this check.
 	for _, existingCategory := range categories.list {
-		if existingCategory.ID() == id {
+		if existingCategory.ID() == id && existingCategory.cType != categoryType {
 			panic(fmt.Sprintf("category id: %v has already been used", id))
-		}
-
-		if existingCategory.Name() == name {
-			panic(fmt.Sprintf("categeory name: %s has already been used", name))
 		}
 	}
 
