@@ -75,7 +75,7 @@ func applyWorkflowMutationTx(
 		workflowMutation.DBRecordVersion,
 	); err != nil {
 		switch err.(type) {
-		case *p.WorkflowConditionFailedError:
+		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
 			return err
 		default:
 			return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowMutationTx failed. Failed to lock executions row. Error: %v", err))
@@ -231,7 +231,7 @@ func applyWorkflowSnapshotTxAsReset(
 		workflowSnapshot.DBRecordVersion,
 	); err != nil {
 		switch err.(type) {
-		case *p.WorkflowConditionFailedError:
+		case *p.WorkflowConditionFailedError, *p.ConditionFailedError:
 			return err
 		default:
 			return serviceerror.NewUnavailable(fmt.Sprintf("applyWorkflowSnapshotTxAsReset failed. Failed to lock executions row. Error: %v", err))
@@ -685,11 +685,13 @@ func lockExecution(
 	})
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return 0, 0, serviceerror.NewNotFound(fmt.Sprintf("lockNextEventID failed. Unable to lock executions row with (shard, namespace, workflow, run) = (%v,%v,%v,%v) which does not exist.",
-				shardID,
-				namespaceID,
-				workflowID,
-				runID))
+			return 0, 0, &p.ConditionFailedError{
+				Msg: fmt.Sprintf("WriteLockExecutions failed. Unable to lock (shard, namespace, workflow, run) = (%v,%v,%v,%v) which does not exist.",
+					shardID,
+					namespaceID,
+					workflowID,
+					runID),
+			}
 		}
 		return 0, 0, serviceerror.NewUnavailable(fmt.Sprintf("lockNextEventID failed. Error: %v", err))
 	}

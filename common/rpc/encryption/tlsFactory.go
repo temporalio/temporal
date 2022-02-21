@@ -44,6 +44,7 @@ type (
 		GetInternodeClientConfig() (*tls.Config, error)
 		GetFrontendServerConfig() (*tls.Config, error)
 		GetFrontendClientConfig() (*tls.Config, error)
+		GetRemoteClusterClientConfig(hostname string) (*tls.Config, error)
 		GetExpiringCerts(timeWindow time.Duration) (expiring CertExpirationMap, expired CertExpirationMap, err error)
 	}
 

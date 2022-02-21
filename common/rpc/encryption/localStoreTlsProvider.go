@@ -51,17 +51,18 @@ type localStoreTlsProvider struct {
 
 	settings *config.RootTLS
 
-	internodeCertProvider       CertProvider
-	internodeClientCertProvider CertProvider
-	frontendCertProvider        CertProvider
-	workerCertProvider          CertProvider
+	internodeCertProvider           CertProvider
+	internodeClientCertProvider     CertProvider
+	frontendCertProvider            CertProvider
+	workerCertProvider              CertProvider
+	remoteClusterClientCertProvider map[string]CertProvider
+	frontendPerHostCertProviderMap  *localStorePerHostCertProviderMap
 
-	frontendPerHostCertProviderMap *localStorePerHostCertProviderMap
-
-	cachedInternodeServerConfig *tls.Config
-	cachedInternodeClientConfig *tls.Config
-	cachedFrontendServerConfig  *tls.Config
-	cachedFrontendClientConfig  *tls.Config
+	cachedInternodeServerConfig     *tls.Config
+	cachedInternodeClientConfig     *tls.Config
+	cachedFrontendServerConfig      *tls.Config
+	cachedFrontendClientConfig      *tls.Config
+	cachedRemoteClusterClientConfig map[string]*tls.Config
 
 	ticker *time.Ticker
 	logger log.Logger
@@ -84,6 +85,11 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope metrics.Scope, lo
 		workerProvider = internodeWorkerProvider
 	}
 
+	remoteClusterClientCertProvider := make(map[string]CertProvider)
+	for hostname, groupTLS := range tlsConfig.RemoteClusters {
+		remoteClusterClientCertProvider[hostname] = certProviderFactory(&groupTLS, nil, nil, tlsConfig.RefreshInterval, logger)
+	}
+
 	provider := &localStoreTlsProvider{
 		internodeCertProvider:       internodeProvider,
 		internodeClientCertProvider: internodeProvider,
@@ -91,10 +97,12 @@ func NewLocalStoreTlsProvider(tlsConfig *config.RootTLS, scope metrics.Scope, lo
 		workerCertProvider:          workerProvider,
 		frontendPerHostCertProviderMap: newLocalStorePerHostCertProviderMap(
 			tlsConfig.Frontend.PerHostOverrides, certProviderFactory, tlsConfig.RefreshInterval, logger),
-		RWMutex:  sync.RWMutex{},
-		settings: tlsConfig,
-		scope:    scope,
-		logger:   logger,
+		remoteClusterClientCertProvider: remoteClusterClientCertProvider,
+		RWMutex:                         sync.RWMutex{},
+		settings:                        tlsConfig,
+		scope:                           scope,
+		logger:                          logger,
+		cachedRemoteClusterClientConfig: make(map[string]*tls.Config),
 	}
 	provider.initialize()
 	return provider, nil
@@ -130,7 +138,7 @@ func (s *localStoreTlsProvider) GetInternodeClientConfig() (*tls.Config, error) 
 			return newClientTLSConfig(s.internodeClientCertProvider, client.ServerName,
 				s.settings.Internode.Server.RequireClientAuth, false, !client.DisableHostVerification)
 		},
-		s.settings.Internode.IsEnabled(),
+		s.settings.Internode.IsClientEnabled(),
 	)
 }
 
@@ -143,7 +151,7 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 		useTLS = true
 	} else {
 		client = &s.settings.Frontend.Client
-		useTLS = s.settings.Frontend.IsEnabled()
+		useTLS = s.settings.Frontend.IsClientEnabled()
 	}
 	return s.getOrCreateConfig(
 		&s.cachedFrontendClientConfig,
@@ -155,13 +163,33 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 	)
 }
 
+func (s *localStoreTlsProvider) GetRemoteClusterClientConfig(hostname string) (*tls.Config, error) {
+	groupTLS, ok := s.settings.RemoteClusters[hostname]
+	if !ok {
+		return nil, nil
+	}
+
+	return s.getOrCreateRemoteClusterClientConfig(
+		hostname,
+		func() (*tls.Config, error) {
+			return newClientTLSConfig(
+				s.remoteClusterClientCertProvider[hostname],
+				groupTLS.Client.ServerName,
+				groupTLS.Server.RequireClientAuth,
+				false,
+				!groupTLS.Client.DisableHostVerification)
+		},
+		groupTLS.IsClientEnabled(),
+	)
+}
+
 func (s *localStoreTlsProvider) GetFrontendServerConfig() (*tls.Config, error) {
 	return s.getOrCreateConfig(
 		&s.cachedFrontendServerConfig,
 		func() (*tls.Config, error) {
 			return newServerTLSConfig(s.frontendCertProvider, s.frontendPerHostCertProviderMap, &s.settings.Frontend, s.logger)
 		},
-		s.settings.Frontend.IsEnabled())
+		s.settings.Frontend.IsServerEnabled())
 }
 
 func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) {
@@ -170,7 +198,7 @@ func (s *localStoreTlsProvider) GetInternodeServerConfig() (*tls.Config, error) 
 		func() (*tls.Config, error) {
 			return newServerTLSConfig(s.internodeCertProvider, nil, &s.settings.Internode, s.logger)
 		},
-		s.settings.Internode.IsEnabled())
+		s.settings.Internode.IsServerEnabled())
 }
 
 func (s *localStoreTlsProvider) GetExpiringCerts(timeWindow time.Duration,
@@ -237,6 +265,41 @@ func (s *localStoreTlsProvider) getOrCreateConfig(
 
 	*cachedConfig = localConfig
 	return *cachedConfig, nil
+}
+
+func (s *localStoreTlsProvider) getOrCreateRemoteClusterClientConfig(
+	hostname string,
+	configConstructor tlsConfigConstructor,
+	isEnabled bool,
+) (*tls.Config, error) {
+	if !isEnabled {
+		return nil, nil
+	}
+
+	// Check if exists under a read lock first
+	s.RLock()
+	if clientConfig, ok := s.cachedRemoteClusterClientConfig[hostname]; ok {
+		defer s.RUnlock()
+		return clientConfig, nil
+	}
+	// Not found, promote to write lock to initialize
+	s.RUnlock()
+	s.Lock()
+	defer s.Unlock()
+	// Check if someone got here first while waiting for write lock
+	if clientConfig, ok := s.cachedRemoteClusterClientConfig[hostname]; ok {
+		return clientConfig, nil
+	}
+
+	// Load configuration
+	localConfig, err := configConstructor()
+
+	if err != nil {
+		return nil, err
+	}
+
+	s.cachedRemoteClusterClientConfig[hostname] = localConfig
+	return localConfig, nil
 }
 
 func newServerTLSConfig(
@@ -321,8 +384,13 @@ func getServerTLSConfigFromCertProvider(
 		logger), nil
 }
 
-func newClientTLSConfig(clientProvider CertProvider, serverName string, isAuthRequired bool,
-	isWorker bool, enableHostVerification bool) (*tls.Config, error) {
+func newClientTLSConfig(
+	clientProvider CertProvider,
+	serverName string,
+	isAuthRequired bool,
+	isWorker bool,
+	enableHostVerification bool,
+) (*tls.Config, error) {
 	// Optional ServerCA for client if not already trusted by host
 	serverCa, err := clientProvider.FetchServerRootCAsForClient(isWorker)
 	if err != nil {

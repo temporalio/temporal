@@ -579,7 +579,11 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 		category = tasks.CategoryReplication
 	default:
 		// persistence manager will validate if category is defined or not
-		category = tasks.Category(request.GetCategory())
+		category = tasks.NewCategory(
+			int32(request.GetCategory()),
+			tasks.CategoryTypeUnspecified,
+			"",
+		)
 	}
 
 	err = executionMgr.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{

@@ -992,6 +992,20 @@ func (mr *MockExecutionStoreMockRecorder) ReadHistoryBranch(request interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranch", reflect.TypeOf((*MockExecutionStore)(nil).ReadHistoryBranch), request)
 }
 
+// SetWorkflowExecution mocks base method.
+func (m *MockExecutionStore) SetWorkflowExecution(request *persistence.InternalSetWorkflowExecutionRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetWorkflowExecution", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetWorkflowExecution indicates an expected call of SetWorkflowExecution.
+func (mr *MockExecutionStoreMockRecorder) SetWorkflowExecution(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockExecutionStore)(nil).SetWorkflowExecution), request)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockExecutionStore) UpdateWorkflowExecution(request *persistence.InternalUpdateWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()

@@ -239,49 +239,6 @@ type (
 		NewMutableStateStats MutableStateStatistics
 	}
 
-	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
-	GetWorkflowExecutionRequest struct {
-		ShardID     int32
-		NamespaceID string
-		WorkflowID  string
-		RunID       string
-	}
-
-	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
-	GetWorkflowExecutionResponse struct {
-		State             *persistencespb.WorkflowMutableState
-		DBRecordVersion   int64
-		MutableStateStats MutableStateStatistics
-	}
-
-	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
-	GetCurrentExecutionRequest struct {
-		ShardID     int32
-		NamespaceID string
-		WorkflowID  string
-	}
-
-	// ListConcreteExecutionsRequest is request to ListConcreteExecutions
-	ListConcreteExecutionsRequest struct {
-		ShardID   int32
-		PageSize  int
-		PageToken []byte
-	}
-
-	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
-	ListConcreteExecutionsResponse struct {
-		States    []*persistencespb.WorkflowMutableState
-		PageToken []byte
-	}
-
-	// GetCurrentExecutionResponse is the response to GetCurrentExecution
-	GetCurrentExecutionResponse struct {
-		StartRequestID string
-		RunID          string
-		State          enumsspb.WorkflowExecutionState
-		Status         enumspb.WorkflowExecutionStatus
-	}
-
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
 	UpdateWorkflowExecutionRequest struct {
 		ShardID int32
@@ -325,6 +282,61 @@ type (
 		ResetMutableStateStats   MutableStateStatistics
 		NewMutableStateStats     *MutableStateStatistics
 		CurrentMutableStateStats *MutableStateStatistics
+	}
+
+	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
+	GetCurrentExecutionRequest struct {
+		ShardID     int32
+		NamespaceID string
+		WorkflowID  string
+	}
+
+	// GetCurrentExecutionResponse is the response to GetCurrentExecution
+	GetCurrentExecutionResponse struct {
+		StartRequestID string
+		RunID          string
+		State          enumsspb.WorkflowExecutionState
+		Status         enumspb.WorkflowExecutionStatus
+	}
+
+	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
+	GetWorkflowExecutionRequest struct {
+		ShardID     int32
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
+	}
+
+	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
+	GetWorkflowExecutionResponse struct {
+		State             *persistencespb.WorkflowMutableState
+		DBRecordVersion   int64
+		MutableStateStats MutableStateStatistics
+	}
+
+	// SetWorkflowExecutionRequest is used to overwrite the info of a workflow execution
+	SetWorkflowExecutionRequest struct {
+		ShardID int32
+		RangeID int64
+
+		SetWorkflowSnapshot WorkflowSnapshot
+	}
+
+	// SetWorkflowExecutionResponse is the response to SetWorkflowExecutionRequest
+	SetWorkflowExecutionResponse struct {
+	}
+
+	// ListConcreteExecutionsRequest is request to ListConcreteExecutions
+	ListConcreteExecutionsRequest struct {
+		ShardID   int32
+		PageSize  int
+		PageToken []byte
+	}
+
+	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
+	ListConcreteExecutionsResponse struct {
+		States    []*persistencespb.WorkflowMutableState
+		PageToken []byte
 	}
 
 	// WorkflowEvents is used as generic workflow history events transaction container
@@ -991,12 +1003,13 @@ type (
 		GetName() string
 
 		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
-		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
+		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
+		SetWorkflowExecution(request *SetWorkflowExecutionRequest) (*SetWorkflowExecutionResponse, error)
 
 		// Scan operations
 

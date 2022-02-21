@@ -562,6 +562,21 @@ func (mr *MockExecutionManagerMockRecorder) ReadRawHistoryBranch(request interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ReadRawHistoryBranch), request)
 }
 
+// SetWorkflowExecution mocks base method.
+func (m *MockExecutionManager) SetWorkflowExecution(request *SetWorkflowExecutionRequest) (*SetWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetWorkflowExecution", request)
+	ret0, _ := ret[0].(*SetWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetWorkflowExecution indicates an expected call of SetWorkflowExecution.
+func (mr *MockExecutionManagerMockRecorder) SetWorkflowExecution(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).SetWorkflowExecution), request)
+}
+
 // TrimHistoryBranch mocks base method.
 func (m *MockExecutionManager) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()

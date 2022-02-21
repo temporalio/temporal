@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - master
-  workflow_dispatch:
+      - release/*
 
 jobs:
   trigger:
@@ -16,11 +16,18 @@ jobs:
         shell: bash
 
     steps:
+      - name: Get git branch name
+        id: get_branch
+        run: |
+          echo "::set-output name=branch::${GITHUB_REF#refs/heads/}"
+
       - name: Dispatch docker builds Github Action
         env:
           PAT: ${{ secrets.COMMANDER_DATA_TOKEN }}
           PARENT_REPO: temporalio/docker-builds
-          PARENT_BRANCH: main
+          PARENT_BRANCH: ${{ toJSON('main') }}
           WORKFLOW_ID: update-submodules.yml
+          REPO: ${{ toJSON('temporal') }}
+          BRANCH: ${{ toJSON(steps.get_branch.outputs.branch) }}
         run: |
-          curl -fL -X POST -H "Accept: application/vnd.github.v3+json" -H "Authorization: token ${{ env.PAT }}" https://api.github.com/repos/${{ env.PARENT_REPO }}/actions/workflows/${{ env.WORKFLOW_ID }}/dispatches -d '{"ref":"${{ env.PARENT_BRANCH }}"}'
+          curl -fL -X POST -H "Accept: application/vnd.github.v3+json" -H "Authorization: token $PAT" "https://api.github.com/repos/$PARENT_REPO/actions/workflows/$WORKFLOW_ID/dispatches" -d '{"ref":'"$PARENT_BRANCH"', "inputs": { "repo":'"$REPO"', "branch":'"$BRANCH"' }}'

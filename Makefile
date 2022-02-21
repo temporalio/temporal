@@ -493,6 +493,19 @@ docker-admin-tools-x:
 	@printf $(COLOR) "Build cross-platform docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
 	docker buildx build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-admin-tools
 
+##### goreleaser #####
+goreleaser-install:
+	@printf $(COLOR) "Install/update goreleaser tool..."
+	@go install github.com/goreleaser/goreleaser@latest
+
+goreleaser-build:
+	@printf $(COLOR) "Build release binaries from current commit..."
+	@goreleaser release --snapshot --rm-dist
+
+goreleaser-release:
+	@printf $(COLOR) "Build and publish release binaries to the latest release tag..."
+	@goreleaser release --rm-dist
+
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."

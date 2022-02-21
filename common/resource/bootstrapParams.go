@@ -54,7 +54,6 @@ type (
 		ClusterMetadataConfig        *cluster.Config
 		ReplicatorConfig             config.Replicator
 		ServerMetricsReporter        metrics.Reporter
-		SDKMetricsReporter           metrics.Reporter
 		MetricsClient                metrics.Client
 		DCRedirectionPolicy          config.DCRedirectionPolicy
 		SdkClientFactory             sdk.ClientFactory

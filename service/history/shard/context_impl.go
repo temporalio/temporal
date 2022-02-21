@@ -1058,8 +1058,8 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 	transferMaxReadLevel *int64,
 ) error {
 	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
-	for _, tasks := range newTasks {
-		for _, task := range tasks {
+	for category, tasksByCategory := range newTasks {
+		for _, task := range tasksByCategory {
 			// set taskID
 			id, err := s.generateTransferTaskIDLocked()
 			if err != nil {
@@ -1070,7 +1070,7 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 			*transferMaxReadLevel = id
 
 			// if scheduled task, check if fire time is in the past
-			if !task.GetKey().FireTime.IsZero() {
+			if category.Type() == tasks.CategoryTypeScheduled {
 				ts := task.GetVisibilityTime()
 				if task.GetVersion() != common.EmptyVersion {
 					// cannot use version to determine the corresponding cluster for timer task

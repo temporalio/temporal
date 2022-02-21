@@ -108,14 +108,15 @@ type (
 		Closeable
 		GetName() string
 		// The below three APIs are related to serialization/deserialization
-		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
+		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
 		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
 
-		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*InternalGetCurrentExecutionResponse, error)
+		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
+		SetWorkflowExecution(request *InternalSetWorkflowExecutionRequest) error
 
 		// Scan related methods
 		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
@@ -291,22 +292,6 @@ type (
 	InternalCreateWorkflowExecutionResponse struct {
 	}
 
-	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
-	InternalWorkflowMutableState struct {
-		ActivityInfos       map[int64]*commonpb.DataBlob  // ActivityInfo
-		TimerInfos          map[string]*commonpb.DataBlob // TimerInfo
-		ChildExecutionInfos map[int64]*commonpb.DataBlob  // ChildExecutionInfo
-		RequestCancelInfos  map[int64]*commonpb.DataBlob  // RequestCancelInfo
-		SignalInfos         map[int64]*commonpb.DataBlob  // SignalInfo
-		SignalRequestedIDs  []string
-		ExecutionInfo       *commonpb.DataBlob // WorkflowExecutionInfo
-		ExecutionState      *commonpb.DataBlob // WorkflowExecutionState
-		NextEventID         int64
-		BufferedEvents      []*commonpb.DataBlob
-		Checksum            *commonpb.DataBlob // persistencespb.Checksum
-		DBRecordVersion     int64
-	}
-
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
 	InternalUpdateWorkflowExecutionRequest struct {
 		ShardID int32
@@ -337,6 +322,28 @@ type (
 		// current workflow
 		CurrentWorkflowMutation        *InternalWorkflowMutation
 		CurrentWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
+	}
+	InternalSetWorkflowExecutionRequest struct {
+		ShardID int32
+		RangeID int64
+
+		SetWorkflowSnapshot InternalWorkflowSnapshot
+	}
+
+	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
+	InternalWorkflowMutableState struct {
+		ActivityInfos       map[int64]*commonpb.DataBlob  // ActivityInfo
+		TimerInfos          map[string]*commonpb.DataBlob // TimerInfo
+		ChildExecutionInfos map[int64]*commonpb.DataBlob  // ChildExecutionInfo
+		RequestCancelInfos  map[int64]*commonpb.DataBlob  // RequestCancelInfo
+		SignalInfos         map[int64]*commonpb.DataBlob  // SignalInfo
+		SignalRequestedIDs  []string
+		ExecutionInfo       *commonpb.DataBlob // WorkflowExecutionInfo
+		ExecutionState      *commonpb.DataBlob // WorkflowExecutionState
+		NextEventID         int64
+		BufferedEvents      []*commonpb.DataBlob
+		Checksum            *commonpb.DataBlob // persistencespb.Checksum
+		DBRecordVersion     int64
 	}
 
 	InternalHistoryTask struct {

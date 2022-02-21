@@ -390,6 +390,13 @@ func (e *FaultInjectionExecutionStore) GetWorkflowExecution(request *persistence
 	return e.baseExecutionStore.GetWorkflowExecution(request)
 }
 
+func (e *FaultInjectionExecutionStore) SetWorkflowExecution(request *persistence.InternalSetWorkflowExecutionRequest) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.SetWorkflowExecution(request)
+}
+
 func (e *FaultInjectionExecutionStore) UpdateWorkflowExecution(request *persistence.InternalUpdateWorkflowExecutionRequest) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err

@@ -78,50 +78,54 @@ func (m *executionManagerImpl) GetName() string {
 
 // The below three APIs are related to serialization/deserialization
 
-func (m *executionManagerImpl) GetWorkflowExecution(
-	request *GetWorkflowExecutionRequest,
-) (*GetWorkflowExecutionResponse, error) {
-	response, err := m.persistence.GetWorkflowExecution(request)
+func (m *executionManagerImpl) CreateWorkflowExecution(
+	request *CreateWorkflowExecutionRequest,
+) (*CreateWorkflowExecutionResponse, error) {
+
+	newSnapshot := request.NewWorkflowSnapshot
+	newWorkflowNewEvents, newHistoryDiff, err := m.serializeWorkflowEventBatches(request.ShardID, request.NewWorkflowEvents)
 	if err != nil {
 		return nil, err
 	}
-	state, err := m.toWorkflowMutableState(response.State)
+	newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newHistoryDiff.SizeDiff)
+
+	if err := ValidateCreateWorkflowModeState(
+		request.Mode,
+		newSnapshot,
+	); err != nil {
+		return nil, err
+	}
+	if err := ValidateCreateWorkflowStateStatus(
+		newSnapshot.ExecutionState.State,
+		newSnapshot.ExecutionState.Status,
+	); err != nil {
+		return nil, err
+	}
+
+	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&newSnapshot)
 	if err != nil {
 		return nil, err
 	}
-	if state.ExecutionInfo.ExecutionStats == nil {
-		state.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
-			HistorySize: 0,
-		}
+
+	newRequest := &InternalCreateWorkflowExecutionRequest{
+		ShardID:                  request.ShardID,
+		RangeID:                  request.RangeID,
+		Mode:                     request.Mode,
+		PreviousRunID:            request.PreviousRunID,
+		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
+		NewWorkflowSnapshot:      *serializedNewWorkflowSnapshot,
+		NewWorkflowNewEvents:     newWorkflowNewEvents,
 	}
 
-	newResponse := &GetWorkflowExecutionResponse{
-		State:             state,
-		DBRecordVersion:   response.DBRecordVersion,
-		MutableStateStats: *statusOfInternalWorkflow(response.State, nil),
+	if _, err := m.persistence.CreateWorkflowExecution(newRequest); err != nil {
+		return nil, err
 	}
-	return newResponse, nil
-}
-
-func (m *executionManagerImpl) DeserializeBufferedEvents(
-	blobs []*commonpb.DataBlob,
-) ([]*historypb.HistoryEvent, error) {
-
-	events := make([]*historypb.HistoryEvent, 0)
-	for _, b := range blobs {
-		if b == nil {
-			// Should not happen, log and discard to prevent callers from consuming
-			m.logger.Warn("discarding nil buffered event")
-			continue
-		}
-
-		history, err := m.serializer.DeserializeEvents(b)
-		if err != nil {
-			return nil, err
-		}
-		events = append(events, history...)
-	}
-	return events, nil
+	return &CreateWorkflowExecutionResponse{
+		NewMutableStateStats: *statusOfInternalWorkflowSnapshot(
+			serializedNewWorkflowSnapshot,
+			newHistoryDiff,
+		),
+	}, nil
 }
 
 func (m *executionManagerImpl) UpdateWorkflowExecution(
@@ -325,54 +329,51 @@ func (m *executionManagerImpl) ConflictResolveWorkflowExecution(
 	}
 }
 
-func (m *executionManagerImpl) CreateWorkflowExecution(
-	request *CreateWorkflowExecutionRequest,
-) (*CreateWorkflowExecutionResponse, error) {
-
-	newSnapshot := request.NewWorkflowSnapshot
-	newWorkflowNewEvents, newHistoryDiff, err := m.serializeWorkflowEventBatches(request.ShardID, request.NewWorkflowEvents)
+func (m *executionManagerImpl) GetWorkflowExecution(
+	request *GetWorkflowExecutionRequest,
+) (*GetWorkflowExecutionResponse, error) {
+	response, err := m.persistence.GetWorkflowExecution(request)
 	if err != nil {
 		return nil, err
 	}
-	newSnapshot.ExecutionInfo.ExecutionStats.HistorySize += int64(newHistoryDiff.SizeDiff)
-
-	if err := ValidateCreateWorkflowModeState(
-		request.Mode,
-		newSnapshot,
-	); err != nil {
+	state, err := m.toWorkflowMutableState(response.State)
+	if err != nil {
 		return nil, err
 	}
-	if err := ValidateCreateWorkflowStateStatus(
-		newSnapshot.ExecutionState.State,
-		newSnapshot.ExecutionState.Status,
-	); err != nil {
-		return nil, err
+	if state.ExecutionInfo.ExecutionStats == nil {
+		state.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
+			HistorySize: 0,
+		}
 	}
 
-	serializedNewWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&newSnapshot)
+	newResponse := &GetWorkflowExecutionResponse{
+		State:             state,
+		DBRecordVersion:   response.DBRecordVersion,
+		MutableStateStats: *statusOfInternalWorkflow(response.State, nil),
+	}
+	return newResponse, nil
+}
+
+func (m *executionManagerImpl) SetWorkflowExecution(
+	request *SetWorkflowExecutionRequest,
+) (*SetWorkflowExecutionResponse, error) {
+	serializedWorkflowSnapshot, err := m.SerializeWorkflowSnapshot(&request.SetWorkflowSnapshot)
 	if err != nil {
 		return nil, err
 	}
 
-	newRequest := &InternalCreateWorkflowExecutionRequest{
-		ShardID:                  request.ShardID,
-		RangeID:                  request.RangeID,
-		Mode:                     request.Mode,
-		PreviousRunID:            request.PreviousRunID,
-		PreviousLastWriteVersion: request.PreviousLastWriteVersion,
-		NewWorkflowSnapshot:      *serializedNewWorkflowSnapshot,
-		NewWorkflowNewEvents:     newWorkflowNewEvents,
+	newRequest := &InternalSetWorkflowExecutionRequest{
+		ShardID: request.ShardID,
+		RangeID: request.RangeID,
+
+		SetWorkflowSnapshot: *serializedWorkflowSnapshot,
 	}
 
-	if _, err := m.persistence.CreateWorkflowExecution(newRequest); err != nil {
+	err = m.persistence.SetWorkflowExecution(newRequest)
+	if err != nil {
 		return nil, err
 	}
-	return &CreateWorkflowExecutionResponse{
-		NewMutableStateStats: *statusOfInternalWorkflowSnapshot(
-			serializedNewWorkflowSnapshot,
-			newHistoryDiff,
-		),
-	}, nil
+	return &SetWorkflowExecutionResponse{}, nil
 }
 
 func (m *executionManagerImpl) serializeWorkflowEventBatches(
@@ -396,6 +397,27 @@ func (m *executionManagerImpl) serializeWorkflowEventBatches(
 		historyStatistics.CountDiff += len(workflowEvents.Events)
 	}
 	return workflowNewEvents, &historyStatistics, nil
+}
+
+func (m *executionManagerImpl) DeserializeBufferedEvents(
+	blobs []*commonpb.DataBlob,
+) ([]*historypb.HistoryEvent, error) {
+
+	events := make([]*historypb.HistoryEvent, 0)
+	for _, b := range blobs {
+		if b == nil {
+			// Should not happen, log and discard to prevent callers from consuming
+			m.logger.Warn("discarding nil buffered event")
+			continue
+		}
+
+		history, err := m.serializer.DeserializeEvents(b)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, history...)
+	}
+	return events, nil
 }
 
 func (m *executionManagerImpl) serializeWorkflowEvents(

@@ -149,6 +149,7 @@ func (w *taskWriter) appendTask(
 		// noop
 	}
 
+	startTime := time.Now().UTC()
 	ch := make(chan *writeTaskResponse)
 	req := &writeTaskRequest{
 		execution:  execution,
@@ -160,6 +161,7 @@ func (w *taskWriter) appendTask(
 	case w.appendCh <- req:
 		select {
 		case r := <-ch:
+			w.tlMgr.metricScope.RecordTimer(metrics.TaskWriteLatencyPerTaskQueue, time.Since(startTime))
 			return r.persistenceResponse, r.err
 		case <-w.writeLoop.Done():
 			// if we are shutting down, this request will never make
@@ -167,6 +169,7 @@ func (w *taskWriter) appendTask(
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
+		w.tlMgr.metricScope.IncCounter(metrics.TaskWriteThrottlePerTaskQueueCounter)
 		return nil, serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			"Too many outstanding appends to the task queue")

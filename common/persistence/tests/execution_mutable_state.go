@@ -1402,6 +1402,83 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 	s.AssertEqualWithDB(newSnapshot)
 }
 
+func (s *ExecutionMutableStateSuite) TestSet_NotExists() {
+	setSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	_, err := s.ExecutionManager.SetWorkflowExecution(&p.SetWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+
+		SetWorkflowSnapshot: *setSnapshot,
+	})
+	s.IsType(&p.ConditionFailedError{}, err)
+
+	s.AssertMissingFromDB(s.NamespaceID, s.WorkflowID, s.RunID)
+}
+
+func (s *ExecutionMutableStateSuite) TestSet_Conflict() {
+	snapshot := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	setSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+	_, err := s.ExecutionManager.SetWorkflowExecution(&p.SetWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+
+		SetWorkflowSnapshot: *setSnapshot,
+	})
+	s.IsType(&p.WorkflowConditionFailedError{}, err)
+
+	s.AssertEqualWithDB(snapshot)
+}
+
+func (s *ExecutionMutableStateSuite) TestSet() {
+	snapshot := s.CreateWorkflow(
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	setSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		snapshot.DBRecordVersion+1,
+	)
+	_, err := s.ExecutionManager.SetWorkflowExecution(&p.SetWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+
+		SetWorkflowSnapshot: *setSnapshot,
+	})
+	s.NoError(err)
+
+	s.AssertEqualWithDB(setSnapshot)
+}
+
 func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 	_ = s.CreateWorkflow(
 		rand.Int63(),
