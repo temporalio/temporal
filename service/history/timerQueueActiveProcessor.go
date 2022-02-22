@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -56,7 +57,8 @@ type (
 
 func newTimerQueueActiveProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowCache workflow.Cache,
+	workflowDeleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
@@ -74,6 +76,7 @@ func newTimerQueueActiveProcessor(
 		)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
+	metricsClient := shard.GetMetricsClient()
 	timerTaskFilter := func(task tasks.Task) (bool, error) {
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
@@ -81,7 +84,6 @@ func newTimerQueueActiveProcessor(
 	timerQueueAckMgr := newTimerQueueAckMgr(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
-		historyService.metricsClient,
 		shard.GetQueueClusterAckLevel(tasks.CategoryTimer, currentClusterName).FireTime,
 		timeNow,
 		updateShardAckLevel,
@@ -96,16 +98,15 @@ func newTimerQueueActiveProcessor(
 		timerTaskFilter:    timerTaskFilter,
 		now:                timeNow,
 		logger:             logger,
-		metricsClient:      historyService.metricsClient,
+		metricsClient:      metricsClient,
 		currentClusterName: currentClusterName,
 	}
 	processor.taskExecutor = newTimerQueueActiveTaskExecutor(
 		shard,
-		historyService.workflowDeleteManager,
-		historyService.historyCache,
+		workflowCache,
+		workflowDeleteManager,
 		processor,
 		logger,
-		historyService.metricsClient,
 		shard.GetConfig(),
 		matchingClient,
 	)
@@ -113,7 +114,7 @@ func newTimerQueueActiveProcessor(
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
-		historyService,
+		workflowCache,
 		processor,
 		timerQueueAckMgr,
 		timerGate,
@@ -127,7 +128,8 @@ func newTimerQueueActiveProcessor(
 
 func newTimerQueueFailoverProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowCache workflow.Cache,
+	workflowDeleteManager workflow.DeleteManager,
 	namespaceIDs map[string]struct{},
 	standbyClusterName string,
 	minLevel time.Time,
@@ -174,7 +176,6 @@ func newTimerQueueFailoverProcessor(
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(
 		shard,
-		historyService.metricsClient,
 		minLevel,
 		maxLevel,
 		timeNow,
@@ -190,16 +191,15 @@ func newTimerQueueFailoverProcessor(
 		timerTaskFilter:    timerTaskFilter,
 		now:                timeNow,
 		logger:             logger,
-		metricsClient:      historyService.metricsClient,
+		metricsClient:      shard.GetMetricsClient(),
 		currentClusterName: currentClusterName,
 	}
 	processor.taskExecutor = newTimerQueueActiveTaskExecutor(
 		shard,
-		historyService.workflowDeleteManager,
-		historyService.historyCache,
+		workflowCache,
+		workflowDeleteManager,
 		processor,
 		logger,
-		historyService.metricsClient,
 		shard.GetConfig(),
 		matchingClient,
 	)
@@ -207,7 +207,7 @@ func newTimerQueueFailoverProcessor(
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
-		historyService,
+		workflowCache,
 		processor,
 		timerQueueAckMgr,
 		timerGate,

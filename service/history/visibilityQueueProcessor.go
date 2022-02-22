@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -74,15 +75,15 @@ type (
 
 func newVisibilityQueueProcessor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
-	logger log.Logger,
 ) queues.Processor {
 
 	config := shard.GetConfig()
-	logger = log.With(logger, tag.ComponentVisibilityQueue)
+	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
+	metricsClient := shard.GetMetricsClient()
 
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.VisibilityTaskBatchSize,
@@ -125,15 +126,12 @@ func newVisibilityQueueProcessor(
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
-		metricsClient:            historyEngine.metricsClient,
+		metricsClient:            metricsClient,
 		taskExecutor: newVisibilityQueueTaskExecutor(
 			shard,
-			historyEngine,
+			workflowCache,
 			visibilityMgr,
 			logger,
-			historyEngine.metricsClient,
-			config,
-			matchingClient,
 		),
 
 		config:       config,
@@ -159,7 +157,7 @@ func newVisibilityQueueProcessor(
 		options,
 		retProcessor,
 		queueAckMgr,
-		historyEngine.historyCache,
+		workflowCache,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)

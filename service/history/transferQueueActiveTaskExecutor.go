@@ -38,6 +38,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -58,6 +59,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
@@ -66,6 +68,7 @@ type (
 		*transferQueueTaskExecutorBase
 
 		registry                namespace.Registry
+		workflowResetter        *workflowResetterImpl
 		historyClient           historyservice.HistoryServiceClient
 		parentClosePolicyClient parentclosepolicy.Client
 	}
@@ -73,31 +76,34 @@ type (
 
 func newTransferQueueActiveTaskExecutor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
+	publicClient sdkclient.Client,
 	logger log.Logger,
-	metricsClient metrics.Client,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
-	registry namespace.Registry,
 ) queueTaskExecutor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
-			historyEngine,
-			historyEngine.workflowDeleteManager,
+			workflowCache,
+			archivalClient,
 			logger,
-			metricsClient,
-			config,
 			matchingClient,
 		),
 		historyClient: shard.GetHistoryClient(),
+		workflowResetter: newWorkflowResetter(
+			shard,
+			workflowCache,
+			logger,
+		),
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsClient(),
 			shard.GetLogger(),
-			historyEngine.publicClient,
+			publicClient,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
-		registry: registry,
+		registry: shard.GetNamespaceRegistry(),
 	}
 }
 
@@ -1245,7 +1251,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 	baseNextEventID := baseMutableState.GetNextEventID()
 
-	err = t.historyService.workflowResetter.resetWorkflow(
+	err = t.workflowResetter.resetWorkflow(
 		ctx,
 		namespaceID,
 		workflowID,

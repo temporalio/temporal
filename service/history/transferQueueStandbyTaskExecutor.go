@@ -34,7 +34,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -42,11 +41,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -61,27 +60,23 @@ type (
 
 func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
-	metricsClient metrics.Client,
 	clusterName string,
-	config *configs.Config,
-	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queueTaskExecutor {
 	return &transferQueueStandbyTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
-			historyEngine,
-			historyEngine.workflowDeleteManager,
+			workflowCache,
+			archivalClient,
 			logger,
-			metricsClient,
-			config,
 			matchingClient,
 		),
 		clusterName:        clusterName,
-		adminClient:        clientBean.GetRemoteAdminClient(clusterName),
+		adminClient:        shard.GetRemoteAdminClient(clusterName),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }

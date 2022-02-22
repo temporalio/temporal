@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -37,6 +36,8 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -58,11 +59,11 @@ type (
 func newTransferQueueStandbyProcessor(
 	clusterName string,
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
-	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -103,16 +104,14 @@ func newTransferQueueStandbyProcessor(
 		config:             shard.GetConfig(),
 		transferTaskFilter: transferTaskFilter,
 		logger:             logger,
-		metricsClient:      historyEngine.metricsClient,
+		metricsClient:      shard.GetMetricsClient(),
 		taskExecutor: newTransferQueueStandbyTaskExecutor(
 			shard,
-			historyEngine,
+			workflowCache,
+			archivalClient,
 			nDCHistoryResender,
 			logger,
-			historyEngine.metricsClient,
 			clusterName,
-			config,
-			clientBean,
 			matchingClient,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
@@ -139,7 +138,7 @@ func newTransferQueueStandbyProcessor(
 		options,
 		processor,
 		queueAckMgr,
-		historyEngine.historyCache,
+		workflowCache,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
 	)

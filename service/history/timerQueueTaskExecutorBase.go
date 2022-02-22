@@ -51,18 +51,17 @@ type (
 
 func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
+	workflowCache workflow.Cache,
 	deleteManager workflow.DeleteManager,
-	cache workflow.Cache,
 	logger log.Logger,
-	metricsClient metrics.Client,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
 		shard:         shard,
+		cache:         workflowCache,
 		deleteManager: deleteManager,
-		cache:         cache,
 		logger:        logger,
-		metricsClient: metricsClient,
+		metricsClient: shard.GetMetricsClient(),
 		config:        config,
 	}
 }

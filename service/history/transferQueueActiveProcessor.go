@@ -29,6 +29,7 @@ import (
 
 	"github.com/pborman/uuid"
 
+	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
@@ -38,6 +39,8 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -57,12 +60,13 @@ type (
 
 func newTransferQueueActiveProcessor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
+	publicClient sdkclient.Client,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
-	registry namespace.Registry,
 ) *transferQueueActiveProcessorImpl {
 
 	config := shard.GetConfig()
@@ -105,16 +109,16 @@ func newTransferQueueActiveProcessor(
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		logger:             logger,
-		metricsClient:      historyEngine.metricsClient,
+		metricsClient:      shard.GetMetricsClient(),
 		transferTaskFilter: transferTaskFilter,
 		taskExecutor: newTransferQueueActiveTaskExecutor(
 			shard,
-			historyEngine,
+			workflowCache,
+			archivalClient,
+			publicClient,
 			logger,
-			historyEngine.metricsClient,
 			config,
 			matchingClient,
-			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
@@ -140,7 +144,7 @@ func newTransferQueueActiveProcessor(
 		options,
 		processor,
 		queueAckMgr,
-		historyEngine.historyCache,
+		workflowCache,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
@@ -152,7 +156,9 @@ func newTransferQueueActiveProcessor(
 
 func newTransferQueueFailoverProcessor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
+	publicClient sdkclient.Client,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceIDs map[string]struct{},
@@ -161,7 +167,6 @@ func newTransferQueueFailoverProcessor(
 	maxLevel int64,
 	taskAllocator taskAllocator,
 	logger log.Logger,
-	registry namespace.Registry,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
 	config := shard.GetConfig()
@@ -217,16 +222,16 @@ func newTransferQueueFailoverProcessor(
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		logger:             logger,
-		metricsClient:      historyEngine.metricsClient,
+		metricsClient:      shard.GetMetricsClient(),
 		transferTaskFilter: transferTaskFilter,
 		taskExecutor: newTransferQueueActiveTaskExecutor(
 			shard,
-			historyEngine,
+			workflowCache,
+			archivalClient,
+			publicClient,
 			logger,
-			historyEngine.metricsClient,
 			config,
 			matchingClient,
-			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
@@ -252,7 +257,7 @@ func newTransferQueueFailoverProcessor(
 		options,
 		processor,
 		queueAckMgr,
-		historyEngine.historyCache,
+		workflowCache,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)

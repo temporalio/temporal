@@ -33,6 +33,7 @@ import (
 	failurepb "go.temporal.io/api/failure/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/failure"
@@ -65,6 +66,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.True(isRetryable(f, nil))
+	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -72,6 +74,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.False(isRetryable(f, nil))
+	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -79,6 +82,7 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.False(isRetryable(f, nil))
+	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String()}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_TimeoutFailureInfo{TimeoutFailureInfo: &failurepb.TimeoutFailureInfo{
@@ -86,6 +90,9 @@ func Test_IsRetryable(t *testing.T) {
 		}},
 	}
 	a.True(isRetryable(f, nil))
+	a.False(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String()}))
+	a.True(isRetryable(f, []string{common.TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String()}))
+	a.True(isRetryable(f, []string{common.TimeoutFailureTypePrefix + "unknown timeout type string"}))
 
 	f = &failurepb.Failure{
 		FailureInfo: &failurepb.Failure_ServerFailureInfo{ServerFailureInfo: &failurepb.ServerFailureInfo{

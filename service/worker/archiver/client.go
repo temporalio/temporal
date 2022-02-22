@@ -64,13 +64,13 @@ type (
 
 	// ArchiveRequest is the request signal sent to the archival workflow
 	ArchiveRequest struct {
+		ShardID     int32
 		NamespaceID string
 		Namespace   string
 		WorkflowID  string
 		RunID       string
 
 		// history archival
-		ShardID              int32
 		BranchToken          []byte
 		NextEventID          int64
 		CloseFailoverVersion int64
@@ -155,6 +155,7 @@ func (c *client) Archive(ctx context.Context, request *ClientRequest) (*ClientRe
 	}
 	logger := log.With(
 		c.logger,
+		tag.ShardID(request.ArchiveRequest.ShardID),
 		tag.ArchivalCallerServiceName(request.CallerService),
 		tag.ArchivalArchiveAttemptedInline(request.AttemptArchiveInline),
 	)
