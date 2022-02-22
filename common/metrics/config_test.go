@@ -37,10 +37,6 @@ import (
 )
 
 type nullStatsReporter struct{}
-type unsupportedNullStatsReporter struct{}
-
-var CachedNullStatsReporter tally.CachedStatsReporter = nullStatsReporter{}
-var UnsupportedNullStatsReporter tally.BaseStatsReporter = unsupportedNullStatsReporter{}
 
 func (r nullStatsReporter) Capabilities() tally.Capabilities {
 	panic("implement me")
@@ -63,14 +59,6 @@ func (r nullStatsReporter) AllocateTimer(name string, tags map[string]string) ta
 }
 
 func (r nullStatsReporter) AllocateHistogram(name string, tags map[string]string, buckets tally.Buckets) tally.CachedHistogram {
-	panic("implement me")
-}
-
-func (u unsupportedNullStatsReporter) Capabilities() tally.Capabilities {
-	panic("implement me")
-}
-
-func (u unsupportedNullStatsReporter) Flush() {
 	panic("implement me")
 }
 
@@ -129,39 +117,4 @@ func (s *MetricsSuite) TestNoop() {
 	config := &Config{}
 	scope := NewScope(log.NewNoopLogger(), config)
 	s.Equal(tally.NoopScope, scope)
-}
-
-func (s *MetricsSuite) TestCustomReporter() {
-	config := &Config{}
-	scope := NewCustomReporterScope(log.NewNoopLogger(), &config.ClientConfig, tally.NullStatsReporter)
-	s.NotNil(scope)
-	s.NotEqual(tally.NoopScope, scope)
-}
-
-func (s *MetricsSuite) TestCustomCachedReporter() {
-	config := &Config{}
-	scope := NewCustomReporterScope(log.NewNoopLogger(), &config.ClientConfig, CachedNullStatsReporter)
-	s.NotNil(scope)
-	s.NotEqual(tally.NoopScope, scope)
-}
-
-func (s *MetricsSuite) TestUnsupportedReporter() {
-	config := &Config{}
-	scope := NewCustomReporterScope(log.NewNoopLogger(), &config.ClientConfig, UnsupportedNullStatsReporter)
-	s.Equal(tally.NoopScope, scope)
-}
-
-func (s *MetricsSuite) TestOTCustomReporter() {
-	prom := &PrometheusConfig{
-		Framework:     "custom",
-		OnError:       "panic",
-		TimerType:     "histogram",
-		ListenAddress: "127.0.0.1:0",
-	}
-	config := &Config{}
-	config.Prometheus = prom
-	mockReporter := NewMockReporter(s.controller)
-	reporter, err := InitMetricsReporterInternal(log.NewNoopLogger(), config, mockReporter)
-	s.Equal(mockReporter, reporter)
-	s.Nil(err)
 }

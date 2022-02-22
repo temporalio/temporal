@@ -207,10 +207,9 @@ func newBootstrapParams(
 
 	params.ServerMetricsReporter = serverReporter
 
-	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
 	if serverReporter == nil {
 		var err error
-		serverReporter, err = metrics.InitMetricsReporterInternal(logger, &svcCfg.Metrics, nil)
+		serverReporter, err = metrics.InitMetricsReporter(logger, &svcCfg.Metrics)
 		if err != nil {
 			return nil, fmt.Errorf(
 				"unable to initialize per-service metric client. "+

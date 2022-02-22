@@ -205,34 +205,6 @@ var (
 	}
 )
 
-// InitMetricsReporterInternal is a root function for initializing metrics clients used inside temporal server.
-//
-// Usage pattern;
-// serverReporter, err := c.InitMetricsReporterInternal(logger, config, customReporter)
-// metricsClient := serverReporter.newClient(logger, serviceIdx)
-//
-// customReporter Provide this argument if you want to report metrics to a custom metric platform, otherwise use nil.
-//
-// returns SeverReporter, error
-func InitMetricsReporterInternal(logger log.Logger, c *Config, customReporter interface{}) (Reporter, error) {
-	if customReporter == nil {
-		reporter, err := InitMetricsReporter(logger, c)
-		return reporter, err
-	}
-
-	switch cReporter := customReporter.(type) {
-	case tally.BaseStatsReporter:
-		scope := NewCustomReporterScope(logger, &c.ClientConfig, cReporter)
-		reporter := NewTallyReporter(scope, &c.ClientConfig)
-		return reporter, nil
-	case Reporter:
-		return cReporter, nil
-	default:
-		return nil, fmt.Errorf(
-			"specified customReporter does not implement tally.BaseStatsReporter or metrics.Reporter")
-	}
-}
-
 // InitMetricsReporter is a method that initializes reporter to be used inside server.
 //
 // Reporter is a base for reporting metrics and is used to initialize MetricsClient or UserScope.
@@ -338,28 +310,6 @@ func convertPrometheusConfigToTally(
 		DefaultSummaryObjectives: defaultObjectives,
 		OnError:                  config.OnError,
 	}
-}
-
-func NewCustomReporterScope(logger log.Logger, c *ClientConfig, customReporter tally.BaseStatsReporter) tally.Scope {
-	options := tally.ScopeOptions{
-		DefaultBuckets: histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
-	}
-	if c != nil {
-		options.Tags = c.Tags
-		options.Prefix = c.Prefix
-	}
-
-	switch reporter := customReporter.(type) {
-	case tally.StatsReporter:
-		options.Reporter = reporter
-	case tally.CachedStatsReporter:
-		options.CachedReporter = reporter
-	default:
-		logger.Error("Unsupported metrics reporter type.", tag.ValueType(customReporter))
-		return tally.NoopScope
-	}
-	scope, _ := tally.NewRootScope(options, time.Second)
-	return scope
 }
 
 // newM3Scope returns a new m3 scope with
