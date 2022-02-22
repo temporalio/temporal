@@ -67,8 +67,9 @@ type (
 		dynamicConfigClient dynamicconfig.Client
 		dcCollection        *dynamicconfig.Collection
 
-		persistenceConfig config.Persistence
-		clusterMetadata   *cluster.Config
+		persistenceConfig          config.Persistence
+		clusterMetadata            *cluster.Config
+		persistenceFactoryProvider persistenceClient.FactoryProviderFn
 	}
 )
 
@@ -89,18 +90,20 @@ func NewServerFxImpl(
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
+	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 ) *ServerImpl {
 	s := &ServerImpl{
-		so:                  opts,
-		servicesMetadata:    servicesGroup.Services,
-		stoppedCh:           stoppedCh,
-		logger:              logger,
-		namespaceLogger:     namespaceLogger,
-		serverReporter:      serverReporter,
-		dynamicConfigClient: dynamicConfigClient,
-		dcCollection:        dcCollection,
-		persistenceConfig:   persistenceConfig,
-		clusterMetadata:     clusterMetadata,
+		so:                         opts,
+		servicesMetadata:           servicesGroup.Services,
+		stoppedCh:                  stoppedCh,
+		logger:                     logger,
+		namespaceLogger:            namespaceLogger,
+		serverReporter:             serverReporter,
+		dynamicConfigClient:        dynamicConfigClient,
+		dcCollection:               dcCollection,
+		persistenceConfig:          persistenceConfig,
+		clusterMetadata:            clusterMetadata,
+		persistenceFactoryProvider: persistenceFactoryProvider,
 	}
 	return s
 }
@@ -111,15 +114,13 @@ func (s *ServerImpl) Start() error {
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
 
-	var err error
-
-	err = initSystemNamespaces(
+	if err := initSystemNamespaces(
 		&s.persistenceConfig,
 		s.clusterMetadata.CurrentClusterName,
 		s.so.persistenceServiceResolver,
+		s.persistenceFactoryProvider,
 		s.logger,
-		s.so.customDataStoreFactory)
-	if err != nil {
+		s.so.customDataStoreFactory); err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
@@ -257,18 +258,19 @@ func initSystemNamespaces(
 	cfg *config.Persistence,
 	currentClusterName string,
 	persistenceServiceResolver resolver.ServiceResolver,
+	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	logger log.Logger,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) error {
-	factory := persistenceClient.NewFactory(
-		cfg,
-		persistenceServiceResolver,
-		nil,
-		customDataStoreFactory,
-		currentClusterName,
-		nil,
-		logger,
-	)
+	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
+		Cfg:                      cfg,
+		Resolver:                 persistenceServiceResolver,
+		PersistenceMaxQPS:        nil,
+		AbstractDataStoreFactory: customDataStoreFactory,
+		ClusterName:              persistenceClient.ClusterName(currentClusterName),
+		MetricsClient:            nil,
+		Logger:                   logger,
+	})
 	defer factory.Close()
 
 	metadataManager, err := factory.NewMetadataManager()

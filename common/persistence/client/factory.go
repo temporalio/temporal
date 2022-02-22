@@ -140,12 +140,13 @@ func NewFactory(
 	cfg *config.Persistence,
 	r resolver.ServiceResolver,
 	persistenceMaxQPS dynamicconfig.IntPropertyFn,
+	serializer serialization.Serializer,
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	clusterName string,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) Factory {
-	return NewFactoryImpl(cfg, r, persistenceMaxQPS, abstractDataStoreFactory, clusterName, metricsClient, logger)
+	return NewFactoryImpl(cfg, r, persistenceMaxQPS, serializer, abstractDataStoreFactory, clusterName, metricsClient, logger)
 }
 
 // Initializes and returns FactoryImpl
@@ -153,6 +154,7 @@ func NewFactoryImpl(
 	cfg *config.Persistence,
 	r resolver.ServiceResolver,
 	persistenceMaxQPS dynamicconfig.IntPropertyFn,
+	serializer serialization.Serializer,
 	abstractDataStoreFactory AbstractDataStoreFactory,
 	clusterName string,
 	metricsClient metrics.Client,
@@ -160,7 +162,7 @@ func NewFactoryImpl(
 ) *factoryImpl {
 	factory := &factoryImpl{
 		config:                   cfg,
-		serializer:               serialization.NewSerializer(),
+		serializer:               serializer,
 		abstractDataStoreFactory: abstractDataStoreFactory,
 		metricsClient:            metricsClient,
 		logger:                   logger,

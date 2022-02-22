@@ -51,3 +51,7 @@ type (
 		CreateProcessor(shard shard.Context, engine shard.Engine, cache workflow.Cache) Processor
 	}
 )
+
+const (
+	ProcessorFactoryFxGroup = "queueProcessorFactory"
+)

@@ -96,6 +96,7 @@ func newNDCStateRebuilder(
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionMgr:      shard.GetExecutionManager(),
 		taskRefresher: workflow.NewTaskRefresher(
+			shard,
 			shard.GetConfig(),
 			shard.GetNamespaceRegistry(),
 			shard.GetEventsCache(),
@@ -215,9 +216,6 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		r.shard,
 		r.logger,
 		resetMutableStateBuilder,
-		func(mutableState workflow.MutableState) workflow.TaskGenerator {
-			return workflow.NewTaskGenerator(r.shard.GetNamespaceRegistry(), mutableState)
-		},
 	)
 	return resetMutableStateBuilder, stateBuilder
 }

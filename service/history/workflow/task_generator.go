@@ -127,19 +127,6 @@ const defaultWorkflowRetention = 1 * 24 * time.Hour
 
 var _ TaskGenerator = (*TaskGeneratorImpl)(nil)
 
-func NewTaskGenerator(
-	namespaceRegistry namespace.Registry,
-	mutableState MutableState,
-) *TaskGeneratorImpl {
-
-	mstg := &TaskGeneratorImpl{
-		namespaceRegistry: namespaceRegistry,
-		mutableState:      mutableState,
-	}
-
-	return mstg
-}
-
 func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 	_ time.Time,
 	startEvent *historypb.HistoryEvent,

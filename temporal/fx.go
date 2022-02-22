@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 )
@@ -112,6 +113,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Provide(ApplyClusterMetadataConfigProvider),
 		fx.Provide(MetricsClientProvider),
 		fx.Provide(ServiceNamesProvider),
+		fx.Provide(func() persistenceClient.FactoryProviderFn { return persistenceClient.FactoryProvider }),
 		fx.Provide(AbstractDatastoreFactoryProvider),
 		fx.Provide(ClientFactoryProvider),
 		fx.Provide(SearchAttributeMapperProvider),
@@ -236,6 +238,7 @@ type (
 		ClientFactoryProvider      client.FactoryProvider
 		AudienceGetter             authorization.JWTAudienceMapper
 		PersistenceServiceResolver resolver.ServiceResolver
+		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
 		CustomInterceptors         []grpc.UnaryServerInterceptor
 		Authorizer                 authorization.Authorizer
@@ -284,7 +287,10 @@ func HistoryServiceProvider(
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
+		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(newBootstrapParams),
+		fx.Provide(workflow.NewTaskGeneratorProvider),
+		history.QueueProcessorModule,
 		history.Module,
 		fx.NopLogger,
 	)
@@ -339,6 +345,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
+		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(newBootstrapParams),
 		matching.Module,
 		fx.NopLogger,
@@ -394,6 +401,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
+		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(newBootstrapParams),
 		frontend.Module,
 		fx.NopLogger,
@@ -449,6 +457,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
+		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(newBootstrapParams),
 		worker.Module,
 		fx.NopLogger,
@@ -526,19 +535,20 @@ func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
 	config *config.Config,
 	persistenceServiceResolver resolver.ServiceResolver,
+	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (*cluster.Config, config.Persistence, error) {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
-	factory := persistenceClient.NewFactory(
-		&config.Persistence,
-		persistenceServiceResolver,
-		nil,
-		customDataStoreFactory,
-		config.ClusterMetadata.CurrentClusterName,
-		nil,
-		logger,
-	)
+	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
+		Cfg:                      &config.Persistence,
+		Resolver:                 persistenceServiceResolver,
+		PersistenceMaxQPS:        nil,
+		AbstractDataStoreFactory: customDataStoreFactory,
+		ClusterName:              persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
+		MetricsClient:            nil,
+		Logger:                   logger,
+	})
 	defer factory.Close()
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()

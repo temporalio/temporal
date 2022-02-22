@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/resolver"
@@ -65,6 +66,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 		&persistence,
 		resolver.NewNoopResolver(),
 		GetQPS,
+		serialization.NewSerializer(),
 		nil,
 		c.String(FlagTargetCluster),
 		nil, // MetricsClient

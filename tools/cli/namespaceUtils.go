@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -279,6 +280,7 @@ func initializePersistenceFactory(
 		&pConfig,
 		resolver.NewNoopResolver(),
 		dynamicconfig.GetIntPropertyFn(dependencyMaxQPS),
+		serialization.NewSerializer(),
 		nil, // TODO propagate abstract datastore factory from the CLI.
 		"",
 		metricsClient,

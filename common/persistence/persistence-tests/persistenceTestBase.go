@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
@@ -211,7 +212,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	cfg := s.DefaultTestCluster.Config()
 	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
 	metricsClient := metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
-	factory := client.NewFactoryImpl(&cfg, resolver.NewNoopResolver(), nil, s.AbstractDataStoreFactory, clusterName, metricsClient, s.Logger)
+	factory := client.NewFactoryImpl(&cfg, resolver.NewNoopResolver(), nil, serialization.NewSerializer(), s.AbstractDataStoreFactory, clusterName, metricsClient, s.Logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
