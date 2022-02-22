@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/dynamicconfig"
@@ -104,6 +105,42 @@ func TestValidateRetryPolicy(t *testing.T) {
 			},
 			wantErr:       true,
 			wantErrString: "MaximumAttempts cannot be negative on retry policy.",
+		},
+		{
+			name: "timeout nonretryable error - valid type",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: 1,
+				NonRetryableErrorTypes: []string{
+					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_START_TO_CLOSE.String(),
+					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_START.String(),
+					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_SCHEDULE_TO_CLOSE.String(),
+					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_HEARTBEAT.String(),
+				},
+			},
+			wantErr:       false,
+			wantErrString: "",
+		},
+		{
+			name: "timeout nonretryable error - unspecified type",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: 1,
+				NonRetryableErrorTypes: []string{
+					TimeoutFailureTypePrefix + enumspb.TIMEOUT_TYPE_UNSPECIFIED.String(),
+				},
+			},
+			wantErr:       true,
+			wantErrString: "Invalid timeout type value: Unspecified.",
+		},
+		{
+			name: "timeout nonretryable error - unknown type",
+			input: &commonpb.RetryPolicy{
+				BackoffCoefficient: 1,
+				NonRetryableErrorTypes: []string{
+					TimeoutFailureTypePrefix + "unknown",
+				},
+			},
+			wantErr:       true,
+			wantErrString: "Invalid timeout type value: unknown.",
 		},
 	}
 
