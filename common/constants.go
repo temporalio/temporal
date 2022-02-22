@@ -116,6 +116,6 @@ const (
 	// TimeoutFailureTypePrefix is the prefix for timeout failure types
 	// used in retry policy
 	// the actual failure type will be prefix + enums.TimeoutType.String()
-	// e.g. "Temporal Timeout: StartToClose" or "Temporal Timeout: Heartbeat"
-	TimeoutFailureTypePrefix = "Temporal Timeout: "
+	// e.g. "TemporalTimeout:StartToClose" or "TemporalTimeout:Heartbeat"
+	TimeoutFailureTypePrefix = "TemporalTimeout:"
 )

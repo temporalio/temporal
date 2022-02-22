@@ -26,7 +26,6 @@ package workflow
 
 import (
 	"math"
-	"strings"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -123,7 +122,10 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
 		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
 			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
-			return !matchTimeoutNonRetryableTypes(timeoutType, nonRetryableTypes)
+			return !matchNonRetryableTypes(
+				common.TimeoutFailureTypePrefix+timeoutType.String(),
+				nonRetryableTypes,
+			)
 		}
 
 		return false
@@ -138,7 +140,7 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			return false
 		}
 
-		return !matchApplicationNonRetryableTypes(
+		return !matchNonRetryableTypes(
 			failure.GetApplicationFailureInfo().GetType(),
 			nonRetryableTypes,
 		)
@@ -146,29 +148,11 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	return true
 }
 
-func matchTimeoutNonRetryableTypes(
-	timeoutType enumspb.TimeoutType,
-	nonRetryableTypes []string,
-) bool {
-	timeoutFailureType := common.TimeoutFailureTypePrefix + timeoutType.String()
-	for _, nrt := range nonRetryableTypes {
-		if timeoutFailureType == nrt {
-			return true
-		}
-	}
-
-	return false
-}
-
-func matchApplicationNonRetryableTypes(
+func matchNonRetryableTypes(
 	failureType string,
 	nonRetryableTypes []string,
 ) bool {
 	for _, nrt := range nonRetryableTypes {
-		if strings.HasPrefix(nrt, common.TimeoutFailureTypePrefix) {
-			continue
-		}
-
 		if nrt == failureType {
 			return true
 		}
