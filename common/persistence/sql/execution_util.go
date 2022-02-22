@@ -86,7 +86,7 @@ func applyWorkflowMutationTx(
 		tx,
 		namespaceID,
 		workflowID,
-		workflowMutation.ExecutionInfo,
+		workflowMutation.ExecutionInfoBlob,
 		workflowMutation.ExecutionState,
 		workflowMutation.NextEventID,
 		lastWriteVersion,
