@@ -58,7 +58,6 @@ type (
 	timerQueueProcessorBase struct {
 		scope            int
 		shard            shard.Context
-		historyService   *historyEngineImpl
 		cache            workflow.Cache
 		executionManager persistence.ExecutionManager
 		status           int32
@@ -88,7 +87,7 @@ type (
 func newTimerQueueProcessorBase(
 	scope int,
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowCache workflow.Cache,
 	timerProcessor timerProcessor,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate timer.Gate,
@@ -106,21 +105,20 @@ func newTimerQueueProcessorBase(
 			workerCount: config.TimerTaskWorkerCount(),
 			queueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 		}
-		taskProcessor = newTaskProcessor(options, shard, historyService.historyCache, logger)
+		taskProcessor = newTaskProcessor(options, shard, workflowCache, logger)
 	}
 
 	base := &timerQueueProcessorBase{
 		scope:            scope,
 		shard:            shard,
-		historyService:   historyService,
 		timerProcessor:   timerProcessor,
-		cache:            historyService.historyCache,
+		cache:            workflowCache,
 		executionManager: shard.GetExecutionManager(),
 		status:           common.DaemonStatusInitialized,
 		shutdownCh:       make(chan struct{}),
 		config:           config,
 		logger:           logger,
-		metricsClient:    historyService.metricsClient,
+		metricsClient:    shard.GetMetricsClient(),
 		metricsScope:     metricsScope,
 		timerQueueAckMgr: timerQueueAckMgr,
 		timerGate:        timerGate,

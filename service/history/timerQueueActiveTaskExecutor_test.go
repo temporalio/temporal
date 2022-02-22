@@ -171,24 +171,23 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
 		},
-		workflowDeleteManager: s.mockDeleteManager,
 	}
 	s.mockShard.SetEngineForTesting(h)
 	s.mockHistoryEngine = h
 
 	s.timerQueueActiveTaskExecutor = newTimerQueueActiveTaskExecutor(
 		s.mockShard,
+		h.historyCache,
 		s.mockDeleteManager,
-		historyCache,
 		newTimerQueueActiveProcessor(
 			s.mockShard,
-			h,
+			h.historyCache,
+			s.mockDeleteManager,
 			s.mockMatchingClient,
 			newTaskAllocator(s.mockShard),
 			s.logger,
 		),
 		s.logger,
-		s.mockShard.GetMetricsClient(),
 		config,
 		s.mockShard.Resource.GetMatchingClient(),
 	).(*timerQueueActiveTaskExecutor)

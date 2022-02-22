@@ -260,11 +260,11 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 
 	req := &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
+			ShardID:              m.shard.GetShardID(),
 			NamespaceID:          namespaceID.String(),
 			WorkflowID:           workflowExecution.GetWorkflowId(),
 			RunID:                workflowExecution.GetRunId(),
 			Namespace:            namespaceRegistryEntry.Name().String(),
-			ShardID:              m.shard.GetShardID(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
 			HistoryURI:           namespaceRegistryEntry.HistoryArchivalState().URI,
 			NextEventID:          mutableState.GetNextEventID(),
