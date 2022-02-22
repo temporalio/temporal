@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/searchattribute"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -539,12 +540,12 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
 			handler.shard.GetTimeSource().Now(),
 			workflow.NewContext(
-				namespace.ID(newWorkflowExecutionInfo.NamespaceId),
-				commonpb.WorkflowExecution{
-					WorkflowId: newWorkflowExecutionInfo.WorkflowId,
-					RunId:      newWorkflowExecutionState.RunId,
-				},
 				handler.shard,
+				definition.NewWorkflowKey(
+					newWorkflowExecutionInfo.NamespaceId,
+					newWorkflowExecutionInfo.WorkflowId,
+					newWorkflowExecutionState.RunId,
+				),
 				handler.logger,
 			),
 			newStateBuilder,

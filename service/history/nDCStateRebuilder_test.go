@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -345,7 +346,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		definition.NewWorkflowKey(s.namespaceID.String(), s.workflowID, s.runID),
 		branchToken,
 		lastEventID,
-		version,
+		convert.Int64Ptr(version),
 		definition.NewWorkflowKey(targetNamespaceID.String(), targetWorkflowID, targetRunID),
 		targetBranchToken,
 		requestID,

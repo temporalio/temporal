@@ -57,7 +57,7 @@ type (
 			baseWorkflowIdentifier definition.WorkflowKey,
 			baseBranchToken []byte,
 			baseLastEventID int64,
-			baseLastEventVersion int64,
+			baseLastEventVersion *int64,
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
@@ -112,7 +112,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	baseWorkflowIdentifier definition.WorkflowKey,
 	baseBranchToken []byte,
 	baseLastEventID int64,
-	baseLastEventVersion int64,
+	baseLastEventVersion *int64,
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
@@ -170,15 +170,18 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	if !lastItem.Equal(versionhistory.NewVersionHistoryItem(
-		baseLastEventID,
-		baseLastEventVersion,
-	)) {
-		return nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v, this event must be at the boundary",
+
+	if baseLastEventVersion != nil {
+		if !lastItem.Equal(versionhistory.NewVersionHistoryItem(
 			baseLastEventID,
-			baseLastEventVersion,
-		))
+			*baseLastEventVersion,
+		)) {
+			return nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
+				"nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v, this event must be at the boundary",
+				baseLastEventID,
+				baseLastEventVersion,
+			))
+		}
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
