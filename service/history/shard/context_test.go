@@ -178,7 +178,7 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 			continue
 		}
 
-		maxReadLevel := s.shardContext.GetScheduledTaskMaxReadLevel(clusterName)
+		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
 		s.False(maxReadLevel.Before(*persistenceShardInfo.TimerAckLevelTime))
 
 		if clusterAckLevel, ok := persistenceShardInfo.ClusterTimerAckLevel[clusterName]; ok {
@@ -193,16 +193,13 @@ func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
 
 	now := time.Now()
 	s.timeSource.Update(now)
-	s.shardContext.UpdateScheduledTaskMaxReadLevel(clusterName)
-	maxReadLevel := s.shardContext.GetScheduledTaskMaxReadLevel(clusterName)
+	maxReadLevel := s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
 
 	s.timeSource.Update(now.Add(-time.Minute))
-	s.shardContext.UpdateScheduledTaskMaxReadLevel(clusterName)
-	newMaxReadLevel := s.shardContext.GetScheduledTaskMaxReadLevel(clusterName)
+	newMaxReadLevel := s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
 	s.Equal(maxReadLevel, newMaxReadLevel)
 
 	s.timeSource.Update(now.Add(time.Minute))
-	s.shardContext.UpdateScheduledTaskMaxReadLevel(clusterName)
-	newMaxReadLevel = s.shardContext.GetScheduledTaskMaxReadLevel(clusterName)
-	s.True(newMaxReadLevel.After(maxReadLevel))
+	newMaxReadLevel = s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
+	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
 }

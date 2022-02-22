@@ -303,12 +303,7 @@ message Checksum {
     bytes value = 3;
 }
 
-message TaskKey {
-    int64 task_id = 1;
-    google.protobuf.Timestamp fire_time = 2 [(gogoproto.stdtime) = true];
-}
-
 message QueueAckLevel {
-    TaskKey ack_level = 1;
-    map<string, TaskKey> cluster_ack_level = 2;
+    int64 ack_level = 1;
+    map<string, int64> cluster_ack_level = 2;
 }

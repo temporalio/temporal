@@ -214,10 +214,44 @@ func (s *ContextImpl) GenerateTaskIDs(number int) ([]int64, error) {
 	return result, nil
 }
 
-func (s *ContextImpl) GetImmediateTaskMaxReadLevel() int64 {
+func (s *ContextImpl) GetQueueMaxReadLevel(
+	category tasks.Category,
+	cluster string,
+) tasks.Key {
+	switch categoryType := category.Type(); categoryType {
+	case tasks.CategoryTypeImmediate:
+		return s.getImmediateTaskMaxReadLevel()
+	case tasks.CategoryTypeScheduled:
+		return s.updateScheduledTaskMaxReadLevel(cluster)
+	default:
+		panic(fmt.Sprintf("invalid task category type: %v", categoryType))
+	}
+}
+
+func (s *ContextImpl) getImmediateTaskMaxReadLevel() tasks.Key {
 	s.rLock()
 	defer s.rUnlock()
-	return s.immediateTaskMaxReadLevel
+	return tasks.Key{TaskID: s.immediateTaskMaxReadLevel}
+}
+
+func (s *ContextImpl) getScheduledTaskMaxReadLevel(cluster string) tasks.Key {
+	s.rLock()
+	defer s.rUnlock()
+	return tasks.Key{FireTime: s.scheduledTaskMaxReadLevelMap[cluster]}
+}
+
+func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key {
+	s.wLock()
+	defer s.wUnlock()
+
+	currentTime := s.timeSource.Now()
+	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
+		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
+	}
+
+	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
+	s.scheduledTaskMaxReadLevelMap[cluster] = common.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
+	return tasks.Key{FireTime: s.scheduledTaskMaxReadLevelMap[cluster]}
 }
 
 func (s *ContextImpl) GetQueueAckLevel(category tasks.Category) tasks.Key {
@@ -228,11 +262,8 @@ func (s *ContextImpl) GetQueueAckLevel(category tasks.Category) tasks.Key {
 }
 
 func (s *ContextImpl) getQueueAckLevelLocked(category tasks.Category) tasks.Key {
-	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[int32(category)]; ok && queueAckLevel.AckLevel != nil {
-		return tasks.Key{
-			TaskID:   queueAckLevel.AckLevel.TaskId,
-			FireTime: timestamp.TimeValue(queueAckLevel.AckLevel.FireTime),
-		}
+	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok && queueAckLevel.AckLevel != 0 {
+		return convertAckLevelToTaskKey(category.Type(), queueAckLevel.AckLevel)
 	}
 
 	// backward compatibility
@@ -280,15 +311,12 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 		// for new category, we don't need to worry about rollback
 	}
 
-	if _, ok := s.shardInfo.QueueAckLevels[int32(category)]; !ok {
-		s.shardInfo.QueueAckLevels[int32(category)] = &persistencespb.QueueAckLevel{
-			ClusterAckLevel: make(map[string]*persistencespb.TaskKey),
+	if _, ok := s.shardInfo.QueueAckLevels[category.ID()]; !ok {
+		s.shardInfo.QueueAckLevels[category.ID()] = &persistencespb.QueueAckLevel{
+			ClusterAckLevel: make(map[string]int64),
 		}
 	}
-	s.shardInfo.QueueAckLevels[int32(category)].AckLevel = &persistencespb.TaskKey{
-		TaskId:   ackLevel.TaskID,
-		FireTime: timestamp.TimePtr(ackLevel.FireTime),
-	}
+	s.shardInfo.QueueAckLevels[category.ID()].AckLevel = convertTaskKeyToAckLevel(category.Type(), ackLevel)
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -301,12 +329,9 @@ func (s *ContextImpl) GetQueueClusterAckLevel(
 	s.rLock()
 	defer s.rUnlock()
 
-	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[int32(category)]; ok {
+	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok {
 		if ackLevel, ok := queueAckLevel.ClusterAckLevel[cluster]; ok {
-			return tasks.Key{
-				TaskID:   ackLevel.TaskId,
-				FireTime: timestamp.TimeValue(ackLevel.FireTime),
-			}
+			return convertAckLevelToTaskKey(category.Type(), ackLevel)
 		}
 	}
 
@@ -367,15 +392,12 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 		// for new category, we don't need to worry about rollback
 	}
 
-	if _, ok := s.shardInfo.QueueAckLevels[int32(category)]; !ok {
-		s.shardInfo.QueueAckLevels[int32(category)] = &persistencespb.QueueAckLevel{
-			ClusterAckLevel: make(map[string]*persistencespb.TaskKey),
+	if _, ok := s.shardInfo.QueueAckLevels[category.ID()]; !ok {
+		s.shardInfo.QueueAckLevels[category.ID()] = &persistencespb.QueueAckLevel{
+			ClusterAckLevel: make(map[string]int64),
 		}
 	}
-	s.shardInfo.QueueAckLevels[int32(category)].ClusterAckLevel[cluster] = &persistencespb.TaskKey{
-		TaskId:   ackLevel.TaskID,
-		FireTime: timestamp.TimePtr(ackLevel.FireTime),
-	}
+	s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel[cluster] = convertTaskKeyToAckLevel(category.Type(), ackLevel)
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -522,27 +544,6 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 			delete(s.handoverNamespaces, k)
 		}
 	}
-}
-
-func (s *ContextImpl) GetScheduledTaskMaxReadLevel(cluster string) time.Time {
-	s.rLock()
-	defer s.rUnlock()
-
-	return s.scheduledTaskMaxReadLevelMap[cluster]
-}
-
-func (s *ContextImpl) UpdateScheduledTaskMaxReadLevel(cluster string) time.Time {
-	s.wLock()
-	defer s.wUnlock()
-
-	currentTime := s.timeSource.Now()
-	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
-		currentTime = s.getRemoteClusterInfoLocked(cluster).CurrentTime
-	}
-
-	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
-	s.scheduledTaskMaxReadLevelMap[cluster] = common.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
-	return s.scheduledTaskMaxReadLevelMap[cluster]
 }
 
 func (s *ContextImpl) CreateWorkflowExecution(
@@ -1471,6 +1472,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	remoteClusterInfos := make(map[string]*remoteClusterInfo)
 	scheduledTaskMaxReadLevelMap := make(map[string]time.Time)
 	currentClusterName := s.GetClusterMetadata().GetCurrentClusterName()
+	taskCategories := tasks.GetCategories()
 	for clusterName, info := range s.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
@@ -1482,15 +1484,20 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 			maxReadTime = common.MaxTime(maxReadTime, timestamp.TimeValue(currentTime))
 		}
 
-		for _, queueAckLevels := range shardInfo.QueueAckLevels {
-			if queueAckLevels.AckLevel != nil {
-				currentTime := timestamp.TimeValue(queueAckLevels.AckLevel.FireTime)
+		for categoryID, queueAckLevels := range shardInfo.QueueAckLevels {
+			category, ok := taskCategories[categoryID]
+			if !ok || category.Type() != tasks.CategoryTypeScheduled {
+				continue
+			}
+
+			if queueAckLevels.AckLevel != 0 {
+				currentTime := timestamp.UnixOrZeroTime(queueAckLevels.AckLevel)
 				maxReadTime = common.MaxTime(maxReadTime, currentTime)
 			}
 
 			if queueAckLevels.ClusterAckLevel != nil {
 				if ackLevel, ok := queueAckLevels.ClusterAckLevel[clusterName]; ok {
-					currentTime := timestamp.TimeValue(ackLevel.FireTime)
+					currentTime := timestamp.UnixOrZeroTime(ackLevel)
 					maxReadTime = common.MaxTime(maxReadTime, currentTime)
 				}
 			}
@@ -1742,13 +1749,10 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	for category, ackLevels := range shardInfo.QueueAckLevels {
 		copiedLevel := &persistencespb.QueueAckLevel{
 			AckLevel:        ackLevels.AckLevel,
-			ClusterAckLevel: make(map[string]*persistencespb.TaskKey),
+			ClusterAckLevel: make(map[string]int64),
 		}
 		for k, v := range ackLevels.ClusterAckLevel {
-			copiedLevel.ClusterAckLevel[k] = &persistencespb.TaskKey{
-				TaskId:   v.TaskId,
-				FireTime: v.FireTime,
-			}
+			copiedLevel.ClusterAckLevel[k] = v
 		}
 		queueAckLevels[category] = copiedLevel
 	}
@@ -1809,6 +1813,26 @@ func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
 	return s.clusterMetadata
 }
 
-func (h *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
-	return h.archivalMetadata
+func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
+	return s.archivalMetadata
+}
+
+func convertAckLevelToTaskKey(
+	categoryType tasks.CategoryType,
+	ackLevel int64,
+) tasks.Key {
+	if categoryType == tasks.CategoryTypeImmediate {
+		return tasks.Key{TaskID: ackLevel}
+	}
+	return tasks.Key{FireTime: timestamp.UnixOrZeroTime(ackLevel)}
+}
+
+func convertTaskKeyToAckLevel(
+	categoryType tasks.CategoryType,
+	taskKey tasks.Key,
+) int64 {
+	if categoryType == tasks.CategoryTypeImmediate {
+		return taskKey.TaskID
+	}
+	return taskKey.FireTime.UnixNano()
 }

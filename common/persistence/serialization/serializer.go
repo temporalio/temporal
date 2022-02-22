@@ -322,7 +322,7 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob, clusterName 
 			shardInfo.QueueAckLevels[category] = ackLevels
 		}
 		if ackLevels.ClusterAckLevel == nil {
-			ackLevels.ClusterAckLevel = make(map[string]*persistencespb.TaskKey)
+			ackLevels.ClusterAckLevel = make(map[string]int64)
 		}
 	}
 

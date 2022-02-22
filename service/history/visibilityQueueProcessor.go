@@ -103,7 +103,10 @@ func newVisibilityQueueProcessor(
 		return true, nil
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetImmediateTaskMaxReadLevel()
+		return shard.GetQueueMaxReadLevel(
+			tasks.CategoryVisibility,
+			shard.GetClusterMetadata().GetCurrentClusterName(),
+		).TaskID
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: ackLevel})

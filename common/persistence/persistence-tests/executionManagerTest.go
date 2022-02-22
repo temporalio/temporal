@@ -3197,18 +3197,18 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		ClusterReplicationLevel:      map[string]int64{},
 		ReplicationDlqAckLevel:       map[string]int64{},
 		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-			int32(tasks.CategoryTransfer): {
-				AckLevel: &persistencespb.TaskKey{TaskId: currentClusterTransferAck},
-				ClusterAckLevel: map[string]*persistencespb.TaskKey{
-					cluster.TestCurrentClusterName:     {TaskId: currentClusterTransferAck},
-					cluster.TestAlternativeClusterName: {TaskId: alternativeClusterTransferAck},
+			tasks.CategoryTransfer.ID(): {
+				AckLevel: currentClusterTransferAck,
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTransferAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
 				},
 			},
-			int32(tasks.CategoryTimer): {
-				AckLevel: &persistencespb.TaskKey{FireTime: currentClusterTimerAck},
-				ClusterAckLevel: map[string]*persistencespb.TaskKey{
-					cluster.TestCurrentClusterName:     {FireTime: currentClusterTimerAck},
-					cluster.TestAlternativeClusterName: {FireTime: alternativeClusterTimerAck},
+			tasks.CategoryTimer.ID(): {
+				AckLevel: currentClusterTimerAck.UnixNano(),
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
+					cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
 				},
 			},
 		},
@@ -3256,18 +3256,18 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		ClusterReplicationLevel:      map[string]int64{cluster.TestAlternativeClusterName: 12345},
 		ReplicationDlqAckLevel:       map[string]int64{},
 		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
-			int32(tasks.CategoryTransfer): {
-				AckLevel: &persistencespb.TaskKey{TaskId: currentClusterTransferAck},
-				ClusterAckLevel: map[string]*persistencespb.TaskKey{
-					cluster.TestCurrentClusterName:     {TaskId: currentClusterTransferAck},
-					cluster.TestAlternativeClusterName: {TaskId: alternativeClusterTransferAck},
+			tasks.CategoryTransfer.ID(): {
+				AckLevel: currentClusterTransferAck,
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTransferAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
 				},
 			},
-			int32(tasks.CategoryTimer): {
-				AckLevel: &persistencespb.TaskKey{FireTime: currentClusterTimerAck},
-				ClusterAckLevel: map[string]*persistencespb.TaskKey{
-					cluster.TestCurrentClusterName:     {FireTime: currentClusterTimerAck},
-					cluster.TestAlternativeClusterName: {FireTime: alternativeClusterTimerAck},
+			tasks.CategoryTimer.ID(): {
+				AckLevel: currentClusterTimerAck.UnixNano(),
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
+					cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
 				},
 			},
 		},

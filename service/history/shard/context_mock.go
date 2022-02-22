@@ -318,20 +318,6 @@ func (mr *MockContextMockRecorder) GetHistoryClient() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryClient", reflect.TypeOf((*MockContext)(nil).GetHistoryClient))
 }
 
-// GetImmediateTaskMaxReadLevel mocks base method.
-func (m *MockContext) GetImmediateTaskMaxReadLevel() int64 {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetImmediateTaskMaxReadLevel")
-	ret0, _ := ret[0].(int64)
-	return ret0
-}
-
-// GetImmediateTaskMaxReadLevel indicates an expected call of GetImmediateTaskMaxReadLevel.
-func (mr *MockContextMockRecorder) GetImmediateTaskMaxReadLevel() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetImmediateTaskMaxReadLevel", reflect.TypeOf((*MockContext)(nil).GetImmediateTaskMaxReadLevel))
-}
-
 // GetLastUpdatedTime mocks base method.
 func (m *MockContext) GetLastUpdatedTime() time.Time {
 	m.ctrl.T.Helper()
@@ -458,6 +444,20 @@ func (mr *MockContextMockRecorder) GetQueueClusterAckLevel(category, cluster int
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueClusterAckLevel", reflect.TypeOf((*MockContext)(nil).GetQueueClusterAckLevel), category, cluster)
 }
 
+// GetQueueMaxReadLevel mocks base method.
+func (m *MockContext) GetQueueMaxReadLevel(category tasks.Category, cluster string) tasks.Key {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetQueueMaxReadLevel", category, cluster)
+	ret0, _ := ret[0].(tasks.Key)
+	return ret0
+}
+
+// GetQueueMaxReadLevel indicates an expected call of GetQueueMaxReadLevel.
+func (mr *MockContextMockRecorder) GetQueueMaxReadLevel(category, cluster interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetQueueMaxReadLevel", reflect.TypeOf((*MockContext)(nil).GetQueueMaxReadLevel), category, cluster)
+}
+
 // GetRemoteAdminClient mocks base method.
 func (m *MockContext) GetRemoteAdminClient(cluster string) v10.AdminServiceClient {
 	m.ctrl.T.Helper()
@@ -500,20 +500,6 @@ func (m *MockContext) GetReplicatorDLQAckLevel(sourceCluster string) int64 {
 func (mr *MockContextMockRecorder) GetReplicatorDLQAckLevel(sourceCluster interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicatorDLQAckLevel", reflect.TypeOf((*MockContext)(nil).GetReplicatorDLQAckLevel), sourceCluster)
-}
-
-// GetScheduledTaskMaxReadLevel mocks base method.
-func (m *MockContext) GetScheduledTaskMaxReadLevel(cluster string) time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetScheduledTaskMaxReadLevel", cluster)
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// GetScheduledTaskMaxReadLevel indicates an expected call of GetScheduledTaskMaxReadLevel.
-func (mr *MockContextMockRecorder) GetScheduledTaskMaxReadLevel(cluster interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetScheduledTaskMaxReadLevel", reflect.TypeOf((*MockContext)(nil).GetScheduledTaskMaxReadLevel), cluster)
 }
 
 // GetSearchAttributesMapper mocks base method.
@@ -702,20 +688,6 @@ func (m *MockContext) UpdateReplicatorDLQAckLevel(sourCluster string, ackLevel i
 func (mr *MockContextMockRecorder) UpdateReplicatorDLQAckLevel(sourCluster, ackLevel interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateReplicatorDLQAckLevel", reflect.TypeOf((*MockContext)(nil).UpdateReplicatorDLQAckLevel), sourCluster, ackLevel)
-}
-
-// UpdateScheduledTaskMaxReadLevel mocks base method.
-func (m *MockContext) UpdateScheduledTaskMaxReadLevel(cluster string) time.Time {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateScheduledTaskMaxReadLevel", cluster)
-	ret0, _ := ret[0].(time.Time)
-	return ret0
-}
-
-// UpdateScheduledTaskMaxReadLevel indicates an expected call of UpdateScheduledTaskMaxReadLevel.
-func (mr *MockContextMockRecorder) UpdateScheduledTaskMaxReadLevel(cluster interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateScheduledTaskMaxReadLevel", reflect.TypeOf((*MockContext)(nil).UpdateScheduledTaskMaxReadLevel), cluster)
 }
 
 // UpdateWorkflowExecution mocks base method.

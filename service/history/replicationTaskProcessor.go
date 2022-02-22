@@ -500,7 +500,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		metrics.TargetClusterTag(p.currentCluster),
 	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		int(p.shard.GetImmediateTaskMaxReadLevel()-*minAckedTaskID),
+		int(p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, currentCluster).TaskID-*minAckedTaskID),
 	)
 	err := p.shard.GetExecutionManager().RangeCompleteReplicationTask(
 		&persistence.RangeCompleteReplicationTaskRequest{

@@ -151,7 +151,7 @@ func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_Initialized() {
 
 func (s *replicatorQueueProcessorSuite) TestTaskIDRange_NotInitialized() {
 	s.replicatorQueueProcessor.sanityCheckTime = time.Time{}
-	expectMaxTaskID := s.mockShard.GetImmediateTaskMaxReadLevel()
+	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID
 	expectMinTaskID := expectMaxTaskID - 100
 	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(expectMinTaskID - 100)
 
@@ -166,8 +166,8 @@ func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_UseHighestRe
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
 	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetImmediateTaskMaxReadLevel() - 100
-	expectMaxTaskID := s.mockShard.GetImmediateTaskMaxReadLevel() - 50
+	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 50
 	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(expectMaxTaskID)
 
 	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
@@ -181,8 +181,8 @@ func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_NoHighestRep
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
 	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetImmediateTaskMaxReadLevel() - 100
-	expectMaxTaskID := s.mockShard.GetImmediateTaskMaxReadLevel()
+	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID
 	s.replicatorQueueProcessor.maxTaskID = nil
 
 	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
@@ -196,9 +196,9 @@ func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_UseHighestTr
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(-2 * time.Minute)
 	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetImmediateTaskMaxReadLevel() - 100
-	expectMaxTaskID := s.mockShard.GetImmediateTaskMaxReadLevel()
-	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(s.mockShard.GetImmediateTaskMaxReadLevel() - 50)
+	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID
+	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 50)
 
 	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)

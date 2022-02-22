@@ -87,7 +87,7 @@ func newTransferQueueActiveProcessor(
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetImmediateTaskMaxReadLevel()
+		return shard.GetQueueMaxReadLevel(tasks.CategoryTransfer, currentClusterName).TaskID
 	}
 	updateTransferAckLevel := func(ackLevel int64) error {
 		return shard.UpdateQueueClusterAckLevel(
