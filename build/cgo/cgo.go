@@ -22,51 +22,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package build
+//go:build cgo
 
-import (
-	"embed"
-	"encoding/json"
-	"time"
-
-	"go.temporal.io/server/build/cgo"
-)
+package cgo
 
 const (
-	buildInfoDataFile = "info/data.json"
+	Enabled = true
 )
-
-type (
-	Info struct {
-		// GitRevision is the git revision associated with this build.
-		GitRevision string
-		// BuildTimeUnix is the seconds since epoch representing the date this build was created.
-		BuildTimeUnix int64
-		// CgoEnabled indicates whether cgo was enabled when this build was created.
-		CgoEnabled bool
-	}
-)
-
-var (
-	//go:embed info
-	buildInfoFs embed.FS
-	InfoData    Info
-)
-
-func init() {
-	InfoData = Info{
-		GitRevision:   "unknown",
-		BuildTimeUnix: 0,
-		CgoEnabled:    cgo.Enabled,
-	}
-
-	buildInfoDataJson, err := buildInfoFs.ReadFile(buildInfoDataFile)
-	if err != nil {
-		return
-	}
-	_ = json.Unmarshal(buildInfoDataJson, &InfoData)
-}
-
-func (i Info) BuildTime() time.Time {
-	return time.Unix(i.BuildTimeUnix, 0)
-}
