@@ -199,6 +199,30 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	return updateHistorySizeDiff, newHistorySizeDiff, nil
 }
 
+func (t *TransactionImpl) SetWorkflowExecution(
+	workflowSnapshot *persistence.WorkflowSnapshot,
+	clusterName string,
+) error {
+
+	engine, err := t.shard.GetEngine()
+	if err != nil {
+		return err
+	}
+	_, err = setWorkflowExecutionWithRetry(t.shard, &persistence.SetWorkflowExecutionRequest{
+		ShardID: t.shard.GetShardID(),
+		// RangeID , this is set by shard context
+		SetWorkflowSnapshot: *workflowSnapshot,
+	})
+	if operationPossiblySucceeded(err) {
+		NotifyWorkflowSnapshotTasks(engine, workflowSnapshot, clusterName)
+	}
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func PersistWorkflowEvents(
 	shard shard.Context,
 	workflowEvents *persistence.WorkflowEvents,
@@ -506,6 +530,45 @@ func updateWorkflowExecutionWithRetry(
 			mutationToCompletionMetric(&request.UpdateWorkflowMutation),
 			snapshotToCompletionMetric(request.NewWorkflowSnapshot),
 		)
+	}
+
+	return resp, nil
+}
+
+func setWorkflowExecutionWithRetry(
+	shard shard.Context,
+	request *persistence.SetWorkflowExecutionRequest,
+) (*persistence.SetWorkflowExecutionResponse, error) {
+
+	var resp *persistence.SetWorkflowExecutionResponse
+	var err error
+	op := func() error {
+		resp, err = shard.SetWorkflowExecution(request)
+		return err
+	}
+
+	err = backoff.Retry(
+		op, PersistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
+	if err != nil {
+		shard.GetLogger().Error(
+			"Set workflow execution operation failed.",
+			tag.WorkflowNamespaceID(request.SetWorkflowSnapshot.ExecutionInfo.NamespaceId),
+			tag.WorkflowID(request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId),
+			tag.WorkflowRunID(request.SetWorkflowSnapshot.ExecutionState.RunId),
+			tag.StoreOperationUpdateWorkflowExecution,
+			tag.Error(err),
+		)
+		switch err.(type) {
+		case *persistence.CurrentWorkflowConditionFailedError,
+			*persistence.WorkflowConditionFailedError,
+			*persistence.ConditionFailedError:
+			// TODO get rid of ErrConflict
+			return nil, consts.ErrConflict
+		default:
+			return nil, err
+		}
 	}
 
 	return resp, nil
