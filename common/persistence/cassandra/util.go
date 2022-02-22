@@ -54,7 +54,7 @@ func applyWorkflowMutationBatch(
 		namespaceID,
 		workflowID,
 		runID,
-		workflowMutation.ExecutionInfo,
+		workflowMutation.ExecutionInfoBlob,
 		workflowMutation.ExecutionState,
 		workflowMutation.ExecutionStateBlob,
 		workflowMutation.NextEventID,
