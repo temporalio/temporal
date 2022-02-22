@@ -564,15 +564,9 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	fireTime := timestamp.TimeValue(request.GetVisibilityTime())
-	taskKey := tasks.Key{
-		TaskID:   request.GetTaskId(),
-		FireTime: fireTime,
-	}
-
 	var err error
 	var category tasks.Category
-	switch request.GetCategory() {
+	switch categoryID := request.GetCategory(); categoryID {
 	case enumsspb.TASK_CATEGORY_TRANSFER:
 		category = tasks.CategoryTransfer
 	case enumsspb.TASK_CATEGORY_VISIBILITY:
@@ -582,22 +576,20 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 	case enumsspb.TASK_CATEGORY_REPLICATION:
 		category = tasks.CategoryReplication
 	default:
-		// persistence manager will validate if category is defined or not
-		categoryType := tasks.CategoryTypeImmediate
-		if !fireTime.IsZero() {
-			categoryType = tasks.CategoryTypeScheduled
+		var ok bool
+		category, ok = tasks.GetCategoryByID(int32(categoryID))
+		if !ok {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", categoryID))
 		}
-		category = tasks.NewCategory(
-			int32(request.GetCategory()),
-			categoryType,
-			"",
-		)
 	}
 
 	err = h.persistenceExecutionManager.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: category,
-		TaskKey:      taskKey,
+		TaskKey: tasks.Key{
+			TaskID:   request.GetTaskId(),
+			FireTime: timestamp.TimeValue(request.GetVisibilityTime()),
+		},
 	})
 
 	return &historyservice.RemoveTaskResponse{}, err
