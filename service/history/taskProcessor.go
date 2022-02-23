@@ -51,9 +51,9 @@ const (
 )
 
 type (
-	taskProcessorOptions struct {
-		queueSize   int
-		workerCount int
+	TaskProcessorOptions struct {
+		QueueSize   int
+		WorkerCount int
 	}
 
 	taskInfo struct {
@@ -92,7 +92,7 @@ type (
 	}
 )
 
-func newTaskInfo(
+func NewTaskInfo(
 	processor taskExecutor,
 	task tasks.Task,
 	logger log.Logger,
@@ -109,15 +109,15 @@ func newTaskInfo(
 	}
 }
 
-func newTaskProcessor(
-	options taskProcessorOptions,
+func NewTaskProcessor(
+	options TaskProcessorOptions,
 	shard shard.Context,
 	historyCache workflow.Cache,
 	logger log.Logger,
 ) *taskProcessor {
 
 	var workerNotificationChs []chan struct{}
-	for index := 0; index < options.workerCount; index++ {
+	for index := 0; index < options.WorkerCount; index++ {
 		workerNotificationChs = append(workerNotificationChs, make(chan struct{}, 1))
 	}
 
@@ -125,20 +125,20 @@ func newTaskProcessor(
 		shard:                   shard,
 		cache:                   historyCache,
 		shutdownCh:              make(chan struct{}),
-		tasksCh:                 make(chan *taskInfo, options.queueSize),
+		tasksCh:                 make(chan *taskInfo, options.QueueSize),
 		config:                  shard.GetConfig(),
 		logger:                  logger,
 		metricsClient:           shard.GetMetricsClient(),
 		timeSource:              shard.GetTimeSource(),
 		workerNotificationChans: workerNotificationChs,
 		retryPolicy:             common.CreatePersistenceRetryPolicy(),
-		numOfWorker:             options.workerCount,
+		numOfWorker:             options.WorkerCount,
 	}
 
 	return base
 }
 
-func (t *taskProcessor) start() {
+func (t *taskProcessor) Start() {
 	for i := 0; i < t.numOfWorker; i++ {
 		t.workerWG.Add(1)
 		notificationChan := t.workerNotificationChans[i]
@@ -147,7 +147,7 @@ func (t *taskProcessor) start() {
 	t.logger.Info("Task processor started.")
 }
 
-func (t *taskProcessor) stop() {
+func (t *taskProcessor) Stop() {
 	close(t.shutdownCh)
 	if success := common.AwaitWaitGroup(&t.workerWG, time.Minute); !success {
 		t.logger.Warn("Task processor timed out on shutdown.")

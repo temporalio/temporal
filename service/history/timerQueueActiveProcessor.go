@@ -68,8 +68,8 @@ func newTimerQueueActiveProcessor(
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
 	}
-	updateShardAckLevel := func(ackLevel timerKey) error {
-		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
+	updateShardAckLevel := func(ackLevel tasks.Key) error {
+		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.FireTime)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	metricsClient := shard.GetMetricsClient()
@@ -133,7 +133,7 @@ func newTimerQueueFailoverProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
-) (func(ackLevel timerKey) error, *timerQueueActiveProcessorImpl) {
+) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
@@ -143,13 +143,13 @@ func newTimerQueueFailoverProcessor(
 	failoverStartTime := shard.GetTimeSource().Now()
 	failoverUUID := uuid.New()
 
-	updateShardAckLevel := func(ackLevel timerKey) error {
+	updateShardAckLevel := func(ackLevel tasks.Key) error {
 		return shard.UpdateTimerFailoverLevel(
 			failoverUUID,
 			persistence.TimerFailoverLevel{
 				StartTime:    failoverStartTime,
 				MinLevel:     minLevel,
-				CurrentLevel: ackLevel.VisibilityTimestamp,
+				CurrentLevel: ackLevel.FireTime,
 				MaxLevel:     maxLevel,
 				NamespaceIDs: namespaceIDs,
 			},
@@ -226,11 +226,11 @@ func (t *timerQueueActiveProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
-func (t *timerQueueActiveProcessorImpl) getAckLevel() timerKey {
+func (t *timerQueueActiveProcessorImpl) getAckLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
-func (t *timerQueueActiveProcessorImpl) getReadLevel() timerKey {
+func (t *timerQueueActiveProcessorImpl) getReadLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 

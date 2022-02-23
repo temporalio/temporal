@@ -54,15 +54,6 @@ const (
 )
 
 type (
-	// timerKeys is used for sorting timers
-	timerKeys []timerKey
-
-	// timerKey - Visibility timer stamp + Sequence Number.
-	timerKey struct {
-		VisibilityTimestamp time.Time
-		TaskID              int64
-	}
-
 	timerQueueAckMgrImpl struct {
 		scope               int
 		isFailover          bool
@@ -84,11 +75,11 @@ type (
 
 		sync.Mutex
 		// outstanding timer task -> finished (true)
-		outstandingTasks map[timerKey]bool
+		outstandingTasks map[tasks.Key]bool
 		// timer task ack level
-		ackLevel timerKey
+		ackLevel tasks.Key
 		// timer task read level, used by failover
-		readLevel timerKey
+		readLevel tasks.Key
 		// mutable timer level
 		minQueryLevel time.Time
 		maxQueryLevel time.Time
@@ -106,38 +97,6 @@ type (
 
 var _ timerQueueAckMgr = (*timerQueueAckMgrImpl)(nil)
 
-// Len implements sort.Interace
-func (t timerKeys) Len() int {
-	return len(t)
-}
-
-// Swap implements sort.Interface.
-func (t timerKeys) Swap(i, j int) {
-	t[i], t[j] = t[j], t[i]
-}
-
-// Less implements sort.Interface
-func (t timerKeys) Less(i, j int) bool {
-	return compareTimerIDLess(&t[i], &t[j])
-}
-
-func newTimerKey(time time.Time, taskID int64) *timerKey {
-	return &timerKey{
-		VisibilityTimestamp: time,
-		TaskID:              taskID,
-	}
-}
-
-func compareTimerIDLess(first *timerKey, second *timerKey) bool {
-	if first.VisibilityTimestamp.Before(second.VisibilityTimestamp) {
-		return true
-	}
-	if first.VisibilityTimestamp.Equal(second.VisibilityTimestamp) {
-		return first.TaskID < second.TaskID
-	}
-	return false
-}
-
 func newTimerQueueAckMgr(
 	scope int,
 	shard shard.Context,
@@ -147,7 +106,7 @@ func newTimerQueueAckMgr(
 	logger log.Logger,
 	clusterName string,
 ) *timerQueueAckMgrImpl {
-	ackLevel := timerKey{VisibilityTimestamp: minLevel}
+	ackLevel := tasks.Key{FireTime: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
 		scope:               scope,
@@ -160,12 +119,12 @@ func newTimerQueueAckMgr(
 		timeNow:             timeNow,
 		updateTimerAckLevel: updateTimerAckLevel,
 		timerQueueShutdown:  func() error { return nil },
-		outstandingTasks:    make(map[timerKey]bool),
+		outstandingTasks:    make(map[tasks.Key]bool),
 		ackLevel:            ackLevel,
 		readLevel:           ackLevel,
-		minQueryLevel:       ackLevel.VisibilityTimestamp,
+		minQueryLevel:       ackLevel.FireTime,
 		pageToken:           nil,
-		maxQueryLevel:       ackLevel.VisibilityTimestamp,
+		maxQueryLevel:       ackLevel.FireTime,
 		isReadFinished:      false,
 		finishedChan:        nil,
 		clusterName:         clusterName,
@@ -184,7 +143,7 @@ func newTimerQueueFailoverAckMgr(
 	logger log.Logger,
 ) *timerQueueAckMgrImpl {
 	// failover ack manager will start from the standby cluster's ack level to active cluster's ack level
-	ackLevel := timerKey{VisibilityTimestamp: minLevel}
+	ackLevel := tasks.Key{FireTime: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
 		scope:               metrics.TimerActiveQueueProcessorScope,
@@ -197,10 +156,10 @@ func newTimerQueueFailoverAckMgr(
 		timeNow:             timeNow,
 		updateTimerAckLevel: updateTimerAckLevel,
 		timerQueueShutdown:  timerQueueShutdown,
-		outstandingTasks:    make(map[timerKey]bool),
+		outstandingTasks:    make(map[tasks.Key]bool),
 		ackLevel:            ackLevel,
 		readLevel:           ackLevel,
-		minQueryLevel:       ackLevel.VisibilityTimestamp,
+		minQueryLevel:       ackLevel.FireTime,
 		pageToken:           nil,
 		maxQueryLevel:       maxLevel,
 		isReadFinished:      false,
@@ -250,16 +209,16 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]tasks.Task, tasks.Task, bool,
 
 TaskFilterLoop:
 	for _, task := range timerTasks {
-		timerKey := &timerKey{VisibilityTimestamp: task.GetVisibilityTime(), TaskID: task.GetTaskID()}
+		timerKey := &tasks.Key{FireTime: task.GetVisibilityTime(), TaskID: task.GetTaskID()}
 		_, isLoaded := t.outstandingTasks[*timerKey]
 		if isLoaded {
 			// timer already loaded
 			continue TaskFilterLoop
 		}
 
-		if !t.isProcessNow(timerKey.VisibilityTimestamp) {
-			lookAheadTask = task                           // this means there is task in the time range (now, now + offset)
-			t.maxQueryLevel = timerKey.VisibilityTimestamp // adjust maxQueryLevel so that this task will be read next time
+		if !t.isProcessNow(timerKey.FireTime) {
+			lookAheadTask = task                // this means there is task in the time range (now, now + offset)
+			t.maxQueryLevel = timerKey.FireTime // adjust maxQueryLevel so that this task will be read next time
 			break TaskFilterLoop
 		}
 
@@ -320,20 +279,20 @@ func (t *timerQueueAckMgrImpl) completeTimerTask(
 	taskTimestamp time.Time,
 	taskID int64,
 ) {
-	timerKey := &timerKey{VisibilityTimestamp: taskTimestamp, TaskID: taskID}
+	timerKey := &tasks.Key{FireTime: taskTimestamp, TaskID: taskID}
 	t.Lock()
 	defer t.Unlock()
 
 	t.outstandingTasks[*timerKey] = true
 }
 
-func (t *timerQueueAckMgrImpl) getReadLevel() timerKey {
+func (t *timerQueueAckMgrImpl) getReadLevel() tasks.Key {
 	t.Lock()
 	defer t.Unlock()
 	return t.readLevel
 }
 
-func (t *timerQueueAckMgrImpl) getAckLevel() timerKey {
+func (t *timerQueueAckMgrImpl) getAckLevel() tasks.Key {
 	t.Lock()
 	defer t.Unlock()
 	return t.ackLevel
@@ -348,7 +307,7 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
 	// check. TODO: we can maintain a sorted slice as well.
-	var sequenceIDs timerKeys
+	var sequenceIDs tasks.Keys
 	for k := range outstandingTasks {
 		sequenceIDs = append(sequenceIDs, k)
 	}
