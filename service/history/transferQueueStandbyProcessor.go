@@ -89,10 +89,10 @@ func newTransferQueueStandbyProcessor(
 		return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetTransferMaxReadLevel()
+		return shard.GetQueueMaxReadLevel(tasks.CategoryTransfer, clusterName).TaskID
 	}
 	updateClusterAckLevel := func(ackLevel int64) error {
-		return shard.UpdateTransferClusterAckLevel(clusterName, ackLevel)
+		return shard.UpdateQueueClusterAckLevel(tasks.CategoryTransfer, clusterName, tasks.Key{TaskID: ackLevel})
 	}
 	transferQueueShutdown := func() error {
 		return nil
@@ -128,7 +128,7 @@ func newTransferQueueStandbyProcessor(
 		shard,
 		options,
 		processor,
-		shard.GetTransferClusterAckLevel(clusterName),
+		shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, clusterName).TaskID,
 		logger,
 	)
 

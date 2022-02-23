@@ -139,12 +139,16 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.timerQueueAckMgr = newTimerQueueAckMgr(
 		0,
 		s.mockShard,
-		s.mockShard.GetTimerClusterAckLevel(s.clusterName),
+		s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime,
 		func() time.Time {
 			return s.mockShard.GetCurrentTime(s.clusterName)
 		},
 		func(ackLevel tasks.Key) error {
-			return s.mockShard.UpdateTimerClusterAckLevel(s.clusterName, ackLevel.FireTime)
+			return s.mockShard.UpdateQueueClusterAckLevel(
+				tasks.CategoryTimer,
+				s.clusterName,
+				ackLevel,
+			)
 		},
 		s.logger,
 		s.clusterName,
@@ -267,8 +271,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.FireTime)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName), ackLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime, minQueryLevel)
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
@@ -315,8 +319,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.FireTime)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName), ackLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime, minQueryLevel)
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
@@ -365,8 +369,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.FireTime)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName), ackLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime, minQueryLevel)
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
@@ -409,8 +413,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.FireTime)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName), ackLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime, minQueryLevel)
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
@@ -509,7 +513,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.timerQueueAckMgr.completeTimerTask(timer1.VisibilityTimestamp, timer1.TaskID)
 	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID1])
 	_ = s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
 	timerSequenceID3 := tasks.Key{
@@ -520,7 +524,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID3])
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	// ack level remains unchanged
-	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 
 	// we are not testing shard context
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
@@ -531,12 +535,12 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.timerQueueAckMgr.completeTimerTask(timer2.VisibilityTimestamp, timer2.TaskID)
 	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID2])
 	_ = s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(timer3.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer3.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
-	level := s.mockShard.UpdateTimerMaxReadLevel(s.clusterName)
+	level := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, s.clusterName).FireTime
 
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
@@ -591,7 +595,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtc(),
 					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
 				}},
-			TimerFailoverLevels: make(map[string]persistence.TimerFailoverLevel),
+			FailoverLevels: make(map[tasks.Category]map[string]persistence.FailoverLevel),
 		},
 		config,
 	)
@@ -614,17 +618,18 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 			return s.mockShard.GetCurrentTime(s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName())
 		},
 		func(ackLevel tasks.Key) error {
-			return s.mockShard.UpdateTimerFailoverLevel(
+			return s.mockShard.UpdateFailoverLevel(
+				tasks.CategoryTimer,
 				s.namespaceID,
-				persistence.TimerFailoverLevel{
-					MinLevel:     ackLevel.FireTime,
-					MaxLevel:     ackLevel.FireTime,
+				persistence.FailoverLevel{
+					MinLevel:     ackLevel,
+					MaxLevel:     ackLevel,
 					NamespaceIDs: map[string]struct{}{s.namespaceID: {}},
 				},
 			)
 		},
 		func() error {
-			return s.mockShard.DeleteTimerFailoverLevel(s.namespaceID)
+			return s.mockShard.DeleteFailoverLevel(tasks.CategoryTimer, s.namespaceID)
 		},
 		s.logger,
 	)

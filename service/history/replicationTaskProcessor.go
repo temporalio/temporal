@@ -484,7 +484,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 			continue
 		}
 
-		ackLevel := p.shard.GetClusterReplicationLevel(clusterName)
+		ackLevel := p.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
 		if minAckedTaskID == nil || ackLevel < *minAckedTaskID {
 			minAckedTaskID = &ackLevel
 		}
@@ -500,7 +500,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		metrics.TargetClusterTag(p.currentCluster),
 	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		int(p.shard.GetTransferMaxReadLevel()-*minAckedTaskID),
+		int(p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, currentCluster).TaskID-*minAckedTaskID),
 	)
 	err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(
 		&persistence.RangeCompleteHistoryTasksRequest{

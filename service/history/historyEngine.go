@@ -2993,13 +2993,16 @@ func (e *historyEngineImpl) GetReplicationMessages(
 ) (*replicationspb.ReplicationMessages, error) {
 
 	if ackMessageID != persistence.EmptyQueueMessageID {
-		if err := e.shard.UpdateClusterReplicationLevel(
+		if err := e.shard.UpdateQueueClusterAckLevel(
+			tasks.CategoryReplication,
 			pollingCluster,
-			ackMessageID,
-			ackTimestampe,
+			tasks.Key{
+				TaskID: ackMessageID,
+			},
 		); err != nil {
 			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
 		}
+		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestampe)
 	}
 
 	replicationMessages, err := e.replicatorProcessor.paginateTasks(

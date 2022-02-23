@@ -3137,6 +3137,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 		TimerAckLevelTime:       currentClusterTimerAck,
 		ClusterReplicationLevel: map[string]int64{},
 		ReplicationDlqAckLevel:  map[string]int64{},
+		QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 	}
 	request := &p.GetOrCreateShardRequest{
 		ShardID:          shardID,
@@ -3195,6 +3196,22 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		NamespaceNotificationVersion: namespaceNotificationVersion,
 		ClusterReplicationLevel:      map[string]int64{},
 		ReplicationDlqAckLevel:       map[string]int64{},
+		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+			tasks.CategoryTransfer.ID(): {
+				AckLevel: currentClusterTransferAck,
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTransferAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+				},
+			},
+			tasks.CategoryTimer.ID(): {
+				AckLevel: currentClusterTimerAck.UnixNano(),
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
+					cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
+				},
+			},
+		},
 	}
 	createRequest := &p.GetOrCreateShardRequest{
 		ShardID:          shardID,
@@ -3238,6 +3255,22 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		NamespaceNotificationVersion: namespaceNotificationVersion,
 		ClusterReplicationLevel:      map[string]int64{cluster.TestAlternativeClusterName: 12345},
 		ReplicationDlqAckLevel:       map[string]int64{},
+		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+			tasks.CategoryTransfer.ID(): {
+				AckLevel: currentClusterTransferAck,
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTransferAck,
+					cluster.TestAlternativeClusterName: alternativeClusterTransferAck,
+				},
+			},
+			tasks.CategoryTimer.ID(): {
+				AckLevel: currentClusterTimerAck.UnixNano(),
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName:     currentClusterTimerAck.UnixNano(),
+					cluster.TestAlternativeClusterName: alternativeClusterTimerAck.UnixNano(),
+				},
+			},
+		},
 	}
 	updateRequest := &p.UpdateShardRequest{
 		ShardInfo:       shardInfo,

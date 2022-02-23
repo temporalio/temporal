@@ -69,7 +69,11 @@ func newTimerQueueActiveProcessor(
 		return shard.GetCurrentTime(currentClusterName)
 	}
 	updateShardAckLevel := func(ackLevel tasks.Key) error {
-		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.FireTime)
+		return shard.UpdateQueueClusterAckLevel(
+			tasks.CategoryTimer,
+			currentClusterName,
+			ackLevel,
+		)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	metricsClient := shard.GetMetricsClient()
@@ -80,7 +84,7 @@ func newTimerQueueActiveProcessor(
 	timerQueueAckMgr := newTimerQueueAckMgr(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
-		shard.GetTimerClusterAckLevel(currentClusterName),
+		shard.GetQueueClusterAckLevel(tasks.CategoryTimer, currentClusterName).FireTime,
 		timeNow,
 		updateShardAckLevel,
 		logger,
@@ -144,19 +148,20 @@ func newTimerQueueFailoverProcessor(
 	failoverUUID := uuid.New()
 
 	updateShardAckLevel := func(ackLevel tasks.Key) error {
-		return shard.UpdateTimerFailoverLevel(
+		return shard.UpdateFailoverLevel(
+			tasks.CategoryTimer,
 			failoverUUID,
-			persistence.TimerFailoverLevel{
+			persistence.FailoverLevel{
 				StartTime:    failoverStartTime,
-				MinLevel:     minLevel,
-				CurrentLevel: ackLevel.FireTime,
-				MaxLevel:     maxLevel,
+				MinLevel:     tasks.Key{FireTime: minLevel},
+				CurrentLevel: ackLevel,
+				MaxLevel:     tasks.Key{FireTime: maxLevel},
 				NamespaceIDs: namespaceIDs,
 			},
 		)
 	}
 	timerAckMgrShutdown := func() error {
-		return shard.DeleteTimerFailoverLevel(failoverUUID)
+		return shard.DeleteFailoverLevel(tasks.CategoryTimer, failoverUUID)
 	}
 
 	logger = log.With(

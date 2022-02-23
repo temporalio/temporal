@@ -113,7 +113,7 @@ func newTimerQueueProcessor(
 		metricsClient:            shard.GetMetricsClient(),
 		workflowCache:            workflowCache,
 		workflowDeleteManager:    workflowDeleteManager,
-		ackLevel:                 tasks.Key{FireTime: shard.GetTimerAckLevel()},
+		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTimer),
 		logger:                   logger,
 		matchingClient:           matchingClient,
 		status:                   common.DaemonStatusInitialized,
@@ -194,14 +194,14 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		return
 	}
 
-	minLevel := t.shard.GetTimerClusterAckLevel(t.currentClusterName)
+	minLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTimer, t.currentClusterName).FireTime
 	standbyClusterName := t.currentClusterName
 	for clusterName, info := range t.shard.GetClusterMetadata().GetAllClusterInfo() {
 		if !info.Enabled {
 			continue
 		}
 
-		ackLevel := t.shard.GetTimerClusterAckLevel(clusterName)
+		ackLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTimer, clusterName).FireTime
 		if ackLevel.Before(minLevel) {
 			minLevel = ackLevel
 			standbyClusterName = clusterName
@@ -301,9 +301,9 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		}
 		t.standbyTimerProcessorsLock.RUnlock()
 
-		for _, failoverInfo := range t.shard.GetAllTimerFailoverLevels() {
-			if !upperAckLevel.FireTime.Before(failoverInfo.MinLevel) {
-				upperAckLevel = tasks.Key{FireTime: failoverInfo.MinLevel}
+		for _, failoverInfo := range t.shard.GetAllFailoverLevels(tasks.CategoryTimer) {
+			if !upperAckLevel.FireTime.Before(failoverInfo.MinLevel.FireTime) {
+				upperAckLevel = failoverInfo.MinLevel
 			}
 		}
 	}
@@ -333,7 +333,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateTimerAckLevel(t.ackLevel.FireTime)
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryTimer, t.ackLevel)
 }
 
 func (t *timerQueueProcessorImpl) listenToClusterMetadataChange() {

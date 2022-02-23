@@ -527,7 +527,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 		return err
 	}
 
-	transactionID, err := r.shard.GenerateTransferTaskID()
+	transactionID, err := r.shard.GenerateTaskID()
 	if err != nil {
 		return err
 	}

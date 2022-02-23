@@ -160,25 +160,15 @@ type (
 	// ShardInfoWithFailover describes a shard
 	ShardInfoWithFailover struct {
 		*persistencespb.ShardInfo
-		TransferFailoverLevels map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
-		TimerFailoverLevels    map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
+		FailoverLevels map[tasks.Category]map[string]FailoverLevel // uuid -> FailoverLevel
 	}
 
-	// TransferFailoverLevel contains corresponding start / end level
-	TransferFailoverLevel struct {
+	// FailoverLevel contains corresponding start / end level
+	FailoverLevel struct {
 		StartTime    time.Time
-		MinLevel     int64
-		CurrentLevel int64
-		MaxLevel     int64
-		NamespaceIDs map[string]struct{}
-	}
-
-	// TimerFailoverLevel contains namespace IDs and corresponding start / end level
-	TimerFailoverLevel struct {
-		StartTime    time.Time
-		MinLevel     time.Time
-		CurrentLevel time.Time
-		MaxLevel     time.Time
+		MinLevel     tasks.Key
+		CurrentLevel tasks.Key
+		MaxLevel     tasks.Key
 		NamespaceIDs map[string]struct{}
 	}
 

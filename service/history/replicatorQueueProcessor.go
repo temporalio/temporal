@@ -135,10 +135,10 @@ func (p *replicatorQueueProcessorImpl) GetMaxReplicationTaskID() int64 {
 
 	if p.maxTaskID == nil {
 		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
-		// use TransferMaxReadLevel which is the max task id of any transfer/visibility/replication queues.
-		// TransferMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
-		// a few seconds) ack to the latest TransferMaxReadLevel if there is no replication tasks at all.
-		return p.shard.GetTransferMaxReadLevel()
+		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
+		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
+		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
+		return p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, p.currentClusterName).TaskID
 	}
 
 	return *p.maxTaskID
@@ -309,7 +309,7 @@ func (p *replicatorQueueProcessorImpl) taskIDsRange(
 	lastReadMessageID int64,
 ) (minTaskID int64, maxTaskID int64) {
 	minTaskID = lastReadMessageID
-	maxTaskID = p.shard.GetTransferMaxReadLevel()
+	maxTaskID = p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, p.currentClusterName).TaskID
 
 	p.Lock()
 	defer p.Unlock()

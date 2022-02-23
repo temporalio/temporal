@@ -199,6 +199,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 						},
 						ClusterReplicationLevel: map[string]int64{},
 						ReplicationDlqAckLevel:  map[string]int64{},
+						QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 					},
 				}, nil)
 			s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
@@ -220,6 +221,7 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 					},
 					ClusterReplicationLevel: map[string]int64{},
 					ReplicationDlqAckLevel:  map[string]int64{},
+					QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 				},
 				PreviousRangeID: 5,
 			}).Return(nil)
@@ -283,6 +285,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 						},
 						ClusterReplicationLevel: map[string]int64{},
 						ReplicationDlqAckLevel:  map[string]int64{},
+						QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 					},
 				}, nil)
 			s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
@@ -304,6 +307,7 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 					},
 					ClusterReplicationLevel: map[string]int64{},
 					ReplicationDlqAckLevel:  map[string]int64{},
+					QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 				},
 				PreviousRangeID: 5,
 			}).Return(nil)
@@ -376,6 +380,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 					},
 					ClusterReplicationLevel: map[string]int64{},
 					ReplicationDlqAckLevel:  map[string]int64{},
+					QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 				},
 			}, nil)
 		s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
@@ -397,6 +402,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 				},
 				ClusterReplicationLevel: map[string]int64{},
 				ReplicationDlqAckLevel:  map[string]int64{},
+				QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 			},
 			PreviousRangeID: 5,
 		}).Return(nil)
@@ -452,6 +458,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 					},
 					ClusterReplicationLevel: map[string]int64{},
 					ReplicationDlqAckLevel:  map[string]int64{},
+					QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 				},
 			}, nil)
 		s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
@@ -473,6 +480,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 				},
 				ClusterReplicationLevel: map[string]int64{},
 				ReplicationDlqAckLevel:  map[string]int64{},
+				QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 			},
 			PreviousRangeID: 5,
 		}).Return(nil)
@@ -680,6 +688,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 				},
 				ClusterReplicationLevel: map[string]int64{},
 				ReplicationDlqAckLevel:  map[string]int64{},
+				QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 			},
 		}, nil)
 	s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
@@ -701,6 +710,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 			},
 			ClusterReplicationLevel: map[string]int64{},
 			ReplicationDlqAckLevel:  map[string]int64{},
+			QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 		},
 		PreviousRangeID: currentRangeID,
 	}).Return(nil)
