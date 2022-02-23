@@ -72,13 +72,11 @@ type (
 	}
 )
 
-var OsReader fileReader = &osReader{}
-
 // NewFileBasedClient creates a file based client.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
 		basicClient: newBasicClient(logger),
-		reader:      OsReader,
+		reader:      &osReader{},
 		config:      config,
 		doneCh:      doneCh,
 	}
