@@ -226,7 +226,6 @@ func match(v *constrainedValue, filters map[Filter]interface{}) bool {
 	return true
 }
 
-
 func (fc *basicClient) logDiff(old configValueMap, new configValueMap) {
 	for key, newValues := range new {
 		oldValues, ok := old[key]
@@ -307,4 +306,3 @@ func (bc *basicClient) appendConstrainedValue(logLine *strings.Builder, value *c
 		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
 	}
 }
-

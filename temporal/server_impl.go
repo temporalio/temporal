@@ -89,15 +89,15 @@ func NewServerFxImpl(
 	clusterMetadata *cluster.Config,
 ) *ServerImpl {
 	s := &ServerImpl{
-		so:                  opts,
-		servicesMetadata:    servicesGroup.Services,
-		stoppedCh:           stoppedCh,
-		logger:              logger,
-		namespaceLogger:     namespaceLogger,
-		serverReporter:      serverReporter,
-		dcCollection:        dcCollection,
-		persistenceConfig:   persistenceConfig,
-		clusterMetadata:     clusterMetadata,
+		so:                opts,
+		servicesMetadata:  servicesGroup.Services,
+		stoppedCh:         stoppedCh,
+		logger:            logger,
+		namespaceLogger:   namespaceLogger,
+		serverReporter:    serverReporter,
+		dcCollection:      dcCollection,
+		persistenceConfig: persistenceConfig,
+		clusterMetadata:   clusterMetadata,
 	}
 	return s
 }
