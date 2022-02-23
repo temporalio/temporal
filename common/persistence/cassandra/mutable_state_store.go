@@ -962,9 +962,9 @@ func (d *MutableStateStore) SetWorkflowExecution(
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
 
 	shardID := request.ShardID
-	workflow := request.SetWorkflowSnapshot
+	setSnapshot := request.SetWorkflowSnapshot
 
-	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &workflow); err != nil {
+	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &setSnapshot); err != nil {
 		return err
 	}
 
@@ -992,11 +992,11 @@ func (d *MutableStateStore) SetWorkflowExecution(
 
 	if !applied {
 		executionCASConditions := []executionCASCondition{{
-			runID: workflow.RunID,
-			// dbVersion is for CAS, so the db record version will be set to `resetWorkflow.DBRecordVersion`
-			// while CAS on `resetWorkflow.DBRecordVersion - 1`
-			dbVersion:   workflow.DBRecordVersion - 1,
-			nextEventID: workflow.Condition,
+			runID: setSnapshot.RunID,
+			// dbVersion is for CAS, so the db record version will be set to `setSnapshot.DBRecordVersion`
+			// while CAS on `setSnapshot.DBRecordVersion - 1`
+			dbVersion:   setSnapshot.DBRecordVersion - 1,
+			nextEventID: setSnapshot.Condition,
 		}}
 		return convertErrors(
 			conflictRecord,

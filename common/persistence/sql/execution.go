@@ -681,12 +681,12 @@ func (m *sqlExecutionStore) setWorkflowExecutionTx(
 	request *p.InternalSetWorkflowExecutionRequest,
 ) error {
 	shardID := request.ShardID
-	workflow := request.SetWorkflowSnapshot
+	setSnapshot := request.SetWorkflowSnapshot
 
 	if err := applyWorkflowSnapshotTxAsReset(ctx,
 		tx,
 		shardID,
-		&workflow,
+		&setSnapshot,
 	); err != nil {
 		return err
 	}

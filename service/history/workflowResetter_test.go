@@ -41,6 +41,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -303,7 +304,7 @@ func (s *workflowResetterSuite) TestReplayResetWorkflow() {
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		baseRebuildLastEventVersion,
+		convert.Int64Ptr(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,

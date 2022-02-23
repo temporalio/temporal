@@ -471,7 +471,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.Execution); err != nil {
 		return nil, err
 	}
 
@@ -759,7 +759,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.Execution); err != nil {
 		return nil, err
 	}
 
@@ -1934,7 +1934,7 @@ func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, r
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateExecution(request.WorkflowExecution); err != nil {
+	if err := validateExecution(request.WorkflowExecution); err != nil {
 		return nil, err
 	}
 
@@ -1971,7 +1971,7 @@ func (wh *WorkflowHandler) SignalWorkflowExecution(ctx context.Context, request 
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateExecution(request.WorkflowExecution); err != nil {
+	if err := validateExecution(request.WorkflowExecution); err != nil {
 		return nil, err
 	}
 
@@ -2127,7 +2127,7 @@ func (wh *WorkflowHandler) ResetWorkflowExecution(ctx context.Context, request *
 		return nil, errRequestIDTooLong
 	}
 
-	if err := wh.validateExecution(request.WorkflowExecution); err != nil {
+	if err := validateExecution(request.WorkflowExecution); err != nil {
 		return nil, err
 	}
 
@@ -2175,7 +2175,7 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateExecution(request.WorkflowExecution); err != nil {
+	if err := validateExecution(request.WorkflowExecution); err != nil {
 		return nil, err
 	}
 
@@ -2732,7 +2732,7 @@ func (wh *WorkflowHandler) ResetStickyTaskQueue(ctx context.Context, request *wo
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.Execution); err != nil {
 		return nil, err
 	}
 
@@ -2771,7 +2771,7 @@ func (wh *WorkflowHandler) QueryWorkflow(ctx context.Context, request *workflows
 		return nil, errRequestNotSet
 	}
 
-	if err := wh.validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.Execution); err != nil {
 		return nil, err
 	}
 
@@ -2838,7 +2838,7 @@ func (wh *WorkflowHandler) DescribeWorkflowExecution(ctx context.Context, reques
 		return nil, err
 	}
 
-	if err := wh.validateExecution(request.Execution); err != nil {
+	if err := validateExecution(request.Execution); err != nil {
 		return nil, err
 	}
 
@@ -3261,14 +3261,6 @@ func (wh *WorkflowHandler) validateTaskQueue(t *taskqueuepb.TaskQueue) error {
 	}
 
 	enums.SetDefaultTaskQueueKind(&t.Kind)
-	return nil
-}
-
-func (wh *WorkflowHandler) validateExecution(w *commonpb.WorkflowExecution) error {
-	err := validateExecution(w)
-	if err != nil {
-		return err
-	}
 	return nil
 }
 

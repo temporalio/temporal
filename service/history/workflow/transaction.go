@@ -57,5 +57,10 @@ type (
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
 			clusterName string,
 		) (int64, int64, error)
+
+		SetWorkflowExecution(
+			workflowSnapshot *persistence.WorkflowSnapshot,
+			clusterName string,
+		) error
 	}
 )

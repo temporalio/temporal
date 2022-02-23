@@ -34,8 +34,7 @@ import (
 	time "time"
 
 	gomock "github.com/golang/mock/gomock"
-	v1 "go.temporal.io/api/common/v1"
-	v10 "go.temporal.io/server/api/persistence/v1"
+	v1 "go.temporal.io/server/api/persistence/v1"
 	namespace "go.temporal.io/server/common/namespace"
 	persistence "go.temporal.io/server/common/persistence"
 )
@@ -103,20 +102,6 @@ func (mr *MockContextMockRecorder) CreateWorkflowExecution(now, createMode, prev
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).CreateWorkflowExecution), now, createMode, prevRunID, prevLastWriteVersion, newMutableState, newWorkflow, newWorkflowEvents)
 }
 
-// GetExecution mocks base method.
-func (m *MockContext) GetExecution() *v1.WorkflowExecution {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetExecution")
-	ret0, _ := ret[0].(*v1.WorkflowExecution)
-	return ret0
-}
-
-// GetExecution indicates an expected call of GetExecution.
-func (mr *MockContextMockRecorder) GetExecution() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetExecution", reflect.TypeOf((*MockContext)(nil).GetExecution))
-}
-
 // GetHistorySize mocks base method.
 func (m *MockContext) GetHistorySize() int64 {
 	m.ctrl.T.Helper()
@@ -159,11 +144,39 @@ func (mr *MockContextMockRecorder) GetNamespaceID() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespaceID", reflect.TypeOf((*MockContext)(nil).GetNamespaceID))
 }
 
+// GetRunID mocks base method.
+func (m *MockContext) GetRunID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRunID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetRunID indicates an expected call of GetRunID.
+func (mr *MockContextMockRecorder) GetRunID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRunID", reflect.TypeOf((*MockContext)(nil).GetRunID))
+}
+
+// GetWorkflowID mocks base method.
+func (m *MockContext) GetWorkflowID() string {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowID")
+	ret0, _ := ret[0].(string)
+	return ret0
+}
+
+// GetWorkflowID indicates an expected call of GetWorkflowID.
+func (mr *MockContextMockRecorder) GetWorkflowID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowID", reflect.TypeOf((*MockContext)(nil).GetWorkflowID))
+}
+
 // LoadExecutionStats mocks base method.
-func (m *MockContext) LoadExecutionStats() (*v10.ExecutionStats, error) {
+func (m *MockContext) LoadExecutionStats() (*v1.ExecutionStats, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "LoadExecutionStats")
-	ret0, _ := ret[0].(*v10.ExecutionStats)
+	ret0, _ := ret[0].(*v1.ExecutionStats)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

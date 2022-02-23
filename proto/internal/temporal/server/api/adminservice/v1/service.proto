@@ -27,6 +27,11 @@ import "temporal/server/api/adminservice/v1/request_response.proto";
 
 // AdminService provides advanced APIs for debugging and analysis with admin privilege
 service AdminService {
+    // RebuildMutableState attempts to rebuild mutable state according to persisted history events.
+    // NOTE: this is experimental API
+    rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
+    }
+
     // DescribeWorkflowExecution returns information about the internal states of workflow execution.
     rpc DescribeMutableState (DescribeMutableStateRequest) returns (DescribeMutableStateResponse) {
     }

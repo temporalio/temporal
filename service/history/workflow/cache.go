@@ -175,7 +175,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if !cacheHit {
 		c.metricsClient.IncCounter(scope, metrics.CacheMissCounter)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = NewContext(namespaceID, execution, c.shard, c.logger)
+		workflowCtx = NewContext(c.shard, key, c.logger)
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
 			c.metricsClient.IncCounter(scope, metrics.CacheFailures)

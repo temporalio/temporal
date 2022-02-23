@@ -519,6 +519,27 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 	return s.timerMaxReadLevelMap[cluster]
 }
 
+func (s *ContextImpl) AddTasks(
+	request *persistence.AddTasksRequest,
+) error {
+	if err := s.errorByState(); err != nil {
+		return err
+	}
+
+	namespaceID := namespace.ID(request.NamespaceID)
+
+	// do not try to get namespace cache within shard lock
+	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+
+	s.wLock()
+	defer s.wUnlock()
+
+	return s.addTasksLocked(request, namespaceEntry)
+}
+
 func (s *ContextImpl) CreateWorkflowExecution(
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
@@ -663,25 +684,42 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	return resp, nil
 }
 
-func (s *ContextImpl) AddTasks(
-	request *persistence.AddTasksRequest,
-) error {
+func (s *ContextImpl) SetWorkflowExecution(
+	request *persistence.SetWorkflowExecutionRequest,
+) (*persistence.SetWorkflowExecutionResponse, error) {
 	if err := s.errorByState(); err != nil {
-		return err
+		return nil, err
 	}
 
-	namespaceID := namespace.ID(request.NamespaceID)
+	namespaceID := namespace.ID(request.SetWorkflowSnapshot.ExecutionInfo.NamespaceId)
+	workflowID := request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
 
 	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	s.wLock()
 	defer s.wUnlock()
 
-	return s.addTasksLocked(request, namespaceEntry)
+	transferMaxReadLevel := int64(0)
+	if err := s.allocateTaskIDsLocked(
+		namespaceEntry,
+		workflowID,
+		request.SetWorkflowSnapshot.Tasks,
+		&transferMaxReadLevel,
+	); err != nil {
+		return nil, err
+	}
+
+	currentRangeID := s.getRangeIDLocked()
+	request.RangeID = currentRangeID
+	resp, err := s.executionManager.SetWorkflowExecution(request)
+	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+		return nil, err
+	}
+	return resp, nil
 }
 
 func (s *ContextImpl) addTasksLocked(

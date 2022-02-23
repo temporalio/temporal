@@ -90,6 +90,20 @@ func (mr *MockTransactionMockRecorder) CreateWorkflowExecution(createMode, newWo
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).CreateWorkflowExecution), createMode, newWorkflowSnapshot, newWorkflowEventsSeq, clusterName)
 }
 
+// SetWorkflowExecution mocks base method.
+func (m *MockTransaction) SetWorkflowExecution(workflowSnapshot *persistence.WorkflowSnapshot, clusterName string) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetWorkflowExecution", workflowSnapshot, clusterName)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// SetWorkflowExecution indicates an expected call of SetWorkflowExecution.
+func (mr *MockTransactionMockRecorder) SetWorkflowExecution(workflowSnapshot, clusterName interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockTransaction)(nil).SetWorkflowExecution), workflowSnapshot, clusterName)
+}
+
 // UpdateWorkflowExecution mocks base method.
 func (m *MockTransaction) UpdateWorkflowExecution(updateMode persistence.UpdateWorkflowMode, currentWorkflowMutation *persistence.WorkflowMutation, currentWorkflowEventsSeq []*persistence.WorkflowEvents, newWorkflowSnapshot *persistence.WorkflowSnapshot, newWorkflowEventsSeq []*persistence.WorkflowEvents, clusterName string) (int64, int64, error) {
 	m.ctrl.T.Helper()
