@@ -54,7 +54,7 @@ var QueueProcessorModule = fx.Options(
 )
 
 type (
-	TransferQueueProcessorFactoryParams struct {
+	transferQueueProcessorFactoryParams struct {
 		fx.In
 
 		ArchivalClient archiver.Client
@@ -63,37 +63,37 @@ type (
 		HistoryClient  historyservice.HistoryServiceClient
 	}
 
-	TimerQueueProcessorFactoryParams struct {
+	timerQueueProcessorFactoryParams struct {
 		fx.In
 
 		ArchivalClient archiver.Client
 		MatchingClient resource.MatchingClient
 	}
 
-	VisibilityQueueProcessorFactoryParams struct {
+	visibilityQueueProcessorFactoryParams struct {
 		fx.In
 
 		VisibilityMgr manager.VisibilityManager
 	}
 
 	transferQueueProcessorFactory struct {
-		TransferQueueProcessorFactoryParams
+		transferQueueProcessorFactoryParams
 	}
 
 	timerQueueProcessorFactory struct {
-		TimerQueueProcessorFactoryParams
+		timerQueueProcessorFactoryParams
 	}
 
 	visibilityQueueProcessorFactory struct {
-		VisibilityQueueProcessorFactoryParams
+		visibilityQueueProcessorFactoryParams
 	}
 )
 
 func NewTransferQueueProcessorFactory(
-	params TransferQueueProcessorFactoryParams,
+	params transferQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
 	return &transferQueueProcessorFactory{
-		TransferQueueProcessorFactoryParams: params,
+		transferQueueProcessorFactoryParams: params,
 	}
 }
 
@@ -114,10 +114,10 @@ func (f *transferQueueProcessorFactory) CreateProcessor(
 }
 
 func NewTimerQueueProcessorFactory(
-	params TimerQueueProcessorFactoryParams,
+	params timerQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
 	return &timerQueueProcessorFactory{
-		TimerQueueProcessorFactoryParams: params,
+		timerQueueProcessorFactoryParams: params,
 	}
 }
 
@@ -136,10 +136,10 @@ func (f *timerQueueProcessorFactory) CreateProcessor(
 }
 
 func NewVisibilityQueueProcessorFactory(
-	params VisibilityQueueProcessorFactoryParams,
+	params visibilityQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
 	return &visibilityQueueProcessorFactory{
-		VisibilityQueueProcessorFactoryParams: params,
+		visibilityQueueProcessorFactoryParams: params,
 	}
 }
 
