@@ -96,7 +96,7 @@ func (s *VisibilityPersistenceSuite) TearDownSuite() {
 func (s *VisibilityPersistenceSuite) TestBasicVisibility() {
 	testNamespaceUUID := namespace.ID(uuid.New())
 	startTime := time.Now().UTC().Add(time.Second * -5)
-	startReq := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-workflow-test", "visibility-workflow", startTime)
+	startReq := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-workflow-test", "visibility-workflow", startTime, "test-queue")
 
 	resp, err1 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
@@ -135,7 +135,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityTimeSkew() {
 	testNamespaceUUID := namespace.ID(uuid.New())
 
 	startTime := time.Now()
-	openRecord := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-workflow-test-time-skew", "visibility-workflow", startTime)
+	openRecord := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-workflow-test-time-skew", "visibility-workflow", startTime, "test-queue")
 
 	resp, err1 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
 		NamespaceID:       testNamespaceUUID,
@@ -173,7 +173,7 @@ func (s *VisibilityPersistenceSuite) TestBasicVisibilityShortWorkflow() {
 	testNamespaceUUID := namespace.ID(uuid.New())
 
 	startTime := time.Now().UTC()
-	openRecord := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-workflow-test-short-workflow", "visibility-workflow", startTime)
+	openRecord := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-workflow-test-short-workflow", "visibility-workflow", startTime, "test-queue")
 	closedRecord := s.createClosedWorkflowRecord(openRecord, startTime.Add(10*time.Millisecond))
 
 	resp, err3 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
@@ -202,10 +202,10 @@ func (s *VisibilityPersistenceSuite) TestVisibilityPagination() {
 
 	// Create 2 executions
 	startTime1 := time.Now().UTC()
-	openRecord1 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-pagination-test1", "visibility-workflow", startTime1)
+	openRecord1 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-pagination-test1", "visibility-workflow", startTime1, "test-queue")
 
 	startTime2 := startTime1.Add(time.Second)
-	openRecord2 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-pagination-test2", "visibility-workflow", startTime2)
+	openRecord2 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-pagination-test2", "visibility-workflow", startTime2, "test-queue")
 
 	// Get the first one
 	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
@@ -251,8 +251,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStartTime() {
 	startTime := time.Now()
 
 	// Create 2 open workflows, one started 2hrs ago, the other started just now.
-	openRecord1 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test1", "visibility-workflow-1", startTime.Add(-2*time.Hour))
-	openRecord2 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test2", "visibility-workflow-2", startTime)
+	openRecord1 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test1", "visibility-workflow-1", startTime.Add(-2*time.Hour), "test-queue")
+	openRecord2 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test2", "visibility-workflow-2", startTime, "test-queue")
 
 	// List open workflows with start time filter
 	resp, err := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
@@ -301,8 +301,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByType() {
 	startTime := time.Now()
 
 	// Create 2 executions
-	openRecord1 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test1", "visibility-workflow-1", startTime)
-	openRecord2 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test2", "visibility-workflow-2", startTime)
+	openRecord1 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test1", "visibility-workflow-1", startTime, "test-queue")
+	openRecord2 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test2", "visibility-workflow-2", startTime, "test-queue")
 
 	// List open with filtering
 	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutionsByType(&manager.ListWorkflowExecutionsByTypeRequest{
@@ -363,8 +363,8 @@ func (s *VisibilityPersistenceSuite) TestFilteringByWorkflowID() {
 	startTime := time.Now()
 
 	// Create 2 executions
-	openRecord1 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test1", "visibility-workflow", startTime)
-	openRecord2 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test2", "visibility-workflow", startTime)
+	openRecord1 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test1", "visibility-workflow", startTime, "test-queue")
+	openRecord2 := s.createOpenWorkflowRecord(testNamespaceUUID, "visibility-filtering-test2", "visibility-workflow", startTime, "test-queue")
 
 	// List open with filtering
 	resp, err2 := s.VisibilityMgr.ListOpenWorkflowExecutionsByWorkflowID(&manager.ListWorkflowExecutionsByWorkflowIDRequest{
@@ -631,7 +631,7 @@ func (s *VisibilityPersistenceSuite) TestAdvancedVisibilityPagination() {
 	var startReqs []*manager.RecordWorkflowExecutionStartedRequest
 	var closeReqs []*manager.RecordWorkflowExecutionClosedRequest
 	for i := 0; i < 5; i++ {
-		startReq := s.createOpenWorkflowRecord(testNamespaceUUID, fmt.Sprintf("advanced-visibility-%v", i), "visibility-workflow", time.Now())
+		startReq := s.createOpenWorkflowRecord(testNamespaceUUID, fmt.Sprintf("advanced-visibility-%v", i), "visibility-workflow", time.Now(), "test-queue")
 		if i <= 1 {
 			startReqs = append([]*manager.RecordWorkflowExecutionStartedRequest{startReq}, startReqs...)
 		} else {
@@ -701,6 +701,7 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 	workflowID string,
 	workflowType string,
 	startTime time.Time,
+	taskQueue string,
 ) *manager.RecordWorkflowExecutionStartedRequest {
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -712,6 +713,7 @@ func (s *VisibilityPersistenceSuite) createOpenWorkflowRecord(
 			Execution:        workflowExecution,
 			WorkflowTypeName: workflowType,
 			StartTime:        startTime,
+			TaskQueue:        taskQueue,
 		},
 	}
 	err := s.VisibilityMgr.RecordWorkflowExecutionStarted(startReq)
