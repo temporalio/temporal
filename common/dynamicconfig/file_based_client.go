@@ -28,7 +28,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"reflect"
 	"strings"
 	"time"
 
@@ -60,7 +59,6 @@ type (
 		lastUpdatedTime time.Time
 		config          *FileBasedClientConfig
 		doneCh          <-chan interface{}
-		logger          log.Logger
 	}
 
 	osReader struct {
@@ -72,11 +70,10 @@ var OsReader FileReader = &osReader{}
 // NewFileBasedClient creates a file based client.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
-		basicClient: newBasicClient(),
+		basicClient: newBasicClient(logger),
 		reader:      OsReader,
 		config:      config,
 		doneCh:      doneCh,
-		logger:      logger,
 	}
 
 	err := client.init()
@@ -89,11 +86,10 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 
 func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
-		basicClient: newBasicClient(),
+		basicClient: newBasicClient(logger),
 		reader:      reader,
 		config:      config,
 		doneCh:      doneCh,
-		logger:      logger,
 	}
 
 	err := client.init()
@@ -156,94 +152,9 @@ func (fc *fileBasedClient) update() error {
 		return fmt.Errorf("unable to decode dynamic config: %w", err)
 	}
 
-	oldValues := fc.basicClient.getValues()
 	err = fc.storeValues(newValues)
-	newStoredValues := fc.getValues()
-
-	fc.logDiff(oldValues, newStoredValues)
 
 	return err
-}
-
-func (fc *fileBasedClient) logDiff(old configValueMap, new configValueMap) {
-	for key, newValues := range new {
-		oldValues, ok := old[key]
-		if !ok {
-			for _, newValue := range newValues {
-				// new key added
-				fc.logValueDiff(key, nil, newValue)
-			}
-		} else {
-			// compare existing keys
-			fc.logConstraintsDiff(key, oldValues, newValues)
-		}
-	}
-
-	// check for removed values
-	for key, oldValues := range old {
-		if _, ok := new[key]; !ok {
-			for _, oldValue := range oldValues {
-				fc.logValueDiff(key, oldValue, nil)
-			}
-		}
-	}
-}
-
-func (fc *fileBasedClient) logConstraintsDiff(key string, oldValues []*constrainedValue, newValues []*constrainedValue) {
-	for _, oldValue := range oldValues {
-		matchFound := false
-		for _, newValue := range newValues {
-			if reflect.DeepEqual(oldValue.Constraints, newValue.Constraints) {
-				matchFound = true
-				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
-					fc.logValueDiff(key, oldValue, newValue)
-				}
-			}
-		}
-		if !matchFound {
-			fc.logValueDiff(key, oldValue, nil)
-		}
-	}
-
-	for _, newValue := range newValues {
-		matchFound := false
-		for _, oldValue := range oldValues {
-			if reflect.DeepEqual(oldValue.Constraints, newValue.Constraints) {
-				matchFound = true
-			}
-		}
-		if !matchFound {
-			fc.logValueDiff(key, nil, newValue)
-		}
-	}
-}
-
-func (fc *fileBasedClient) logValueDiff(key string, oldValue *constrainedValue, newValue *constrainedValue) {
-	logLine := &strings.Builder{}
-	logLine.Grow(128)
-	logLine.WriteString("dynamic config changed for the key: ")
-	logLine.WriteString(key)
-	logLine.WriteString(" oldValue: ")
-	fc.appendConstrainedValue(logLine, oldValue)
-	logLine.WriteString(" newValue: ")
-	fc.appendConstrainedValue(logLine, newValue)
-	fc.logger.Info(logLine.String())
-}
-
-func (fc *fileBasedClient) appendConstrainedValue(logLine *strings.Builder, value *constrainedValue) {
-	if value == nil {
-		logLine.WriteString("nil")
-	} else {
-		logLine.WriteString("{ constraints: {")
-		for constraintKey, constraintValue := range value.Constraints {
-			logLine.WriteString("{")
-			logLine.WriteString(constraintKey)
-			logLine.WriteString(":")
-			logLine.WriteString(fmt.Sprintf("%v", constraintValue))
-			logLine.WriteString("}")
-		}
-		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
-	}
 }
 
 func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue) error {
