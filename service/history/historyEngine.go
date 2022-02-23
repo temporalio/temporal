@@ -105,6 +105,7 @@ type (
 		logger                        log.Logger
 		throttledLogger               log.Logger
 		config                        *configs.Config
+		workflowRebuilder             workflowRebuilder
 		workflowResetter              workflowResetter
 		replicationTaskFetchers       ReplicationTaskFetchers
 		replicationTaskProcessorsLock sync.Mutex
@@ -223,6 +224,11 @@ func NewEngineWithShardContext(
 			logger,
 		)
 	}
+	historyEngImpl.workflowRebuilder = NewWorkflowRebuilder(
+		shard,
+		historyCache,
+		logger,
+	)
 	historyEngImpl.workflowResetter = newWorkflowResetter(
 		shard,
 		historyCache,
@@ -572,7 +578,15 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		return nil, err
 	}
 
-	weContext := workflow.NewContext(namespaceID, execution, e.shard, e.logger)
+	weContext := workflow.NewContext(
+		e.shard,
+		definition.NewWorkflowKey(
+			namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		e.logger,
+	)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
@@ -1041,7 +1055,7 @@ func (e *historyEngineImpl) getMutableState(
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
-	execution.RunId = context.GetExecution().RunId
+	execution.RunId = context.GetRunID()
 	workflowState, workflowStatus := mutableState.GetWorkflowStateStatus()
 	lastFirstEventID, lastFirstEventTxnID := mutableState.GetLastFirstEventIDTxnID()
 	return &historyservice.GetMutableStateResponse{
@@ -1991,7 +2005,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 
 			if sRequest.GetRequestId() != "" && mutableState.IsSignalRequested(sRequest.GetRequestId()) {
 				// duplicate signal
-				return &historyservice.SignalWithStartWorkflowExecutionResponse{RunId: context.GetExecution().RunId}, nil
+				return &historyservice.SignalWithStartWorkflowExecutionResponse{RunId: context.GetRunID()}, nil
 			}
 			if sRequest.GetRequestId() != "" {
 				mutableState.AddSignalRequested(sRequest.GetRequestId())
@@ -2020,7 +2034,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				}
 				return nil, err
 			}
-			return &historyservice.SignalWithStartWorkflowExecutionResponse{RunId: context.GetExecution().RunId}, nil
+			return &historyservice.SignalWithStartWorkflowExecutionResponse{RunId: context.GetRunID()}, nil
 		} // end for Just_Signal_Loop
 		if attempt == conditionalRetryCount+1 {
 			return nil, consts.ErrMaxAttemptsExceeded
@@ -2126,7 +2140,15 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	context = workflow.NewContext(namespaceID, execution, e.shard, e.logger)
+	context = workflow.NewContext(
+		e.shard,
+		definition.NewWorkflowKey(
+			namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		e.logger,
+	)
 
 	now := e.timeSource.Now()
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
@@ -3227,6 +3249,21 @@ func (e *historyEngineImpl) MergeDLQMessages(
 	}, nil
 }
 
+func (e *historyEngineImpl) RebuildMutableState(
+	ctx context.Context,
+	namespaceUUID namespace.ID,
+	execution commonpb.WorkflowExecution,
+) error {
+	return e.workflowRebuilder.rebuild(
+		ctx,
+		definition.NewWorkflowKey(
+			namespaceUUID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+	)
+}
+
 func (e *historyEngineImpl) RefreshWorkflowTasks(
 	ctx context.Context,
 	namespaceUUID namespace.ID,
@@ -3312,7 +3349,7 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	err = e.shard.AddTasks(&persistence.AddTasksRequest{
+	err = e.shard.AddTasks(&persistence.AddHistoryTasksRequest{
 		ShardID: e.shard.GetShardID(),
 		// RangeID is set by shard
 		NamespaceID: string(namespaceID),

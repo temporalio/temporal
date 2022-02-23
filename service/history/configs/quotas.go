@@ -45,6 +45,7 @@ var (
 		"PurgeDLQMessages":                    0,
 		"QueryWorkflow":                       0,
 		"ReapplyEvents":                       0,
+		"RebuildMutableState":                 0,
 		"RecordActivityTaskHeartbeat":         0,
 		"RecordActivityTaskStarted":           0,
 		"RecordChildExecutionCompleted":       0,

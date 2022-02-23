@@ -103,11 +103,11 @@ func newQueueProcessorBase(
 
 	var taskProcessor *taskProcessor
 	if !options.EnablePriorityTaskProcessor() {
-		taskProcessorOptions := taskProcessorOptions{
-			queueSize:   options.BatchSize(),
-			workerCount: options.WorkerCount(),
+		taskProcessorOptions := TaskProcessorOptions{
+			QueueSize:   options.BatchSize(),
+			WorkerCount: options.WorkerCount(),
 		}
-		taskProcessor = newTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
+		taskProcessor = NewTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
 	}
 
 	p := &queueProcessorBase{
@@ -141,7 +141,7 @@ func (p *queueProcessorBase) Start() {
 	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
 
 	if p.taskProcessor != nil {
-		p.taskProcessor.start()
+		p.taskProcessor.Start()
 	}
 	p.shutdownWG.Add(1)
 	p.notifyNewTask()
@@ -164,7 +164,7 @@ func (p *queueProcessorBase) Stop() {
 	}
 
 	if p.taskProcessor != nil {
-		p.taskProcessor.stop()
+		p.taskProcessor.Stop()
 	}
 }
 
@@ -280,7 +280,7 @@ func (p *queueProcessorBase) submitTask(
 ) bool {
 
 	return p.taskProcessor.addTask(
-		newTaskInfo(
+		NewTaskInfo(
 			p.processor,
 			taskInfo,
 			initializeLoggerForTask(p.shard.GetShardID(), taskInfo, p.logger),

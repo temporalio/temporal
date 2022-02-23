@@ -75,7 +75,7 @@ func (m *MockContext) EXPECT() *MockContextMockRecorder {
 }
 
 // AddTasks mocks base method.
-func (m *MockContext) AddTasks(request *persistence.AddTasksRequest) error {
+func (m *MockContext) AddTasks(request *persistence.AddHistoryTasksRequest) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddTasks", request)
 	ret0, _ := ret[0].(error)
@@ -582,6 +582,21 @@ func (m *MockContext) SetCurrentTime(cluster string, currentTime time.Time) {
 func (mr *MockContextMockRecorder) SetCurrentTime(cluster, currentTime interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetCurrentTime", reflect.TypeOf((*MockContext)(nil).SetCurrentTime), cluster, currentTime)
+}
+
+// SetWorkflowExecution mocks base method.
+func (m *MockContext) SetWorkflowExecution(request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetWorkflowExecution", request)
+	ret0, _ := ret[0].(*persistence.SetWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetWorkflowExecution indicates an expected call of SetWorkflowExecution.
+func (mr *MockContextMockRecorder) SetWorkflowExecution(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), request)
 }
 
 // Unload mocks base method.

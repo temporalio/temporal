@@ -194,8 +194,8 @@ const (
 	PersistenceGetTransferTasksScope
 	// PersistenceCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
 	PersistenceCompleteTransferTaskScope
-	// PersistenceRangeCompleteTransferTaskScope tracks CompleteTransferTasks calls made by service to persistence layer
-	PersistenceRangeCompleteTransferTaskScope
+	// PersistenceRangeCompleteTransferTasksScope tracks CompleteTransferTasks calls made by service to persistence layer
+	PersistenceRangeCompleteTransferTasksScope
 
 	// PersistenceGetVisibilityTaskScope tracks GetVisibilityTask calls made by service to persistence layer
 	PersistenceGetVisibilityTaskScope
@@ -203,8 +203,8 @@ const (
 	PersistenceGetVisibilityTasksScope
 	// PersistenceCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
 	PersistenceCompleteVisibilityTaskScope
-	// PersistenceRangeCompleteVisibilityTaskScope tracks CompleteVisibilityTasks calls made by service to persistence layer
-	PersistenceRangeCompleteVisibilityTaskScope
+	// PersistenceRangeCompleteVisibilityTasksScope tracks CompleteVisibilityTasks calls made by service to persistence layer
+	PersistenceRangeCompleteVisibilityTasksScope
 
 	// PersistenceGetReplicationTaskScope tracks GetReplicationTask calls made by service to persistence layer
 	PersistenceGetReplicationTaskScope
@@ -212,8 +212,8 @@ const (
 	PersistenceGetReplicationTasksScope
 	// PersistenceCompleteReplicationTaskScope tracks CompleteReplicationTasks calls made by service to persistence layer
 	PersistenceCompleteReplicationTaskScope
-	// PersistenceRangeCompleteReplicationTaskScope tracks RangeCompleteReplicationTasks calls made by service to persistence layer
-	PersistenceRangeCompleteReplicationTaskScope
+	// PersistenceRangeCompleteReplicationTasksScope tracks RangeCompleteReplicationTasks calls made by service to persistence layer
+	PersistenceRangeCompleteReplicationTasksScope
 	// PersistencePutReplicationTaskToDLQScope tracks PersistencePutReplicationTaskToDLQScope calls made by service to persistence layer
 	PersistencePutReplicationTaskToDLQScope
 	// PersistenceGetReplicationTasksFromDLQScope tracks PersistenceGetReplicationTasksFromDLQScope calls made by service to persistence layer
@@ -228,8 +228,8 @@ const (
 	PersistenceGetTimerTasksScope
 	// PersistenceCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
 	PersistenceCompleteTimerTaskScope
-	// PersistenceRangeCompleteTimerTaskScope tracks CompleteTimerTasks calls made by service to persistence layer
-	PersistenceRangeCompleteTimerTaskScope
+	// PersistenceRangeCompleteTimerTasksScope tracks CompleteTimerTasks calls made by service to persistence layer
+	PersistenceRangeCompleteTimerTasksScope
 	// PersistenceCreateTaskScope tracks CreateTask calls made by service to persistence layer
 	PersistenceCreateTaskScope
 	// PersistenceGetTasksScope tracks GetTasks calls made by service to persistence layer
@@ -536,8 +536,10 @@ const (
 	AdminClientListVisibilityTasksScope
 	// AdminClientDescribeHistoryHostScope tracks RPC calls to admin service
 	AdminClientDescribeHistoryHostScope
-	// AdminClientDescribeWorkflowMutableStateScope tracks RPC calls to admin service
-	AdminClientDescribeWorkflowMutableStateScope
+	// AdminClientRebuildMutableStateScope tracks RPC calls to admin service
+	AdminClientRebuildMutableStateScope
+	// AdminClientDescribeMutableStateScope tracks RPC calls to admin service
+	AdminClientDescribeMutableStateScope
 	// AdminClientGetWorkflowExecutionRawHistoryScope tracks RPC calls to admin service
 	AdminClientGetWorkflowExecutionRawHistoryScope
 	// AdminClientGetWorkflowExecutionRawHistoryV2Scope tracks RPC calls to admin service
@@ -738,6 +740,8 @@ const (
 	AdminRemoveSearchAttributesScope
 	// AdminGetSearchAttributesScope is the metric scope for admin.AdminGetSearchAttributesScope
 	AdminGetSearchAttributesScope
+	// AdminRebuildMutableStateScope is the metric scope for admin.AdminRebuildMutableStateScope
+	AdminRebuildMutableStateScope
 	// AdminDescribeWorkflowExecutionScope is the metric scope for admin.AdminDescribeWorkflowExecutionScope
 	AdminDescribeWorkflowExecutionScope
 	// AdminGetWorkflowExecutionRawHistoryScope is the metric scope for admin.GetWorkflowExecutionRawHistoryScope
@@ -935,7 +939,9 @@ const (
 	HistorySyncShardStatusScope
 	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
 	HistorySyncActivityScope
-	// HistoryDescribeMutableStateScope tracks HistoryActivity API calls received by service
+	// HistoryRebuildMutableStateScope tracks RebuildMutable API calls received by service
+	HistoryRebuildMutableStateScope
+	// HistoryDescribeMutableStateScope tracks DescribeMutableState API calls received by service
 	HistoryDescribeMutableStateScope
 	// HistoryGetReplicationMessagesScope tracks GetReplicationMessages API calls received by service
 	HistoryGetReplicationMessagesScope
@@ -1221,15 +1227,15 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetTransferTaskScope:                   {operation: "GetTransferTask"},
 		PersistenceGetTransferTasksScope:                  {operation: "GetTransferTasks"},
 		PersistenceCompleteTransferTaskScope:              {operation: "CompleteTransferTask"},
-		PersistenceRangeCompleteTransferTaskScope:         {operation: "RangeCompleteTransferTask"},
+		PersistenceRangeCompleteTransferTasksScope:        {operation: "RangeCompleteTransferTask"},
 		PersistenceGetVisibilityTaskScope:                 {operation: "GetVisibilityTask"},
 		PersistenceGetVisibilityTasksScope:                {operation: "GetVisibilityTasks"},
 		PersistenceCompleteVisibilityTaskScope:            {operation: "CompleteVisibilityTask"},
-		PersistenceRangeCompleteVisibilityTaskScope:       {operation: "RangeCompleteVisibilityTask"},
+		PersistenceRangeCompleteVisibilityTasksScope:      {operation: "RangeCompleteVisibilityTask"},
 		PersistenceGetReplicationTaskScope:                {operation: "GetReplicationTask"},
 		PersistenceGetReplicationTasksScope:               {operation: "GetReplicationTasks"},
 		PersistenceCompleteReplicationTaskScope:           {operation: "CompleteReplicationTask"},
-		PersistenceRangeCompleteReplicationTaskScope:      {operation: "RangeCompleteReplicationTask"},
+		PersistenceRangeCompleteReplicationTasksScope:     {operation: "RangeCompleteReplicationTask"},
 		PersistencePutReplicationTaskToDLQScope:           {operation: "PutReplicationTaskToDLQ"},
 		PersistenceGetReplicationTasksFromDLQScope:        {operation: "GetReplicationTasksFromDLQ"},
 		PersistenceDeleteReplicationTaskFromDLQScope:      {operation: "DeleteReplicationTaskFromDLQ"},
@@ -1237,7 +1243,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetTimerTaskScope:                      {operation: "GetTimerTask"},
 		PersistenceGetTimerTasksScope:                     {operation: "GetTimerTasks"},
 		PersistenceCompleteTimerTaskScope:                 {operation: "CompleteTimerTask"},
-		PersistenceRangeCompleteTimerTaskScope:            {operation: "RangeCompleteTimerTask"},
+		PersistenceRangeCompleteTimerTasksScope:           {operation: "RangeCompleteTimerTask"},
 		PersistenceCreateTaskScope:                        {operation: "CreateTask"},
 		PersistenceGetTasksScope:                          {operation: "GetTasks"},
 		PersistenceCompleteTaskScope:                      {operation: "CompleteTask"},
@@ -1400,7 +1406,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientRemoveSearchAttributesScope:                {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetSearchAttributesScope:                   {operation: "AdminClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeHistoryHostScope:                   {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientDescribeWorkflowMutableStateScope:          {operation: "AdminClientDescribeWorkflowMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRebuildMutableStateScope:                   {operation: "AdminClientRebuildMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeMutableStateScope:                  {operation: "AdminClientDescribeMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryScope:        {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetWorkflowExecutionRawHistoryV2Scope:      {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientDescribeClusterScope:                       {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1507,6 +1514,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminAddSearchAttributesScope:              {operation: "AdminAddSearchAttributes"},
 		AdminRemoveSearchAttributesScope:           {operation: "AdminRemoveSearchAttributes"},
 		AdminGetSearchAttributesScope:              {operation: "AdminGetSearchAttributes"},
+		AdminRebuildMutableStateScope:              {operation: "AdminRebuildMutableState"},
 		AdminDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
 		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},
 		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "GetWorkflowExecutionRawHistoryV2"},
@@ -1597,6 +1605,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRequestCancelWorkflowExecutionScope:      {operation: "RequestCancelWorkflowExecution"},
 		HistorySyncShardStatusScope:                     {operation: "SyncShardStatus"},
 		HistorySyncActivityScope:                        {operation: "SyncActivity"},
+		HistoryRebuildMutableStateScope:                 {operation: "RebuildMutableState"},
 		HistoryDescribeMutableStateScope:                {operation: "DescribeMutableState"},
 		HistoryGetReplicationMessagesScope:              {operation: "GetReplicationMessages"},
 		HistoryGetDLQReplicationMessagesScope:           {operation: "GetDLQReplicationMessages"},

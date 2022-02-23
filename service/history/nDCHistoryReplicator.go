@@ -28,10 +28,10 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -441,12 +441,12 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newExecutionState := newMutableState.GetExecutionState()
 		newContext := workflow.NewContext(
-			namespace.ID(newExecutionInfo.NamespaceId),
-			commonpb.WorkflowExecution{
-				WorkflowId: newExecutionInfo.WorkflowId,
-				RunId:      newExecutionState.RunId,
-			},
 			r.shard,
+			definition.NewWorkflowKey(
+				newExecutionInfo.NamespaceId,
+				newExecutionInfo.WorkflowId,
+				newExecutionState.RunId,
+			),
 			r.logger,
 		)
 

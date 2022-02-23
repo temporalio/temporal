@@ -246,20 +246,38 @@ func (c *metricClient) ListVisibilityTasks(
 	return resp, err
 }
 
+func (c *metricClient) RebuildMutableState(
+	ctx context.Context,
+	request *adminservice.RebuildMutableStateRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.RebuildMutableStateResponse, error) {
+
+	c.metricsClient.IncCounter(metrics.AdminClientRebuildMutableStateScope, metrics.ClientRequests)
+
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRebuildMutableStateScope, metrics.ClientLatency)
+	resp, err := c.client.RebuildMutableState(ctx, request, opts...)
+	sw.Stop()
+
+	if err != nil {
+		c.metricsClient.IncCounter(metrics.AdminClientRebuildMutableStateScope, metrics.ClientFailures)
+	}
+	return resp, err
+}
+
 func (c *metricClient) DescribeMutableState(
 	ctx context.Context,
 	request *adminservice.DescribeMutableStateRequest,
 	opts ...grpc.CallOption,
 ) (*adminservice.DescribeMutableStateResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientDescribeMutableStateScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeMutableStateScope, metrics.ClientLatency)
 	resp, err := c.client.DescribeMutableState(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientDescribeMutableStateScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

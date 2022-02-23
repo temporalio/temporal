@@ -66,6 +66,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
@@ -405,6 +406,34 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 	}, lastErr
 }
 
+func (adh *AdminHandler) RebuildMutableState(ctx context.Context, request *adminservice.RebuildMutableStateRequest) (_ *adminservice.RebuildMutableStateResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminRebuildMutableStateScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	if _, err := adh.historyClient.RebuildMutableState(ctx, &historyservice.RebuildMutableStateRequest{
+		NamespaceId: namespaceID.String(),
+		Execution:   request.Execution,
+	}); err != nil {
+		return nil, err
+	}
+	return &adminservice.RebuildMutableStateResponse{}, nil
+}
+
 // DescribeMutableState returns information about the specified workflow execution.
 func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *adminservice.DescribeMutableStateRequest) (_ *adminservice.DescribeMutableStateResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -421,6 +450,9 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 	}
 
 	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
 
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
@@ -444,7 +476,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		HistoryAddr:          historyAddr,
 		DatabaseMutableState: historyResponse.GetDatabaseMutableState(),
 		CacheMutableState:    historyResponse.GetCacheMutableState(),
-	}, err
+	}, nil
 }
 
 // RemoveTask returns information about the internal states of a history host
@@ -510,10 +542,15 @@ func (adh *AdminHandler) ListTimerTasks(ctx context.Context, request *adminservi
 
 	executionMgr := adh.persistenceExecutionManager
 
-	resp, err := executionMgr.GetTimerTasks(&persistence.GetTimerTasksRequest{
-		ShardID:       request.GetShardId(),
-		MinTimestamp:  *request.GetMinTime(),
-		MaxTimestamp:  *request.GetMaxTime(),
+	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: tasks.CategoryTimer,
+		MinTaskKey: tasks.Key{
+			FireTime: timestamp.TimeValue(request.GetMinTime()),
+		},
+		MaxTaskKey: tasks.Key{
+			FireTime: timestamp.TimeValue(request.GetMaxTime()),
+		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
@@ -556,10 +593,15 @@ func (adh *AdminHandler) ListReplicationTasks(ctx context.Context, request *admi
 
 	executionMgr := adh.persistenceExecutionManager
 
-	resp, err := executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
-		ShardID:       request.GetShardId(),
-		MinTaskID:     request.GetMinTaskId(),
-		MaxTaskID:     request.GetMaxTaskId(),
+	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: tasks.CategoryReplication,
+		MinTaskKey: tasks.Key{
+			TaskID: request.GetMinTaskId(),
+		},
+		MaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxTaskId(),
+		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
@@ -602,10 +644,15 @@ func (adh *AdminHandler) ListTransferTasks(ctx context.Context, request *adminse
 
 	executionMgr := adh.persistenceExecutionManager
 
-	resp, err := executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ShardID:       request.GetShardId(),
-		ReadLevel:     request.GetMinTaskId(),
-		MaxReadLevel:  request.GetMaxTaskId(),
+	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: tasks.CategoryTransfer,
+		MinTaskKey: tasks.Key{
+			TaskID: request.GetMinTaskId(),
+		},
+		MaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxTaskId(),
+		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
@@ -648,10 +695,15 @@ func (adh *AdminHandler) ListVisibilityTasks(ctx context.Context, request *admin
 
 	executionMgr := adh.persistenceExecutionManager
 
-	resp, err := executionMgr.GetVisibilityTasks(&persistence.GetVisibilityTasksRequest{
-		ShardID:       request.GetShardId(),
-		ReadLevel:     resendStartEventID,
-		MaxReadLevel:  request.GetMaxReadLevel(),
+	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: tasks.CategoryVisibility,
+		MinTaskKey: tasks.Key{
+			TaskID: resendStartEventID,
+		},
+		MaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxReadLevel(),
+		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})

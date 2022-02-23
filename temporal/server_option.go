@@ -27,16 +27,18 @@ package temporal
 import (
 	"net/http"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/authorization"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	persistenceclient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/searchattribute"
-	"google.golang.org/grpc"
 )
 
 type (
@@ -119,12 +121,15 @@ func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JW
 	})
 }
 
-// Set custom metric reporter
-// for (deprecated) Tally it should be tally.BaseStatsReporter
-// for Prometheus with framework metrics.FrameworkCustom it should be metrics.Reporter
-// not used otherwise
-// TODO: replace argument type with metrics.Reporter once tally is deprecated.
-func WithCustomMetricsReporter(reporter interface{}) ServerOption {
+// WithCustomMetricsReporter sets custom metric reporter
+// Detailed examples can be found at https://github.com/temporalio/samples-server
+//
+// Sample usage:
+// logger := log.NewCLILogger()
+// mustProvider, err := NewCustomMustProviderImplementation(logger)
+// reporter, err2 := metrics.NewOpentelemeteryReporter(logger, &metrics.ClientConfig{}, mustProvider)
+// server := temporal.NewServer(temporal.WithCustomMetricsReporter(repoter))
+func WithCustomMetricsReporter(reporter metrics.Reporter) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.metricsReporter = reporter
 	})

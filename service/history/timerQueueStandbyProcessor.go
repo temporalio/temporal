@@ -68,11 +68,11 @@ func newTimerQueueStandbyProcessor(
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)
 	}
-	updateShardAckLevel := func(ackLevel timerKey) error {
+	updateShardAckLevel := func(ackLevel tasks.Key) error {
 		return shard.UpdateQueueClusterAckLevel(
 			tasks.CategoryTimer,
 			clusterName,
-			tasks.Key{FireTime: ackLevel.VisibilityTimestamp},
+			ackLevel,
 		)
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
@@ -153,12 +153,12 @@ func (t *timerQueueStandbyProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
-func (t *timerQueueStandbyProcessorImpl) getAckLevel() timerKey {
+func (t *timerQueueStandbyProcessorImpl) getAckLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
 //nolint:unused
-func (t *timerQueueStandbyProcessorImpl) getReadLevel() timerKey {
+func (t *timerQueueStandbyProcessorImpl) getReadLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 

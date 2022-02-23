@@ -282,12 +282,12 @@ func (e *DeserializationError) Error() string {
 }
 
 func (t *serializerImpl) ShardInfoToBlob(info *persistencespb.ShardInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob, clusterName string) (*persistencespb.ShardInfo, error) {
 	shardInfo := &persistencespb.ShardInfo{}
-	err := proto3DecodeBlob(data, shardInfo)
+	err := ProtoDecodeBlob(data, shardInfo)
 
 	if err != nil {
 		return nil, err
@@ -330,111 +330,111 @@ func (t *serializerImpl) ShardInfoFromBlob(data *commonpb.DataBlob, clusterName 
 }
 
 func (t *serializerImpl) NamespaceDetailToBlob(info *persistencespb.NamespaceDetail, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) NamespaceDetailFromBlob(data *commonpb.DataBlob) (*persistencespb.NamespaceDetail, error) {
 	result := &persistencespb.NamespaceDetail{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) HistoryTreeInfoToBlob(info *persistencespb.HistoryTreeInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) HistoryTreeInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.HistoryTreeInfo, error) {
 	result := &persistencespb.HistoryTreeInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) HistoryBranchToBlob(info *persistencespb.HistoryBranch, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) HistoryBranchFromBlob(data *commonpb.DataBlob) (*persistencespb.HistoryBranch, error) {
 	result := &persistencespb.HistoryBranch{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) WorkflowExecutionInfoToBlob(info *persistencespb.WorkflowExecutionInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) WorkflowExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionInfo, error) {
 	result := &persistencespb.WorkflowExecutionInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) WorkflowExecutionStateToBlob(info *persistencespb.WorkflowExecutionState, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) WorkflowExecutionStateFromBlob(data *commonpb.DataBlob) (*persistencespb.WorkflowExecutionState, error) {
 	result := &persistencespb.WorkflowExecutionState{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) ActivityInfoToBlob(info *persistencespb.ActivityInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) ActivityInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ActivityInfo, error) {
 	result := &persistencespb.ActivityInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) ChildExecutionInfoToBlob(info *persistencespb.ChildExecutionInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) ChildExecutionInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.ChildExecutionInfo, error) {
 	result := &persistencespb.ChildExecutionInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) SignalInfoToBlob(info *persistencespb.SignalInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) SignalInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.SignalInfo, error) {
 	result := &persistencespb.SignalInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) RequestCancelInfoToBlob(info *persistencespb.RequestCancelInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) RequestCancelInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.RequestCancelInfo, error) {
 	result := &persistencespb.RequestCancelInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) TimerInfoToBlob(info *persistencespb.TimerInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) TimerInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TimerInfo, error) {
 	result := &persistencespb.TimerInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) TaskInfoToBlob(info *persistencespb.AllocatedTaskInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) TaskInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.AllocatedTaskInfo, error) {
 	result := &persistencespb.AllocatedTaskInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) TaskQueueInfoToBlob(info *persistencespb.TaskQueueInfo, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(info, encodingType)
+	return ProtoEncodeBlob(info, encodingType)
 }
 
 func (t *serializerImpl) TaskQueueInfoFromBlob(data *commonpb.DataBlob) (*persistencespb.TaskQueueInfo, error) {
 	result := &persistencespb.TaskQueueInfo{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
 func (t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
@@ -442,12 +442,12 @@ func (t *serializerImpl) ChecksumToBlob(checksum *persistencespb.Checksum, encod
 	if checksum == nil {
 		checksum = &persistencespb.Checksum{}
 	}
-	return proto3EncodeBlob(checksum, encodingType)
+	return ProtoEncodeBlob(checksum, encodingType)
 }
 
 func (t *serializerImpl) ChecksumFromBlob(data *commonpb.DataBlob) (*persistencespb.Checksum, error) {
 	result := &persistencespb.Checksum{}
-	err := proto3DecodeBlob(data, result)
+	err := ProtoDecodeBlob(data, result)
 	if err != nil || result.GetFlavor() == enumsspb.CHECKSUM_FLAVOR_UNSPECIFIED {
 		// If result is an empty struct (Flavor is unspecified), replace it with nil, because everywhere in the code checksum is pointer type.
 		return nil, err
@@ -465,15 +465,15 @@ func (t *serializerImpl) QueueMetadataFromBlob(data *commonpb.DataBlob) (*persis
 }
 
 func (t *serializerImpl) ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error) {
-	return proto3EncodeBlob(replicationTask, encodingType)
+	return ProtoEncodeBlob(replicationTask, encodingType)
 }
 
 func (t *serializerImpl) ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error) {
 	result := &replicationspb.ReplicationTask{}
-	return result, proto3DecodeBlob(data, result)
+	return result, ProtoDecodeBlob(data, result)
 }
 
-func proto3DecodeBlob(data *commonpb.DataBlob, result proto.Message) error {
+func ProtoDecodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 	if data == nil {
 		// TODO: should we return nil or error?
 		return NewDeserializationError("cannot decode nil")
@@ -503,7 +503,7 @@ func decodeBlob(data *commonpb.DataBlob, result proto.Message) error {
 	case enumspb.ENCODING_TYPE_JSON:
 		return codec.NewJSONPBEncoder().Decode(data.Data, result)
 	case enumspb.ENCODING_TYPE_PROTO3:
-		return proto3DecodeBlob(data, result)
+		return ProtoDecodeBlob(data, result)
 	default:
 		return NewUnknownEncodingTypeError(data.EncodingType)
 	}
@@ -528,13 +528,13 @@ func encodeBlob(o proto.Message, encoding enumspb.EncodingType) (*commonpb.DataB
 			EncodingType: enumspb.ENCODING_TYPE_JSON,
 		}, nil
 	case enumspb.ENCODING_TYPE_PROTO3:
-		return proto3EncodeBlob(o, enumspb.ENCODING_TYPE_PROTO3)
+		return ProtoEncodeBlob(o, enumspb.ENCODING_TYPE_PROTO3)
 	default:
 		return nil, NewUnknownEncodingTypeError(encoding)
 	}
 }
 
-func proto3EncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.DataBlob, error) {
+func ProtoEncodeBlob(m proto.Message, encoding enumspb.EncodingType) (*commonpb.DataBlob, error) {
 	if encoding != enumspb.ENCODING_TYPE_PROTO3 {
 		return nil, NewUnknownEncodingTypeError(encoding)
 	}

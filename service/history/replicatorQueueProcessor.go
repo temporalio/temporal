@@ -204,12 +204,17 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	}
 
 	var token []byte
-	tasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
+	replicationTasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
 	for {
-		response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
-			ShardID:       p.shard.GetShardID(),
-			MinTaskID:     minTaskID,
-			MaxTaskID:     maxTaskID,
+		response, err := p.executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+			ShardID:      p.shard.GetShardID(),
+			TaskCategory: tasks.CategoryReplication,
+			MinTaskKey: tasks.Key{
+				TaskID: minTaskID,
+			},
+			MaxTaskKey: tasks.Key{
+				TaskID: maxTaskID,
+			},
 			BatchSize:     batchSize,
 			NextPageToken: token,
 		})
@@ -225,26 +230,26 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 			); err != nil {
 				return nil, 0, err
 			} else if replicationTask != nil {
-				tasks = append(tasks, replicationTask)
+				replicationTasks = append(replicationTasks, replicationTask)
 			}
 		}
 
 		// break if seen at least one task or no more task
-		if len(token) == 0 || len(tasks) > 0 {
+		if len(token) == 0 || len(replicationTasks) > 0 {
 			break
 		}
 	}
 
 	// sanity check we will finish pagination or return some tasks
-	if len(token) != 0 && len(tasks) == 0 {
+	if len(token) != 0 && len(replicationTasks) == 0 {
 		p.logger.Fatal("replication task reader should finish pagination or return some tasks")
 	}
 
-	if len(tasks) == 0 {
+	if len(replicationTasks) == 0 {
 		// len(token) == 0, no more items from DB
 		return nil, maxTaskID, nil
 	}
-	return tasks, tasks[len(tasks)-1].GetSourceTaskId(), nil
+	return replicationTasks, replicationTasks[len(replicationTasks)-1].GetSourceTaskId(), nil
 }
 
 func (p *replicatorQueueProcessorImpl) getTask(

@@ -81,11 +81,11 @@ func (w *workflowContextImpl) getReleaseFn() workflow.ReleaseCacheFunc {
 }
 
 func (w *workflowContextImpl) getWorkflowID() string {
-	return w.getContext().GetExecution().GetWorkflowId()
+	return w.getContext().GetWorkflowID()
 }
 
 func (w *workflowContextImpl) getRunID() string {
-	return w.getContext().GetExecution().GetRunId()
+	return w.getContext().GetRunID()
 }
 
 func newWorkflowContext(

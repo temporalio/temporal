@@ -244,4 +244,8 @@ service HistoryService {
 
     rpc GetReplicationStatus(GetReplicationStatusRequest) returns (GetReplicationStatusResponse) {
     }
+
+    // RebuildMutableState attempts to rebuild mutable state according to persisted history events.
+    rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
+    }
 }

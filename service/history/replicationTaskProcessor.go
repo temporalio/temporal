@@ -502,10 +502,13 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		metrics.ReplicationTasksLag,
 		int(p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, currentCluster).TaskID-*minAckedTaskID),
 	)
-	err := p.shard.GetExecutionManager().RangeCompleteReplicationTask(
-		&persistence.RangeCompleteReplicationTaskRequest{
-			ShardID:            p.shard.GetShardID(),
-			InclusiveEndTaskID: *minAckedTaskID,
+	err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(
+		&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:      p.shard.GetShardID(),
+			TaskCategory: tasks.CategoryReplication,
+			MaxTaskKey: tasks.Key{
+				TaskID: *minAckedTaskID,
+			},
 		},
 	)
 	if err == nil {

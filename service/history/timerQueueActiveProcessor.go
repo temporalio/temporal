@@ -68,11 +68,11 @@ func newTimerQueueActiveProcessor(
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
 	}
-	updateShardAckLevel := func(ackLevel timerKey) error {
+	updateShardAckLevel := func(ackLevel tasks.Key) error {
 		return shard.UpdateQueueClusterAckLevel(
 			tasks.CategoryTimer,
 			currentClusterName,
-			tasks.Key{FireTime: ackLevel.VisibilityTimestamp},
+			ackLevel,
 		)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
@@ -137,7 +137,7 @@ func newTimerQueueFailoverProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
-) (func(ackLevel timerKey) error, *timerQueueActiveProcessorImpl) {
+) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
@@ -147,14 +147,14 @@ func newTimerQueueFailoverProcessor(
 	failoverStartTime := shard.GetTimeSource().Now()
 	failoverUUID := uuid.New()
 
-	updateShardAckLevel := func(ackLevel timerKey) error {
+	updateShardAckLevel := func(ackLevel tasks.Key) error {
 		return shard.UpdateFailoverLevel(
 			tasks.CategoryTimer,
 			failoverUUID,
 			persistence.FailoverLevel{
 				StartTime:    failoverStartTime,
 				MinLevel:     tasks.Key{FireTime: minLevel},
-				CurrentLevel: tasks.Key{FireTime: ackLevel.VisibilityTimestamp},
+				CurrentLevel: ackLevel,
 				MaxLevel:     tasks.Key{FireTime: maxLevel},
 				NamespaceIDs: namespaceIDs,
 			},
@@ -231,11 +231,11 @@ func (t *timerQueueActiveProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
-func (t *timerQueueActiveProcessorImpl) getAckLevel() timerKey {
+func (t *timerQueueActiveProcessorImpl) getAckLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
-func (t *timerQueueActiveProcessorImpl) getReadLevel() timerKey {
+func (t *timerQueueActiveProcessorImpl) getReadLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 

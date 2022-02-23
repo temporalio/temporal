@@ -30,7 +30,6 @@ import (
 
 	"github.com/pborman/uuid"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -587,12 +587,12 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	return weContext.UpdateWorkflowExecutionWithNewAsActive(
 		t.shard.GetTimeSource().Now(),
 		workflow.NewContext(
-			namespace.ID(newExecutionInfo.NamespaceId),
-			commonpb.WorkflowExecution{
-				WorkflowId: newExecutionInfo.WorkflowId,
-				RunId:      newExecutionState.RunId,
-			},
 			t.shard,
+			definition.NewWorkflowKey(
+				newExecutionInfo.NamespaceId,
+				newExecutionInfo.WorkflowId,
+				newExecutionState.RunId,
+			),
 			t.logger,
 		),
 		newMutableState,
