@@ -108,6 +108,7 @@ type (
 		throttledLogger               log.Logger
 		config                        *configs.Config
 		archivalClient                archiver.Client
+		workflowRebuilder             workflowRebuilder
 		workflowResetter              workflowResetter
 		replicationTaskFetchers       ReplicationTaskFetchers
 		replicationTaskProcessorsLock sync.Mutex
@@ -216,6 +217,11 @@ func NewEngineWithShardContext(
 			logger,
 		)
 	}
+	historyEngImpl.workflowRebuilder = NewWorkflowRebuilder(
+		shard,
+		historyCache,
+		logger,
+	)
 	historyEngImpl.workflowResetter = newWorkflowResetter(
 		shard,
 		historyCache,
@@ -3231,6 +3237,21 @@ func (e *historyEngineImpl) MergeDLQMessages(
 	return &historyservice.MergeDLQMessagesResponse{
 		NextPageToken: token,
 	}, nil
+}
+
+func (e *historyEngineImpl) RebuildMutableState(
+	ctx context.Context,
+	namespaceUUID namespace.ID,
+	execution commonpb.WorkflowExecution,
+) error {
+	return e.workflowRebuilder.rebuild(
+		ctx,
+		definition.NewWorkflowKey(
+			namespaceUUID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+	)
 }
 
 func (e *historyEngineImpl) RefreshWorkflowTasks(

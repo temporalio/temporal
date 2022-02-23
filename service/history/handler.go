@@ -614,10 +614,44 @@ func (h *Handler) GetShard(_ context.Context, request *historyservice.GetShardRe
 	return &historyservice.GetShardResponse{ShardInfo: resp.ShardInfo}, nil
 }
 
+// RebuildMutableState attempts to rebuild mutable state according to persisted history events
+func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservice.RebuildMutableStateRequest) (_ *historyservice.RebuildMutableStateResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowExecution := request.Execution
+	workflowID := workflowExecution.GetWorkflowId()
+	engine, err := h.controller.GetEngine(ctx, namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	if err := engine.RebuildMutableState(ctx, namespaceID, commonpb.WorkflowExecution{
+		WorkflowId: workflowExecution.WorkflowId,
+		RunId:      workflowExecution.RunId,
+	}); err != nil {
+		return nil, h.convertError(err)
+	}
+	return &historyservice.RebuildMutableStateResponse{}, nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -643,6 +677,10 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -667,6 +705,10 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -690,6 +732,10 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {

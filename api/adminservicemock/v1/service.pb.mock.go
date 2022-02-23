@@ -520,6 +520,26 @@ func (mr *MockAdminServiceClientMockRecorder) ReapplyEvents(ctx, in interface{},
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockAdminServiceClient)(nil).ReapplyEvents), varargs...)
 }
 
+// RebuildMutableState mocks base method.
+func (m *MockAdminServiceClient) RebuildMutableState(ctx context.Context, in *adminservice.RebuildMutableStateRequest, opts ...grpc.CallOption) (*adminservice.RebuildMutableStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RebuildMutableState", varargs...)
+	ret0, _ := ret[0].(*adminservice.RebuildMutableStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RebuildMutableState indicates an expected call of RebuildMutableState.
+func (mr *MockAdminServiceClientMockRecorder) RebuildMutableState(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildMutableState", reflect.TypeOf((*MockAdminServiceClient)(nil).RebuildMutableState), varargs...)
+}
+
 // RefreshWorkflowTasks mocks base method.
 func (m *MockAdminServiceClient) RefreshWorkflowTasks(ctx context.Context, in *adminservice.RefreshWorkflowTasksRequest, opts ...grpc.CallOption) (*adminservice.RefreshWorkflowTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -986,6 +1006,21 @@ func (m *MockAdminServiceServer) ReapplyEvents(arg0 context.Context, arg1 *admin
 func (mr *MockAdminServiceServerMockRecorder) ReapplyEvents(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockAdminServiceServer)(nil).ReapplyEvents), arg0, arg1)
+}
+
+// RebuildMutableState mocks base method.
+func (m *MockAdminServiceServer) RebuildMutableState(arg0 context.Context, arg1 *adminservice.RebuildMutableStateRequest) (*adminservice.RebuildMutableStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RebuildMutableState", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.RebuildMutableStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RebuildMutableState indicates an expected call of RebuildMutableState.
+func (mr *MockAdminServiceServerMockRecorder) RebuildMutableState(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildMutableState", reflect.TypeOf((*MockAdminServiceServer)(nil).RebuildMutableState), arg0, arg1)
 }
 
 // RefreshWorkflowTasks mocks base method.

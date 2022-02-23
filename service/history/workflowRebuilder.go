@@ -45,44 +45,44 @@ import (
 )
 
 type (
-	workflowRebuild interface {
-		// workflowRebuild rebuilds a workflow, in case of any kind of corruption
-		workflowRebuild(
+	workflowRebuilder interface {
+		// rebuild rebuilds a workflow, in case of any kind of corruption
+		rebuild(
 			ctx context.Context,
 			workflowKey definition.WorkflowKey,
 		) error
 	}
 
 	workflowRebuilderImpl struct {
-		shard          shard.Context
-		workflowCache  workflow.Cache
-		executionMgr   persistence.ExecutionManager
-		stateRebuilder nDCStateRebuilderProvider
-		transaction    workflow.Transaction
-		logger         log.Logger
+		shard             shard.Context
+		workflowCache     workflow.Cache
+		executionMgr      persistence.ExecutionManager
+		newStateRebuilder nDCStateRebuilderProvider
+		transaction       workflow.Transaction
+		logger            log.Logger
 	}
 )
 
-var _ workflowRebuild = (*workflowRebuilderImpl)(nil)
+var _ workflowRebuilder = (*workflowRebuilderImpl)(nil)
 
 func NewWorkflowRebuilder(
 	shard shard.Context,
 	workflowCache workflow.Cache,
-	stateRebuilder nDCStateRebuilderProvider,
-	transaction workflow.Transaction,
 	logger log.Logger,
 ) *workflowRebuilderImpl {
 	return &workflowRebuilderImpl{
-		shard:          shard,
-		workflowCache:  workflowCache,
-		executionMgr:   shard.GetExecutionManager(),
-		stateRebuilder: stateRebuilder,
-		transaction:    transaction,
-		logger:         logger,
+		shard:         shard,
+		workflowCache: workflowCache,
+		executionMgr:  shard.GetExecutionManager(),
+		newStateRebuilder: func() nDCStateRebuilder {
+			return newNDCStateRebuilder(shard, logger)
+		},
+		transaction: workflow.NewTransaction(shard),
+		logger:      logger,
 	}
 }
 
-func (r *workflowRebuilderImpl) workflowRebuild(
+func (r *workflowRebuilderImpl) rebuild(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 ) (retError error) {
@@ -98,8 +98,10 @@ func (r *workflowRebuilderImpl) workflowRebuild(
 	if err != nil {
 		return err
 	}
-	defer func() { releaseFn(retError) }()
-	context.Clear()
+	defer func() {
+		releaseFn(retError)
+		context.Clear()
+	}()
 
 	msRecord, dbRecordVersion, err := r.getMutableState(workflowKey)
 	if err != nil {
@@ -112,11 +114,13 @@ func (r *workflowRebuilderImpl) workflowRebuild(
 		return err
 	}
 	branchToken := currentVersionHistory.BranchToken
+	stateTransitionCount := msRecord.ExecutionInfo.StateTransitionCount
 
 	rebuildMutableState, rebuildHistorySize, err := r.replayResetWorkflow(
 		ctx,
 		workflowKey,
 		branchToken,
+		stateTransitionCount,
 		dbRecordVersion,
 		requestID,
 	)
@@ -130,17 +134,18 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 	branchToken []byte,
+	stateTransitionCount int64,
 	dbRecordVersion int64,
 	requestID string,
 ) (workflow.MutableState, int64, error) {
 
-	rebuildMutableState, rebuildHistorySize, err := r.stateRebuilder().rebuild(
+	rebuildMutableState, rebuildHistorySize, err := r.newStateRebuilder().rebuild(
 		ctx,
 		r.shard.GetTimeSource().Now(),
 		workflowKey,
 		branchToken,
-		math.MaxInt64,
-		nil, // skip event ID & version check
+		math.MaxInt64-1, // NOTE: this is last event ID, layer below will +1 to calculate the next event ID
+		nil,             // skip event ID & version check
 		workflowKey,
 		branchToken,
 		requestID,
@@ -148,6 +153,10 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 	if err != nil {
 		return nil, 0, err
 	}
+
+	// note: this is an admin API, for operator to recover a corrupted mutable state, so state transition count
+	// should remain the same, the -= 1 exists here since later CloseTransactionAsSnapshot will += 1 to state transition count
+	rebuildMutableState.GetExecutionInfo().StateTransitionCount = stateTransitionCount - 1
 	rebuildMutableState.SetUpdateCondition(rebuildMutableState.GetNextEventID(), dbRecordVersion)
 	return rebuildMutableState, rebuildHistorySize, nil
 }

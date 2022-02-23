@@ -551,3 +551,11 @@ message ShardReplicationStatusPerCluster {
     // Acked replication task creation time
     google.protobuf.Timestamp acked_task_visibility_time = 2 [(gogoproto.stdtime) = true];
 }
+
+message RebuildMutableStateRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message RebuildMutableStateResponse {
+}
