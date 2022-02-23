@@ -118,17 +118,17 @@ func (t timerKeys) Swap(i, j int) {
 
 // Less implements sort.Interface
 func (t timerKeys) Less(i, j int) bool {
-	return compareTimerIDLess(&t[i], &t[j])
+	return CompareTimerIDLess(&t[i], &t[j])
 }
 
-func newTimerKey(time time.Time, taskID int64) *timerKey {
+func NewTimerKey(time time.Time, taskID int64) *timerKey {
 	return &timerKey{
 		VisibilityTimestamp: time,
 		TaskID:              taskID,
 	}
 }
 
-func compareTimerIDLess(first *timerKey, second *timerKey) bool {
+func CompareTimerIDLess(first *timerKey, second *timerKey) bool {
 	if first.VisibilityTimestamp.Before(second.VisibilityTimestamp) {
 		return true
 	}

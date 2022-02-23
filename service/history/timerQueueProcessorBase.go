@@ -101,11 +101,11 @@ func newTimerQueueProcessorBase(
 
 	var taskProcessor *taskProcessor
 	if !config.TimerProcessorEnablePriorityTaskProcessor() {
-		options := taskProcessorOptions{
-			workerCount: config.TimerTaskWorkerCount(),
-			queueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
+		options := TaskProcessorOptions{
+			WorkerCount: config.TimerTaskWorkerCount(),
+			QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 		}
-		taskProcessor = newTaskProcessor(options, shard, workflowCache, logger)
+		taskProcessor = NewTaskProcessor(options, shard, workflowCache, logger)
 	}
 
 	base := &timerQueueProcessorBase{
@@ -141,7 +141,7 @@ func (t *timerQueueProcessorBase) Start() {
 	}
 
 	if t.taskProcessor != nil {
-		t.taskProcessor.start()
+		t.taskProcessor.Start()
 	}
 	t.shutdownWG.Add(1)
 	// notify a initial scan
@@ -165,7 +165,7 @@ func (t *timerQueueProcessorBase) Stop() {
 	}
 
 	if t.taskProcessor != nil {
-		t.taskProcessor.stop()
+		t.taskProcessor.Stop()
 	}
 	t.logger.Info("Timer queue processor stopped.")
 }
@@ -346,7 +346,7 @@ func (t *timerQueueProcessorBase) submitTask(
 ) bool {
 
 	return t.taskProcessor.addTask(
-		newTaskInfo(
+		NewTaskInfo(
 			t.timerProcessor,
 			taskInfo,
 			initializeLoggerForTask(t.shard.GetShardID(), taskInfo, t.logger),

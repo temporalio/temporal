@@ -295,7 +295,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			ackLevel := standbyTimerProcessor.getAckLevel()
-			if !compareTimerIDLess(&upperAckLevel, &ackLevel) {
+			if !CompareTimerIDLess(&upperAckLevel, &ackLevel) {
 				upperAckLevel = ackLevel
 			}
 		}
@@ -309,7 +309,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	}
 
 	t.logger.Debug("Start completing timer task", tag.AckLevel(lowerAckLevel), tag.AckLevel(upperAckLevel))
-	if !compareTimerIDLess(&lowerAckLevel, &upperAckLevel) {
+	if !CompareTimerIDLess(&lowerAckLevel, &upperAckLevel) {
 		return nil
 	}
 
