@@ -28,7 +28,6 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -37,6 +36,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 const (
@@ -57,21 +57,22 @@ type (
 
 func newTimerQueueStandbyProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowCache workflow.Cache,
+	workflowDeleteManager workflow.DeleteManager,
 	clusterName string,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
-	clientBean client.Bean,
 ) *timerQueueStandbyProcessorImpl {
 
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(clusterName)
 	}
-	updateShardAckLevel := func(ackLevel timerKey) error {
-		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.VisibilityTimestamp)
+	updateShardAckLevel := func(ackLevel tasks.Key) error {
+		return shard.UpdateTimerClusterAckLevel(clusterName, ackLevel.FireTime)
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
+	metricsClient := shard.GetMetricsClient()
 	timerTaskFilter := func(task tasks.Task) (bool, error) {
 		return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
 	}
@@ -81,7 +82,6 @@ func newTimerQueueStandbyProcessor(
 	timerQueueAckMgr := newTimerQueueAckMgr(
 		metrics.TimerStandbyQueueProcessorScope,
 		shard,
-		historyService.metricsClient,
 		shard.GetTimerClusterAckLevel(clusterName),
 		timeNow,
 		updateShardAckLevel,
@@ -93,25 +93,23 @@ func newTimerQueueStandbyProcessor(
 		shard:           shard,
 		timerTaskFilter: timerTaskFilter,
 		logger:          logger,
-		metricsClient:   historyService.metricsClient,
+		metricsClient:   metricsClient,
 		timerGate:       timerGate,
 		taskExecutor: newTimerQueueStandbyTaskExecutor(
 			shard,
-			historyService.workflowDeleteManager,
-			historyService.historyCache,
+			workflowCache,
+			workflowDeleteManager,
 			nDCHistoryResender,
 			logger,
-			historyService.metricsClient,
 			clusterName,
 			shard.GetConfig(),
-			clientBean,
 		),
 	}
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerStandbyQueueProcessorScope,
 		shard,
-		historyService,
+		workflowCache,
 		processor,
 		timerQueueAckMgr,
 		timerGate,
@@ -151,12 +149,12 @@ func (t *timerQueueStandbyProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
-func (t *timerQueueStandbyProcessorImpl) getAckLevel() timerKey {
+func (t *timerQueueStandbyProcessorImpl) getAckLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
 //nolint:unused
-func (t *timerQueueStandbyProcessorImpl) getReadLevel() timerKey {
+func (t *timerQueueStandbyProcessorImpl) getReadLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 

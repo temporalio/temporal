@@ -111,14 +111,16 @@ type (
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
 		UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace, maxRepTaskID int64)
 
+		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
+
+		AddTasks(request *persistence.AddHistoryTasksRequest) error
 		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
 		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error)
-		// Delete workflow execution, current workflow execution, and add task to delete visibility.
+		SetWorkflowExecution(request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error)
+		// DeleteWorkflowExecution deletes workflow execution, current workflow execution, and add task to delete visibility.
 		// If branchToken != nil, then delete history also, otherwise leave history.
 		DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64, closeTime *time.Time) error
-		AddTasks(request *persistence.AddHistoryTasksRequest) error
-		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 
 		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
 		GetHistoryClient() historyservice.HistoryServiceClient

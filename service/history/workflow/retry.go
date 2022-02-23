@@ -39,6 +39,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -118,8 +119,16 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 	}
 
 	if failure.GetTimeoutFailureInfo() != nil {
-		return failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
-			failure.GetTimeoutFailureInfo().GetTimeoutType() == enumspb.TIMEOUT_TYPE_HEARTBEAT
+		timeoutType := failure.GetTimeoutFailureInfo().GetTimeoutType()
+		if timeoutType == enumspb.TIMEOUT_TYPE_START_TO_CLOSE ||
+			timeoutType == enumspb.TIMEOUT_TYPE_HEARTBEAT {
+			return !matchNonRetryableTypes(
+				common.TimeoutFailureTypePrefix+timeoutType.String(),
+				nonRetryableTypes,
+			)
+		}
+
+		return false
 	}
 
 	if failure.GetServerFailureInfo() != nil {
@@ -131,14 +140,24 @@ func isRetryable(failure *failurepb.Failure, nonRetryableTypes []string) bool {
 			return false
 		}
 
-		failureType := failure.GetApplicationFailureInfo().GetType()
-		for _, nrt := range nonRetryableTypes {
-			if nrt == failureType {
-				return false
-			}
-		}
+		return !matchNonRetryableTypes(
+			failure.GetApplicationFailureInfo().GetType(),
+			nonRetryableTypes,
+		)
 	}
 	return true
+}
+
+func matchNonRetryableTypes(
+	failureType string,
+	nonRetryableTypes []string,
+) bool {
+	for _, nrt := range nonRetryableTypes {
+		if nrt == failureType {
+			return true
+		}
+	}
+	return false
 }
 
 // Helpers for creating new retry/cron workflows:

@@ -37,7 +37,6 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -49,6 +48,8 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 var (
@@ -58,17 +59,19 @@ var (
 
 type (
 	timeNow                 func() time.Time
-	updateTimerAckLevel     func(timerKey) error
+	updateTimerAckLevel     func(tasks.Key) error
 	timerQueueShutdown      func() error
 	timerQueueProcessorImpl struct {
 		isGlobalNamespaceEnabled   bool
 		currentClusterName         string
 		shard                      shard.Context
+		historyEngine              shard.Engine
 		taskAllocator              taskAllocator
 		config                     *configs.Config
 		metricsClient              metrics.Client
-		historyService             *historyEngineImpl
-		ackLevel                   timerKey
+		workflowCache              workflow.Cache
+		workflowDeleteManager      workflow.DeleteManager
+		ackLevel                   tasks.Key
 		logger                     log.Logger
 		matchingClient             matchingservice.MatchingServiceClient
 		status                     int32
@@ -77,45 +80,53 @@ type (
 		activeTimerProcessor       *timerQueueActiveProcessorImpl
 		standbyTimerProcessorsLock sync.RWMutex
 		standbyTimerProcessors     map[string]*timerQueueStandbyProcessorImpl
-		clientBean                 client.Bean
 	}
 )
 
 func newTimerQueueProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	historyEngine shard.Engine,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
-	logger log.Logger,
-	clientBean client.Bean,
 ) queues.Processor {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
-	logger = log.With(logger, tag.ComponentTimerQueue)
+	logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
+	workflowDeleteManager := workflow.NewDeleteManager(
+		shard,
+		workflowCache,
+		config,
+		archivalClient,
+		shard.GetTimeSource(),
+	)
 
 	return &timerQueueProcessorImpl{
 		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
+		historyEngine:            historyEngine,
 		taskAllocator:            taskAllocator,
 		config:                   config,
-		metricsClient:            historyService.metricsClient,
-		historyService:           historyService,
-		ackLevel:                 timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},
+		metricsClient:            shard.GetMetricsClient(),
+		workflowCache:            workflowCache,
+		workflowDeleteManager:    workflowDeleteManager,
+		ackLevel:                 tasks.Key{FireTime: shard.GetTimerAckLevel()},
 		logger:                   logger,
 		matchingClient:           matchingClient,
 		status:                   common.DaemonStatusInitialized,
 		shutdownChan:             make(chan struct{}),
 		activeTimerProcessor: newTimerQueueActiveProcessor(
 			shard,
-			historyService,
+			workflowCache,
+			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
 			logger,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
-		clientBean:             clientBean,
 	}
 }
 
@@ -197,7 +208,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		}
 	}
 	// the ack manager is exclusive, so just add a cassandra min precision
-	maxLevel := t.activeTimerProcessor.getReadLevel().VisibilityTimestamp.Add(1 * time.Millisecond)
+	maxLevel := t.activeTimerProcessor.getReadLevel().FireTime.Add(1 * time.Millisecond)
 	t.logger.Info("Timer Failover Triggered",
 		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.MinLevel(minLevel.UnixNano()),
@@ -205,7 +216,8 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 	// we should consider make the failover idempotent
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
 		t.shard,
-		t.historyService,
+		t.workflowCache,
+		t.workflowDeleteManager,
 		namespaceIDs,
 		standbyClusterName,
 		minLevel,
@@ -223,7 +235,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
-	err := updateShardAckLevel(timerKey{VisibilityTimestamp: minLevel})
+	err := updateShardAckLevel(tasks.Key{FireTime: minLevel})
 	if err != nil {
 		t.logger.Error("Error when update shard ack level", tag.Error(err))
 	}
@@ -283,35 +295,35 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			ackLevel := standbyTimerProcessor.getAckLevel()
-			if !compareTimerIDLess(&upperAckLevel, &ackLevel) {
+			if upperAckLevel.CompareTo(ackLevel) > 0 {
 				upperAckLevel = ackLevel
 			}
 		}
 		t.standbyTimerProcessorsLock.RUnlock()
 
 		for _, failoverInfo := range t.shard.GetAllTimerFailoverLevels() {
-			if !upperAckLevel.VisibilityTimestamp.Before(failoverInfo.MinLevel) {
-				upperAckLevel = timerKey{VisibilityTimestamp: failoverInfo.MinLevel}
+			if !upperAckLevel.FireTime.Before(failoverInfo.MinLevel) {
+				upperAckLevel = tasks.Key{FireTime: failoverInfo.MinLevel}
 			}
 		}
 	}
 
 	t.logger.Debug("Start completing timer task", tag.AckLevel(lowerAckLevel), tag.AckLevel(upperAckLevel))
-	if !compareTimerIDLess(&lowerAckLevel, &upperAckLevel) {
+	if lowerAckLevel.CompareTo(upperAckLevel) > 0 {
 		return nil
 	}
 
 	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
-	if lowerAckLevel.VisibilityTimestamp.Before(upperAckLevel.VisibilityTimestamp) {
+	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      t.shard.GetShardID(),
 			TaskCategory: tasks.CategoryTimer,
 			MinTaskKey: tasks.Key{
-				FireTime: lowerAckLevel.VisibilityTimestamp,
+				FireTime: lowerAckLevel.FireTime,
 			},
 			MaxTaskKey: tasks.Key{
-				FireTime: upperAckLevel.VisibilityTimestamp,
+				FireTime: upperAckLevel.FireTime,
 			},
 		})
 		if err != nil {
@@ -321,7 +333,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateTimerAckLevel(t.ackLevel.VisibilityTimestamp)
+	return t.shard.UpdateTimerAckLevel(t.ackLevel.FireTime)
 }
 
 func (t *timerQueueProcessorImpl) listenToClusterMetadataChange() {
@@ -356,7 +368,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.shard.GetNamespaceRegistry(),
 				t.shard.GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return t.historyService.ReplicateEventsV2(ctx, request)
+					return t.historyEngine.ReplicateEventsV2(ctx, request)
 				},
 				t.shard.GetPayloadSerializer(),
 				t.config.StandbyTaskReReplicationContextTimeout,
@@ -364,12 +376,12 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 			)
 			processor := newTimerQueueStandbyProcessor(
 				t.shard,
-				t.historyService,
+				t.workflowCache,
+				t.workflowDeleteManager,
 				clusterName,
 				t.taskAllocator,
 				nDCHistoryResender,
 				t.logger,
-				t.clientBean,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor

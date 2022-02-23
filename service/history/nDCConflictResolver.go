@@ -32,6 +32,7 @@ import (
 	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/versionhistory"
@@ -150,7 +151,7 @@ func (r *nDCConflictResolverImpl) rebuild(
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		lastItem.GetEventId(),
-		lastItem.GetVersion(),
+		convert.Int64Ptr(lastItem.GetVersion()),
 		workflowKey,
 		replayVersionHistory.GetBranchToken(),
 		requestID,

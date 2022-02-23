@@ -219,18 +219,17 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
 		},
-		archivalClient: s.mockArchivalClient,
 	}
 	s.mockShard.SetEngineForTesting(h)
 
 	s.transferQueueActiveTaskExecutor = newTransferQueueActiveTaskExecutor(
 		s.mockShard,
-		h,
+		h.historyCache,
+		s.mockArchivalClient,
+		h.publicClient,
 		s.logger,
-		s.mockShard.GetMetricsClient(),
 		config,
 		s.mockShard.Resource.MatchingClient,
-		s.mockNamespaceCache,
 	).(*transferQueueActiveTaskExecutor)
 	s.transferQueueActiveTaskExecutor.parentClosePolicyClient = s.mockParentClosePolicyClient
 }

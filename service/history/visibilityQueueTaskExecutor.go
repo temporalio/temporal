@@ -40,25 +40,20 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
 type (
 	visibilityQueueTaskExecutor struct {
-		shard                   shard.Context
-		historyService          *historyEngineImpl
-		cache                   workflow.Cache
-		logger                  log.Logger
-		metricsClient           metrics.Client
-		matchingClient          matchingservice.MatchingServiceClient
-		visibilityMgr           manager.VisibilityManager
-		config                  *configs.Config
-		historyClient           historyservice.HistoryServiceClient
-		parentClosePolicyClient parentclosepolicy.Client
+		shard          shard.Context
+		cache          workflow.Cache
+		logger         log.Logger
+		metricsClient  metrics.Client
+		matchingClient matchingservice.MatchingServiceClient
+		visibilityMgr  manager.VisibilityManager
+		historyClient  historyservice.HistoryServiceClient
 	}
 )
 
@@ -68,29 +63,17 @@ var (
 
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	metricsClient metrics.Client,
-	config *configs.Config,
-	matchingClient matchingservice.MatchingServiceClient,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
-		shard:          shard,
-		historyService: historyService,
-		cache:          historyService.historyCache,
-		logger:         logger,
-		metricsClient:  metricsClient,
-		matchingClient: matchingClient,
-		visibilityMgr:  visibilityMgr,
-		config:         config,
-		historyClient:  shard.GetHistoryClient(),
-		parentClosePolicyClient: parentclosepolicy.NewClient(
-			shard.GetMetricsClient(),
-			shard.GetLogger(),
-			historyService.publicClient,
-			config.NumParentClosePolicySystemWorkflows(),
-		),
+		shard:         shard,
+		cache:         workflowCache,
+		logger:        logger,
+		metricsClient: shard.GetMetricsClient(),
+		visibilityMgr: visibilityMgr,
+		historyClient: shard.GetHistoryClient(),
 	}
 }
 

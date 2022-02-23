@@ -614,10 +614,10 @@ func (mr *MocktimerQueueAckMgrMockRecorder) completeTimerTask(arg0, arg1 interfa
 }
 
 // getAckLevel mocks base method.
-func (m *MocktimerQueueAckMgr) getAckLevel() timerKey {
+func (m *MocktimerQueueAckMgr) getAckLevel() tasks.Key {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getAckLevel")
-	ret0, _ := ret[0].(timerKey)
+	ret0, _ := ret[0].(tasks.Key)
 	return ret0
 }
 
@@ -642,10 +642,10 @@ func (mr *MocktimerQueueAckMgrMockRecorder) getFinishedChan() *gomock.Call {
 }
 
 // getReadLevel mocks base method.
-func (m *MocktimerQueueAckMgr) getReadLevel() timerKey {
+func (m *MocktimerQueueAckMgr) getReadLevel() tasks.Key {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "getReadLevel")
-	ret0, _ := ret[0].(timerKey)
+	ret0, _ := ret[0].(tasks.Key)
 	return ret0
 }
 

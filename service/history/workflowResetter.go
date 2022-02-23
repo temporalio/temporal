@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
@@ -417,12 +418,12 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 	}
 
 	resetContext := workflow.NewContext(
-		namespaceID,
-		commonpb.WorkflowExecution{
-			WorkflowId: workflowID,
-			RunId:      resetRunID,
-		},
 		r.shard,
+		definition.NewWorkflowKey(
+			namespaceID.String(),
+			workflowID,
+			resetRunID,
+		),
 		r.logger,
 	)
 	resetMutableState, resetHistorySize, err := r.newStateRebuilder().rebuild(
@@ -435,7 +436,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 		),
 		baseBranchToken,
 		baseRebuildLastEventID,
-		baseRebuildLastEventVersion,
+		convert.Int64Ptr(baseRebuildLastEventVersion),
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,

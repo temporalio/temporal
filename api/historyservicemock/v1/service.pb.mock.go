@@ -400,6 +400,26 @@ func (mr *MockHistoryServiceClientMockRecorder) ReapplyEvents(ctx, in interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockHistoryServiceClient)(nil).ReapplyEvents), varargs...)
 }
 
+// RebuildMutableState mocks base method.
+func (m *MockHistoryServiceClient) RebuildMutableState(ctx context.Context, in *historyservice.RebuildMutableStateRequest, opts ...grpc.CallOption) (*historyservice.RebuildMutableStateResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "RebuildMutableState", varargs...)
+	ret0, _ := ret[0].(*historyservice.RebuildMutableStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RebuildMutableState indicates an expected call of RebuildMutableState.
+func (mr *MockHistoryServiceClientMockRecorder) RebuildMutableState(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildMutableState", reflect.TypeOf((*MockHistoryServiceClient)(nil).RebuildMutableState), varargs...)
+}
+
 // RecordActivityTaskHeartbeat mocks base method.
 func (m *MockHistoryServiceClient) RecordActivityTaskHeartbeat(ctx context.Context, in *historyservice.RecordActivityTaskHeartbeatRequest, opts ...grpc.CallOption) (*historyservice.RecordActivityTaskHeartbeatResponse, error) {
 	m.ctrl.T.Helper()
@@ -1136,6 +1156,21 @@ func (m *MockHistoryServiceServer) ReapplyEvents(arg0 context.Context, arg1 *his
 func (mr *MockHistoryServiceServerMockRecorder) ReapplyEvents(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReapplyEvents", reflect.TypeOf((*MockHistoryServiceServer)(nil).ReapplyEvents), arg0, arg1)
+}
+
+// RebuildMutableState mocks base method.
+func (m *MockHistoryServiceServer) RebuildMutableState(arg0 context.Context, arg1 *historyservice.RebuildMutableStateRequest) (*historyservice.RebuildMutableStateResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RebuildMutableState", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.RebuildMutableStateResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// RebuildMutableState indicates an expected call of RebuildMutableState.
+func (mr *MockHistoryServiceServerMockRecorder) RebuildMutableState(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RebuildMutableState", reflect.TypeOf((*MockHistoryServiceServer)(nil).RebuildMutableState), arg0, arg1)
 }
 
 // RecordActivityTaskHeartbeat mocks base method.

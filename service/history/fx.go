@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	warchiver "go.temporal.io/server/service/worker/archiver"
 )
 
 var Module = fx.Options(
@@ -80,6 +81,7 @@ var Module = fx.Options(
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(ReplicationTaskFetchersProvider),
+	fx.Provide(ArchivalClientProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
@@ -167,9 +169,7 @@ func HistoryEngineFactoryProvider(
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient resource.MatchingRawClient,
 	newCacheFn workflow.NewCacheFn,
-	clientBean client.Bean,
-	archiverProvider provider.ArchiverProvider,
-	registry namespace.Registry,
+	archivalClient warchiver.Client,
 ) shard.EngineFactory {
 	return NewEngineFactory(
 		visibilityMgr,
@@ -181,9 +181,7 @@ func HistoryEngineFactoryProvider(
 		replicationTaskFetchers,
 		rawMatchingClient,
 		newCacheFn,
-		clientBean,
-		archiverProvider,
-		registry,
+		archivalClient,
 	)
 }
 
@@ -303,6 +301,23 @@ func ReplicationTaskFetchersProvider(
 		config,
 		clusterMetadata,
 		clientBean,
+	)
+}
+
+func ArchivalClientProvider(
+	archiverProvider provider.ArchiverProvider,
+	publicClient sdkclient.Client,
+	logger log.Logger,
+	metricsClient metrics.Client,
+	config *configs.Config,
+) warchiver.Client {
+	return warchiver.NewClient(
+		metricsClient,
+		logger,
+		publicClient,
+		config.NumArchiveSystemWorkflows,
+		config.ArchiveRequestRPS,
+		archiverProvider,
 	)
 }
 

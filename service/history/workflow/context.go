@@ -40,6 +40,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/locks"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -68,7 +69,8 @@ type (
 	Context interface {
 		GetNamespace() namespace.Name
 		GetNamespaceID() namespace.ID
-		GetExecution() *commonpb.WorkflowExecution
+		GetWorkflowID() string
+		GetRunID() string
 
 		LoadWorkflowExecution() (MutableState, error)
 		LoadExecutionStats() (*persistencespb.ExecutionStats, error)
@@ -136,14 +138,13 @@ type (
 
 type (
 	ContextImpl struct {
-		namespaceID       namespace.ID
-		workflowExecution commonpb.WorkflowExecution
-		shard             shard.Context
-		logger            log.Logger
-		metricsClient     metrics.Client
-		timeSource        clock.TimeSource
-		config            *configs.Config
-		transaction       Transaction
+		shard         shard.Context
+		workflowKey   definition.WorkflowKey
+		logger        log.Logger
+		metricsClient metrics.Client
+		timeSource    clock.TimeSource
+		config        *configs.Config
+		transaction   Transaction
 
 		mutex        locks.PriorityMutex
 		MutableState MutableState
@@ -158,21 +159,19 @@ var (
 )
 
 func NewContext(
-	namespaceID namespace.ID,
-	execution commonpb.WorkflowExecution,
 	shard shard.Context,
+	workflowKey definition.WorkflowKey,
 	logger log.Logger,
 ) *ContextImpl {
 	return &ContextImpl{
-		namespaceID:       namespaceID,
-		workflowExecution: execution,
-		shard:             shard,
-		logger:            logger,
-		metricsClient:     shard.GetMetricsClient(),
-		timeSource:        shard.GetTimeSource(),
-		config:            shard.GetConfig(),
-		mutex:             locks.NewPriorityMutex(),
-		transaction:       NewTransaction(shard),
+		shard:         shard,
+		workflowKey:   workflowKey,
+		logger:        logger,
+		metricsClient: shard.GetMetricsClient(),
+		timeSource:    shard.GetTimeSource(),
+		config:        shard.GetConfig(),
+		mutex:         locks.NewPriorityMutex(),
+		transaction:   NewTransaction(shard),
 		stats: &persistencespb.ExecutionStats{
 			HistorySize: 0,
 		},
@@ -218,15 +217,19 @@ func (c *ContextImpl) Clear() {
 }
 
 func (c *ContextImpl) GetNamespaceID() namespace.ID {
-	return c.namespaceID
+	return namespace.ID(c.workflowKey.NamespaceID)
 }
 
-func (c *ContextImpl) GetExecution() *commonpb.WorkflowExecution {
-	return &c.workflowExecution
+func (c *ContextImpl) GetWorkflowID() string {
+	return c.workflowKey.WorkflowID
+}
+
+func (c *ContextImpl) GetRunID() string {
+	return c.workflowKey.RunID
 }
 
 func (c *ContextImpl) GetNamespace() namespace.Name {
-	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.namespaceID)
+	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.GetNamespaceID())
 	if err != nil {
 		return ""
 	}
@@ -250,8 +253,7 @@ func (c *ContextImpl) LoadExecutionStats() (*persistencespb.ExecutionStats, erro
 }
 
 func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
-
-	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.namespaceID)
+	namespaceEntry, err := c.shard.GetNamespaceRegistry().GetNamespaceByID(c.GetNamespaceID())
 	if err != nil {
 		return nil, err
 	}
@@ -259,9 +261,9 @@ func (c *ContextImpl) LoadWorkflowExecution() (MutableState, error) {
 	if c.MutableState == nil {
 		response, err := getWorkflowExecutionWithRetry(c.shard, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
-			NamespaceID: c.namespaceID.String(),
-			WorkflowID:  c.workflowExecution.GetWorkflowId(),
-			RunID:       c.workflowExecution.GetRunId(),
+			NamespaceID: c.workflowKey.NamespaceID,
+			WorkflowID:  c.workflowKey.WorkflowID,
+			RunID:       c.workflowKey.RunID,
 		})
 		if err != nil {
 			return nil, err
@@ -821,9 +823,9 @@ func (c *ContextImpl) enforceSizeCheck() (bool, error) {
 	if (historySize > historySizeLimitError || historyCount > historyCountLimitError) &&
 		c.MutableState.IsWorkflowExecutionRunning() {
 		c.logger.Error("history size exceeds error limit.",
-			tag.WorkflowNamespaceID(c.namespaceID.String()),
-			tag.WorkflowID(c.workflowExecution.GetWorkflowId()),
-			tag.WorkflowRunID(c.workflowExecution.GetRunId()),
+			tag.WorkflowNamespaceID(c.workflowKey.NamespaceID),
+			tag.WorkflowID(c.workflowKey.WorkflowID),
+			tag.WorkflowRunID(c.workflowKey.RunID),
 			tag.WorkflowHistorySize(historySize),
 			tag.WorkflowEventCount(historyCount))
 

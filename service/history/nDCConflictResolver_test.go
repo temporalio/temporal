@@ -35,6 +35,7 @@ import (
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
@@ -166,7 +167,7 @@ func (s *nDCConflictResolverSuite) TestRebuild() {
 		workflowKey,
 		branchToken1,
 		lastEventID1,
-		version,
+		convert.Int64Ptr(version),
 		workflowKey,
 		branchToken1,
 		requestID,
@@ -263,7 +264,7 @@ func (s *nDCConflictResolverSuite) TestPrepareMutableState_Rebuild() {
 		workflowKey,
 		branchToken1,
 		lastEventID1,
-		version,
+		convert.Int64Ptr(version),
 		workflowKey,
 		branchToken1,
 		gomock.Any(),
