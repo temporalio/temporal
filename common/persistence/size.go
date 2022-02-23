@@ -104,7 +104,7 @@ func statusOfInternalWorkflowMutation(
 		return nil
 	}
 
-	executionInfoSize := sizeOfBlob(mutation.ExecutionInfo)
+	executionInfoSize := sizeOfBlob(mutation.ExecutionInfoBlob)
 	executionStateSize := sizeOfBlob(mutation.ExecutionStateBlob)
 
 	activityInfoCount := len(mutation.UpsertActivityInfos)
