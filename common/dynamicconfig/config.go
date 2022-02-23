@@ -25,8 +25,6 @@
 package dynamicconfig
 
 import (
-	"reflect"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,6 +33,15 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 )
+
+// Collection wraps dynamic config client with a closure so that across the code, the config values
+// can be directly accessed by calling the function without propagating the client everywhere in
+// code
+type Collection struct {
+	client   Client
+	logger   log.Logger
+	errCount int64
+}
 
 const (
 	errCountLogThreshold = 1000
@@ -45,19 +52,8 @@ func NewCollection(client Client, logger log.Logger) *Collection {
 	return &Collection{
 		client:   client,
 		logger:   logger,
-		keys:     &sync.Map{},
 		errCount: -1,
 	}
-}
-
-// Collection wraps dynamic config client with a closure so that across the code, the config values
-// can be directly accessed by calling the function without propagating the client everywhere in
-// code
-type Collection struct {
-	client   Client
-	logger   log.Logger
-	keys     *sync.Map // map of config Key to strongly typed value
-	errCount int64
 }
 
 func (c *Collection) logError(key Key, err error) {
@@ -65,18 +61,6 @@ func (c *Collection) logError(key Key, err error) {
 	if errCount%errCountLogThreshold == 0 {
 		// log only every 'x' errors to reduce mem allocs and to avoid log noise
 		c.logger.Debug("Failed to fetch key from dynamic config", tag.Key(key.String()), tag.Error(err))
-	}
-}
-
-func (c *Collection) logValue(
-	key Key,
-	value, defaultValue interface{},
-	cmpValueEquals func(interface{}, interface{}) bool,
-) {
-	cachedValue, isInCache := c.keys.Load(key)
-	if !isInCache || !cmpValueEquals(cachedValue, value) {
-		c.keys.Store(key, value)
-		c.logger.Info("Get dynamic config", tag.Name(key.String()), tag.Value(value), tag.DefaultValue(defaultValue))
 	}
 }
 
@@ -153,7 +137,6 @@ func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, reflect.DeepEqual)
 		return val
 	}
 }
@@ -174,7 +157,7 @@ func (c *Collection) GetIntProperty(key Key, defaultValue int) IntPropertyFn {
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, intCompareEquals)
+
 		return val
 	}
 }
@@ -186,7 +169,7 @@ func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue int
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, intCompareEquals)
+
 		return val
 	}
 }
@@ -217,7 +200,6 @@ func (c *Collection) GetIntPropertyFilteredByTaskQueueInfo(key Key, defaultValue
 			}
 		}
 
-		c.logValue(key, val, defaultValue, intCompareEquals)
 		return val
 	}
 }
@@ -233,7 +215,7 @@ func (c *Collection) GetIntPropertyFilteredByShardID(key Key, defaultValue int) 
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, intCompareEquals)
+
 		return val
 	}
 }
@@ -245,7 +227,7 @@ func (c *Collection) GetFloat64Property(key Key, defaultValue float64) FloatProp
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, float64CompareEquals)
+
 		return val
 	}
 }
@@ -261,7 +243,7 @@ func (c *Collection) GetFloat64PropertyFilteredByShardID(key Key, defaultValue f
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, float64CompareEquals)
+
 		return val
 	}
 }
@@ -273,7 +255,7 @@ func (c *Collection) GetFloatPropertyFilteredByNamespace(key Key, defaultValue f
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, float64CompareEquals)
+
 		return val
 	}
 }
@@ -304,7 +286,6 @@ func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultVal
 			}
 		}
 
-		c.logValue(key, val, defaultValue, float64CompareEquals)
 		return val
 	}
 }
@@ -316,7 +297,7 @@ func (c *Collection) GetDurationProperty(key Key, defaultValue time.Duration) Du
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, durationCompareEquals)
+
 		return val
 	}
 }
@@ -328,7 +309,7 @@ func (c *Collection) GetDurationPropertyFilteredByNamespace(key Key, defaultValu
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, durationCompareEquals)
+
 		return val
 	}
 }
@@ -340,7 +321,7 @@ func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultVa
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, durationCompareEquals)
+
 		return val
 	}
 }
@@ -371,7 +352,6 @@ func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, default
 			}
 		}
 
-		c.logValue(key, val, defaultValue, durationCompareEquals)
 		return val
 	}
 }
@@ -387,7 +367,7 @@ func (c *Collection) GetDurationPropertyFilteredByShardID(key Key, defaultValue 
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, durationCompareEquals)
+
 		return val
 	}
 }
@@ -399,7 +379,7 @@ func (c *Collection) GetBoolProperty(key Key, defaultValue bool) BoolPropertyFn 
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, boolCompareEquals)
+
 		return val
 	}
 }
@@ -411,7 +391,7 @@ func (c *Collection) GetStringProperty(key Key, defaultValue string) StringPrope
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, stringCompareEquals)
+
 		return val
 	}
 }
@@ -423,7 +403,7 @@ func (c *Collection) GetMapProperty(key Key, defaultValue map[string]interface{}
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, reflect.DeepEqual)
+
 		return val
 	}
 }
@@ -435,7 +415,7 @@ func (c *Collection) GetStringPropertyFnWithNamespaceFilter(key Key, defaultValu
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, stringCompareEquals)
+
 		return val
 	}
 }
@@ -447,7 +427,7 @@ func (c *Collection) GetMapPropertyFnWithNamespaceFilter(key Key, defaultValue m
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, reflect.DeepEqual)
+
 		return val
 	}
 }
@@ -459,7 +439,7 @@ func (c *Collection) GetBoolPropertyFnWithNamespaceFilter(key Key, defaultValue 
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, boolCompareEquals)
+
 		return val
 	}
 }
@@ -471,7 +451,7 @@ func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValu
 		if err != nil {
 			c.logError(key, err)
 		}
-		c.logValue(key, val, defaultValue, boolCompareEquals)
+
 		return val
 	}
 }
@@ -502,7 +482,6 @@ func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValu
 			}
 		}
 
-		c.logValue(key, val, defaultValue, boolCompareEquals)
 		return val
 	}
 }

@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination file_based_client_mock.go
+
 package dynamicconfig
 
 import (
@@ -44,53 +46,91 @@ const (
 	fileMode        = 0644 // used for update config file
 )
 
-// FileBasedClientConfig is the config for the file based dynamic config client.
-// It specifies where the config file is stored and how often the config should be
-// updated by checking the config file again.
-type FileBasedClientConfig struct {
-	Filepath     string        `yaml:"filepath"`
-	PollInterval time.Duration `yaml:"pollInterval"`
-}
+type (
+	fileReader interface {
+		Stat(src string) (os.FileInfo, error)
+		ReadFile(src string) ([]byte, error)
+	}
 
-type fileBasedClient struct {
-	*basicClient
-	lastUpdatedTime time.Time
-	config          *FileBasedClientConfig
-	doneCh          <-chan interface{}
-	logger          log.Logger
-}
+	// FileBasedClientConfig is the config for the file based dynamic config client.
+	// It specifies where the config file is stored and how often the config should be
+	// updated by checking the config file again.
+	FileBasedClientConfig struct {
+		Filepath     string        `yaml:"filepath"`
+		PollInterval time.Duration `yaml:"pollInterval"`
+	}
+
+	fileBasedClient struct {
+		*basicClient
+		reader          fileReader
+		lastUpdatedTime time.Time
+		config          *FileBasedClientConfig
+		doneCh          <-chan interface{}
+	}
+
+	osReader struct {
+	}
+)
 
 // NewFileBasedClient creates a file based client.
-func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (Client, error) {
-	if err := validateConfig(config); err != nil {
-		return nil, fmt.Errorf("unable to validate dynamic config: %w", err)
-	}
-
+func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
-		basicClient: newBasicClient(),
+		basicClient: newBasicClient(logger),
+		reader:      &osReader{},
 		config:      config,
 		doneCh:      doneCh,
-		logger:      logger,
 	}
-	if err := client.update(); err != nil {
-		return nil, fmt.Errorf("unable to read dynamic config: %w", err)
+
+	err := client.init()
+	if err != nil {
+		return nil, err
 	}
+
+	return client, nil
+}
+
+func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
+	client := &fileBasedClient{
+		basicClient: newBasicClient(logger),
+		reader:      reader,
+		config:      config,
+		doneCh:      doneCh,
+	}
+
+	err := client.init()
+	if err != nil {
+		return nil, err
+	}
+
+	return client, nil
+}
+
+func (fc *fileBasedClient) init() error {
+	if err := fc.validateConfig(fc.config); err != nil {
+		return fmt.Errorf("unable to validate dynamic config: %w", err)
+	}
+
+	if err := fc.update(); err != nil {
+		return fmt.Errorf("unable to read dynamic config: %w", err)
+	}
+
 	go func() {
-		ticker := time.NewTicker(client.config.PollInterval)
+		ticker := time.NewTicker(fc.config.PollInterval)
 		for {
 			select {
 			case <-ticker.C:
-				err := client.update()
+				err := fc.update()
 				if err != nil {
-					client.logger.Error("Unable to update dynamic config.", tag.Error(err))
+					fc.logger.Error("Unable to update dynamic config.", tag.Error(err))
 				}
-			case <-client.doneCh:
+			case <-fc.doneCh:
 				ticker.Stop()
 				return
 			}
 		}
 	}()
-	return client, nil
+
+	return nil
 }
 
 func (fc *fileBasedClient) update() error {
@@ -100,7 +140,7 @@ func (fc *fileBasedClient) update() error {
 
 	newValues := make(configValueMap)
 
-	info, err := os.Stat(fc.config.Filepath)
+	info, err := fc.reader.Stat(fc.config.Filepath)
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
@@ -108,7 +148,7 @@ func (fc *fileBasedClient) update() error {
 		return nil
 	}
 
-	confContent, err := os.ReadFile(fc.config.Filepath)
+	confContent, err := fc.reader.ReadFile(fc.config.Filepath)
 	if err != nil {
 		return fmt.Errorf("dynamic config file: %s: %w", fc.config.Filepath, err)
 	}
@@ -117,7 +157,9 @@ func (fc *fileBasedClient) update() error {
 		return fmt.Errorf("unable to decode dynamic config: %w", err)
 	}
 
-	return fc.storeValues(newValues)
+	err = fc.storeValues(newValues)
+
+	return err
 }
 
 func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue) error {
@@ -138,16 +180,17 @@ func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue)
 		formattedNewValues[strings.ToLower(key)] = valuesSlice
 	}
 
-	fc.values.Store(formattedNewValues)
+	fc.basicClient.updateValues(formattedNewValues)
 	fc.logger.Info("Updated dynamic config")
+
 	return nil
 }
 
-func validateConfig(config *FileBasedClientConfig) error {
+func (fc *fileBasedClient) validateConfig(config *FileBasedClientConfig) error {
 	if config == nil {
 		return errors.New("configuration for dynamic config client is nil")
 	}
-	if _, err := os.Stat(config.Filepath); err != nil {
+	if _, err := fc.reader.Stat(config.Filepath); err != nil {
 		return fmt.Errorf("dynamic config: %s: %w", config.Filepath, err)
 	}
 	if config.PollInterval < minPollInterval {
@@ -193,4 +236,12 @@ func convertKeyTypeToStringSlice(s []interface{}) ([]interface{}, error) {
 		stringKeySlice[idx] = convertedValue
 	}
 	return stringKeySlice, nil
+}
+
+func (r *osReader) ReadFile(src string) ([]byte, error) {
+	return os.ReadFile(src)
+}
+
+func (r *osReader) Stat(src string) (os.FileInfo, error) {
+	return os.Stat(src)
 }
