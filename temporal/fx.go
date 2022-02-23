@@ -699,10 +699,14 @@ func NamespaceLoggerProvider(so *serverOptions) NamespaceLogger {
 }
 
 func MetricReportersProvider(so *serverOptions, logger log.Logger) (ServerReporter, error) {
+	if so.metricsReporter != nil {
+		return so.metricsReporter, nil
+	}
+
 	var serverReporter ServerReporter
 	if so.config.Global.Metrics != nil {
 		var err error
-		serverReporter, err = metrics.InitMetricsReporterInternal(logger, so.config.Global.Metrics, so.metricsReporter)
+		serverReporter, err = metrics.InitMetricsReporter(logger, so.config.Global.Metrics)
 		if err != nil {
 			return nil, err
 		}
