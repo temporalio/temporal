@@ -95,7 +95,6 @@ func NewServerFxImpl(
 		logger:              logger,
 		namespaceLogger:     namespaceLogger,
 		serverReporter:      serverReporter,
-		dynamicConfigClient: dynamicConfigClient,
 		dcCollection:        dcCollection,
 		persistenceConfig:   persistenceConfig,
 		clusterMetadata:     clusterMetadata,
