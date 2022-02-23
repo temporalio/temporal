@@ -26,6 +26,7 @@ package tasks
 
 import (
 	"fmt"
+	"strconv"
 	"sync"
 )
 
@@ -88,18 +89,21 @@ var (
 
 var (
 	categories = struct {
-		sync.Mutex
-		list []Category
+		sync.RWMutex
+		m map[int32]Category
 	}{
-		list: []Category{
-			CategoryTransfer,
-			CategoryTimer,
-			CategoryVisibility,
-			CategoryReplication,
+		m: map[int32]Category{
+			CategoryTransfer.ID():    CategoryTransfer,
+			CategoryTimer.ID():       CategoryTimer,
+			CategoryVisibility.ID():  CategoryVisibility,
+			CategoryReplication.ID(): CategoryReplication,
 		},
 	}
 )
 
+// NewCategory creates a new Category and register the created Category
+// Registered Categories can be retrieved via GetCategories() or GetCategoryByID()
+// NewCategory panics when a Category with the same ID has already been registered
 func NewCategory(
 	id int32,
 	categoryType CategoryType,
@@ -108,14 +112,8 @@ func NewCategory(
 	categories.Lock()
 	defer categories.Unlock()
 
-	for _, existingCategory := range categories.list {
-		if existingCategory.ID() == id {
-			panic(fmt.Sprintf("category id: %v has already been used", id))
-		}
-
-		if existingCategory.Name() == name {
-			panic(fmt.Sprintf("categeory name: %s has already been used", name))
-		}
+	if category, ok := categories.m[id]; ok {
+		panic(fmt.Sprintf("category id: %v has already been defined as type %v and name %v", id, category.cType, category.name))
 	}
 
 	newCategory := Category{
@@ -123,9 +121,32 @@ func NewCategory(
 		cType: categoryType,
 		name:  name,
 	}
-	categories.list = append(categories.list, newCategory)
+	categories.m[id] = newCategory
 
 	return newCategory
+}
+
+// GetCategories returns a deep copy of all registered Categories
+func GetCategories() map[int32]Category {
+	categoriesCopy := make(map[int32]Category)
+
+	categories.RLock()
+	defer categories.RUnlock()
+
+	for k, v := range categories.m {
+		categoriesCopy[k] = v
+	}
+
+	return categoriesCopy
+}
+
+// GetCategoryByID returns a registered Category with the same ID
+func GetCategoryByID(id int32) (Category, bool) {
+	categories.RLock()
+	defer categories.RUnlock()
+
+	category, ok := categories.m[id]
+	return category, ok
 }
 
 func (c *Category) ID() int32 {
@@ -138,4 +159,15 @@ func (c *Category) Name() string {
 
 func (c *Category) Type() CategoryType {
 	return c.cType
+}
+
+func (t CategoryType) String() string {
+	switch t {
+	case CategoryTypeImmediate:
+		return "Immediate"
+	case CategoryTypeScheduled:
+		return "Scheduled"
+	default:
+		return strconv.Itoa(int(t))
+	}
 }

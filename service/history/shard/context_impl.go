@@ -520,7 +520,7 @@ func (s *ContextImpl) UpdateTimerMaxReadLevel(cluster string) time.Time {
 }
 
 func (s *ContextImpl) AddTasks(
-	request *persistence.AddTasksRequest,
+	request *persistence.AddHistoryTasksRequest,
 ) error {
 	if err := s.errorByState(); err != nil {
 		return err
@@ -723,7 +723,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 }
 
 func (s *ContextImpl) addTasksLocked(
-	request *persistence.AddTasksRequest,
+	request *persistence.AddHistoryTasksRequest,
 	namespaceEntry *namespace.Namespace,
 ) error {
 	transferMaxReadLevel := int64(0)
@@ -737,7 +737,7 @@ func (s *ContextImpl) addTasksLocked(
 	}
 
 	request.RangeID = s.getRangeIDLocked()
-	err := s.executionManager.AddTasks(request)
+	err := s.executionManager.AddHistoryTasks(request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
@@ -817,7 +817,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	defer s.wUnlock()
 
 	// Step 1. Delete visibility.
-	addTasksRequest := &persistence.AddTasksRequest{
+	addTasksRequest := &persistence.AddHistoryTasksRequest{
 		ShardID:     s.shardID,
 		NamespaceID: key.NamespaceID,
 		WorkflowID:  key.WorkflowID,

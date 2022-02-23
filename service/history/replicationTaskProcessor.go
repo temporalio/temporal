@@ -53,6 +53,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -501,10 +502,13 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		metrics.ReplicationTasksLag,
 		int(p.shard.GetTransferMaxReadLevel()-*minAckedTaskID),
 	)
-	err := p.shard.GetExecutionManager().RangeCompleteReplicationTask(
-		&persistence.RangeCompleteReplicationTaskRequest{
-			ShardID:            p.shard.GetShardID(),
-			InclusiveEndTaskID: *minAckedTaskID,
+	err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(
+		&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:      p.shard.GetShardID(),
+			TaskCategory: tasks.CategoryReplication,
+			MaxTaskKey: tasks.Key{
+				TaskID: *minAckedTaskID,
+			},
 		},
 	)
 	if err == nil {

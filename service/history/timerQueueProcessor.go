@@ -316,10 +316,15 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	t.metricsClient.IncCounter(metrics.TimerQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
-		err := t.shard.GetExecutionManager().RangeCompleteTimerTask(&persistence.RangeCompleteTimerTaskRequest{
-			ShardID:                 t.shard.GetShardID(),
-			InclusiveBeginTimestamp: lowerAckLevel.FireTime,
-			ExclusiveEndTimestamp:   upperAckLevel.FireTime,
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:      t.shard.GetShardID(),
+			TaskCategory: tasks.CategoryTimer,
+			MinTaskKey: tasks.Key{
+				FireTime: lowerAckLevel.FireTime,
+			},
+			MaxTaskKey: tasks.Key{
+				FireTime: upperAckLevel.FireTime,
+			},
 		})
 		if err != nil {
 			return err

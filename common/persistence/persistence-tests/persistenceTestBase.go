@@ -959,10 +959,15 @@ func (s *TestBase) GetTransferTasks(batchSize int, getAll bool) ([]tasks.Task, e
 
 Loop:
 	for {
-		response, err := s.ExecutionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
-			ShardID:       s.ShardInfo.GetShardId(),
-			ReadLevel:     s.GetTransferReadLevel(),
-			MaxReadLevel:  int64(math.MaxInt64),
+		response, err := s.ExecutionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+			ShardID:      s.ShardInfo.GetShardId(),
+			TaskCategory: tasks.CategoryTransfer,
+			MinTaskKey: tasks.Key{
+				TaskID: s.GetTransferReadLevel(),
+			},
+			MaxTaskKey: tasks.Key{
+				TaskID: int64(math.MaxInt64),
+			},
 			BatchSize:     batchSize,
 			NextPageToken: token,
 		})
@@ -991,10 +996,15 @@ func (s *TestBase) GetReplicationTasks(batchSize int, getAll bool) ([]tasks.Task
 
 Loop:
 	for {
-		response, err := s.ExecutionManager.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
-			ShardID:       s.ShardInfo.GetShardId(),
-			MinTaskID:     s.GetReplicationReadLevel(),
-			MaxTaskID:     int64(math.MaxInt64),
+		response, err := s.ExecutionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+			ShardID:      s.ShardInfo.GetShardId(),
+			TaskCategory: tasks.CategoryReplication,
+			MinTaskKey: tasks.Key{
+				TaskID: s.GetReplicationReadLevel(),
+			},
+			MaxTaskKey: tasks.Key{
+				TaskID: int64(math.MaxInt64),
+			},
 			BatchSize:     batchSize,
 			NextPageToken: token,
 		})
@@ -1018,9 +1028,12 @@ Loop:
 
 // RangeCompleteReplicationTask is a utility method to complete a range of replication tasks
 func (s *TestBase) RangeCompleteReplicationTask(inclusiveEndTaskID int64) error {
-	return s.ExecutionManager.RangeCompleteReplicationTask(&persistence.RangeCompleteReplicationTaskRequest{
-		ShardID:            s.ShardInfo.GetShardId(),
-		InclusiveEndTaskID: inclusiveEndTaskID,
+	return s.ExecutionManager.RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
+		ShardID:      s.ShardInfo.GetShardId(),
+		TaskCategory: tasks.CategoryReplication,
+		MaxTaskKey: tasks.Key{
+			TaskID: inclusiveEndTaskID,
+		},
 	})
 }
 
@@ -1089,27 +1102,38 @@ func (s *TestBase) RangeDeleteReplicationTaskFromDLQ(
 // CompleteTransferTask is a utility method to complete a transfer task
 func (s *TestBase) CompleteTransferTask(taskID int64) error {
 
-	return s.ExecutionManager.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
-		ShardID: s.ShardInfo.GetShardId(),
-		TaskID:  taskID,
+	return s.ExecutionManager.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{
+		ShardID:      s.ShardInfo.GetShardId(),
+		TaskCategory: tasks.CategoryTransfer,
+		TaskKey: tasks.Key{
+			TaskID: taskID,
+		},
 	})
 }
 
 // RangeCompleteTransferTask is a utility method to complete a range of transfer tasks
 func (s *TestBase) RangeCompleteTransferTask(exclusiveBeginTaskID int64, inclusiveEndTaskID int64) error {
-	return s.ExecutionManager.RangeCompleteTransferTask(&persistence.RangeCompleteTransferTaskRequest{
-		ShardID:              s.ShardInfo.GetShardId(),
-		ExclusiveBeginTaskID: exclusiveBeginTaskID,
-		InclusiveEndTaskID:   inclusiveEndTaskID,
+	return s.ExecutionManager.RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
+		ShardID:      s.ShardInfo.GetShardId(),
+		TaskCategory: tasks.CategoryTransfer,
+		MinTaskKey: tasks.Key{
+			TaskID: exclusiveBeginTaskID,
+		},
+		MaxTaskKey: tasks.Key{
+			TaskID: inclusiveEndTaskID,
+		},
 	})
 }
 
 // CompleteReplicationTask is a utility method to complete a replication task
 func (s *TestBase) CompleteReplicationTask(taskID int64) error {
 
-	return s.ExecutionManager.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
-		ShardID: s.ShardInfo.GetShardId(),
-		TaskID:  taskID,
+	return s.ExecutionManager.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{
+		ShardID:      s.ShardInfo.GetShardId(),
+		TaskCategory: tasks.CategoryReplication,
+		TaskKey: tasks.Key{
+			TaskID: taskID,
+		},
 	})
 }
 
@@ -1120,10 +1144,15 @@ func (s *TestBase) GetTimerTasks(batchSize int, getAll bool) ([]tasks.Task, erro
 
 Loop:
 	for {
-		response, err := s.ExecutionManager.GetTimerTasks(&persistence.GetTimerTasksRequest{
-			ShardID:       s.ShardInfo.GetShardId(),
-			MinTimestamp:  time.Unix(0, 0).UTC(),
-			MaxTimestamp:  time.Unix(0, math.MaxInt64).UTC(),
+		response, err := s.ExecutionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+			ShardID:      s.ShardInfo.GetShardId(),
+			TaskCategory: tasks.CategoryTimer,
+			MinTaskKey: tasks.Key{
+				FireTime: time.Unix(0, 0).UTC(),
+			},
+			MaxTaskKey: tasks.Key{
+				FireTime: time.Unix(0, math.MaxInt64).UTC(),
+			},
 			BatchSize:     batchSize,
 			NextPageToken: token,
 		})
@@ -1143,10 +1172,13 @@ Loop:
 
 // CompleteTimerTask is a utility method to complete a timer task
 func (s *TestBase) CompleteTimerTask(ts time.Time, taskID int64) error {
-	return s.ExecutionManager.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
-		ShardID:             s.ShardInfo.GetShardId(),
-		VisibilityTimestamp: ts,
-		TaskID:              taskID,
+	return s.ExecutionManager.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{
+		ShardID:      s.ShardInfo.GetShardId(),
+		TaskCategory: tasks.CategoryTimer,
+		TaskKey: tasks.Key{
+			FireTime: ts,
+			TaskID:   taskID,
+		},
 	})
 }
 
@@ -1160,10 +1192,15 @@ func (s *TestBase) CompleteTimerTaskProto(ts *types.Timestamp, taskID int64) err
 
 // RangeCompleteTimerTask is a utility method to complete a range of timer tasks
 func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exclusiveEndTimestamp time.Time) error {
-	return s.ExecutionManager.RangeCompleteTimerTask(&persistence.RangeCompleteTimerTaskRequest{
-		ShardID:                 s.ShardInfo.GetShardId(),
-		InclusiveBeginTimestamp: inclusiveBeginTimestamp,
-		ExclusiveEndTimestamp:   exclusiveEndTimestamp,
+	return s.ExecutionManager.RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
+		ShardID:      s.ShardInfo.GetShardId(),
+		TaskCategory: tasks.CategoryTimer,
+		MinTaskKey: tasks.Key{
+			FireTime: inclusiveBeginTimestamp,
+		},
+		MaxTaskKey: tasks.Key{
+			FireTime: exclusiveEndTimestamp,
+		},
 	})
 }
 

@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -563,34 +564,33 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 
 // RemoveTask returns information about the internal states of a history host
 func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	executionMgr := h.persistenceExecutionManager
-
 	var err error
-	switch request.GetCategory() {
+	var category tasks.Category
+	switch categoryID := request.GetCategory(); categoryID {
 	case enumsspb.TASK_CATEGORY_TRANSFER:
-		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
-			ShardID: request.GetShardId(),
-			TaskID:  request.GetTaskId(),
-		})
+		category = tasks.CategoryTransfer
 	case enumsspb.TASK_CATEGORY_VISIBILITY:
-		err = executionMgr.CompleteVisibilityTask(&persistence.CompleteVisibilityTaskRequest{
-			ShardID: request.GetShardId(),
-			TaskID:  request.GetTaskId(),
-		})
+		category = tasks.CategoryVisibility
 	case enumsspb.TASK_CATEGORY_TIMER:
-		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
-			ShardID:             request.GetShardId(),
-			VisibilityTimestamp: timestamp.TimeValue(request.GetVisibilityTime()),
-			TaskID:              request.GetTaskId(),
-		})
+		category = tasks.CategoryTimer
 	case enumsspb.TASK_CATEGORY_REPLICATION:
-		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
-			ShardID: request.GetShardId(),
-			TaskID:  request.GetTaskId(),
-		})
+		category = tasks.CategoryReplication
 	default:
-		err = errInvalidTaskType
+		var ok bool
+		category, ok = tasks.GetCategoryByID(int32(categoryID))
+		if !ok {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", categoryID))
+		}
 	}
+
+	err = h.persistenceExecutionManager.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: category,
+		TaskKey: tasks.Key{
+			TaskID:   request.GetTaskId(),
+			FireTime: timestamp.TimeValue(request.GetVisibilityTime()),
+		},
+	})
 
 	return &historyservice.RemoveTaskResponse{}, err
 }

@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const maxEventID = 9999
@@ -405,38 +406,35 @@ func AdminDescribeTask(c *cli.Context) {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
 
-	if category == enumsspb.TASK_CATEGORY_TIMER {
-		vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
-		req := &persistence.GetTimerTaskRequest{ShardID: int32(sid), TaskID: int64(tid), VisibilityTimestamp: time.Unix(0, vis).UTC()}
-		task, err := executionManager.GetTimerTask(req)
-		if err != nil {
-			ErrorAndExit("Failed to get Timer Task", err)
-		}
-		prettyPrintJSONObject(task)
-	} else if category == enumsspb.TASK_CATEGORY_REPLICATION {
-		req := &persistence.GetReplicationTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
-		task, err := executionManager.GetReplicationTask(req)
-		if err != nil {
-			ErrorAndExit("Failed to get Replication Task", err)
-		}
-		prettyPrintJSONObject(task)
-	} else if category == enumsspb.TASK_CATEGORY_TRANSFER {
-		req := &persistence.GetTransferTaskRequest{ShardID: int32(sid), TaskID: int64(tid)}
-		task, err := executionManager.GetTransferTask(req)
-		if err != nil {
-			ErrorAndExit("Failed to get Transfer Task", err)
-		}
-		prettyPrintJSONObject(task)
-	} else if category == enumsspb.TASK_CATEGORY_VISIBILITY {
-		req := &persistence.GetVisibilityTaskRequest{ShardID: sid, TaskID: int64(tid)}
-		task, err := executionManager.GetVisibilityTask(req)
-		if err != nil {
-			ErrorAndExit("Failed to get visibility task", err)
-		}
-		prettyPrintJSONObject(task)
-	} else {
+	var historyTaskCategory tasks.Category
+	vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
+	taskKey := tasks.Key{
+		TaskID:   int64(tid),
+		FireTime: time.Unix(0, vis).UTC(),
+	}
+	switch category {
+	case enumsspb.TASK_CATEGORY_TIMER:
+		historyTaskCategory = tasks.CategoryTimer
+	case enumsspb.TASK_CATEGORY_REPLICATION:
+		historyTaskCategory = tasks.CategoryReplication
+	case enumsspb.TASK_CATEGORY_TRANSFER:
+		historyTaskCategory = tasks.CategoryTransfer
+	case enumsspb.TASK_CATEGORY_VISIBILITY:
+		historyTaskCategory = tasks.CategoryReplication
+	default:
 		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
 	}
+
+	task, err := executionManager.GetHistoryTask(&persistence.GetHistoryTaskRequest{
+		ShardID:      int32(sid),
+		TaskCategory: historyTaskCategory,
+		TaskKey:      taskKey,
+	})
+
+	if err != nil {
+		ErrorAndExit("Failed to get task", err)
+	}
+	prettyPrintJSONObject(task)
 }
 
 // AdminListShardTasks outputs a list of a tasks for given Shard and Task Category

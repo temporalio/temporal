@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -382,10 +383,15 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
-	s.mockExecutionManager.EXPECT().RangeCompleteReplicationTask(&persistence.RangeCompleteReplicationTaskRequest{
-		ShardID:            s.shardID,
-		InclusiveEndTaskID: ackedTaskID,
-	}).Return(nil)
+	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
+		&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:      s.shardID,
+			TaskCategory: tasks.CategoryReplication,
+			MaxTaskKey: tasks.Key{
+				TaskID: ackedTaskID,
+			},
+		},
+	).Return(nil)
 	err = s.replicationTaskProcessor.cleanupReplicationTasks()
 	s.NoError(err)
 }

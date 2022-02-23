@@ -1,0 +1,8 @@
+{
+    "CurrVersion": "1.7",
+    "MinCompatibleVersion": "1.0",
+    "Description": "drop unused columns and add history task columns in executions",
+    "SchemaUpdateCqlFiles": [
+        "executions.cql"
+    ]
+}

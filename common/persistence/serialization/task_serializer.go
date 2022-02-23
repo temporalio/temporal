@@ -56,17 +56,18 @@ func (s *TaskSerializer) SerializeTasks(
 	var blob commonpb.DataBlob
 	var err error
 	for _, task := range taskSlice {
-		switch task.GetCategory() {
-		case tasks.CategoryTransfer:
+		category := task.GetCategory()
+		switch category.ID() {
+		case tasks.CategoryIDTransfer:
 			key, blob, err = s.SerializeTransferTask(task)
-		case tasks.CategoryTimer:
+		case tasks.CategoryIDTimer:
 			key, blob, err = s.SerializeTimerTask(task)
-		case tasks.CategoryVisibility:
+		case tasks.CategoryIDVisibility:
 			key, blob, err = s.SerializeVisibilityTask(task)
-		case tasks.CategoryReplication:
+		case tasks.CategoryIDReplication:
 			key, blob, err = s.SerializeReplicationTask(task)
 		default:
-			err = serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", task.GetCategory()))
+			err = serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
 		}
 
 		if err != nil {
@@ -78,20 +79,20 @@ func (s *TaskSerializer) SerializeTasks(
 }
 
 func (s *TaskSerializer) DeserializeTasks(
-	Category tasks.Category,
+	category tasks.Category,
 	blobs []commonpb.DataBlob,
 ) ([]tasks.Task, error) {
-	switch Category {
-	case tasks.CategoryTransfer:
+	switch category.ID() {
+	case tasks.CategoryIDTransfer:
 		return s.DeserializeTransferTasks(blobs)
-	case tasks.CategoryTimer:
+	case tasks.CategoryIDTimer:
 		return s.DeserializeTimerTasks(blobs)
-	case tasks.CategoryVisibility:
+	case tasks.CategoryIDVisibility:
 		return s.DeserializeVisibilityTasks(blobs)
-	case tasks.CategoryReplication:
+	case tasks.CategoryIDReplication:
 		return s.DeserializeReplicationTasks(blobs)
 	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown queue type: %v", Category))
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown task category: %v", category))
 	}
 }
 

@@ -130,7 +130,7 @@ func (s *contextSuite) TestAddTasks_Success() {
 		tasks.CategoryVisibility:  {&tasks.DeleteExecutionVisibilityTask{}},
 	}
 
-	addTasksRequest := &persistence.AddTasksRequest{
+	addTasksRequest := &persistence.AddHistoryTasksRequest{
 		ShardID:     s.shardContext.GetShardID(),
 		NamespaceID: task.GetNamespaceId(),
 		WorkflowID:  task.GetWorkflowId(),
@@ -141,7 +141,7 @@ func (s *contextSuite) TestAddTasks_Success() {
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
-	s.mockExecutionManager.EXPECT().AddTasks(addTasksRequest).Return(nil)
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(addTasksRequest).Return(nil)
 	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), tasks)
 
 	err := s.shardContext.AddTasks(addTasksRequest)

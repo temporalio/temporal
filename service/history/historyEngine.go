@@ -3346,7 +3346,7 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	err = e.shard.AddTasks(&persistence.AddTasksRequest{
+	err = e.shard.AddTasks(&persistence.AddHistoryTasksRequest{
 		ShardID: e.shard.GetShardID(),
 		// RangeID is set by shard
 		NamespaceID: string(namespaceID),

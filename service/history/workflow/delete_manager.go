@@ -104,7 +104,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		return err
 	}
 
-	err = m.shard.AddTasks(&persistence.AddTasksRequest{
+	err = m.shard.AddTasks(&persistence.AddHistoryTasksRequest{
 		ShardID: m.shard.GetShardID(),
 		// RangeID is set by shard
 		NamespaceID: nsID.String(),
