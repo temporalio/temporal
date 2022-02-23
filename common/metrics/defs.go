@@ -939,7 +939,9 @@ const (
 	HistorySyncShardStatusScope
 	// HistorySyncActivityScope tracks HistoryActivity API calls received by service
 	HistorySyncActivityScope
-	// HistoryDescribeMutableStateScope tracks HistoryActivity API calls received by service
+	// HistoryRebuildMutableStateScope tracks RebuildMutable API calls received by service
+	HistoryRebuildMutableStateScope
+	// HistoryDescribeMutableStateScope tracks DescribeMutableState API calls received by service
 	HistoryDescribeMutableStateScope
 	// HistoryGetReplicationMessagesScope tracks GetReplicationMessages API calls received by service
 	HistoryGetReplicationMessagesScope
@@ -1603,6 +1605,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryRequestCancelWorkflowExecutionScope:      {operation: "RequestCancelWorkflowExecution"},
 		HistorySyncShardStatusScope:                     {operation: "SyncShardStatus"},
 		HistorySyncActivityScope:                        {operation: "SyncActivity"},
+		HistoryRebuildMutableStateScope:                 {operation: "RebuildMutableState"},
 		HistoryDescribeMutableStateScope:                {operation: "DescribeMutableState"},
 		HistoryGetReplicationMessagesScope:              {operation: "GetReplicationMessages"},
 		HistoryGetDLQReplicationMessagesScope:           {operation: "GetDLQReplicationMessages"},
