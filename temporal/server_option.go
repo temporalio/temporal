@@ -121,11 +121,14 @@ func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JW
 	})
 }
 
-// Set custom metric reporter
-// for (deprecated) Tally it should be tally.BaseStatsReporter
-// for Prometheus with framework metrics.FrameworkCustom it should be metrics.Reporter
-// not used otherwise
-// TODO: replace argument type with metrics.Reporter once tally is deprecated.
+// WithCustomMetricsReporter sets custom metric reporter
+// Detailed examples can be found at https://github.com/temporalio/samples-server
+//
+// Sample usage:
+// logger := log.NewCLILogger()
+// mustProvider, err := NewCustomMustProviderImplementation(logger)
+// reporter, err2 := metrics.NewOpentelemeteryReporter(logger, &metrics.ClientConfig{}, mustProvider)
+// server := temporal.NewServer(temporal.WithCustomMetricsReporter(repoter))
 func WithCustomMetricsReporter(reporter metrics.Reporter) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {
 		s.metricsReporter = reporter
