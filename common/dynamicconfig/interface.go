@@ -27,7 +27,6 @@
 package dynamicconfig
 
 import (
-	"os"
 	"time"
 )
 
@@ -48,10 +47,5 @@ type (
 		GetDurationValue(
 			name Key, filters map[Filter]interface{}, defaultValue time.Duration,
 		) (time.Duration, error)
-	}
-
-	FileReader interface {
-		Stat(src string) (os.FileInfo, error)
-		ReadFile(src string) ([]byte, error)
 	}
 )

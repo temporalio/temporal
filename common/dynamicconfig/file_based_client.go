@@ -22,6 +22,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
+//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination file_based_client_mock.go
+
 package dynamicconfig
 
 import (
@@ -45,6 +47,11 @@ const (
 )
 
 type (
+	fileReader interface {
+		Stat(src string) (os.FileInfo, error)
+		ReadFile(src string) ([]byte, error)
+	}
+
 	// FileBasedClientConfig is the config for the file based dynamic config client.
 	// It specifies where the config file is stored and how often the config should be
 	// updated by checking the config file again.
@@ -55,7 +62,7 @@ type (
 
 	fileBasedClient struct {
 		*basicClient
-		reader          FileReader
+		reader          fileReader
 		lastUpdatedTime time.Time
 		config          *FileBasedClientConfig
 		doneCh          <-chan interface{}
@@ -65,7 +72,7 @@ type (
 	}
 )
 
-var OsReader FileReader = &osReader{}
+var OsReader fileReader = &osReader{}
 
 // NewFileBasedClient creates a file based client.
 func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
@@ -84,7 +91,7 @@ func NewFileBasedClient(config *FileBasedClientConfig, logger log.Logger, doneCh
 	return client, nil
 }
 
-func NewFileBasedClientWithReader(reader FileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
+func NewFileBasedClientWithReader(reader fileReader, config *FileBasedClientConfig, logger log.Logger, doneCh <-chan interface{}) (*fileBasedClient, error) {
 	client := &fileBasedClient{
 		basicClient: newBasicClient(logger),
 		reader:      reader,
@@ -177,6 +184,7 @@ func (fc *fileBasedClient) storeValues(newValues map[string][]*constrainedValue)
 
 	fc.basicClient.updateValues(formattedNewValues)
 	fc.logger.Info("Updated dynamic config")
+
 	return nil
 }
 

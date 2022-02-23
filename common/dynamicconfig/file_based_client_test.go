@@ -378,7 +378,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedValue() {
 	defer ctrl.Finish()
 
 	doneCh := make(chan interface{})
-	reader := NewMockFileReader(ctrl)
+	reader := NewMockfileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
@@ -438,11 +438,11 @@ testGetBoolPropertyKey:
 	reader.EXPECT().Stat(gomock.Any()).Return(updatedFileInfo, nil)
 	reader.EXPECT().ReadFile(gomock.Any()).Return(updatedFileData, nil)
 
-	mockLogger.EXPECT().Info(gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: { constraints: {} value: 12 } newValue: { constraints: {} value: 13 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetintpropertykey oldValue: { constraints: {} value: 1000 } newValue: { constraints: {} value: 2000 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {} value: false } newValue: { constraints: {} value: true }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetboolpropertykey oldValue: { constraints: {{namespace:global-samples-namespace}} value: true } newValue: { constraints: {{namespace:global-samples-namespace}} value: false }", gomock.Any())
+	mockLogger.EXPECT().Info(gomock.Any())
 	client.update()
 	s.NoError(err)
 	close(doneCh)
@@ -453,7 +453,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangedMapValue() {
 	defer ctrl.Finish()
 
 	doneCh := make(chan interface{})
-	reader := NewMockFileReader(ctrl)
+	reader := NewMockfileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
@@ -491,8 +491,8 @@ history.defaultActivityRetryPolicy:
 	reader.EXPECT().Stat(gomock.Any()).Return(updatedFileInfo, nil)
 	reader.EXPECT().ReadFile(gomock.Any()).Return(updatedFileData, nil)
 
-	mockLogger.EXPECT().Info(gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: history.defaultactivityretrypolicy oldValue: { constraints: {} value: map[BackoffCoefficient:3 InitialIntervalInSeconds:1 MaximumAttempts:0 MaximumIntervalCoefficient:100] } newValue: { constraints: {} value: map[BackoffCoefficient:2 InitialIntervalInSeconds:3 MaximumAttempts:0 MaximumIntervalCoefficient:100] }", gomock.Any())
+	mockLogger.EXPECT().Info(gomock.Any())
 	client.update()
 	s.NoError(err)
 	close(doneCh)
@@ -503,7 +503,7 @@ func (s *fileBasedClientSuite) TestUpdate_NewEntry() {
 	defer ctrl.Finish()
 
 	doneCh := make(chan interface{})
-	reader := NewMockFileReader(ctrl)
+	reader := NewMockfileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
@@ -531,8 +531,8 @@ testGetIntPropertyKey:
 	reader.EXPECT().Stat(gomock.Any()).Return(originFileInfo, nil).Times(2)
 	reader.EXPECT().ReadFile(gomock.Any()).Return(originFileData, nil)
 
-	mockLogger.EXPECT().Info(gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {} value: 12 }", gomock.Any())
+	mockLogger.EXPECT().Info(gomock.Any())
 	client, err := NewFileBasedClientWithReader(reader,
 		&FileBasedClientConfig{
 			Filepath:     "anyValue",
@@ -543,9 +543,9 @@ testGetIntPropertyKey:
 	reader.EXPECT().Stat(gomock.Any()).Return(updatedFileInfo, nil)
 	reader.EXPECT().ReadFile(gomock.Any()).Return(updatedFileData, nil)
 
-	mockLogger.EXPECT().Info(gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetfloat64propertykey oldValue: nil newValue: { constraints: {{namespace:samples-namespace}} value: 22 }", gomock.Any())
 	mockLogger.EXPECT().Info("dynamic config changed for the key: testgetintpropertykey oldValue: nil newValue: { constraints: {} value: 2000 }", gomock.Any())
+	mockLogger.EXPECT().Info(gomock.Any())
 	client.update()
 	s.NoError(err)
 	close(doneCh)
@@ -556,7 +556,7 @@ func (s *fileBasedClientSuite) TestUpdate_ChangeOrder_ShouldNotWriteLog() {
 	defer ctrl.Finish()
 
 	doneCh := make(chan interface{})
-	reader := NewMockFileReader(ctrl)
+	reader := NewMockfileReader(ctrl)
 	mockLogger := log.NewMockLogger(ctrl)
 
 	updateInterval := time.Minute * 5
