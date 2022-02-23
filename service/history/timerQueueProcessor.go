@@ -37,7 +37,6 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -49,6 +48,8 @@ import (
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 var (
@@ -64,10 +65,12 @@ type (
 		isGlobalNamespaceEnabled   bool
 		currentClusterName         string
 		shard                      shard.Context
+		historyEngine              shard.Engine
 		taskAllocator              taskAllocator
 		config                     *configs.Config
 		metricsClient              metrics.Client
-		historyService             *historyEngineImpl
+		workflowCache              workflow.Cache
+		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   timerKey
 		logger                     log.Logger
 		matchingClient             matchingservice.MatchingServiceClient
@@ -77,31 +80,39 @@ type (
 		activeTimerProcessor       *timerQueueActiveProcessorImpl
 		standbyTimerProcessorsLock sync.RWMutex
 		standbyTimerProcessors     map[string]*timerQueueStandbyProcessorImpl
-		clientBean                 client.Bean
 	}
 )
 
 func newTimerQueueProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	historyEngine shard.Engine,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
-	logger log.Logger,
-	clientBean client.Bean,
 ) queues.Processor {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
-	logger = log.With(logger, tag.ComponentTimerQueue)
+	logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
 	taskAllocator := newTaskAllocator(shard)
+	workflowDeleteManager := workflow.NewDeleteManager(
+		shard,
+		workflowCache,
+		config,
+		archivalClient,
+		shard.GetTimeSource(),
+	)
 
 	return &timerQueueProcessorImpl{
 		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
+		historyEngine:            historyEngine,
 		taskAllocator:            taskAllocator,
 		config:                   config,
-		metricsClient:            historyService.metricsClient,
-		historyService:           historyService,
+		metricsClient:            shard.GetMetricsClient(),
+		workflowCache:            workflowCache,
+		workflowDeleteManager:    workflowDeleteManager,
 		ackLevel:                 timerKey{VisibilityTimestamp: shard.GetTimerAckLevel()},
 		logger:                   logger,
 		matchingClient:           matchingClient,
@@ -109,13 +120,13 @@ func newTimerQueueProcessor(
 		shutdownChan:             make(chan struct{}),
 		activeTimerProcessor: newTimerQueueActiveProcessor(
 			shard,
-			historyService,
+			workflowCache,
+			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
 			logger,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
-		clientBean:             clientBean,
 	}
 }
 
@@ -205,7 +216,8 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 	// we should consider make the failover idempotent
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
 		t.shard,
-		t.historyService,
+		t.workflowCache,
+		t.workflowDeleteManager,
 		namespaceIDs,
 		standbyClusterName,
 		minLevel,
@@ -351,7 +363,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.shard.GetNamespaceRegistry(),
 				t.shard.GetRemoteAdminClient(clusterName),
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return t.historyService.ReplicateEventsV2(ctx, request)
+					return t.historyEngine.ReplicateEventsV2(ctx, request)
 				},
 				t.shard.GetPayloadSerializer(),
 				t.config.StandbyTaskReReplicationContextTimeout,
@@ -359,12 +371,12 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 			)
 			processor := newTimerQueueStandbyProcessor(
 				t.shard,
-				t.historyService,
+				t.workflowCache,
+				t.workflowDeleteManager,
 				clusterName,
 				t.taskAllocator,
 				nDCHistoryResender,
 				t.logger,
-				t.clientBean,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor

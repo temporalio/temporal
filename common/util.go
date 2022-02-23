@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"math/rand"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -471,6 +472,17 @@ func ValidateRetryPolicy(policy *commonpb.RetryPolicy) error {
 	if policy.GetMaximumAttempts() < 0 {
 		return serviceerror.NewInvalidArgument("MaximumAttempts cannot be negative on retry policy.")
 	}
+
+	for _, nrt := range policy.NonRetryableErrorTypes {
+		if strings.HasPrefix(nrt, TimeoutFailureTypePrefix) {
+			timeoutTypeValue := nrt[len(TimeoutFailureTypePrefix):]
+			timeoutType, ok := enumspb.TimeoutType_value[timeoutTypeValue]
+			if !ok || enumspb.TimeoutType(timeoutType) == enumspb.TIMEOUT_TYPE_UNSPECIFIED {
+				return serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid timeout type value: %v.", timeoutTypeValue))
+			}
+		}
+	}
+
 	return nil
 }
 

@@ -62,21 +62,19 @@ type (
 
 func newTimerQueueActiveTaskExecutor(
 	shard shard.Context,
+	workflowCache workflow.Cache,
 	workflowDeleteManager workflow.DeleteManager,
-	cache workflow.Cache,
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
-	metricsClient metrics.Client,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queueTaskExecutor {
 	return &timerQueueActiveTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
+			workflowCache,
 			workflowDeleteManager,
-			cache,
 			logger,
-			metricsClient,
 			config,
 		),
 		queueProcessor: queueProcessor,
@@ -241,7 +239,8 @@ Loop:
 			break Loop
 		}
 
-		timeoutFailure := failure.NewTimeoutFailure("activity timeout", timerSequenceID.TimerType)
+		failureMsg := fmt.Sprintf("activity %v timeout", timerSequenceID.TimerType.String())
+		timeoutFailure := failure.NewTimeoutFailure(failureMsg, timerSequenceID.TimerType)
 		var retryState enumspb.RetryState
 		if retryState, err = mutableState.RetryActivity(
 			activityInfo,

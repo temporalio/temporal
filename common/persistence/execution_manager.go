@@ -478,6 +478,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		UpsertRequestCancelInfos:  make(map[int64]*commonpb.DataBlob),
 		UpsertSignalInfos:         make(map[int64]*commonpb.DataBlob),
 
+		ExecutionInfo:  input.ExecutionInfo,
 		ExecutionState: input.ExecutionState,
 
 		DeleteActivityInfos:       input.DeleteActivityInfos,
@@ -500,7 +501,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation(
 		NextEventID:     input.NextEventID,
 	}
 
-	result.ExecutionInfo, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
+	result.ExecutionInfoBlob, err = m.serializer.WorkflowExecutionInfoToBlob(input.ExecutionInfo, enumspb.ENCODING_TYPE_PROTO3)
 	if err != nil {
 		return nil, err
 	}

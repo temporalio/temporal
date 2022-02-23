@@ -43,7 +43,6 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -91,7 +90,6 @@ type (
 		discardDuration      time.Duration
 
 		timerQueueStandbyTaskExecutor *timerQueueStandbyTaskExecutor
-		mockBean                      *client.MockBean
 	}
 )
 
@@ -178,24 +176,18 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 			s.mockTxProcessor.Category():    s.mockTxProcessor,
 			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
 		},
-		workflowDeleteManager: s.mockDeleteManager,
 	}
 	s.mockShard.SetEngineForTesting(h)
-	s.mockBean = client.NewMockBean(s.controller)
-	s.mockBean.EXPECT().GetRemoteAdminClient("standby").Return(s.mockAdminClient)
 
 	s.timerQueueStandbyTaskExecutor = newTimerQueueStandbyTaskExecutor(
 		s.mockShard,
+		h.historyCache,
 		s.mockDeleteManager,
-		historyCache,
 		s.mockNDCHistoryResender,
 		s.logger,
-		s.mockShard.GetMetricsClient(),
 		s.clusterName,
 		config,
-		s.mockBean,
 	).(*timerQueueStandbyTaskExecutor)
-
 }
 
 func (s *timerQueueStandbyTaskExecutorSuite) TearDownTest() {

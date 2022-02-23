@@ -43,8 +43,6 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
@@ -107,7 +105,6 @@ type (
 		logger                        log.Logger
 		throttledLogger               log.Logger
 		config                        *configs.Config
-		archivalClient                archiver.Client
 		workflowRebuilder             workflowRebuilder
 		workflowResetter              workflowResetter
 		replicationTaskFetchers       ReplicationTaskFetchers
@@ -135,24 +132,13 @@ func NewEngineWithShardContext(
 	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
-	clientBean client.Bean,
-	archiverProvider provider.ArchiverProvider,
-	registry namespace.Registry,
-) *historyEngineImpl {
+	archivalClient archiver.Client,
+) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
 	logger := shard.GetLogger()
 	executionManager := shard.GetExecutionManager()
 	historyCache := newCacheFn(shard)
-
-	archivalClient := archiver.NewClient(
-		shard.GetMetricsClient(),
-		logger,
-		publicClient,
-		shard.GetConfig().NumArchiveSystemWorkflows,
-		shard.GetConfig().ArchiveRequestRPS,
-		archiverProvider,
-	)
 
 	workflowDeleteManager := workflow.NewDeleteManager(
 		shard,
@@ -176,7 +162,6 @@ func NewEngineWithShardContext(
 		metricsClient:             shard.GetMetricsClient(),
 		eventNotifier:             eventNotifier,
 		config:                    config,
-		archivalClient:            archivalClient,
 		publicClient:              publicClient,
 		matchingClient:            matchingClient,
 		rawMatchingClient:         rawMatchingClient,
@@ -185,12 +170,34 @@ func NewEngineWithShardContext(
 		workflowDeleteManager:     workflowDeleteManager,
 	}
 
-	txProcessor := newTransferQueueProcessor(shard, historyEngImpl,
-		matchingClient, historyClient, logger, clientBean, registry)
-	timerProcessor := newTimerQueueProcessor(shard, historyEngImpl,
-		matchingClient, logger, clientBean)
-	visibilityProcessor := newVisibilityQueueProcessor(shard, historyEngImpl, visibilityMgr,
-		matchingClient, historyClient, logger)
+	// Please make sure all components needed for initializing a queue processor
+	// can either be provided via fx or can be retrieved from shard context or
+	// history engine interface. (history cache is a special case for now, and will
+	// be addressed once it's promoted to be a host level component)
+	// TODO: intialize queue via QueueProcessorFactory
+	txProcessor := newTransferQueueProcessor(
+		shard,
+		historyEngImpl,
+		historyCache,
+		archivalClient,
+		publicClient,
+		matchingClient,
+		historyClient,
+	)
+	timerProcessor := newTimerQueueProcessor(
+		shard,
+		historyEngImpl,
+		historyCache,
+		archivalClient,
+		matchingClient,
+	)
+	visibilityProcessor := newVisibilityQueueProcessor(
+		shard,
+		historyCache,
+		visibilityMgr,
+		matchingClient,
+		historyClient,
+	)
 	historyEngImpl.queueProcessors = map[tasks.Category]queues.Processor{
 		txProcessor.Category():         txProcessor,
 		timerProcessor.Category():      timerProcessor,

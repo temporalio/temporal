@@ -139,7 +139,6 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.timerQueueAckMgr = newTimerQueueAckMgr(
 		0,
 		s.mockShard,
-		s.mockShard.GetMetricsClient(),
 		s.mockShard.GetTimerClusterAckLevel(s.clusterName),
 		func() time.Time {
 			return s.mockShard.GetCurrentTime(s.clusterName)
@@ -584,7 +583,6 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.maxLevel = time.Now().UTC().Add(10 * time.Minute)
 	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(
 		s.mockShard,
-		s.mockShard.GetMetricsClient(),
 		s.minLevel,
 		s.maxLevel,
 		func() time.Time {
