@@ -167,7 +167,7 @@ func NewService(
 }
 
 // NewConfig builds the new Config for worker service
-func NewConfig(dc dynamicconfig.Collection, params *resource.BootstrapParams) *Config {
+func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams) *Config {
 	config := &Config{
 		ArchiverConfig: &archiver.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
