@@ -188,7 +188,7 @@ func (s *ContextImpl) GetEngine() (Engine, error) {
 func (s *ContextImpl) GetMaxTaskIDForCurrentRangeID() int64 {
 	s.rLock()
 	defer s.rUnlock()
-	// maxTransferSequenceNumber is the exclusive upper bound of task ID for current range.
+	// maxTaskSequenceNumber is the exclusive upper bound of task ID for current range.
 	return s.maxTaskSequenceNumber - 1
 }
 
