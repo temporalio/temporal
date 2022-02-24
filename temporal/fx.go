@@ -142,7 +142,7 @@ func StopChanProvider() chan interface{} {
 	return make(chan interface{})
 }
 
-func stopService(logger log.Logger, app *fx.App, svcName string, stopChan chan struct{}) {
+func StopService(logger log.Logger, app *fx.App, svcName string, stopChan chan struct{}) {
 	stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
 	err := app.Stop(stopCtx)
 	cancelFunc()
@@ -288,14 +288,14 @@ func HistoryServiceProvider(
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(newBootstrapParams),
+		fx.Provide(NewBootstrapParams),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
 		history.QueueProcessorModule,
 		history.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
+	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -346,12 +346,12 @@ func MatchingServiceProvider(
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(newBootstrapParams),
+		fx.Provide(NewBootstrapParams),
 		matching.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
+	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -402,12 +402,12 @@ func FrontendServiceProvider(
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(newBootstrapParams),
+		fx.Provide(NewBootstrapParams),
 		frontend.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
+	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -458,12 +458,12 @@ func WorkerServiceProvider(
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(newBootstrapParams),
+		fx.Provide(NewBootstrapParams),
 		worker.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
+	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
