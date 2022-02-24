@@ -27,6 +27,7 @@
 package frontend
 
 import (
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -35,17 +36,23 @@ import (
 )
 
 type (
-	// Handler is interface wrapping frontend handler
+	// Handler is interface wrapping frontend workflow handler
 	Handler interface {
 		workflowservice.WorkflowServiceServer
 		common.Daemon
 
-		// Health is the health check method for this rpc handler
+		// HealthServer is the health check method for the whole frontend server
 		healthpb.HealthServer
 		// UpdateHealthStatus sets the health status for this rpc handler.
 		// This health status will be used within the rpc health check handler
 		UpdateHealthStatus(status HealthStatus)
 
 		GetConfig() *Config
+	}
+
+	// OperatorHandler is interface wrapping frontend workflow handler
+	OperatorHandler interface {
+		operatorservice.OperatorServiceServer
+		common.Daemon
 	}
 )

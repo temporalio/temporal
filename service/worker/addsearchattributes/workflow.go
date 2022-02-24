@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	// WorkflowName is the workflow name.
+	// WorkflowName is workflowId of the system workflow performing addition of search attributes
 	WorkflowName = "temporal-sys-add-search-attributes-workflow"
 )
 

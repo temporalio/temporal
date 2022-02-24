@@ -796,10 +796,22 @@ const (
 	NumAdminScopes
 )
 
+// -- Operation scopes for Admin service --
+const (
+	// OperatorAddSearchAttributesScope is the metric scope for operator.AddSearchAttributes
+	OperatorAddSearchAttributesScope = iota + NumAdminScopes
+	// OperatorRemoveSearchAttributesScope is the metric scope for operator.RemoveSearchAttributes
+	OperatorRemoveSearchAttributesScope
+	// OperatorListSearchAttributesScope is the metric scope for operator.GetSearchAttributes
+	OperatorListSearchAttributesScope
+
+	NumOperatorScopes
+)
+
 // -- Operation scopes for Frontend service --
 const (
 	// FrontendStartWorkflowExecutionScope is the metric scope for frontend.StartWorkflowExecution
-	FrontendStartWorkflowExecutionScope = iota + NumAdminScopes
+	FrontendStartWorkflowExecutionScope = iota + NumOperatorScopes
 	// FrontendPollWorkflowTaskQueueScope is the metric scope for frontend.PollWorkflowTaskQueue
 	FrontendPollWorkflowTaskQueueScope
 	// FrontendPollActivityTaskQueueScope is the metric scope for frontend.PollActivityTaskQueue
@@ -1500,37 +1512,39 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	// Frontend Scope Names
 	Frontend: {
 		// Admin API scope co-locates with with frontend
-		AdminRemoveTaskScope:                       {operation: "AdminRemoveTask"},
-		AdminCloseShardScope:                       {operation: "AdminCloseShard"},
-		AdminGetShardScope:                         {operation: "AdminGetShard"},
-		AdminListTransferTasksScope:                {operation: "AdminListTransferTasks"},
-		AdminListTimerTasksScope:                   {operation: "AdminListTimerTasks"},
-		AdminListReplicationTasksScope:             {operation: "AdminListReplicationTasks"},
-		AdminListVisibilityTasksScope:              {operation: "AdminListTimerTasks"},
-		AdminReadDLQMessagesScope:                  {operation: "AdminReadDLQMessages"},
-		AdminPurgeDLQMessagesScope:                 {operation: "AdminPurgeDLQMessages"},
-		AdminMergeDLQMessagesScope:                 {operation: "AdminMergeDLQMessages"},
-		AdminDescribeHistoryHostScope:              {operation: "DescribeHistoryHost"},
-		AdminAddSearchAttributesScope:              {operation: "AdminAddSearchAttributes"},
-		AdminRemoveSearchAttributesScope:           {operation: "AdminRemoveSearchAttributes"},
-		AdminGetSearchAttributesScope:              {operation: "AdminGetSearchAttributes"},
-		AdminRebuildMutableStateScope:              {operation: "AdminRebuildMutableState"},
-		AdminDescribeWorkflowExecutionScope:        {operation: "DescribeWorkflowExecution"},
-		AdminGetWorkflowExecutionRawHistoryScope:   {operation: "GetWorkflowExecutionRawHistory"},
-		AdminGetWorkflowExecutionRawHistoryV2Scope: {operation: "GetWorkflowExecutionRawHistoryV2"},
-		AdminGetReplicationMessagesScope:           {operation: "GetReplicationMessages"},
-		AdminListClusterMembersScope:               {operation: "AdminListClusterMembers"},
-		AdminGetNamespaceReplicationMessagesScope:  {operation: "GetNamespaceReplicationMessages"},
-		AdminGetDLQReplicationMessagesScope:        {operation: "AdminGetDLQReplicationMessages"},
-		AdminReapplyEventsScope:                    {operation: "ReapplyEvents"},
-		AdminRefreshWorkflowTasksScope:             {operation: "RefreshWorkflowTasks"},
-		AdminResendReplicationTasksScope:           {operation: "ResendReplicationTasks"},
-		AdminGetTaskQueueTasksScope:                {operation: "GetTaskQueueTasks"},
-		AdminDescribeClusterScope:                  {operation: "AdminDescribeCluster"},
-		AdminListClustersScope:                     {operation: "AdminListClusters"},
-		AdminAddOrUpdateRemoteClusterScope:         {operation: "AdminAddOrUpdateRemoteCluster"},
-		AdminRemoveRemoteClusterScope:              {operation: "AdminRemoveRemoteCluster"},
-
+		AdminRemoveTaskScope:                            {operation: "AdminRemoveTask"},
+		AdminCloseShardScope:                            {operation: "AdminCloseShard"},
+		AdminGetShardScope:                              {operation: "AdminGetShard"},
+		AdminListTransferTasksScope:                     {operation: "AdminListTransferTasks"},
+		AdminListTimerTasksScope:                        {operation: "AdminListTimerTasks"},
+		AdminListReplicationTasksScope:                  {operation: "AdminListReplicationTasks"},
+		AdminListVisibilityTasksScope:                   {operation: "AdminListTimerTasks"},
+		AdminReadDLQMessagesScope:                       {operation: "AdminReadDLQMessages"},
+		AdminPurgeDLQMessagesScope:                      {operation: "AdminPurgeDLQMessages"},
+		AdminMergeDLQMessagesScope:                      {operation: "AdminMergeDLQMessages"},
+		AdminDescribeHistoryHostScope:                   {operation: "DescribeHistoryHost"},
+		AdminAddSearchAttributesScope:                   {operation: "AdminAddSearchAttributes"},
+		AdminRemoveSearchAttributesScope:                {operation: "AdminRemoveSearchAttributes"},
+		AdminGetSearchAttributesScope:                   {operation: "AdminGetSearchAttributes"},
+		AdminRebuildMutableStateScope:                   {operation: "AdminRebuildMutableState"},
+		AdminDescribeWorkflowExecutionScope:             {operation: "DescribeWorkflowExecution"},
+		AdminGetWorkflowExecutionRawHistoryScope:        {operation: "GetWorkflowExecutionRawHistory"},
+		AdminGetWorkflowExecutionRawHistoryV2Scope:      {operation: "GetWorkflowExecutionRawHistoryV2"},
+		AdminGetReplicationMessagesScope:                {operation: "GetReplicationMessages"},
+		AdminListClusterMembersScope:                    {operation: "AdminListClusterMembers"},
+		AdminGetNamespaceReplicationMessagesScope:       {operation: "GetNamespaceReplicationMessages"},
+		AdminGetDLQReplicationMessagesScope:             {operation: "AdminGetDLQReplicationMessages"},
+		AdminReapplyEventsScope:                         {operation: "ReapplyEvents"},
+		AdminRefreshWorkflowTasksScope:                  {operation: "RefreshWorkflowTasks"},
+		AdminResendReplicationTasksScope:                {operation: "ResendReplicationTasks"},
+		AdminGetTaskQueueTasksScope:                     {operation: "GetTaskQueueTasks"},
+		AdminDescribeClusterScope:                       {operation: "AdminDescribeCluster"},
+		AdminListClustersScope:                          {operation: "AdminListClusters"},
+		AdminAddOrUpdateRemoteClusterScope:              {operation: "AdminAddOrUpdateRemoteCluster"},
+		AdminRemoveRemoteClusterScope:                   {operation: "AdminRemoveRemoteCluster"},
+		OperatorAddSearchAttributesScope:                {operation: "OperatorAddSearchAttributes"},
+		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
+		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
 		FrontendPollActivityTaskQueueScope:              {operation: "PollActivityTaskQueue"},

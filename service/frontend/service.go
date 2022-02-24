@@ -32,6 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/api/operatorservice/v1"
+
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -188,6 +190,7 @@ type Service struct {
 
 	handler           Handler
 	adminHandler      *AdminHandler
+	operatorHandler   *OperatorHandlerImpl
 	versionChecker    *VersionChecker
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
@@ -204,6 +207,7 @@ func NewService(
 	server *grpc.Server,
 	handler Handler,
 	adminHandler *AdminHandler,
+	operatorHandler *OperatorHandlerImpl,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
@@ -217,6 +221,7 @@ func NewService(
 		server:                         server,
 		handler:                        handler,
 		adminHandler:                   adminHandler,
+		operatorHandler:                operatorHandler,
 		versionChecker:                 versionChecker,
 		visibilityManager:              visibilityMgr,
 		logger:                         logger,
@@ -237,8 +242,8 @@ func (s *Service) Start() {
 
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
 	healthpb.RegisterHealthServer(s.server, s.handler)
-
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
+	operatorservice.RegisterOperatorServiceServer(s.server, s.operatorHandler)
 
 	reflection.Register(s.server)
 
@@ -247,6 +252,7 @@ func (s *Service) Start() {
 	rand.Seed(time.Now().UnixNano())
 
 	s.adminHandler.Start()
+	s.operatorHandler.Start()
 	s.versionChecker.Start()
 
 	listener := s.grpcListener
@@ -281,6 +287,7 @@ func (s *Service) Stop() {
 	time.Sleep(failureDetectionTime)
 
 	s.adminHandler.Stop()
+	s.operatorHandler.Stop()
 	s.versionChecker.Stop()
 	s.visibilityManager.Close()
 

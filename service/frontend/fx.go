@@ -86,6 +86,7 @@ var Module = fx.Options(
 	fx.Provide(HandlerProvider),
 	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
 	fx.Provide(AdminHandlerProvider),
+	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(NewServiceProvider),
@@ -97,6 +98,7 @@ func NewServiceProvider(
 	server *grpc.Server,
 	handler Handler,
 	adminHandler *AdminHandler,
+	operatorHandler *OperatorHandlerImpl,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
 	logger resource.SnTaggedLogger,
@@ -109,6 +111,7 @@ func NewServiceProvider(
 		server,
 		handler,
 		adminHandler,
+		operatorHandler,
 		versionChecker,
 		visibilityMgr,
 		logger,
@@ -396,6 +399,27 @@ func AdminHandlerProvider(
 		archivalMetadata,
 	}
 	return NewAdminHandler(args)
+}
+
+func OperatorHandlerProvider(
+	esConfig *esclient.Config,
+	esClient esclient.Client,
+	logger resource.SnTaggedLogger,
+	sdkSystemClient sdkclient.Client,
+	metricsClient metrics.Client,
+	saProvider searchattribute.Provider,
+	saManager searchattribute.Manager,
+) *OperatorHandlerImpl {
+	args := NewOperatorHandlerImplArgs{
+		esConfig,
+		esClient,
+		logger,
+		sdkSystemClient,
+		metricsClient,
+		saProvider,
+		saManager,
+	}
+	return NewOperatorHandlerImpl(args)
 }
 
 func HandlerProvider(
