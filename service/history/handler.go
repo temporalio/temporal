@@ -1142,6 +1142,10 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 		return nil, errShuttingDown
 	}
 
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1206,6 +1210,10 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 		return nil, errShuttingDown
 	}
 
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1240,6 +1248,9 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 	if h.isStopped() {
 		return nil, errShuttingDown
+	}
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
 	}
 
 	var wg sync.WaitGroup
@@ -1293,6 +1304,9 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 
 	if h.isStopped() {
 		return nil, errShuttingDown
+	}
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
 	}
 
 	taskInfoPerShard := map[int32][]*replicationspb.ReplicationTaskInfo{}
@@ -1533,6 +1547,9 @@ func (h *Handler) GetReplicationStatus(
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
+	}
 
 	resp := &historyservice.GetReplicationStatusResponse{}
 	for _, shardID := range h.controller.ShardIDs() {
@@ -1569,6 +1586,13 @@ func (h *Handler) convertError(err error) error {
 	}
 
 	return err
+}
+
+func (h *Handler) validateReplicationConfig() error {
+	if !h.clusterMetadata.IsGlobalNamespaceEnabled() {
+		return serviceerror.NewUnavailable("The cluster has global namespace disabled. The operation is not supported.")
+	}
+	return nil
 }
 
 func validateTaskToken(taskToken *tokenspb.Task) error {
