@@ -64,8 +64,7 @@ type (
 		namespaceLogger  NamespaceLogger
 		serverReporter   metrics.Reporter
 
-		dynamicConfigClient dynamicconfig.Client
-		dcCollection        *dynamicconfig.Collection
+		dcCollection *dynamicconfig.Collection
 
 		persistenceConfig          config.Persistence
 		clusterMetadata            *cluster.Config
@@ -84,7 +83,6 @@ func NewServerFxImpl(
 	logger log.Logger,
 	namespaceLogger NamespaceLogger,
 	stoppedCh chan interface{},
-	dynamicConfigClient dynamicconfig.Client,
 	dcCollection *dynamicconfig.Collection,
 	serverReporter ServerReporter,
 	servicesGroup ServicesGroupIn,
@@ -99,7 +97,6 @@ func NewServerFxImpl(
 		logger:                     logger,
 		namespaceLogger:            namespaceLogger,
 		serverReporter:             serverReporter,
-		dynamicConfigClient:        dynamicConfigClient,
 		dcCollection:               dcCollection,
 		persistenceConfig:          persistenceConfig,
 		clusterMetadata:            clusterMetadata,

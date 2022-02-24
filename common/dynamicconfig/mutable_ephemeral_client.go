@@ -27,6 +27,8 @@ package dynamicconfig
 import (
 	"strings"
 	"sync"
+
+	"go.temporal.io/server/common/log"
 )
 
 // MutableEphemeralClient is a dynamicconfig.Client implementation that is
@@ -42,7 +44,7 @@ type MutableEphemeralClient struct {
 // NewMutableEphemeralClient constructs a new MutableEphemeralClient with an
 // empty internal store.
 func NewMutableEphemeralClient(mutations ...Mutation) *MutableEphemeralClient {
-	c := &MutableEphemeralClient{basicClient: newBasicClient()}
+	c := &MutableEphemeralClient{basicClient: newBasicClient(log.NewNoopLogger())}
 	c.Update(mutations...)
 	return c
 }

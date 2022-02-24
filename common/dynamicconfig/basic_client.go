@@ -27,10 +27,12 @@ package dynamicconfig
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"strings"
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -44,13 +46,26 @@ type constrainedValue struct {
 }
 
 type basicClient struct {
+	logger log.Logger
 	values atomic.Value // configValueMap
 }
 
-func newBasicClient() *basicClient {
-	bc := &basicClient{}
+func newBasicClient(logger log.Logger) *basicClient {
+	bc := &basicClient{
+		logger: logger,
+	}
 	bc.values.Store(configValueMap{})
 	return bc
+}
+
+func (bc *basicClient) getValues() configValueMap {
+	return bc.values.Load().(configValueMap)
+}
+
+func (bc *basicClient) updateValues(newValues configValueMap) {
+	oldValues := bc.getValues()
+	bc.values.Store(newValues)
+	bc.logDiff(oldValues, newValues)
 }
 
 func (bc *basicClient) GetValue(
@@ -209,4 +224,85 @@ func match(v *constrainedValue, filters map[Filter]interface{}) bool {
 		}
 	}
 	return true
+}
+
+func (fc *basicClient) logDiff(old configValueMap, new configValueMap) {
+	for key, newValues := range new {
+		oldValues, ok := old[key]
+		if !ok {
+			for _, newValue := range newValues {
+				// new key added
+				fc.logValueDiff(key, nil, newValue)
+			}
+		} else {
+			// compare existing keys
+			fc.logConstraintsDiff(key, oldValues, newValues)
+		}
+	}
+
+	// check for removed values
+	for key, oldValues := range old {
+		if _, ok := new[key]; !ok {
+			for _, oldValue := range oldValues {
+				fc.logValueDiff(key, oldValue, nil)
+			}
+		}
+	}
+}
+
+func (bc *basicClient) logConstraintsDiff(key string, oldValues []*constrainedValue, newValues []*constrainedValue) {
+	for _, oldValue := range oldValues {
+		matchFound := false
+		for _, newValue := range newValues {
+			if reflect.DeepEqual(oldValue.Constraints, newValue.Constraints) {
+				matchFound = true
+				if !reflect.DeepEqual(oldValue.Value, newValue.Value) {
+					bc.logValueDiff(key, oldValue, newValue)
+				}
+			}
+		}
+		if !matchFound {
+			bc.logValueDiff(key, oldValue, nil)
+		}
+	}
+
+	for _, newValue := range newValues {
+		matchFound := false
+		for _, oldValue := range oldValues {
+			if reflect.DeepEqual(oldValue.Constraints, newValue.Constraints) {
+				matchFound = true
+			}
+		}
+		if !matchFound {
+			bc.logValueDiff(key, nil, newValue)
+		}
+	}
+}
+
+func (bc *basicClient) logValueDiff(key string, oldValue *constrainedValue, newValue *constrainedValue) {
+	logLine := &strings.Builder{}
+	logLine.Grow(128)
+	logLine.WriteString("dynamic config changed for the key: ")
+	logLine.WriteString(key)
+	logLine.WriteString(" oldValue: ")
+	bc.appendConstrainedValue(logLine, oldValue)
+	logLine.WriteString(" newValue: ")
+	bc.appendConstrainedValue(logLine, newValue)
+	bc.logger.Info(logLine.String())
+}
+
+func (bc *basicClient) appendConstrainedValue(logLine *strings.Builder, value *constrainedValue) {
+	if value == nil {
+		logLine.WriteString("nil")
+	} else {
+		logLine.WriteString("{ constraints: {")
+		for constraintKey, constraintValue := range value.Constraints {
+			logLine.WriteString("{")
+			logLine.WriteString(constraintKey)
+			logLine.WriteString(":")
+			logLine.WriteString(fmt.Sprintf("%v", constraintValue))
+			logLine.WriteString("}")
+		}
+		logLine.WriteString(fmt.Sprint("} value: ", value.Value, " }"))
+	}
 }
