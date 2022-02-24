@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/resolver"
 )
 
 type (
@@ -43,13 +42,12 @@ type (
 	NewFactoryParams struct {
 		fx.In
 
-		Cfg                      *config.Persistence
-		Resolver                 resolver.ServiceResolver
-		PersistenceMaxQPS        PersistenceMaxQps
-		AbstractDataStoreFactory AbstractDataStoreFactory
-		ClusterName              ClusterName
-		MetricsClient            metrics.Client
-		Logger                   log.Logger
+		DataStoreFactory  DataStoreFactory
+		Cfg               *config.Persistence
+		PersistenceMaxQPS PersistenceMaxQps
+		ClusterName       ClusterName
+		MetricsClient     metrics.Client
+		Logger            log.Logger
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -58,6 +56,7 @@ type (
 var Module = fx.Options(
 	BeanModule,
 	fx.Provide(ClusterNameProvider),
+	fx.Provide(DataStoreFactoryProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -68,11 +67,10 @@ func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
 	return NewFactory(
+		params.DataStoreFactory,
 		params.Cfg,
-		params.Resolver,
 		dynamicconfig.IntPropertyFn(params.PersistenceMaxQPS),
 		serialization.NewSerializer(),
-		params.AbstractDataStoreFactory,
 		string(params.ClusterName),
 		params.MetricsClient,
 		params.Logger,

@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resolver"
 )
@@ -215,7 +216,8 @@ func initializeAdminNamespaceHandler(
 	logger := log.NewZapLogger(log.BuildZapLogger(configuration.Log))
 
 	factory := initializePersistenceFactory(
-		configuration,
+		&configuration.Persistence,
+		"",
 		metricsClient,
 		logger,
 	)
@@ -270,19 +272,26 @@ func initializeNamespaceHandler(
 }
 
 func initializePersistenceFactory(
-	serviceConfig *config.Config,
+	pConfig *config.Persistence,
+	clusterName string,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) client.Factory {
 
-	pConfig := serviceConfig.Persistence
-	pFactory := client.NewFactory(
-		&pConfig,
+	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+		persistenceClient.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
+		pConfig,
+		nil, // TODO propagate abstract datastore factory from the CLI.
+		logger,
+		metricsClient,
+	)
+	pFactory := client.NewFactory(
+		dataStoreFactory,
+		pConfig,
 		dynamicconfig.GetIntPropertyFn(dependencyMaxQPS),
 		serialization.NewSerializer(),
-		nil, // TODO propagate abstract datastore factory from the CLI.
-		"",
+		clusterName,
 		metricsClient,
 		logger,
 	)

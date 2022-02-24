@@ -35,11 +35,8 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/resource"
 )
 
 // CreatePersistenceFactory returns an initialized persistence managers factory.
@@ -51,7 +48,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 	}
 
 	visibilityStore, _ := CreateDefaultDBConfig(c)
-	persistence := config.Persistence{
+	persistence := &config.Persistence{
 		DefaultStore:    "db-default",
 		VisibilityStore: "db-visibility",
 		DataStores: map[string]config.DataStore{
@@ -59,21 +56,13 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 			"db-visibility": visibilityStore,
 		},
 	}
-	params := resource.BootstrapParams{}
-	params.Name = "cli"
 
-	factory := persistenceClient.NewFactory(
-		&persistence,
-		resolver.NewNoopResolver(),
-		GetQPS,
-		serialization.NewSerializer(),
-		nil,
+	return initializePersistenceFactory(
+		persistence,
 		c.String(FlagTargetCluster),
-		nil, // MetricsClient
+		nil,
 		log.NewNoopLogger(),
 	)
-
-	return factory
 }
 
 // CreateDefaultDBConfig return default DB configuration based on provided options
