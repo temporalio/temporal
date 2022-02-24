@@ -475,8 +475,9 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		return nil, err
 	}
 
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
+	maxPageSize := int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
+	if request.GetMaximumPageSize() <= 0 || request.GetMaximumPageSize() > maxPageSize {
+		request.MaximumPageSize = maxPageSize
 	}
 
 	enums.SetDefaultHistoryEventFilterType(&request.HistoryEventFilterType)
@@ -763,8 +764,9 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 		return nil, err
 	}
 
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
+	maxPageSize := int32(wh.config.HistoryMaxPageSize(request.GetNamespace()))
+	if request.GetMaximumPageSize() <= 0 || request.GetMaximumPageSize() > maxPageSize {
+		request.MaximumPageSize = maxPageSize
 	}
 
 	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
@@ -2227,8 +2229,9 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		return nil, errEarliestTimeIsGreaterThanLatestTime
 	}
 
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetMaximumPageSize() <= 0 || request.GetMaximumPageSize() > maxPageSize {
+		request.MaximumPageSize = maxPageSize
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetNamespace()) {
@@ -2320,8 +2323,9 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		return nil, errEarliestTimeIsGreaterThanLatestTime
 	}
 
-	if request.GetMaximumPageSize() <= 0 {
-		request.MaximumPageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetMaximumPageSize() <= 0 || request.GetMaximumPageSize() > maxPageSize {
+		request.MaximumPageSize = maxPageSize
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetMaximumPageSize(), request.GetNamespace()) {
@@ -2412,8 +2416,9 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		return nil, errRequestNotSet
 	}
 
-	if request.GetPageSize() <= 0 {
-		request.PageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetPageSize(), request.GetNamespace()) {
@@ -2460,13 +2465,10 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, errRequestNotSet
 	}
 
-	if request.GetPageSize() <= 0 {
-		request.PageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
-	}
 
 	maxPageSize := wh.config.VisibilityArchivalQueryMaxPageSize()
-	if int(request.GetPageSize()) > maxPageSize {
-		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf(errPageSizeTooBigMessage, maxPageSize))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > int32(maxPageSize) {
+		request.PageSize = int32(maxPageSize)
 	}
 
 	if !wh.archivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival() {
@@ -2546,8 +2548,9 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		return nil, errRequestNotSet
 	}
 
-	if request.GetPageSize() <= 0 {
-		request.PageSize = int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	maxPageSize := int32(wh.config.VisibilityMaxPageSize(request.GetNamespace()))
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
 	}
 
 	if wh.isListRequestPageSizeTooLarge(request.GetPageSize(), request.GetNamespace()) {
