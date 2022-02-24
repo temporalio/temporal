@@ -625,22 +625,15 @@ func ApplyClusterMetadataConfigProvider(
 
 		// Allow updating cluster metadata if global namespace is disabled
 		if !resp.IsGlobalNamespaceEnabled && clusterData.EnableGlobalNamespace {
-			resp.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
-			resp.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
+			currentMetadata := resp.ClusterMetadata
+			currentMetadata.IsGlobalNamespaceEnabled = clusterData.EnableGlobalNamespace
+			currentMetadata.InitialFailoverVersion = clusterInfo.InitialFailoverVersion
+			currentMetadata.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
 
 			applied, err = clusterMetadataManager.SaveClusterMetadata(
 				&persistence.SaveClusterMetadataRequest{
-					ClusterMetadata: persistencespb.ClusterMetadata{
-						HistoryShardCount:        resp.HistoryShardCount,
-						ClusterName:              resp.ClusterName,
-						ClusterId:                resp.ClusterId,
-						ClusterAddress:           resp.ClusterAddress,
-						FailoverVersionIncrement: resp.FailoverVersionIncrement,
-						InitialFailoverVersion:   resp.InitialFailoverVersion,
-						IsGlobalNamespaceEnabled: clusterData.EnableGlobalNamespace,
-						IsConnectionEnabled:      resp.IsConnectionEnabled,
-					},
-					Version: resp.Version,
+					ClusterMetadata: currentMetadata,
+					Version:         resp.Version,
 				})
 			if !applied || err != nil {
 				return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while updating cluster metadata: %w", err)
