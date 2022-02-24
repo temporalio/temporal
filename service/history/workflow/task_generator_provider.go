@@ -52,8 +52,8 @@ func (p *taskGeneratorProviderImpl) NewTaskGenerator(
 	shard shard.Context,
 	mutableState MutableState,
 ) TaskGenerator {
-	return &TaskGeneratorImpl{
-		namespaceRegistry: shard.GetNamespaceRegistry(),
-		mutableState:      mutableState,
-	}
+	return NewTaskGenerator(
+		shard.GetNamespaceRegistry(),
+		mutableState,
+	)
 }
