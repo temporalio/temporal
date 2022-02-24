@@ -260,7 +260,7 @@ func NewMutableState(
 		common.FirstEventID,
 		s.bufferEventsInDB,
 	)
-	s.taskGenerator = NewTaskGenerator(shard.GetNamespaceRegistry(), s)
+	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
 
 	return s

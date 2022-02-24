@@ -133,6 +133,7 @@ func NewEngineWithShardContext(
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
 	archivalClient archiver.Client,
+	queueProcessorFactories []queues.ProcessorFactory,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -170,39 +171,12 @@ func NewEngineWithShardContext(
 		workflowDeleteManager:     workflowDeleteManager,
 	}
 
-	// Please make sure all components needed for initializing a queue processor
-	// can either be provided via fx or can be retrieved from shard context or
-	// history engine interface. (history cache is a special case for now, and will
-	// be addressed once it's promoted to be a host level component)
-	// TODO: intialize queue via QueueProcessorFactory
-	txProcessor := newTransferQueueProcessor(
-		shard,
-		historyEngImpl,
-		historyCache,
-		archivalClient,
-		publicClient,
-		matchingClient,
-		historyClient,
-	)
-	timerProcessor := newTimerQueueProcessor(
-		shard,
-		historyEngImpl,
-		historyCache,
-		archivalClient,
-		matchingClient,
-	)
-	visibilityProcessor := newVisibilityQueueProcessor(
-		shard,
-		historyCache,
-		visibilityMgr,
-		matchingClient,
-		historyClient,
-	)
-	historyEngImpl.queueProcessors = map[tasks.Category]queues.Processor{
-		txProcessor.Category():         txProcessor,
-		timerProcessor.Category():      timerProcessor,
-		visibilityProcessor.Category(): visibilityProcessor,
+	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)
+	for _, factory := range queueProcessorFactories {
+		processor := factory.CreateProcessor(shard, historyEngImpl, historyCache)
+		historyEngImpl.queueProcessors[processor.Category()] = processor
 	}
+
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
@@ -3297,6 +3271,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	}
 
 	mutableStateTaskRefresher := workflow.NewTaskRefresher(
+		e.shard,
 		e.shard.GetConfig(),
 		e.shard.GetNamespaceRegistry(),
 		e.shard.GetEventsCache(),

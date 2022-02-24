@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 )
@@ -130,6 +131,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		fx.Supply(opts),
 		fx.Provide(ServerOptionsProvider),
 
+		fx.Provide(PersistenceFactoryProvider),
 		fx.Provide(HistoryServiceProvider),
 		fx.Provide(MatchingServiceProvider),
 		fx.Provide(FrontendServiceProvider),
@@ -291,7 +293,7 @@ func (s ServerFx) Stop() {
 	s.app.Stop(context.Background())
 }
 
-func stopService(logger log.Logger, app *fx.App, svcName string, stopChan chan struct{}) {
+func StopService(logger log.Logger, app *fx.App, svcName string, stopChan chan struct{}) {
 	stopCtx, cancelFunc := context.WithTimeout(context.Background(), serviceStopTimeout)
 	err := app.Stop(stopCtx)
 	cancelFunc()
@@ -325,6 +327,7 @@ type (
 		ClientFactoryProvider      client.FactoryProvider
 		AudienceGetter             authorization.JWTAudienceMapper
 		PersistenceServiceResolver resolver.ServiceResolver
+		PersistenceFactoryProvider persistenceClient.FactoryProviderFn
 		SearchAttributesMapper     searchattribute.Mapper
 		CustomInterceptors         []grpc.UnaryServerInterceptor
 		Authorizer                 authorization.Authorizer
@@ -373,12 +376,15 @@ func HistoryServiceProvider(
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(newBootstrapParams),
+		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Provide(NewBootstrapParams),
+		fx.Provide(workflow.NewTaskGeneratorProvider),
+		history.QueueProcessorModule,
 		history.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
+	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -428,12 +434,13 @@ func MatchingServiceProvider(
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(newBootstrapParams),
+		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Provide(NewBootstrapParams),
 		matching.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
+	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -483,12 +490,13 @@ func FrontendServiceProvider(
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(newBootstrapParams),
+		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Provide(NewBootstrapParams),
 		frontend.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
+	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -538,12 +546,13 @@ func WorkerServiceProvider(
 		fx.Provide(func() ServerReporter { return params.ServerReporter }),
 		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
-		fx.Provide(newBootstrapParams),
+		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Provide(NewBootstrapParams),
 		worker.Module,
 		fx.NopLogger,
 	)
 
-	stopFn := func() { stopService(params.Logger, app, serviceName, stopChan) }
+	stopFn := func() { StopService(params.Logger, app, serviceName, stopChan) }
 	return ServicesGroupOut{
 		Services: &ServicesMetadata{
 			App:           app,
@@ -561,19 +570,20 @@ func ApplyClusterMetadataConfigProvider(
 	logger log.Logger,
 	config *config.Config,
 	persistenceServiceResolver resolver.ServiceResolver,
+	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (*cluster.Config, config.Persistence, error) {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
-	factory := persistenceClient.NewFactory(
-		&config.Persistence,
-		persistenceServiceResolver,
-		nil,
-		customDataStoreFactory,
-		config.ClusterMetadata.CurrentClusterName,
-		nil,
-		logger,
-	)
+	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
+		Cfg:                      &config.Persistence,
+		Resolver:                 persistenceServiceResolver,
+		PersistenceMaxQPS:        nil,
+		AbstractDataStoreFactory: customDataStoreFactory,
+		ClusterName:              persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
+		MetricsClient:            nil,
+		Logger:                   logger,
+	})
 	defer factory.Close()
 
 	clusterMetadataManager, err := factory.NewClusterMetadataManager()
@@ -671,6 +681,10 @@ func ApplyClusterMetadataConfigProvider(
 		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
 	return config.ClusterMetadata, config.Persistence, nil
+}
+
+func PersistenceFactoryProvider() persistenceClient.FactoryProviderFn {
+	return persistenceClient.FactoryProvider
 }
 
 // TODO: move this to cluster.fx

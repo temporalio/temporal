@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/shard"
 )
 
 type (
@@ -48,6 +49,7 @@ type (
 	}
 
 	TaskRefresherImpl struct {
+		shard             shard.Context
 		config            *configs.Config
 		namespaceRegistry namespace.Registry
 		eventsCache       events.Cache
@@ -56,6 +58,7 @@ type (
 )
 
 func NewTaskRefresher(
+	shard shard.Context,
 	config *configs.Config,
 	namespaceRegistry namespace.Registry,
 	eventsCache events.Cache,
@@ -63,6 +66,7 @@ func NewTaskRefresher(
 ) *TaskRefresherImpl {
 
 	return &TaskRefresherImpl{
+		shard:             shard,
 		config:            config,
 		namespaceRegistry: namespaceRegistry,
 		eventsCache:       eventsCache,
@@ -75,8 +79,8 @@ func (r *TaskRefresherImpl) RefreshTasks(
 	mutableState MutableState,
 ) error {
 
-	taskGenerator := NewTaskGenerator(
-		r.namespaceRegistry,
+	taskGenerator := taskGeneratorProvider.NewTaskGenerator(
+		r.shard,
 		mutableState,
 	)
 

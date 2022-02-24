@@ -175,9 +175,6 @@ func newNDCHistoryReplicator(
 				shard,
 				logger,
 				state,
-				func(mutableState workflow.MutableState) workflow.TaskGenerator {
-					return workflow.NewTaskGenerator(shard.GetNamespaceRegistry(), mutableState)
-				},
 			)
 		},
 		newMutableState: func(

@@ -30,8 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -77,8 +75,6 @@ func newVisibilityQueueProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
-	matchingClient matchingservice.MatchingServiceClient,
-	historyClient historyservice.HistoryServiceClient,
 ) queues.Processor {
 
 	config := shard.GetConfig()

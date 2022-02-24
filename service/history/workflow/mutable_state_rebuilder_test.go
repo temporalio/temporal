@@ -76,6 +76,13 @@ type (
 		executionInfo  *persistencespb.WorkflowExecutionInfo
 		stateRebuilder *MutableStateRebuilderImpl
 	}
+
+	testTaskGeneratorProvider struct {
+		mockMutableState *MockMutableState
+
+		mockTaskGenerator       *MockTaskGenerator
+		mockTaskGeneratorForNew *MockTaskGenerator
+	}
 )
 
 func TestStateBuilderSuite(t *testing.T) {
@@ -123,16 +130,15 @@ func (s *stateBuilderSuite) SetupTest() {
 	}
 	s.mockMutableState.EXPECT().GetExecutionInfo().Return(s.executionInfo).AnyTimes()
 
+	taskGeneratorProvider = &testTaskGeneratorProvider{
+		mockMutableState:        s.mockMutableState,
+		mockTaskGenerator:       s.mockTaskGenerator,
+		mockTaskGeneratorForNew: s.mockTaskGeneratorForNew,
+	}
 	s.stateRebuilder = NewMutableStateRebuilder(
 		s.mockShard,
 		s.logger,
 		s.mockMutableState,
-		func(mutableState MutableState) TaskGenerator {
-			if mutableState == s.mockMutableState {
-				return s.mockTaskGenerator
-			}
-			return s.mockTaskGeneratorForNew
-		},
 	)
 	s.sourceCluster = "some random source cluster"
 }
@@ -1764,4 +1770,14 @@ func (s *stateBuilderSuite) TestApplyEventsNewEventsNotHandled() {
 	s.Equal(41, len(eventTypes), "If you see this error, you are adding new event type. "+
 		"Before updating the number to make this test pass, please make sure you update stateBuilderImpl.ApplyEvents method "+
 		"to handle the new command type. Otherwise cross dc will not work on the new event.")
+}
+
+func (p *testTaskGeneratorProvider) NewTaskGenerator(
+	_ shard.Context,
+	mutableState MutableState,
+) TaskGenerator {
+	if mutableState == p.mockMutableState {
+		return p.mockTaskGenerator
+	}
+	return p.mockTaskGeneratorForNew
 }

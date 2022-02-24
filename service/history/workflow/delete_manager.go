@@ -94,10 +94,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		return consts.ErrWorkflowNotCompleted
 	}
 
-	taskGenerator := NewTaskGenerator(
-		m.shard.GetNamespaceRegistry(),
-		ms,
-	)
+	taskGenerator := taskGeneratorProvider.NewTaskGenerator(m.shard, ms)
 
 	deleteTask, err := taskGenerator.GenerateDeleteExecutionTask(m.timeSource.Now())
 	if err != nil {

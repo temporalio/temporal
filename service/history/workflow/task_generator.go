@@ -131,13 +131,10 @@ func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
 	mutableState MutableState,
 ) *TaskGeneratorImpl {
-
-	mstg := &TaskGeneratorImpl{
+	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
 		mutableState:      mutableState,
 	}
-
-	return mstg
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(

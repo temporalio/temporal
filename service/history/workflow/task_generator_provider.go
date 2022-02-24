@@ -25,19 +25,35 @@
 package workflow
 
 import (
-	"go.uber.org/fx"
-
 	"go.temporal.io/server/service/history/shard"
 )
 
-var Module = fx.Options(
-	fx.Provide(NewCacheFnProvider),
-	fx.Populate(&taskGeneratorProvider),
+var (
+	// The default value is just for testing purpose,
+	// so we don't have to specify its value in every test.
+	// If TaskGeneratorFactory is not provided as an fx Option,
+	// fx.Populate in fx.go and server start up will still fail.
+	taskGeneratorProvider = NewTaskGeneratorProvider()
 )
 
-// NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.
-func NewCacheFnProvider() NewCacheFn {
-	return func(shard shard.Context) Cache {
-		return NewCache(shard)
+type (
+	TaskGeneratorProvider interface {
+		NewTaskGenerator(shard.Context, MutableState) TaskGenerator
 	}
+
+	taskGeneratorProviderImpl struct{}
+)
+
+func NewTaskGeneratorProvider() TaskGeneratorProvider {
+	return &taskGeneratorProviderImpl{}
+}
+
+func (p *taskGeneratorProviderImpl) NewTaskGenerator(
+	shard shard.Context,
+	mutableState MutableState,
+) TaskGenerator {
+	return NewTaskGenerator(
+		shard.GetNamespaceRegistry(),
+		mutableState,
+	)
 }

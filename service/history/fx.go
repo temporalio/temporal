@@ -32,7 +32,6 @@ import (
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -160,29 +159,11 @@ func HandlerProvider(
 }
 
 func HistoryEngineFactoryProvider(
-	visibilityMgr manager.VisibilityManager,
-	matchingClient resource.MatchingClient,
-	historyClient historyservice.HistoryServiceClient,
-	publicClient sdkclient.Client,
-	eventNotifier events.Notifier,
-	config *configs.Config,
-	replicationTaskFetchers ReplicationTaskFetchers,
-	rawMatchingClient resource.MatchingRawClient,
-	newCacheFn workflow.NewCacheFn,
-	archivalClient warchiver.Client,
+	params HistoryEngineFactoryParams,
 ) shard.EngineFactory {
-	return NewEngineFactory(
-		visibilityMgr,
-		matchingClient,
-		historyClient,
-		publicClient,
-		eventNotifier,
-		config,
-		replicationTaskFetchers,
-		rawMatchingClient,
-		newCacheFn,
-		archivalClient,
-	)
+	return &historyEngineFactory{
+		HistoryEngineFactoryParams: params,
+	}
 }
 
 func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
