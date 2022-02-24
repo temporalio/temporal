@@ -2465,9 +2465,9 @@ func (wh *WorkflowHandler) ListArchivedWorkflowExecutions(ctx context.Context, r
 		return nil, errRequestNotSet
 	}
 
-	maxPageSize := wh.config.VisibilityArchivalQueryMaxPageSize()
-	if request.GetPageSize() <= 0 || request.GetPageSize() > int32(maxPageSize) {
-		request.PageSize = int32(maxPageSize)
+	maxPageSize := int32(wh.config.VisibilityArchivalQueryMaxPageSize())
+	if request.GetPageSize() <= 0 || request.GetPageSize() > maxPageSize {
+		request.PageSize = maxPageSize
 	}
 
 	if !wh.archivalMetadata.GetVisibilityConfig().ClusterConfiguredForArchival() {
