@@ -71,7 +71,7 @@ func (s *registrySuite) SetupTest() {
 	s.registry = namespace.NewRegistry(
 		s.regPersistence,
 		true,
-		metrics.NewNoopMetricsClient(),
+		metrics.NoopClient,
 		log.NewTestLogger())
 }
 
@@ -547,7 +547,7 @@ func TestCacheByName(t *testing.T) {
 		Namespaces: []*persistence.GetNamespaceResponse{&nsrec},
 	}, nil)
 	reg := namespace.NewRegistry(
-		regPersist, false, metrics.NewNoopMetricsClient(), log.NewNoopLogger())
+		regPersist, false, metrics.NoopClient, log.NewNoopLogger())
 	reg.Start()
 	defer reg.Stop()
 	ns, err := reg.GetNamespace(namespace.Name("foo"))

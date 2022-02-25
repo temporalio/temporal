@@ -198,7 +198,7 @@ func MetricsScope(
 	scope, ok := ctx.Value(metricsCtxKey).(metrics.Scope)
 	if !ok {
 		logger.Error("unable to get metrics scope")
-		return metrics.NoopScope(metrics.Frontend)
+		return metrics.NoopScope
 	}
 	return scope
 }

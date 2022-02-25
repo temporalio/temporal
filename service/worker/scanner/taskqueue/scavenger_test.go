@@ -63,7 +63,7 @@ func (s *ScavengerTestSuite) SetupTest() {
 	s.taskQueueTable = &mockTaskQueueTable{}
 	s.taskTables = make(map[string]*mockTaskTable)
 	logger := log.NewTestLogger()
-	s.scvgr = NewScavenger(s.taskMgr, metrics.NewNoopMetricsClient(), logger)
+	s.scvgr = NewScavenger(s.taskMgr, metrics.NoopClient, logger)
 	maxTasksPerJob = 4
 	executorPollInterval = time.Millisecond * 50
 }
