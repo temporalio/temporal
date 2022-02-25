@@ -492,7 +492,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		return nil
 	}
 
-	p.logger.Info("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
+	p.logger.Debug("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
 	p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
 	p.metricsClient.Scope(
 		metrics.ReplicationTaskFetcherScope,
