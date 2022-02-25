@@ -205,17 +205,6 @@ func NewBootstrapParams(
 
 	params.ServerMetricsReporter = serverReporter
 
-	if serverReporter == nil {
-		var err error
-		serverReporter, err = metrics.InitMetricsReporter(logger, &svcCfg.Metrics)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"unable to initialize per-service metric client. "+
-					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
-		}
-		params.ServerMetricsReporter = serverReporter
-	}
-
 	serviceIdx := metrics.GetMetricsServiceIdx(svcName, logger)
 	metricsClient, err := serverReporter.NewClient(logger, serviceIdx)
 	if err != nil {

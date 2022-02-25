@@ -112,7 +112,7 @@ func (s *matchingEngineSuite) SetupTest() {
 		context.Background(),
 		matchingTestNamespace,
 		&taskqueuepb.TaskQueue{Name: matchingTestTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		metrics.NewNoopMetricsClient(),
+		metrics.NoopClient,
 		metrics.MatchingTaskQueueMgrScope,
 		log.NewNoopLogger(),
 	)
@@ -142,7 +142,7 @@ func newMatchingEngine(
 		taskQueues:        make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,
-		metricsClient:     metrics.NewNoopMetricsClient(),
+		metricsClient:     metrics.NoopClient,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,

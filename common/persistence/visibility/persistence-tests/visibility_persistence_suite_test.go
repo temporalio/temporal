@@ -71,7 +71,7 @@ func (s *VisibilityPersistenceSuite) SetupSuite() {
 		resolver.NewNoopResolver(),
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
-		metrics.NewNoopMetricsClient(),
+		metrics.NoopClient,
 		s.Logger)
 
 	if err != nil {

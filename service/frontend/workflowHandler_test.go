@@ -1311,7 +1311,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	history, token, err := wh.getHistory(
-		metrics.NoopScope(metrics.Frontend),
+		metrics.NoopScope,
 		namespaceID,
 		namespace,
 		we,

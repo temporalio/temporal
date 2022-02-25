@@ -72,7 +72,7 @@ func (s *handlerSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment)
 func (s *handlerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	handlerTestMetrics = metrics.NewMockClient(s.controller)
-	handlerTestMetrics.EXPECT().StartTimer(gomock.Any(), gomock.Any()).Return(metrics.NopStopwatch()).AnyTimes()
+	handlerTestMetrics.EXPECT().StartTimer(gomock.Any(), gomock.Any()).Return(metrics.NoopStopwatch).AnyTimes()
 	handlerTestLogger = log.NewMockLogger(s.controller)
 }
 

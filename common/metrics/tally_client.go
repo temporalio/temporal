@@ -151,7 +151,7 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	return m.scopeWrapper(
 		newTallyScopeInternal(
 			newTallyScopeInternal(
-				NoopScope(0),
+				noopInternalScope,
 				scope,
 				m.metricDefs,
 				false,
