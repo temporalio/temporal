@@ -299,7 +299,7 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	mapVal := newAckChan()
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
-	s.mockMetricClient.EXPECT().Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(400)).Return(metrics.NoopScope(0))
+	s.mockMetricClient.EXPECT().Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(400)).Return(metrics.NoopScope)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	select {
 	case ack := <-mapVal.ackChInternal:
@@ -336,7 +336,7 @@ func (s *processorSuite) TestBulkAfterAction_Error() {
 		Items:  []map[string]*elastic.BulkResponseItem{mFailed},
 	}
 
-	s.mockMetricClient.EXPECT().Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(400)).Return(metrics.NoopScope(0))
+	s.mockMetricClient.EXPECT().Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(400)).Return(metrics.NoopScope)
 	s.esProcessor.bulkAfterAction(0, requests, response, &elastic.Error{Status: 400})
 }
 
