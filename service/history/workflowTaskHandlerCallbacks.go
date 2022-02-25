@@ -485,6 +485,10 @@ Update_History_Loop:
 				tag.WorkflowID(token.GetWorkflowId()),
 				tag.WorkflowRunID(token.GetRunId()),
 				tag.WorkflowNamespaceID(namespaceID.String()))
+			if currentWorkflowTask.Attempt > 1 {
+				// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
+				return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
+			}
 			msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, wtFailedCause, request)
 			if err != nil {
 				return nil, err
