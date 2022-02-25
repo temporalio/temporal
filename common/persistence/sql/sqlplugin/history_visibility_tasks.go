@@ -51,6 +51,7 @@ type (
 		ShardID            int32
 		InclusiveMinTaskID int64
 		ExclusiveMaxTaskID int64
+		PageSize           int
 	}
 
 	// HistoryVisibilityTask is the SQL persistence interface for history visibility tasks
@@ -63,6 +64,7 @@ type (
 		// DeleteFromVisibilityTasks deletes one rows from visibility_tasks table.
 		DeleteFromVisibilityTasks(ctx context.Context, filter VisibilityTasksFilter) (sql.Result, error)
 		// RangeDeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table.
+		//  VisibilityTasksRangeFilter - {PageSize} will be ignored
 		RangeDeleteFromVisibilityTasks(ctx context.Context, filter VisibilityTasksRangeFilter) (sql.Result, error)
 	}
 )
