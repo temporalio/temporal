@@ -38,14 +38,16 @@ import (
 	"go.temporal.io/api/workflowservicemock/v1"
 	"go.temporal.io/sdk/testsuite"
 
+	"google.golang.org/grpc"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/service/history/tests"
-	"google.golang.org/grpc"
 )
 
 type parentClosePolicyWorkflowSuite struct {
@@ -78,7 +80,7 @@ func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 	s.mockClientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(s.mockRemoteClient).AnyTimes()
 
 	s.processor = &Processor{
-		metricsClient: metrics.noopMetricsClient{},
+		metricsClient: metrics.NoopClient,
 		logger:        log.NewNoopLogger(),
 		cfg: Config{
 			MaxConcurrentActivityExecutionSize:     dynamicconfig.GetIntPropertyFn(1000),
