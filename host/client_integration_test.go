@@ -585,18 +585,16 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 	//s.printHistory(id, workflowRun.GetRunID())
 }
 
+// This test simulates workflow try to complete itself while there is buffered event.
+// Event sequence:
+//  1st WorkflowTask runs a local activity.
+//  While local activity is running, a signal is received by server.
+//  After signal is received, local activity completed, and workflow drains signal chan (no signal yet) and complete workflow.
+//  Server failed the complete request because there is unhandled signal.
+//  Server rescheduled a new workflow task.
+//  Workflow runs the local activity again and drain the signal chan (with one signal) and complete workflow.
+//  Server complete workflow as requested.
 func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
-	/*
-		Event sequence:
-		1st WorkflowTask runs a local activity.
-		While local activity is running, a signal is received by server.
-		After signal is received, local activity completed, and workflow drains signal chan (no signal yet) and complete workflow.
-		Server failed the complete request because there is unhandled signal.
-		Server rescheduled a new workflow task.
-		Workflow runs the local activity again and drain the signal chan (with one signal) and complete workflow.
-		Server complete workflow as requested.
-	*/
-
 	sigReadyToSendChan := make(chan struct{}, 1)
 	sigSendDoneChan := make(chan struct{})
 	localActivityFn := func(ctx context.Context) error {
@@ -694,14 +692,11 @@ func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
 	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
 }
 
+// This test simulates workflow generate command with invalid attributes.
+// Server is expected to fail the workflow task and schedule a retry immediately for first attempt,
+// but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.
+// This is the same behavior as the SDK used to do, but now we would do on server.
 func (s *clientIntegrationSuite) Test_InvalidCommandAttribute() {
-	/*
-		This test simulates workflow generate command with invalid attributes.
-		Server is expected to fail the workflow task and schedule a retry immediately for first attempt,
-		but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.
-		This is the same behavior as the SDK used to do, but now we would do on server.
-	*/
-
 	activityFn := func(ctx context.Context) error {
 		return nil
 	}
