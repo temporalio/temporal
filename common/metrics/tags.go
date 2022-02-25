@@ -45,8 +45,8 @@ const (
 	taskQueue     = "taskqueue"
 	workflowType  = "workflowType"
 	activityType  = "activityType"
-	commandType = "commandType"
-	serviceName = "service_name"
+	commandType   = "commandType"
+	serviceName   = "service_name"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
