@@ -694,6 +694,73 @@ func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
 	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
 }
 
+func (s *clientIntegrationSuite) Test_InvalidCommandAttribute() {
+	/*
+	This test simulates workflow generate command with invalid attributes.
+	Server is expected to fail the workflow task and schedule a retry immediately for first attempt,
+	but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.
+	This is the same behavior as the SDK used to do, but now we would do on server.
+	 */
+
+	activityFn := func(ctx context.Context) error {
+		return nil
+	}
+
+	var calledTime []time.Time
+	workflowFn := func(ctx workflow.Context) error {
+		calledTime = append(calledTime, time.Now().UTC())
+		ao := workflow.ActivityOptions{} // invalid activity option without StartToClose timeout
+		ctx = workflow.WithActivityOptions(ctx, ao)
+
+		err := workflow.ExecuteActivity(ctx, activityFn).Get(ctx, nil)
+		return err
+	}
+
+	s.worker.RegisterWorkflow(workflowFn)
+	s.worker.RegisterActivity(activityFn)
+
+	id := "integration-test-invalid-command-attributes"
+	workflowOptions := sdkclient.StartWorkflowOptions{
+		ID:        id,
+		TaskQueue: s.taskQueue,
+		// With 3s TaskTimeout and 5s RunTimeout, we expect to see total of 3 attempts.
+		// First attempt follow by immediate retry follow by timeout and 3rd attempt after WorkflowTaskTimeout.
+		WorkflowTaskTimeout: 3 * time.Second,
+		WorkflowRunTimeout:  5 * time.Second,
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	workflowRun, err := s.sdkClient.ExecuteWorkflow(ctx, workflowOptions, workflowFn)
+	if err != nil {
+		s.Logger.Fatal("Start workflow failed with err", tag.Error(err))
+	}
+
+	s.NotNil(workflowRun)
+	s.True(workflowRun.GetRunID() != "")
+
+	// wait until workflow close (it will be timeout)
+	err = workflowRun.Get(ctx, nil)
+	s.Error(err)
+	s.Contains(err.Error(), "timeout")
+
+	// verify event sequence
+	expectedHistory := []enumspb.EventType{
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_STARTED,
+		enumspb.EVENT_TYPE_WORKFLOW_TASK_SCHEDULED,
+		enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED,
+		enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED,
+		enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT,
+	}
+	s.assertHistory(id, workflowRun.GetRunID(), expectedHistory)
+
+	// assert workflow task retried 3 times
+	s.Equal(3, len(calledTime))
+
+	s.True(calledTime[1].Sub(calledTime[0]) < time.Second) // retry immediately
+	s.True(calledTime[2].Sub(calledTime[1]) > time.Second * 3) // retry after WorkflowTaskTimeout
+}
+
 func (s *clientIntegrationSuite) Test_BufferedQuery() {
 	localActivityFn := func(ctx context.Context) error {
 		time.Sleep(5 * time.Second) // use local activity sleep to block workflow task to force query to be buffered
