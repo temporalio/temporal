@@ -167,8 +167,8 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Multiple() {
 	numTasks := 20
 
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.VisibilityTasksRow
@@ -184,9 +184,9 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
 	}
 	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -221,12 +221,12 @@ func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Single() {
 func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Multiple() {
 	shardID := rand.Int31()
 	minTaskID := int64(1)
-	maxTaskID := int64(100)
+	maxTaskID := int64(101)
 
 	filter := sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
 	}
 	result, err := s.store.RangeDeleteFromVisibilityTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -275,8 +275,8 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Multiple() {
 	numTasks := 20
 
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.VisibilityTasksRow
@@ -292,9 +292,9 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
 	}
 	result, err = s.store.RangeDeleteFromVisibilityTasks(newExecutionContext(), filter)
 	s.NoError(err)

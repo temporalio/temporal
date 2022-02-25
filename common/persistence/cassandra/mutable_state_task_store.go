@@ -106,8 +106,8 @@ const (
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ?`
+		`and task_id >= ? ` +
+		`and task_id < ?`
 
 	templateGetVisibilityTaskQuery = `SELECT visibility_task_data, visibility_task_encoding ` +
 		`FROM executions ` +
@@ -127,8 +127,8 @@ const (
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ?`
+		`and task_id >= ? ` +
+		`and task_id < ?`
 
 	templateGetReplicationTaskQuery = `SELECT replication, replication_encoding ` +
 		`FROM executions ` +
@@ -148,8 +148,8 @@ const (
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ?`
+		`and task_id >= ? ` +
+		`and task_id < ?`
 
 	templateCompleteTransferTaskQuery = `DELETE FROM executions ` +
 		`WHERE shard_id = ? ` +
@@ -167,36 +167,12 @@ const (
 		`and workflow_id = ? ` +
 		`and run_id = ? ` +
 		`and visibility_ts = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ?`
+		`and task_id >= ? ` +
+		`and task_id < ?`
 
-	templateCompleteVisibilityTaskQuery = `DELETE FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id = ?`
+	templateCompleteVisibilityTaskQuery = templateCompleteTransferTaskQuery
 
-	templateRangeCompleteVisibilityTaskQuery = `DELETE FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ?`
-
-	templateCompleteReplicationTaskBeforeQuery = `DELETE FROM executions ` +
-		`WHERE shard_id = ? ` +
-		`and type = ? ` +
-		`and namespace_id = ? ` +
-		`and workflow_id = ? ` +
-		`and run_id = ? ` +
-		`and visibility_ts = ? ` +
-		`and task_id <= ?`
+	templateRangeCompleteVisibilityTaskQuery = templateRangeCompleteTransferTaskQuery
 
 	templateCompleteReplicationTaskQuery = templateCompleteTransferTaskQuery
 
@@ -245,97 +221,6 @@ const (
 		`and run_id = ?` +
 		`and visibility_ts >= ? ` +
 		`and visibility_ts < ?`
-
-	templateCreateTaskQuery = `INSERT INTO tasks (` +
-		`namespace_id, task_queue_name, task_queue_type, type, task_id, task, task_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?)`
-
-	templateCreateTaskWithTTLQuery = `INSERT INTO tasks (` +
-		`namespace_id, task_queue_name, task_queue_type, type, task_id, task, task_encoding) ` +
-		`VALUES(?, ?, ?, ?, ?, ?, ?) USING TTL ?`
-
-	templateGetTasksQuery = `SELECT task_id, task, task_encoding ` +
-		`FROM tasks ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ?`
-
-	templateCompleteTaskQuery = `DELETE FROM tasks ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ?`
-
-	templateCompleteTasksLessThanQuery = `DELETE FROM tasks ` +
-		`WHERE namespace_id = ? ` +
-		`AND task_queue_name = ? ` +
-		`AND task_queue_type = ? ` +
-		`AND type = ? ` +
-		`AND task_id <= ? `
-
-	templateGetTaskQueue = `SELECT ` +
-		`range_id, ` +
-		`task_queue, ` +
-		`task_queue_encoding ` +
-		`FROM tasks ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ?`
-
-	templateInsertTaskQueueQuery = `INSERT INTO tasks (` +
-		`namespace_id, ` +
-		`task_queue_name, ` +
-		`task_queue_type, ` +
-		`type, ` +
-		`task_id, ` +
-		`range_id, ` +
-		`task_queue, ` +
-		`task_queue_encoding ` +
-		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
-
-	templateUpdateTaskQueueQuery = `UPDATE tasks SET ` +
-		`range_id = ?, ` +
-		`task_queue = ?, ` +
-		`task_queue_encoding = ? ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ? ` +
-		`IF range_id = ?`
-
-	templateUpdateTaskQueueQueryWithTTLPart1 = `INSERT INTO tasks (` +
-		`namespace_id, ` +
-		`task_queue_name, ` +
-		`task_queue_type, ` +
-		`type, ` +
-		`task_id ` +
-		`) VALUES (?, ?, ?, ?, ?) USING TTL ?`
-
-	templateUpdateTaskQueueQueryWithTTLPart2 = `UPDATE tasks USING TTL ? SET ` +
-		`range_id = ?, ` +
-		`task_queue = ?, ` +
-		`task_queue_encoding = ? ` +
-		`WHERE namespace_id = ? ` +
-		`and task_queue_name = ? ` +
-		`and task_queue_type = ? ` +
-		`and type = ? ` +
-		`and task_id = ? ` +
-		`IF range_id = ?`
-
-	templateDeleteTaskQueueQuery = `DELETE FROM tasks ` +
-		`WHERE namespace_id = ? ` +
-		`AND task_queue_name = ? ` +
-		`AND task_queue_type = ? ` +
-		`AND type = ? ` +
-		`AND task_id = ? ` +
-		`IF range_id = ?`
 )
 
 type (
@@ -505,8 +390,8 @@ func (d *MutableStateTaskStore) getTransferTasks(
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		defaultVisibilityTimestamp,
-		request.MinTaskKey.TaskID,
-		request.MaxTaskKey.TaskID,
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
 	)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
@@ -558,8 +443,8 @@ func (d *MutableStateTaskStore) rangeCompleteTransferTasks(
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		defaultVisibilityTimestamp,
-		request.MinTaskKey.TaskID,
-		request.MaxTaskKey.TaskID,
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
 	)
 
 	err := query.Exec()
@@ -595,8 +480,8 @@ func (d *MutableStateTaskStore) getTimerTasks(
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could lose tasks
-	minTimestamp := p.UnixMilliseconds(request.MinTaskKey.FireTime)
-	maxTimestamp := p.UnixMilliseconds(request.MaxTaskKey.FireTime)
+	minTimestamp := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
+	maxTimestamp := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
 	query := d.Session.Query(templateGetTimerTasksQuery,
 		request.ShardID,
 		rowTypeTimerTask,
@@ -650,8 +535,8 @@ func (d *MutableStateTaskStore) completeTimerTask(
 func (d *MutableStateTaskStore) rangeCompleteTimerTasks(
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	start := p.UnixMilliseconds(request.MinTaskKey.FireTime)
-	end := p.UnixMilliseconds(request.MaxTaskKey.FireTime)
+	start := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
+	end := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
 	query := d.Session.Query(templateRangeCompleteTimerTaskQuery,
 		request.ShardID,
 		rowTypeTimerTask,
@@ -701,8 +586,8 @@ func (d *MutableStateTaskStore) getReplicationTasks(
 		rowTypeReplicationWorkflowID,
 		rowTypeReplicationRunID,
 		defaultVisibilityTimestamp,
-		request.MinTaskKey.TaskID,
-		request.MaxTaskKey.TaskID,
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasks")
@@ -727,14 +612,15 @@ func (d *MutableStateTaskStore) completeReplicationTask(
 func (d *MutableStateTaskStore) rangeCompleteReplicationTasks(
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	query := d.Session.Query(templateCompleteReplicationTaskBeforeQuery,
+	query := d.Session.Query(templateRangeCompleteReplicationTaskQuery,
 		request.ShardID,
 		rowTypeReplicationTask,
 		rowTypeReplicationNamespaceID,
 		rowTypeReplicationWorkflowID,
 		rowTypeReplicationRunID,
 		defaultVisibilityTimestamp,
-		request.MaxTaskKey.TaskID,
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
 	)
 
 	err := query.Exec()
@@ -781,8 +667,8 @@ func (d *MutableStateTaskStore) GetReplicationTasksFromDLQ(
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
-		request.MinTaskID,
-		request.MinTaskID+int64(request.BatchSize),
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
 	).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasksFromDLQ")
@@ -799,7 +685,7 @@ func (d *MutableStateTaskStore) DeleteReplicationTaskFromDLQ(
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
-		request.TaskID,
+		request.TaskKey.TaskID,
 	)
 
 	err := query.Exec()
@@ -817,8 +703,8 @@ func (d *MutableStateTaskStore) RangeDeleteReplicationTaskFromDLQ(
 		request.SourceClusterName,
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
-		request.ExclusiveBeginTaskID,
-		request.InclusiveEndTaskID,
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
 	)
 
 	err := query.Exec()
@@ -859,8 +745,8 @@ func (d *MutableStateTaskStore) getVisibilityTasks(
 		rowTypeVisibilityTaskWorkflowID,
 		rowTypeVisibilityTaskRunID,
 		defaultVisibilityTimestamp,
-		request.MinTaskKey.TaskID,
-		request.MaxTaskKey.TaskID,
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
 	)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
@@ -911,8 +797,8 @@ func (d *MutableStateTaskStore) rangeCompleteVisibilityTasks(
 		rowTypeVisibilityTaskWorkflowID,
 		rowTypeVisibilityTaskRunID,
 		defaultVisibilityTimestamp,
-		request.MinTaskKey.TaskID,
-		request.MaxTaskKey.TaskID,
+		request.InclusiveMinTaskKey.TaskID,
+		request.ExclusiveMaxTaskKey.TaskID,
 	)
 
 	err := query.Exec()
@@ -988,12 +874,12 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 			rowTypeHistoryTaskWorkflowID,
 			rowTypeHistoryTaskRunID,
 			defaultVisibilityTimestamp,
-			request.MinTaskKey.TaskID,
-			request.MaxTaskKey.TaskID,
+			request.InclusiveMinTaskKey.TaskID,
+			request.ExclusiveMaxTaskKey.TaskID,
 		)
 	} else {
-		minTimestamp := p.UnixMilliseconds(request.MinTaskKey.FireTime)
-		maxTimestamp := p.UnixMilliseconds(request.MaxTaskKey.FireTime)
+		minTimestamp := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
+		maxTimestamp := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
 		query = d.Session.Query(templateGetHistoryScheduledTasksQuery,
 			request.ShardID,
 			request.TaskCategory.ID(),
@@ -1062,12 +948,12 @@ func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
 			rowTypeHistoryTaskWorkflowID,
 			rowTypeHistoryTaskRunID,
 			defaultVisibilityTimestamp,
-			request.MinTaskKey.TaskID,
-			request.MaxTaskKey.TaskID,
+			request.InclusiveMinTaskKey.TaskID,
+			request.ExclusiveMaxTaskKey.TaskID,
 		)
 	} else {
-		minTimestamp := p.UnixMilliseconds(request.MinTaskKey.FireTime)
-		maxTimestamp := p.UnixMilliseconds(request.MaxTaskKey.FireTime)
+		minTimestamp := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
+		maxTimestamp := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
 		query = d.Session.Query(templateRangeCompleteHistoryScheduledTasksQuery,
 			request.ShardID,
 			request.TaskCategory.ID(),

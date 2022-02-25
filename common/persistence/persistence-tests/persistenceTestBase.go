@@ -963,10 +963,10 @@ Loop:
 		response, err := s.ExecutionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 			ShardID:      s.ShardInfo.GetShardId(),
 			TaskCategory: tasks.CategoryTransfer,
-			MinTaskKey: tasks.Key{
-				TaskID: s.GetTransferReadLevel(),
+			InclusiveMinTaskKey: tasks.Key{
+				TaskID: s.GetTransferReadLevel() + 1,
 			},
-			MaxTaskKey: tasks.Key{
+			ExclusiveMaxTaskKey: tasks.Key{
 				TaskID: int64(math.MaxInt64),
 			},
 			BatchSize:     batchSize,
@@ -1000,10 +1000,10 @@ Loop:
 		response, err := s.ExecutionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 			ShardID:      s.ShardInfo.GetShardId(),
 			TaskCategory: tasks.CategoryReplication,
-			MinTaskKey: tasks.Key{
-				TaskID: s.GetReplicationReadLevel(),
+			InclusiveMinTaskKey: tasks.Key{
+				TaskID: s.GetReplicationReadLevel() + 1,
 			},
-			MaxTaskKey: tasks.Key{
+			ExclusiveMaxTaskKey: tasks.Key{
 				TaskID: int64(math.MaxInt64),
 			},
 			BatchSize:     batchSize,
@@ -1028,12 +1028,12 @@ Loop:
 }
 
 // RangeCompleteReplicationTask is a utility method to complete a range of replication tasks
-func (s *TestBase) RangeCompleteReplicationTask(inclusiveEndTaskID int64) error {
+func (s *TestBase) RangeCompleteReplicationTask(exclusiveEndTaskID int64) error {
 	return s.ExecutionManager.RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
 		ShardID:      s.ShardInfo.GetShardId(),
 		TaskCategory: tasks.CategoryReplication,
-		MaxTaskKey: tasks.Key{
-			TaskID: inclusiveEndTaskID,
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: exclusiveEndTaskID,
 		},
 	})
 }
@@ -1054,21 +1054,22 @@ func (s *TestBase) PutReplicationTaskToDLQ(
 // GetReplicationTasksFromDLQ is a utility method to read replication task info
 func (s *TestBase) GetReplicationTasksFromDLQ(
 	sourceCluster string,
-	readLevel int64,
-	maxReadLevel int64,
+	inclusiveMinLevel int64,
+	exclusiveMaxLevel int64,
 	pageSize int,
 	pageToken []byte,
-) (*persistence.GetReplicationTasksFromDLQResponse, error) {
+) (*persistence.GetHistoryTasksResponse, error) {
 
 	return s.ExecutionManager.GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
-		ShardID:           s.ShardInfo.GetShardId(),
-		SourceClusterName: sourceCluster,
-		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			MinTaskID:     readLevel,
-			MaxTaskID:     maxReadLevel,
-			BatchSize:     pageSize,
-			NextPageToken: pageToken,
+		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
+			ShardID:             s.ShardInfo.GetShardId(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.Key{TaskID: inclusiveMinLevel},
+			ExclusiveMaxTaskKey: tasks.Key{TaskID: exclusiveMaxLevel},
+			BatchSize:           pageSize,
+			NextPageToken:       pageToken,
 		},
+		SourceClusterName: sourceCluster,
 	})
 }
 
@@ -1079,24 +1080,30 @@ func (s *TestBase) DeleteReplicationTaskFromDLQ(
 ) error {
 
 	return s.ExecutionManager.DeleteReplicationTaskFromDLQ(&persistence.DeleteReplicationTaskFromDLQRequest{
-		ShardID:           s.ShardInfo.GetShardId(),
+		CompleteHistoryTaskRequest: persistence.CompleteHistoryTaskRequest{
+			ShardID:      s.ShardInfo.GetShardId(),
+			TaskCategory: tasks.CategoryReplication,
+			TaskKey:      tasks.Key{TaskID: taskID},
+		},
 		SourceClusterName: sourceCluster,
-		TaskID:            taskID,
 	})
 }
 
 // RangeDeleteReplicationTaskFromDLQ is a utility method to delete  replication task info
 func (s *TestBase) RangeDeleteReplicationTaskFromDLQ(
 	sourceCluster string,
-	beginTaskID int64,
-	endTaskID int64,
+	inclusiveMinTaskID int64,
+	exclusiveMaxTaskID int64,
 ) error {
 
 	return s.ExecutionManager.RangeDeleteReplicationTaskFromDLQ(&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-		ShardID:              s.ShardInfo.GetShardId(),
-		SourceClusterName:    sourceCluster,
-		ExclusiveBeginTaskID: beginTaskID,
-		InclusiveEndTaskID:   endTaskID,
+		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:             s.ShardInfo.GetShardId(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.Key{TaskID: inclusiveMinTaskID},
+			ExclusiveMaxTaskKey: tasks.Key{TaskID: exclusiveMaxTaskID},
+		},
+		SourceClusterName: sourceCluster,
 	})
 }
 
@@ -1113,15 +1120,15 @@ func (s *TestBase) CompleteTransferTask(taskID int64) error {
 }
 
 // RangeCompleteTransferTask is a utility method to complete a range of transfer tasks
-func (s *TestBase) RangeCompleteTransferTask(exclusiveBeginTaskID int64, inclusiveEndTaskID int64) error {
+func (s *TestBase) RangeCompleteTransferTask(inclusiveMinTaskID int64, exclusiveMaxTaskID int64) error {
 	return s.ExecutionManager.RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
 		ShardID:      s.ShardInfo.GetShardId(),
 		TaskCategory: tasks.CategoryTransfer,
-		MinTaskKey: tasks.Key{
-			TaskID: exclusiveBeginTaskID,
+		InclusiveMinTaskKey: tasks.Key{
+			TaskID: inclusiveMinTaskID,
 		},
-		MaxTaskKey: tasks.Key{
-			TaskID: inclusiveEndTaskID,
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: exclusiveMaxTaskID,
 		},
 	})
 }
@@ -1148,10 +1155,10 @@ Loop:
 		response, err := s.ExecutionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 			ShardID:      s.ShardInfo.GetShardId(),
 			TaskCategory: tasks.CategoryTimer,
-			MinTaskKey: tasks.Key{
+			InclusiveMinTaskKey: tasks.Key{
 				FireTime: time.Unix(0, 0).UTC(),
 			},
-			MaxTaskKey: tasks.Key{
+			ExclusiveMaxTaskKey: tasks.Key{
 				FireTime: time.Unix(0, math.MaxInt64).UTC(),
 			},
 			BatchSize:     batchSize,
@@ -1196,10 +1203,10 @@ func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exc
 	return s.ExecutionManager.RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
 		ShardID:      s.ShardInfo.GetShardId(),
 		TaskCategory: tasks.CategoryTimer,
-		MinTaskKey: tasks.Key{
+		InclusiveMinTaskKey: tasks.Key{
 			FireTime: inclusiveBeginTimestamp,
 		},
-		MaxTaskKey: tasks.Key{
+		ExclusiveMaxTaskKey: tasks.Key{
 			FireTime: exclusiveEndTimestamp,
 		},
 	})

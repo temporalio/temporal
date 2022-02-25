@@ -730,8 +730,8 @@ func (m *executionManagerImpl) GetHistoryTasks(
 ) (*GetHistoryTasksResponse, error) {
 	if err := validateTaskRange(
 		request.TaskCategory.Type(),
-		request.MinTaskKey,
-		request.MaxTaskKey,
+		request.InclusiveMinTaskKey,
+		request.ExclusiveMaxTaskKey,
 	); err != nil {
 		return nil, err
 	}
@@ -761,8 +761,8 @@ func (m *executionManagerImpl) RangeCompleteHistoryTasks(
 ) error {
 	if err := validateTaskRange(
 		request.TaskCategory.Type(),
-		request.MinTaskKey,
-		request.MaxTaskKey,
+		request.InclusiveMinTaskKey,
+		request.ExclusiveMaxTaskKey,
 	); err != nil {
 		return err
 	}
@@ -778,7 +778,7 @@ func (m *executionManagerImpl) PutReplicationTaskToDLQ(
 
 func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	request *GetReplicationTasksFromDLQRequest,
-) (*GetReplicationTasksFromDLQResponse, error) {
+) (*GetHistoryTasksResponse, error) {
 	resp, err := m.persistence.GetReplicationTasksFromDLQ(request)
 	if err != nil {
 		return nil, err
@@ -787,7 +787,7 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	if err != nil {
 		return nil, err
 	}
-	return &GetReplicationTasksFromDLQResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
+	return &GetHistoryTasksResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
 }
 
 func (m *executionManagerImpl) DeleteReplicationTaskFromDLQ(

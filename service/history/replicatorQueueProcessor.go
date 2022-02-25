@@ -209,11 +209,11 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 		response, err := p.executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 			ShardID:      p.shard.GetShardID(),
 			TaskCategory: tasks.CategoryReplication,
-			MinTaskKey: tasks.Key{
-				TaskID: minTaskID,
+			InclusiveMinTaskKey: tasks.Key{
+				TaskID: minTaskID + 1,
 			},
-			MaxTaskKey: tasks.Key{
-				TaskID: maxTaskID,
+			ExclusiveMaxTaskKey: tasks.Key{
+				TaskID: maxTaskID + 1,
 			},
 			BatchSize:     batchSize,
 			NextPageToken: token,

@@ -155,15 +155,16 @@ func (m *sqlExecutionStore) getTransferTask(
 	return resp, nil
 }
 
+// TODO: pagination
 func (m *sqlExecutionStore) getTransferTasks(
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	rows, err := m.Db.RangeSelectFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
-		ShardID:   request.ShardID,
-		MinTaskID: request.MinTaskKey.TaskID,
-		MaxTaskID: request.MaxTaskKey.TaskID,
+		ShardID:            request.ShardID,
+		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
 	})
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -197,9 +198,9 @@ func (m *sqlExecutionStore) rangeCompleteTransferTasks(
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	if _, err := m.Db.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
-		ShardID:   request.ShardID,
-		MinTaskID: request.MinTaskKey.TaskID,
-		MaxTaskID: request.MaxTaskKey.TaskID,
+		ShardID:            request.ShardID,
+		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
 	}); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("RangeCompleteTransferTask operation failed. Error: %v", err))
 	}
@@ -239,7 +240,7 @@ func (m *sqlExecutionStore) getTimerTasks(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	pageToken := &timerTaskPageToken{TaskID: math.MinInt64, Timestamp: request.MinTaskKey.FireTime}
+	pageToken := &timerTaskPageToken{TaskID: math.MinInt64, Timestamp: request.InclusiveMinTaskKey.FireTime}
 	if len(request.NextPageToken) > 0 {
 		if err := pageToken.deserialize(request.NextPageToken); err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("error deserializing timerTaskPageToken: %v", err))
@@ -247,11 +248,11 @@ func (m *sqlExecutionStore) getTimerTasks(
 	}
 
 	rows, err := m.Db.RangeSelectFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
-		ShardID:                request.ShardID,
-		MinVisibilityTimestamp: pageToken.Timestamp,
-		TaskID:                 pageToken.TaskID,
-		MaxVisibilityTimestamp: request.MaxTaskKey.FireTime,
-		PageSize:               request.BatchSize + 1,
+		ShardID:                         request.ShardID,
+		InclusiveMinVisibilityTimestamp: pageToken.Timestamp,
+		InclusiveMinTaskID:              pageToken.TaskID,
+		ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
+		PageSize:                        request.BatchSize + 1,
 	})
 
 	if err != nil && err != sql.ErrNoRows {
@@ -301,12 +302,12 @@ func (m *sqlExecutionStore) rangeCompleteTimerTasks(
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	start := request.MinTaskKey.FireTime
-	end := request.MaxTaskKey.FireTime
+	start := request.InclusiveMinTaskKey.FireTime
+	end := request.ExclusiveMaxTaskKey.FireTime
 	if _, err := m.Db.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
-		ShardID:                request.ShardID,
-		MinVisibilityTimestamp: start,
-		MaxVisibilityTimestamp: end,
+		ShardID:                         request.ShardID,
+		InclusiveMinVisibilityTimestamp: start,
+		ExclusiveMaxVisibilityTimestamp: end,
 	}); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("CompleteTimerTask operation failed. Error: %v", err))
 	}
@@ -343,21 +344,21 @@ func (m *sqlExecutionStore) getReplicationTasks(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	readLevel, maxReadLevelInclusive, err := getReadLevels(request)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadLevels(request)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := m.Db.RangeSelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
-		ShardID:   request.ShardID,
-		MinTaskID: readLevel,
-		MaxTaskID: maxReadLevelInclusive,
-		PageSize:  request.BatchSize,
+		ShardID:            request.ShardID,
+		InclusiveMinTaskID: inclusiveMinTaskID,
+		ExclusiveMaxTaskID: exclusiveMaxTaskID,
+		PageSize:           request.BatchSize,
 	})
 
 	switch err {
 	case nil:
-		return m.populateGetReplicationTasksResponse(rows, request.MaxTaskKey.TaskID)
+		return m.populateGetReplicationTasksResponse(rows, request.ExclusiveMaxTaskKey.TaskID)
 	case sql.ErrNoRows:
 		return &p.InternalGetHistoryTasksResponse{}, nil
 	default:
@@ -367,39 +368,22 @@ func (m *sqlExecutionStore) getReplicationTasks(
 
 func getReadLevels(
 	request *p.GetHistoryTasksRequest,
-) (readLevel int64, maxReadLevelInclusive int64, err error) {
-	readLevel = request.MinTaskKey.TaskID
+) (inclusiveMinTaskID int64, exclusiveMaxTaskID int64, err error) {
+	inclusiveMinTaskID = request.InclusiveMinTaskKey.TaskID
 	if len(request.NextPageToken) > 0 {
-		readLevel, err = deserializePageToken(request.NextPageToken)
+		inclusiveMinTaskID, err = deserializePageToken(request.NextPageToken)
 		if err != nil {
 			return 0, 0, err
 		}
 	}
 
-	maxReadLevelInclusive = collection.MaxInt64(readLevel+int64(request.BatchSize), request.MaxTaskKey.TaskID)
-	return readLevel, maxReadLevelInclusive, nil
-}
-
-func getReadLevelsForDLQ(
-	request *p.GetReplicationTasksFromDLQRequest,
-) (readLevel int64, maxReadLevelInclusive int64, err error) {
-	return getReadLevels(&p.GetHistoryTasksRequest{
-		ShardID:      request.ShardID,
-		TaskCategory: tasks.CategoryReplication,
-		MinTaskKey: tasks.Key{
-			TaskID: request.MinTaskID,
-		},
-		MaxTaskKey: tasks.Key{
-			TaskID: request.MaxTaskID,
-		},
-		BatchSize:     request.BatchSize,
-		NextPageToken: request.NextPageToken,
-	})
+	exclusiveMaxTaskID = collection.MinInt64(inclusiveMinTaskID+int64(request.BatchSize), request.ExclusiveMaxTaskKey.TaskID)
+	return inclusiveMinTaskID, exclusiveMaxTaskID, nil
 }
 
 func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	rows []sqlplugin.ReplicationTasksRow,
-	requestMaxReadLevel int64,
+	exclusiveMaxTaskID int64,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	if len(rows) == 0 {
 		return &p.InternalGetHistoryTasksResponse{}, nil
@@ -411,8 +395,8 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	}
 	var nextPageToken []byte
 	lastTaskID := rows[len(rows)-1].TaskID
-	if lastTaskID < requestMaxReadLevel {
-		nextPageToken = serializePageToken(lastTaskID)
+	if lastTaskID+1 < exclusiveMaxTaskID {
+		nextPageToken = serializePageToken(lastTaskID + 1)
 	}
 	return &p.InternalGetHistoryTasksResponse{
 		Tasks:         tasks,
@@ -422,7 +406,7 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 
 func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	rows []sqlplugin.ReplicationDLQTasksRow,
-	requestMaxReadLevel int64,
+	exclusiveMaxTaskID int64,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	if len(rows) == 0 {
 		return &p.InternalGetHistoryTasksResponse{}, nil
@@ -434,8 +418,8 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	}
 	var nextPageToken []byte
 	lastTaskID := rows[len(rows)-1].TaskID
-	if lastTaskID < requestMaxReadLevel {
-		nextPageToken = serializePageToken(lastTaskID)
+	if lastTaskID+1 < exclusiveMaxTaskID {
+		nextPageToken = serializePageToken(lastTaskID + 1)
 	}
 	return &p.InternalGetHistoryTasksResponse{
 		Tasks:         tasks,
@@ -463,9 +447,9 @@ func (m *sqlExecutionStore) rangeCompleteReplicationTasks(
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	if _, err := m.Db.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
-		ShardID:   request.ShardID,
-		MinTaskID: request.MinTaskKey.TaskID,
-		MaxTaskID: request.MaxTaskKey.TaskID,
+		ShardID:            request.ShardID,
+		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
 	}); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("RangeCompleteReplicationTask operation failed. Error: %v", err))
 	}
@@ -506,22 +490,22 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	readLevel, maxReadLevelInclusive, err := getReadLevelsForDLQ(request)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadLevels(&request.GetHistoryTasksRequest)
 	if err != nil {
 		return nil, err
 	}
 
 	rows, err := m.Db.RangeSelectFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
-		ShardID:           request.ShardID,
-		MinTaskID:         readLevel,
-		MaxTaskID:         maxReadLevelInclusive,
-		PageSize:          request.BatchSize,
-		SourceClusterName: request.SourceClusterName,
+		ShardID:            request.ShardID,
+		InclusiveMinTaskID: inclusiveMinTaskID,
+		ExclusiveMaxTaskID: exclusiveMaxTaskID,
+		PageSize:           request.BatchSize,
+		SourceClusterName:  request.SourceClusterName,
 	})
 
 	switch err {
 	case nil:
-		return m.populateGetReplicationDLQTasksResponse(rows, request.MaxTaskID)
+		return m.populateGetReplicationDLQTasksResponse(rows, request.ExclusiveMaxTaskKey.TaskID)
 	case sql.ErrNoRows:
 		return &p.InternalGetHistoryTasksResponse{}, nil
 	default:
@@ -536,7 +520,7 @@ func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
 	defer cancel()
 	if _, err := m.Db.DeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksFilter{
 		ShardID:           request.ShardID,
-		TaskID:            request.TaskID,
+		TaskID:            request.TaskKey.TaskID,
 		SourceClusterName: request.SourceClusterName,
 	}); err != nil {
 		return err
@@ -550,10 +534,10 @@ func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	if _, err := m.Db.RangeDeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
-		ShardID:           request.ShardID,
-		SourceClusterName: request.SourceClusterName,
-		MinTaskID:         request.ExclusiveBeginTaskID,
-		MaxTaskID:         request.InclusiveEndTaskID,
+		ShardID:            request.ShardID,
+		SourceClusterName:  request.SourceClusterName,
+		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
 	}); err != nil {
 		return err
 	}
@@ -585,15 +569,16 @@ func (m *sqlExecutionStore) getVisibilityTask(
 	return resp, nil
 }
 
+// TODO: pagination
 func (m *sqlExecutionStore) getVisibilityTasks(
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	rows, err := m.Db.RangeSelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:   request.ShardID,
-		MinTaskID: request.MinTaskKey.TaskID,
-		MaxTaskID: request.MaxTaskKey.TaskID,
+		ShardID:            request.ShardID,
+		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
 	})
 	if err != nil {
 		if err != sql.ErrNoRows {
@@ -627,9 +612,9 @@ func (m *sqlExecutionStore) rangeCompleteVisibilityTasks(
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	if _, err := m.Db.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:   request.ShardID,
-		MinTaskID: request.MinTaskKey.TaskID,
-		MaxTaskID: request.MaxTaskKey.TaskID,
+		ShardID:            request.ShardID,
+		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
+		ExclusiveMaxTaskID: request.ExclusiveMaxTaskKey.TaskID,
 	}); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("RangeCompleteVisibilityTask operation failed. Error: %v", err))
 	}

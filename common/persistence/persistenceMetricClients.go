@@ -459,7 +459,7 @@ func (p *executionPersistenceClient) PutReplicationTaskToDLQ(
 
 func (p *executionPersistenceClient) GetReplicationTasksFromDLQ(
 	request *GetReplicationTasksFromDLQRequest,
-) (*GetReplicationTasksFromDLQResponse, error) {
+) (*GetHistoryTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTasksFromDLQScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationTasksFromDLQScope, metrics.PersistenceLatency)

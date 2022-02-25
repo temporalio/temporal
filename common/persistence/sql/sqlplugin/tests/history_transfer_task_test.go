@@ -167,8 +167,8 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 	numTasks := 20
 
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.TransferTasksRow
@@ -184,9 +184,9 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.TransferTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
 	}
 	rows, err := s.store.RangeSelectFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -221,12 +221,12 @@ func (s *historyHistoryTransferTaskSuite) TestDeleteSelect_Single() {
 func (s *historyHistoryTransferTaskSuite) TestDeleteSelect_Multiple() {
 	shardID := rand.Int31()
 	minTaskID := int64(1)
-	maxTaskID := int64(100)
+	maxTaskID := int64(101)
 
 	filter := sqlplugin.TransferTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
 	}
 	result, err := s.store.RangeDeleteFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -275,8 +275,8 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Multiple() {
 	numTasks := 20
 
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.TransferTasksRow
@@ -292,9 +292,9 @@ func (s *historyHistoryTransferTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.TransferTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
 	}
 	result, err = s.store.RangeDeleteFromTransferTasks(newExecutionContext(), filter)
 	s.NoError(err)

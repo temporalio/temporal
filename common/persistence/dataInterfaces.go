@@ -423,17 +423,13 @@ type (
 	// GetHistoryTasksRequest is used to get a range of history tasks
 	// Either max TaskID or FireTime is required depending on the
 	// task category type. Min TaskID or FireTime is optional.
-	// NOTE: currently the range for TaskID is (minTaskID, maxTaskID] and
-	// the range for FireTime is [minFireTime, maxFireTime)
-	// TODO: change the semantics for TaskID to be the same as FireTime
-	// and rename the fields to InclusiveMinTaskKey and ExclusiveMaxTaskKey
 	GetHistoryTasksRequest struct {
-		ShardID       int32
-		TaskCategory  tasks.Category
-		MinTaskKey    tasks.Key
-		MaxTaskKey    tasks.Key
-		BatchSize     int
-		NextPageToken []byte
+		ShardID             int32
+		TaskCategory        tasks.Category
+		InclusiveMinTaskKey tasks.Key
+		ExclusiveMaxTaskKey tasks.Key
+		BatchSize           int
+		NextPageToken       []byte
 	}
 
 	// GetHistoryTasksResponse is the response for GetHistoryTasks
@@ -452,19 +448,12 @@ type (
 	// RangeCompleteHistoryTasksRequest deletes a range of history tasks
 	// Either max TaskID or FireTime is required depending on the
 	// task category type. Min TaskID or FireTime is optional.
-	// NOTE: currently the range for TaskID is (minTaskID, maxTaskID] and
-	// the range for FireTime is [minFireTime, maxFireTime)
-	// TODO: change the semantics for TaskID to be the same as FireTime
-	// and rename the fields to InclusiveMinTaskKey and ExclusiveMaxTaskKey
 	RangeCompleteHistoryTasksRequest struct {
-		ShardID      int32
-		TaskCategory tasks.Category
-		MinTaskKey   tasks.Key
-		MaxTaskKey   tasks.Key
+		ShardID             int32
+		TaskCategory        tasks.Category
+		InclusiveMinTaskKey tasks.Key
+		ExclusiveMaxTaskKey tasks.Key
 	}
-
-	// TODO: refactor Replication DLQ related methods/struct definition and reuse history task
-	// definition above
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
 	GetReplicationTasksRequest struct {
@@ -484,28 +473,24 @@ type (
 
 	// GetReplicationTasksFromDLQRequest is used to get replication tasks from dlq
 	GetReplicationTasksFromDLQRequest struct {
-		ShardID           int32
+		GetHistoryTasksRequest
+
 		SourceClusterName string
-		GetReplicationTasksRequest
 	}
 
 	// DeleteReplicationTaskFromDLQRequest is used to delete replication task from DLQ
 	DeleteReplicationTaskFromDLQRequest struct {
-		ShardID           int32
+		CompleteHistoryTaskRequest
+
 		SourceClusterName string
-		TaskID            int64
 	}
 
 	// RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
 	RangeDeleteReplicationTaskFromDLQRequest struct {
-		ShardID              int32
-		SourceClusterName    string
-		ExclusiveBeginTaskID int64
-		InclusiveEndTaskID   int64
-	}
+		RangeCompleteHistoryTasksRequest
 
-	// GetReplicationTasksFromDLQResponse is the response for GetReplicationTasksFromDLQ
-	GetReplicationTasksFromDLQResponse = GetHistoryTasksResponse
+		SourceClusterName string
+	}
 
 	// CreateTaskQueueRequest create a new task queue
 	CreateTaskQueueRequest struct {
@@ -1016,7 +1001,7 @@ type (
 		RangeCompleteHistoryTasks(request *RangeCompleteHistoryTasksRequest) error
 
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
-		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
+		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetHistoryTasksResponse, error)
 		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
 
@@ -1197,27 +1182,6 @@ func SplitHistoryGarbageCleanupInfo(info string) (namespaceID, workflowID, runID
 	workflowEnd := len(info) - len(runID) - 1
 	workflowID = info[len(namespaceID)+1 : workflowEnd]
 	return
-}
-
-// NewGetReplicationTasksFromDLQRequest creates a new GetReplicationTasksFromDLQRequest
-func NewGetReplicationTasksFromDLQRequest(
-	shardID int32,
-	sourceClusterName string,
-	readLevel int64,
-	maxReadLevel int64,
-	batchSize int,
-	nextPageToken []byte,
-) *GetReplicationTasksFromDLQRequest {
-	return &GetReplicationTasksFromDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: sourceClusterName,
-		GetReplicationTasksRequest: GetReplicationTasksRequest{
-			MinTaskID:     readLevel,
-			MaxTaskID:     maxReadLevel,
-			BatchSize:     batchSize,
-			NextPageToken: nextPageToken,
-		},
-	}
 }
 
 type ServiceType int

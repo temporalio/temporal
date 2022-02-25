@@ -39,6 +39,99 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
+const (
+	templateCreateTaskQuery = `INSERT INTO tasks (` +
+		`namespace_id, task_queue_name, task_queue_type, type, task_id, task, task_encoding) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?)`
+
+	templateCreateTaskWithTTLQuery = `INSERT INTO tasks (` +
+		`namespace_id, task_queue_name, task_queue_type, type, task_id, task, task_encoding) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?) USING TTL ?`
+
+	templateGetTasksQuery = `SELECT task_id, task, task_encoding ` +
+		`FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id > ? ` +
+		`and task_id <= ?`
+
+	templateCompleteTaskQuery = `DELETE FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ?`
+
+	templateCompleteTasksLessThanQuery = `DELETE FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
+		`AND type = ? ` +
+		`AND task_id <= ? `
+
+	templateGetTaskQueue = `SELECT ` +
+		`range_id, ` +
+		`task_queue, ` +
+		`task_queue_encoding ` +
+		`FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ?`
+
+	templateInsertTaskQueueQuery = `INSERT INTO tasks (` +
+		`namespace_id, ` +
+		`task_queue_name, ` +
+		`task_queue_type, ` +
+		`type, ` +
+		`task_id, ` +
+		`range_id, ` +
+		`task_queue, ` +
+		`task_queue_encoding ` +
+		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+
+	templateUpdateTaskQueueQuery = `UPDATE tasks SET ` +
+		`range_id = ?, ` +
+		`task_queue = ?, ` +
+		`task_queue_encoding = ? ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ? ` +
+		`IF range_id = ?`
+
+	templateUpdateTaskQueueQueryWithTTLPart1 = `INSERT INTO tasks (` +
+		`namespace_id, ` +
+		`task_queue_name, ` +
+		`task_queue_type, ` +
+		`type, ` +
+		`task_id ` +
+		`) VALUES (?, ?, ?, ?, ?) USING TTL ?`
+
+	templateUpdateTaskQueueQueryWithTTLPart2 = `UPDATE tasks USING TTL ? SET ` +
+		`range_id = ?, ` +
+		`task_queue = ?, ` +
+		`task_queue_encoding = ? ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ? ` +
+		`IF range_id = ?`
+
+	templateDeleteTaskQueueQuery = `DELETE FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
+		`AND type = ? ` +
+		`AND task_id = ? ` +
+		`IF range_id = ?`
+)
+
 type (
 	MatchingTaskStore struct {
 		Session gocql.Session

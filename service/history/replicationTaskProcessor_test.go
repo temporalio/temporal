@@ -387,8 +387,8 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      s.shardID,
 			TaskCategory: tasks.CategoryReplication,
-			MaxTaskKey: tasks.Key{
-				TaskID: ackedTaskID,
+			ExclusiveMaxTaskKey: tasks.Key{
+				TaskID: ackedTaskID + 1,
 			},
 		},
 	).Return(nil)

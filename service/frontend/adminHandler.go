@@ -529,6 +529,10 @@ func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.C
 	return &adminservice.CloseShardResponse{}, err
 }
 
+// TODO: consolidate into one ListShardTasks API and the range in request should be [inclusive, exclusive) for all task categories
+// Currently for transfer, replication, and visibility tasks the range in the request is (exclusive, inclusive], so add 1 when
+// calling persistence layer.
+
 // ListTimerTasks lists timer tasks for a given shard
 func (adh *AdminHandler) ListTimerTasks(ctx context.Context, request *adminservice.ListTimerTasksRequest) (_ *adminservice.ListTimerTasksResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -545,10 +549,10 @@ func (adh *AdminHandler) ListTimerTasks(ctx context.Context, request *adminservi
 	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: tasks.CategoryTimer,
-		MinTaskKey: tasks.Key{
+		InclusiveMinTaskKey: tasks.Key{
 			FireTime: timestamp.TimeValue(request.GetMinTime()),
 		},
-		MaxTaskKey: tasks.Key{
+		ExclusiveMaxTaskKey: tasks.Key{
 			FireTime: timestamp.TimeValue(request.GetMaxTime()),
 		},
 		BatchSize:     int(request.GetBatchSize()),
@@ -596,11 +600,11 @@ func (adh *AdminHandler) ListReplicationTasks(ctx context.Context, request *admi
 	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: tasks.CategoryReplication,
-		MinTaskKey: tasks.Key{
-			TaskID: request.GetMinTaskId(),
+		InclusiveMinTaskKey: tasks.Key{
+			TaskID: request.GetMinTaskId() + 1,
 		},
-		MaxTaskKey: tasks.Key{
-			TaskID: request.GetMaxTaskId(),
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxTaskId() + 1,
 		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
@@ -647,11 +651,11 @@ func (adh *AdminHandler) ListTransferTasks(ctx context.Context, request *adminse
 	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: tasks.CategoryTransfer,
-		MinTaskKey: tasks.Key{
-			TaskID: request.GetMinTaskId(),
+		InclusiveMinTaskKey: tasks.Key{
+			TaskID: request.GetMinTaskId() + 1,
 		},
-		MaxTaskKey: tasks.Key{
-			TaskID: request.GetMaxTaskId(),
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxTaskId() + 1,
 		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
@@ -698,11 +702,11 @@ func (adh *AdminHandler) ListVisibilityTasks(ctx context.Context, request *admin
 	resp, err := executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: tasks.CategoryVisibility,
-		MinTaskKey: tasks.Key{
-			TaskID: resendStartEventID,
+		InclusiveMinTaskKey: tasks.Key{
+			TaskID: resendStartEventID + 1,
 		},
-		MaxTaskKey: tasks.Key{
-			TaskID: request.GetMaxReadLevel(),
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: request.GetMaxReadLevel() + 1,
 		},
 		BatchSize:     int(request.GetBatchSize()),
 		NextPageToken: request.GetNextPageToken(),
