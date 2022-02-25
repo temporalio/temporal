@@ -227,7 +227,6 @@ func (s *mutableStateSuite) TestChecksum() {
 	}
 
 	loadErrorsFunc := func() int64 {
-		// todomigryz: debug code
 		counter := s.testScope.Snapshot().Counters()["test.mutable_state_checksum_mismatch+namespace=all,operation=WorkflowContext,service_name=history"]
 		if counter != nil {
 			return counter.Value()
