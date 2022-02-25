@@ -26,7 +26,6 @@ package client
 
 import (
 	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
@@ -76,28 +75,21 @@ type (
 func NewFactory(
 	dataStoreFactory DataStoreFactory,
 	cfg *config.Persistence,
-	persistenceMaxQPS dynamicconfig.IntPropertyFn,
+	ratelimiter quotas.RateLimiter,
 	serializer serialization.Serializer,
 	clusterName string,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) Factory {
-	factory := &factoryImpl{
+	return &factoryImpl{
 		dataStoreFactory: dataStoreFactory,
 		config:           cfg,
 		serializer:       serializer,
 		metricsClient:    metricsClient,
 		logger:           logger,
 		clusterName:      clusterName,
+		ratelimiter:      ratelimiter,
 	}
-
-	if persistenceMaxQPS != nil && persistenceMaxQPS() > 0 {
-		factory.ratelimiter = quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(persistenceMaxQPS()) },
-		)
-	}
-
-	return factory
 }
 
 // NewTaskManager returns a new task manager

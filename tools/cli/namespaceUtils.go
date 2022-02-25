@@ -32,12 +32,11 @@ import (
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -45,7 +44,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -217,6 +215,9 @@ func initializeAdminNamespaceHandler(
 
 	factory := initializePersistenceFactory(
 		&configuration.Persistence,
+		func(...dynamicconfig.FilterOption) int {
+			return dependencyMaxQPS
+		},
 		"",
 		metricsClient,
 		logger,
@@ -273,6 +274,7 @@ func initializeNamespaceHandler(
 
 func initializePersistenceFactory(
 	pConfig *config.Persistence,
+	maxQps client.PersistenceMaxQps,
 	clusterName string,
 	metricsClient metrics.Client,
 	logger log.Logger,
@@ -286,16 +288,14 @@ func initializePersistenceFactory(
 		logger,
 		metricsClient,
 	)
-	pFactory := client.NewFactory(
-		dataStoreFactory,
-		pConfig,
-		dynamicconfig.GetIntPropertyFn(dependencyMaxQPS),
-		serialization.NewSerializer(),
-		clusterName,
-		metricsClient,
-		logger,
-	)
-	return pFactory
+	return client.FactoryProvider(client.NewFactoryParams{
+		DataStoreFactory:  dataStoreFactory,
+		Cfg:               pConfig,
+		PersistenceMaxQPS: maxQps,
+		ClusterName:       persistenceClient.ClusterName(clusterName),
+		MetricsClient:     metricsClient,
+		Logger:            logger,
+	})
 }
 
 func initializeClusterMetadata(

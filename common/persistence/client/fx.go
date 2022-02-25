@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -66,10 +67,16 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
+	var ratelimiter quotas.RateLimiter
+	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
+		ratelimiter = quotas.NewDefaultOutgoingRateLimiter(
+			func() float64 { return float64(params.PersistenceMaxQPS()) },
+		)
+	}
 	return NewFactory(
 		params.DataStoreFactory,
 		params.Cfg,
-		dynamicconfig.IntPropertyFn(params.PersistenceMaxQPS),
+		ratelimiter,
 		serialization.NewSerializer(),
 		string(params.ClusterName),
 		params.MetricsClient,

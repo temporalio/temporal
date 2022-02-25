@@ -59,6 +59,7 @@ func CreatePersistenceFactory(c *cli.Context) persistenceClient.Factory {
 
 	return initializePersistenceFactory(
 		persistence,
+		GetQPS,
 		c.String(FlagTargetCluster),
 		nil,
 		log.NewNoopLogger(),
