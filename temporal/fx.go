@@ -353,6 +353,7 @@ func HistoryServiceProvider(
 	}
 
 	stopChan := make(chan struct{})
+
 	app := fx.New(
 		fx.Supply(
 			stopChan,

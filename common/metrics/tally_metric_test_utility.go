@@ -46,7 +46,11 @@ func NewTallyMetricTestUtility() *TallyMetricTestUtility {
 }
 
 func (t *TallyMetricTestUtility) GetClient(config *ClientConfig, idx ServiceIdx) Client {
-	return NewClient(config, t.scope, idx)
+	result, err := NewClient(config, t.scope, idx)
+	if err != nil {
+		panic(err)
+	}
+	return result
 }
 
 func (t *TallyMetricTestUtility) ContainsCounter(name MetricName, labels map[string]string, value int64) error {

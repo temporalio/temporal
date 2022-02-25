@@ -103,9 +103,11 @@ func (s *historyArchiverSuite) TearDownSuite() {
 func (s *historyArchiverSuite) SetupTest() {
 	scope := tally.NewTestScope("test", nil)
 	s.Assertions = require.New(s.T())
+	metricsClient, err := metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.History)
+	s.Require().NoError(err, "metrics.NewClient")
 	s.container = &archiver.HistoryBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.HistoryArchiverScope),
+		MetricsClient: metricsClient,
 	}
 
 	s.controller = gomock.NewController(s.T())

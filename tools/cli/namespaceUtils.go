@@ -208,10 +208,13 @@ func initializeFrontendClient(
 
 func initializeAdminNamespaceHandler(
 	context *cli.Context,
-) namespace.Handler {
+) (namespace.Handler, error) {
 
 	configuration := loadConfig(context)
-	metricsClient := initializeMetricsClient()
+	metricsClient, err := initializeMetricsClient()
+	if err != nil {
+		return nil, err
+	}
 	logger := log.NewZapLogger(log.BuildZapLogger(configuration.Log))
 
 	factory := initializePersistenceFactory(
@@ -234,7 +237,7 @@ func initializeAdminNamespaceHandler(
 		clusterMetadata,
 		initializeArchivalMetadata(configuration, dynamicConfig),
 		initializeArchivalProvider(configuration, clusterMetadata, metricsClient, logger),
-	)
+	), nil
 }
 
 func loadConfig(
@@ -386,7 +389,7 @@ func initializeDynamicConfig(
 	return dynamicconfig.NewCollection(dynamicConfigClient, logger)
 }
 
-func initializeMetricsClient() metrics.Client {
+func initializeMetricsClient() (metrics.Client, error) {
 	return metrics.NewClient(&metrics.ClientConfig{}, tally.NoopScope, metrics.Common)
 }
 
