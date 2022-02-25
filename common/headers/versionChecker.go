@@ -41,8 +41,8 @@ const (
 	ClientNameTypeScriptSDK = "temporal-typescript"
 	ClientNameCLI           = "temporal-cli"
 
-	ServerVersion = "1.15.0"
-	CLIVersion    = "1.15.0"
+	ServerVersion = "1.15.1"
+	CLIVersion    = "1.15.1"
 
 	// SupportedServerVersions is used by CLI and inter role communication.
 	SupportedServerVersions = ">=1.0.0 <2.0.0"
