@@ -30,18 +30,18 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-var(
-	NoopReporter Reporter = newNoopReporter()
-	NoopClient Client = newNoopClient()
+var (
+	NoopReporter      Reporter      = newNoopReporter()
+	NoopClient        Client        = newNoopClient()
 	noopInternalScope internalScope = newNoopScope()
-	NoopScope Scope = noopInternalScope
-	NoopUserScope UserScope = newNoopUserScope()
-	NoopStopwatch Stopwatch = newNoopStopwatch()
+	NoopScope         Scope         = noopInternalScope
+	NoopUserScope     UserScope     = newNoopUserScope()
+	NoopStopwatch     Stopwatch     = newNoopStopwatch()
 )
 
 type (
-	noopReporterImpl struct{}
-	noopClientImpl   struct{}
+	noopReporterImpl     struct{}
+	noopClientImpl       struct{}
 	noopMetricsUserScope struct{}
 	noopStopwatchImpl    struct{}
 	noopScopeImpl        struct{}
@@ -156,4 +156,3 @@ func newNoopStopwatch() *noopStopwatchImpl {
 
 func (n *noopStopwatchImpl) Stop()                       {}
 func (n *noopStopwatchImpl) Subtract(nsec time.Duration) {}
-

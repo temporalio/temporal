@@ -197,8 +197,8 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	var metricsClient metrics.Client
 	metricsClient, err = serverReporter.NewClient(logger, metrics.Server)
 	if err != nil {
-			  return serverOptionsProvider{}, err
-			  }
+		return serverOptionsProvider{}, err
+	}
 
 	// DynamicConfigClient
 	dcClient := so.dynamicConfigClient
