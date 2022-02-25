@@ -2132,6 +2132,15 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedState1, state1.NextEventId, int64(3), replicationTasks)
 	s.NoError(err)
 
+	// test only tasks within requested range will be returned
+	for _, replicationTask := range replicationTasks {
+		taskID := replicationTask.GetTaskID()
+		tasks, err := s.GetReplicationTasksInRange(taskID, taskID+1, 100)
+		s.NoError(err)
+		s.Equal(1, len(tasks))
+	}
+
+	// test pagination
 	respTasks, err := s.GetReplicationTasks(1, true)
 	s.NoError(err)
 	s.Equal(len(replicationTasks), len(respTasks))
@@ -3016,8 +3025,12 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 		NewRunBranchToken:   nil,
 	}, task1)
 
-	err = s.CompleteTransferTask(task1.GetTaskID())
+	err = s.CompleteReplicationTask(task1.GetTaskID())
 	s.NoError(err)
+
+	// NOTE: GetReplicationTasks will return empty result even if
+	// there's no CompleteReplicationTask above because the minTaskID
+	// already advanced beyond task1's ID inside GetReplicationTasks
 	tasks2, err := s.GetReplicationTasks(1, false)
 	s.NoError(err)
 	s.Equal(0, len(tasks2))

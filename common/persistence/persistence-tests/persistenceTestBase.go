@@ -1027,6 +1027,25 @@ Loop:
 	return result, nil
 }
 
+func (s *TestBase) GetReplicationTasksInRange(
+	inclusiveMinTaskID int64,
+	exclusiveMaxTaskID int64,
+	batchSize int,
+) ([]tasks.Task, error) {
+	response, err := s.ExecutionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		ShardID:             s.ShardInfo.GetShardId(),
+		TaskCategory:        tasks.CategoryReplication,
+		InclusiveMinTaskKey: tasks.Key{TaskID: inclusiveMinTaskID},
+		ExclusiveMaxTaskKey: tasks.Key{TaskID: exclusiveMaxTaskID},
+		BatchSize:           batchSize,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return response.Tasks, nil
+}
+
 // RangeCompleteReplicationTask is a utility method to complete a range of replication tasks
 func (s *TestBase) RangeCompleteReplicationTask(exclusiveEndTaskID int64) error {
 	return s.ExecutionManager.RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{

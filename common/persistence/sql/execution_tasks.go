@@ -34,7 +34,6 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -344,7 +343,7 @@ func (m *sqlExecutionStore) getReplicationTasks(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadLevels(request)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadRange(request)
 	if err != nil {
 		return nil, err
 	}
@@ -366,7 +365,7 @@ func (m *sqlExecutionStore) getReplicationTasks(
 	}
 }
 
-func getReadLevels(
+func getReadRange(
 	request *p.GetHistoryTasksRequest,
 ) (inclusiveMinTaskID int64, exclusiveMaxTaskID int64, err error) {
 	inclusiveMinTaskID = request.InclusiveMinTaskKey.TaskID
@@ -377,8 +376,7 @@ func getReadLevels(
 		}
 	}
 
-	exclusiveMaxTaskID = collection.MinInt64(inclusiveMinTaskID+int64(request.BatchSize), request.ExclusiveMaxTaskKey.TaskID)
-	return inclusiveMinTaskID, exclusiveMaxTaskID, nil
+	return inclusiveMinTaskID, request.ExclusiveMaxTaskKey.TaskID, nil
 }
 
 func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
@@ -490,7 +488,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadLevels(&request.GetHistoryTasksRequest)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadRange(&request.GetHistoryTasksRequest)
 	if err != nil {
 		return nil, err
 	}
