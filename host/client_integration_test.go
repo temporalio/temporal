@@ -696,11 +696,11 @@ func (s *clientIntegrationSuite) Test_UnhandledCommandAndNewTask() {
 
 func (s *clientIntegrationSuite) Test_InvalidCommandAttribute() {
 	/*
-	This test simulates workflow generate command with invalid attributes.
-	Server is expected to fail the workflow task and schedule a retry immediately for first attempt,
-	but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.
-	This is the same behavior as the SDK used to do, but now we would do on server.
-	 */
+		This test simulates workflow generate command with invalid attributes.
+		Server is expected to fail the workflow task and schedule a retry immediately for first attempt,
+		but if workflow task keeps failing, server will drop the task and wait for timeout to schedule additional retries.
+		This is the same behavior as the SDK used to do, but now we would do on server.
+	*/
 
 	activityFn := func(ctx context.Context) error {
 		return nil
@@ -757,8 +757,8 @@ func (s *clientIntegrationSuite) Test_InvalidCommandAttribute() {
 	// assert workflow task retried 3 times
 	s.Equal(3, len(calledTime))
 
-	s.True(calledTime[1].Sub(calledTime[0]) < time.Second) // retry immediately
-	s.True(calledTime[2].Sub(calledTime[1]) > time.Second * 3) // retry after WorkflowTaskTimeout
+	s.True(calledTime[1].Sub(calledTime[0]) < time.Second)   // retry immediately
+	s.True(calledTime[2].Sub(calledTime[1]) > time.Second*3) // retry after WorkflowTaskTimeout
 }
 
 func (s *clientIntegrationSuite) Test_BufferedQuery() {
