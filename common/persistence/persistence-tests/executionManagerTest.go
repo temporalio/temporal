@@ -3335,19 +3335,22 @@ func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 		NamespaceId: uuid.New(),
 		WorkflowId:  uuid.New(),
 		RunId:       uuid.New(),
-		TaskId:      2,
+		TaskId:      10,
 		TaskType:    1,
 	}
 	err = s.PutReplicationTaskToDLQ(sourceCluster, taskInfo1)
 	s.NoError(err)
 	err = s.PutReplicationTaskToDLQ(sourceCluster, taskInfo2)
 	s.NoError(err)
-	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 1, 3, 2, nil)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 1, 5, 100, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 1)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 1, 11, 2, nil)
 	s.NoError(err)
 	s.Len(resp.Tasks, 2)
-	err = s.RangeDeleteReplicationTaskFromDLQ(sourceCluster, 1, 3)
+	err = s.RangeDeleteReplicationTaskFromDLQ(sourceCluster, 1, 11)
 	s.NoError(err)
-	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 1, 3, 2, nil)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 1, 11, 2, nil)
 	s.NoError(err)
 	s.Len(resp.Tasks, 0)
 }
