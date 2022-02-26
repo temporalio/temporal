@@ -1,7 +1,7 @@
 CREATE TYPE serialized_event_batch (
   encoding_type text,
   version       int,
-  data          blob,
+  data          blob
 );
 
 CREATE TABLE executions (
