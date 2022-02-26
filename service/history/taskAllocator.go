@@ -27,8 +27,6 @@ package history
 import (
 	"sync"
 
-	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -37,9 +35,9 @@ import (
 
 type (
 	taskAllocator interface {
-		verifyActiveTask(taskNamespaceID namespace.ID, task interface{}) (bool, error)
-		verifyFailoverActiveTask(targetNamespaceIDs map[string]struct{}, taskNamespaceID namespace.ID, task interface{}) (bool, error)
-		verifyStandbyTask(standbyCluster string, taskNamespaceID namespace.ID, task interface{}) (bool, error)
+		verifyActiveTask(taskNamespaceID namespace.ID, task interface{}) bool
+		verifyFailoverActiveTask(targetNamespaceIDs map[string]struct{}, taskNamespaceID namespace.ID, task interface{}) bool
+		verifyStandbyTask(standbyCluster string, taskNamespaceID namespace.ID, task interface{}) bool
 		lock()
 		unlock()
 	}
@@ -65,68 +63,54 @@ func newTaskAllocator(shard shard.Context) taskAllocator {
 }
 
 // verifyActiveTask, will return true if task activeness check is successful
-func (t *taskAllocatorImpl) verifyActiveTask(taskNamespaceID namespace.ID, task interface{}) (bool, error) {
+func (t *taskAllocatorImpl) verifyActiveTask(taskNamespaceID namespace.ID, task interface{}) bool {
 	t.locker.RLock()
 	defer t.locker.RUnlock()
 
 	namespaceEntry, err := t.namespaceRegistry.GetNamespaceByID(taskNamespaceID)
 	if err != nil {
-		// it is possible that the namespace is deleted
-		// we should treat that namespace as active
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			t.logger.Warn("Cannot find namespace", tag.WorkflowNamespaceID(taskNamespaceID.String()))
-			return false, err
-		}
-		t.logger.Warn("Cannot find namespace, default to process task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-		return true, nil
+		return false
 	}
 	if namespaceEntry.IsGlobalNamespace() && t.currentClusterName != namespaceEntry.ActiveClusterName() {
 		// timer task does not belong to cluster name
 		t.logger.Debug("Namespace is not active, skip task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-		return false, nil
+		return false
 	}
 	t.logger.Debug("Namespace is active, process task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-	return true, nil
+	return true
 }
 
 // verifyFailoverActiveTask, will return true if task activeness check is successful
-func (t *taskAllocatorImpl) verifyFailoverActiveTask(targetNamespaceIDs map[string]struct{}, taskNamespaceID namespace.ID, task interface{}) (bool, error) {
+func (t *taskAllocatorImpl) verifyFailoverActiveTask(targetNamespaceIDs map[string]struct{}, taskNamespaceID namespace.ID, task interface{}) bool {
 	_, ok := targetNamespaceIDs[taskNamespaceID.String()]
 	if ok {
 		t.logger.Debug("Failover Namespace is active, process task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-		return true, nil
+		return true
 	}
 	t.logger.Debug("Failover Namespace is not active, skip task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-	return false, nil
+	return false
 }
 
 // verifyStandbyTask, will return true if task standbyness check is successful
-func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskNamespaceID namespace.ID, task interface{}) (bool, error) {
+func (t *taskAllocatorImpl) verifyStandbyTask(standbyCluster string, taskNamespaceID namespace.ID, task interface{}) bool {
 	t.locker.RLock()
 	defer t.locker.RUnlock()
 
 	namespaceEntry, err := t.namespaceRegistry.GetNamespaceByID(taskNamespaceID)
 	if err != nil {
-		// it is possible that the namespace is deleted
-		// we should treat that namespace as not active
-		if _, ok := err.(*serviceerror.NotFound); !ok {
-			t.logger.Warn("Cannot find namespace", tag.WorkflowNamespaceID(taskNamespaceID.String()))
-			return false, err
-		}
-		t.logger.Warn("Cannot find namespace, default to not process task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-		return false, nil
+		return false
 	}
 	if !namespaceEntry.IsGlobalNamespace() {
 		// non global namespace, timer task does not belong here
 		t.logger.Debug("Namespace is not global, skip task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-		return false, nil
+		return false
 	} else if namespaceEntry.IsGlobalNamespace() && namespaceEntry.ActiveClusterName() != standbyCluster {
 		// timer task does not belong here
 		t.logger.Debug("Namespace is not standby, skip task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-		return false, nil
+		return false
 	}
 	t.logger.Debug("Namespace is standby, process task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-	return true, nil
+	return true
 }
 
 // lock block all task allocation

@@ -50,8 +50,7 @@ import (
 var (
 	emptyTime = time.Time{}
 
-	loadNamespaceEntryForTimerTaskRetryDelay = 100 * time.Millisecond
-	loadTimerTaskThrottleRetryDelay          = 5 * time.Second
+	loadTimerTaskThrottleRetryDelay = 5 * time.Second
 )
 
 type (

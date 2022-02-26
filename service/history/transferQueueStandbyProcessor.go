@@ -85,7 +85,7 @@ func newTransferQueueStandbyProcessor(
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 
-	transferTaskFilter := func(task tasks.Task) (bool, error) {
+	transferTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {

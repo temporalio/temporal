@@ -59,7 +59,7 @@ var (
 )
 
 type (
-	taskFilter func(task tasks.Task) (bool, error)
+	taskFilter func(task tasks.Task) bool
 
 	transferQueueProcessorImpl struct {
 		isGlobalNamespaceEnabled  bool

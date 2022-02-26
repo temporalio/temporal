@@ -208,19 +208,12 @@ func (t *taskProcessor) processTaskAndAck(
 	var scope metrics.Scope
 	var err error
 
-FilterLoop:
-	for {
-		select {
-		case <-t.shutdownCh:
-			// this must return without ack
-			return
-		default:
-			task.shouldProcessTask, err = task.processor.getTaskFilter()(task.Task)
-			if err == nil {
-				break FilterLoop
-			}
-			time.Sleep(loadNamespaceEntryForTimerTaskRetryDelay)
-		}
+	select {
+	case <-t.shutdownCh:
+		// this must return without ack
+		return
+	default:
+		task.shouldProcessTask = task.processor.getTaskFilter()(task.Task)
 	}
 
 	op := func() error {

@@ -77,7 +77,7 @@ func newTimerQueueActiveProcessor(
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	metricsClient := shard.GetMetricsClient()
-	timerTaskFilter := func(task tasks.Task) (bool, error) {
+	timerTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
 
@@ -170,7 +170,7 @@ func newTimerQueueFailoverProcessor(
 		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
-	timerTaskFilter := func(task tasks.Task) (bool, error) {
+	timerTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, namespace.ID(task.GetNamespaceID()), task)
 	}
 
