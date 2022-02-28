@@ -716,12 +716,13 @@ func (m *executionManagerImpl) GetHistoryTask(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTasks(request.TaskCategory, []commonpb.DataBlob{resp.Task})
+
+	task, err := m.serializer.DeserializeTask(request.TaskCategory, resp.Task)
 	if err != nil {
 		return nil, err
 	}
 	return &GetHistoryTaskResponse{
-		Task: tasks[0],
+		Task: task,
 	}, nil
 }
 
@@ -740,10 +741,16 @@ func (m *executionManagerImpl) GetHistoryTasks(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTasks(request.TaskCategory, resp.Tasks)
-	if err != nil {
-		return nil, err
+
+	tasks := make([]tasks.Task, 0, len(resp.Tasks))
+	for _, blob := range resp.Tasks {
+		task, err := m.serializer.DeserializeTask(request.TaskCategory, blob)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
 	}
+
 	return &GetHistoryTasksResponse{
 		Tasks:         tasks,
 		NextPageToken: resp.NextPageToken,
@@ -783,11 +790,21 @@ func (m *executionManagerImpl) GetReplicationTasksFromDLQ(
 	if err != nil {
 		return nil, err
 	}
-	tasks, err := m.serializer.DeserializeTasks(tasks.CategoryReplication, resp.Tasks)
-	if err != nil {
-		return nil, err
+
+	category := tasks.CategoryReplication
+	tasks := make([]tasks.Task, 0, len(resp.Tasks))
+	for _, blob := range resp.Tasks {
+		task, err := m.serializer.DeserializeTask(category, blob)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
 	}
-	return &GetReplicationTasksFromDLQResponse{Tasks: tasks, NextPageToken: resp.NextPageToken}, nil
+
+	return &GetReplicationTasksFromDLQResponse{
+		Tasks:         tasks,
+		NextPageToken: resp.NextPageToken,
+	}, nil
 }
 
 func (m *executionManagerImpl) DeleteReplicationTaskFromDLQ(
@@ -962,23 +979,19 @@ func serializeTasks(
 	inputTasks map[tasks.Category][]tasks.Task,
 ) (map[tasks.Category][]InternalHistoryTask, error) {
 	outputTasks := make(map[tasks.Category][]InternalHistoryTask)
-	for category, tasksByQueueType := range inputTasks {
-		// TODO: update serializer interface to serialize & deserialize one task at a time
-		// ideally, SerializeTasks should return a list of []InternalHistoryTask, which groups
-		// serialized task with it's key, howeve that will result in a cycle dependency issue
-		// between persistence and serializer package.
-		serializedTasks, err := serializer.SerializeTasks(tasksByQueueType)
-		if err != nil {
-			return nil, err
-		}
-
-		outputTasks[category] = make([]InternalHistoryTask, 0, len(serializedTasks))
-		for key, blob := range serializedTasks {
-			outputTasks[category] = append(outputTasks[category], InternalHistoryTask{
-				Key:  key,
+	for category, tasks := range inputTasks {
+		serializedTasks := make([]InternalHistoryTask, 0, len(tasks))
+		for _, task := range tasks {
+			blob, err := serializer.SerializeTask(task)
+			if err != nil {
+				return nil, err
+			}
+			serializedTasks = append(serializedTasks, InternalHistoryTask{
+				Key:  task.GetKey(),
 				Blob: blob,
 			})
 		}
+		outputTasks[category] = serializedTasks
 	}
 	return outputTasks, nil
 }

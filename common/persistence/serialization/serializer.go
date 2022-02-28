@@ -102,8 +102,8 @@ type (
 		ReplicationTaskToBlob(replicationTask *replicationspb.ReplicationTask, encodingType enumspb.EncodingType) (*commonpb.DataBlob, error)
 		ReplicationTaskFromBlob(data *commonpb.DataBlob) (*replicationspb.ReplicationTask, error)
 
-		SerializeTasks(taskSlice []tasks.Task) (map[tasks.Key]commonpb.DataBlob, error)
-		DeserializeTasks(category tasks.Category, blobSlice []commonpb.DataBlob) ([]tasks.Task, error)
+		SerializeTask(task tasks.Task) (commonpb.DataBlob, error)
+		DeserializeTask(category tasks.Category, blob commonpb.DataBlob) (tasks.Task, error)
 	}
 
 	// SerializationError is an error type for serialization

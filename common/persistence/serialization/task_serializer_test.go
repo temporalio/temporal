@@ -32,7 +32,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
@@ -333,10 +332,9 @@ func (s *taskSerializerSuite) TestReplicateHistoryTask() {
 func (s *taskSerializerSuite) assertEqualTasks(
 	task tasks.Task,
 ) {
-	blobMap, err := s.taskSerializer.SerializeTasks([]tasks.Task{task})
+	blob, err := s.taskSerializer.SerializeTask(task)
 	s.NoError(err)
-	blobSlice := []commonpb.DataBlob{blobMap[task.GetKey()]}
-	taskSlice, err := s.taskSerializer.DeserializeTasks(task.GetCategory(), blobSlice)
+	deserializedTask, err := s.taskSerializer.DeserializeTask(task.GetCategory(), blob)
 	s.NoError(err)
-	s.Equal([]tasks.Task{task}, taskSlice)
+	s.Equal(task, deserializedTask)
 }
