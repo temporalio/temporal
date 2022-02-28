@@ -106,7 +106,7 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	s.scopeIdx = 0
-	s.scope = metrics.NewNoopMetricsClient().Scope(s.scopeIdx)
+	s.scope = metrics.NoopClient.Scope(s.scopeIdx)
 	s.notificationChan = make(chan struct{})
 	h := &historyEngineImpl{
 		shard:         s.mockShard,

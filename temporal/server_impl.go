@@ -205,17 +205,6 @@ func NewBootstrapParams(
 
 	params.ServerMetricsReporter = serverReporter
 
-	if serverReporter == nil {
-		var err error
-		serverReporter, err = metrics.InitMetricsReporter(logger, &svcCfg.Metrics)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"unable to initialize per-service metric client. "+
-					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
-		}
-		params.ServerMetricsReporter = serverReporter
-	}
-
 	serviceIdx := metrics.GetMetricsServiceIdx(svcName, logger)
 	metricsClient, err := serverReporter.NewClient(logger, serviceIdx)
 	if err != nil {
@@ -259,14 +248,22 @@ func initSystemNamespaces(
 	logger log.Logger,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) error {
+	clusterName := persistenceClient.ClusterName(currentClusterName)
+	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+		clusterName,
+		persistenceServiceResolver,
+		cfg,
+		customDataStoreFactory,
+		logger,
+		nil,
+	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
-		Cfg:                      cfg,
-		Resolver:                 persistenceServiceResolver,
-		PersistenceMaxQPS:        nil,
-		AbstractDataStoreFactory: customDataStoreFactory,
-		ClusterName:              persistenceClient.ClusterName(currentClusterName),
-		MetricsClient:            nil,
-		Logger:                   logger,
+		DataStoreFactory:  dataStoreFactory,
+		Cfg:               cfg,
+		PersistenceMaxQPS: nil,
+		ClusterName:       persistenceClient.ClusterName(currentClusterName),
+		MetricsClient:     nil,
+		Logger:            logger,
 	})
 	defer factory.Close()
 

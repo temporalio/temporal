@@ -32,19 +32,18 @@ import (
 	"github.com/urfave/cli"
 	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/config"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/client"
-	"go.temporal.io/server/common/persistence/serialization"
+	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -208,14 +207,21 @@ func initializeFrontendClient(
 
 func initializeAdminNamespaceHandler(
 	context *cli.Context,
-) namespace.Handler {
+) (namespace.Handler, error) {
 
 	configuration := loadConfig(context)
-	metricsClient := initializeMetricsClient()
+	metricsClient, err := initializeMetricsClient()
+	if err != nil {
+		return nil, err
+	}
 	logger := log.NewZapLogger(log.BuildZapLogger(configuration.Log))
 
 	factory := initializePersistenceFactory(
-		configuration,
+		&configuration.Persistence,
+		func(...dynamicconfig.FilterOption) int {
+			return dependencyMaxQPS
+		},
+		"",
 		metricsClient,
 		logger,
 	)
@@ -234,7 +240,7 @@ func initializeAdminNamespaceHandler(
 		clusterMetadata,
 		initializeArchivalMetadata(configuration, dynamicConfig),
 		initializeArchivalProvider(configuration, clusterMetadata, metricsClient, logger),
-	)
+	), nil
 }
 
 func loadConfig(
@@ -270,23 +276,29 @@ func initializeNamespaceHandler(
 }
 
 func initializePersistenceFactory(
-	serviceConfig *config.Config,
+	pConfig *config.Persistence,
+	maxQps client.PersistenceMaxQps,
+	clusterName string,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) client.Factory {
 
-	pConfig := serviceConfig.Persistence
-	pFactory := client.NewFactory(
-		&pConfig,
+	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+		persistenceClient.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
-		dynamicconfig.GetIntPropertyFn(dependencyMaxQPS),
-		serialization.NewSerializer(),
+		pConfig,
 		nil, // TODO propagate abstract datastore factory from the CLI.
-		"",
-		metricsClient,
 		logger,
+		metricsClient,
 	)
-	return pFactory
+	return client.FactoryProvider(client.NewFactoryParams{
+		DataStoreFactory:  dataStoreFactory,
+		Cfg:               pConfig,
+		PersistenceMaxQPS: maxQps,
+		ClusterName:       persistenceClient.ClusterName(clusterName),
+		MetricsClient:     metricsClient,
+		Logger:            logger,
+	})
 }
 
 func initializeClusterMetadata(
@@ -386,7 +398,7 @@ func initializeDynamicConfig(
 	return dynamicconfig.NewCollection(dynamicConfigClient, logger)
 }
 
-func initializeMetricsClient() metrics.Client {
+func initializeMetricsClient() (metrics.Client, error) {
 	return metrics.NewClient(&metrics.ClientConfig{}, tally.NoopScope, metrics.Common)
 }
 

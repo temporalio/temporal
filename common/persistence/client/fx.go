@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
@@ -43,13 +43,12 @@ type (
 	NewFactoryParams struct {
 		fx.In
 
-		Cfg                      *config.Persistence
-		Resolver                 resolver.ServiceResolver
-		PersistenceMaxQPS        PersistenceMaxQps
-		AbstractDataStoreFactory AbstractDataStoreFactory
-		ClusterName              ClusterName
-		MetricsClient            metrics.Client
-		Logger                   log.Logger
+		DataStoreFactory  DataStoreFactory
+		Cfg               *config.Persistence
+		PersistenceMaxQPS PersistenceMaxQps
+		ClusterName       ClusterName
+		MetricsClient     metrics.Client
+		Logger            log.Logger
 	}
 
 	FactoryProviderFn func(NewFactoryParams) Factory
@@ -58,6 +57,7 @@ type (
 var Module = fx.Options(
 	BeanModule,
 	fx.Provide(ClusterNameProvider),
+	fx.Provide(DataStoreFactoryProvider),
 )
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
@@ -67,12 +67,17 @@ func ClusterNameProvider(config *cluster.Config) ClusterName {
 func FactoryProvider(
 	params NewFactoryParams,
 ) Factory {
+	var ratelimiter quotas.RateLimiter
+	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
+		ratelimiter = quotas.NewDefaultOutgoingRateLimiter(
+			func() float64 { return float64(params.PersistenceMaxQPS()) },
+		)
+	}
 	return NewFactory(
+		params.DataStoreFactory,
 		params.Cfg,
-		params.Resolver,
-		dynamicconfig.IntPropertyFn(params.PersistenceMaxQPS),
+		ratelimiter,
 		serialization.NewSerializer(),
-		params.AbstractDataStoreFactory,
 		string(params.ClusterName),
 		params.MetricsClient,
 		params.Logger,

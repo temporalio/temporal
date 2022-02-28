@@ -138,7 +138,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier: events.NewNotifier(
 			clock.NewRealTimeSource(),
-			metrics.NewNoopMetricsClient(),
+			metrics.NoopClient,
 			func(namespace.ID, string) int32 { return 1 },
 		),
 		queueProcessors: map[tasks.Category]queues.Processor{
