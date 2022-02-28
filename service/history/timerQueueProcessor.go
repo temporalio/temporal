@@ -319,10 +319,10 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      t.shard.GetShardID(),
 			TaskCategory: tasks.CategoryTimer,
-			MinTaskKey: tasks.Key{
+			InclusiveMinTaskKey: tasks.Key{
 				FireTime: lowerAckLevel.FireTime,
 			},
-			MaxTaskKey: tasks.Key{
+			ExclusiveMaxTaskKey: tasks.Key{
 				FireTime: upperAckLevel.FireTime,
 			},
 		})

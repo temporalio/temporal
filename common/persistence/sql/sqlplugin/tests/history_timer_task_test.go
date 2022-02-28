@@ -196,10 +196,10 @@ func (s *historyHistoryTimerTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.TimerTasksRangeFilter{
-		ShardID:                shardID,
-		MinVisibilityTimestamp: minTimestamp,
-		MaxVisibilityTimestamp: maxTimestamp,
-		PageSize:               numTasks,
+		ShardID:                         shardID,
+		InclusiveMinVisibilityTimestamp: minTimestamp,
+		ExclusiveMaxVisibilityTimestamp: maxTimestamp,
+		PageSize:                        numTasks,
 	}
 	rows, err := s.store.RangeSelectFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -241,10 +241,10 @@ func (s *historyHistoryTimerTaskSuite) TestDeleteSelect_Multiple() {
 	maxTimestamp := minTimestamp.Add(time.Minute)
 
 	filter := sqlplugin.TimerTasksRangeFilter{
-		ShardID:                shardID,
-		MinVisibilityTimestamp: minTimestamp,
-		MaxVisibilityTimestamp: maxTimestamp,
-		PageSize:               0,
+		ShardID:                         shardID,
+		InclusiveMinVisibilityTimestamp: minTimestamp,
+		ExclusiveMaxVisibilityTimestamp: maxTimestamp,
+		PageSize:                        0,
 	}
 	result, err := s.store.RangeDeleteFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -316,10 +316,10 @@ func (s *historyHistoryTimerTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.TimerTasksRangeFilter{
-		ShardID:                shardID,
-		MinVisibilityTimestamp: minTimestamp,
-		MaxVisibilityTimestamp: maxTimestamp,
-		PageSize:               0,
+		ShardID:                         shardID,
+		InclusiveMinVisibilityTimestamp: minTimestamp,
+		ExclusiveMaxVisibilityTimestamp: maxTimestamp,
+		PageSize:                        0,
 	}
 	result, err = s.store.RangeDeleteFromTimerTasks(newExecutionContext(), filter)
 	s.NoError(err)

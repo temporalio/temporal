@@ -168,8 +168,8 @@ func (s *historyHistoryReplicationTaskSuite) TestInsertSelect_Multiple() {
 	pageSize := numTasks * 2
 
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.ReplicationTasksRow
@@ -185,10 +185,10 @@ func (s *historyHistoryReplicationTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.ReplicationTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
-		PageSize:  pageSize,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
+		PageSize:           pageSize,
 	}
 	rows, err := s.store.RangeSelectFromReplicationTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -223,13 +223,13 @@ func (s *historyHistoryReplicationTaskSuite) TestDeleteSelect_Single() {
 func (s *historyHistoryReplicationTaskSuite) TestDeleteSelect_Multiple() {
 	shardID := rand.Int31()
 	minTaskID := int64(1)
-	maxTaskID := int64(100)
+	maxTaskID := int64(101)
 
 	filter := sqlplugin.ReplicationTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
-		PageSize:  0,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
+		PageSize:           0,
 	}
 	result, err := s.store.RangeDeleteFromReplicationTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -279,8 +279,8 @@ func (s *historyHistoryReplicationTaskSuite) TestInsertDeleteSelect_Multiple() {
 	pageSize := numTasks * 2
 
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.ReplicationTasksRow
@@ -296,10 +296,10 @@ func (s *historyHistoryReplicationTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.ReplicationTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
-		PageSize:  pageSize,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
+		PageSize:           pageSize,
 	}
 	result, err = s.store.RangeDeleteFromReplicationTasks(newExecutionContext(), filter)
 	s.NoError(err)

@@ -184,10 +184,10 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:      s.mockShard.GetShardID(),
 		TaskCategory: tasks.CategoryTimer,
-		MinTaskKey: tasks.Key{
+		InclusiveMinTaskKey: tasks.Key{
 			FireTime: minTimestamp,
 		},
-		MaxTaskKey: tasks.Key{
+		ExclusiveMaxTaskKey: tasks.Key{
 			FireTime: maxTimestamp,
 		},
 		BatchSize:     batchSize,
@@ -228,10 +228,10 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:      s.mockShard.GetShardID(),
 		TaskCategory: tasks.CategoryTimer,
-		MinTaskKey: tasks.Key{
+		InclusiveMinTaskKey: tasks.Key{
 			FireTime: minTimestamp,
 		},
-		MaxTaskKey: tasks.Key{
+		ExclusiveMaxTaskKey: tasks.Key{
 			FireTime: maxTimestamp,
 		},
 		BatchSize:     batchSize,

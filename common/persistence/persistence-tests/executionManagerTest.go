@@ -2132,6 +2132,15 @@ func (s *ExecutionManagerSuite) TestReplicationTasks() {
 	err = s.UpdateWorklowStateAndReplication(updatedInfo1, updatedState1, state1.NextEventId, int64(3), replicationTasks)
 	s.NoError(err)
 
+	// test only tasks within requested range will be returned
+	for _, replicationTask := range replicationTasks {
+		taskID := replicationTask.GetTaskID()
+		tasks, err := s.GetReplicationTasksInRange(taskID, taskID+1, 100)
+		s.NoError(err)
+		s.Equal(1, len(tasks))
+	}
+
+	// test pagination
 	respTasks, err := s.GetReplicationTasks(1, true)
 	s.NoError(err)
 	s.Equal(len(replicationTasks), len(respTasks))
@@ -2346,7 +2355,7 @@ func (s *ExecutionManagerSuite) TestTransferTasksRangeComplete() {
 	s.Equal(currentTransferID+10005, txTasks[4].GetTaskID())
 	s.Equal(currentTransferID+10006, txTasks[5].GetTaskID())
 
-	err2 = s.RangeCompleteTransferTask(txTasks[0].GetTaskID()-1, txTasks[5].GetTaskID())
+	err2 = s.RangeCompleteTransferTask(txTasks[0].GetTaskID(), txTasks[5].GetTaskID()+1)
 	s.NoError(err2)
 
 	txTasks, err2 = s.GetTransferTasks(100, false)
@@ -3016,8 +3025,12 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskTasks() {
 		NewRunBranchToken:   nil,
 	}, task1)
 
-	err = s.CompleteTransferTask(task1.GetTaskID())
+	err = s.CompleteReplicationTask(task1.GetTaskID())
 	s.NoError(err)
+
+	// NOTE: GetReplicationTasks will return empty result even if
+	// there's no CompleteReplicationTask above because the minTaskID
+	// already advanced beyond task1's ID inside GetReplicationTasks
 	tasks2, err := s.GetReplicationTasks(1, false)
 	s.NoError(err)
 	s.Equal(0, len(tasks2))
@@ -3094,7 +3107,7 @@ func (s *ExecutionManagerSuite) TestReplicationTransferTaskRangeComplete() {
 		NewRunBranchToken:   nil,
 	}, task1)
 
-	err = s.RangeCompleteReplicationTask(task1.GetTaskID())
+	err = s.RangeCompleteReplicationTask(task1.GetTaskID() + 1)
 	s.NoError(err)
 	tasks2, err := s.GetReplicationTasks(1, false)
 	s.NoError(err)
@@ -3302,12 +3315,12 @@ func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 	}
 	err := s.PutReplicationTaskToDLQ(sourceCluster, taskInfo)
 	s.NoError(err)
-	resp, err := s.GetReplicationTasksFromDLQ(sourceCluster, -1, 0, 1, nil)
+	resp, err := s.GetReplicationTasksFromDLQ(sourceCluster, 0, 1, 1, nil)
 	s.NoError(err)
 	s.Len(resp.Tasks, 1)
 	err = s.DeleteReplicationTaskFromDLQ(sourceCluster, 0)
 	s.NoError(err)
-	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, -1, 0, 1, nil)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 0, 1, 1, nil)
 	s.NoError(err)
 	s.Len(resp.Tasks, 0)
 
@@ -3322,19 +3335,22 @@ func (s *ExecutionManagerSuite) TestReplicationDLQ() {
 		NamespaceId: uuid.New(),
 		WorkflowId:  uuid.New(),
 		RunId:       uuid.New(),
-		TaskId:      2,
+		TaskId:      10,
 		TaskType:    1,
 	}
 	err = s.PutReplicationTaskToDLQ(sourceCluster, taskInfo1)
 	s.NoError(err)
 	err = s.PutReplicationTaskToDLQ(sourceCluster, taskInfo2)
 	s.NoError(err)
-	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 0, 2, 2, nil)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 1, 5, 100, nil)
+	s.NoError(err)
+	s.Len(resp.Tasks, 1)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 1, 11, 2, nil)
 	s.NoError(err)
 	s.Len(resp.Tasks, 2)
-	err = s.RangeDeleteReplicationTaskFromDLQ(sourceCluster, 0, 2)
+	err = s.RangeDeleteReplicationTaskFromDLQ(sourceCluster, 1, 11)
 	s.NoError(err)
-	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 0, 2, 2, nil)
+	resp, err = s.GetReplicationTasksFromDLQ(sourceCluster, 1, 11, 2, nil)
 	s.NoError(err)
 	s.Len(resp.Tasks, 0)
 }

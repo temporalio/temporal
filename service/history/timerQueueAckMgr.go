@@ -365,10 +365,10 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 	request := &persistence.GetHistoryTasksRequest{
 		ShardID:      t.shard.GetShardID(),
 		TaskCategory: tasks.CategoryTimer,
-		MinTaskKey: tasks.Key{
+		InclusiveMinTaskKey: tasks.Key{
 			FireTime: minTimestamp,
 		},
-		MaxTaskKey: tasks.Key{
+		ExclusiveMaxTaskKey: tasks.Key{
 			FireTime: maxTimestamp,
 		},
 		BatchSize:     batchSize,

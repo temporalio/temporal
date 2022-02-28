@@ -76,11 +76,11 @@ func (t *transferQueueProcessorBase) readTasks(
 	response, err := t.executionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 		ShardID:      t.shard.GetShardID(),
 		TaskCategory: tasks.CategoryTransfer,
-		MinTaskKey: tasks.Key{
-			TaskID: readLevel,
+		InclusiveMinTaskKey: tasks.Key{
+			TaskID: readLevel + 1,
 		},
-		MaxTaskKey: tasks.Key{
-			TaskID: t.maxReadAckLevel(),
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: t.maxReadAckLevel() + 1,
 		},
 		BatchSize: t.options.BatchSize(),
 	})

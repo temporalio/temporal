@@ -316,11 +316,11 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      t.shard.GetShardID(),
 			TaskCategory: tasks.CategoryTransfer,
-			MinTaskKey: tasks.Key{
-				TaskID: lowerAckLevel,
+			InclusiveMinTaskKey: tasks.Key{
+				TaskID: lowerAckLevel + 1,
 			},
-			MaxTaskKey: tasks.Key{
-				TaskID: upperAckLevel,
+			ExclusiveMaxTaskKey: tasks.Key{
+				TaskID: upperAckLevel + 1,
 			},
 		})
 		if err != nil {

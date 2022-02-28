@@ -416,10 +416,10 @@ func (mr *MockExecutionManagerMockRecorder) GetName() *gomock.Call {
 }
 
 // GetReplicationTasksFromDLQ mocks base method.
-func (m *MockExecutionManager) GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error) {
+func (m *MockExecutionManager) GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationTasksFromDLQ", request)
-	ret0, _ := ret[0].(*GetReplicationTasksFromDLQResponse)
+	ret0, _ := ret[0].(*GetHistoryTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

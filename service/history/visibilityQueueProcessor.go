@@ -258,11 +258,11 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      t.shard.GetShardID(),
 			TaskCategory: tasks.CategoryVisibility,
-			MinTaskKey: tasks.Key{
-				TaskID: lowerAckLevel,
+			InclusiveMinTaskKey: tasks.Key{
+				TaskID: lowerAckLevel + 1,
 			},
-			MaxTaskKey: tasks.Key{
-				TaskID: upperAckLevel,
+			ExclusiveMaxTaskKey: tasks.Key{
+				TaskID: upperAckLevel + 1,
 			},
 		})
 		if err != nil {
@@ -309,11 +309,11 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 	response, err := t.executionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
 		ShardID:      t.shard.GetShardID(),
 		TaskCategory: tasks.CategoryVisibility,
-		MinTaskKey: tasks.Key{
-			TaskID: readLevel,
+		InclusiveMinTaskKey: tasks.Key{
+			TaskID: readLevel + 1,
 		},
-		MaxTaskKey: tasks.Key{
-			TaskID: t.maxReadAckLevel(),
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: t.maxReadAckLevel() + 1,
 		},
 		BatchSize: t.options.BatchSize(),
 	})

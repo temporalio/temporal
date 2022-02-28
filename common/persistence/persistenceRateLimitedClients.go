@@ -305,7 +305,7 @@ func (p *executionRateLimitedPersistenceClient) PutReplicationTaskToDLQ(
 
 func (p *executionRateLimitedPersistenceClient) GetReplicationTasksFromDLQ(
 	request *GetReplicationTasksFromDLQRequest,
-) (*GetReplicationTasksFromDLQResponse, error) {
+) (*GetHistoryTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}

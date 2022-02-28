@@ -49,11 +49,11 @@ type (
 
 	// ReplicationDLQTasksRangeFilter
 	ReplicationDLQTasksRangeFilter struct {
-		ShardID           int32
-		SourceClusterName string
-		MinTaskID         int64
-		MaxTaskID         int64
-		PageSize          int
+		ShardID            int32
+		SourceClusterName  string
+		InclusiveMinTaskID int64
+		ExclusiveMaxTaskID int64
+		PageSize           int
 	}
 
 	// HistoryReplicationDLQTask is the SQL persistence interface for history replication tasks DLQ

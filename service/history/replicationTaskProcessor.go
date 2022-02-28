@@ -506,8 +506,8 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      p.shard.GetShardID(),
 			TaskCategory: tasks.CategoryReplication,
-			MaxTaskKey: tasks.Key{
-				TaskID: *minAckedTaskID,
+			ExclusiveMaxTaskKey: tasks.Key{
+				TaskID: *minAckedTaskID + 1,
 			},
 		},
 	)

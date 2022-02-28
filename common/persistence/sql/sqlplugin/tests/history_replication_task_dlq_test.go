@@ -178,8 +178,8 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Multiple() {
 
 	sourceCluster := shuffle.String(testHistoryReplicationTaskDLQSourceCluster)
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.ReplicationDLQTasksRow
@@ -195,11 +195,11 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.ReplicationDLQTasksRangeFilter{
-		ShardID:           shardID,
-		SourceClusterName: sourceCluster,
-		MinTaskID:         minTaskID,
-		MaxTaskID:         maxTaskID,
-		PageSize:          pageSize,
+		ShardID:            shardID,
+		SourceClusterName:  sourceCluster,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
+		PageSize:           pageSize,
 	}
 	rows, err := s.store.RangeSelectFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -239,14 +239,14 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestDeleteSelect_Multiple() {
 	sourceCluster := shuffle.String(testHistoryReplicationTaskDLQSourceCluster)
 	shardID := rand.Int31()
 	minTaskID := int64(1)
-	maxTaskID := int64(100)
+	maxTaskID := int64(101)
 
 	filter := sqlplugin.ReplicationDLQTasksRangeFilter{
-		ShardID:           shardID,
-		SourceClusterName: sourceCluster,
-		MinTaskID:         minTaskID,
-		MaxTaskID:         maxTaskID,
-		PageSize:          0,
+		ShardID:            shardID,
+		SourceClusterName:  sourceCluster,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
+		PageSize:           0,
 	}
 	result, err := s.store.RangeDeleteFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -301,8 +301,8 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Multiple(
 
 	sourceCluster := shuffle.String(testHistoryReplicationTaskDLQSourceCluster)
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.ReplicationDLQTasksRow
@@ -318,11 +318,11 @@ func (s *historyHistoryReplicationDLQTaskSuite) TestInsertDeleteSelect_Multiple(
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.ReplicationDLQTasksRangeFilter{
-		ShardID:           shardID,
-		SourceClusterName: sourceCluster,
-		MinTaskID:         minTaskID,
-		MaxTaskID:         maxTaskID,
-		PageSize:          pageSize,
+		ShardID:            shardID,
+		SourceClusterName:  sourceCluster,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
+		PageSize:           pageSize,
 	}
 	result, err = s.store.RangeDeleteFromReplicationDLQTasks(newExecutionContext(), filter)
 	s.NoError(err)
