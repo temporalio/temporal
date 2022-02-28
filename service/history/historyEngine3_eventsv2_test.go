@@ -141,11 +141,11 @@ func (s *engine3Suite) SetupTest() {
 		historyCache:       historyCache,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
-		metricsClient:      metrics.NewNoopMetricsClient(),
+		metricsClient:      metrics.NoopClient,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		config:             s.config,
 		timeSource:         s.mockShard.GetTimeSource(),
-		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NewNoopMetricsClient(), func(namespace.ID, string) int32 { return 1 }),
+		eventNotifier:      events.NewNotifier(clock.NewRealTimeSource(), metrics.NoopClient, func(namespace.ID, string) int32 { return 1 }),
 		queueProcessors: map[tasks.Category]queues.Processor{
 			s.mockTxProcessor.Category():         s.mockTxProcessor,
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,

@@ -71,7 +71,7 @@ func (r *replayMetricsClient) AddCounter(scope int, counter int, delta int64) {
 // StartTimer starts a timer for the given metric name. Time will be recorded when stopwatch is stopped.
 func (r *replayMetricsClient) StartTimer(scope int, timer int) metrics.Stopwatch {
 	if workflow.IsReplaying(r.ctx) {
-		return metrics.NopStopwatch()
+		return metrics.NoopStopwatch
 	}
 	return r.client.StartTimer(scope, timer)
 }

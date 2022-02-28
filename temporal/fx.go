@@ -182,8 +182,10 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 	// ServerReporter
 	serverReporter := so.metricsReporter
 	if serverReporter == nil {
-		if so.config.Global.Metrics != nil {
-			var err error
+		if so.config.Global.Metrics == nil {
+			logger.Warn("no metrics config provided, using noop reporter")
+			serverReporter = metrics.NoopReporter
+		} else {
 			serverReporter, err = metrics.InitMetricsReporter(logger, so.config.Global.Metrics)
 			if err != nil {
 				return serverOptionsProvider{}, err
@@ -193,13 +195,9 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 
 	// MetricsClient
 	var metricsClient metrics.Client
-	if serverReporter == nil {
-		metricsClient = metrics.NewNoopMetricsClient()
-	} else {
-		metricsClient, err = serverReporter.NewClient(logger, metrics.Server)
-		if err != nil {
-			return serverOptionsProvider{}, err
-		}
+	metricsClient, err = serverReporter.NewClient(logger, metrics.Server)
+	if err != nil {
+		return serverOptionsProvider{}, err
 	}
 
 	// DynamicConfigClient
@@ -353,6 +351,7 @@ func HistoryServiceProvider(
 	}
 
 	stopChan := make(chan struct{})
+
 	app := fx.New(
 		fx.Supply(
 			stopChan,

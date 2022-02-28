@@ -117,7 +117,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	metricsClient := metrics.NewNoopMetricsClient()
+	metricsClient := metrics.NoopClient
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.replicationTaskHandler = newReplicationTaskExecutor(

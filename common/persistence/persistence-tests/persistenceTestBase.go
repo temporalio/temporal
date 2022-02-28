@@ -211,7 +211,9 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 
 	cfg := s.DefaultTestCluster.Config()
 	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-	metricsClient := metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
+	var metricsClient metrics.Client
+	metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
+	s.fatalOnError("metrics.NewClient", err)
 	dataStoreFactory, faultInjection := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
 		resolver.NewNoopResolver(),

@@ -207,5 +207,5 @@ func (t TestOtelReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (C
 func (t TestOtelReporter) Stop(logger log.Logger) {}
 
 func (t TestOtelReporter) UserScope() UserScope {
-	return NewNoopMetricsUserScope()
+	return NoopUserScope
 }

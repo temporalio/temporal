@@ -112,7 +112,7 @@ func (s *matchingEngineSuite) SetupTest() {
 		context.Background(),
 		matchingTestNamespace,
 		&taskqueuepb.TaskQueue{Name: matchingTestTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		metrics.NewNoopMetricsClient(),
+		metrics.NoopClient,
 		metrics.MatchingTaskQueueMgrScope,
 		log.NewNoopLogger(),
 	)
@@ -142,7 +142,7 @@ func newMatchingEngine(
 		taskQueues:        make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,
-		metricsClient:     metrics.NewNoopMetricsClient(),
+		metricsClient:     metrics.NoopClient,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,
@@ -702,7 +702,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	var err error
+	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	s.NoError(err)
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
@@ -842,7 +844,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,taskqueue=makeToast"]
 	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -895,7 +897,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 	}
 	const workerCount = 20
 	const taskCount = 100
-	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("test", nil), metrics.Matching)
+	var err error
+	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("test", nil), metrics.Matching)
+	s.NoError(err)
 	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
 	s.logger.Info("Number of tasks throttled", tag.Number(throttleCt))
 	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
@@ -909,7 +913,9 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchLimitFn func(int, int64) float64,
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	var err error
+	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	s.NoError(err)
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
