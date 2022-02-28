@@ -17,7 +17,7 @@ make docker-auto-setup
 
 This will build a local `temporalio/auto-setup` docker image with the label "test".
 
-To *run* the docker image with dependencies (e.g. PostgreSQL and Elasticsearch), you can use `docker-compose`. See our [docker-compose repo](https://github.com/temporalio/docker-compose) for reference configurations - and update the image accordingly to `image: temporalio/auto-setup:1.15.0`.
+To *run* the docker image with dependencies (e.g. PostgreSQL and Elasticsearch), you can use `docker-compose`. See our [docker-compose repo](https://github.com/temporalio/docker-compose) for reference configurations - and update the image accordingly to `image: temporalio/auto-setup:test`.
 
 ## Build docker image for any commit
 
