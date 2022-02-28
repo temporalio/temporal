@@ -574,14 +574,22 @@ func ApplyClusterMetadataConfigProvider(
 ) (*cluster.Config, config.Persistence, error) {
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
+	clusterName := persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName)
+	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+		clusterName,
+		persistenceServiceResolver,
+		&config.Persistence,
+		customDataStoreFactory,
+		logger,
+		nil,
+	)
 	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
-		Cfg:                      &config.Persistence,
-		Resolver:                 persistenceServiceResolver,
-		PersistenceMaxQPS:        nil,
-		AbstractDataStoreFactory: customDataStoreFactory,
-		ClusterName:              persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
-		MetricsClient:            nil,
-		Logger:                   logger,
+		DataStoreFactory:  dataStoreFactory,
+		Cfg:               &config.Persistence,
+		PersistenceMaxQPS: nil,
+		ClusterName:       persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName),
+		MetricsClient:     nil,
+		Logger:            logger,
 	})
 	defer factory.Close()
 

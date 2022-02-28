@@ -47,6 +47,8 @@ type (
 
 	// BeanImpl stores persistence managers
 	BeanImpl struct {
+		sync.RWMutex
+
 		clusterMetadataManager    persistence.ClusterMetadataManager
 		metadataManager           persistence.MetadataManager
 		taskManager               persistence.TaskManager
@@ -54,10 +56,7 @@ type (
 		shardManager              persistence.ShardManager
 		executionManager          persistence.ExecutionManager
 
-		factory        Factory
-		faultInjection *FaultInjectionDataStoreFactory
-
-		sync.RWMutex
+		factory  Factory
 		isClosed bool
 	}
 )
