@@ -1622,6 +1622,24 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
 
+	// Record details as heartbeat if present
+	if request.GetLastHeartbeatDetails() != nil {
+		response, err := wh.RecordActivityTaskHeartbeat(ctx, &workflowservice.RecordActivityTaskHeartbeatRequest{
+			TaskToken: request.GetTaskToken(),
+			Identity:  request.GetIdentity(),
+			Namespace: request.GetNamespace(),
+			Details:   request.GetLastHeartbeatDetails(),
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		if response.CancelRequested {
+			return &workflowservice.RespondActivityTaskFailedResponse{}, nil
+		}
+	}
+
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetFailure().Size(),
 		sizeLimitWarn,
@@ -1706,6 +1724,26 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
+
+	// Record details as heartbeat if present
+	if request.GetLastHeartbeatDetails() != nil {
+		response, err := wh.RecordActivityTaskHeartbeatById(ctx, &workflowservice.RecordActivityTaskHeartbeatByIdRequest{
+			Namespace:  request.GetNamespace(),
+			WorkflowId: request.GetWorkflowId(),
+			RunId:      request.GetRunId(),
+			ActivityId: request.GetActivityId(),
+			Identity:   request.GetIdentity(),
+			Details:    request.GetLastHeartbeatDetails(),
+		})
+
+		if err != nil {
+			return nil, err
+		}
+
+		if response.CancelRequested {
+			return &workflowservice.RespondActivityTaskFailedByIdResponse{}, nil
+		}
+	}
 
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetFailure().Size(),
