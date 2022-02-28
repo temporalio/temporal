@@ -343,7 +343,7 @@ func (m *sqlExecutionStore) getReplicationTasks(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadRange(request)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(request)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +365,7 @@ func (m *sqlExecutionStore) getReplicationTasks(
 	}
 }
 
-func getReadRange(
+func getImmediateTaskReadRange(
 	request *p.GetHistoryTasksRequest,
 ) (inclusiveMinTaskID int64, exclusiveMaxTaskID int64, err error) {
 	inclusiveMinTaskID = request.InclusiveMinTaskKey.TaskID
@@ -377,6 +377,17 @@ func getReadRange(
 	}
 
 	return inclusiveMinTaskID, request.ExclusiveMaxTaskKey.TaskID, nil
+}
+
+func getImmediateTaskNextPageToken(
+	lastTaskID int64,
+	exclusiveMaxTaskID int64,
+) []byte {
+	nextTaskID := lastTaskID + 1
+	if nextTaskID < exclusiveMaxTaskID {
+		return serializePageToken(nextTaskID)
+	}
+	return nil
 }
 
 func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
@@ -391,14 +402,13 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	for i, row := range rows {
 		tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	var nextPageToken []byte
-	lastTaskID := rows[len(rows)-1].TaskID
-	if lastTaskID+1 < exclusiveMaxTaskID {
-		nextPageToken = serializePageToken(lastTaskID + 1)
-	}
+
 	return &p.InternalGetHistoryTasksResponse{
-		Tasks:         tasks,
-		NextPageToken: nextPageToken,
+		Tasks: tasks,
+		NextPageToken: getImmediateTaskNextPageToken(
+			rows[len(rows)-1].TaskID,
+			exclusiveMaxTaskID,
+		),
 	}, nil
 }
 
@@ -488,7 +498,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadRange(&request.GetHistoryTasksRequest)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(&request.GetHistoryTasksRequest)
 	if err != nil {
 		return nil, err
 	}
