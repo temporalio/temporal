@@ -2850,11 +2850,11 @@ func getScheduleID(
 ) (int64, error) {
 
 	if activityID == "" {
-		return 0, serviceerror.NewInvalidArgument("Neither ActivityID nor ScheduleID is provided")
+		return 0, serviceerror.NewInvalidArgument("invalid ActivityID provided")
 	}
 	activityInfo, ok := mutableState.GetActivityByActivityID(activityID)
 	if !ok {
-		return 0, serviceerror.NewInvalidArgument("Cannot locate Activity ScheduleID")
+		return 0, serviceerror.NewNotFound(fmt.Sprintf("cannot locate active task for ActivityID %s, check workflow execution history for more details", activityID))
 	}
 	return activityInfo.ScheduleId, nil
 }
