@@ -30,6 +30,7 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -232,6 +233,11 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 
 	if execution.GetWorkflowId() == "" {
 		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
+	}
+
+	if !utf8.ValidString(execution.GetWorkflowId()) {
+		// We know workflow cannot exist with invalid utf8 string as WorkflowID.
+		return serviceerror.NewNotFound("Workflow not exists.")
 	}
 
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
