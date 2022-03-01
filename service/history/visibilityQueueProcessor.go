@@ -99,7 +99,7 @@ func newVisibilityQueueProcessor(
 		MetricScope:                         metrics.VisibilityQueueProcessorScope,
 	}
 	visibilityTaskFilter := func(task tasks.Task) bool {
-		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
+		return taskAllocator.verifyTaskNamespaceExists(namespace.ID(task.GetNamespaceID()))
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetQueueMaxReadLevel(

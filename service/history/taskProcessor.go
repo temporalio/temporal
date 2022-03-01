@@ -352,7 +352,6 @@ func (t *taskProcessor) ackTaskOnce(
 func (t *taskProcessor) getNamespaceTagByID(namespaceID namespace.ID) metrics.Tag {
 	namespaceName, err := t.shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
 	if err != nil {
-		t.logger.Error("Unable to get namespace", tag.Error(err))
 		return metrics.NamespaceUnknownTag()
 	}
 	return metrics.NamespaceTag(namespaceName.String())
