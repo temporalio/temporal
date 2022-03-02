@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
 )
@@ -197,7 +198,7 @@ func (s *historyHistoryTransferTaskSuite) TestInsertSelect_Multiple() {
 		for index := range rows {
 			rows[index].ShardID = shardID
 		}
-		s.Equal(tasks[:len(rows)], rows)
+		s.Equal(tasks[:common.MinInt(numTasks, pageSize)], rows)
 	}
 }
 
