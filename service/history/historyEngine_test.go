@@ -2280,7 +2280,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedIfNoAIdProvided() {
 			Identity:  identity,
 		},
 	})
-	s.EqualError(err, "invalid ActivityID provided")
+	s.EqualError(err, "activityID cannot be empty")
 }
 
 func (s *engineSuite) TestRespondActivityTaskCompletedIfNotFound() {
@@ -2817,7 +2817,7 @@ func (s *engineSuite) TestRespondActivityTaskFailededIfNoAIdProvided() {
 			Identity:  identity,
 		},
 	})
-	s.EqualError(err, "invalid ActivityID provided")
+	s.EqualError(err, "activityID cannot be empty")
 }
 
 func (s *engineSuite) TestRespondActivityTaskFailededIfNotFound() {
@@ -3596,7 +3596,7 @@ func (s *engineSuite) TestRespondActivityTaskCanceledIfNoAIdProvided() {
 			Identity:  identity,
 		},
 	})
-	s.EqualError(err, "invalid ActivityID provided")
+	s.EqualError(err, "activityID cannot be empty")
 }
 
 func (s *engineSuite) TestRespondActivityTaskCanceledIfNotFound() {

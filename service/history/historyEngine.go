@@ -2850,11 +2850,11 @@ func getScheduleID(
 ) (int64, error) {
 
 	if activityID == "" {
-		return 0, serviceerror.NewInvalidArgument("invalid ActivityID provided")
+		return 0, serviceerror.NewInvalidArgument("activityID cannot be empty")
 	}
 	activityInfo, ok := mutableState.GetActivityByActivityID(activityID)
 	if !ok {
-		return 0, serviceerror.NewNotFound(fmt.Sprintf("cannot locate active task for ActivityID %s, check workflow execution history for more details", activityID))
+		return 0, serviceerror.NewNotFound(fmt.Sprintf("cannot find pending activity with ActivityID %s, check workflow execution history for more details", activityID))
 	}
 	return activityInfo.ScheduleId, nil
 }
