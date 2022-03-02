@@ -35,16 +35,16 @@ import (
 
 const (
 	templateCreateWorkflowExecutionStarted = `INSERT INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding, task_queue) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
 		`ON DUPLICATE KEY UPDATE ` +
 		`run_id=VALUES(run_id)`
 
 	templateCreateWorkflowExecutionClosed = `INSERT INTO executions_visibility (` +
-		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding) ` +
-		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
+		`namespace_id, workflow_id, run_id, start_time, execution_time, workflow_type_name, close_time, status, history_length, memo, encoding, task_queue) ` +
+		`VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ` +
 		`ON DUPLICATE KEY UPDATE workflow_id = VALUES(workflow_id), start_time = VALUES(start_time), execution_time = VALUES(execution_time), workflow_type_name = VALUES(workflow_type_name), ` +
-		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding)`
+		`close_time = VALUES(close_time), status = VALUES(status), history_length = VALUES(history_length), memo = VALUES(memo), encoding = VALUES(encoding), task_queue = VALUES(task_queue)`
 
 	// RunID condition is needed for correct pagination
 	templateConditions = ` AND namespace_id = ?
@@ -61,7 +61,7 @@ const (
 	ORDER BY close_time DESC, run_id
 	LIMIT ?`
 
-	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding`
+	templateOpenFieldNames = `workflow_id, run_id, start_time, execution_time, workflow_type_name, status, memo, encoding, task_queue`
 	templateOpenSelect     = `SELECT ` + templateOpenFieldNames + ` FROM executions_visibility WHERE status = 1 `
 
 	templateClosedSelect = `SELECT ` + templateOpenFieldNames + `, close_time, history_length
@@ -81,7 +81,7 @@ const (
 
 	templateGetClosedWorkflowExecutionsByStatus = templateClosedSelect + `AND status = ?` + templateConditionsClosedWorkflows
 
-	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length 
+	templateGetClosedWorkflowExecution = `SELECT workflow_id, run_id, start_time, execution_time, memo, encoding, close_time, workflow_type_name, status, history_length, task_queue 
 		 FROM executions_visibility
 		 WHERE namespace_id = ? AND status != 1
 		 AND run_id = ?`
@@ -110,6 +110,7 @@ func (mdb *db) InsertIntoVisibility(
 		row.Status,
 		row.Memo,
 		row.Encoding,
+		row.TaskQueue,
 	)
 }
 
@@ -136,6 +137,7 @@ func (mdb *db) ReplaceIntoVisibility(
 			*row.HistoryLength,
 			row.Memo,
 			row.Encoding,
+			row.TaskQueue,
 		)
 	default:
 		return nil, errCloseParams

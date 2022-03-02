@@ -165,6 +165,11 @@ func NewTest(
 
 	scope := tally.NewTestScope("test", nil)
 
+	metricClient, err := metrics.NewClient(&metrics.ClientConfig{}, scope, serviceMetricsIndex)
+	if err != nil {
+		panic(err)
+	}
+
 	return &Test{
 		MetricsScope:             scope,
 		ClusterMetadata:          cluster.NewMockMetadata(controller),
@@ -177,7 +182,7 @@ func NewTest(
 		NamespaceCache:    namespace.NewMockRegistry(controller),
 		TimeSource:        clock.NewRealTimeSource(),
 		PayloadSerializer: serialization.NewSerializer(),
-		MetricsClient:     metrics.NewClient(&metrics.ClientConfig{}, scope, serviceMetricsIndex),
+		MetricsClient:     metricClient,
 		ArchivalMetadata:  archiver.NewMockArchivalMetadata(controller),
 		ArchiverProvider:  provider.NewMockArchiverProvider(controller),
 
@@ -435,8 +440,4 @@ func (t *Test) GetSearchAttributesMapper() searchattribute.Mapper {
 
 func (t *Test) RefreshNamespaceCache() {
 	t.NamespaceCache.Refresh()
-}
-
-func (t *Test) GetFaultInjection() *persistenceClient.FaultInjectionDataStoreFactory {
-	return nil
 }

@@ -211,8 +211,18 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 
 	cfg := s.DefaultTestCluster.Config()
 	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-	metricsClient := metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
-	factory := client.NewFactoryImpl(&cfg, resolver.NewNoopResolver(), nil, serialization.NewSerializer(), s.AbstractDataStoreFactory, clusterName, metricsClient, s.Logger)
+	var metricsClient metrics.Client
+	metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
+	s.fatalOnError("metrics.NewClient", err)
+	dataStoreFactory, faultInjection := client.DataStoreFactoryProvider(
+		client.ClusterName(clusterName),
+		resolver.NewNoopResolver(),
+		&cfg,
+		s.AbstractDataStoreFactory,
+		s.Logger,
+		metricsClient,
+	)
+	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metricsClient, s.Logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -233,7 +243,7 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.fatalOnError("NewExecutionManager", err)
 
 	s.Factory = factory
-	s.FaultInjection = factory.FaultInjection()
+	s.FaultInjection = faultInjection
 
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0

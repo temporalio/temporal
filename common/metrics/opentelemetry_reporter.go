@@ -93,7 +93,6 @@ func (r *opentelemetryReporterImpl) GetMeterMust() metric.MeterMust {
 }
 
 func (r *opentelemetryReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-
 	return NewOpentelemeteryClient(r.clientConfig, serviceIdx, r, logger, r.gaugeCache)
 }
 

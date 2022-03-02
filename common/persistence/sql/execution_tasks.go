@@ -158,7 +158,7 @@ func (m *sqlExecutionStore) getTransferTasks(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadRange(request)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(request)
 	if err != nil {
 		return nil, err
 	}
@@ -184,10 +184,10 @@ func (m *sqlExecutionStore) getTransferTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	nextTaskID := rows[len(rows)-1].TaskID + 1
-	if nextTaskID < exclusiveMaxTaskID {
-		resp.NextPageToken = serializePageToken(nextTaskID)
-	}
+	resp.NextPageToken = getImmediateTaskNextPageToken(
+		rows[len(rows)-1].TaskID,
+		exclusiveMaxTaskID,
+	)
 	return resp, nil
 }
 
@@ -357,7 +357,7 @@ func (m *sqlExecutionStore) getReplicationTasks(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadRange(request)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(request)
 	if err != nil {
 		return nil, err
 	}
@@ -379,7 +379,7 @@ func (m *sqlExecutionStore) getReplicationTasks(
 	}
 }
 
-func getReadRange(
+func getImmediateTaskReadRange(
 	request *p.GetHistoryTasksRequest,
 ) (inclusiveMinTaskID int64, exclusiveMaxTaskID int64, err error) {
 	inclusiveMinTaskID = request.InclusiveMinTaskKey.TaskID
@@ -391,6 +391,17 @@ func getReadRange(
 	}
 
 	return inclusiveMinTaskID, request.ExclusiveMaxTaskKey.TaskID, nil
+}
+
+func getImmediateTaskNextPageToken(
+	lastTaskID int64,
+	exclusiveMaxTaskID int64,
+) []byte {
+	nextTaskID := lastTaskID + 1
+	if nextTaskID < exclusiveMaxTaskID {
+		return serializePageToken(nextTaskID)
+	}
+	return nil
 }
 
 func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
@@ -405,14 +416,12 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	for i, row := range rows {
 		tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	var nextPageToken []byte
-	nextTaskID := rows[len(rows)-1].TaskID + 1
-	if nextTaskID < exclusiveMaxTaskID {
-		nextPageToken = serializePageToken(nextTaskID)
-	}
 	return &p.InternalGetHistoryTasksResponse{
-		Tasks:         tasks,
-		NextPageToken: nextPageToken,
+		Tasks: tasks,
+		NextPageToken: getImmediateTaskNextPageToken(
+			rows[len(rows)-1].TaskID,
+			exclusiveMaxTaskID,
+		),
 	}, nil
 }
 
@@ -428,14 +437,12 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	for i, row := range rows {
 		tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	var nextPageToken []byte
-	nextTaskID := rows[len(rows)-1].TaskID + 1
-	if nextTaskID < exclusiveMaxTaskID {
-		nextPageToken = serializePageToken(nextTaskID)
-	}
 	return &p.InternalGetHistoryTasksResponse{
-		Tasks:         tasks,
-		NextPageToken: nextPageToken,
+		Tasks: tasks,
+		NextPageToken: getImmediateTaskNextPageToken(
+			rows[len(rows)-1].TaskID,
+			exclusiveMaxTaskID,
+		),
 	}, nil
 }
 
@@ -502,7 +509,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadRange(&request.GetHistoryTasksRequest)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(&request.GetHistoryTasksRequest)
 	if err != nil {
 		return nil, err
 	}
@@ -581,13 +588,12 @@ func (m *sqlExecutionStore) getVisibilityTask(
 	return resp, nil
 }
 
-// TODO: pagination
 func (m *sqlExecutionStore) getVisibilityTasks(
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	inclusiveMinTaskID, exclusiveMaxTaskID, err := getReadRange(request)
+	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(request)
 	if err != nil {
 		return nil, err
 	}
@@ -613,10 +619,10 @@ func (m *sqlExecutionStore) getVisibilityTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	nextTaskID := rows[len(rows)-1].TaskID + 1
-	if nextTaskID < exclusiveMaxTaskID {
-		resp.NextPageToken = serializePageToken(nextTaskID)
-	}
+	resp.NextPageToken = getImmediateTaskNextPageToken(
+		rows[len(rows)-1].TaskID,
+		exclusiveMaxTaskID,
+	)
 	return resp, nil
 }
 

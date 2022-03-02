@@ -71,7 +71,7 @@ const (
 		`AND type = ? ` +
 		`AND task_id <= ? `
 
-	templateGetTaskQueue = `SELECT ` +
+	templateGetTaskQueueQuery = `SELECT ` +
 		`range_id, ` +
 		`task_queue, ` +
 		`task_queue_encoding ` +
@@ -183,7 +183,7 @@ func (d *MatchingTaskStore) CreateTaskQueue(
 func (d *MatchingTaskStore) GetTaskQueue(
 	request *p.InternalGetTaskQueueRequest,
 ) (*p.InternalGetTaskQueueResponse, error) {
-	query := d.Session.Query(templateGetTaskQueue,
+	query := d.Session.Query(templateGetTaskQueueQuery,
 		request.NamespaceID,
 		request.TaskQueue,
 		request.TaskType,

@@ -1480,7 +1480,7 @@ func (s *ExecutionMutableStateSuite) TestSet() {
 }
 
 func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
-	_ = s.CreateWorkflow(
+	newSnapshot := s.CreateWorkflow(
 		rand.Int63(),
 		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
@@ -1501,10 +1501,35 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_IsCurrent() {
 		WorkflowID:  s.WorkflowID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+
+	s.AssertEqualWithDB(newSnapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
-	err := s.ExecutionManager.DeleteCurrentWorkflowExecution(&p.DeleteCurrentWorkflowExecutionRequest{
+	newSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
+		rand.Int63(),
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
+		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
+		rand.Int63(),
+	)
+
+	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeZombie,
+
+		PreviousRunID:            "",
+		PreviousLastWriteVersion: 0,
+
+		NewWorkflowSnapshot: *newSnapshot,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	err = s.ExecutionManager.DeleteCurrentWorkflowExecution(&p.DeleteCurrentWorkflowExecutionRequest{
 		ShardID:     s.ShardID,
 		NamespaceID: s.NamespaceID,
 		WorkflowID:  s.WorkflowID,
@@ -1518,17 +1543,35 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 		WorkflowID:  s.WorkflowID,
 	})
 	s.IsType(&serviceerror.NotFound{}, err)
+
+	s.AssertEqualWithDB(newSnapshot)
 }
 
 func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
-	_ = s.CreateWorkflow(
+	newSnapshot := RandomSnapshot(
+		s.NamespaceID,
+		s.WorkflowID,
+		s.RunID,
 		rand.Int63(),
-		enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
+		enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE,
 		enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING,
 		rand.Int63(),
 	)
 
-	err := s.ExecutionManager.DeleteWorkflowExecution(&p.DeleteWorkflowExecutionRequest{
+	_, err := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+		ShardID: s.ShardID,
+		RangeID: s.RangeID,
+		Mode:    p.CreateWorkflowModeZombie,
+
+		PreviousRunID:            "",
+		PreviousLastWriteVersion: 0,
+
+		NewWorkflowSnapshot: *newSnapshot,
+		NewWorkflowEvents:   nil,
+	})
+	s.NoError(err)
+
+	err = s.ExecutionManager.DeleteWorkflowExecution(&p.DeleteWorkflowExecutionRequest{
 		ShardID:     s.ShardID,
 		NamespaceID: s.NamespaceID,
 		WorkflowID:  s.WorkflowID,

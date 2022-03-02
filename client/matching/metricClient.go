@@ -28,6 +28,7 @@ import (
 	"context"
 	"strings"
 
+	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"google.golang.org/grpc"
 
@@ -256,7 +257,16 @@ func (c *metricClient) finishMetricsRecording(
 	err error,
 ) {
 	if err != nil {
-		c.throttledLogger.Error("matching client encountered error", tag.Error(err), tag.ErrorType(err))
+		switch err.(type) {
+		case *serviceerror.Canceled,
+			*serviceerror.DeadlineExceeded,
+			*serviceerror.NotFound,
+			*serviceerror.WorkflowExecutionAlreadyStarted:
+			// noop - not interest and too many logs
+		default:
+
+			c.throttledLogger.Error("matching client encountered error", tag.Error(err), tag.ErrorType(err))
+		}
 		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
 	}
 	stopwatch.Stop()

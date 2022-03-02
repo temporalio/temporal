@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -54,6 +55,17 @@ func NewOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 	}
 
 	globalRootScope := newOpentelemetryScope(serviceIdx, reporter.GetMeterMust(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
+
+	serviceTypeTagValue, err := MetricsServiceIdxToServiceName(serviceIdx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize metrics client: %w", err)
+	}
+
+	rootTags := make(map[string]string, len(clientConfig.Tags)+1)
+	for k, v := range clientConfig.Tags {
+		rootTags[k] = v
+	}
+	rootTags[serviceName] = serviceTypeTagValue
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &opentelemetryClient{

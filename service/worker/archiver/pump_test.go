@@ -63,7 +63,7 @@ func (s *pumpSuite) registerWorkflows(env *testsuite.TestWorkflowEnvironment) {
 func (s *pumpSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	pumpTestMetrics = metrics.NewMockClient(s.controller)
-	pumpTestMetrics.EXPECT().StartTimer(gomock.Any(), gomock.Any()).Return(metrics.NopStopwatch())
+	pumpTestMetrics.EXPECT().StartTimer(gomock.Any(), gomock.Any()).Return(metrics.NoopStopwatch)
 	pumpTestLogger = log.NewMockLogger(s.controller)
 }
 

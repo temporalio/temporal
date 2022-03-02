@@ -1034,6 +1034,7 @@ type (
 	}
 
 	// TaskManager is used to manage tasks
+	// TODO: consider change the range for GetTasks and CompleteTasks to be [inclusive, exclusive)
 	TaskManager interface {
 		Closeable
 		GetName() string

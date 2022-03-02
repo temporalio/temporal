@@ -4,11 +4,20 @@ Temporal builds 4 Docker images with [every release](https://github.com/temporal
 
 ## Prerequisites
 
-To build docker image:
-  * [docker](https://docs.docker.com/engine/installation/)
+To build our docker image, you will need [Docker](https://docs.docker.com/engine/installation/).
 
-To run docker image with dependencies:
-  * [docker-compose](https://docs.docker.com/compose/install/)
+## Build docker image from master
+
+You can build the image by running `make`:
+
+```bash
+# at project root
+make docker-auto-setup
+```
+
+This will build a local `temporalio/auto-setup` docker image with the tag "test".
+
+To *run* the docker image with dependencies (e.g. PostgreSQL and Elasticsearch), you can use `docker-compose`. See our [docker-compose repo](https://github.com/temporalio/docker-compose) for reference configurations - and update the image accordingly to `image: temporalio/auto-setup:test`.
 
 ## Build docker image for any commit
 

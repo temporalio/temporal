@@ -27,6 +27,7 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -627,7 +628,15 @@ func (c *metricClient) finishMetricsRecording(
 	err error,
 ) {
 	if err != nil {
-		c.throttledLogger.Error("history client encountered error", tag.Error(err), tag.ErrorType(err))
+		switch err.(type) {
+		case *serviceerror.Canceled,
+			*serviceerror.DeadlineExceeded,
+			*serviceerror.NotFound,
+			*serviceerror.WorkflowExecutionAlreadyStarted:
+			// noop - not interest and too many logs
+		default:
+			c.throttledLogger.Error("history client encountered error", tag.Error(err), tag.ErrorType(err))
+		}
 		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
 	}
 	stopwatch.Stop()
