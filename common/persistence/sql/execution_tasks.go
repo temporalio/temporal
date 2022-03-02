@@ -184,10 +184,13 @@ func (m *sqlExecutionStore) getTransferTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	resp.NextPageToken = getImmediateTaskNextPageToken(
-		rows[len(rows)-1].TaskID,
-		exclusiveMaxTaskID,
-	)
+	if len(rows) == request.BatchSize {
+		resp.NextPageToken = getImmediateTaskNextPageToken(
+			rows[len(rows)-1].TaskID,
+			exclusiveMaxTaskID,
+		)
+	}
+
 	return resp, nil
 }
 
@@ -265,7 +268,7 @@ func (m *sqlExecutionStore) getTimerTasks(
 		InclusiveMinVisibilityTimestamp: pageToken.Timestamp,
 		InclusiveMinTaskID:              pageToken.TaskID,
 		ExclusiveMaxVisibilityTimestamp: request.ExclusiveMaxTaskKey.FireTime,
-		PageSize:                        request.BatchSize + 1,
+		PageSize:                        request.BatchSize,
 	})
 
 	if err != nil && err != sql.ErrNoRows {
@@ -277,14 +280,11 @@ func (m *sqlExecutionStore) getTimerTasks(
 		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
 
-	// above use page size + 1 for query, so if this check is true
-	// there is definitely a next page
-	if len(resp.Tasks) > request.BatchSize {
+	if len(resp.Tasks) == request.BatchSize {
 		pageToken = &timerTaskPageToken{
-			TaskID:    rows[request.BatchSize].TaskID,
-			Timestamp: rows[request.BatchSize].VisibilityTimestamp,
+			TaskID:    rows[request.BatchSize-1].TaskID + 1,
+			Timestamp: rows[request.BatchSize-1].VisibilityTimestamp,
 		}
-		resp.Tasks = resp.Tasks[:request.BatchSize]
 		nextToken, err := pageToken.serialize()
 		if err != nil {
 			return nil, serviceerror.NewInternal(fmt.Sprintf("GetTimerTasks: error serializing page token: %v", err))
@@ -371,7 +371,7 @@ func (m *sqlExecutionStore) getReplicationTasks(
 
 	switch err {
 	case nil:
-		return m.populateGetReplicationTasksResponse(rows, request.ExclusiveMaxTaskKey.TaskID)
+		return m.populateGetReplicationTasksResponse(rows, request.ExclusiveMaxTaskKey.TaskID, request.BatchSize)
 	case sql.ErrNoRows:
 		return &p.InternalGetHistoryTasksResponse{}, nil
 	default:
@@ -407,6 +407,7 @@ func getImmediateTaskNextPageToken(
 func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	rows []sqlplugin.ReplicationTasksRow,
 	exclusiveMaxTaskID int64,
+	batchSize int,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	if len(rows) == 0 {
 		return &p.InternalGetHistoryTasksResponse{}, nil
@@ -416,18 +417,23 @@ func (m *sqlExecutionStore) populateGetReplicationTasksResponse(
 	for i, row := range rows {
 		tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	return &p.InternalGetHistoryTasksResponse{
-		Tasks: tasks,
-		NextPageToken: getImmediateTaskNextPageToken(
+	var nextPageToken []byte
+	if len(rows) == batchSize {
+		nextPageToken = getImmediateTaskNextPageToken(
 			rows[len(rows)-1].TaskID,
 			exclusiveMaxTaskID,
-		),
+		)
+	}
+	return &p.InternalGetHistoryTasksResponse{
+		Tasks:         tasks,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 
 func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	rows []sqlplugin.ReplicationDLQTasksRow,
 	exclusiveMaxTaskID int64,
+	batchSize int,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	if len(rows) == 0 {
 		return &p.InternalGetHistoryTasksResponse{}, nil
@@ -437,12 +443,16 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 	for i, row := range rows {
 		tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	return &p.InternalGetHistoryTasksResponse{
-		Tasks: tasks,
-		NextPageToken: getImmediateTaskNextPageToken(
+	var nextPageToken []byte
+	if len(rows) == batchSize {
+		nextPageToken = getImmediateTaskNextPageToken(
 			rows[len(rows)-1].TaskID,
 			exclusiveMaxTaskID,
-		),
+		)
+	}
+	return &p.InternalGetHistoryTasksResponse{
+		Tasks:         tasks,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 
@@ -524,7 +534,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 
 	switch err {
 	case nil:
-		return m.populateGetReplicationDLQTasksResponse(rows, request.ExclusiveMaxTaskKey.TaskID)
+		return m.populateGetReplicationDLQTasksResponse(rows, request.ExclusiveMaxTaskKey.TaskID, request.BatchSize)
 	case sql.ErrNoRows:
 		return &p.InternalGetHistoryTasksResponse{}, nil
 	default:
@@ -619,10 +629,13 @@ func (m *sqlExecutionStore) getVisibilityTasks(
 	for i, row := range rows {
 		resp.Tasks[i] = *p.NewDataBlob(row.Data, row.DataEncoding)
 	}
-	resp.NextPageToken = getImmediateTaskNextPageToken(
-		rows[len(rows)-1].TaskID,
-		exclusiveMaxTaskID,
-	)
+	if len(rows) == request.BatchSize {
+		resp.NextPageToken = getImmediateTaskNextPageToken(
+			rows[len(rows)-1].TaskID,
+			exclusiveMaxTaskID,
+		)
+	}
+
 	return resp, nil
 }
 

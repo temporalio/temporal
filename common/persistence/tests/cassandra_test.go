@@ -95,6 +95,23 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestCassandraExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	shardStore, err := testData.factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+	executionStore, err := testData.factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+
+	s := NewExecutionMutableStateTaskSuite(t, shardStore, executionStore, testData.logger)
+	suite.Run(t, s)
+}
+
 func TestCassandraHistoryStoreSuite(t *testing.T) {
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
