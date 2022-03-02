@@ -157,7 +157,7 @@ func (s *localStoreTlsProvider) GetFrontendClientConfig() (*tls.Config, error) {
 		&s.cachedFrontendClientConfig,
 		func() (*tls.Config, error) {
 			return newClientTLSConfig(s.workerCertProvider, client.ServerName,
-				s.settings.Frontend.Server.RequireClientAuth, true, !client.DisableHostVerification)
+				useTLS, true, !client.DisableHostVerification)
 		},
 		useTLS,
 	)
