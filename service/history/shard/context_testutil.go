@@ -124,8 +124,9 @@ func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 	s.eventsCache = c
 }
 
-// StopForTest calls private method stop(). In general only the controller should call stop, but integration
-// tests need to do it also to clean up any background acquireShard goroutines that may exist.
+// StopForTest calls private method finishStop(). In general only the controller
+// should call that, but integration tests need to do it also to clean up any
+// background acquireShard goroutines that may exist.
 func (s *ContextTest) StopForTest() {
-	s.stop()
+	s.finishStop()
 }

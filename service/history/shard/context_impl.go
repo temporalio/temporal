@@ -1291,11 +1291,13 @@ func (s *ContextImpl) start() {
 }
 
 func (s *ContextImpl) Unload() {
-	s.stop()
+	s.wLock()
+	defer s.wUnlock()
+	s.transitionLocked(contextRequestStop{})
 }
 
-// stop should only be called by the controller.
-func (s *ContextImpl) stop() {
+// finishStop should only be called by the controller.
+func (s *ContextImpl) finishStop() {
 	s.wLock()
 	s.transitionLocked(contextRequestFinishStop{})
 	engine := s.engine
@@ -1366,13 +1368,13 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 		Acquired
 			ShardOwnershipLostError: handleErrorLocked calls transitionLocked(contextRequestStop)
 		Stopping
-			controller removes from map and calls stop()
+			controller removes from map and calls finishStop()
 		Stopped
 
 	Stopping can be triggered internally (if we get a ShardOwnershipLostError, or fail to acquire the rangeid
 	lock after several minutes) or externally (from controller, e.g. controller shutting down or admin force-
 	unload shard). If it's triggered internally, we transition to Stopping, then make an asynchronous callback
-	to controller, which will remove us from the map and call stop(), which will transition to Stopped and
+	to controller, which will remove us from the map and call finishStop(), which will transition to Stopped and
 	stop the engine. If it's triggered externally, we'll skip over Stopping and go straight to Stopped.
 
 	If we want to stop, and the acquireShard goroutine is still running, we can't kill it, but we need a
@@ -1389,8 +1391,8 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	- If state is Acquiring, acquireShard should be running in the background.
 	- Only acquireShard can use contextRequestAcquired (i.e. transition from Acquiring to Acquired).
 	- Once state has reached Acquired at least once, and not reached Stopped, engine must be non-nil.
-	- Only the controller may call start() and stop().
-	- The controller must call stop() for every ContextImpl it creates.
+	- Only the controller may call start() and finishStop().
+	- The controller must call finishStop() for every ContextImpl it creates.
 
 	*/
 
@@ -1407,7 +1409,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 		if s.shardInfo != nil {
 			s.shardInfo.RangeId = -1
 		}
-		// This will cause the controller to remove this shard from the map and then call s.stop()
+		// This will cause the controller to remove this shard from the map and then call s.finishStop()
 		go s.closeCallback(s)
 	}
 
