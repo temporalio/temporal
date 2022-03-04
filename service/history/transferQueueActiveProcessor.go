@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"github.com/pborman/uuid"
-
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/historyservice/v1"

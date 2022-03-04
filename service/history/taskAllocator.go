@@ -38,7 +38,6 @@ type (
 		verifyActiveTask(taskNamespaceID namespace.ID, task interface{}) bool
 		verifyFailoverActiveTask(targetNamespaceIDs map[string]struct{}, taskNamespaceID namespace.ID, task interface{}) bool
 		verifyStandbyTask(standbyCluster string, taskNamespaceID namespace.ID, task interface{}) bool
-		verifyTaskNamespaceExists(taskNamespaceID namespace.ID, task interface{}) bool
 		lock()
 		unlock()
 	}
@@ -62,18 +61,6 @@ func newTaskAllocator(shard shard.Context) taskAllocator {
 		logger:             shard.GetLogger(),
 	}
 }
-func (t *taskAllocatorImpl) verifyTaskNamespaceExists(taskNamespaceID namespace.ID, task interface{}) bool {
-	t.locker.RLock()
-	defer t.locker.RUnlock()
-
-	_, err := t.namespaceRegistry.GetNamespaceByID(taskNamespaceID)
-	if err != nil {
-		t.logger.Debug("Unable to find namespace, skip task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-		return false
-	}
-
-	return true
-}
 
 // verifyActiveTask, will return true if task activeness check is successful
 func (t *taskAllocatorImpl) verifyActiveTask(taskNamespaceID namespace.ID, task interface{}) bool {
@@ -82,8 +69,8 @@ func (t *taskAllocatorImpl) verifyActiveTask(taskNamespaceID namespace.ID, task 
 
 	namespaceEntry, err := t.namespaceRegistry.GetNamespaceByID(taskNamespaceID)
 	if err != nil {
-		t.logger.Debug("Unable to find namespace, skip task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
-		return false
+		t.logger.Debug("Unable to find namespace, process task.", tag.WorkflowNamespaceID(taskNamespaceID.String()), tag.Value(task))
+		return true
 	}
 	if namespaceEntry.IsGlobalNamespace() && t.currentClusterName != namespaceEntry.ActiveClusterName() {
 		// timer task does not belong to cluster name

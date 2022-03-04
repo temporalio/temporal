@@ -153,6 +153,5 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 		shard,
 		workflowCache,
 		f.VisibilityMgr,
-		newTaskAllocator(shard),
 	)
 }

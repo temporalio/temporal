@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
@@ -76,7 +75,6 @@ func newVisibilityQueueProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
-	taskAllocator taskAllocator,
 ) queues.Processor {
 
 	config := shard.GetConfig()
@@ -98,8 +96,8 @@ func newVisibilityQueueProcessor(
 		EnablePriorityTaskProcessor:         config.VisibilityProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.VisibilityQueueProcessorScope,
 	}
-	visibilityTaskFilter := func(task tasks.Task) bool {
-		return taskAllocator.verifyTaskNamespaceExists(namespace.ID(task.GetNamespaceID()), task)
+	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
+		return true
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetQueueMaxReadLevel(
