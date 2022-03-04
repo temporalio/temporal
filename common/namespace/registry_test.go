@@ -529,6 +529,105 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	waitGroup.Wait()
 }
 
+func (s *registrySuite) TestRemoveDeletedNamespace() {
+	namespaceNotificationVersion := int64(0)
+	namespaceRecord1 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   namespace.NewID().String(),
+				Name: "some random namespace name",
+				Data: make(map[string]string)},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(1),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				}},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestCurrentClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			ConfigVersion:               10,
+			FailoverVersion:             11,
+			FailoverNotificationVersion: 0,
+		},
+		NotificationVersion: namespaceNotificationVersion,
+	}
+	namespaceNotificationVersion++
+
+	namespaceRecord2 := &persistence.GetNamespaceResponse{
+		Namespace: &persistencespb.NamespaceDetail{
+			Info: &persistencespb.NamespaceInfo{
+				Id:   namespace.NewID().String(),
+				Name: "another random namespace name",
+				Data: make(map[string]string)},
+			Config: &persistencespb.NamespaceConfig{
+				Retention: timestamp.DurationFromDays(2),
+				BadBinaries: &namespacepb.BadBinaries{
+					Binaries: map[string]*namespacepb.BadBinaryInfo{},
+				}},
+			ReplicationConfig: &persistencespb.NamespaceReplicationConfig{
+				ActiveClusterName: cluster.TestAlternativeClusterName,
+				Clusters: []string{
+					cluster.TestCurrentClusterName,
+					cluster.TestAlternativeClusterName,
+				},
+			},
+			ConfigVersion:               20,
+			FailoverVersion:             21,
+			FailoverNotificationVersion: 0,
+		},
+		NotificationVersion: namespaceNotificationVersion,
+	}
+	namespaceNotificationVersion++
+
+	s.regPersistence.EXPECT().GetMetadata().Return(
+		&persistence.GetMetadataResponse{
+			NotificationVersion: namespaceNotificationVersion,
+		}, nil)
+	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+		PageSize:      namespace.CacheRefreshPageSize,
+		NextPageToken: nil,
+	}).Return(&persistence.ListNamespacesResponse{
+		Namespaces: []*persistence.GetNamespaceResponse{
+			namespaceRecord1,
+			namespaceRecord2},
+		NextPageToken: nil,
+	}, nil)
+
+	// load namespaces
+	s.registry.Start()
+	defer s.registry.Stop()
+
+	s.regPersistence.EXPECT().GetMetadata().Return(
+		&persistence.GetMetadataResponse{
+			NotificationVersion: namespaceNotificationVersion,
+		}, nil)
+	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+		PageSize:      namespace.CacheRefreshPageSize,
+		NextPageToken: nil,
+	}).Return(&persistence.ListNamespacesResponse{
+		Namespaces: []*persistence.GetNamespaceResponse{
+			// namespaceRecord1 is removed
+			namespaceRecord2},
+		NextPageToken: nil,
+	}, nil)
+
+	s.registry.Refresh()
+
+	ns2FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord2.Namespace.Info.Name))
+	s.NotNil(ns2FromRegistry)
+	s.NoError(err)
+
+	ns1FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
+	s.Nil(ns1FromRegistry)
+	s.Error(err)
+	var notFound *serviceerror.NotFound
+	s.ErrorAs(err, &notFound)
+}
+
 func TestCacheByName(t *testing.T) {
 	nsrec := persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{

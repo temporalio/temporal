@@ -387,7 +387,8 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 
 	var token []byte
 	request := &persistence.ListNamespacesRequest{PageSize: CacheRefreshPageSize}
-	var namespaces Namespaces
+	var namespacesDb Namespaces
+	namespaceIDsDb := make(map[ID]struct{})
 	continuePage := true
 
 	for continuePage {
@@ -397,8 +398,9 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 			return err
 		}
 		token = response.NextPageToken
-		for _, namespace := range response.Namespaces {
-			namespaces = append(namespaces, FromPersistentState(namespace))
+		for _, namespaceDb := range response.Namespaces {
+			namespacesDb = append(namespacesDb, FromPersistentState(namespaceDb))
+			namespaceIDsDb[ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
 		}
 		continuePage = len(token) != 0
 	}
@@ -406,21 +408,23 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	// we mush apply the namespace change by order
 	// since history shard have to update the shard info
 	// with namespace change version.
-	sort.Sort(namespaces)
+	sort.Sort(namespacesDb)
 
-	var oldEntries []*Namespace
-	var newEntries []*Namespace
-
-	// make a copy of the existing namespace cache, so we can calculate diff and do compare and swap
+	// Make a copy of the existing namespace cache (excluding deleted), so we can calculate diff and do "compare and swap".
 	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts)
 	newCacheByID := cache.New(cacheMaxSize, &cacheOpts)
 	for _, namespace := range r.getAllNamespace() {
+		if _, namespaceExistsDb := namespaceIDsDb[namespace.ID()]; !namespaceExistsDb {
+			continue
+		}
 		newCacheNameToID.Put(Name(namespace.info.Name), ID(namespace.info.Id))
 		newCacheByID.Put(ID(namespace.info.Id), namespace)
 	}
 
+	var oldEntries []*Namespace
+	var newEntries []*Namespace
 UpdateLoop:
-	for _, namespace := range namespaces {
+	for _, namespace := range namespacesDb {
 		if namespace.notificationVersion >= namespaceNotificationVersion {
 			// this guarantee that namespace change events before the
 			// namespaceNotificationVersion is loaded into the cache.
