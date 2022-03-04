@@ -89,7 +89,7 @@ workflow_id = :workflow_id
 	getTransferTaskQuery = `SELECT task_id, data, data_encoding 
  FROM transfer_tasks WHERE shard_id = $1 AND task_id = $2`
 	getTransferTasksQuery = `SELECT task_id, data, data_encoding 
- FROM transfer_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3 ORDER BY task_id`
+ FROM transfer_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3 ORDER BY task_id LIMIT $4`
 
 	deleteTransferTaskQuery      = `DELETE FROM transfer_tasks WHERE shard_id = $1 AND task_id = $2`
 	rangeDeleteTransferTaskQuery = `DELETE FROM transfer_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3`
@@ -136,7 +136,7 @@ ORDER BY task_id LIMIT $5`
 	getVisibilityTaskQuery = `SELECT task_id, data, data_encoding 
  FROM visibility_tasks WHERE shard_id = $1 AND task_id = $2`
 	getVisibilityTasksQuery = `SELECT task_id, data, data_encoding 
- FROM visibility_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3 ORDER BY task_id`
+ FROM visibility_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3 ORDER BY task_id LIMIT $4`
 
 	deleteVisibilityTaskQuery      = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id = $2`
 	rangeDeleteVisibilityTaskQuery = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3`
@@ -391,6 +391,7 @@ func (pdb *db) RangeSelectFromTransferTasks(
 		filter.ShardID,
 		filter.InclusiveMinTaskID,
 		filter.ExclusiveMaxTaskID,
+		filter.PageSize,
 	)
 	if err != nil {
 		return nil, err
@@ -746,6 +747,7 @@ func (pdb *db) RangeSelectFromVisibilityTasks(
 		filter.ShardID,
 		filter.InclusiveMinTaskID,
 		filter.ExclusiveMaxTaskID,
+		filter.PageSize,
 	)
 	if err != nil {
 		return nil, err

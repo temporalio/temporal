@@ -88,6 +88,34 @@ func TestPostgreSQLExecutionMutableStateStoreSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
+func TestPostgreSQLExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	cfg := NewPostgreSQLConfig()
+	SetupPostgreSQLDatabase(cfg)
+	SetupPostgreSQLSchema(cfg)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testPostgreSQLClusterName,
+		logger,
+	)
+	shardStore, err := factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	executionStore, err := factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+		TearDownPostgreSQLDatabase(cfg)
+	}()
+
+	s := NewExecutionMutableStateTaskSuite(t, shardStore, executionStore, logger)
+	suite.Run(t, s)
+}
+
 func TestPostgreSQLHistoryStoreSuite(t *testing.T) {
 	cfg := NewPostgreSQLConfig()
 	SetupPostgreSQLDatabase(cfg)

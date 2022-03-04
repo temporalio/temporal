@@ -51,6 +51,7 @@ type (
 		ShardID            int32
 		InclusiveMinTaskID int64
 		ExclusiveMaxTaskID int64
+		PageSize           int
 	}
 
 	// HistoryTransferTask is the SQL persistence interface for history transfer tasks
@@ -63,6 +64,7 @@ type (
 		// DeleteFromTransferTasks deletes one rows from transfer_tasks table.
 		DeleteFromTransferTasks(ctx context.Context, filter TransferTasksFilter) (sql.Result, error)
 		// RangeDeleteFromTransferTasks deletes one or more rows from transfer_tasks table.
+		//  TransferTasksRangeFilter - {PageSize} will be ignored
 		RangeDeleteFromTransferTasks(ctx context.Context, filter TransferTasksRangeFilter) (sql.Result, error)
 	}
 )
