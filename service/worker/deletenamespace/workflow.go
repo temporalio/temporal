@@ -43,8 +43,7 @@ const (
 	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-delete-namespace-workflow"
 
-	deleteMaxAttempts = 3
-	checkMaxAttempts  = 5
+	checkMaxAttempts = 10
 )
 
 type (
@@ -168,8 +167,9 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 func deleteWorkflowExecutions(ctx workflow.Context, params DeleteNamespaceWorkflowParams, a *activities, logger log.Logger) error {
 	totalDeletedCount := 0
-	var executionsExist bool
-	for deleteAttempt := int32(1); deleteAttempt <= deleteMaxAttempts; deleteAttempt++ {
+	deleteAttempt := int32(1)
+	executionsExist := true
+	for executionsExist {
 		ctx1 := workflow.WithChildOptions(ctx, deleteexecutions.DeleteExecutionsWorkflowOptions)
 		var der deleteexecutions.DeleteExecutionsResult
 		err := workflow.ExecuteChildWorkflow(ctx1, deleteexecutions.DeleteExecutionsWorkflow, deleteexecutions.DeleteExecutionsParams{
@@ -202,15 +202,10 @@ func deleteWorkflowExecutions(ctx workflow.Context, params DeleteNamespaceWorkfl
 			}
 			logger.Info("Workflow executions are still not deleted.", tag.WorkflowNamespace(params.Namespace.String()), tag.Attempt(checkAttempt))
 		}
-		if !executionsExist {
-			break
+		if executionsExist {
+			logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
+			deleteAttempt++
 		}
-		logger.Info("Unable to delete workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
-	}
-
-	if executionsExist {
-		logger.Info("Workflow executions are left in deleted namespace after all attempts.", tag.WorkflowNamespace(params.Namespace.String()), tag.Attempt(deleteMaxAttempts))
-		return nil
 	}
 
 	logger.Info("All workflow executions has been deleted successfully.", tag.WorkflowNamespace(params.Namespace.String()), tag.NewInt("deleted-executions-count", totalDeletedCount))
