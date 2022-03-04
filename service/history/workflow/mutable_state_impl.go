@@ -1048,6 +1048,7 @@ func (e *MutableStateImpl) DeleteActivity(
 	}
 
 	delete(e.updateActivityInfos, scheduleEventID)
+	delete(e.syncActivityTasks, scheduleEventID)
 	e.deleteActivityInfos[scheduleEventID] = struct{}{}
 	return nil
 }
