@@ -1456,6 +1456,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.rLock()
 
 	if s.state >= contextStateStopping {
+		s.rUnlock()
 		return errStoppingContext
 	}
 
