@@ -385,29 +385,27 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	}
 	namespaceNotificationVersion := metadata.NotificationVersion
 
-	var token []byte
 	request := &persistence.ListNamespacesRequest{PageSize: CacheRefreshPageSize}
 	var namespacesDb Namespaces
 	namespaceIDsDb := make(map[ID]struct{})
-	continuePage := true
 
-	for continuePage {
-		request.NextPageToken = token
+	for {
 		response, err := r.persistence.ListNamespaces(request)
 		if err != nil {
 			return err
 		}
-		token = response.NextPageToken
 		for _, namespaceDb := range response.Namespaces {
 			namespacesDb = append(namespacesDb, FromPersistentState(namespaceDb))
 			namespaceIDsDb[ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
 		}
-		continuePage = len(token) != 0
+		if len(response.NextPageToken) == 0 {
+			break
+		}
+		request.NextPageToken = response.NextPageToken
 	}
 
-	// we mush apply the namespace change by order
-	// since history shard have to update the shard info
-	// with namespace change version.
+	// Sort namespaces by notification version because changes must be applied in this order
+	// because history shard has to update the shard info with namespace change version.
 	sort.Sort(namespacesDb)
 
 	// Make a copy of the existing namespace cache (excluding deleted), so we can calculate diff and do "compare and swap".
