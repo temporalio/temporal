@@ -1189,6 +1189,8 @@ const (
 	AddSearchAttributesWorkflowScope
 	// MigrationWorkflowScope is scope used by metrics emitted by migration related workflows
 	MigrationWorkflowScope
+	// DeleteNamespaceWorkflowScope is scope used by metrics emitted by delete namespace workflow.
+	DeleteNamespaceWorkflowScope
 
 	NumWorkerScopes
 )
@@ -1730,6 +1732,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		ParentClosePolicyProcessorScope:        {operation: "ParentClosePolicyProcessor"},
 		AddSearchAttributesWorkflowScope:       {operation: "AddSearchAttributesWorkflow"},
 		MigrationWorkflowScope:                 {operation: "MigrationWorkflow"},
+		DeleteNamespaceWorkflowScope:           {operation: "DeleteNamespaceWorkflow"},
 	},
 	Server: {
 		ServerTlsScope: {operation: "ServerTls"},
@@ -2192,6 +2195,7 @@ const (
 	AddSearchAttributesFailuresCount
 	CatchUpReadyShardCountGauge
 	HandoverReadyShardCountGauge
+	DeleteNamespaceFailuresCount
 
 	NumWorkerMetrics
 )
@@ -2646,6 +2650,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		AddSearchAttributesFailuresCount:              NewCounterDef("add_search_attributes_failures"),
 		CatchUpReadyShardCountGauge:                   NewGaugeDef("catchup_ready_shard_count"),
 		HandoverReadyShardCountGauge:                  NewGaugeDef("handover_ready_shard_count"),
+		DeleteNamespaceFailuresCount:                  NewCounterDef("delete_namespace_failures"),
 	},
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),
