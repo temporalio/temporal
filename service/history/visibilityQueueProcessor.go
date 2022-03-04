@@ -96,8 +96,8 @@ func newVisibilityQueueProcessor(
 		EnablePriorityTaskProcessor:         config.VisibilityProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.VisibilityQueueProcessorScope,
 	}
-	visibilityTaskFilter := func(taskInfo tasks.Task) (bool, error) {
-		return true, nil
+	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
+		return true
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetQueueMaxReadLevel(

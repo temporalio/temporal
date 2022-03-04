@@ -77,7 +77,7 @@ func newTimerQueueStandbyProcessor(
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 	metricsClient := shard.GetMetricsClient()
-	timerTaskFilter := func(task tasks.Task) (bool, error) {
+	timerTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
 	}
 

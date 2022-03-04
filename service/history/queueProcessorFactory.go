@@ -26,6 +26,8 @@ package history
 
 import (
 	sdkclient "go.temporal.io/sdk/client"
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
@@ -33,7 +35,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
-	"go.uber.org/fx"
 )
 
 var QueueProcessorModule = fx.Options(

@@ -208,19 +208,12 @@ func (t *taskProcessor) processTaskAndAck(
 	var scope metrics.Scope
 	var err error
 
-FilterLoop:
-	for {
-		select {
-		case <-t.shutdownCh:
-			// this must return without ack
-			return
-		default:
-			task.shouldProcessTask, err = task.processor.getTaskFilter()(task.Task)
-			if err == nil {
-				break FilterLoop
-			}
-			time.Sleep(loadNamespaceEntryForTimerTaskRetryDelay)
-		}
+	select {
+	case <-t.shutdownCh:
+		// this must return without ack
+		return
+	default:
+		task.shouldProcessTask = task.processor.getTaskFilter()(task.Task)
 	}
 
 	op := func() error {
@@ -359,7 +352,7 @@ func (t *taskProcessor) ackTaskOnce(
 func (t *taskProcessor) getNamespaceTagByID(namespaceID namespace.ID) metrics.Tag {
 	namespaceName, err := t.shard.GetNamespaceRegistry().GetNamespaceName(namespaceID)
 	if err != nil {
-		t.logger.Error("Unable to get namespace", tag.Error(err))
+		t.logger.Debug("Unable to get namespace", tag.Error(err))
 		return metrics.NamespaceUnknownTag()
 	}
 	return metrics.NamespaceTag(namespaceName.String())

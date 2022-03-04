@@ -28,8 +28,8 @@ import (
 	"context"
 
 	"github.com/pborman/uuid"
-
 	sdkclient "go.temporal.io/sdk/client"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
@@ -87,7 +87,7 @@ func newTransferQueueActiveProcessor(
 	}
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	transferTaskFilter := func(task tasks.Task) (bool, error) {
+	transferTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
@@ -194,7 +194,7 @@ func newTransferQueueFailoverProcessor(
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 
-	transferTaskFilter := func(task tasks.Task) (bool, error) {
+	transferTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
