@@ -61,26 +61,6 @@ func NewActivities(
 	}
 }
 
-func (a *activities) CheckExecutionsExistActivity(ctx context.Context, nsName namespace.Name) (bool, error) {
-	sdkClient, err := a.sdkClientFactory.NewClient(nsName.String(), a.logger)
-	if err != nil {
-		return false, err
-	}
-
-	// TODO: use CountWorkflow if adv visibility is enabled.
-	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		PageSize: 1,
-	})
-
-	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
-		a.logger.Error("Unable to list workflows.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
-		return false, err
-	}
-
-	return len(resp.Executions) > 0, nil
-}
-
 func (a *activities) GetNamespaceIDActivity(_ context.Context, nsName namespace.Name) (namespace.ID, error) {
 	getNamespaceRequest := &persistence.GetNamespaceRequest{
 		Name: nsName.String(),
@@ -132,6 +112,26 @@ func (a *activities) MarkNamespaceDeletedActivity(_ context.Context, nsName name
 		return err
 	}
 	return nil
+}
+
+func (a *activities) CheckExecutionsExistActivity(ctx context.Context, nsName namespace.Name) (bool, error) {
+	sdkClient, err := a.sdkClientFactory.NewClient(nsName.String(), a.logger)
+	if err != nil {
+		return false, err
+	}
+
+	// TODO: use CountWorkflow if adv visibility is enabled.
+	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
+		PageSize: 1,
+	})
+
+	if err != nil {
+		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.logger.Error("Unable to list workflows.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		return false, err
+	}
+
+	return len(resp.Executions) > 0, nil
 }
 
 func (a *activities) DeleteNamespaceActivity(_ context.Context, nsName namespace.Name, nsID namespace.ID) error {
