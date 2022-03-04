@@ -656,6 +656,23 @@ func (s *controllerSuite) TestShardControllerClosed() {
 	workerWG.Wait()
 }
 
+func (s *controllerSuite) TestShardExplicitUnload() {
+	s.config.NumberOfShards = 1
+	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(s.hostInfo, nil)
+	shard, err := s.shardController.getOrCreateShardContext(0)
+	s.NoError(err)
+	s.Equal(1, s.shardController.NumShards())
+
+	shard.Unload()
+
+	for tries := 0; tries < 100 && s.shardController.NumShards() != 0; tries++ {
+		// removal from map happens asynchronously
+		time.Sleep(1 * time.Millisecond)
+	}
+	s.Equal(0, s.shardController.NumShards())
+	s.Equal(contextStateStopped, shard.state)
+}
+
 func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *MockEngine, currentRangeID,
 	newRangeID int64) {
 
