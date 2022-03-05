@@ -10,3 +10,5 @@ RUN apk add --update --no-cache \
     shellcheck
 
 RUN wget -O- https://raw.githubusercontent.com/fossas/spectrometer/master/install.sh | sh
+
+RUN go get github.com/golang/mock/mockgen
