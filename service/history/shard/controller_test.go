@@ -516,7 +516,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		mockEngine := NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
-		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
+		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -613,7 +613,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		mockEngine := NewMockEngine(s.controller)
 		historyEngines[shardID] = mockEngine
-		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6)
+		s.setupMocksForAcquireShard(shardID, mockEngine, 5, 6, true)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -658,7 +658,13 @@ func (s *controllerSuite) TestShardControllerClosed() {
 
 func (s *controllerSuite) TestShardExplicitUnload() {
 	s.config.NumberOfShards = 1
-	s.mockServiceResolver.EXPECT().Lookup(gomock.Any()).Return(s.hostInfo, nil)
+
+	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
+	mockEngine := NewMockEngine(s.controller)
+	mockEngine.EXPECT().Stop().AnyTimes()
+	s.setupMocksForAcquireShard(0, mockEngine, 5, 6, false)
+
 	shard, err := s.shardController.getOrCreateShardContext(0)
 	s.NoError(err)
 	s.Equal(1, s.shardController.NumShards())
@@ -670,11 +676,11 @@ func (s *controllerSuite) TestShardExplicitUnload() {
 		time.Sleep(1 * time.Millisecond)
 	}
 	s.Equal(0, s.shardController.NumShards())
-	s.Equal(contextStateStopped, shard.state)
+	s.False(shard.isValid())
 }
 
 func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *MockEngine, currentRangeID,
-	newRangeID int64) {
+	newRangeID int64, required bool) {
 
 	replicationAck := int64(201)
 	currentClusterTransferAck := int64(210)
@@ -682,10 +688,15 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 	currentClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-100)
 	alternativeClusterTimerAck := timestamp.TimeNowPtrUtcAddSeconds(-200)
 
+	minTimes := 0
+	if required {
+		minTimes = 1
+	}
+
 	// s.mockResource.ExecutionMgr.On("Close").Return()
-	mockEngine.EXPECT().Start()
-	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2)
-	s.mockEngineFactory.EXPECT().CreateEngine(newContextMatcher(shardID)).Return(mockEngine)
+	mockEngine.EXPECT().Start().MinTimes(minTimes)
+	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2).MinTimes(minTimes)
+	s.mockEngineFactory.EXPECT().CreateEngine(newContextMatcher(shardID)).Return(mockEngine).MinTimes(minTimes)
 	s.mockShardManager.EXPECT().GetOrCreateShard(getOrCreateShardRequestMatcher(shardID)).Return(
 		&persistence.GetOrCreateShardResponse{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -707,7 +718,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 				ReplicationDlqAckLevel:  map[string]int64{},
 				QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 			},
-		}, nil)
+		}, nil).MinTimes(minTimes)
 	s.mockShardManager.EXPECT().UpdateShard(&persistence.UpdateShardRequest{
 		ShardInfo: &persistencespb.ShardInfo{
 			ShardId:             shardID,
@@ -730,7 +741,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 			QueueAckLevels:          map[int32]*persistencespb.QueueAckLevel{},
 		},
 		PreviousRangeID: currentRangeID,
-	}).Return(nil)
+	}).Return(nil).MinTimes(minTimes)
 }
 
 func newContextMatcher(shardID int32) *contextMatcher {
