@@ -28,36 +28,35 @@ import (
 	"context"
 
 	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
 type (
 	activities struct {
-		sdkClientFactory sdk.ClientFactory
-		metadataManager  persistence.MetadataManager
-		metricsClient    metrics.Client
-		logger           log.Logger
+		visibilityManager manager.VisibilityManager
+		metadataManager   persistence.MetadataManager
+		metricsClient     metrics.Client
+		logger            log.Logger
 	}
 )
 
 func NewActivities(
-	sdkClientFactory sdk.ClientFactory,
+	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *activities {
 	return &activities{
-		sdkClientFactory: sdkClientFactory,
-		metadataManager:  metadataManager,
-		metricsClient:    metricsClient,
-		logger:           logger,
+		visibilityManager: visibilityManager,
+		metadataManager:   metadataManager,
+		metricsClient:     metricsClient,
+		logger:            logger,
 	}
 }
 
@@ -114,20 +113,31 @@ func (a *activities) MarkNamespaceDeletedActivity(_ context.Context, nsName name
 	return nil
 }
 
-func (a *activities) CheckExecutionsExistActivity(ctx context.Context, nsName namespace.Name) (bool, error) {
-	sdkClient, err := a.sdkClientFactory.NewClient(nsName.String(), a.logger)
-	if err != nil {
-		return false, err
+func (a *activities) CheckExecutionsExistActivity(_ context.Context, nsID namespace.ID, nsName namespace.Name) (bool, error) {
+	if a.visibilityManager.GetName() == "elasticsearch" {
+		req := &manager.CountWorkflowExecutionsRequest{
+			NamespaceID: nsID,
+			Namespace:   nsName,
+		}
+		resp, err := a.visibilityManager.CountWorkflowExecutions(req)
+		if err != nil {
+			a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+			a.logger.Error("Unable to count workflows.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+			return false, err
+		}
+
+		return resp.Count > 0, nil
 	}
 
-	// TODO: use CountWorkflow if adv visibility is enabled.
-	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		PageSize: 1,
-	})
-
+	req := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: nsID,
+		Namespace:   nsName,
+		PageSize:    1,
+	}
+	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
-		a.logger.Error("Unable to list workflows.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		a.logger.Error("Unable to count workflows using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return false, err
 	}
 

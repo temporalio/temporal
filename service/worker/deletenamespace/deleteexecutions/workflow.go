@@ -44,7 +44,7 @@ type (
 		NamespaceID namespace.ID
 
 		DeleteRPS                                 int
-		ListPageSize                              int32
+		ListPageSize                              int
 		ConcurrentDeleteExecutionsActivitiesCount int
 
 		PreviousSuccessCount int
@@ -117,6 +117,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		ctx1 := workflow.WithLocalActivityOptions(ctx, getNextPageTokenActivityOptions)
 		var nptr GetNextPageTokenResult
 		err := workflow.ExecuteLocalActivity(ctx1, a.GetNextPageTokenActivity, GetNextPageTokenParams{
+			NamespaceID:   params.NamespaceID,
 			Namespace:     params.Namespace,
 			PageSize:      params.ListPageSize,
 			NextPageToken: nextPageToken,

@@ -53,7 +53,7 @@ type (
 		Namespace   namespace.Name
 
 		DeleteRPS                                 int
-		ListPageSize                              int32
+		ListPageSize                              int
 		ConcurrentDeleteExecutionsActivitiesCount int
 	}
 )
@@ -192,7 +192,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params DeleteNamespaceWorkfl
 			}
 
 			ctx2 := workflow.WithActivityOptions(ctx, checkExecutionsExistActivityOptions)
-			err = workflow.ExecuteActivity(ctx2, a.CheckExecutionsExistActivity, params.Namespace).Get(ctx, &executionsExist)
+			err = workflow.ExecuteActivity(ctx2, a.CheckExecutionsExistActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsExist)
 			if err != nil {
 				return fmt.Errorf("%w: CountWorkflowActivity: %v", ErrUnableToExecuteActivity, err)
 			}

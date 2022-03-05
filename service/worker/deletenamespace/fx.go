@@ -33,7 +33,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 )
@@ -41,11 +41,11 @@ import (
 type (
 	// deleteNamespaceComponent represent background work needed for delete namespace.
 	deleteNamespaceComponent struct {
-		sdkClientFactory sdk.ClientFactory
-		metadataManager  persistence.MetadataManager
-		historyClient    historyservice.HistoryServiceClient
-		metricsClient    metrics.Client
-		logger           log.Logger
+		visibilityManager manager.VisibilityManager
+		metadataManager   persistence.MetadataManager
+		historyClient     historyservice.HistoryServiceClient
+		metricsClient     metrics.Client
+		logger            log.Logger
 	}
 
 	component struct {
@@ -59,7 +59,7 @@ var Module = fx.Options(
 )
 
 func newComponent(
-	sdkClientFactory sdk.ClientFactory,
+	visibilityManager manager.VisibilityManager,
 	metadataManager persistence.MetadataManager,
 	historyClient historyservice.HistoryServiceClient,
 	metricsClient metrics.Client,
@@ -67,11 +67,11 @@ func newComponent(
 ) component {
 	return component{
 		DeleteNamespaceComponent: &deleteNamespaceComponent{
-			sdkClientFactory: sdkClientFactory,
-			metadataManager:  metadataManager,
-			historyClient:    historyClient,
-			metricsClient:    metricsClient,
-			logger:           logger,
+			visibilityManager: visibilityManager,
+			metadataManager:   metadataManager,
+			historyClient:     historyClient,
+			metricsClient:     metricsClient,
+			logger:            logger,
 		}}
 }
 
@@ -89,9 +89,9 @@ func (wc *deleteNamespaceComponent) DedicatedWorkerOptions() *workercommon.Dedic
 }
 
 func (wc *deleteNamespaceComponent) deleteNamespaceActivities() *activities {
-	return NewActivities(wc.sdkClientFactory, wc.metadataManager, wc.metricsClient, wc.logger)
+	return NewActivities(wc.visibilityManager, wc.metadataManager, wc.metricsClient, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {
-	return deleteexecutions.NewActivities(wc.sdkClientFactory, wc.historyClient, wc.metricsClient, wc.logger)
+	return deleteexecutions.NewActivities(wc.visibilityManager, wc.historyClient, wc.metricsClient, wc.logger)
 }

@@ -104,6 +104,13 @@ type (
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
+
+		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+		AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+		AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+		EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -163,7 +170,7 @@ func NewService(
 }
 
 // NewConfig builds the new Config for worker service
-func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams) *Config {
+func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams, enableReadFromES bool) *Config {
 	config := &Config{
 		ArchiverConfig: &archiver.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
@@ -292,6 +299,13 @@ func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams) *
 			dynamicconfig.WorkerPersistenceGlobalMaxQPS,
 			0,
 		),
+
+		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
+		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
+		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
+		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
+		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
 	}
 	return config
 }

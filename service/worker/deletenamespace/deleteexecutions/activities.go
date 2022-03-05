@@ -39,8 +39,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
-	"go.temporal.io/server/common/sdk"
 )
 
 const (
@@ -49,15 +49,16 @@ const (
 
 type (
 	Activities struct {
-		sdkClientFactory sdk.ClientFactory
-		historyClient    historyservice.HistoryServiceClient
-		metricsClient    metrics.Client
-		logger           log.Logger
+		visibilityManager manager.VisibilityManager
+		historyClient     historyservice.HistoryServiceClient
+		metricsClient     metrics.Client
+		logger            log.Logger
 	}
 
 	GetNextPageTokenParams struct {
+		NamespaceID   namespace.ID
 		Namespace     namespace.Name
-		PageSize      int32
+		PageSize      int
 		NextPageToken []byte
 	}
 	GetNextPageTokenResult struct {
@@ -68,7 +69,7 @@ type (
 		Namespace     namespace.Name
 		NamespaceID   namespace.ID
 		DeleteRPS     int
-		ListPageSize  int32
+		ListPageSize  int
 		NextPageToken []byte
 	}
 	DeleteExecutionsActivityResult struct {
@@ -97,56 +98,55 @@ var (
 )
 
 func NewActivities(
-	clientFactory sdk.ClientFactory,
+	visibilityManager manager.VisibilityManager,
 	historyClient historyservice.HistoryServiceClient,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *Activities {
 	return &Activities{
-		sdkClientFactory: clientFactory,
-		historyClient:    historyClient,
-		metricsClient:    metricsClient,
-		logger:           logger,
+		visibilityManager: visibilityManager,
+		historyClient:     historyClient,
+		metricsClient:     metricsClient,
+		logger:            logger,
 	}
 }
 
-func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNextPageTokenParams) (GetNextPageTokenResult, error) {
-	sdkClient, err := a.sdkClientFactory.NewClient(params.Namespace.String(), a.logger)
-	if err != nil {
-		return GetNextPageTokenResult{}, err
+func (a *Activities) GetNextPageTokenActivity(_ context.Context, params GetNextPageTokenParams) (GetNextPageTokenResult, error) {
+	req := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID:   params.NamespaceID,
+		Namespace:     params.Namespace,
+		PageSize:      params.PageSize,
+		NextPageToken: params.NextPageToken,
 	}
 
-	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		NextPageToken: params.NextPageToken,
-		PageSize:      params.PageSize,
-	})
+	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
-		a.logger.Error("Unable to list all workflows.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 		return GetNextPageTokenResult{}, err
 	}
 
 	return GetNextPageTokenResult{
-		NextPageToken: resp.GetNextPageToken(),
+		NextPageToken: resp.NextPageToken,
 	}, nil
 }
 
 func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
-	sdkClient, err := a.sdkClientFactory.NewClient(params.Namespace.String(), a.logger)
-	if err != nil {
-		return DeleteExecutionsActivityResult{}, err
-	}
 	rateLimiter := quotas.NewRateLimiter(float64(params.DeleteRPS), params.DeleteRPS)
 
 	var result DeleteExecutionsActivityResult
-	resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
-		NextPageToken: params.NextPageToken,
+
+	req := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID:   params.NamespaceID,
+		Namespace:     params.Namespace,
 		PageSize:      params.ListPageSize,
-	})
+		NextPageToken: params.NextPageToken,
+	}
+	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
 		a.logger.Error("Unable to list all workflows.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
-		return DeleteExecutionsActivityResult{}, err
+		return result, err
 	}
 	for _, execution := range resp.Executions {
 		_ = rateLimiter.Wait(ctx)
