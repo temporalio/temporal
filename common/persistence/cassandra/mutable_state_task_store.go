@@ -78,7 +78,7 @@ const (
 		`and task_id > ? ` +
 		`and task_id <= ?`
 
-	templateGetHistoryScheduledTasksQuery = `SELECT timer, timer_encoding ` +
+	templateGetHistoryScheduledTasksQuery = `SELECT task_data, task_encoding ` +
 		`FROM executions ` +
 		`WHERE shard_id = ? ` +
 		`and type = ?` +
