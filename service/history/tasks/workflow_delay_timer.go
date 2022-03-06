@@ -27,6 +27,7 @@ package tasks
 import (
 	"time"
 
+	enumspb "go.temporal.io/server/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
@@ -76,4 +77,8 @@ func (r *WorkflowBackoffTimerTask) SetVisibilityTime(t time.Time) {
 
 func (r *WorkflowBackoffTimerTask) GetCategory() Category {
 	return CategoryTimer
+}
+
+func (r *WorkflowBackoffTimerTask) GetType() enumspb.TaskType {
+	return enumspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
 }

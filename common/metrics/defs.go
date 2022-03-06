@@ -526,6 +526,8 @@ const (
 	AdminClientCloseShardScope
 	// AdminClientGetShardScope tracks RPC calls to admin service
 	AdminClientGetShardScope
+	// AdminClientListHistoryTasksScope tracks RPC calls to admin service
+	AdminClientListHistoryTasksScope
 	// AdminClientListTransferTasksScope tracks RPC calls to admin service
 	AdminClientListTransferTasksScope
 	// AdminClientListTimerTasksScope tracks RPC calls to admin service
@@ -768,6 +770,8 @@ const (
 	AdminCloseShardScope
 	// AdminGetShardScope is the metric scope for admin.AdminGetShardScope
 	AdminGetShardScope
+	// AdminListHistoryTasksScope is the metric scope for admin.ListHistoryTasksScope
+	AdminListHistoryTasksScope
 	// AdminListTransferTasksScope is the metric scope for admin.ListTransferTasksScope
 	AdminListTransferTasksScope
 	// AdminListTimerTasksScope is the metric scope for admin.ListTimerTasksScope
@@ -1515,6 +1519,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminRemoveTaskScope:                            {operation: "AdminRemoveTask"},
 		AdminCloseShardScope:                            {operation: "AdminCloseShard"},
 		AdminGetShardScope:                              {operation: "AdminGetShard"},
+		AdminListHistoryTasksScope:                      {operation: "AdminListHistoryTasks"},
 		AdminListTransferTasksScope:                     {operation: "AdminListTransferTasks"},
 		AdminListTimerTasksScope:                        {operation: "AdminListTimerTasks"},
 		AdminListReplicationTasksScope:                  {operation: "AdminListReplicationTasks"},

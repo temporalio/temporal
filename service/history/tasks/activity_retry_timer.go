@@ -27,6 +27,7 @@ package tasks
 import (
 	"time"
 
+	enumspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -76,4 +77,8 @@ func (r *ActivityRetryTimerTask) SetVisibilityTime(t time.Time) {
 
 func (r *ActivityRetryTimerTask) GetCategory() Category {
 	return CategoryTimer
+}
+
+func (r *ActivityRetryTimerTask) GetType() enumspb.TaskType {
+	return enumspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
 }

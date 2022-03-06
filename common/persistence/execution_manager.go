@@ -1009,14 +1009,14 @@ func validateTaskRange(
 	switch taskCategoryType {
 	case tasks.CategoryTypeImmediate:
 		if !maxTaskIDSpecified {
-			serviceerror.NewInvalidArgument("invalid task range, max taskID must be specified for immediate task category")
+			return serviceerror.NewInvalidArgument("invalid task range, max taskID must be specified for immediate task category")
 		}
 		if minFireTimeSpecified || maxFireTimeSpecified {
 			return serviceerror.NewInvalidArgument("invalid task range, fireTime must be empty for immediate task category")
 		}
 	case tasks.CategoryTypeScheduled:
 		if !maxFireTimeSpecified {
-			serviceerror.NewInvalidArgument("invalid task range, max fire time must be specified for scheduled task category")
+			return serviceerror.NewInvalidArgument("invalid task range, max fire time must be specified for scheduled task category")
 		}
 		if minTaskIDSpecified || maxTaskIDSpecified {
 			return serviceerror.NewInvalidArgument("invalid task range, taskID must be empty for scheduled task category")

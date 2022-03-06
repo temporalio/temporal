@@ -46,6 +46,9 @@ service AdminService {
     rpc CloseShard (CloseShardRequest) returns (CloseShardResponse) {
     }
 
+    rpc ListHistoryTasks (ListHistoryTasksRequest) returns (ListHistoryTasksResponse) {
+    }
+
     rpc ListTransferTasks (ListTransferTasksRequest) returns (ListTransferTasksResponse) {
     }
 

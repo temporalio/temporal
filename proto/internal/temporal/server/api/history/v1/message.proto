@@ -24,6 +24,10 @@ package temporal.server.api.history.v1;
 
 option go_package = "go.temporal.io/server/api/history/v1;history";
 
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
 import "temporal/api/history/v1/message.proto";
 
 message TransientWorkflowTaskInfo {
@@ -47,4 +51,14 @@ message VersionHistory {
 message VersionHistories {
     int32 current_version_history_index = 1;
     repeated VersionHistory histories = 2;
+}
+
+message TaskKey {
+    int64 task_id = 1;
+    google.protobuf.Timestamp fire_time = 2 [(gogoproto.stdtime) = true];
+}
+
+message TaskRange {
+    TaskKey inclusive_min_task_key = 1;
+    TaskKey exclusive_max_task_key = 2;
 }

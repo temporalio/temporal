@@ -26,6 +26,8 @@ package tasks
 
 import (
 	"time"
+
+	enumspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -48,6 +50,7 @@ type (
 		GetVisibilityTime() time.Time
 		GetVersion() int64
 		GetCategory() Category
+		GetType() enumspb.TaskType
 
 		SetVersion(version int64)
 		SetTaskID(id int64)
