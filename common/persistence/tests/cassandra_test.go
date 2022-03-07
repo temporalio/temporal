@@ -73,7 +73,12 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
 
-	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, testData.Logger)
+	s := NewExecutionMutableStateSuite(
+		t,
+		shardStore,
+		executionStore,
+		serialization.NewSerializer(),
+		testData.Logger)
 	suite.Run(t, s)
 }
 

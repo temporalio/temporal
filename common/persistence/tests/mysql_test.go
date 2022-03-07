@@ -85,7 +85,13 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 		TearDownMySQLDatabase(cfg)
 	}()
 
-	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, logger)
+	s := NewExecutionMutableStateSuite(
+		t,
+		shardStore,
+		executionStore,
+		serialization.NewSerializer(),
+		logger,
+	)
 	suite.Run(t, s)
 }
 
