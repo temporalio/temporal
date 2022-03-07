@@ -27,7 +27,7 @@ package tasks
 import (
 	"time"
 
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 )
@@ -89,6 +89,6 @@ func (f *fakeTask) GetCategory() Category {
 	return f.Category
 }
 
-func (f *fakeTask) GetType() enumspb.TaskType {
-	return enumspb.TASK_TYPE_UNSPECIFIED
+func (f *fakeTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_UNSPECIFIED
 }

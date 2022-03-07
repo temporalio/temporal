@@ -27,7 +27,7 @@ package tasks
 import (
 	"time"
 
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -79,6 +79,6 @@ func (r *ActivityRetryTimerTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (r *ActivityRetryTimerTask) GetType() enumspb.TaskType {
-	return enumspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
+func (r *ActivityRetryTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
 }

@@ -1436,6 +1436,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientListClusterMembersScope:                    {operation: "AdminClientListClusterMembers", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientGetShardScope:                              {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListHistoryTasksScope:                      {operation: "AdminClientListHistoryTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListTransferTasksScope:                     {operation: "AdminClientListTransferTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListTimerTasksScope:                        {operation: "AdminClientListTimerTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientListReplicationTasksScope:                  {operation: "AdminClientListReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},

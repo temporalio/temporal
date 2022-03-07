@@ -27,7 +27,7 @@ package tasks
 import (
 	"time"
 
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -78,6 +78,6 @@ func (a *SyncActivityTask) GetCategory() Category {
 	return CategoryReplication
 }
 
-func (a *SyncActivityTask) GetType() enumspb.TaskType {
-	return enumspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
+func (a *SyncActivityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
 }

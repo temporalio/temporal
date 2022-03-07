@@ -29,7 +29,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
-	"go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -82,6 +82,6 @@ func (a *ActivityTimeoutTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (a *ActivityTimeoutTask) GetType() enums.TaskType {
-	return enums.TASK_TYPE_ACTIVITY_TIMEOUT
+func (a *ActivityTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
 }

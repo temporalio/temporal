@@ -27,7 +27,6 @@ package tasks
 import (
 	"time"
 
-	enumspb "go.temporal.io/server/api/enums/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
@@ -79,6 +78,6 @@ func (r *WorkflowBackoffTimerTask) GetCategory() Category {
 	return CategoryTimer
 }
 
-func (r *WorkflowBackoffTimerTask) GetType() enumspb.TaskType {
-	return enumspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
+func (r *WorkflowBackoffTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
 }

@@ -27,7 +27,7 @@ package tasks
 import (
 	"time"
 
-	enumspb "go.temporal.io/server/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -77,6 +77,6 @@ func (a *DeleteExecutionTask) GetCategory() Category {
 	return CategoryTransfer
 }
 
-func (a *DeleteExecutionTask) GetType() enumspb.TaskType {
-	return enumspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
+func (a *DeleteExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
 }
