@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
@@ -84,7 +85,13 @@ func TestMySQLExecutionMutableStateStoreSuite(t *testing.T) {
 		TearDownMySQLDatabase(cfg)
 	}()
 
-	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, logger)
+	s := NewExecutionMutableStateSuite(
+		t,
+		shardStore,
+		executionStore,
+		serialization.NewSerializer(),
+		logger,
+	)
 	suite.Run(t, s)
 }
 
@@ -112,7 +119,13 @@ func TestMySQLExecutionMutableStateTaskStoreSuite(t *testing.T) {
 		TearDownMySQLDatabase(cfg)
 	}()
 
-	s := NewExecutionMutableStateTaskSuite(t, shardStore, executionStore, logger)
+	s := NewExecutionMutableStateTaskSuite(
+		t,
+		shardStore,
+		executionStore,
+		serialization.NewSerializer(),
+		logger,
+	)
 	suite.Run(t, s)
 }
 
