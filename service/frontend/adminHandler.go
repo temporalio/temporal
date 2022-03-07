@@ -549,7 +549,7 @@ func (adh *AdminHandler) ListHistoryTasks(
 	taskCategory, ok := tasks.GetCategoryByID(int32(request.Category))
 	if !ok {
 		return nil, adh.error(&serviceerror.InvalidArgument{
-			Message: fmt.Sprintf("unknown task category ID: %v", int32(request.Category)),
+			Message: fmt.Sprintf("unknown task category: %v", request.Category),
 		}, scope)
 	}
 
@@ -595,6 +595,8 @@ func toAdminTask(tasks []tasks.Task) []*adminservice.Task {
 	}
 	return adminTasks
 }
+
+// TODO: remove following four list tasks methods in 1.17 release
 
 // ListTimerTasks lists timer tasks for a given shard
 func (adh *AdminHandler) ListTimerTasks(ctx context.Context, request *adminservice.ListTimerTasksRequest) (_ *adminservice.ListTimerTasksResponse, retError error) {

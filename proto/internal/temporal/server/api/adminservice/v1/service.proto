@@ -49,16 +49,21 @@ service AdminService {
     rpc ListHistoryTasks (ListHistoryTasksRequest) returns (ListHistoryTasksResponse) {
     }
 
+    // TODO: remove following four list tasks rpc in 1.17 release
     rpc ListTransferTasks (ListTransferTasksRequest) returns (ListTransferTasksResponse) {
+        option deprecated = true;
     }
 
     rpc ListTimerTasks (ListTimerTasksRequest) returns (ListTimerTasksResponse) {
+        option deprecated = true;
     }
 
     rpc ListReplicationTasks (ListReplicationTasksRequest) returns (ListReplicationTasksResponse) {
+        option deprecated = true;
     }
 
     rpc ListVisibilityTasks (ListVisibilityTasksRequest) returns (ListVisibilityTasksResponse) {
+        option deprecated = true;
     }
 
     rpc RemoveTask (RemoveTaskRequest) returns (RemoveTaskResponse) {
