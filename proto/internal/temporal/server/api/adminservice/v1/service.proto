@@ -49,7 +49,7 @@ service AdminService {
     rpc ListHistoryTasks (ListHistoryTasksRequest) returns (ListHistoryTasksResponse) {
     }
 
-    // TODO: remove following four list tasks rpc in 1.17 release
+    // TODO: remove following four list tasks rpc
     rpc ListTransferTasks (ListTransferTasksRequest) returns (ListTransferTasksResponse) {
         option deprecated = true;
     }
