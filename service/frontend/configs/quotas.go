@@ -140,13 +140,15 @@ func (c *NamespaceRateBurstImpl) Burst() int {
 }
 
 func NewRequestToRateLimiter(
-	rateBurstFn quotas.RateBurst,
+	executionRateBurstFn quotas.RateBurst,
+	visibilityRateBurstFn quotas.RateBurst,
+	otherRateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
 
-	executionRateLimiter := NewExecutionPriorityRateLimiter(rateBurstFn)
-	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(rateBurstFn)
-	otherRateLimiter := NewOtherAPIPriorityRateLimiter(rateBurstFn)
+	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn)
+	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn)
+	otherRateLimiter := NewOtherAPIPriorityRateLimiter(otherRateBurstFn)
 
 	for api := range ExecutionAPIToPriority {
 		mapping[api] = executionRateLimiter
