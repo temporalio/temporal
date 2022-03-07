@@ -62,17 +62,18 @@ func NewExecutionMutableStateTaskSuite(
 	t *testing.T,
 	shardStore p.ShardStore,
 	executionStore p.ExecutionStore,
+	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateTaskSuite {
 	return &ExecutionMutableStateTaskSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
-			serialization.NewSerializer(),
+			serializer,
 		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
-			serialization.NewSerializer(),
+			serializer,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
@@ -130,7 +131,7 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
 	numTasks := 20
-	transferTasks := s.addRandomTasks(
+	transferTasks := s.AddRandomTasks(
 		tasks.CategoryTransfer,
 		numTasks,
 		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
@@ -142,8 +143,8 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
 		},
 	)
 
-	transferTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.randomPaginateRange(transferTasks)
-	loadedTasks := s.paginateTasks(
+	transferTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.RandomPaginateRange(transferTasks)
+	loadedTasks := s.PaginateTasks(
 		tasks.CategoryTransfer,
 		inclusiveMinTaskKey,
 		exclusiveMaxTaskKey,
@@ -154,7 +155,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetTimerTasks_Multiple() {
 	numTasks := 20
-	timerTasks := s.addRandomTasks(
+	timerTasks := s.AddRandomTasks(
 		tasks.CategoryTimer,
 		numTasks,
 		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
@@ -166,8 +167,8 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTimerTasks_Multiple() {
 		},
 	)
 
-	timerTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.randomPaginateRange(timerTasks)
-	loadedTasks := s.paginateTasks(
+	timerTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.RandomPaginateRange(timerTasks)
+	loadedTasks := s.PaginateTasks(
 		tasks.CategoryTimer,
 		inclusiveMinTaskKey,
 		exclusiveMaxTaskKey,
@@ -178,7 +179,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetTimerTasks_Multiple() {
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetReplicationTasks_Multiple() {
 	numTasks := 20
-	replicationTasks := s.addRandomTasks(
+	replicationTasks := s.AddRandomTasks(
 		tasks.CategoryReplication,
 		numTasks,
 		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
@@ -190,8 +191,8 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetReplicationTasks_Multiple() {
 		},
 	)
 
-	replicationTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.randomPaginateRange(replicationTasks)
-	loadedTasks := s.paginateTasks(
+	replicationTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.RandomPaginateRange(replicationTasks)
+	loadedTasks := s.PaginateTasks(
 		tasks.CategoryReplication,
 		inclusiveMinTaskKey,
 		exclusiveMaxTaskKey,
@@ -202,7 +203,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetReplicationTasks_Multiple() {
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
 	numTasks := 20
-	visibilityTasks := s.addRandomTasks(
+	visibilityTasks := s.AddRandomTasks(
 		tasks.CategoryVisibility,
 		numTasks,
 		func(workflowKey definition.WorkflowKey, taskID int64, visibilityTimestamp time.Time) tasks.Task {
@@ -214,8 +215,8 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
 		},
 	)
 
-	visibilityTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.randomPaginateRange(visibilityTasks)
-	loadedTasks := s.paginateTasks(
+	visibilityTasks, inclusiveMinTaskKey, exclusiveMaxTaskKey := s.RandomPaginateRange(visibilityTasks)
+	loadedTasks := s.PaginateTasks(
 		tasks.CategoryVisibility,
 		inclusiveMinTaskKey,
 		exclusiveMaxTaskKey,
@@ -224,7 +225,7 @@ func (s *ExecutionMutableStateTaskSuite) TestAddGetVisibilityTasks_Multiple() {
 	s.Equal(visibilityTasks, loadedTasks)
 }
 
-func (s *ExecutionMutableStateTaskSuite) addRandomTasks(
+func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 	category tasks.Category,
 	numTasks int,
 	newTaskFn func(definition.WorkflowKey, int64, time.Time) tasks.Task,
@@ -253,7 +254,7 @@ func (s *ExecutionMutableStateTaskSuite) addRandomTasks(
 	return randomTasks
 }
 
-func (s *ExecutionMutableStateTaskSuite) paginateTasks(
+func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	category tasks.Category,
 	inclusiveMinTaskKey tasks.Key,
 	exclusiveMaxTaskKey tasks.Key,
@@ -280,7 +281,7 @@ func (s *ExecutionMutableStateTaskSuite) paginateTasks(
 	return loadedTasks
 }
 
-func (s *ExecutionMutableStateTaskSuite) randomPaginateRange(
+func (s *ExecutionMutableStateTaskSuite) RandomPaginateRange(
 	createdTasks []tasks.Task,
 ) ([]tasks.Task, tasks.Key, tasks.Key) {
 	numTasks := len(createdTasks)

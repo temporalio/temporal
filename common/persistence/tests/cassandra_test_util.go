@@ -39,6 +39,8 @@ import (
 	"go.temporal.io/server/common/persistence/cassandra"
 	"go.temporal.io/server/common/persistence/nosql/nosqlplugin/cassandra/gocql"
 	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/shuffle"
+	"go.temporal.io/server/environment"
 )
 
 const (
@@ -47,6 +49,22 @@ const (
 	testCassandraExecutionSchema  = "../../../schema/cassandra/temporal/schema.cql"
 	testCassandraVisibilitySchema = "../../../schema/cassandra/visibility/schema.cql"
 )
+
+// TODO merge the initialization with existing persistence setup
+const (
+	testCassandraClusterName = "temporal_cassandra_cluster"
+
+	testCassandraUser               = "temporal"
+	testCassandraPassword           = "temporal"
+	testCassandraDatabaseNamePrefix = "test_"
+	testCassandraDatabaseNameSuffix = "temporal_persistence"
+)
+
+type CassandraTestData struct {
+	Cfg     *config.Cassandra
+	Factory *cassandra.Factory
+	Logger  log.Logger
+}
 
 func SetUpCassandraDatabase(cfg *config.Cassandra, logger log.Logger) {
 	adminCfg := *cfg
@@ -175,4 +193,15 @@ func GetSchemaFiles(schemaDir string, logger log.Logger) []string {
 	}
 
 	return retVal
+}
+
+// NewCassandraConfig returns a new Cassandra config for test
+func NewCassandraConfig() *config.Cassandra {
+	return &config.Cassandra{
+		User:     testCassandraUser,
+		Password: testCassandraPassword,
+		Hosts:    environment.GetCassandraAddress(),
+		Port:     environment.GetCassandraPort(),
+		Keyspace: testCassandraDatabaseNamePrefix + shuffle.String(testCassandraDatabaseNameSuffix),
+	}
 }
