@@ -546,26 +546,11 @@ func (adh *AdminHandler) ListHistoryTasks(
 		return nil, adh.error(errTaskRangeNotSet, scope)
 	}
 
-	var taskCategory tasks.Category
-	switch request.Category {
-	case enumsspb.TASK_CATEGORY_UNSPECIFIED:
-		return nil, adh.error(errTaskCategoryNotSet, scope)
-	case enumsspb.TASK_CATEGORY_TRANSFER:
-		taskCategory = tasks.CategoryTransfer
-	case enumsspb.TASK_CATEGORY_TIMER:
-		taskCategory = tasks.CategoryTimer
-	case enumsspb.TASK_CATEGORY_REPLICATION:
-		taskCategory = tasks.CategoryReplication
-	case enumsspb.TASK_CATEGORY_VISIBILITY:
-		taskCategory = tasks.CategoryVisibility
-	default:
-		var ok bool
-		taskCategory, ok = tasks.GetCategoryByID(int32(request.Category))
-		if !ok {
-			return nil, adh.error(&serviceerror.InvalidArgument{
-				Message: fmt.Sprintf("unknown task category ID: %v", int32(request.Category)),
-			}, scope)
-		}
+	taskCategory, ok := tasks.GetCategoryByID(int32(request.Category))
+	if !ok {
+		return nil, adh.error(&serviceerror.InvalidArgument{
+			Message: fmt.Sprintf("unknown task category ID: %v", int32(request.Category)),
+		}, scope)
 	}
 
 	var minTaskKey, maxTaskKey tasks.Key
