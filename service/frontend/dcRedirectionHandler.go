@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -102,21 +101,6 @@ func (handler *DCRedirectionHandlerImpl) Stop() {
 // GetConfig return config
 func (handler *DCRedirectionHandlerImpl) GetConfig() *Config {
 	return handler.frontendHandler.GetConfig()
-}
-
-// UpdateHealthStatus sets the health status for this rpc handler.
-// This health status will be used within the rpc health check handler
-func (handler *DCRedirectionHandlerImpl) UpdateHealthStatus(status HealthStatus) {
-	handler.frontendHandler.UpdateHealthStatus(status)
-}
-
-// Check is for health check
-func (handler *DCRedirectionHandlerImpl) Check(ctx context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	return handler.frontendHandler.Check(ctx, request)
-}
-
-func (handler *DCRedirectionHandlerImpl) Watch(request *healthpb.HealthCheckRequest, server healthpb.Health_WatchServer) error {
-	return handler.frontendHandler.Watch(request, server)
 }
 
 // Namespace APIs, namespace APIs does not require redirection

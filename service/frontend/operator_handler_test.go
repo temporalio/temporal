@@ -31,6 +31,7 @@ import (
 	"testing"
 
 	"go.temporal.io/api/operatorservice/v1"
+	"google.golang.org/grpc/health"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/mock"
@@ -81,6 +82,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetMetricsClient(),
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesManager(),
+		health.NewServer(),
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()
@@ -152,7 +154,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 	}
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.ESConfig = &client.Config{
+	handler.esConfig = &client.Config{
 		Indices: map[string]string{
 			"visibility": "random-index-name",
 		},
@@ -248,7 +250,7 @@ func (s *operatorHandlerSuite) Test_ListSearchAttributes() {
 	s.NotNil(resp)
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.ESConfig = &client.Config{
+	handler.esConfig = &client.Config{
 		Indices: map[string]string{
 			"visibility": "random-index-name",
 		},
@@ -328,7 +330,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 	}
 
 	// Configure Elasticsearch: add advanced visibility store config with index name.
-	handler.ESConfig = &client.Config{
+	handler.esConfig = &client.Config{
 		Indices: map[string]string{
 			"visibility": "random-index-name",
 		},

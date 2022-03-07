@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
@@ -111,6 +113,7 @@ type (
 		saProvider                  searchattribute.Provider
 		saManager                   searchattribute.Manager
 		clusterMetadata             cluster.Metadata
+		healthServer                *health.Server
 	}
 
 	NewAdminHandlerArgs struct {
@@ -138,6 +141,7 @@ type (
 		SaManager                           searchattribute.Manager
 		ClusterMetadata                     cluster.Metadata
 		ArchivalMetadata                    archiver.ArchivalMetadata
+		HealthServer                        *health.Server
 	}
 )
 
@@ -196,17 +200,18 @@ func NewAdminHandler(
 		saProvider:                  args.SaProvider,
 		saManager:                   args.SaManager,
 		clusterMetadata:             args.ClusterMetadata,
+		healthServer:                args.HealthServer,
 	}
 }
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
-	if !atomic.CompareAndSwapInt32(
+	if atomic.CompareAndSwapInt32(
 		&adh.status,
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		return
+		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
 
 	// Start namespace replication queue cleanup
@@ -216,12 +221,12 @@ func (adh *AdminHandler) Start() {
 
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
-	if !atomic.CompareAndSwapInt32(
+	if atomic.CompareAndSwapInt32(
 		&adh.status,
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
-		return
+		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
 
 	// Calling stop if the queue does not start is ok

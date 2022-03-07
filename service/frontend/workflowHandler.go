@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -66,17 +67,6 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 )
 
-const (
-	// HealthStatusOK is used when this node is healthy and rpc requests are allowed
-	HealthStatusOK HealthStatus = iota + 1
-	// HealthStatusShuttingDown is used when the rpc handler is shutting down
-	HealthStatusShuttingDown
-)
-
-const (
-	serviceName = "temporal.api.workflowservice.v1.WorkflowService"
-)
-
 var _ Handler = (*WorkflowHandler)(nil)
 
 var (
@@ -94,7 +84,6 @@ type (
 	WorkflowHandler struct {
 		status int32
 
-		healthStatus                    int32
 		tokenSerializer                 common.TaskTokenSerializer
 		config                          *Config
 		versionChecker                  headers.VersionChecker
@@ -114,10 +103,8 @@ type (
 		saProvider                      searchattribute.Provider
 		saValidator                     *searchattribute.Validator
 		archivalMetadata                archiver.ArchivalMetadata
+		healthServer                    *health.Server
 	}
-
-	// HealthStatus is an enum that refers to the rpc handler health status
-	HealthStatus int32
 )
 
 var (
@@ -143,12 +130,12 @@ func NewWorkflowHandler(
 	saProvider searchattribute.Provider,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
+	healthServer *health.Server,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
 		status:          common.DaemonStatusInitialized,
 		config:          config,
-		healthStatus:    int32(HealthStatusOK),
 		tokenSerializer: common.NewProtoTaskTokenSerializer(),
 		versionChecker:  headers.NewDefaultVersionChecker(),
 		namespaceHandler: namespace.NewHandler(
@@ -180,6 +167,7 @@ func NewWorkflowHandler(
 			config.SearchAttributesSizeOfValueLimit,
 			config.SearchAttributesTotalSizeLimit),
 		archivalMetadata: archivalMetadata,
+		healthServer:     healthServer,
 	}
 
 	return handler
@@ -187,30 +175,24 @@ func NewWorkflowHandler(
 
 // Start starts the handler
 func (wh *WorkflowHandler) Start() {
-	if !atomic.CompareAndSwapInt32(
+	if atomic.CompareAndSwapInt32(
 		&wh.status,
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		return
+		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
 }
 
 // Stop stops the handler
 func (wh *WorkflowHandler) Stop() {
-	if !atomic.CompareAndSwapInt32(
+	if atomic.CompareAndSwapInt32(
 		&wh.status,
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
-		return
+		wh.healthServer.SetServingStatus(WorkflowServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
-}
-
-// UpdateHealthStatus sets the health status for this rpc handler.
-// This health status will be used within the rpc health check handler
-func (wh *WorkflowHandler) UpdateHealthStatus(status HealthStatus) {
-	atomic.StoreInt32(&wh.healthStatus, int32(status))
 }
 
 func (wh *WorkflowHandler) isStopped() bool {
@@ -220,32 +202,6 @@ func (wh *WorkflowHandler) isStopped() bool {
 // GetConfig return config
 func (wh *WorkflowHandler) GetConfig() *Config {
 	return wh.config
-}
-
-// Check is from: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-func (wh *WorkflowHandler) Check(_ context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	wh.logger.Debug("Frontend service health check endpoint (gRPC) reached.")
-
-	if request.Service != serviceName {
-		return &healthpb.HealthCheckResponse{
-			Status: healthpb.HealthCheckResponse_SERVICE_UNKNOWN,
-		}, nil
-	}
-
-	status := HealthStatus(atomic.LoadInt32(&wh.healthStatus))
-	if status == HealthStatusOK {
-		return &healthpb.HealthCheckResponse{
-			Status: healthpb.HealthCheckResponse_SERVING,
-		}, nil
-	}
-
-	return &healthpb.HealthCheckResponse{
-		Status: healthpb.HealthCheckResponse_NOT_SERVING,
-	}, nil
-}
-
-func (wh *WorkflowHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
-	return serviceerror.NewUnimplemented("Watch is not implemented.")
 }
 
 // RegisterNamespace creates a new namespace which can be used as a container for all resources.  Namespace is a top level
@@ -3530,17 +3486,6 @@ func (wh *WorkflowHandler) checkBadBinary(namespaceEntry *namespace.Namespace, b
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Binary %v already marked as bad deployment.", binaryChecksum))
 	}
 	return nil
-}
-
-func (hs HealthStatus) String() string {
-	switch hs {
-	case HealthStatusOK:
-		return "OK"
-	case HealthStatusShuttingDown:
-		return "ShuttingDown"
-	default:
-		return "unknown"
-	}
 }
 
 func (wh *WorkflowHandler) validateRetryPolicy(namespaceName namespace.Name, retryPolicy *commonpb.RetryPolicy) error {

@@ -30,9 +30,13 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
-
 	"go.temporal.io/server/common"
+)
+
+const (
+	WorkflowServiceName = "temporal.api.workflowservice.v1.WorkflowService"
+	OperatorServiceName = "temporal.api.operatorservice.v1.OperatorService"
+	AdminServiceName    = "temporal.api.adminservice.v1.AdminService"
 )
 
 type (
@@ -40,12 +44,6 @@ type (
 	Handler interface {
 		workflowservice.WorkflowServiceServer
 		common.Daemon
-
-		// HealthServer is the health check method for the whole frontend server
-		healthpb.HealthServer
-		// UpdateHealthStatus sets the health status for this rpc handler.
-		// This health status will be used within the rpc health check handler
-		UpdateHealthStatus(status HealthStatus)
 
 		GetConfig() *Config
 	}

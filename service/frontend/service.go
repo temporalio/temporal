@@ -33,9 +33,9 @@ import (
 	"time"
 
 	"go.temporal.io/api/operatorservice/v1"
-
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
@@ -188,6 +188,7 @@ type Service struct {
 	status int32
 	config *Config
 
+	healthServer      *health.Server
 	handler           Handler
 	adminHandler      *AdminHandler
 	operatorHandler   *OperatorHandlerImpl
@@ -205,6 +206,7 @@ type Service struct {
 func NewService(
 	serviceConfig *Config,
 	server *grpc.Server,
+	healthServer *health.Server,
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
@@ -219,6 +221,7 @@ func NewService(
 		status:                         common.DaemonStatusInitialized,
 		config:                         serviceConfig,
 		server:                         server,
+		healthServer:                   healthServer,
 		handler:                        handler,
 		adminHandler:                   adminHandler,
 		operatorHandler:                operatorHandler,
@@ -240,8 +243,8 @@ func (s *Service) Start() {
 	logger := s.logger
 	logger.Info("frontend starting")
 
+	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
-	healthpb.RegisterHealthServer(s.server, s.handler)
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
 	operatorservice.RegisterOperatorServiceServer(s.server, s.operatorHandler)
 
@@ -251,9 +254,10 @@ func (s *Service) Start() {
 	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
 	rand.Seed(time.Now().UnixNano())
 
+	s.versionChecker.Start()
 	s.adminHandler.Start()
 	s.operatorHandler.Start()
-	s.versionChecker.Start()
+	s.handler.Start()
 
 	listener := s.grpcListener
 	logger.Info("Starting to serve on frontend listener")
@@ -280,14 +284,15 @@ func (s *Service) Stop() {
 	requestDrainTime := common.MinDuration(time.Second, s.config.ShutdownDrainDuration())
 	failureDetectionTime := common.MaxDuration(0, s.config.ShutdownDrainDuration()-requestDrainTime)
 
-	logger.Info("ShutdownHandler: Updating rpc health status to ShuttingDown")
-	s.handler.UpdateHealthStatus(HealthStatusShuttingDown)
+	logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
+	s.healthServer.Shutdown()
 
 	logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(failureDetectionTime)
 
-	s.adminHandler.Stop()
+	s.handler.Stop()
 	s.operatorHandler.Stop()
+	s.adminHandler.Stop()
 	s.versionChecker.Stop()
 	s.visibilityManager.Close()
 

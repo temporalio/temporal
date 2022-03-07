@@ -34,6 +34,8 @@ import (
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
 	sdkclient "go.temporal.io/sdk/client"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -55,12 +57,13 @@ type (
 
 		healthStatus  int32
 		logger        log.Logger
-		ESConfig      *esclient.Config
-		ESClient      esclient.Client
+		esConfig      *esclient.Config
+		esClient      esclient.Client
 		sdkClient     sdkclient.Client
 		metricsClient metrics.Client
 		saProvider    searchattribute.Provider
 		saManager     searchattribute.Manager
+		healthServer  *health.Server
 	}
 
 	NewOperatorHandlerImplArgs struct {
@@ -71,6 +74,7 @@ type (
 		MetricsClient   metrics.Client
 		SaProvider      searchattribute.Provider
 		SaManager       searchattribute.Manager
+		healthServer    *health.Server
 	}
 )
 
@@ -82,12 +86,13 @@ func NewOperatorHandlerImpl(
 	handler := &OperatorHandlerImpl{
 		logger:        args.Logger,
 		status:        common.DaemonStatusInitialized,
-		ESConfig:      args.EsConfig,
-		ESClient:      args.EsClient,
+		esConfig:      args.EsConfig,
+		esClient:      args.EsClient,
 		sdkClient:     args.SdkSystemClient,
 		metricsClient: args.MetricsClient,
 		saProvider:    args.SaProvider,
 		saManager:     args.SaManager,
+		healthServer:  args.healthServer,
 	}
 
 	return handler
@@ -95,23 +100,23 @@ func NewOperatorHandlerImpl(
 
 // Start starts the handler
 func (h *OperatorHandlerImpl) Start() {
-	if !atomic.CompareAndSwapInt32(
+	if atomic.CompareAndSwapInt32(
 		&h.status,
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		return
+		h.healthServer.SetServingStatus(OperatorServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
 }
 
 // Stop stops the handler
 func (h *OperatorHandlerImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(
+	if atomic.CompareAndSwapInt32(
 		&h.status,
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
-		return
+		h.healthServer.SetServingStatus(OperatorServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
 }
 
@@ -132,7 +137,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 		return nil, h.error(errSearchAttributesNotSet, scope, endpointName)
 	}
 
-	indexName := h.ESConfig.GetVisibilityIndex()
+	indexName := h.esConfig.GetVisibilityIndex()
 
 	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
@@ -200,7 +205,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(ctx context.Context, reques
 		return nil, h.error(errSearchAttributesNotSet, scope, endpointName)
 	}
 
-	indexName := h.ESConfig.GetVisibilityIndex()
+	indexName := h.esConfig.GetVisibilityIndex()
 
 	currentSearchAttributes, err := h.saProvider.GetSearchAttributes(indexName, true)
 	if err != nil {
@@ -242,12 +247,12 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request 
 		return nil, h.error(errRequestNotSet, scope, endpointName)
 	}
 
-	indexName := h.ESConfig.GetVisibilityIndex()
+	indexName := h.esConfig.GetVisibilityIndex()
 
 	var lastErr error
 	var esMapping map[string]string = nil
-	if h.ESClient != nil {
-		esMapping, lastErr = h.ESClient.GetMapping(ctx, indexName)
+	if h.esClient != nil {
+		esMapping, lastErr = h.esClient.GetMapping(ctx, indexName)
 		if lastErr != nil {
 			lastErr = h.error(serviceerror.NewUnavailable(fmt.Sprintf("unable to get mapping from Elasticsearch: %v", lastErr)), scope, endpointName)
 		}
