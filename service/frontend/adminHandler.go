@@ -1594,6 +1594,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		MinTaskIDExclusive: request.GetMinTaskId(),
 		MaxTaskIDInclusive: maxTaskID,
 		PageSize:           int(request.GetBatchSize()),
+		NextPageToken:      request.NextPageToken,
 	}
 
 	resp, err := taskMgr.GetTasks(req)
@@ -1602,7 +1603,8 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 	}
 
 	return &adminservice.GetTaskQueueTasksResponse{
-		Tasks: resp.Tasks,
+		Tasks:         resp.Tasks,
+		NextPageToken: req.NextPageToken,
 	}, nil
 }
 
