@@ -51,7 +51,7 @@ import (
 
 const (
 	retryLimit       = 20
-	retryBackoffTime = 200 * time.Millisecond
+	retryBackoffTime = 500 * time.Millisecond
 )
 
 func (s *integrationSuite) TestArchival_TimerQueueProcessor() {
