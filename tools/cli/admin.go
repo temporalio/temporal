@@ -39,11 +39,6 @@ func newAdminWorkflowCommands() []cli.Command {
 			Usage:   "show workflow history from database",
 			Flags: []cli.Flag{
 				cli.StringFlag{
-					Name:  FlagNamespace,
-					Usage: "Namespace of the workflow",
-					Value: "default",
-				},
-				cli.StringFlag{
 					Name:  FlagWorkflowIDWithAlias,
 					Usage: "WorkflowId",
 				},
@@ -191,33 +186,41 @@ func newAdminShardManagementCommands() []cli.Command {
 			Usage: "List tasks for given shard Id and task type",
 			Flags: append(
 				flagsForPagination,
-				cli.StringFlag{
-					Name:  FlagTargetCluster,
-					Value: "active",
-					Usage: "Temporal cluster to use",
-				},
 				cli.IntFlag{
-					Name:  FlagShardID,
-					Usage: "The ID of the shard",
+					Name:     FlagShardID,
+					Usage:    "The ID of the shard",
+					Required: true,
 				},
 				cli.StringFlag{
-					Name:  FlagTaskType,
-					Value: "transfer",
-					Usage: "Task type: transfer (default), timer, replication, visibility",
+					Name:     FlagTaskType,
+					Usage:    "Task type: transfer, timer, replication, visibility",
+					Required: true,
+				},
+				cli.Int64Flag{
+					Name:  FlagMinTaskID,
+					Usage: "Inclusive min taskID. Optional for transfer, replication, visibility tasks. Can't be specified for timer task",
+				},
+				cli.Int64Flag{
+					Name:  FlagMaxTaskID,
+					Usage: "Exclusive max taskID. Required for transfer, replication, visibility tasks. Can't be specified for timer task",
 				},
 				cli.StringFlag{
-					Name:  FlagMinVisibilityTimestamp,
-					Value: "2020-01-01T00:00:00+00:00",
-					Usage: "Task visibility min timestamp. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+					Name: FlagMinVisibilityTimestamp,
+					Usage: "Inclusive min task fire timestamp. Optional for timer task. Can't be specified for transfer, replication, visibility tasks." +
+						"Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
 						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
 						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
 				},
 				cli.StringFlag{
-					Name:  FlagMaxVisibilityTimestamp,
-					Value: "2035-01-01T00:00:00+00:00",
-					Usage: "Task visibility max timestamp. Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
+					Name: FlagMaxVisibilityTimestamp,
+					Usage: "Exclusive max task fire timestamp. Required for timer task. Can't be specified for transfer, replication, visibility tasks." +
+						"Supported formats are '2006-01-02T15:04:05+07:00', raw UnixNano and " +
 						"time range (N<duration>), where 0 < N < 1000000 and duration (full-notation/short-notation) can be second/s, " +
 						"minute/m, hour/h, day/d, week/w, month/M or year/y. For example, '15minute' or '15m' implies last 15 minutes.",
+				},
+				cli.BoolFlag{
+					Name:  FlagPrintJSONWithAlias,
+					Usage: "Print in raw json format",
 				},
 			),
 			Action: func(c *cli.Context) {
@@ -385,12 +388,8 @@ func newAdminTaskQueueCommands() []cli.Command {
 		{
 			Name:  "list_tasks",
 			Usage: "List tasks of a task queue",
-			Flags: []cli.Flag{
-				cli.StringFlag{
-					Name:  FlagNamespace,
-					Usage: "Namespace name",
-					Value: "default",
-				},
+			Flags: append(
+				flagsForPagination,
 				cli.StringFlag{
 					Name:  FlagTaskQueueType,
 					Value: "activity",
@@ -409,7 +408,11 @@ func newAdminTaskQueueCommands() []cli.Command {
 					Name:  FlagMaxTaskID,
 					Usage: "Maximum task Id",
 				},
-			},
+				cli.BoolFlag{
+					Name:  FlagPrintJSONWithAlias,
+					Usage: "Print in raw json format",
+				},
+			),
 			Action: func(c *cli.Context) {
 				AdminListTaskQueueTasks(c)
 			},

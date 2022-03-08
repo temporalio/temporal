@@ -77,3 +77,7 @@ func (r *WorkflowBackoffTimerTask) SetVisibilityTime(t time.Time) {
 func (r *WorkflowBackoffTimerTask) GetCategory() Category {
 	return CategoryTimer
 }
+
+func (r *WorkflowBackoffTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
+}

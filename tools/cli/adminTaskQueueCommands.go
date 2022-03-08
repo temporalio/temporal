@@ -160,5 +160,7 @@ func AdminListTaskQueueTasks(c *cli.Context) {
 		return items, nil, nil
 	}
 
-	paginate(c, paginationFunc)
+	if err := paginate(c, paginationFunc, pageSize); err != nil {
+		ErrorAndExit("Failed to list task queue tasks", err)
+	}
 }

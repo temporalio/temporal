@@ -3169,6 +3169,71 @@ func (s *engineSuite) TestRespondActivityTaskFailedSuccess() {
 	s.Equal(common.EmptyEventID, di.StartedID)
 }
 
+func (s *engineSuite) TestRespondActivityTaskFailedWithHeartbeatSuccess() {
+
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	tl := "testTaskQueue"
+	tt := &tokenspb.Task{
+		ScheduleAttempt: 1,
+		WorkflowId:      we.WorkflowId,
+		RunId:           we.RunId,
+		ScheduleId:      5,
+	}
+	taskToken, _ := tt.Marshal()
+	identity := "testIdentity"
+	activityID := "activity1_id"
+	activityType := "activity_type1"
+	activityInput := payloads.EncodeString("input1")
+	failure := failure.NewServerFailure("failed", false)
+
+	msBuilder := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
+		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 100*time.Second, 100*time.Second, identity)
+	di := addWorkflowTaskScheduledEvent(msBuilder)
+	workflowTaskStartedEvent := addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, di.ScheduleID, workflowTaskStartedEvent.EventId, identity)
+	activityScheduledEvent, activityInfo := addActivityTaskScheduledEvent(msBuilder, workflowTaskCompletedEvent.EventId, activityID, activityType, tl, activityInput, 100*time.Second, 10*time.Second, 1*time.Second, 5*time.Second)
+	addActivityTaskStartedEvent(msBuilder, activityScheduledEvent.EventId, identity)
+
+	ms := workflow.TestCloneToProto(msBuilder)
+	ms.ActivityInfos[activityInfo.ScheduleId] = activityInfo
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	details := payloads.EncodeString("details")
+
+	s.Nil(activityInfo.GetLastHeartbeatDetails())
+
+	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		FailedRequest: &workflowservice.RespondActivityTaskFailedRequest{
+			TaskToken:            taskToken,
+			Failure:              failure,
+			Identity:             identity,
+			LastHeartbeatDetails: details,
+		},
+	})
+	s.Nil(err)
+	executionBuilder := s.getBuilder(tests.NamespaceID, we)
+	s.Equal(int64(9), executionBuilder.GetNextEventID())
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
+
+	s.True(executionBuilder.HasPendingWorkflowTask())
+	di, ok := executionBuilder.GetWorkflowTaskInfo(int64(8))
+	s.True(ok)
+	s.EqualValues(int64(100), di.WorkflowTaskTimeout.Seconds())
+	s.Equal(int64(8), di.ScheduleID)
+	s.Equal(common.EmptyEventID, di.StartedID)
+
+	s.NotNil(activityInfo.GetLastHeartbeatDetails())
+}
+
 func (s *engineSuite) TestRespondActivityTaskFailedByIdSuccess() {
 
 	we := commonpb.WorkflowExecution{

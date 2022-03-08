@@ -28,6 +28,8 @@ import (
 	"fmt"
 	"strconv"
 	"sync"
+
+	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
 type (
@@ -41,11 +43,11 @@ type (
 )
 
 const (
-	CategoryIDUnspecified int32 = iota
-	CategoryIDTransfer
-	CategoryIDTimer
-	CategoryIDVisibility
-	CategoryIDReplication
+	CategoryIDUnspecified = int32(enumsspb.TASK_CATEGORY_UNSPECIFIED)
+	CategoryIDTransfer    = int32(enumsspb.TASK_CATEGORY_TRANSFER)
+	CategoryIDTimer       = int32(enumsspb.TASK_CATEGORY_TIMER)
+	CategoryIDReplication = int32(enumsspb.TASK_CATEGORY_REPLICATION)
+	CategoryIDVisibility  = int32(enumsspb.TASK_CATEGORY_VISIBILITY)
 )
 
 const (
@@ -57,8 +59,8 @@ const (
 const (
 	CategoryNameTransfer    = "transfer"
 	CategoryNameTimer       = "timer"
-	CategoryNameVisibility  = "visibility"
 	CategoryNameReplication = "replication"
+	CategoryNameVisibility  = "visibility"
 )
 
 var (
@@ -74,16 +76,16 @@ var (
 		name:  CategoryNameTimer,
 	}
 
-	CategoryVisibility = Category{
-		id:    CategoryIDVisibility,
-		cType: CategoryTypeImmediate,
-		name:  CategoryNameVisibility,
-	}
-
 	CategoryReplication = Category{
 		id:    CategoryIDReplication,
 		cType: CategoryTypeImmediate,
 		name:  CategoryNameReplication,
+	}
+
+	CategoryVisibility = Category{
+		id:    CategoryIDVisibility,
+		cType: CategoryTypeImmediate,
+		name:  CategoryNameVisibility,
 	}
 )
 

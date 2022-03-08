@@ -27,6 +27,7 @@ package searchattribute
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -125,4 +126,13 @@ func Test_EncodeValue(t *testing.T) {
 	assert.NoError(err)
 	assert.Equal(`"qwe"`, string(encodedPayload.GetData()))
 	assert.Equal("Text", string(encodedPayload.Metadata["type"]))
+
+	var expectedEncodedRepresentation = "2022-03-07T21:27:35.986848-05:00"
+	timeValue, err := time.Parse(time.RFC3339, expectedEncodedRepresentation)
+	assert.NoError(err)
+	encodedPayload, err = EncodeValue(timeValue, enumspb.INDEXED_VALUE_TYPE_DATETIME)
+	assert.NoError(err)
+	assert.Equal(`"`+expectedEncodedRepresentation+`"`, string(encodedPayload.GetData()),
+		"Datetime Search Attribute is expected to be encoded in RFC 3339 format")
+	assert.Equal("Datetime", string(encodedPayload.Metadata["type"]))
 }

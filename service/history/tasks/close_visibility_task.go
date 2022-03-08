@@ -27,6 +27,7 @@ package tasks
 import (
 	"time"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -74,4 +75,8 @@ func (t *CloseExecutionVisibilityTask) SetVisibilityTime(timestamp time.Time) {
 
 func (t *CloseExecutionVisibilityTask) GetCategory() Category {
 	return CategoryVisibility
+}
+
+func (t *CloseExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION
 }

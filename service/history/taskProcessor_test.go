@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 
+	enumspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -307,3 +308,4 @@ func (t *taskForTest) SetVersion(_ int64)            { panic("implement me") }
 func (t *taskForTest) SetTaskID(_ int64)             { panic("implement me") }
 func (t *taskForTest) SetVisibilityTime(_ time.Time) { panic("implement me") }
 func (t *taskForTest) GetCategory() tasks.Category   { panic("implement me") }
+func (t *taskForTest) GetType() enumspb.TaskType     { panic("implement me") }

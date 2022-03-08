@@ -27,6 +27,7 @@ package tasks
 import (
 	"time"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -76,4 +77,8 @@ func (t *UpsertExecutionVisibilityTask) SetVisibilityTime(timestamp time.Time) {
 
 func (t *UpsertExecutionVisibilityTask) GetCategory() Category {
 	return CategoryVisibility
+}
+
+func (t *UpsertExecutionVisibilityTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION
 }

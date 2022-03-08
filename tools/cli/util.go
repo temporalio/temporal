@@ -697,13 +697,9 @@ func showNextPage() bool {
 }
 
 // paginate creates an interactive CLI mode to control the printing of items
-func paginate(c *cli.Context, paginationFn collection.PaginationFn) error {
+func paginate(c *cli.Context, paginationFn collection.PaginationFn, pageSize int) error {
 	more := c.Bool(FlagMore)
 	isTableView := !c.Bool(FlagPrintJSON)
-	pageSize := c.Int(FlagPageSize)
-	if pageSize == 0 {
-		pageSize = defaultPageSize
-	}
 	iter := collection.NewPagingIterator(paginationFn)
 
 	var pageItems []interface{}

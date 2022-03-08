@@ -1569,6 +1569,18 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
+			e.logger.Debug("RespondActivityTaskFailed", tag.WorkflowScheduleID(scheduleID), tag.ActivityInfo(ai), tag.NewBoolTag("hasHeartbeatDetails", request.GetLastHeartbeatDetails() != nil))
+
+			if request.GetLastHeartbeatDetails() != nil {
+				// Save heartbeat details as progress
+				mutableState.UpdateActivityProgress(ai, &workflowservice.RecordActivityTaskHeartbeatRequest{
+					TaskToken: request.GetTaskToken(),
+					Details:   request.GetLastHeartbeatDetails(),
+					Identity:  request.GetIdentity(),
+					Namespace: request.GetNamespace(),
+				})
+			}
+
 			postActions := &updateWorkflowAction{}
 			failure := request.GetFailure()
 			retryState, err := mutableState.RetryActivity(ai, failure)

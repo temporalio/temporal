@@ -67,17 +67,18 @@ func NewExecutionMutableStateSuite(
 	t *testing.T,
 	shardStore p.ShardStore,
 	executionStore p.ExecutionStore,
+	serializer serialization.Serializer,
 	logger log.Logger,
 ) *ExecutionMutableStateSuite {
 	return &ExecutionMutableStateSuite{
 		Assertions: require.New(t),
 		ShardManager: p.NewShardManager(
 			shardStore,
-			serialization.NewSerializer(),
+			serializer,
 		),
 		ExecutionManager: p.NewExecutionManager(
 			executionStore,
-			serialization.NewSerializer(),
+			serializer,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),

@@ -27,6 +27,7 @@ package tasks
 import (
 	"time"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
 
@@ -77,4 +78,8 @@ func (u *StartChildExecutionTask) SetVisibilityTime(timestamp time.Time) {
 
 func (u *StartChildExecutionTask) GetCategory() Category {
 	return CategoryTransfer
+}
+
+func (u *StartChildExecutionTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION
 }
