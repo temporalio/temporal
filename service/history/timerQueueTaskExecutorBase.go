@@ -26,7 +26,7 @@ package history
 
 import (
 	"context"
-
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/persistence"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -76,13 +76,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	if len(task.BranchToken) > 0 {
-		return t.shard.GetExecutionManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-			ShardID:     t.shard.GetShardID(),
-			BranchToken: task.BranchToken,
-		})
-	}
-
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
@@ -100,7 +93,18 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	defer func() { release(retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
-	if err != nil {
+	switch err.(type) {
+	case nil:
+		// continue the following step
+	case *serviceerror.NotFound:
+		if len(task.BranchToken) > 0 {
+			// only delete the history if mutable state is gone
+			return t.shard.GetExecutionManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+				ShardID:     t.shard.GetShardID(),
+				BranchToken: task.BranchToken,
+			})
+		}
+	default:
 		return err
 	}
 

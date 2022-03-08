@@ -81,7 +81,7 @@ func loadMutableStateForTransferTask(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-	return loadMutableStateForTask(
+	return LoadMutableStateForTask(
 		context,
 		transferTask,
 		getTransferTaskEventIDAndRetryable,
@@ -98,7 +98,7 @@ func loadMutableStateForTimerTask(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-	return loadMutableStateForTask(
+	return LoadMutableStateForTask(
 		context,
 		timerTask,
 		getTimerTaskEventIDAndRetryable,
@@ -107,7 +107,7 @@ func loadMutableStateForTimerTask(
 	)
 }
 
-func loadMutableStateForTask(
+func LoadMutableStateForTask(
 	context workflow.Context,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
