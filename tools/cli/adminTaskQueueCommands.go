@@ -130,7 +130,7 @@ func AdminListTaskQueueTasks(c *cli.Context) {
 	ctx, cancel := newContext(c)
 	defer cancel()
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-
+		req.NextPageToken = paginationToken
 		response, err := client.GetTaskQueueTasks(ctx, req)
 		if err != nil {
 			return nil, nil, err

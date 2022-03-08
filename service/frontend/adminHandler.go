@@ -1593,13 +1593,15 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		MinTaskIDExclusive: request.GetMinTaskId(),
 		MaxTaskIDInclusive: request.GetMaxTaskId(),
 		PageSize:           int(request.GetBatchSize()),
+		NextPageToken:      request.NextPageToken,
 	})
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
 
 	return &adminservice.GetTaskQueueTasksResponse{
-		Tasks: resp.Tasks,
+		Tasks:         resp.Tasks,
+		NextPageToken: resp.NextPageToken,
 	}, nil
 }
 
