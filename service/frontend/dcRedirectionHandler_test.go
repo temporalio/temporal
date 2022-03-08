@@ -34,7 +34,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/api/workflowservicemock/v1"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+	"google.golang.org/grpc/health"
 
 	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common/cluster"
@@ -125,6 +125,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
+		health.NewServer(),
 	)
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)
@@ -900,17 +901,6 @@ func (serverHandler *testServerHandler) Start() {
 }
 
 func (serverHandler *testServerHandler) Stop() {
-}
-
-func (serverHandler *testServerHandler) Check(context.Context, *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	return nil, nil
-}
-
-func (serverHandler *testServerHandler) Watch(*healthpb.HealthCheckRequest, healthpb.Health_WatchServer) error {
-	return nil
-}
-
-func (serverHandler *testServerHandler) UpdateHealthStatus(status HealthStatus) {
 }
 
 func (serverHandler *testServerHandler) GetConfig() *Config {

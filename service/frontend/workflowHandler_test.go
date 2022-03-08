@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	"google.golang.org/grpc/health"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -176,6 +177,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
+		health.NewServer(),
 	)
 }
 

@@ -31,6 +31,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -83,8 +84,9 @@ var Module = fx.Options(
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
-	fx.Provide(HandlerProvider),
 	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
+	fx.Provide(healthServerProvider),
+	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
 	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
@@ -96,6 +98,7 @@ var Module = fx.Options(
 func NewServiceProvider(
 	serviceConfig *Config,
 	server *grpc.Server,
+	healthServer *health.Server,
 	handler Handler,
 	adminHandler *AdminHandler,
 	operatorHandler *OperatorHandlerImpl,
@@ -109,6 +112,7 @@ func NewServiceProvider(
 	return NewService(
 		serviceConfig,
 		server,
+		healthServer,
 		handler,
 		adminHandler,
 		operatorHandler,
@@ -346,6 +350,10 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 	return membershipMonitor.GetResolver(common.FrontendServiceName)
 }
 
+func healthServerProvider() *health.Server {
+	return health.NewServer()
+}
+
 func AdminHandlerProvider(
 	params *resource.BootstrapParams,
 	config *Config,
@@ -371,6 +379,7 @@ func AdminHandlerProvider(
 	saManager searchattribute.Manager,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
+	healthServer *health.Server,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		params,
@@ -397,6 +406,7 @@ func AdminHandlerProvider(
 		saManager,
 		clusterMetadata,
 		archivalMetadata,
+		healthServer,
 	}
 	return NewAdminHandler(args)
 }
@@ -409,6 +419,7 @@ func OperatorHandlerProvider(
 	metricsClient metrics.Client,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
+	healthServer *health.Server,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		esConfig,
@@ -418,6 +429,7 @@ func OperatorHandlerProvider(
 		metricsClient,
 		saProvider,
 		saManager,
+		healthServer,
 	}
 	return NewOperatorHandlerImpl(args)
 }
@@ -445,6 +457,7 @@ func HandlerProvider(
 	saProvider searchattribute.Provider,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
+	healthServer *health.Server,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -464,6 +477,7 @@ func HandlerProvider(
 		saProvider,
 		clusterMetadata,
 		archivalMetadata,
+		healthServer,
 	)
 	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler

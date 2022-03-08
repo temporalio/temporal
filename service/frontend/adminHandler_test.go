@@ -30,6 +30,8 @@ import (
 	"fmt"
 	"testing"
 
+	"google.golang.org/grpc/health"
+
 	"go.temporal.io/server/api/adminservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -145,6 +147,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetSearchAttributesManager(),
 		s.mockMetadata,
 		s.mockResource.GetArchivalMetadata(),
+		health.NewServer(),
 	}
 	s.handler = NewAdminHandler(args)
 	s.handler.Start()

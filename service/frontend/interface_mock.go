@@ -35,7 +35,6 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/operatorservice/v1"
 	v10 "go.temporal.io/api/workflowservice/v1"
-	grpc_health_v1 "google.golang.org/grpc/health/grpc_health_v1"
 )
 
 // MockHandler is a mock of Handler interface.
@@ -59,21 +58,6 @@ func NewMockHandler(ctrl *gomock.Controller) *MockHandler {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MockHandler) EXPECT() *MockHandlerMockRecorder {
 	return m.recorder
-}
-
-// Check mocks base method.
-func (m *MockHandler) Check(arg0 context.Context, arg1 *grpc_health_v1.HealthCheckRequest) (*grpc_health_v1.HealthCheckResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Check", arg0, arg1)
-	ret0, _ := ret[0].(*grpc_health_v1.HealthCheckResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Check indicates an expected call of Check.
-func (mr *MockHandlerMockRecorder) Check(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Check", reflect.TypeOf((*MockHandler)(nil).Check), arg0, arg1)
 }
 
 // CountWorkflowExecutions mocks base method.
@@ -699,18 +683,6 @@ func (mr *MockHandlerMockRecorder) TerminateWorkflowExecution(arg0, arg1 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHandler)(nil).TerminateWorkflowExecution), arg0, arg1)
 }
 
-// UpdateHealthStatus mocks base method.
-func (m *MockHandler) UpdateHealthStatus(status HealthStatus) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateHealthStatus", status)
-}
-
-// UpdateHealthStatus indicates an expected call of UpdateHealthStatus.
-func (mr *MockHandlerMockRecorder) UpdateHealthStatus(status interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateHealthStatus", reflect.TypeOf((*MockHandler)(nil).UpdateHealthStatus), status)
-}
-
 // UpdateNamespace mocks base method.
 func (m *MockHandler) UpdateNamespace(arg0 context.Context, arg1 *v10.UpdateNamespaceRequest) (*v10.UpdateNamespaceResponse, error) {
 	m.ctrl.T.Helper()
@@ -724,20 +696,6 @@ func (m *MockHandler) UpdateNamespace(arg0 context.Context, arg1 *v10.UpdateName
 func (mr *MockHandlerMockRecorder) UpdateNamespace(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockHandler)(nil).UpdateNamespace), arg0, arg1)
-}
-
-// Watch mocks base method.
-func (m *MockHandler) Watch(arg0 *grpc_health_v1.HealthCheckRequest, arg1 grpc_health_v1.Health_WatchServer) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Watch", arg0, arg1)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// Watch indicates an expected call of Watch.
-func (mr *MockHandlerMockRecorder) Watch(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Watch", reflect.TypeOf((*MockHandler)(nil).Watch), arg0, arg1)
 }
 
 // MockOperatorHandler is a mock of OperatorHandler interface.
