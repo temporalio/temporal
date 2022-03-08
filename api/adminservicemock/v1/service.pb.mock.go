@@ -380,6 +380,26 @@ func (mr *MockAdminServiceClientMockRecorder) ListClusters(ctx, in interface{}, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockAdminServiceClient)(nil).ListClusters), varargs...)
 }
 
+// ListHistoryTasks mocks base method.
+func (m *MockAdminServiceClient) ListHistoryTasks(ctx context.Context, in *adminservice.ListHistoryTasksRequest, opts ...grpc.CallOption) (*adminservice.ListHistoryTasksResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "ListHistoryTasks", varargs...)
+	ret0, _ := ret[0].(*adminservice.ListHistoryTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListHistoryTasks indicates an expected call of ListHistoryTasks.
+func (mr *MockAdminServiceClientMockRecorder) ListHistoryTasks(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListHistoryTasks", reflect.TypeOf((*MockAdminServiceClient)(nil).ListHistoryTasks), varargs...)
+}
+
 // ListReplicationTasks mocks base method.
 func (m *MockAdminServiceClient) ListReplicationTasks(ctx context.Context, in *adminservice.ListReplicationTasksRequest, opts ...grpc.CallOption) (*adminservice.ListReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
@@ -901,6 +921,21 @@ func (m *MockAdminServiceServer) ListClusters(arg0 context.Context, arg1 *admins
 func (mr *MockAdminServiceServerMockRecorder) ListClusters(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusters", reflect.TypeOf((*MockAdminServiceServer)(nil).ListClusters), arg0, arg1)
+}
+
+// ListHistoryTasks mocks base method.
+func (m *MockAdminServiceServer) ListHistoryTasks(arg0 context.Context, arg1 *adminservice.ListHistoryTasksRequest) (*adminservice.ListHistoryTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListHistoryTasks", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.ListHistoryTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListHistoryTasks indicates an expected call of ListHistoryTasks.
+func (mr *MockAdminServiceServerMockRecorder) ListHistoryTasks(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListHistoryTasks", reflect.TypeOf((*MockAdminServiceServer)(nil).ListHistoryTasks), arg0, arg1)
 }
 
 // ListReplicationTasks mocks base method.

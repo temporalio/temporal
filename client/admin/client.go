@@ -161,6 +161,20 @@ func (c *clientImpl) GetShard(
 	return client.GetShard(ctx, request, opts...)
 }
 
+func (c *clientImpl) ListHistoryTasks(
+	ctx context.Context,
+	request *adminservice.ListHistoryTasksRequest,
+	opts ...grpc.CallOption,
+) (*adminservice.ListHistoryTasksResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.ListHistoryTasks(ctx, request, opts...)
+}
+
 func (c *clientImpl) ListTimerTasks(
 	ctx context.Context,
 	request *adminservice.ListTimerTasksRequest,

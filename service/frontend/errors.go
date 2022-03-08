@@ -48,6 +48,7 @@ var (
 	errQueryDisallowedForNamespace                        = serviceerror.NewInvalidArgument("Namespace is not allowed to query, please contact temporal team to re-enable queries.")
 	errClusterNameNotSet                                  = serviceerror.NewInvalidArgument("Cluster name is not set.")
 	errEmptyReplicationInfo                               = serviceerror.NewInvalidArgument("Replication task info is not set.")
+	errTaskRangeNotSet                                    = serviceerror.NewInvalidArgument("Task range is not set")
 	errHistoryNotFound                                    = serviceerror.NewInvalidArgument("Requested workflow history not found, may have passed retention period.")
 	errNamespaceTooLong                                   = serviceerror.NewInvalidArgument("Namespace length exceeds limit.")
 	errWorkflowTypeTooLong                                = serviceerror.NewInvalidArgument("WorkflowType length exceeds limit.")

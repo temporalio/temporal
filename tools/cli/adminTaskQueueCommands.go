@@ -97,7 +97,7 @@ func printTaskQueueStatus(taskQueueStatus *taskqueuepb.TaskQueueStatus) {
 
 // AdminListTaskQueueTasks displays task information
 func AdminListTaskQueueTasks(c *cli.Context) {
-	namespace := getRequiredOption(c, FlagNamespace)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	tqName := getRequiredOption(c, FlagTaskQueue)
 	tlTypeInt, err := stringToEnum(c.String(FlagTaskQueueType), enumspb.TaskQueueType_value)
 	if err != nil {
@@ -109,6 +109,10 @@ func AdminListTaskQueueTasks(c *cli.Context) {
 	}
 	minTaskID := c.Int64(FlagMinTaskID)
 	maxTaskID := c.Int64(FlagMaxTaskID)
+	pageSize := defaultPageSize
+	if c.IsSet(FlagPageSize) {
+		pageSize = c.Int(FlagPageSize)
+	}
 	workflowID := c.String(FlagWorkflowID)
 	runID := c.String(FlagRunID)
 
@@ -120,11 +124,13 @@ func AdminListTaskQueueTasks(c *cli.Context) {
 		TaskQueueType: tqType,
 		MinTaskId:     minTaskID,
 		MaxTaskId:     maxTaskID,
+		BatchSize:     int32(pageSize),
 	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
 	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+
 		response, err := client.GetTaskQueueTasks(ctx, req)
 		if err != nil {
 			return nil, nil, err
@@ -154,5 +160,7 @@ func AdminListTaskQueueTasks(c *cli.Context) {
 		return items, nil, nil
 	}
 
-	paginate(c, paginationFunc)
+	if err := paginate(c, paginationFunc, pageSize); err != nil {
+		ErrorAndExit("Failed to list task queue tasks", err)
+	}
 }

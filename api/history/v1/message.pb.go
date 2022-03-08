@@ -35,8 +35,12 @@ import (
 	math_bits "math/bits"
 	reflect "reflect"
 	strings "strings"
+	time "time"
 
+	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/gogo/protobuf/types"
+	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	v1 "go.temporal.io/api/history/v1"
 )
 
@@ -44,6 +48,7 @@ import (
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+var _ = time.Kitchen
 
 // This is a compile-time assertion to ensure that this generated file
 // is compatible with the proto package it is being compiled against.
@@ -258,11 +263,115 @@ func (m *VersionHistories) GetHistories() []*VersionHistory {
 	return nil
 }
 
+type TaskKey struct {
+	TaskId   int64      `protobuf:"varint,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	FireTime *time.Time `protobuf:"bytes,2,opt,name=fire_time,json=fireTime,proto3,stdtime" json:"fire_time,omitempty"`
+}
+
+func (m *TaskKey) Reset()      { *m = TaskKey{} }
+func (*TaskKey) ProtoMessage() {}
+func (*TaskKey) Descriptor() ([]byte, []int) {
+	return fileDescriptor_670cd05c700ece14, []int{4}
+}
+func (m *TaskKey) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TaskKey) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_TaskKey.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *TaskKey) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TaskKey.Merge(m, src)
+}
+func (m *TaskKey) XXX_Size() int {
+	return m.Size()
+}
+func (m *TaskKey) XXX_DiscardUnknown() {
+	xxx_messageInfo_TaskKey.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TaskKey proto.InternalMessageInfo
+
+func (m *TaskKey) GetTaskId() int64 {
+	if m != nil {
+		return m.TaskId
+	}
+	return 0
+}
+
+func (m *TaskKey) GetFireTime() *time.Time {
+	if m != nil {
+		return m.FireTime
+	}
+	return nil
+}
+
+type TaskRange struct {
+	InclusiveMinTaskKey *TaskKey `protobuf:"bytes,1,opt,name=inclusive_min_task_key,json=inclusiveMinTaskKey,proto3" json:"inclusive_min_task_key,omitempty"`
+	ExclusiveMaxTaskKey *TaskKey `protobuf:"bytes,2,opt,name=exclusive_max_task_key,json=exclusiveMaxTaskKey,proto3" json:"exclusive_max_task_key,omitempty"`
+}
+
+func (m *TaskRange) Reset()      { *m = TaskRange{} }
+func (*TaskRange) ProtoMessage() {}
+func (*TaskRange) Descriptor() ([]byte, []int) {
+	return fileDescriptor_670cd05c700ece14, []int{5}
+}
+func (m *TaskRange) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TaskRange) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_TaskRange.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *TaskRange) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TaskRange.Merge(m, src)
+}
+func (m *TaskRange) XXX_Size() int {
+	return m.Size()
+}
+func (m *TaskRange) XXX_DiscardUnknown() {
+	xxx_messageInfo_TaskRange.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TaskRange proto.InternalMessageInfo
+
+func (m *TaskRange) GetInclusiveMinTaskKey() *TaskKey {
+	if m != nil {
+		return m.InclusiveMinTaskKey
+	}
+	return nil
+}
+
+func (m *TaskRange) GetExclusiveMaxTaskKey() *TaskKey {
+	if m != nil {
+		return m.ExclusiveMaxTaskKey
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*TransientWorkflowTaskInfo)(nil), "temporal.server.api.history.v1.TransientWorkflowTaskInfo")
 	proto.RegisterType((*VersionHistoryItem)(nil), "temporal.server.api.history.v1.VersionHistoryItem")
 	proto.RegisterType((*VersionHistory)(nil), "temporal.server.api.history.v1.VersionHistory")
 	proto.RegisterType((*VersionHistories)(nil), "temporal.server.api.history.v1.VersionHistories")
+	proto.RegisterType((*TaskKey)(nil), "temporal.server.api.history.v1.TaskKey")
+	proto.RegisterType((*TaskRange)(nil), "temporal.server.api.history.v1.TaskRange")
 }
 
 func init() {
@@ -270,34 +379,44 @@ func init() {
 }
 
 var fileDescriptor_670cd05c700ece14 = []byte{
-	// 422 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x92, 0xc1, 0x6a, 0xd4, 0x40,
-	0x1c, 0xc6, 0x33, 0x5d, 0x6a, 0x75, 0x76, 0xad, 0x32, 0xa7, 0x6d, 0xc1, 0xa1, 0x06, 0x0a, 0x3d,
-	0x94, 0x09, 0x5d, 0x8f, 0x9e, 0x14, 0x84, 0x46, 0xc4, 0x43, 0x58, 0x14, 0xbc, 0x84, 0xd9, 0xcd,
-	0xbf, 0xcd, 0xb0, 0x9b, 0x99, 0x30, 0x33, 0x8d, 0x7a, 0x10, 0x7c, 0x04, 0xdf, 0xc1, 0x8b, 0x6f,
-	0xe0, 0x2b, 0x78, 0xdc, 0x63, 0x8f, 0x6e, 0xf6, 0xe2, 0xb1, 0x8f, 0x20, 0x99, 0xcc, 0xa6, 0xac,
-	0x96, 0x42, 0x6f, 0xf3, 0x4d, 0xbe, 0xff, 0xef, 0xfb, 0xc2, 0xfc, 0xf1, 0xb1, 0x85, 0xa2, 0x54,
-	0x9a, 0xcf, 0x23, 0x03, 0xba, 0x02, 0x1d, 0xf1, 0x52, 0x44, 0xb9, 0x30, 0x56, 0xe9, 0xcf, 0x51,
-	0x75, 0x12, 0x15, 0x60, 0x0c, 0x3f, 0x07, 0x56, 0x6a, 0x65, 0x15, 0xa1, 0x6b, 0x37, 0x6b, 0xdd,
-	0x8c, 0x97, 0x82, 0x79, 0x37, 0xab, 0x4e, 0xf6, 0x0f, 0x3b, 0xda, 0x6d, 0x98, 0xf0, 0x27, 0xc2,
-	0x7b, 0x63, 0xcd, 0xa5, 0x11, 0x20, 0xed, 0x7b, 0xa5, 0x67, 0x67, 0x73, 0xf5, 0x71, 0xcc, 0xcd,
-	0x2c, 0x96, 0x67, 0x8a, 0xbc, 0xc5, 0x8f, 0xcc, 0x34, 0x87, 0xec, 0x62, 0x0e, 0x59, 0x0a, 0x15,
-	0x48, 0x3b, 0x44, 0x07, 0xe8, 0xa8, 0x3f, 0x3a, 0x64, 0x5d, 0xfc, 0x66, 0x2e, 0x3b, 0x6d, 0x8f,
-	0xaf, 0x1a, 0x73, 0xb2, 0xdb, 0x4d, 0x3b, 0x4d, 0x5e, 0xe3, 0x87, 0xc6, 0x72, 0x6d, 0x3b, 0xda,
-	0xd6, 0x5d, 0x68, 0x03, 0x3f, 0xeb, 0x54, 0x18, 0x63, 0xf2, 0x0e, 0xb4, 0x11, 0x4a, 0x7a, 0x53,
-	0x6c, 0xa1, 0x20, 0x7b, 0xf8, 0xbe, 0x23, 0xa7, 0x22, 0x73, 0x55, 0x7b, 0xc9, 0x8e, 0xd3, 0x71,
-	0x46, 0x86, 0x78, 0xa7, 0x6a, 0x07, 0x5c, 0x6c, 0x2f, 0x59, 0xcb, 0xf0, 0x0b, 0xde, 0xdd, 0x44,
-	0x91, 0xa7, 0x78, 0x30, 0xd1, 0x5c, 0x4e, 0xf3, 0xd4, 0xaa, 0x19, 0x48, 0x87, 0x1a, 0x24, 0xfd,
-	0xf6, 0x6e, 0xdc, 0x5c, 0x91, 0x53, 0xbc, 0x2d, 0x2c, 0x14, 0x66, 0xb8, 0x75, 0xd0, 0x3b, 0xea,
-	0x8f, 0x46, 0xec, 0xf6, 0x07, 0x61, 0xff, 0x97, 0x4d, 0x5a, 0x40, 0xf8, 0x1d, 0xe1, 0xc7, 0x1b,
-	0x5f, 0x05, 0x18, 0xf2, 0x02, 0x3f, 0x99, 0x5e, 0x68, 0xdd, 0xfc, 0x8a, 0xaf, 0x99, 0x7a, 0x58,
-	0x2a, 0x64, 0x06, 0x9f, 0x5c, 0xa5, 0xed, 0x64, 0xdf, 0x9b, 0xfe, 0xa1, 0x37, 0x0e, 0xf2, 0x06,
-	0x3f, 0xc8, 0xd7, 0x3c, 0xdf, 0x92, 0xdd, 0xad, 0x65, 0x72, 0x0d, 0x78, 0x39, 0x59, 0x2c, 0x69,
-	0x70, 0xb9, 0xa4, 0xc1, 0xd5, 0x92, 0xa2, 0xaf, 0x35, 0x45, 0x3f, 0x6a, 0x8a, 0x7e, 0xd5, 0x14,
-	0x2d, 0x6a, 0x8a, 0x7e, 0xd7, 0x14, 0xfd, 0xa9, 0x69, 0x70, 0x55, 0x53, 0xf4, 0x6d, 0x45, 0x83,
-	0xc5, 0x8a, 0x06, 0x97, 0x2b, 0x1a, 0x7c, 0x38, 0x3e, 0x57, 0xd7, 0x91, 0x42, 0xdd, 0xbc, 0xda,
-	0xcf, 0xfd, 0x71, 0x72, 0xcf, 0x2d, 0xe5, 0xb3, 0xbf, 0x01, 0x00, 0x00, 0xff, 0xff, 0xb1, 0xc0,
-	0xb3, 0x54, 0x0b, 0x03, 0x00, 0x00,
+	// 580 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x94, 0x41, 0x4f, 0x13, 0x41,
+	0x14, 0xc7, 0x3b, 0x20, 0x14, 0x06, 0x44, 0x33, 0x26, 0x08, 0x4d, 0x1c, 0xa0, 0x09, 0x91, 0x03,
+	0x99, 0x0d, 0x78, 0x34, 0x1e, 0x24, 0x31, 0xa1, 0x2a, 0x1e, 0x36, 0x8d, 0x26, 0x86, 0x64, 0x33,
+	0xed, 0xbe, 0x6e, 0x27, 0xed, 0xce, 0x34, 0x33, 0xd3, 0x5a, 0x0e, 0x26, 0x7e, 0x04, 0xbe, 0x83,
+	0x17, 0xbf, 0x81, 0x1f, 0x41, 0x8f, 0x1c, 0xb9, 0x29, 0xcb, 0xc5, 0x23, 0x1f, 0xc1, 0xec, 0xec,
+	0x74, 0x1b, 0xd4, 0x60, 0xb8, 0xcd, 0x7b, 0xfb, 0x7f, 0xbf, 0xf7, 0x7f, 0x33, 0x2f, 0x8b, 0x77,
+	0x2d, 0xa4, 0x03, 0xa5, 0x79, 0x3f, 0x30, 0xa0, 0x47, 0xa0, 0x03, 0x3e, 0x10, 0x41, 0x57, 0x18,
+	0xab, 0xf4, 0x49, 0x30, 0xda, 0x0b, 0x52, 0x30, 0x86, 0x27, 0xc0, 0x06, 0x5a, 0x59, 0x45, 0xe8,
+	0x44, 0xcd, 0x0a, 0x35, 0xe3, 0x03, 0xc1, 0xbc, 0x9a, 0x8d, 0xf6, 0x6a, 0x1b, 0x89, 0x52, 0x49,
+	0x1f, 0x02, 0xa7, 0x6e, 0x0d, 0x3b, 0x81, 0x15, 0x29, 0x18, 0xcb, 0xd3, 0x41, 0x01, 0xa8, 0x6d,
+	0xc5, 0x30, 0x00, 0x19, 0x83, 0x6c, 0x0b, 0x30, 0x41, 0xa2, 0x12, 0xe5, 0xf2, 0xee, 0xe4, 0x25,
+	0xdb, 0xa5, 0xa3, 0x9b, 0xac, 0xd4, 0xbf, 0x22, 0xbc, 0xde, 0xd4, 0x5c, 0x1a, 0x01, 0xd2, 0xbe,
+	0x53, 0xba, 0xd7, 0xe9, 0xab, 0x0f, 0x4d, 0x6e, 0x7a, 0x0d, 0xd9, 0x51, 0xe4, 0x0d, 0xbe, 0x67,
+	0xda, 0x5d, 0x88, 0x87, 0x7d, 0x88, 0x23, 0x18, 0x81, 0xb4, 0x6b, 0x68, 0x13, 0xed, 0x2c, 0xed,
+	0x6f, 0xb3, 0x72, 0x84, 0xeb, 0xde, 0xd9, 0x61, 0x71, 0x7c, 0x91, 0x8b, 0xc3, 0x95, 0xb2, 0xda,
+	0xc5, 0xe4, 0x25, 0xbe, 0x6b, 0x2c, 0xd7, 0xb6, 0xa4, 0xcd, 0xdc, 0x86, 0xb6, 0xec, 0x6b, 0x5d,
+	0x54, 0x6f, 0x60, 0xf2, 0x16, 0xb4, 0x11, 0x4a, 0x7a, 0x51, 0xc3, 0x42, 0x4a, 0xd6, 0xf1, 0x82,
+	0x23, 0x47, 0x22, 0x76, 0x56, 0x67, 0xc3, 0xaa, 0x8b, 0x1b, 0x31, 0x59, 0xc3, 0xd5, 0x51, 0x51,
+	0xe0, 0xda, 0xce, 0x86, 0x93, 0xb0, 0xfe, 0x11, 0xaf, 0x5c, 0x47, 0x91, 0x2d, 0xbc, 0xdc, 0xd2,
+	0x5c, 0xb6, 0xbb, 0x91, 0x55, 0x3d, 0x90, 0x0e, 0xb5, 0x1c, 0x2e, 0x15, 0xb9, 0x66, 0x9e, 0x22,
+	0x87, 0x78, 0x4e, 0x58, 0x48, 0xcd, 0xda, 0xcc, 0xe6, 0xec, 0xce, 0xd2, 0xfe, 0x3e, 0xbb, 0xf9,
+	0x51, 0xd9, 0xdf, 0x66, 0xc3, 0x02, 0x50, 0xff, 0x8c, 0xf0, 0xfd, 0x6b, 0x5f, 0x05, 0x18, 0xf2,
+	0x1c, 0x3f, 0x6a, 0x0f, 0xb5, 0xce, 0x47, 0xf1, 0x36, 0x23, 0x0f, 0x8b, 0x84, 0x8c, 0x61, 0xec,
+	0x2c, 0xcd, 0x85, 0x35, 0x2f, 0xfa, 0x83, 0x9e, 0x2b, 0xc8, 0x6b, 0xbc, 0xd8, 0x9d, 0xf0, 0xbc,
+	0x4b, 0x76, 0x3b, 0x97, 0xe1, 0x14, 0x50, 0xe7, 0xb8, 0x9a, 0xef, 0xc5, 0x2b, 0x38, 0x21, 0x0f,
+	0x71, 0xd5, 0x72, 0xd3, 0x9b, 0xde, 0xf1, 0x7c, 0x1e, 0x36, 0x62, 0xf2, 0x0c, 0x2f, 0x76, 0x84,
+	0x86, 0x28, 0xdf, 0x57, 0xff, 0xb6, 0x35, 0x56, 0x2c, 0x33, 0x9b, 0x2c, 0x33, 0x6b, 0x4e, 0x96,
+	0xf9, 0xe0, 0xce, 0xe9, 0x8f, 0x0d, 0x14, 0x2e, 0xe4, 0x25, 0x79, 0xb2, 0xfe, 0x0d, 0xe1, 0xc5,
+	0xbc, 0x47, 0xc8, 0x65, 0x02, 0xe4, 0x18, 0xaf, 0x0a, 0xd9, 0xee, 0x0f, 0x8d, 0x18, 0x41, 0x94,
+	0x0a, 0x19, 0xb9, 0x9e, 0x3d, 0x38, 0xf1, 0x3b, 0xf8, 0xf8, 0x7f, 0xb3, 0x78, 0xbb, 0xe1, 0x83,
+	0x12, 0x73, 0x24, 0xe4, 0x64, 0x86, 0x63, 0xbc, 0x0a, 0xe3, 0x92, 0xce, 0xc7, 0x53, 0xfa, 0xcc,
+	0x2d, 0xe9, 0x25, 0xe6, 0x88, 0x8f, 0x7d, 0xf2, 0xa0, 0x75, 0x76, 0x41, 0x2b, 0xe7, 0x17, 0xb4,
+	0x72, 0x75, 0x41, 0xd1, 0xa7, 0x8c, 0xa2, 0x2f, 0x19, 0x45, 0xdf, 0x33, 0x8a, 0xce, 0x32, 0x8a,
+	0x7e, 0x66, 0x14, 0xfd, 0xca, 0x68, 0xe5, 0x2a, 0xa3, 0xe8, 0xf4, 0x92, 0x56, 0xce, 0x2e, 0x69,
+	0xe5, 0xfc, 0x92, 0x56, 0xde, 0xef, 0x26, 0x6a, 0xda, 0x55, 0xa8, 0x7f, 0xff, 0x4b, 0x9e, 0xfa,
+	0x63, 0x6b, 0xde, 0xdd, 0xe8, 0x93, 0xdf, 0x01, 0x00, 0x00, 0xff, 0xff, 0x4e, 0x61, 0xd5, 0x83,
+	0x7c, 0x04, 0x00, 0x00,
 }
 
 func (this *TransientWorkflowTaskInfo) Equal(that interface{}) bool {
@@ -418,6 +537,64 @@ func (this *VersionHistories) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *TaskKey) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*TaskKey)
+	if !ok {
+		that2, ok := that.(TaskKey)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.TaskId != that1.TaskId {
+		return false
+	}
+	if that1.FireTime == nil {
+		if this.FireTime != nil {
+			return false
+		}
+	} else if !this.FireTime.Equal(*that1.FireTime) {
+		return false
+	}
+	return true
+}
+func (this *TaskRange) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*TaskRange)
+	if !ok {
+		that2, ok := that.(TaskRange)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.InclusiveMinTaskKey.Equal(that1.InclusiveMinTaskKey) {
+		return false
+	}
+	if !this.ExclusiveMaxTaskKey.Equal(that1.ExclusiveMaxTaskKey) {
+		return false
+	}
+	return true
+}
 func (this *TransientWorkflowTaskInfo) GoString() string {
 	if this == nil {
 		return "nil"
@@ -466,6 +643,32 @@ func (this *VersionHistories) GoString() string {
 	s = append(s, "CurrentVersionHistoryIndex: "+fmt.Sprintf("%#v", this.CurrentVersionHistoryIndex)+",\n")
 	if this.Histories != nil {
 		s = append(s, "Histories: "+fmt.Sprintf("%#v", this.Histories)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *TaskKey) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&history.TaskKey{")
+	s = append(s, "TaskId: "+fmt.Sprintf("%#v", this.TaskId)+",\n")
+	s = append(s, "FireTime: "+fmt.Sprintf("%#v", this.FireTime)+",\n")
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *TaskRange) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&history.TaskRange{")
+	if this.InclusiveMinTaskKey != nil {
+		s = append(s, "InclusiveMinTaskKey: "+fmt.Sprintf("%#v", this.InclusiveMinTaskKey)+",\n")
+	}
+	if this.ExclusiveMaxTaskKey != nil {
+		s = append(s, "ExclusiveMaxTaskKey: "+fmt.Sprintf("%#v", this.ExclusiveMaxTaskKey)+",\n")
 	}
 	s = append(s, "}")
 	return strings.Join(s, "")
@@ -644,6 +847,91 @@ func (m *VersionHistories) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *TaskKey) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TaskKey) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TaskKey) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.FireTime != nil {
+		n3, err3 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.FireTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.FireTime):])
+		if err3 != nil {
+			return 0, err3
+		}
+		i -= n3
+		i = encodeVarintMessage(dAtA, i, uint64(n3))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.TaskId != 0 {
+		i = encodeVarintMessage(dAtA, i, uint64(m.TaskId))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *TaskRange) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TaskRange) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TaskRange) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.ExclusiveMaxTaskKey != nil {
+		{
+			size, err := m.ExclusiveMaxTaskKey.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMessage(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.InclusiveMinTaskKey != nil {
+		{
+			size, err := m.InclusiveMinTaskKey.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMessage(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintMessage(dAtA []byte, offset int, v uint64) int {
 	offset -= sovMessage(v)
 	base := offset
@@ -724,6 +1012,39 @@ func (m *VersionHistories) Size() (n int) {
 	return n
 }
 
+func (m *TaskKey) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.TaskId != 0 {
+		n += 1 + sovMessage(uint64(m.TaskId))
+	}
+	if m.FireTime != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.FireTime)
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
+
+func (m *TaskRange) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.InclusiveMinTaskKey != nil {
+		l = m.InclusiveMinTaskKey.Size()
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	if m.ExclusiveMaxTaskKey != nil {
+		l = m.ExclusiveMaxTaskKey.Size()
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
+
 func sovMessage(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
@@ -780,6 +1101,28 @@ func (this *VersionHistories) String() string {
 	s := strings.Join([]string{`&VersionHistories{`,
 		`CurrentVersionHistoryIndex:` + fmt.Sprintf("%v", this.CurrentVersionHistoryIndex) + `,`,
 		`Histories:` + repeatedStringForHistories + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *TaskKey) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&TaskKey{`,
+		`TaskId:` + fmt.Sprintf("%v", this.TaskId) + `,`,
+		`FireTime:` + strings.Replace(fmt.Sprintf("%v", this.FireTime), "Timestamp", "types.Timestamp", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *TaskRange) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&TaskRange{`,
+		`InclusiveMinTaskKey:` + strings.Replace(this.InclusiveMinTaskKey.String(), "TaskKey", "TaskKey", 1) + `,`,
+		`ExclusiveMaxTaskKey:` + strings.Replace(this.ExclusiveMaxTaskKey.String(), "TaskKey", "TaskKey", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1208,6 +1551,239 @@ func (m *VersionHistories) Unmarshal(dAtA []byte) error {
 			}
 			m.Histories = append(m.Histories, &VersionHistory{})
 			if err := m.Histories[len(m.Histories)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMessage(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TaskKey) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMessage
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TaskKey: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TaskKey: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TaskId", wireType)
+			}
+			m.TaskId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.TaskId |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FireTime", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.FireTime == nil {
+				m.FireTime = new(time.Time)
+			}
+			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.FireTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMessage(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TaskRange) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMessage
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TaskRange: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TaskRange: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field InclusiveMinTaskKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.InclusiveMinTaskKey == nil {
+				m.InclusiveMinTaskKey = &TaskKey{}
+			}
+			if err := m.InclusiveMinTaskKey.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ExclusiveMaxTaskKey", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ExclusiveMaxTaskKey == nil {
+				m.ExclusiveMaxTaskKey = &TaskKey{}
+			}
+			if err := m.ExclusiveMaxTaskKey.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

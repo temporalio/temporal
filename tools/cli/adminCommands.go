@@ -40,6 +40,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/auth"
@@ -64,7 +65,7 @@ const maxEventID = 9999
 
 // AdminShowWorkflow shows history
 func AdminShowWorkflow(c *cli.Context) {
-	namespace := c.String(FlagNamespace)
+	namespace := getRequiredGlobalOption(c, FlagNamespace)
 	wid := getRequiredOption(c, FlagWorkflowID)
 	rid := getRequiredOption(c, FlagRunID)
 	startEventId := c.Int64(FlagMinEventID)
@@ -391,28 +392,26 @@ func AdminGetShardID(c *cli.Context) {
 func AdminDescribeTask(c *cli.Context) {
 	sid := int32(getRequiredIntOption(c, FlagShardID))
 	tid := getRequiredIntOption(c, FlagTaskID)
-	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	categoryStr := getRequiredOption(c, FlagTaskType)
+	categoryValue, err := stringToEnum(categoryStr, enumsspb.TaskCategory_value)
 	if err != nil {
-		ErrorAndExit("Failed to parse Task Type", err)
+		categoryInt, err := strconv.Atoi(categoryStr)
+		if err != nil {
+			ErrorAndExit("Failed to parse task type", err)
+		}
+		categoryValue = int32(categoryInt)
 	}
-	category := enumsspb.TaskCategory(categoryInt)
-	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
-		ErrorAndExit(fmt.Sprintf("Task type %s is currently not supported", category), nil)
-	}
-
-	pFactory := CreatePersistenceFactory(c)
-	executionManager, err := pFactory.NewExecutionManager()
-	if err != nil {
-		ErrorAndExit("Failed to initialize execution manager", err)
-	}
+	category := enumsspb.TaskCategory(categoryValue)
 
 	var historyTaskCategory tasks.Category
-	vis := getRequiredInt64Option(c, FlagTaskVisibilityTimestamp)
+	vis := c.Int64(FlagTaskVisibilityTimestamp)
 	taskKey := tasks.Key{
 		TaskID:   int64(tid),
 		FireTime: time.Unix(0, vis).UTC(),
 	}
 	switch category {
+	case enumsspb.TASK_CATEGORY_UNSPECIFIED:
+		ErrorAndExit("Task type is unspecified", nil)
 	case enumsspb.TASK_CATEGORY_TIMER:
 		historyTaskCategory = tasks.CategoryTimer
 	case enumsspb.TASK_CATEGORY_REPLICATION:
@@ -422,9 +421,24 @@ func AdminDescribeTask(c *cli.Context) {
 	case enumsspb.TASK_CATEGORY_VISIBILITY:
 		historyTaskCategory = tasks.CategoryReplication
 	default:
-		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
+		categoryType := tasks.CategoryTypeImmediate
+		if !taskKey.FireTime.IsZero() {
+			categoryType = tasks.CategoryTypeScheduled
+		}
+		historyTaskCategory = tasks.NewCategory(
+			int32(category),
+			categoryType,
+			"",
+		)
 	}
 
+	// TODO: probably create an admin API for describe task
+	// current result doesn't have task type information
+	pFactory := CreatePersistenceFactory(c)
+	executionManager, err := pFactory.NewExecutionManager()
+	if err != nil {
+		ErrorAndExit("Failed to initialize execution manager", err)
+	}
 	task, err := executionManager.GetHistoryTask(&persistence.GetHistoryTaskRequest{
 		ShardID:      int32(sid),
 		TaskCategory: historyTaskCategory,
@@ -440,98 +454,59 @@ func AdminDescribeTask(c *cli.Context) {
 // AdminListShardTasks outputs a list of a tasks for given Shard and Task Category
 func AdminListShardTasks(c *cli.Context) {
 	sid := int32(getRequiredIntOption(c, FlagShardID))
-	categoryInt, err := stringToEnum(c.String(FlagTaskType), enumsspb.TaskCategory_value)
+	categoryStr := getRequiredOption(c, FlagTaskType)
+	categoryValue, err := stringToEnum(categoryStr, enumsspb.TaskCategory_value)
 	if err != nil {
-		ErrorAndExit("Failed to parse Task Type", err)
+		categoryInt, err := strconv.Atoi(categoryStr)
+		if err != nil {
+			ErrorAndExit("Failed to parse task type", err)
+		}
+		categoryValue = int32(categoryInt)
 	}
-	category := enumsspb.TaskCategory(categoryInt)
+	category := enumsspb.TaskCategory(categoryValue)
 	if category == enumsspb.TASK_CATEGORY_UNSPECIFIED {
-		ErrorAndExit(fmt.Sprintf("Task type %s is currently not supported", category), nil)
+		ErrorAndExit("Task type is unspecified", nil)
 	}
 
 	client := cFactory.AdminClient(c)
+	pageSize := defaultPageSize
+	if c.IsSet(FlagPageSize) {
+		pageSize = c.Int(FlagPageSize)
+	}
+	req := &adminservice.ListHistoryTasksRequest{
+		ShardId:  sid,
+		Category: category,
+		TaskRange: &history.TaskRange{
+			InclusiveMinTaskKey: &history.TaskKey{
+				FireTime: timestamp.TimePtr(parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())),
+				TaskId:   c.Int64(FlagMinTaskID),
+			},
+			ExclusiveMaxTaskKey: &history.TaskKey{
+				FireTime: timestamp.TimePtr(parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())),
+				TaskId:   c.Int64(FlagMaxTaskID),
+			},
+		},
+		BatchSize: int32(pageSize),
+	}
 
 	ctx, cancel := newContext(c)
 	defer cancel()
-	if category == enumsspb.TASK_CATEGORY_TRANSFER {
-		req := &adminservice.ListTransferTasksRequest{ShardId: sid}
-
-		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-			req.NextPageToken = paginationToken
-			response, err := client.ListTransferTasks(ctx, req)
-			if err != nil {
-				return nil, nil, err
-			}
-			token := response.NextPageToken
-
-			var items []interface{}
-			for _, task := range response.Tasks {
-				items = append(items, task)
-			}
-			return items, token, nil
+	paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
+		req.NextPageToken = paginationToken
+		response, err := client.ListHistoryTasks(ctx, req)
+		if err != nil {
+			return nil, nil, err
 		}
-		paginate(c, paginationFunc)
-	} else if category == enumsspb.TASK_CATEGORY_VISIBILITY {
-		req := &adminservice.ListVisibilityTasksRequest{ShardId: sid}
+		token := response.NextPageToken
 
-		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-			req.NextPageToken = paginationToken
-			response, err := client.ListVisibilityTasks(ctx, req)
-			if err != nil {
-				return nil, nil, err
-			}
-			token := response.NextPageToken
-
-			var items []interface{}
-			for _, task := range response.Tasks {
-				items = append(items, task)
-			}
-			return items, token, nil
+		var items []interface{}
+		for _, task := range response.Tasks {
+			items = append(items, task)
 		}
-		paginate(c, paginationFunc)
-	} else if category == enumsspb.TASK_CATEGORY_TIMER {
-		minVis := parseTime(c.String(FlagMinVisibilityTimestamp), time.Time{}, time.Now().UTC())
-		maxVis := parseTime(c.String(FlagMaxVisibilityTimestamp), time.Time{}, time.Now().UTC())
-
-		req := &adminservice.ListTimerTasksRequest{
-			ShardId: sid,
-			MinTime: &minVis,
-			MaxTime: &maxVis,
-		}
-		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-			req.NextPageToken = paginationToken
-			response, err := client.ListTimerTasks(ctx, req)
-			if err != nil {
-				return nil, nil, err
-			}
-			token := response.NextPageToken
-
-			var items []interface{}
-			for _, task := range response.Tasks {
-				items = append(items, task)
-			}
-			return items, token, nil
-		}
-		paginate(c, paginationFunc)
-	} else if category == enumsspb.TASK_CATEGORY_REPLICATION {
-		req := &adminservice.ListReplicationTasksRequest{ShardId: sid}
-		paginationFunc := func(paginationToken []byte) ([]interface{}, []byte, error) {
-			req.NextPageToken = paginationToken
-			response, err := client.ListReplicationTasks(ctx, req)
-			if err != nil {
-				return nil, nil, err
-			}
-			token := response.NextPageToken
-
-			var items []interface{}
-			for _, task := range response.Tasks {
-				items = append(items, task)
-			}
-			return items, token, nil
-		}
-		paginate(c, paginationFunc)
-	} else {
-		ErrorAndExit("Failed to describe task", fmt.Errorf("Unrecognized task type, task_type=%v", category))
+		return items, token, nil
+	}
+	if err := paginate(c, paginationFunc, pageSize); err != nil {
+		ErrorAndExit("Failed to list history tasks", err)
 	}
 }
 
