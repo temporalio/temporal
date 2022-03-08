@@ -138,7 +138,7 @@ type AdminServiceClient interface {
 	GetShard(ctx context.Context, in *GetShardRequest, opts ...grpc.CallOption) (*GetShardResponse, error)
 	CloseShard(ctx context.Context, in *CloseShardRequest, opts ...grpc.CallOption) (*CloseShardResponse, error)
 	ListHistoryTasks(ctx context.Context, in *ListHistoryTasksRequest, opts ...grpc.CallOption) (*ListHistoryTasksResponse, error)
-	// TODO: remove following four list tasks rpc in 1.17 release
+	// TODO: remove following four list tasks rpc
 	ListTransferTasks(ctx context.Context, in *ListTransferTasksRequest, opts ...grpc.CallOption) (*ListTransferTasksResponse, error)
 	ListTimerTasks(ctx context.Context, in *ListTimerTasksRequest, opts ...grpc.CallOption) (*ListTimerTasksResponse, error)
 	ListReplicationTasks(ctx context.Context, in *ListReplicationTasksRequest, opts ...grpc.CallOption) (*ListReplicationTasksResponse, error)
@@ -483,7 +483,7 @@ type AdminServiceServer interface {
 	GetShard(context.Context, *GetShardRequest) (*GetShardResponse, error)
 	CloseShard(context.Context, *CloseShardRequest) (*CloseShardResponse, error)
 	ListHistoryTasks(context.Context, *ListHistoryTasksRequest) (*ListHistoryTasksResponse, error)
-	// TODO: remove following four list tasks rpc in 1.17 release
+	// TODO: remove following four list tasks rpc
 	ListTransferTasks(context.Context, *ListTransferTasksRequest) (*ListTransferTasksResponse, error)
 	ListTimerTasks(context.Context, *ListTimerTasksRequest) (*ListTimerTasksResponse, error)
 	ListReplicationTasks(context.Context, *ListReplicationTasksRequest) (*ListReplicationTasksResponse, error)
