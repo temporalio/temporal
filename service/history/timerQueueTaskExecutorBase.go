@@ -27,6 +27,8 @@ package history
 import (
 	"context"
 
+	"go.temporal.io/server/common/persistence"
+
 	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/common/log"
@@ -73,6 +75,13 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
+
+	if len(task.BranchToken) > 0 {
+		return t.shard.GetExecutionManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+			ShardID:     t.shard.GetShardID(),
+			BranchToken: task.BranchToken,
+		})
+	}
 
 	workflowExecution := commonpb.WorkflowExecution{
 		WorkflowId: task.GetWorkflowID(),

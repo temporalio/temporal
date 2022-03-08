@@ -2392,10 +2392,10 @@ func (s *ExecutionManagerSuite) TestTimerTasksComplete() {
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastWorkflowTaskStartId = int64(2)
 	taskSlice := []tasks.Task{
-		&tasks.WorkflowTimeoutTask{workflowKey, now.Add(2 * time.Second), 2, 12},
-		&tasks.DeleteHistoryEventTask{workflowKey, now.Add(2 * time.Second), 3, 13},
-		&tasks.ActivityTimeoutTask{workflowKey, now.Add(3 * time.Second), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
-		&tasks.UserTimerTask{workflowKey, now.Add(3 * time.Second), 5, 7, 15},
+		&tasks.WorkflowTimeoutTask{WorkflowKey: workflowKey, VisibilityTimestamp: now.Add(2 * time.Second), TaskID: 2, Version: 12},
+		&tasks.DeleteHistoryEventTask{WorkflowKey: workflowKey, VisibilityTimestamp: now.Add(2 * time.Second), TaskID: 3, Version: 13},
+		&tasks.ActivityTimeoutTask{WorkflowKey: workflowKey, VisibilityTimestamp: now.Add(3 * time.Second), TaskID: 4, TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE, EventID: 7, Version: 14},
+		&tasks.UserTimerTask{WorkflowKey: workflowKey, VisibilityTimestamp: now.Add(3 * time.Second), TaskID: 5, EventID: 7, Version: 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), taskSlice, nil, nil, nil, nil)
 	s.NoError(err2)
@@ -2459,11 +2459,11 @@ func (s *ExecutionManagerSuite) TestTimerTasksRangeComplete() {
 	updatedState := copyWorkflowExecutionState(state0.ExecutionState)
 	updatedInfo.LastWorkflowTaskStartId = int64(2)
 	taskSlice := []tasks.Task{
-		&tasks.WorkflowTaskTimeoutTask{workflowKey, time.Now().UTC(), 1, 2, 3, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 11},
-		&tasks.WorkflowTimeoutTask{workflowKey, time.Now().UTC(), 2, 12},
-		&tasks.DeleteHistoryEventTask{workflowKey, time.Now().UTC(), 3, 13},
-		&tasks.ActivityTimeoutTask{workflowKey, time.Now().UTC(), 4, enumspb.TIMEOUT_TYPE_START_TO_CLOSE, 7, 0, 14},
-		&tasks.UserTimerTask{workflowKey, time.Now().UTC(), 5, 7, 15},
+		&tasks.WorkflowTaskTimeoutTask{WorkflowKey: workflowKey, VisibilityTimestamp: time.Now().UTC(), TaskID: 1, EventID: 2, ScheduleAttempt: 3, TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE, Version: 11},
+		&tasks.WorkflowTimeoutTask{WorkflowKey: workflowKey, VisibilityTimestamp: time.Now().UTC(), TaskID: 2, Version: 12},
+		&tasks.DeleteHistoryEventTask{WorkflowKey: workflowKey, VisibilityTimestamp: time.Now().UTC(), TaskID: 3, Version: 13},
+		&tasks.ActivityTimeoutTask{WorkflowKey: workflowKey, VisibilityTimestamp: time.Now().UTC(), TaskID: 4, TimeoutType: enumspb.TIMEOUT_TYPE_START_TO_CLOSE, EventID: 7, Version: 14},
+		&tasks.UserTimerTask{WorkflowKey: workflowKey, VisibilityTimestamp: time.Now().UTC(), TaskID: 5, EventID: 7, Version: 15},
 	}
 	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), taskSlice, nil, nil, nil, nil)
 	s.NoError(err2)

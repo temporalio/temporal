@@ -176,7 +176,10 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	default:
 		return err
 	}
-
+	branchToken, err := r.mutableState.GetCurrentBranchToken()
+	if err != nil {
+		return err
+	}
 	r.mutableState.AddTasks(
 		&tasks.CloseExecutionTask{
 			// TaskID is set by shard
@@ -195,6 +198,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: now.Add(retention),
 			Version:             currentVersion,
+			BranchToken:         branchToken,
 		},
 	)
 
