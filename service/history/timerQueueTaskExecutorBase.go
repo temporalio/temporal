@@ -27,11 +27,11 @@ package history
 import (
 	"bytes"
 	"context"
-	"go.temporal.io/server/common/log/tag"
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -121,8 +121,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		if !bytes.Equal(task.BranchToken, currentBranchToken) {
 			return t.deleteHistoryBranch(task.BranchToken)
 		}
-		// it is not expected to hit here. Usually, an updated version means a different branch token
-		// this is to prevent us from deleting the correct branch token
 		t.logger.Error("Different mutable state versions have the same branch token", tag.TaskVersion(task.Version), tag.LastEventVersion(lastWriteVersion))
 		return serviceerror.NewInternal("Mutable state has different version but same branch token")
 	}
