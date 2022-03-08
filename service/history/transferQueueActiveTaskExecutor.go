@@ -632,7 +632,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
 	if !ok {
-		return err
+		return nil
 	}
 
 	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(task.InitiatedID)

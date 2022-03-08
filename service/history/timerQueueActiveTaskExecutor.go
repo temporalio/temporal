@@ -449,7 +449,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 	if !ok {
-		return err
+		return nil
 	}
 
 	targetNamespaceID := activityInfo.NamespaceId
