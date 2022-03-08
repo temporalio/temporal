@@ -25,6 +25,7 @@
 package history
 
 import (
+	"bytes"
 	"context"
 
 	"go.temporal.io/api/serviceerror"
@@ -98,13 +99,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	case nil:
 		// continue the following step
 	case *serviceerror.NotFound:
-		if len(task.BranchToken) > 0 {
-			// only delete the history if mutable state is gone
-			return t.shard.GetExecutionManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
-				ShardID:     t.shard.GetShardID(),
-				BranchToken: task.BranchToken,
-			})
-		}
+		return t.deleteHistoryBranch(task.BranchToken)
 	default:
 		return err
 	}
@@ -113,9 +108,15 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), lastWriteVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
+	if ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); !ok {
+		currentBranchToken, err := mutableState.GetCurrentBranchToken()
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(task.BranchToken, currentBranchToken) {
+			return t.deleteHistoryBranch(task.BranchToken)
+		}
+		return nil
 	}
 
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(
@@ -135,4 +136,15 @@ func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
 	}
+}
+
+func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(branchToken []byte) error {
+	if len(branchToken) > 0 {
+		// only delete the history if mutable state is gone
+		return t.shard.GetExecutionManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+			ShardID:     t.shard.GetShardID(),
+			BranchToken: branchToken,
+		})
+	}
+	return nil
 }

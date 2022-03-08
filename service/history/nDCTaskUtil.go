@@ -46,31 +46,26 @@ const (
 func verifyTaskVersion(
 	shard shard.Context,
 	logger log.Logger,
-	namespaceID namespace.ID,
+	namespace *namespace.Namespace,
 	version int64,
 	taskVersion int64,
 	task interface{},
-) (bool, error) {
+) bool {
 
 	if !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-		return true, nil
+		return true
 	}
 
 	// the first return value is whether this task is valid for further processing
-	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceID(namespaceID.String()), tag.Error(err))
-		return false, err
-	}
-	if !namespaceEntry.IsGlobalNamespace() {
-		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task))
-		return true, nil
+	if !namespace.IsGlobalNamespace() {
+		logger.Debug("NamespaceID is not global, task version check pass", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task))
+		return true
 	} else if version != taskVersion {
-		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task), tag.TaskVersion(version))
-		return false, nil
+		logger.Debug("NamespaceID is global, task version != target version", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task), tag.TaskVersion(version))
+		return false
 	}
-	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task), tag.TaskVersion(version))
-	return true, nil
+	logger.Debug("NamespaceID is global, task version == target version", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task), tag.TaskVersion(version))
+	return true
 }
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh

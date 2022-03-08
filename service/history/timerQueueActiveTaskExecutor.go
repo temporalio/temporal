@@ -314,9 +314,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	if !ok {
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), workflowTask.Version, task.Version, task)
-	if err != nil || !ok {
-		return err
+	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
+	if !ok {
+		return nil
 	}
 
 	if workflowTask.Attempt != task.ScheduleAttempt {
@@ -447,8 +447,8 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 		return nil
 	}
-	ok, err = verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), activityInfo.Version, task.Version, task)
-	if err != nil || !ok {
+	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+	if !ok {
 		return err
 	}
 
@@ -509,9 +509,9 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), startVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
+	ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
+	if !ok {
+		return nil
 	}
 
 	eventBatchFirstEventID := mutableState.GetNextEventID()

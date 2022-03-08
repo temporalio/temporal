@@ -138,9 +138,9 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), activityInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		if activityInfo.StartedId == common.EmptyEventID {
@@ -200,9 +200,9 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), wtInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		if wtInfo.StartedID == common.EmptyEventID {
@@ -265,9 +265,9 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), lastWriteVersion, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		// DO NOT REPLY TO PARENT
@@ -309,9 +309,9 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), requestCancelInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -346,9 +346,9 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), signalInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -383,9 +383,9 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), childWorkflowInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childWorkflowInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		if childWorkflowInfo.StartedId != common.EmptyEventID {
