@@ -1622,6 +1622,28 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
 
+	response := workflowservice.RespondActivityTaskFailedResponse{}
+
+	if request.GetLastHeartbeatDetails() != nil {
+		if err := common.CheckEventBlobSizeLimit(
+			request.GetLastHeartbeatDetails().Size(),
+			sizeLimitWarn,
+			sizeLimitError,
+			namespaceID.String(),
+			taskToken.GetWorkflowId(),
+			taskToken.GetRunId(),
+			wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.throttledLogger,
+			tag.BlobSizeViolationOperation("RespondActivityTaskFailed"),
+		); err != nil {
+			// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
+			response.Failures = append(response.Failures, failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true))
+
+			// do not send heartbeat to history service
+			request.LastHeartbeatDetails = nil
+		}
+	}
+
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetFailure().Size(),
 		sizeLimitWarn,
@@ -1636,6 +1658,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
+
+		response.Failures = append(response.Failures, serverFailure)
 	}
 
 	_, err = wh.historyClient.RespondActivityTaskFailed(ctx, &historyservice.RespondActivityTaskFailedRequest{
@@ -1645,7 +1669,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailed(
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.RespondActivityTaskFailedResponse{}, nil
+	return &response, nil
 }
 
 // RespondActivityTaskFailedById is called by application worker when it is done processing an ActivityTask.
@@ -1707,6 +1731,28 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	sizeLimitError := wh.config.BlobSizeLimitError(namespaceEntry.Name().String())
 	sizeLimitWarn := wh.config.BlobSizeLimitWarn(namespaceEntry.Name().String())
 
+	response := workflowservice.RespondActivityTaskFailedByIdResponse{}
+
+	if request.GetLastHeartbeatDetails() != nil {
+		if err := common.CheckEventBlobSizeLimit(
+			request.GetLastHeartbeatDetails().Size(),
+			sizeLimitWarn,
+			sizeLimitError,
+			namespaceID.String(),
+			taskToken.GetWorkflowId(),
+			runID,
+			wh.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+			wh.throttledLogger,
+			tag.BlobSizeViolationOperation("RespondActivityTaskFailedById"),
+		); err != nil {
+			// heartbeat details exceed size limit, we would fail the activity immediately with explicit error reason
+			response.Failures = append(response.Failures, failure.NewServerFailure(common.FailureReasonHeartbeatExceedsLimit, true))
+
+			// do not send heartbeat to history service
+			request.LastHeartbeatDetails = nil
+		}
+	}
+
 	if err := common.CheckEventBlobSizeLimit(
 		request.GetFailure().Size(),
 		sizeLimitWarn,
@@ -1721,6 +1767,8 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 		serverFailure := failure.NewServerFailure(common.FailureReasonFailureExceedsLimit, false)
 		serverFailure.Cause = failure.Truncate(request.Failure, sizeLimitWarn)
 		request.Failure = serverFailure
+
+		response.Failures = append(response.Failures, serverFailure)
 	}
 
 	req := &workflowservice.RespondActivityTaskFailedRequest{
@@ -1736,7 +1784,7 @@ func (wh *WorkflowHandler) RespondActivityTaskFailedById(ctx context.Context, re
 	if err != nil {
 		return nil, err
 	}
-	return &workflowservice.RespondActivityTaskFailedByIdResponse{}, nil
+	return &response, nil
 }
 
 // RespondActivityTaskCanceled is called by application worker when it is successfully canceled an ActivityTask.  It will
