@@ -152,6 +152,8 @@ const (
 	CLIFlagQuiet = CLIOptQuiet + ", q"
 	// CLIFlagForce is the cli flag for force mode
 	CLIFlagForce = CLIOptForce + ", f"
+	// CLIFlagDisableInitialHostLookup is the cli flag for only using supplied hosts to connect to the database
+	CLIFlagDisableInitialHostLookup = "disable-initial-host-lookup"
 
 	// CLIFlagEnableTLS enables cassandra client TLS
 	CLIFlagEnableTLS = "tls"
