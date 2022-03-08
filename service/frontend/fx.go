@@ -227,11 +227,12 @@ func TelemetryInterceptorProvider(
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 ) *interceptor.RateLimitInterceptor {
+	rateFn := func() float64 { return float64(serviceConfig.RPS()) }
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateLimiter(
-				func() float64 { return float64(serviceConfig.RPS()) },
-			),
+			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateLimiter(rateFn),
 		),
 		map[string]int{},
 	)
@@ -242,25 +243,33 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.NamespaceRateLimitInterceptor {
-	return interceptor.NewNamespaceRateLimitInterceptor(
-		namespaceRegistry,
-		quotas.NewNamespaceRateLimiter(
-			func(req quotas.Request) quotas.RequestRateLimiter {
-				return configs.NewRequestToRateLimiter(configs.NewNamespaceRateBurst(
-					req.Caller,
-					func(namespace string) float64 {
-						return namespaceRPS(
-							serviceConfig,
-							frontendServiceResolver,
-							namespace,
-						)
-					},
-					serviceConfig.MaxNamespaceBurstPerInstance,
-				))
-			},
-		),
-		map[string]int{},
+	rateFn := func(namespace string) float64 {
+		return namespaceRPS(
+			serviceConfig.MaxNamespaceRPSPerInstance,
+			serviceConfig.GlobalNamespaceRPS,
+			frontendServiceResolver,
+			namespace,
+		)
+	}
+
+	visibilityRateFn := func(namespace string) float64 {
+		return namespaceRPS(
+			serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
+			serviceConfig.GlobalNamespaceRPS,
+			frontendServiceResolver,
+			namespace,
+		)
+	}
+	namespaceRateLimiter := quotas.NewNamespaceRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return configs.NewRequestToRateLimiter(
+				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+			)
+		},
 	)
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
 }
 
 func NamespaceCountLimitInterceptorProvider(
