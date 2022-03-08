@@ -67,17 +67,18 @@ type Config struct {
 	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ESIndexMaxResultWindow                    dynamicconfig.IntPropertyFn
 
-	HistoryMaxPageSize                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                                  dynamicconfig.IntPropertyFn
-	MaxNamespaceRPSPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceBurstPerInstance         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceCountPerInstance         dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceVisibilityRPSPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceRPS                   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit                     dynamicconfig.IntPropertyFn
-	EnableClientVersionCheck             dynamicconfig.BoolPropertyFn
-	DisallowQuery                        dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration                dynamicconfig.DurationPropertyFn
+	HistoryMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                                    dynamicconfig.IntPropertyFn
+	MaxNamespaceRPSPerInstance             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceBurstPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceCountPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceVisibilityRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceVisibilityBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit                       dynamicconfig.IntPropertyFn
+	EnableClientVersionCheck               dynamicconfig.BoolPropertyFn
+	DisallowQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
 
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -154,7 +155,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceBurstPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),
 		MaxNamespaceCountPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
-		MaxNamespaceVisibilityRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxVisibilityNamespaceRPSPerInstance, 10),
+		MaxNamespaceVisibilityRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
+		MaxNamespaceVisibilityBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
