@@ -25,13 +25,16 @@
 package history
 
 import (
+	"bytes"
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
-
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -91,7 +94,16 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	defer func() { release(retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
-	if err != nil {
+	switch err.(type) {
+	case nil:
+		if mutableState == nil {
+			return nil
+		}
+	case *serviceerror.NotFound:
+		// the mutable state is deleted and delete history branch operation failed.
+		// use task branch token to delete the leftover history branch
+		return t.deleteHistoryBranch(task.BranchToken)
+	default:
 		return err
 	}
 
@@ -99,9 +111,18 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), lastWriteVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
+	if ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); !ok {
+		currentBranchToken, err := mutableState.GetCurrentBranchToken()
+		if err != nil {
+			return err
+		}
+		// the mutable state has a newer version and the branch token is updated
+		// use task branch token to delete the original branch
+		if !bytes.Equal(task.BranchToken, currentBranchToken) {
+			return t.deleteHistoryBranch(task.BranchToken)
+		}
+		t.logger.Error("Different mutable state versions have the same branch token", tag.TaskVersion(task.Version), tag.LastEventVersion(lastWriteVersion))
+		return serviceerror.NewInternal("Mutable state has different version but same branch token")
 	}
 
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(
@@ -121,4 +142,14 @@ func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 		WorkflowId: task.GetWorkflowID(),
 		RunId:      task.GetRunID(),
 	}
+}
+
+func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(branchToken []byte) error {
+	if len(branchToken) > 0 {
+		return t.shard.GetExecutionManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+			ShardID:     t.shard.GetShardID(),
+			BranchToken: branchToken,
+		})
+	}
+	return nil
 }

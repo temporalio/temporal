@@ -253,6 +253,7 @@ func (s *taskSerializerSuite) TestTimerWorkflowCleanupTask() {
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
 		Version:             rand.Int63(),
+		BranchToken:         []byte{123},
 	}
 
 	s.assertEqualTasks(workflowCleanupTimer)

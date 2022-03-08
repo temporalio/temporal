@@ -811,6 +811,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskToProto(
 		EventId:             0,
 		TaskId:              workflowCleanupTimer.TaskID,
 		VisibilityTime:      &workflowCleanupTimer.VisibilityTimestamp,
+		BranchToken:         workflowCleanupTimer.BranchToken,
 	}
 }
 
@@ -826,6 +827,7 @@ func (s *TaskSerializer) timerWorkflowCleanupTaskFromProto(
 		VisibilityTimestamp: *workflowCleanupTimer.VisibilityTime,
 		TaskID:              workflowCleanupTimer.TaskId,
 		Version:             workflowCleanupTimer.Version,
+		BranchToken:         workflowCleanupTimer.BranchToken,
 	}
 }
 

@@ -206,6 +206,7 @@ message TimerTaskInfo {
     int64 event_id = 9;
     int64 task_id = 10;
     google.protobuf.Timestamp visibility_time = 11 [(gogoproto.stdtime) = true];
+    bytes branch_token = 12;
 }
 
 // activity_map column

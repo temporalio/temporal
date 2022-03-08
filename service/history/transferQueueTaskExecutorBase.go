@@ -246,9 +246,9 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), lastWriteVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	if !ok {
+		return nil
 	}
 
 	return t.workflowDeleteManager.DeleteWorkflowExecution(
