@@ -42,8 +42,8 @@ const (
 	refreshTaskTimeout = 30 * time.Second
 )
 
-// verifyTaskVersion, will return true if failover version check is successful
-func verifyTaskVersion(
+// VerifyTaskVersion, will return true if failover version check is successful
+func VerifyTaskVersion(
 	shard shard.Context,
 	logger log.Logger,
 	namespace *namespace.Namespace,

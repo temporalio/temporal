@@ -27,15 +27,14 @@ package history
 import (
 	"bytes"
 	"context"
-
-	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/log/tag"
 
 	commonpb "go.temporal.io/api/common/v1"
-
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -97,7 +96,9 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
 	switch err.(type) {
 	case nil:
-		// continue the following step
+		if mutableState == nil {
+			return nil
+		}
 	case *serviceerror.NotFound:
 		// the mutable state is deleted and delete history branch operation failed.
 		// use task branch token to delete the leftover history branch
@@ -110,7 +111,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	if err != nil {
 		return err
 	}
-	if ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); !ok {
+	if ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task); !ok {
 		currentBranchToken, err := mutableState.GetCurrentBranchToken()
 		if err != nil {
 			return err
@@ -122,7 +123,8 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		}
 		// it is not expected to hit here. Usually, an updated version means a different branch token
 		// this is to prevent us from deleting the correct branch token
-		return nil
+		t.logger.Error("Different mutable state versions have the same branch token", tag.TaskVersion(task.Version), tag.LastEventVersion(lastWriteVersion))
+		return serviceerror.NewInternal("Mutable state has different version but same branch token")
 	}
 
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(

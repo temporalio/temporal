@@ -129,7 +129,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	if err != nil {
 		return err
 	}
-	ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -349,7 +349,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
 	if !ok {
 		return nil
 	}

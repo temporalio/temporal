@@ -170,7 +170,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	if !ok {
 		return nil
 	}
-	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
+	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), ai.Version, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -215,7 +215,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	if !found {
 		return nil
 	}
-	ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -284,7 +284,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -402,7 +402,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	if !ok {
 		return nil
 	}
-	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, task.Version, task)
+	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -490,7 +490,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		// To do that, probably need to add the SignalRequestID in transfer task.
 		return nil
 	}
-	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
+	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -630,7 +630,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if !ok {
 		return nil
 	}
-	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
+	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -752,7 +752,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	if err != nil {
 		return err
 	}
-	ok := verifyTaskVersion(t.shard, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, currentMutableState.GetNamespaceEntry(), currentStartVersion, task.Version, task)
 	if !ok {
 		return nil
 	}

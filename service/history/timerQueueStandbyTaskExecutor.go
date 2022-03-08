@@ -291,7 +291,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, nil
 		}
 
-		ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
 		if !ok {
 			return nil, nil
 		}
@@ -369,7 +369,7 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
 		if !ok {
 			return nil, nil
 		}

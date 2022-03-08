@@ -314,7 +314,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	if !ok {
 		return nil
 	}
-	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
+	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -447,7 +447,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		}
 		return nil
 	}
-	ok = verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 	if !ok {
 		return nil
 	}
@@ -509,7 +509,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	if err != nil {
 		return err
 	}
-	ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
 	if !ok {
 		return nil
 	}

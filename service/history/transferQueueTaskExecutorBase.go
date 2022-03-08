@@ -246,7 +246,7 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	if err != nil {
 		return err
 	}
-	ok := verifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
 	if !ok {
 		return nil
 	}
