@@ -677,6 +677,20 @@ func (p *metadataPersistenceClient) UpdateNamespace(request *UpdateNamespaceRequ
 	return err
 }
 
+func (p *metadataPersistenceClient) RenameNamespace(request *RenameNamespaceRequest) error {
+	p.metricClient.IncCounter(metrics.PersistenceRenameNamespaceScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceRenameNamespaceScope, metrics.PersistenceLatency)
+	err := p.persistence.RenameNamespace(request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRenameNamespaceScope, err)
+	}
+
+	return err
+}
+
 func (p *metadataPersistenceClient) DeleteNamespace(request *DeleteNamespaceRequest) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteNamespaceScope, metrics.PersistenceRequests)
 
@@ -1025,7 +1039,7 @@ func (c *clusterMetadataPersistenceClient) Close() {
 }
 
 func (c *clusterMetadataPersistenceClient) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
-	//This is a wrapper of GetClusterMetadata API, use the same scope here
+	// This is a wrapper of GetClusterMetadata API, use the same scope here
 	c.metricClient.IncCounter(metrics.PersistenceListClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceListClusterMetadataScope, metrics.PersistenceLatency)
@@ -1040,7 +1054,7 @@ func (c *clusterMetadataPersistenceClient) ListClusterMetadata(request *ListClus
 }
 
 func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
-	//This is a wrapper of GetClusterMetadata API, use the same scope here
+	// This is a wrapper of GetClusterMetadata API, use the same scope here
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceLatency)

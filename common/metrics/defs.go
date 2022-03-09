@@ -264,6 +264,8 @@ const (
 	PersistenceUpdateNamespaceScope
 	// PersistenceDeleteNamespaceScope tracks DeleteNamespace calls made by service to persistence layer
 	PersistenceDeleteNamespaceScope
+	// PersistenceRenameNamespaceScope tracks RenameNamespace calls made by service to persistence layer
+	PersistenceRenameNamespaceScope
 	// PersistenceDeleteNamespaceByNameScope tracks DeleteNamespaceByName calls made by service to persistence layer
 	PersistenceDeleteNamespaceByNameScope
 	// PersistenceListNamespaceScope tracks DeleteNamespaceByName calls made by service to persistence layer
@@ -1273,6 +1275,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		PersistenceGetNamespaceScope:                      {operation: "GetNamespace"},
 		PersistenceUpdateNamespaceScope:                   {operation: "UpdateNamespace"},
 		PersistenceDeleteNamespaceScope:                   {operation: "DeleteNamespace"},
+		PersistenceRenameNamespaceScope:                   {operation: "RenameNamespace"},
 		PersistenceDeleteNamespaceByNameScope:             {operation: "DeleteNamespaceByName"},
 		PersistenceListNamespaceScope:                     {operation: "ListNamespace"},
 		PersistenceGetMetadataScope:                       {operation: "GetMetadata"},

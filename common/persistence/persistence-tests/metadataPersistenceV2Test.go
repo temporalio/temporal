@@ -777,6 +777,93 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.EqualTimes(time.Unix(0, 0).UTC(), *resp6.Namespace.FailoverEndTime)
 }
 
+func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
+	id := uuid.New()
+	name := "rename-namespace-test-name"
+	newName := "rename-namespace-test-new-name"
+	newNewName := "rename-namespace-test-new-new-name"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "rename-namespace-test-description"
+	owner := "rename-namespace-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.EqualValues(id, resp1.ID)
+
+	_, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+
+	err3 := m.MetadataManager.RenameNamespace(&p.RenameNamespaceRequest{
+		OldName: name,
+		NewName: newName,
+	})
+
+	m.NoError(err3)
+
+	resp4, err4 := m.GetNamespace("", newName)
+	m.NoError(err4)
+	m.NotNil(resp4)
+	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(newName, resp4.Namespace.Info.Name)
+	m.Equal(isGlobalNamespace, resp4.IsGlobalNamespace)
+
+	resp5, err5 := m.GetNamespace(id, "")
+	m.NoError(err5)
+	m.NotNil(resp5)
+	m.EqualValues(id, resp5.Namespace.Info.Id)
+	m.Equal(newName, resp5.Namespace.Info.Name)
+	m.Equal(isGlobalNamespace, resp5.IsGlobalNamespace)
+
+	err6 := m.MetadataManager.RenameNamespace(&p.RenameNamespaceRequest{
+		OldName: newName,
+		NewName: newNewName,
+	})
+	m.NoError(err6)
+
+	resp6, err6 := m.GetNamespace(id, "")
+	m.NoError(err6)
+	m.NotNil(resp6)
+	m.EqualValues(id, resp6.Namespace.Info.Id)
+	m.Equal(newNewName, resp6.Namespace.Info.Name)
+	m.Equal(isGlobalNamespace, resp6.IsGlobalNamespace)
+}
+
 // TestDeleteNamespace test
 func (m *MetadataPersistenceSuiteV2) TestDeleteNamespace() {
 	id := uuid.New()

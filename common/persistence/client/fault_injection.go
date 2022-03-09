@@ -720,6 +720,13 @@ func (m *FaultInjectionMetadataStore) UpdateNamespace(request *persistence.Inter
 	return m.baseMetadataStore.UpdateNamespace(request)
 }
 
+func (m *FaultInjectionMetadataStore) RenameNamespace(request *persistence.InternalRenameNamespaceRequest) error {
+	if err := m.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return m.baseMetadataStore.RenameNamespace(request)
+}
+
 func (m *FaultInjectionMetadataStore) DeleteNamespace(request *persistence.DeleteNamespaceRequest) error {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return err

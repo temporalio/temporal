@@ -49,7 +49,7 @@ type (
 
 var _ MetadataManager = (*metadataManagerImpl)(nil)
 
-//NewMetadataManagerImpl returns new MetadataManager
+// NewMetadataManagerImpl returns new MetadataManager
 func NewMetadataManagerImpl(
 	persistence MetadataStore,
 	serializer serialization.Serializer,
@@ -103,6 +103,42 @@ func (m *metadataManagerImpl) UpdateNamespace(request *UpdateNamespaceRequest) e
 		NotificationVersion: request.NotificationVersion,
 		IsGlobal:            request.IsGlobalNamespace,
 	})
+}
+
+func (m *metadataManagerImpl) RenameNamespace(request *RenameNamespaceRequest) error {
+	ns, err := m.GetNamespace(&GetNamespaceRequest{
+		Name: request.OldName,
+	})
+	if err != nil {
+		return err
+	}
+
+	metadata, err := m.GetMetadata()
+	if err != nil {
+		return err
+	}
+
+	previousName := ns.Namespace.Info.Name
+	ns.Namespace.Info.Name = request.NewName
+
+	nsDataBlob, err := m.serializer.NamespaceDetailToBlob(ns.Namespace, enumspb.ENCODING_TYPE_PROTO3)
+	if err != nil {
+		return err
+	}
+
+	renameRequest := &InternalRenameNamespaceRequest{
+		InternalUpdateNamespaceRequest: &InternalUpdateNamespaceRequest{
+			Id:                  ns.Namespace.Info.Id,
+			Name:                ns.Namespace.Info.Name,
+			Namespace:           nsDataBlob,
+			NotificationVersion: metadata.NotificationVersion,
+			IsGlobal:            ns.IsGlobalNamespace,
+		},
+		PreviousName:                previousName,
+		PreviousNotificationVersion: ns.NotificationVersion,
+	}
+
+	return m.persistence.RenameNamespace(renameRequest)
 }
 
 func (m *metadataManagerImpl) DeleteNamespace(request *DeleteNamespaceRequest) error {

@@ -88,6 +88,10 @@ const (
 		templateNamespaceColumns +
 		` FROM namespaces ` +
 		`WHERE namespaces_partition = ? `
+
+	templateUpdateNamespaceByIdQuery = `UPDATE namespaces_by_id ` +
+		`SET name = ?` +
+		`WHERE id = ? `
 )
 
 type (
@@ -193,6 +197,104 @@ func (m *MetadataStore) UpdateNamespace(request *p.InternalUpdateNamespaceReques
 
 	if !applied {
 		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateNamespace operation failed because of conditional failure."))
+	}
+
+	return nil
+}
+
+func (m *MetadataStore) RenameNamespace(request *p.InternalRenameNamespaceRequest) error {
+	return m.RenameNamespace1(request)
+}
+
+func (m *MetadataStore) RenameNamespace1(request *p.InternalRenameNamespaceRequest) error {
+	// Step 1. Batch of:
+	//         Insert row into `namespaces` table with new name and new `notification_version`.
+	//         Delete row from `namespaces` table with old name.
+	//         Update `notification_version` in metadata row
+	// Step 2. Update `namespaces_by_id` row to new name.
+
+	batch := m.session.NewBatch(gocql.LoggedBatch)
+	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
+		constNamespacePartition,
+		request.Id,
+		request.Name,
+		request.Namespace.Data,
+		request.Namespace.EncodingType.String(),
+		request.NotificationVersion,
+		request.IsGlobal,
+	)
+	batch.Query(templateDeleteNamespaceByNameQueryV2,
+		constNamespacePartition,
+		request.PreviousName,
+	)
+	m.updateMetadataBatch(batch, request.NotificationVersion)
+
+	previous := make(map[string]interface{})
+	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", err))
+	}
+	defer func() { _ = iter.Close() }()
+
+	if !applied {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed because of conditional failure."))
+	}
+
+	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
+		request.Name,
+		request.Id,
+	).Exec(); updateErr != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed to update 'namespaces_by_id' table. Error: %v", updateErr))
+	}
+
+	return nil
+}
+
+func (m *MetadataStore) RenameNamespace2(request *p.InternalRenameNamespaceRequest) error {
+	// Step 1. Insert row into `namespaces` table with new name and old `notification_version`.
+	// Step 2. Update `namespaces_by_id` row to new name.
+	// Step 3. Batch of:
+	//         Delete row from `namespaces` table with old name.
+	//         Update `notification_version` in metadata row.
+
+	// Step 1.
+	if createErr := m.session.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
+		constNamespacePartition,
+		request.Id,
+		request.Name,
+		request.Namespace.Data,
+		request.Namespace.EncodingType.String(),
+		request.PreviousNotificationVersion,
+		request.IsGlobal,
+	).Exec(); createErr != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", createErr))
+	}
+
+	// Step 2.
+	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
+		request.Name,
+		request.Id,
+	).Exec(); updateErr != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", updateErr))
+	}
+
+	// Step 3.
+	batch := m.session.NewBatch(gocql.LoggedBatch)
+	batch.Query(templateDeleteNamespaceByNameQueryV2,
+		constNamespacePartition,
+		request.PreviousName,
+	)
+	m.updateMetadataBatch(batch, request.NotificationVersion)
+
+	previous := make(map[string]interface{})
+	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", err))
+	}
+	defer func() { _ = iter.Close() }()
+
+	if !applied {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed because of conditional failure."))
 	}
 
 	return nil

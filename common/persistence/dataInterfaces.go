@@ -623,6 +623,12 @@ type (
 		NotificationVersion int64
 	}
 
+	// RenameNamespaceRequest is used to rename namespace.
+	RenameNamespaceRequest struct {
+		OldName string
+		NewName string
+	}
+
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
 	DeleteNamespaceRequest struct {
 		ID string
@@ -1065,6 +1071,7 @@ type (
 		CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error)
 		GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error)
 		UpdateNamespace(request *UpdateNamespaceRequest) error
+		RenameNamespace(request *RenameNamespaceRequest) error
 		DeleteNamespace(request *DeleteNamespaceRequest) error
 		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
 		ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error)
