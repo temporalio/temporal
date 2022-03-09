@@ -105,7 +105,11 @@ func buildCLIOptions() *cli.App {
 			Name:  schema.CLIFlagQuiet,
 			Usage: "Don't set exit status to 1 on error",
 		},
-
+		cli.BoolFlag{
+			Name:   schema.CLIFlagDisableInitialHostLookup,
+			Usage:  "instructs gocql driver to only connect to the supplied hosts vs. attempting to lookup additional hosts via the system.peers table",
+			EnvVar: "CASSANDRA_DISABLE_INITIAL_HOST_LOOKUP",
+		},
 		cli.BoolFlag{
 			Name:   schema.CLIFlagEnableTLS,
 			Usage:  "enable TLS",
