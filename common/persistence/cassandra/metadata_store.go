@@ -207,13 +207,20 @@ func (m *MetadataStore) RenameNamespace(request *p.InternalRenameNamespaceReques
 }
 
 // Does almost everything in one batch. The only separate thing is namespaecs_by_id update which is almost not used now.
-// Can't be retried because PreviousName is deleted within the batch.
+// Can be retried but data between steps is inconsistens (points to the name which doesn't exist).
 func (m *MetadataStore) RenameNamespace1(request *p.InternalRenameNamespaceRequest) error {
-	// Step 1. Batch of:
+	// Step 1. Update `namespaces_by_id` row to new name.
+	// Step 2. Batch of:
 	//         Insert row into `namespaces` table with new name and new `notification_version`.
 	//         Delete row from `namespaces` table with old name.
 	//         Update `notification_version` in metadata row
-	// Step 2. Update `namespaces_by_id` row to new name.
+
+	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
+		request.Name,
+		request.Id,
+	).Exec(); updateErr != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed to update 'namespaces_by_id' table. Error: %v", updateErr))
+	}
 
 	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
@@ -234,25 +241,21 @@ func (m *MetadataStore) RenameNamespace1(request *p.InternalRenameNamespaceReque
 	previous := make(map[string]interface{})
 	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
 	if err != nil {
+		// TODO: Update namepspaces_by_id to previous name before returning error???
 		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", err))
 	}
 	defer func() { _ = iter.Close() }()
 
 	if !applied {
+		// TODO: Update namepspaces_by_id to previous name before returning error???
 		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed because of conditional failure."))
-	}
-
-	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
-		request.Name,
-		request.Id,
-	).Exec(); updateErr != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed to update 'namespaces_by_id' table. Error: %v", updateErr))
 	}
 
 	return nil
 }
 
 // Does number of sequencial steps which can be retried.
+// After every step data is in consistence state.
 func (m *MetadataStore) RenameNamespace2(request *p.InternalRenameNamespaceRequest) error {
 	// Step 1. Insert row into `namespaces` table with new name and old `notification_version`.
 	// Step 2. Update `namespaces_by_id` row to new name.
