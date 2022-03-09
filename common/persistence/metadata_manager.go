@@ -134,8 +134,7 @@ func (m *metadataManagerImpl) RenameNamespace(request *RenameNamespaceRequest) e
 			NotificationVersion: metadata.NotificationVersion,
 			IsGlobal:            ns.IsGlobalNamespace,
 		},
-		PreviousName:                previousName,
-		PreviousNotificationVersion: ns.NotificationVersion,
+		PreviousName: previousName,
 	}
 
 	return m.persistence.RenameNamespace(renameRequest)

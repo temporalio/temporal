@@ -833,7 +833,6 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 		PreviousName: name,
 		NewName:      newName,
 	})
-
 	m.NoError(err3)
 
 	resp4, err4 := m.GetNamespace("", newName)

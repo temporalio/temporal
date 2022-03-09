@@ -202,19 +202,18 @@ func (m *MetadataStore) UpdateNamespace(request *p.InternalUpdateNamespaceReques
 	return nil
 }
 
+// RenameNamespace should be used with caution.
+// Not every namespace can be renamed because namespace name are stored in the database.
+// It may leave database in inconsistent state and must be retried until success.
+// Step 1. Update row in `namespaces_by_id` table with the new name.
+// Step 2. Batch of:
+//         Insert row into `namespaces` table with new name and new `notification_version`.
+//         Delete row from `namespaces` table with old name.
+//         Update `notification_version` in metadata row.
+//
+// NOTE: `namespaces_by_id` is currently used only for `DescribeNamespace` API and namespace Id collision check.
 func (m *MetadataStore) RenameNamespace(request *p.InternalRenameNamespaceRequest) error {
-	return m.RenameNamespace1(request)
-}
-
-// Does almost everything in one batch. The only separate thing is namespaecs_by_id update which is almost not used now.
-// Can be retried but data between steps is inconsistens (points to the name which doesn't exist).
-func (m *MetadataStore) RenameNamespace1(request *p.InternalRenameNamespaceRequest) error {
-	// Step 1. Update `namespaces_by_id` row to new name.
-	// Step 2. Batch of:
-	//         Insert row into `namespaces` table with new name and new `notification_version`.
-	//         Delete row from `namespaces` table with old name.
-	//         Update `notification_version` in metadata row
-
+	// Step 1.
 	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
 		request.Name,
 		request.Id,
@@ -222,6 +221,7 @@ func (m *MetadataStore) RenameNamespace1(request *p.InternalRenameNamespaceReque
 		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed to update 'namespaces_by_id' table. Error: %v", updateErr))
 	}
 
+	// Step 2.
 	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
 		constNamespacePartition,
@@ -232,60 +232,6 @@ func (m *MetadataStore) RenameNamespace1(request *p.InternalRenameNamespaceReque
 		request.NotificationVersion,
 		request.IsGlobal,
 	)
-	batch.Query(templateDeleteNamespaceByNameQueryV2,
-		constNamespacePartition,
-		request.PreviousName,
-	)
-	m.updateMetadataBatch(batch, request.NotificationVersion)
-
-	previous := make(map[string]interface{})
-	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
-	if err != nil {
-		// TODO: Update namepspaces_by_id to previous name before returning error???
-		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", err))
-	}
-	defer func() { _ = iter.Close() }()
-
-	if !applied {
-		// TODO: Update namepspaces_by_id to previous name before returning error???
-		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed because of conditional failure."))
-	}
-
-	return nil
-}
-
-// Does number of sequencial steps which can be retried.
-// After every step data is in consistence state.
-func (m *MetadataStore) RenameNamespace2(request *p.InternalRenameNamespaceRequest) error {
-	// Step 1. Insert row into `namespaces` table with new name and old `notification_version`.
-	// Step 2. Update `namespaces_by_id` row to new name.
-	// Step 3. Batch of:
-	//         Delete row from `namespaces` table with old name.
-	//         Update `notification_version` in metadata row.
-
-	// Step 1.
-	if createErr := m.session.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
-		constNamespacePartition,
-		request.Id,
-		request.Name,
-		request.Namespace.Data,
-		request.Namespace.EncodingType.String(),
-		request.PreviousNotificationVersion,
-		request.IsGlobal,
-	).Exec(); createErr != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", createErr))
-	}
-
-	// Step 2.
-	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
-		request.Name,
-		request.Id,
-	).Exec(); updateErr != nil {
-		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", updateErr))
-	}
-
-	// Step 3.
-	batch := m.session.NewBatch(gocql.LoggedBatch)
 	batch.Query(templateDeleteNamespaceByNameQueryV2,
 		constNamespacePartition,
 		request.PreviousName,

@@ -628,8 +628,7 @@ type (
 
 	InternalRenameNamespaceRequest struct {
 		*InternalUpdateNamespaceRequest
-		PreviousName                string
-		PreviousNotificationVersion int64
+		PreviousName string
 	}
 
 	// InternalListNamespacesResponse is the response for GetNamespace
