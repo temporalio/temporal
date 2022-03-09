@@ -115,67 +115,6 @@ message ListHistoryTasksResponse {
     bytes next_page_token = 2;
 }
 
-message ListTransferTasksRequest{
-    option deprecated = true;
-    int32 shard_id = 1;
-    int64 min_task_id = 2;
-    int64 max_task_id = 4;
-    int32 batch_size = 5;
-    bytes next_page_token = 6;
-}
-
-message ListTransferTasksResponse {
-    option deprecated = true;
-    repeated Task tasks = 1;
-    bytes next_page_token = 2;
-}
-
-message ListVisibilityTasksRequest{
-    option deprecated = true;
-    int32 shard_id = 1;
-    int64 read_level = 2;
-    int64 max_read_level = 4;
-    int32 batch_size = 5;
-    bytes next_page_token = 6;
-}
-
- message ListVisibilityTasksResponse {
-    option deprecated = true;
-    repeated Task tasks = 1;
-    bytes next_page_token = 2;
-}
-
-message ListTimerTasksRequest{ 
-    option deprecated = true;
-    int32 shard_id = 1;
-    google.protobuf.Timestamp min_time = 2 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp max_time = 3 [(gogoproto.stdtime) = true];
-    int32 batch_size = 4;
-    bytes next_page_token = 5;
-}
-
-
-message ListTimerTasksResponse {
-    option deprecated = true;
-    repeated Task tasks = 1;
-    bytes next_page_token = 2;
-}
-
-message ListReplicationTasksRequest {
-    option deprecated = true;
-    int32 shard_id = 1;
-    int64 min_task_id = 2;
-    int64 max_task_id = 3;
-    int32 batch_size = 4;
-    bytes next_page_token = 5;
-}
-
-message ListReplicationTasksResponse {
-    option deprecated = true;
-    repeated Task tasks = 1;
-    bytes next_page_token = 2;
-}
-
 message Task {
     string namespace_id = 1;
     string workflow_id = 2;
