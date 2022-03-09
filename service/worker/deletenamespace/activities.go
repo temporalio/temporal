@@ -145,11 +145,11 @@ func (a *activities) CheckExecutionsExistActivity(_ context.Context, nsID namesp
 }
 
 func (a *activities) DeleteNamespaceActivity(_ context.Context, nsName namespace.Name, nsID namespace.ID) error {
-	deleteNamespaceRequest := &persistence.DeleteNamespaceRequest{
-		ID: nsID.String(),
+	deleteNamespaceRequest := &persistence.DeleteNamespaceByNameRequest{
+		Name: nsName.String(),
 	}
 
-	err := a.metadataManager.DeleteNamespace(deleteNamespaceRequest)
+	err := a.metadataManager.DeleteNamespaceByName(deleteNamespaceRequest)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
 		a.logger.Error("Unable delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
