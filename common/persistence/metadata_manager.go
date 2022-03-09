@@ -107,7 +107,7 @@ func (m *metadataManagerImpl) UpdateNamespace(request *UpdateNamespaceRequest) e
 
 func (m *metadataManagerImpl) RenameNamespace(request *RenameNamespaceRequest) error {
 	ns, err := m.GetNamespace(&GetNamespaceRequest{
-		Name: request.OldName,
+		Name: request.PreviousName,
 	})
 	if err != nil {
 		return err

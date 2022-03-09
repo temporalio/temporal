@@ -830,8 +830,8 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 	m.NoError(err2)
 
 	err3 := m.MetadataManager.RenameNamespace(&p.RenameNamespaceRequest{
-		OldName: name,
-		NewName: newName,
+		PreviousName: name,
+		NewName:      newName,
 	})
 
 	m.NoError(err3)
@@ -851,8 +851,8 @@ func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
 	m.Equal(isGlobalNamespace, resp5.IsGlobalNamespace)
 
 	err6 := m.MetadataManager.RenameNamespace(&p.RenameNamespaceRequest{
-		OldName: newName,
-		NewName: newNewName,
+		PreviousName: newName,
+		NewName:      newNewName,
 	})
 	m.NoError(err6)
 

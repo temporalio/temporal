@@ -625,8 +625,8 @@ type (
 
 	// RenameNamespaceRequest is used to rename namespace.
 	RenameNamespaceRequest struct {
-		OldName string
-		NewName string
+		PreviousName string
+		NewName      string
 	}
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table

@@ -90,8 +90,8 @@ const (
 		`WHERE namespaces_partition = ? `
 
 	templateUpdateNamespaceByIdQuery = `UPDATE namespaces_by_id ` +
-		`SET name = ?` +
-		`WHERE id = ? `
+		`SET name = ? ` +
+		`WHERE id = ?`
 )
 
 type (
@@ -206,6 +206,8 @@ func (m *MetadataStore) RenameNamespace(request *p.InternalRenameNamespaceReques
 	return m.RenameNamespace1(request)
 }
 
+// Does almost everything in one batch. The only separate thing is namespaecs_by_id update which is almost not used now.
+// Can't be retried because PreviousName is deleted within the batch.
 func (m *MetadataStore) RenameNamespace1(request *p.InternalRenameNamespaceRequest) error {
 	// Step 1. Batch of:
 	//         Insert row into `namespaces` table with new name and new `notification_version`.
@@ -250,6 +252,7 @@ func (m *MetadataStore) RenameNamespace1(request *p.InternalRenameNamespaceReque
 	return nil
 }
 
+// Does number of sequencial steps which can be retried.
 func (m *MetadataStore) RenameNamespace2(request *p.InternalRenameNamespaceRequest) error {
 	// Step 1. Insert row into `namespaces` table with new name and old `notification_version`.
 	// Step 2. Update `namespaces_by_id` row to new name.
