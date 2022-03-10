@@ -74,12 +74,12 @@ task_queue_id = :task_queue_id
 	// *** Tasks Below ***
 	getTaskMinMaxQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
-		`WHERE range_hash = ? AND task_queue_id = ? AND task_id > ? AND task_id <= ? ` +
+		`WHERE range_hash = ? AND task_queue_id = ? AND task_id >= ? AND task_id < ? ` +
 		` ORDER BY task_id LIMIT ?`
 
 	getTaskMinQry = `SELECT task_id, data, data_encoding ` +
 		`FROM tasks ` +
-		`WHERE range_hash = ? AND task_queue_id = ? AND task_id > ? ORDER BY task_id LIMIT ?`
+		`WHERE range_hash = ? AND task_queue_id = ? AND task_id >= ? ORDER BY task_id LIMIT ?`
 
 	createTaskQry = `INSERT INTO ` +
 		`tasks(range_hash, task_queue_id, task_id, data, data_encoding) ` +
@@ -90,7 +90,7 @@ task_queue_id = :task_queue_id
 
 	rangeDeleteTaskQry = `DELETE FROM tasks ` +
 		`WHERE range_hash = ? AND task_queue_id = ? AND task_id IN (SELECT task_id FROM
-		 tasks WHERE range_hash = ? AND task_queue_id = ? AND task_id <= ? ` +
+		 tasks WHERE range_hash = ? AND task_queue_id = ? AND task_id < ? ` +
 		`ORDER BY task_queue_id,task_id LIMIT ? ) `
 )
 
@@ -113,13 +113,13 @@ func (mdb *db) SelectFromTasks(
 	var err error
 	var rows []sqlplugin.TasksRow
 	switch {
-	case filter.MaxTaskID != nil:
+	case filter.ExclusiveMaxTaskID != nil:
 		err = mdb.conn.SelectContext(ctx,
 			&rows, getTaskMinMaxQry,
 			filter.RangeHash,
 			filter.TaskQueueID,
-			*filter.MinTaskID,
-			*filter.MaxTaskID,
+			*filter.InclusiveMinTaskID,
+			*filter.ExclusiveMaxTaskID,
 			*filter.PageSize,
 		)
 	default:
@@ -127,7 +127,7 @@ func (mdb *db) SelectFromTasks(
 			&rows, getTaskMinQry,
 			filter.RangeHash,
 			filter.TaskQueueID,
-			*filter.MinTaskID,
+			*filter.ExclusiveMaxTaskID,
 			*filter.PageSize,
 		)
 	}
@@ -142,7 +142,7 @@ func (mdb *db) DeleteFromTasks(
 	ctx context.Context,
 	filter sqlplugin.TasksFilter,
 ) (sql.Result, error) {
-	if filter.TaskIDLessThanEquals != nil {
+	if filter.ExclusiveMaxTaskID != nil {
 		if filter.Limit == nil || *filter.Limit == 0 {
 			return nil, fmt.Errorf("missing limit parameter")
 		}
@@ -152,7 +152,7 @@ func (mdb *db) DeleteFromTasks(
 			filter.TaskQueueID,
 			filter.RangeHash,
 			filter.TaskQueueID,
-			*filter.TaskIDLessThanEquals,
+			*filter.ExclusiveMaxTaskID,
 			*filter.Limit,
 		)
 	}

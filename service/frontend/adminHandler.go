@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"sync/atomic"
 	"time"
@@ -1431,7 +1432,9 @@ func (adh *AdminHandler) ResendReplicationTasks(
 }
 
 // GetTaskQueueTasks returns tasks from task queue
-// TODO: support pagination
+// TODO: existing behavior for the requested range is (exclusive, inclusive],
+// we can deprecate old fields and define new one to make the range consistent
+// with the persistence layer.
 func (adh *AdminHandler) GetTaskQueueTasks(
 	ctx context.Context,
 	request *adminservice.GetTaskQueueTasksRequest,
@@ -1449,12 +1452,20 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		return nil, adh.error(err, scope)
 	}
 
+	inclusiveMinTaskID := request.GetMinTaskId()
+	if inclusiveMinTaskID < math.MaxInt64 {
+		inclusiveMinTaskID++
+	}
+	exclusiveMaxTaskID := request.GetMaxTaskId()
+	if exclusiveMaxTaskID < math.MaxInt64 {
+		exclusiveMaxTaskID++
+	}
 	resp, err := adh.taskManager.GetTasks(&persistence.GetTasksRequest{
 		NamespaceID:        namespaceID.String(),
 		TaskQueue:          request.GetTaskQueue(),
 		TaskType:           request.GetTaskQueueType(),
-		MinTaskIDExclusive: request.GetMinTaskId(),
-		MaxTaskIDInclusive: request.GetMaxTaskId(),
+		InclusiveMinTaskID: inclusiveMinTaskID,
+		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 		PageSize:           int(request.GetBatchSize()),
 		NextPageToken:      request.NextPageToken,
 	})

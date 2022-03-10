@@ -1248,7 +1248,7 @@ func (s *TestBase) GetTasks(namespaceID string, taskQueue string, taskType enums
 		TaskQueue:          taskQueue,
 		TaskType:           taskType,
 		PageSize:           batchSize,
-		MaxTaskIDInclusive: math.MaxInt64,
+		ExclusiveMaxTaskID: math.MaxInt64,
 	})
 
 	if err != nil {

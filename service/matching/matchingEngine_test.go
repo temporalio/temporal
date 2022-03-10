@@ -2031,7 +2031,7 @@ func (m *testTaskManager) CompleteTasksLessThan(request *persistence.CompleteTas
 	keys := tlm.tasks.Keys()
 	for _, key := range keys {
 		id := key.(int64)
-		if id <= request.TaskID {
+		if id < request.ExclusiveMaxTaskID {
 			tlm.tasks.Remove(id)
 		}
 	}
@@ -2097,7 +2097,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 // GetTasks provides a mock function with given fields: request
 func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
-	m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.MinTaskIDExclusive), tag.ReadLevel(request.MaxTaskIDInclusive))
+	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
 	tlm.Lock()
@@ -2107,10 +2107,10 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	it := tlm.tasks.Iterator()
 	for it.Next() {
 		taskID := it.Key().(int64)
-		if taskID <= request.MinTaskIDExclusive {
+		if taskID < request.InclusiveMinTaskID {
 			continue
 		}
-		if taskID > request.MaxTaskIDInclusive {
+		if taskID >= request.ExclusiveMaxTaskID {
 			break
 		}
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))
