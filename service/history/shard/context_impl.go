@@ -836,35 +836,44 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 	// Do not get namespace cache within shard lock.
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
+	deleteVisibilityRecord := true
 	if err != nil {
-		return err
+		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+			// If namespace is not found, skip visibility record delete but proceed with other deletions.
+			// This case might happen during namespace deletion.
+			deleteVisibilityRecord = false
+		} else {
+			return err
+		}
 	}
 
 	s.wLock()
 	defer s.wUnlock()
 
 	// Step 1. Delete visibility.
-	addTasksRequest := &persistence.AddHistoryTasksRequest{
-		ShardID:     s.shardID,
-		NamespaceID: key.NamespaceID,
-		WorkflowID:  key.WorkflowID,
-		RunID:       key.RunID,
+	if deleteVisibilityRecord {
+		addTasksRequest := &persistence.AddHistoryTasksRequest{
+			ShardID:     s.shardID,
+			NamespaceID: key.NamespaceID,
+			WorkflowID:  key.WorkflowID,
+			RunID:       key.RunID,
 
-		Tasks: map[tasks.Category][]tasks.Task{
-			tasks.CategoryVisibility: {
-				&tasks.DeleteExecutionVisibilityTask{
-					// TaskID is set by addTasksLocked
-					WorkflowKey:         key,
-					VisibilityTimestamp: s.timeSource.Now(),
-					Version:             newTaskVersion,
-					CloseTime:           closeTime,
+			Tasks: map[tasks.Category][]tasks.Task{
+				tasks.CategoryVisibility: {
+					&tasks.DeleteExecutionVisibilityTask{
+						// TaskID is set by addTasksLocked
+						WorkflowKey:         key,
+						VisibilityTimestamp: s.timeSource.Now(),
+						Version:             newTaskVersion,
+						CloseTime:           closeTime,
+					},
 				},
 			},
-		},
-	}
-	err = s.addTasksLocked(addTasksRequest, namespaceEntry)
-	if err != nil {
-		return err
+		}
+		err = s.addTasksLocked(addTasksRequest, namespaceEntry)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Step 2. Delete current workflow execution pointer.
