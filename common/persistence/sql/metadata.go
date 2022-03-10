@@ -149,6 +149,14 @@ func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin
 }
 
 func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpdateNamespaceRequest) error {
+	return m.updateNamespace(request, "UpdateNamespace")
+}
+
+func (m *sqlMetadataManagerV2) RenameNamespace(request *persistence.InternalRenameNamespaceRequest) error {
+	return m.updateNamespace(request.InternalUpdateNamespaceRequest, "RenameNamespace")
+}
+
+func (m *sqlMetadataManagerV2) updateNamespace(request *persistence.InternalUpdateNamespaceRequest, operationName string) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.Id)
@@ -156,7 +164,7 @@ func (m *sqlMetadataManagerV2) UpdateNamespace(request *persistence.InternalUpda
 		return err
 	}
 
-	return m.txExecute(ctx, "UpdateNamespace", func(tx sqlplugin.Tx) error {
+	return m.txExecute(ctx, operationName, func(tx sqlplugin.Tx) error {
 		metadata, err := lockMetadata(ctx, tx)
 		if err != nil {
 			return err

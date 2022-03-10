@@ -940,6 +940,20 @@ func (mr *MockMetadataManagerMockRecorder) ListNamespaces(request interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockMetadataManager)(nil).ListNamespaces), request)
 }
 
+// RenameNamespace mocks base method.
+func (m *MockMetadataManager) RenameNamespace(request *RenameNamespaceRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RenameNamespace", request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RenameNamespace indicates an expected call of RenameNamespace.
+func (mr *MockMetadataManagerMockRecorder) RenameNamespace(request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenameNamespace", reflect.TypeOf((*MockMetadataManager)(nil).RenameNamespace), request)
+}
+
 // UpdateNamespace mocks base method.
 func (m *MockMetadataManager) UpdateNamespace(request *UpdateNamespaceRequest) error {
 	m.ctrl.T.Helper()

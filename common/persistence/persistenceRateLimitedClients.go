@@ -445,6 +445,15 @@ func (p *metadataRateLimitedPersistenceClient) UpdateNamespace(request *UpdateNa
 	return err
 }
 
+func (p *metadataRateLimitedPersistenceClient) RenameNamespace(request *RenameNamespaceRequest) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.RenameNamespace(request)
+	return err
+}
+
 func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(request *DeleteNamespaceRequest) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded

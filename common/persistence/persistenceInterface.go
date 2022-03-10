@@ -81,6 +81,7 @@ type (
 		CreateNamespace(request *InternalCreateNamespaceRequest) (*CreateNamespaceResponse, error)
 		GetNamespace(request *GetNamespaceRequest) (*InternalGetNamespaceResponse, error)
 		UpdateNamespace(request *InternalUpdateNamespaceRequest) error
+		RenameNamespace(request *InternalRenameNamespaceRequest) error
 		DeleteNamespace(request *DeleteNamespaceRequest) error
 		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
 		ListNamespaces(request *ListNamespacesRequest) (*InternalListNamespacesResponse, error)
@@ -623,6 +624,11 @@ type (
 		Namespace           *commonpb.DataBlob
 		NotificationVersion int64
 		IsGlobal            bool
+	}
+
+	InternalRenameNamespaceRequest struct {
+		*InternalUpdateNamespaceRequest
+		PreviousName string
 	}
 
 	// InternalListNamespacesResponse is the response for GetNamespace
