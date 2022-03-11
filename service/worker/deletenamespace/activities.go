@@ -155,7 +155,7 @@ func (a *activities) RenameNamespaceActivity(_ context.Context, previousName nam
 		return err
 	}
 
-	a.logger.Info("Namespace renamed successfully..", tag.WorkflowNamespace(previousName.String()), tag.WorkflowNamespace(newName.String()))
+	a.logger.Info("Namespace renamed successfully.", tag.WorkflowNamespace(previousName.String()), tag.WorkflowNamespace(newName.String()))
 	return nil
 }
 

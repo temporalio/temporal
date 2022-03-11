@@ -43,7 +43,8 @@ const (
 	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-delete-namespace-workflow"
 
-	checkMaxAttempts = 10
+	checkMaxAttempts           = 10
+	namespaceCacheRefreshDelay = 11 * time.Second
 )
 
 type (
@@ -158,6 +159,11 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		return fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", ErrUnableToExecuteActivity, err)
 	}
 
+	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
+	if err != nil {
+		return err
+	}
+
 	// Step 3. Rename namespace.
 	ctx3 := workflow.WithLocalActivityOptions(ctx, generateDeletedNamespaceNameActivityOptions)
 	var newName namespace.Name
@@ -173,20 +179,18 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	}
 	params.Namespace = newName
 
-	// Step 4. Wait for namespace cache to be updated.
-	const namespaceCacheRefreshDelay = 11 * time.Second
 	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
 	if err != nil {
 		return err
 	}
 
-	// Step 5. Delete workflow executions.
+	// Step 4. Delete workflow executions.
 	err = deleteWorkflowExecutions(ctx, params, a, logger)
 	if err != nil {
 		return err
 	}
 
-	// Step 6. Delete namespace.
+	// Step 5. Delete namespace.
 	ctx5 := workflow.WithLocalActivityOptions(ctx, deleteNamespaceActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx5, a.DeleteNamespaceActivity, params.Namespace, params.NamespaceID).Get(ctx, nil)
 	if err != nil {
