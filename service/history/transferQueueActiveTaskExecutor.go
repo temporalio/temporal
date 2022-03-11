@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	ns "go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -1295,7 +1294,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	namespaceID string,
-	namespace string,
+	namespaceName string,
 	parentExecution *commonpb.WorkflowExecution,
 	childInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) error {
@@ -1307,7 +1306,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	scope := t.metricsClient.Scope(metrics.TransferActiveTaskCloseExecutionScope)
 
 	if t.shard.GetConfig().EnableParentClosePolicyWorker() &&
-		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(namespace) {
+		len(childInfos) >= t.shard.GetConfig().ParentClosePolicyThreshold(namespaceName) {
 
 		executions := make([]parentclosepolicy.RequestDetail, 0, len(childInfos))
 		for _, childInfo := range childInfos {
@@ -1315,14 +1314,19 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 				continue
 			}
 
-			childNamespaceId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
-			if err != nil {
+			childNamespaceId, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
+			switch err.(type) {
+			case nil:
+			case *serviceerror.NotFound:
+				// If child namespace is deleted there is nothing to close.
+				continue
+			default:
 				return err
 			}
 
 			executions = append(executions, parentclosepolicy.RequestDetail{
 				Namespace:   childInfo.Namespace,
-				NamespaceID: string(childNamespaceId),
+				NamespaceID: childNamespaceId.String(),
 				WorkflowID:  childInfo.StartedWorkflowId,
 				RunID:       childInfo.StartedRunId,
 				Policy:      childInfo.ParentClosePolicy,
@@ -1334,7 +1338,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		}
 
 		request := parentclosepolicy.Request{
-			Namespace:       namespace,
+			Namespace:       namespaceName,
 			NamespaceID:     namespaceID,
 			ParentExecution: *parentExecution,
 			Executions:      executions,
@@ -1371,12 +1375,15 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return nil
 
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-		childNamespaceId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
-		if err != nil {
+		childNamespaceId, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
+		switch err.(type) {
+		case nil, *serviceerror.NotFound:
+			// If child namespace is deleted there is nothing to close.
+		default:
 			return err
 		}
 		_, err = t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
-			NamespaceId: string(childNamespaceId),
+			NamespaceId: childNamespaceId.String(),
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
@@ -1394,13 +1401,16 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
-		nsId, err := t.registry.GetNamespaceID(ns.Name(childInfo.GetNamespace()))
-		if err != nil {
+		childNamespaceId, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
+		switch err.(type) {
+		case nil, *serviceerror.NotFound:
+			// If child namespace is deleted there is nothing to close.
+		default:
 			return err
 		}
 
 		_, err = t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
-			NamespaceId: string(nsId),
+			NamespaceId: childNamespaceId.String(),
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),
 				WorkflowExecution: &commonpb.WorkflowExecution{
