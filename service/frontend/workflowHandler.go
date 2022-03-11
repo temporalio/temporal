@@ -959,6 +959,10 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errRequestNotSet
 	}
 
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, errIdentityTooLong
+	}
+
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
@@ -971,10 +975,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	)
 	if err != nil {
 		return nil, err
-	}
-
-	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
-		return nil, errIdentityTooLong
 	}
 
 	completedResp := &workflowservice.RespondWorkflowTaskCompletedResponse{}
