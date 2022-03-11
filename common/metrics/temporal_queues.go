@@ -42,5 +42,8 @@ func GetPerTaskQueueScope(
 		metricTaskQueueName = unknownValue
 	}
 
-	return baseScope.Tagged(NamespaceTag(namespaceName), TaskQueueTag(metricTaskQueueName))
+	return baseScope.Tagged(
+		NamespaceTag(namespaceName),
+		TaskQueueTag(metricTaskQueueName),
+	)
 }

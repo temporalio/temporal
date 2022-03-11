@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -133,6 +134,10 @@ func TaskQueueTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: taskQueue, value: sanitizer.Value(value)}
+}
+
+func TaskQueueTypeTag(tqType enums.TaskQueueType) Tag {
+	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
 }
 
 // WorkflowTypeTag returns a new workflow type tag.

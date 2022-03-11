@@ -1376,8 +1376,12 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			namespaceName := namespaceEntry.Name()
 			taskQueueName := ai.GetTaskQueue()
 
-			metrics.GetPerTaskQueueScope(metricsScope, namespaceName.String(), taskQueueName, enumspb.TASK_QUEUE_KIND_NORMAL).
-				Tagged(metrics.TaskTypeTag("activity")).
+			metrics.GetPerTaskQueueScope(
+				metricsScope,
+				namespaceName.String(),
+				taskQueueName,
+				enumspb.TASK_QUEUE_KIND_NORMAL,
+			).Tagged(metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY)).
 				RecordTimer(metrics.TaskScheduleToStartLatency, scheduleToStartLatency)
 
 			response.StartedTime = ai.StartedTime
