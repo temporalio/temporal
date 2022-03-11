@@ -19,8 +19,7 @@ RUN apk add --update --no-cache \
     ca-certificates \
     tzdata \
     bash \
-    curl \
-    vim
+    curl
 
 COPY --from=dockerize-builder /usr/local/bin/dockerize /usr/local/bin/dockerize
 # set up nsswitch.conf for Go's "netgo" implementation
