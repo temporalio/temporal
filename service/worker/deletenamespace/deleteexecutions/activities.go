@@ -61,9 +61,6 @@ type (
 		PageSize      int
 		NextPageToken []byte
 	}
-	GetNextPageTokenResult struct {
-		NextPageToken []byte
-	}
 
 	DeleteExecutionsActivityParams struct {
 		Namespace     namespace.Name
@@ -111,7 +108,7 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) GetNextPageTokenActivity(_ context.Context, params GetNextPageTokenParams) (GetNextPageTokenResult, error) {
+func (a *Activities) GetNextPageTokenActivity(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   params.NamespaceID,
 		Namespace:     params.Namespace,
@@ -123,12 +120,10 @@ func (a *Activities) GetNextPageTokenActivity(_ context.Context, params GetNextP
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
 		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
-		return GetNextPageTokenResult{}, err
+		return nil, err
 	}
 
-	return GetNextPageTokenResult{
-		NextPageToken: resp.NextPageToken,
-	}, nil
+	return resp.NextPageToken, nil
 }
 
 func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {

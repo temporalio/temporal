@@ -104,7 +104,7 @@ func VisibilityManagerProvider(
 		esConfig.GetVisibilityIndex(),
 		esConfig.GetSecondaryVisibilityIndex(),
 		esClient,
-		nil, // frontend visibility never write
+		nil, // worker visibility never write
 		saProvider,
 		searchAttributesMapper,
 		serviceConfig.StandardVisibilityPersistenceMaxReadQPS,

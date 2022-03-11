@@ -25,8 +25,8 @@
 package defaults
 
 const (
-	DeleteRPS                                    = 1
+	DeleteRPS                                    = 100
 	ListPageSize                                 = 1000
-	ConcurrentDeleteExecutionsActivitiesCount    = 200
-	MaxConcurrentDeleteExecutionsActivitiesCount = 1000
+	ConcurrentDeleteExecutionsActivitiesCount    = 4 // Should be not bigger than number of workers in the cluster.
+	MaxConcurrentDeleteExecutionsActivitiesCount = 200
 )

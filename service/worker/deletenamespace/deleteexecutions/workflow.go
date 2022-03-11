@@ -37,6 +37,10 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace/defaults"
 )
 
+const (
+	WorkflowName = "temporal-sys-delete-executions-workflow"
+)
+
 type (
 	// WorkflowParams is the parameters for add search attributes workflow.
 	DeleteExecutionsParams struct {
@@ -114,20 +118,8 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	var lastDeleteExecutionsActivityErr error
 
 	for i := 0; i < params.ConcurrentDeleteExecutionsActivitiesCount; i++ {
-		ctx1 := workflow.WithLocalActivityOptions(ctx, getNextPageTokenActivityOptions)
-		var nptr GetNextPageTokenResult
-		err := workflow.ExecuteLocalActivity(ctx1, a.GetNextPageTokenActivity, GetNextPageTokenParams{
-			NamespaceID:   params.NamespaceID,
-			Namespace:     params.Namespace,
-			PageSize:      params.ListPageSize,
-			NextPageToken: nextPageToken,
-		}).Get(ctx, &nptr)
-		if err != nil {
-			return result, fmt.Errorf("%w: GetNextPageTokenActivity: %v", ErrUnableToExecuteActivity, err)
-		}
-
-		ctx2 := workflow.WithActivityOptions(ctx, deleteWorkflowExecutionsActivityOptions)
-		deleteExecutionsFuture := workflow.ExecuteActivity(ctx2, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
+		ctx1 := workflow.WithActivityOptions(ctx, deleteWorkflowExecutionsActivityOptions)
+		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
 			Namespace:     params.Namespace,
 			NamespaceID:   params.NamespaceID,
 			DeleteRPS:     params.DeleteRPS,
@@ -138,9 +130,9 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		runningDeleteExecutionsSelector.AddFuture(deleteExecutionsFuture, func(f workflow.Future) {
 			runningDeleteExecutionsActivityCount--
 			var der DeleteExecutionsActivityResult
-			err := f.Get(ctx, &der)
-			if err != nil {
-				lastDeleteExecutionsActivityErr = err
+			deErr := f.Get(ctx, &der)
+			if deErr != nil {
+				lastDeleteExecutionsActivityErr = deErr
 				return
 			}
 			result.SuccessCount += der.SuccessCount
@@ -155,7 +147,16 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			}
 		}
 
-		nextPageToken = nptr.NextPageToken
+		ctx2 := workflow.WithLocalActivityOptions(ctx, getNextPageTokenActivityOptions)
+		err := workflow.ExecuteLocalActivity(ctx2, a.GetNextPageTokenActivity, GetNextPageTokenParams{
+			NamespaceID:   params.NamespaceID,
+			Namespace:     params.Namespace,
+			PageSize:      params.ListPageSize,
+			NextPageToken: nextPageToken,
+		}).Get(ctx, &nextPageToken)
+		if err != nil {
+			return result, fmt.Errorf("%w: GetNextPageTokenActivity: %v", ErrUnableToExecuteActivity, err)
+		}
 		if nextPageToken == nil {
 			break
 		}

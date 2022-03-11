@@ -79,7 +79,7 @@ func (wc *deleteNamespaceComponent) Register(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(DeleteNamespaceWorkflow, workflow.RegisterOptions{Name: WorkflowName})
 	worker.RegisterActivity(wc.deleteNamespaceActivities())
 
-	worker.RegisterWorkflow(deleteexecutions.DeleteExecutionsWorkflow)
+	worker.RegisterWorkflowWithOptions(deleteexecutions.DeleteExecutionsWorkflow, workflow.RegisterOptions{Name: deleteexecutions.WorkflowName})
 	worker.RegisterActivity(wc.deleteExecutionsActivities())
 }
 

@@ -59,7 +59,7 @@ type (
 )
 
 var (
-	getNamespaceIDActivityOptions = workflow.ActivityOptions{
+	getNamespaceIDActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
 		},
@@ -67,7 +67,7 @@ var (
 		ScheduleToCloseTimeout: 10 * time.Minute,
 	}
 
-	markNamespaceAsDeletedActivityOptions = workflow.ActivityOptions{
+	markNamespaceAsDeletedActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
 		},
@@ -75,7 +75,7 @@ var (
 		ScheduleToCloseTimeout: 10 * time.Minute,
 	}
 
-	generateDeletedNamespaceNameActivityOptions = workflow.ActivityOptions{
+	generateDeletedNamespaceNameActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
 		},
@@ -83,7 +83,7 @@ var (
 		ScheduleToCloseTimeout: 10 * time.Minute,
 	}
 
-	renameNamespaceActivityOptions = workflow.ActivityOptions{
+	renameNamespaceActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
 		},
@@ -91,7 +91,7 @@ var (
 		ScheduleToCloseTimeout: 10 * time.Minute,
 	}
 
-	checkExecutionsExistActivityOptions = workflow.ActivityOptions{
+	checkExecutionsExistActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
 		},
@@ -99,7 +99,7 @@ var (
 		ScheduleToCloseTimeout: 10 * time.Minute,
 	}
 
-	deleteNamespaceActivityOptions = workflow.ActivityOptions{
+	deleteNamespaceActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
 		},
@@ -107,7 +107,8 @@ var (
 		ScheduleToCloseTimeout: 10 * time.Minute,
 	}
 
-	ErrUnableToExecuteActivity = errors.New("unable to execute activity")
+	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
+	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
 )
 
 func validateParams(params *DeleteNamespaceWorkflowParams) error {
@@ -143,30 +144,30 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 1. Get namespaceID.
 	if params.NamespaceID.IsEmpty() {
-		ctx1 := workflow.WithActivityOptions(ctx, getNamespaceIDActivityOptions)
-		err = workflow.ExecuteActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
+		ctx1 := workflow.WithLocalActivityOptions(ctx, getNamespaceIDActivityOptions)
+		err = workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
 		if err != nil || params.NamespaceID.IsEmpty() {
 			return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 		}
 	}
 
 	// Step 2. Mark namespace as deleted.
-	ctx2 := workflow.WithActivityOptions(ctx, markNamespaceAsDeletedActivityOptions)
-	err = workflow.ExecuteActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
+	ctx2 := workflow.WithLocalActivityOptions(ctx, markNamespaceAsDeletedActivityOptions)
+	err = workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", ErrUnableToExecuteActivity, err)
 	}
 
 	// Step 3. Rename namespace.
-	ctx3 := workflow.WithActivityOptions(ctx, generateDeletedNamespaceNameActivityOptions)
+	ctx3 := workflow.WithLocalActivityOptions(ctx, generateDeletedNamespaceNameActivityOptions)
 	var newName namespace.Name
-	err = workflow.ExecuteActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &newName)
+	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &newName)
 	if err != nil {
 		return fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", ErrUnableToExecuteActivity, err)
 	}
 
-	ctx31 := workflow.WithActivityOptions(ctx, renameNamespaceActivityOptions)
-	err = workflow.ExecuteActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, newName).Get(ctx, nil)
+	ctx31 := workflow.WithLocalActivityOptions(ctx, renameNamespaceActivityOptions)
+	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, newName).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%w: RenameNamespaceActivity: %v", ErrUnableToExecuteActivity, err)
 	}
@@ -186,8 +187,8 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	}
 
 	// Step 6. Delete namespace.
-	ctx5 := workflow.WithActivityOptions(ctx, deleteNamespaceActivityOptions)
-	err = workflow.ExecuteActivity(ctx5, a.DeleteNamespaceActivity, params.Namespace, params.NamespaceID).Get(ctx, nil)
+	ctx5 := workflow.WithLocalActivityOptions(ctx, deleteNamespaceActivityOptions)
+	err = workflow.ExecuteLocalActivity(ctx5, a.DeleteNamespaceActivity, params.Namespace, params.NamespaceID).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%w: DeleteNamespaceActivity: %v", ErrUnableToExecuteActivity, err)
 	}
@@ -212,7 +213,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params DeleteNamespaceWorkfl
 		}).Get(ctx, &der)
 
 		if err != nil {
-			return fmt.Errorf("%w: DeleteWorkflowExecutionsActivity: %v", ErrUnableToExecuteActivity, err)
+			return fmt.Errorf("%w: DeleteWorkflowExecutionsActivity: %v", ErrUnableToExecuteChildWorkflow, err)
 		}
 		totalDeletedCount += der.SuccessCount
 
@@ -222,10 +223,10 @@ func deleteWorkflowExecutions(ctx workflow.Context, params DeleteNamespaceWorkfl
 				return err
 			}
 
-			ctx2 := workflow.WithActivityOptions(ctx, checkExecutionsExistActivityOptions)
-			err = workflow.ExecuteActivity(ctx2, a.CheckExecutionsExistActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsExist)
+			ctx2 := workflow.WithLocalActivityOptions(ctx, checkExecutionsExistActivityOptions)
+			err = workflow.ExecuteLocalActivity(ctx2, a.CheckExecutionsExistActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsExist)
 			if err != nil {
-				return fmt.Errorf("%w: CountWorkflowActivity: %v", ErrUnableToExecuteActivity, err)
+				return fmt.Errorf("%w: CheckExecutionsExistActivity: %v", ErrUnableToExecuteActivity, err)
 			}
 
 			if !executionsExist {
