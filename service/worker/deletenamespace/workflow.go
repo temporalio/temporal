@@ -75,6 +75,22 @@ var (
 		ScheduleToCloseTimeout: 10 * time.Minute,
 	}
 
+	generateDeletedNamespaceNameActivityOptions = workflow.ActivityOptions{
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 1 * time.Second,
+		},
+		StartToCloseTimeout:    10 * time.Second,
+		ScheduleToCloseTimeout: 10 * time.Minute,
+	}
+
+	renameNamespaceActivityOptions = workflow.ActivityOptions{
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval: 1 * time.Second,
+		},
+		StartToCloseTimeout:    10 * time.Second,
+		ScheduleToCloseTimeout: 10 * time.Minute,
+	}
+
 	checkExecutionsExistActivityOptions = workflow.ActivityOptions{
 		RetryPolicy: &temporal.RetryPolicy{
 			InitialInterval: 1 * time.Second,
@@ -127,36 +143,51 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 1. Get namespaceID.
 	if params.NamespaceID.IsEmpty() {
-		ctx0 := workflow.WithActivityOptions(ctx, getNamespaceIDActivityOptions)
-		err = workflow.ExecuteActivity(ctx0, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
+		ctx1 := workflow.WithActivityOptions(ctx, getNamespaceIDActivityOptions)
+		err = workflow.ExecuteActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
 		if err != nil || params.NamespaceID.IsEmpty() {
 			return temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 		}
 	}
 
 	// Step 2. Mark namespace as deleted.
-	ctx1 := workflow.WithActivityOptions(ctx, markNamespaceAsDeletedActivityOptions)
-	err = workflow.ExecuteActivity(ctx1, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
+	ctx2 := workflow.WithActivityOptions(ctx, markNamespaceAsDeletedActivityOptions)
+	err = workflow.ExecuteActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", ErrUnableToExecuteActivity, err)
 	}
 
-	// Step 3. Wait for namespace cache to be updated.
+	// Step 3. Rename namespace.
+	ctx3 := workflow.WithActivityOptions(ctx, generateDeletedNamespaceNameActivityOptions)
+	var newName namespace.Name
+	err = workflow.ExecuteActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &newName)
+	if err != nil {
+		return fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", ErrUnableToExecuteActivity, err)
+	}
+
+	ctx31 := workflow.WithActivityOptions(ctx, renameNamespaceActivityOptions)
+	err = workflow.ExecuteActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, newName).Get(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("%w: RenameNamespaceActivity: %v", ErrUnableToExecuteActivity, err)
+	}
+	params.Namespace = newName
+
+	// Step 4. Wait for namespace cache to be updated.
 	const namespaceCacheRefreshDelay = 11 * time.Second
 	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
 	if err != nil {
 		return err
 	}
 
-	// Step 4. Delete workflow executions.
+	// Step 5. Delete workflow executions.
 	err = deleteWorkflowExecutions(ctx, params, a, logger)
 	if err != nil {
 		return err
 	}
 
-	// Step 5. Delete namespace.
-	ctx2 := workflow.WithActivityOptions(ctx, deleteNamespaceActivityOptions)
-	err = workflow.ExecuteActivity(ctx2, a.DeleteNamespaceActivity, params.Namespace, params.NamespaceID).Get(ctx, nil)
+	// Step 6. Delete namespace.
+	ctx5 := workflow.WithActivityOptions(ctx, deleteNamespaceActivityOptions)
+	err = workflow.ExecuteActivity(ctx5, a.DeleteNamespaceActivity, params.Namespace, params.NamespaceID).Get(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("%w: DeleteNamespaceActivity: %v", ErrUnableToExecuteActivity, err)
 	}
