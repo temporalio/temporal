@@ -49,7 +49,7 @@ CREATE TABLE current_executions(
 	workflow_id VARCHAR(255) NOT NULL,
 	--
 	run_id BINARY(16) NOT NULL,
-	create_request_id VARCHAR(64) NOT NULL,
+	create_request_id VARCHAR(255) NOT NULL,
 	state INT NOT NULL,
 	status INT NOT NULL,
 	last_write_version BIGINT NOT NULL,
@@ -201,7 +201,7 @@ CREATE TABLE signals_requested_sets (
 	namespace_id BINARY(16) NOT NULL,
 	workflow_id VARCHAR(255) NOT NULL,
 	run_id BINARY(16) NOT NULL,
-	signal_id VARCHAR(64) NOT NULL,
+	signal_id VARCHAR(255) NOT NULL,
 	--
 	PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, signal_id)
 );
