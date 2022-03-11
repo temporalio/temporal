@@ -1241,35 +1241,6 @@ func (s *TestBase) RangeCompleteTimerTask(inclusiveBeginTimestamp time.Time, exc
 	})
 }
 
-// GetTasks is a utility method to get tasks from persistence
-func (s *TestBase) GetTasks(namespaceID string, taskQueue string, taskType enumspb.TaskQueueType, batchSize int) (*persistence.GetTasksResponse, error) {
-	response, err := s.TaskMgr.GetTasks(&persistence.GetTasksRequest{
-		NamespaceID:        namespaceID,
-		TaskQueue:          taskQueue,
-		TaskType:           taskType,
-		PageSize:           batchSize,
-		ExclusiveMaxTaskID: math.MaxInt64,
-	})
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &persistence.GetTasksResponse{Tasks: response.Tasks}, nil
-}
-
-// CompleteTask is a utility method to complete a task
-func (s *TestBase) CompleteTask(namespaceID string, taskQueue string, taskType enumspb.TaskQueueType, taskID int64) error {
-	return s.TaskMgr.CompleteTask(&persistence.CompleteTaskRequest{
-		TaskQueue: &persistence.TaskQueueKey{
-			NamespaceID:   namespaceID,
-			TaskQueueType: taskType,
-			TaskQueueName: taskQueue,
-		},
-		TaskID: taskID,
-	})
-}
-
 // TearDownWorkflowStore to cleanup
 func (s *TestBase) TearDownWorkflowStore() {
 	s.TaskMgr.Close()
