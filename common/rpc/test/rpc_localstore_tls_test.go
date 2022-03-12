@@ -105,6 +105,7 @@ type localStoreRPCSuite struct {
 	frontendConfigRootCAOnly       config.GroupTLS
 	frontendConfigRootCAForceTLS   config.GroupTLS
 	frontendConfigAltRootCAOnly    config.GroupTLS
+	systemWorkerOnly               config.WorkerTLS
 	frontendConfigSystemWorker     config.WorkerTLS
 	frontendConfigMutualTLSRefresh config.GroupTLS
 
@@ -215,12 +216,13 @@ func (s *localStoreRPCSuite) SetupSuite() {
 			RootCAData: []string{convertFileToBase64(s.frontendAltChain.CaPubFile)},
 		},
 	}
-	s.frontendConfigSystemWorker = config.WorkerTLS{
+	s.systemWorkerOnly = config.WorkerTLS{
 		CertFile: s.frontendClientChain.CertPubFile,
 		KeyFile:  s.frontendClientChain.CertKeyFile,
-		Client: config.ClientTLS{
-			RootCAFiles: []string{s.frontendChain.CaPubFile},
-		},
+	}
+	s.frontendConfigSystemWorker = s.systemWorkerOnly
+	s.frontendConfigSystemWorker.Client = config.ClientTLS{
+		RootCAFiles: []string{s.frontendChain.CaPubFile},
 	}
 
 	s.internodeConfigMutualTLS = config.GroupTLS{
@@ -835,4 +837,22 @@ func (s *localStoreRPCSuite) TestClientForceTLS() {
 	options, err := s.frontendConfigRootCAForceTLSFactory.RPCFactory.GetFrontendGRPCServerOptions()
 	s.NoError(err)
 	s.Nil(options)
+}
+
+func (s *localStoreRPCSuite) TestSystemWorkerOnlyConfig() {
+	localStoreSystemWorkerOnly := &config.Global{
+		Membership: s.membershipConfig,
+		TLS: config.RootTLS{
+			SystemWorker: s.systemWorkerOnly,
+		},
+	}
+	provider, err := encryption.NewTLSConfigProviderFromConfig(localStoreSystemWorkerOnly.TLS, nil, s.logger, nil)
+	s.NoError(err)
+	tlsConfig, err := provider.GetFrontendClientConfig()
+	s.NoError(err)
+	s.NotNil(tlsConfig)
+	s.NotNil(tlsConfig.GetClientCertificate)
+	cert, err := tlsConfig.GetClientCertificate(nil)
+	s.NoError(err)
+	s.NotNil(cert)
 }
