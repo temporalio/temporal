@@ -133,6 +133,9 @@ type (
 			currentWorkflowTransactionPolicy TransactionPolicy,
 			newWorkflowTransactionPolicy *TransactionPolicy,
 		) error
+		SetWorkflowExecution(
+			now time.Time,
+		) error
 	}
 )
 
@@ -639,6 +642,34 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	)
 
 	return nil
+}
+
+func (c *ContextImpl) SetWorkflowExecution(now time.Time) (retError error) {
+	defer func() {
+		if retError != nil {
+			c.Clear()
+		}
+	}()
+
+	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
+		now,
+		TransactionPolicyPassive,
+	)
+	if err != nil {
+		return err
+	}
+	if len(resetWorkflowEventsSeq) != 0 {
+		return serviceerror.NewInternal("SetWorkflowExecution encountered new events")
+	}
+
+	resetWorkflowSnapshot.ExecutionInfo.ExecutionStats = &persistencespb.ExecutionStats{
+		HistorySize: c.GetHistorySize(),
+	}
+
+	return c.transaction.SetWorkflowExecution(
+		resetWorkflowSnapshot,
+		c.MutableState.GetNamespaceEntry().ActiveClusterName(),
+	)
 }
 
 func (c *ContextImpl) mergeContinueAsNewReplicationTasks(
