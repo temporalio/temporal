@@ -268,7 +268,9 @@ func (tr *taskReader) addSingleTaskToBuffer(
 }
 
 func (tr *taskReader) persistAckLevel() error {
-	return tr.tlMgr.db.UpdateState(tr.tlMgr.taskAckManager.getAckLevel())
+	ackLevel := tr.tlMgr.taskAckManager.getAckLevel()
+	tr.emitTaskLagMetric(ackLevel)
+	return tr.tlMgr.db.UpdateState(ackLevel)
 }
 
 func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {
@@ -281,4 +283,11 @@ func (tr *taskReader) logger() log.Logger {
 
 func (tr *taskReader) scope() metrics.Scope {
 	return tr.tlMgr.metricScope
+}
+
+func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
+	// note: this metric is only an estimation for the lag.
+	// taskID in DB may not be continuous, especially when task list ownership changes.
+	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
+	tr.scope().UpdateGauge(metrics.TaskLagPerTaskQueueGauge, float64(maxReadLevel-ackLevel))
 }

@@ -174,7 +174,7 @@ func newTaskQueueManager(
 		nsName.String(),
 		taskQueue.name,
 		taskQueueKind,
-	)
+	).Tagged(metrics.TaskQueueTypeTag(taskQueue.taskType))
 	tlMgr := &taskQueueManagerImpl{
 		status:              common.DaemonStatusInitialized,
 		namespaceRegistry:   e.namespaceRegistry,
