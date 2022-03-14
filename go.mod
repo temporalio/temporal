@@ -61,6 +61,8 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
 
+replace go.temporal.io/api => /Users/ycyang/temporalio/api-go // TODO: remove after api change is landed
+
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.2.0 // indirect
