@@ -25,10 +25,10 @@
 package history
 
 import (
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
@@ -45,7 +45,7 @@ type (
 		VisibilityMgr           manager.VisibilityManager
 		MatchingClient          resource.MatchingClient
 		HistoryClient           historyservice.HistoryServiceClient
-		PublicClient            sdkclient.Client
+		SdkClientFactory        sdk.ClientFactory
 		EventNotifier           events.Notifier
 		Config                  *configs.Config
 		ReplicationTaskFetchers ReplicationTaskFetchers
@@ -68,7 +68,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.VisibilityMgr,
 		f.MatchingClient,
 		f.HistoryClient,
-		f.PublicClient,
+		f.SdkClientFactory,
 		f.EventNotifier,
 		f.Config,
 		f.ReplicationTaskFetchers,

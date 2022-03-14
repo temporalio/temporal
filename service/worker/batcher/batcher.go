@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"go.temporal.io/sdk/activity"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
@@ -52,7 +51,6 @@ type (
 	// It is also the context object that get's passed around within the scanner workflows / activities
 	Batcher struct {
 		cfg              *Config
-		sdkSystemClient  sdkclient.Client
 		sdkClientFactory sdk.ClientFactory
 		metricsClient    metrics.Client
 		logger           log.Logger
@@ -62,14 +60,12 @@ type (
 // New returns a new instance of batcher daemon Batcher
 func New(
 	cfg *Config,
-	sdkSystemClient sdkclient.Client,
 	metricsClient metrics.Client,
 	logger log.Logger,
 	sdkClientFactory sdk.ClientFactory,
 ) *Batcher {
 	return &Batcher{
 		cfg:              cfg,
-		sdkSystemClient:  sdkSystemClient,
 		sdkClientFactory: sdkClientFactory,
 		metricsClient:    metricsClient,
 		logger:           log.With(logger, tag.ComponentBatcher),
@@ -80,6 +76,16 @@ func New(
 func (s *Batcher) Start() error {
 	// start worker for batch operation workflows
 	ctx := context.WithValue(context.Background(), batcherContextKey, s)
+
+	sdkClient, err := s.sdkClientFactory.NewSystemClient(s.logger)
+	if err != nil {
+		s.logger.Fatal(
+			"error getting system sdk client",
+			tag.Error(err),
+		)
+		return err
+	}
+
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     s.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
@@ -88,7 +94,7 @@ func (s *Batcher) Start() error {
 
 		BackgroundActivityContext: ctx,
 	}
-	batchWorker := worker.New(s.sdkSystemClient, BatcherTaskQueueName, workerOpts)
+	batchWorker := worker.New(sdkClient, BatcherTaskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})
 

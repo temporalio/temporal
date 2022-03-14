@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
 
@@ -99,7 +100,7 @@ type (
 	client struct {
 		metricsScope     metrics.Scope
 		logger           log.Logger
-		temporalClient   sdkclient.Client
+		sdkClientFactory sdk.ClientFactory
 		numWorkflows     dynamicconfig.IntPropertyFn
 		rateLimiter      quotas.RateLimiter
 		archiverProvider provider.ArchiverProvider
@@ -126,16 +127,16 @@ const (
 func NewClient(
 	metricsClient metrics.Client,
 	logger log.Logger,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	numWorkflows dynamicconfig.IntPropertyFn,
 	requestRPS dynamicconfig.IntPropertyFn,
 	archiverProvider provider.ArchiverProvider,
 ) Client {
 	return &client{
-		metricsScope:   metricsClient.Scope(metrics.ArchiverClientScope),
-		logger:         logger,
-		temporalClient: publicClient,
-		numWorkflows:   numWorkflows,
+		metricsScope:     metricsClient.Scope(metrics.ArchiverClientScope),
+		logger:           logger,
+		sdkClientFactory: sdkClientFactory,
+		numWorkflows:     numWorkflows,
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(requestRPS()) },
 		),
@@ -276,6 +277,15 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 }
 
 func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest, taggedLogger log.Logger) error {
+	sdkClient, err := c.sdkClientFactory.NewSystemClient(c.logger)
+	if err != nil {
+		c.logger.Fatal(
+			"error get system sdk client",
+			tag.Error(err),
+		)
+		return err
+	}
+
 	c.metricsScope.IncCounter(metrics.ArchiverClientSendSignalCount)
 	if ok := c.rateLimiter.Allow(); !ok {
 		c.logger.Error(tooManyRequestsErrMsg)
@@ -294,7 +304,7 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
-	_, err := c.temporalClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
+	_, err = sdkClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
 		taggedLogger.Error("failed to send signal to archival system workflow",
 			tag.ArchivalRequestNamespaceID(request.NamespaceID),

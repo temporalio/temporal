@@ -33,6 +33,7 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
 )
 
@@ -60,21 +61,28 @@ func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *Me
 }
 
 func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error) {
-	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
-		HostPort:       f.hostPort,
-		Namespace:      namespaceName,
-		MetricsHandler: f.metricsHandler,
-		Logger:         log.NewSdkLogger(logger),
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS:                f.tlsConfig,
-			DisableHealthCheck: true,
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("unable to create SDK client: %w", err)
-	}
+	var client sdkclient.Client
 
-	return sdkClient, nil
+	// Retry for up to 1m, handles frontend service not ready
+	err := backoff.Retry(func() error {
+		sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+			HostPort:       f.hostPort,
+			Namespace:      namespaceName,
+			MetricsHandler: f.metricsHandler,
+			Logger:         log.NewSdkLogger(logger),
+			ConnectionOptions: sdkclient.ConnectionOptions{
+				TLS: f.tlsConfig,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("unable to create SDK client: %w", err)
+		}
+
+		client = sdkClient
+		return nil
+	}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
+
+	return client, err
 }
 
 func (f *clientFactory) NewSystemClient(logger log.Logger) (sdkclient.Client, error) {

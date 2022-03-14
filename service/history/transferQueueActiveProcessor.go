@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"github.com/pborman/uuid"
-	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -37,6 +36,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -62,7 +62,7 @@ func newTransferQueueActiveProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
@@ -115,7 +115,7 @@ func newTransferQueueActiveProcessor(
 			shard,
 			workflowCache,
 			archivalClient,
-			publicClient,
+			sdkClientFactory,
 			logger,
 			config,
 			matchingClient,
@@ -158,7 +158,7 @@ func newTransferQueueFailoverProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceIDs map[string]struct{},
@@ -228,7 +228,7 @@ func newTransferQueueFailoverProcessor(
 			shard,
 			workflowCache,
 			archivalClient,
-			publicClient,
+			sdkClientFactory,
 			logger,
 			config,
 			matchingClient,

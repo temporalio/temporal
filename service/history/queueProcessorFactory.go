@@ -25,12 +25,12 @@
 package history
 
 import (
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -58,10 +58,10 @@ type (
 	transferQueueProcessorFactoryParams struct {
 		fx.In
 
-		ArchivalClient archiver.Client
-		PublicClient   sdkclient.Client
-		MatchingClient resource.MatchingClient
-		HistoryClient  historyservice.HistoryServiceClient
+		ArchivalClient   archiver.Client
+		SdkClientFactory sdk.ClientFactory
+		MatchingClient   resource.MatchingClient
+		HistoryClient    historyservice.HistoryServiceClient
 	}
 
 	timerQueueProcessorFactoryParams struct {
@@ -108,7 +108,7 @@ func (f *transferQueueProcessorFactory) CreateProcessor(
 		engine,
 		workflowCache,
 		f.ArchivalClient,
-		f.PublicClient,
+		f.SdkClientFactory,
 		f.MatchingClient,
 		f.HistoryClient,
 	)

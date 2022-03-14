@@ -38,7 +38,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -77,7 +77,7 @@ func newTransferQueueActiveTaskExecutor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -99,7 +99,7 @@ func newTransferQueueActiveTaskExecutor(
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsClient(),
 			shard.GetLogger(),
-			publicClient,
+			sdkClientFactory,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
 		registry: shard.GetNamespaceRegistry(),

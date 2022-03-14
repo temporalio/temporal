@@ -48,8 +48,8 @@ require (
 	go.temporal.io/sdk v1.13.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.9.0
-	go.uber.org/fx v1.16.0
-	go.uber.org/multierr v1.7.0
+	go.uber.org/fx v1.17.0
+	go.uber.org/multierr v1.8.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/oauth2 v0.0.0-20211104180415-d3ed0bb246c8
 	golang.org/x/time v0.0.0-20220210224613-90d013bbcef8
@@ -110,10 +110,10 @@ require (
 	go.opencensus.io v0.23.0 // indirect
 	go.opentelemetry.io/otel/internal/metric v0.27.0 // indirect
 	go.opentelemetry.io/otel/trace v1.4.0 // indirect
-	go.uber.org/dig v1.13.0 // indirect
+	go.uber.org/dig v1.14.0 // indirect
 	golang.org/x/crypto v0.0.0-20220210151621-f4118a5b28e2 // indirect
 	golang.org/x/net v0.0.0-20220225172249-27dd8689420f // indirect
-	golang.org/x/sys v0.0.0-20220307203707-22a9840ba4d7 // indirect
+	golang.org/x/sys v0.0.0-20220310020820-b874c991c1a5 // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/appengine v1.6.7 // indirect

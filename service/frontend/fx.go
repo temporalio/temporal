@@ -28,7 +28,6 @@ import (
 	"context"
 	"net"
 
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -60,6 +59,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -379,7 +379,7 @@ func AdminHandlerProvider(
 	clientFactory client.Factory,
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
-	sdkSystemClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
 	archiverProvider provider.ArchiverProvider,
 	metricsClient metrics.Client,
@@ -406,7 +406,7 @@ func AdminHandlerProvider(
 		clientFactory,
 		clientBean,
 		historyClient,
-		sdkSystemClient,
+		sdkClientFactory,
 		membershipMonitor,
 		archiverProvider,
 		metricsClient,
@@ -424,7 +424,7 @@ func OperatorHandlerProvider(
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	logger resource.SnTaggedLogger,
-	sdkSystemClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	metricsClient metrics.Client,
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
@@ -434,7 +434,7 @@ func OperatorHandlerProvider(
 		esConfig,
 		esClient,
 		logger,
-		sdkSystemClient,
+		sdkClientFactory,
 		metricsClient,
 		saProvider,
 		saManager,

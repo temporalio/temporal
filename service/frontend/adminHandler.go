@@ -71,6 +71,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
@@ -106,7 +107,7 @@ type (
 		clientFactory               serverClient.Factory
 		clientBean                  serverClient.Bean
 		historyClient               historyservice.HistoryServiceClient
-		sdkClient                   sdkclient.Client
+		sdkClientFactory            sdk.ClientFactory
 		membershipMonitor           membership.Monitor
 		metricsClient               metrics.Client
 		namespaceRegistry           namespace.Registry
@@ -132,7 +133,7 @@ type (
 		ClientFactory                       serverClient.Factory
 		ClientBean                          serverClient.Bean
 		HistoryClient                       historyservice.HistoryServiceClient
-		SdkSystemClient                     sdkclient.Client
+		sdkClientFactory                    sdk.ClientFactory
 		MembershipMonitor                   membership.Monitor
 		ArchiverProvider                    provider.ArchiverProvider
 		MetricsClient                       metrics.Client
@@ -193,7 +194,7 @@ func NewAdminHandler(
 		clientFactory:               args.ClientFactory,
 		clientBean:                  args.ClientBean,
 		historyClient:               args.HistoryClient,
-		sdkClient:                   args.SdkSystemClient,
+		sdkClientFactory:            args.sdkClientFactory,
 		membershipMonitor:           args.MembershipMonitor,
 		metricsClient:               args.MetricsClient,
 		namespaceRegistry:           args.NamespaceRegistry,
@@ -278,7 +279,16 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		SkipSchemaUpdate:      request.GetSkipSchemaUpdate(),
 	}
 
-	run, err := adh.sdkClient.ExecuteWorkflow(
+	sdkClient, err := adh.sdkClientFactory.NewSystemClient(adh.logger)
+	if err != nil {
+		adh.logger.Fatal(
+			"error getting system sdk client",
+			tag.Error(err),
+		)
+		return nil, err
+	}
+
+	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
 			TaskQueue: worker.DefaultWorkerTaskQueue,
@@ -376,7 +386,17 @@ func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *admin
 
 func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName string, runID string) (*adminservice.GetSearchAttributesResponse, error) {
 	var lastErr error
-	descResp, err := adh.sdkClient.DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, runID)
+
+	sdkClient, err := adh.sdkClientFactory.NewSystemClient(adh.logger)
+	if err != nil {
+		adh.logger.Fatal(
+			"error getting system sdk client",
+			tag.Error(err),
+		)
+		return nil, err
+	}
+
+	descResp, err := sdkClient.DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, runID)
 	var wfInfo *workflowpb.WorkflowExecutionInfo
 	if err != nil {
 		// NotFound can happen when no search attributes were added and the workflow has never been executed.

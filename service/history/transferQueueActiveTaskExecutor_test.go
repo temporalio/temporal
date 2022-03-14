@@ -226,7 +226,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 		s.mockShard,
 		h.historyCache,
 		s.mockArchivalClient,
-		h.publicClient,
+		h.sdkClientFactory,
 		s.logger,
 		config,
 		s.mockShard.Resource.MatchingClient,

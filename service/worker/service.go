@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/serviceerror"
-	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
@@ -88,7 +87,6 @@ type (
 		status           int32
 		stopC            chan struct{}
 		sdkClientFactory sdk.ClientFactory
-		sdkSystemClient  sdkclient.Client
 		esClient         esclient.Client
 		config           *Config
 
@@ -113,7 +111,6 @@ func NewService(
 	logger resource.SnTaggedLogger,
 	serviceConfig *Config,
 	sdkClientFactory sdk.ClientFactory,
-	sdkSystemClient sdkclient.Client,
 	esClient esclient.Client,
 	archivalMetadata carchiver.ArchivalMetadata,
 	clusterMetadata cluster.Metadata,
@@ -140,7 +137,6 @@ func NewService(
 	return &Service{
 		status:                    common.DaemonStatusInitialized,
 		config:                    serviceConfig,
-		sdkSystemClient:           sdkSystemClient,
 		sdkClientFactory:          sdkClientFactory,
 		esClient:                  esClient,
 		stopC:                     make(chan struct{}),
@@ -388,12 +384,12 @@ func (s *Service) Stop() {
 
 func (s *Service) startParentClosePolicyProcessor() {
 	params := &parentclosepolicy.BootstrapParams{
-		Config:          *s.config.ParentCloseCfg,
-		SdkSystemClient: s.sdkSystemClient,
-		MetricsClient:   s.metricsClient,
-		Logger:          s.logger,
-		ClientBean:      s.clientBean,
-		CurrentCluster:  s.clusterMetadata.GetCurrentClusterName(),
+		Config:           *s.config.ParentCloseCfg,
+		SdkClientFactory: s.sdkClientFactory,
+		MetricsClient:    s.metricsClient,
+		Logger:           s.logger,
+		ClientBean:       s.clientBean,
+		CurrentCluster:   s.clusterMetadata.GetCurrentClusterName(),
 	}
 	processor := parentclosepolicy.New(params)
 	if err := processor.Start(); err != nil {
@@ -407,7 +403,6 @@ func (s *Service) startParentClosePolicyProcessor() {
 func (s *Service) startBatcher() {
 	if err := batcher.New(
 		s.config.BatcherCfg,
-		s.sdkSystemClient,
 		s.metricsClient,
 		s.logger,
 		s.sdkClientFactory).Start(); err != nil {
@@ -419,10 +414,18 @@ func (s *Service) startBatcher() {
 }
 
 func (s *Service) startScanner() {
+	svcClient, err := s.sdkClientFactory.NewSystemClient(s.logger)
+	if err != nil {
+		s.logger.Fatal(
+			"error getting system sdk client",
+			tag.Error(err),
+		)
+	}
+
 	sc := scanner.New(
 		s.logger,
 		s.config.ScannerCfg,
-		s.sdkSystemClient,
+		svcClient,
 		s.metricsClient,
 		s.executionManager,
 		s.taskManager,
@@ -456,13 +459,13 @@ func (s *Service) startReplicator() {
 
 func (s *Service) startArchiver() {
 	bc := &archiver.BootstrapContainer{
-		SdkSystemClient:  s.sdkSystemClient,
 		MetricsClient:    s.metricsClient,
 		Logger:           s.logger,
 		HistoryV2Manager: s.executionManager,
 		NamespaceCache:   s.namespaceRegistry,
 		Config:           s.config.ArchiverConfig,
 		ArchiverProvider: s.archiverProvider,
+		SdkClientFactory: s.sdkClientFactory,
 	}
 	clientWorker := archiver.NewClientWorker(bc)
 	if err := clientWorker.Start(); err != nil {
