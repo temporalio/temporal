@@ -592,7 +592,7 @@ func queryWorkflowHelper(c *cli.Context, queryType string) {
 	if queryResponse.QueryRejected != nil {
 		fmt.Printf("Query was rejected, workflow has status: %v\n", queryResponse.QueryRejected.GetStatus())
 	} else {
-		queryResult := payloads.ToString(queryResponse.QueryResult)
+		queryResult := stringify.AnyToString(queryResponse.QueryResult, true, 0, dataconverter.GetCurrent())
 		fmt.Printf("Query result:\n%v\n", queryResult)
 	}
 }
