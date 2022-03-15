@@ -134,7 +134,8 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		err := workflow.ExecuteChildWorkflow(ctx1, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 
 		if err != nil {
-			return result, fmt.Errorf("%w: DeleteExecutionsWorkflow: %v", ErrUnableToExecuteChildWorkflow, err)
+			logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName))
+			return result, fmt.Errorf("%w: %s: %v", ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
 		}
 		result.SuccessCount += der.SuccessCount
 		result.ErrorCount += der.ErrorCount
@@ -162,7 +163,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		}
 	}
 
-	logger.Info("All workflow executions has been deleted successfully.", tag.WorkflowNamespace(params.Namespace.String()), tag.NewInt("deleted-executions-count", result.SuccessCount), tag.NewInt("delete-executions-error-count", result.ErrorCount))
+	logger.Info("All workflow executions has been deleted successfully.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
 	return result, nil
 }
 

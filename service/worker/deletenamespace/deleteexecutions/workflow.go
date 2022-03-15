@@ -161,14 +161,15 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	}
 
 	if nextPageToken == nil {
-		logger.Info("Finish deleting workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.NewInt("deleted-executions-count", result.SuccessCount), tag.NewInt("delete-executions-error-count", result.ErrorCount))
+		logger.Info("Finish deleting workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
 		return result, nil
 	}
 
 	params.PreviousSuccessCount = result.SuccessCount
 	params.PreviousErrorCount = result.ErrorCount
 
-	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.NewInt("deleted-executions-count", result.SuccessCount), tag.NewInt("delete-executions-error-count", result.ErrorCount))
-	// Too many workflow executions, and we exceed ConcurrentDeleteExecutionsActivitiesCount, so move on to next execution
+	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
+	// Too many workflow executions, and ConcurrentDeleteExecutionsActivitiesCount activities has been started already.
+	// Continue as new to prevent workflow history size explosion.
 	return result, workflow.NewContinueAsNewError(ctx, DeleteExecutionsWorkflow, params)
 }

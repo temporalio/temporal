@@ -159,11 +159,6 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", ErrUnableToExecuteActivity, err)
 	}
 
-	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
-	if err != nil {
-		return result, err
-	}
-
 	// Step 3. Rename namespace.
 	ctx3 := workflow.WithLocalActivityOptions(ctx, generateDeletedNamespaceNameActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &result.DeletedName)
@@ -195,7 +190,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	var reclaimResourcesExecution workflow.Execution
 	if err := reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
 		logger.Error("Unable to execute child workflow.", tag.WorkflowType(reclaimresources.WorkflowName))
-		return result, fmt.Errorf("%w: ReclaimResourcesWorkflow: %v", ErrUnableToExecuteChildWorkflow, err)
+		return result, fmt.Errorf("%w: %s: %v", ErrUnableToExecuteChildWorkflow, reclaimresources.WorkflowName, err)
 	}
 	logger.Info("Child workflow executed successfully.", tag.WorkflowType(reclaimresources.WorkflowName))
 
