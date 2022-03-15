@@ -86,14 +86,14 @@ func (a *activities) MarkNamespaceDeletedActivity(_ context.Context, nsName name
 
 	metadata, err := a.metadataManager.GetMetadata()
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
 		a.logger.Error("Unable to get cluster metadata.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
 
 	ns, err := a.metadataManager.GetNamespace(getNamespaceRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
 		a.logger.Error("Unable to get namespace details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -108,7 +108,7 @@ func (a *activities) MarkNamespaceDeletedActivity(_ context.Context, nsName name
 
 	err = a.metadataManager.UpdateNamespace(updateRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.UpdateNamespaceFailuresCount)
 		a.logger.Error("Unable to update namespace state to Deleted.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
@@ -148,11 +148,12 @@ func (a *activities) RenameNamespaceActivity(_ context.Context, previousName nam
 
 	err := a.metadataManager.RenameNamespace(renameNamespaceRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.RenameNamespaceFailuresCount)
 		a.logger.Error("Unable to rename namespace.", tag.WorkflowNamespace(previousName.String()), tag.Error(err))
 		return err
 	}
 
+	a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.RenameNamespaceSuccessCount)
 	a.logger.Info("Namespace renamed successfully.", tag.WorkflowNamespace(previousName.String()), tag.WorkflowNamespace(newName.String()))
 	return nil
 }

@@ -96,8 +96,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		ErrorCount:   params.PreviousErrorCount,
 	}
 
-	err := validateParams(&params)
-	if err != nil {
+	if err := validateParams(&params); err != nil {
 		return result, err
 	}
 
@@ -170,6 +169,6 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	params.PreviousErrorCount = result.ErrorCount
 
 	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.NewInt("deleted-executions-count", result.SuccessCount), tag.NewInt("delete-executions-error-count", result.ErrorCount))
-	// too many pages, and we exceed PageCountPerExecution, so move on to next execution
+	// Too many workflow executions, and we exceed ConcurrentDeleteExecutionsActivitiesCount, so move on to next execution
 	return result, workflow.NewContinueAsNewError(ctx, DeleteExecutionsWorkflow, params)
 }

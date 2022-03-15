@@ -135,8 +135,8 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
 
 	var result DeleteNamespaceWorkflowResult
-	err := validateParams(&params)
-	if err != nil {
+
+	if err := validateParams(&params); err != nil {
 		return result, err
 	}
 
@@ -145,7 +145,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	// Step 1. Get namespaceID.
 	if params.NamespaceID.IsEmpty() {
 		ctx1 := workflow.WithLocalActivityOptions(ctx, getNamespaceIDActivityOptions)
-		err = workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
+		err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
 		if err != nil || params.NamespaceID.IsEmpty() {
 			return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 		}
@@ -154,7 +154,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, markNamespaceAsDeletedActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
+	err := workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", ErrUnableToExecuteActivity, err)
 	}

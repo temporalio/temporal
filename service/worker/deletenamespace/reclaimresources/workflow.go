@@ -101,8 +101,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	logger := workflow.GetLogger(ctx)
 	logger.Info("Child workflow started.", tag.WorkflowType(WorkflowName))
 
-	err := validateParams(&params)
-	if err != nil {
+	if err := validateParams(&params); err != nil {
 		return ReclaimResourcesResult{}, err
 	}
 

@@ -66,7 +66,7 @@ func (a *Activities) CheckExecutionsExistActivity(_ context.Context, nsID namesp
 		}
 		resp, err := a.visibilityManager.CountWorkflowExecutions(req)
 		if err != nil {
-			a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+			a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 			a.logger.Error("Unable to count workflows.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 			return false, err
 		}
@@ -81,7 +81,7 @@ func (a *Activities) CheckExecutionsExistActivity(_ context.Context, nsID namesp
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to count workflows using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return false, err
 	}
@@ -96,11 +96,12 @@ func (a *Activities) DeleteNamespaceActivity(_ context.Context, nsName namespace
 
 	err := a.metadataManager.DeleteNamespaceByName(deleteNamespaceRequest)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceFailuresCount)
 		a.logger.Error("Unable delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
 
+	a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceSuccessCount)
 	a.logger.Info("Namespace is deleted.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespaceID(nsID.String()))
 	return nil
 }

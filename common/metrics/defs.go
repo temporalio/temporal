@@ -1189,8 +1189,10 @@ const (
 	AddSearchAttributesWorkflowScope
 	// MigrationWorkflowScope is scope used by metrics emitted by migration related workflows
 	MigrationWorkflowScope
-	// DeleteNamespaceWorkflowScope is scope used by metrics emitted by delete namespace workflow.
+
 	DeleteNamespaceWorkflowScope
+	ReclaimResourcesWorkflowScope
+	DeleteExecutionsWorkflowScope
 
 	NumWorkerScopes
 )
@@ -1733,6 +1735,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AddSearchAttributesWorkflowScope:       {operation: "AddSearchAttributesWorkflow"},
 		MigrationWorkflowScope:                 {operation: "MigrationWorkflow"},
 		DeleteNamespaceWorkflowScope:           {operation: "DeleteNamespaceWorkflow"},
+		ReclaimResourcesWorkflowScope:          {operation: "ReclaimResourcesWorkflow"},
+		DeleteExecutionsWorkflowScope:          {operation: "DeleteExecutionsWorkflow"},
 	},
 	Server: {
 		ServerTlsScope: {operation: "ServerTls"},
@@ -2195,7 +2199,17 @@ const (
 	AddSearchAttributesFailuresCount
 	CatchUpReadyShardCountGauge
 	HandoverReadyShardCountGauge
+
+	DeleteNamespaceSuccessCount
+	RenameNamespaceSuccessCount
+	DeleteExecutionsSuccessCount
 	DeleteNamespaceFailuresCount
+	UpdateNamespaceFailuresCount
+	RenameNamespaceFailuresCount
+	ReadNamespaceFailuresCount
+	ListExecutionsFailuresCount
+	TerminateExecutionFailuresCount
+	DeleteExecutionFailuresCount
 
 	NumWorkerMetrics
 )
@@ -2650,7 +2664,17 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		AddSearchAttributesFailuresCount:              NewCounterDef("add_search_attributes_failures"),
 		CatchUpReadyShardCountGauge:                   NewGaugeDef("catchup_ready_shard_count"),
 		HandoverReadyShardCountGauge:                  NewGaugeDef("handover_ready_shard_count"),
-		DeleteNamespaceFailuresCount:                  NewCounterDef("delete_namespace_failures"),
+
+		DeleteNamespaceSuccessCount:     NewCounterDef("delete_namespace_success"),
+		RenameNamespaceSuccessCount:     NewCounterDef("rename_namespace_success"),
+		DeleteExecutionsSuccessCount:    NewCounterDef("delete_executions_success"),
+		DeleteNamespaceFailuresCount:    NewCounterDef("delete_namespace_failures"),
+		UpdateNamespaceFailuresCount:    NewCounterDef("update_namespace_failures"),
+		RenameNamespaceFailuresCount:    NewCounterDef("rename_namespace_failures"),
+		ReadNamespaceFailuresCount:      NewCounterDef("read_namespace_failures"),
+		ListExecutionsFailuresCount:     NewCounterDef("list_executions_failures"),
+		TerminateExecutionFailuresCount: NewCounterDef("terminate_executions_failures"),
+		DeleteExecutionFailuresCount:    NewCounterDef("delete_execution_failures"),
 	},
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),

@@ -45,7 +45,7 @@ import (
 )
 
 const (
-	HeartbeatEveryWorkflowExecutions = 100
+	HeartbeatEveryWorkflowExecutions = 1000
 )
 
 type (
@@ -119,7 +119,7 @@ func (a *Activities) GetNextPageTokenActivity(_ context.Context, params GetNextP
 
 	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 		return nil, err
 	}
@@ -140,7 +140,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 	}
 	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
 	if err != nil {
-		a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+		a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to list all workflows.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 		return result, err
 	}
@@ -156,11 +156,9 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 				},
 			})
 			switch err.(type) {
-			case nil:
-			case *serviceerror.NotFound:
-				// Workflow already completed or doesn't exist.
+			case nil, *serviceerror.NotFound: // Workflow already completed or doesn't exist.
 			default:
-				a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+				a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.TerminateExecutionFailuresCount)
 				a.logger.Error("Unable to terminate workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 				result.ErrorCount++
 				continue
@@ -171,14 +169,12 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 			WorkflowExecution: execution.Execution,
 		})
 		switch err.(type) {
-		case nil:
+		case nil, *serviceerror.NotFound: // Workflow doesn't exist. Treat it as success.
 			result.SuccessCount++
-		case *serviceerror.NotFound:
-			// Workflow doesn't exist. Treat it as success.
-			result.SuccessCount++
+			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.DeleteExecutionsSuccessCount)
 		default:
 			result.ErrorCount++
-			a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
+			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.DeleteExecutionFailuresCount)
 			a.logger.Error("Unable to delete workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 		}
 		if (result.SuccessCount+result.ErrorCount)%HeartbeatEveryWorkflowExecutions == 0 {
