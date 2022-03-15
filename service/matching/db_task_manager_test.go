@@ -354,11 +354,11 @@ func (s *dbTaskManagerSuite) TestDeleteAckedTasks_Success() {
 	s.dbTaskManager.maxDeletedTaskIDInclusive = maxDeletedTaskIDInclusive
 
 	s.store.EXPECT().CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueueName: s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		TaskID:        s.ackedTaskID,
-		Limit:         100000,
+		NamespaceID:        s.namespaceID,
+		TaskQueueName:      s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		ExclusiveMaxTaskID: s.ackedTaskID + 1,
+		Limit:              100000,
 	}).Return(0, nil)
 
 	s.dbTaskManager.deleteAckedTasks()
@@ -374,11 +374,11 @@ func (s *dbTaskManagerSuite) TestDeleteAckedTasks_Failed() {
 	s.dbTaskManager.maxDeletedTaskIDInclusive = maxDeletedTaskIDInclusive
 
 	s.store.EXPECT().CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueueName: s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		TaskID:        s.ackedTaskID,
-		Limit:         100000,
+		NamespaceID:        s.namespaceID,
+		TaskQueueName:      s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		ExclusiveMaxTaskID: s.ackedTaskID + 1,
+		Limit:              100000,
 	}).Return(0, serviceerror.NewUnavailable("random error"))
 
 	s.dbTaskManager.deleteAckedTasks()

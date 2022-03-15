@@ -332,11 +332,11 @@ func (d *dbTaskManager) deleteAckedTasks() {
 		return
 	}
 	_, err := d.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:   d.taskQueueKey.NamespaceID,
-		TaskQueueName: d.taskQueueKey.TaskQueueName,
-		TaskType:      d.taskQueueKey.TaskQueueType,
-		TaskID:        ackedTaskID,
-		Limit:         100000, // TODO @wxing1292 why delete with limit? history service is not doing similar thing
+		NamespaceID:        d.taskQueueKey.NamespaceID,
+		TaskQueueName:      d.taskQueueKey.TaskQueueName,
+		TaskType:           d.taskQueueKey.TaskQueueType,
+		ExclusiveMaxTaskID: ackedTaskID + 1,
+		Limit:              100000, // TODO @wxing1292 why delete with limit? history service is not doing similar thing
 	})
 	if err != nil {
 		d.logger.Error("dbTaskManager encountered task deletion error", tag.Error(err))

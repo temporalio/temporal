@@ -199,7 +199,7 @@ func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64)
 	var response *persistence.GetTasksResponse
 	var err error
 	err = executeWithRetry(func() error {
-		response, err = tr.tlMgr.db.GetTasks(readLevel, maxReadLevel, tr.tlMgr.config.GetTasksBatchSize())
+		response, err = tr.tlMgr.db.GetTasks(readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
 		return err
 	})
 	if err != nil {

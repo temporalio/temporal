@@ -401,12 +401,12 @@ func newAdminTaskQueueCommands() []cli.Command {
 				},
 				cli.Int64Flag{
 					Name:  FlagMinTaskID,
-					Usage: "Minimum task Id",
+					Usage: "Inclusive minimum task Id",
 					Value: -12346, // include default task id
 				},
 				cli.Int64Flag{
 					Name:  FlagMaxTaskID,
-					Usage: "Maximum task Id",
+					Usage: "Exclusive maximum task Id",
 				},
 				cli.BoolFlag{
 					Name:  FlagPrintJSONWithAlias,

@@ -54,8 +54,8 @@ const (
 		`and task_queue_name = ? ` +
 		`and task_queue_type = ? ` +
 		`and type = ? ` +
-		`and task_id > ? ` +
-		`and task_id <= ?`
+		`and task_id >= ? ` +
+		`and task_id < ?`
 
 	templateCompleteTaskQuery = `DELETE FROM tasks ` +
 		`WHERE namespace_id = ? ` +
@@ -69,7 +69,7 @@ const (
 		`AND task_queue_name = ? ` +
 		`AND task_queue_type = ? ` +
 		`AND type = ? ` +
-		`AND task_id <= ? `
+		`AND task_id < ? `
 
 	templateGetTaskQueueQuery = `SELECT ` +
 		`range_id, ` +
@@ -388,8 +388,8 @@ func (d *MatchingTaskStore) GetTasks(
 		request.TaskQueue,
 		request.TaskType,
 		rowTypeTask,
-		request.MinTaskIDExclusive,
-		request.MaxTaskIDInclusive,
+		request.InclusiveMinTaskID,
+		request.ExclusiveMaxTaskID,
 	)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -455,14 +455,14 @@ func (d *MatchingTaskStore) CompleteTask(
 	return nil
 }
 
-// CompleteTasksLessThan deletes all tasks less than or equal to the given task id. This API ignores the
+// CompleteTasksLessThan deletes all tasks less than the given task id. This API ignores the
 // Limit request parameter i.e. either all tasks leq the task_id will be deleted or an error will
 // be returned to the caller
 func (d *MatchingTaskStore) CompleteTasksLessThan(
 	request *p.CompleteTasksLessThanRequest,
 ) (int, error) {
 	query := d.Session.Query(templateCompleteTasksLessThanQuery,
-		request.NamespaceID, request.TaskQueueName, request.TaskType, rowTypeTask, request.TaskID)
+		request.NamespaceID, request.TaskQueueName, request.TaskType, rowTypeTask, request.ExclusiveMaxTaskID)
 	err := query.Exec()
 	if err != nil {
 		return 0, gocql.ConvertError("CompleteTasksLessThan", err)

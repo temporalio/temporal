@@ -1431,7 +1431,6 @@ func (adh *AdminHandler) ResendReplicationTasks(
 }
 
 // GetTaskQueueTasks returns tasks from task queue
-// TODO: support pagination
 func (adh *AdminHandler) GetTaskQueueTasks(
 	ctx context.Context,
 	request *adminservice.GetTaskQueueTasksRequest,
@@ -1453,8 +1452,8 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		NamespaceID:        namespaceID.String(),
 		TaskQueue:          request.GetTaskQueue(),
 		TaskType:           request.GetTaskQueueType(),
-		MinTaskIDExclusive: request.GetMinTaskId(),
-		MaxTaskIDInclusive: request.GetMaxTaskId(),
+		InclusiveMinTaskID: request.GetMinTaskId(),
+		ExclusiveMaxTaskID: request.GetMaxTaskId(),
 		PageSize:           int(request.GetBatchSize()),
 		NextPageToken:      request.NextPageToken,
 	})

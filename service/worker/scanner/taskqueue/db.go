@@ -36,16 +36,16 @@ import (
 
 var retryForeverPolicy = newRetryForeverPolicy()
 
-func (s *Scavenger) completeTasks(key *p.TaskQueueKey, taskID int64, limit int) (int, error) {
+func (s *Scavenger) completeTasks(key *p.TaskQueueKey, exclusiveMaxTaskID int64, limit int) (int, error) {
 	var n int
 	var err error
 	err = s.retryForever(func() error {
 		n, err = s.db.CompleteTasksLessThan(&p.CompleteTasksLessThanRequest{
-			NamespaceID:   key.NamespaceID,
-			TaskQueueName: key.TaskQueueName,
-			TaskType:      key.TaskQueueType,
-			TaskID:        taskID,
-			Limit:         limit,
+			NamespaceID:        key.NamespaceID,
+			TaskQueueName:      key.TaskQueueName,
+			TaskType:           key.TaskQueueType,
+			ExclusiveMaxTaskID: exclusiveMaxTaskID,
+			Limit:              limit,
 		})
 		return err
 	})
@@ -60,8 +60,8 @@ func (s *Scavenger) getTasks(key *p.TaskQueueKey, batchSize int) (*p.GetTasksRes
 			NamespaceID:        key.NamespaceID,
 			TaskQueue:          key.TaskQueueName,
 			TaskType:           key.TaskQueueType,
-			MinTaskIDExclusive: -1, // get the first N tasks sorted by taskID
-			MaxTaskIDInclusive: math.MaxInt64,
+			InclusiveMinTaskID: 0, // get the first N tasks sorted by taskID
+			ExclusiveMaxTaskID: math.MaxInt64,
 			PageSize:           batchSize,
 		})
 		return err

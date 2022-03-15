@@ -194,7 +194,7 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 }
 
 func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
-	if request.MinTaskIDExclusive >= request.MaxTaskIDInclusive {
+	if request.InclusiveMinTaskID >= request.ExclusiveMaxTaskID {
 		return &GetTasksResponse{}, nil
 	}
 

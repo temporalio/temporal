@@ -222,14 +222,18 @@ func (db *taskQueueDB) CreateTasks(tasks []*persistencespb.AllocatedTaskInfo) (*
 }
 
 // GetTasks returns a batch of tasks between the given range
-func (db *taskQueueDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) (*persistence.GetTasksResponse, error) {
+func (db *taskQueueDB) GetTasks(
+	inclusiveMinTaskID int64,
+	exclusiveMaxTaskID int64,
+	batchSize int,
+) (*persistence.GetTasksResponse, error) {
 	return db.store.GetTasks(&persistence.GetTasksRequest{
 		NamespaceID:        db.namespaceID.String(),
 		TaskQueue:          db.taskQueueName,
 		TaskType:           db.taskType,
 		PageSize:           batchSize,
-		MinTaskIDExclusive: minTaskID, // exclusive
-		MaxTaskIDInclusive: maxTaskID, // inclusive
+		InclusiveMinTaskID: inclusiveMinTaskID,
+		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 	})
 }
 
@@ -257,19 +261,19 @@ func (db *taskQueueDB) CompleteTask(taskID int64) error {
 // CompleteTasksLessThan deletes of tasks less than the given taskID. Limit is
 // the upper bound of number of tasks that can be deleted by this method. It may
 // or may not be honored
-func (db *taskQueueDB) CompleteTasksLessThan(taskID int64, limit int) (int, error) {
+func (db *taskQueueDB) CompleteTasksLessThan(exclusiveMaxTaskID int64, limit int) (int, error) {
 	n, err := db.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:   db.namespaceID.String(),
-		TaskQueueName: db.taskQueueName,
-		TaskType:      db.taskType,
-		TaskID:        taskID,
-		Limit:         limit,
+		NamespaceID:        db.namespaceID.String(),
+		TaskQueueName:      db.taskQueueName,
+		TaskType:           db.taskType,
+		ExclusiveMaxTaskID: exclusiveMaxTaskID,
+		Limit:              limit,
 	})
 	if err != nil {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
-			tag.TaskID(taskID),
+			tag.TaskID(exclusiveMaxTaskID),
 			tag.WorkflowTaskQueueType(db.taskType),
 			tag.WorkflowTaskQueueName(db.taskQueueName))
 	}
