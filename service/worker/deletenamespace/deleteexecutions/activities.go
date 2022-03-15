@@ -29,6 +29,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
@@ -154,7 +155,11 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 					Reason:            "Delete namespace",
 				},
 			})
-			if err != nil {
+			switch err.(type) {
+			case nil:
+			case *serviceerror.NotFound:
+				// Workflow already completed or doesn't exist.
+			default:
 				a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
 				a.logger.Error("Unable to terminate workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 				result.ErrorCount++
@@ -165,12 +170,16 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 			NamespaceId:       params.NamespaceID.String(),
 			WorkflowExecution: execution.Execution,
 		})
-		if err != nil {
+		switch err.(type) {
+		case nil:
+			result.SuccessCount++
+		case *serviceerror.NotFound:
+			// Workflow doesn't exist. Treat it as success.
+			result.SuccessCount++
+		default:
 			result.ErrorCount++
 			a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.DeleteNamespaceFailuresCount)
 			a.logger.Error("Unable to delete workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
-		} else {
-			result.SuccessCount++
 		}
 		if (result.SuccessCount+result.ErrorCount)%HeartbeatEveryWorkflowExecutions == 0 {
 			activity.RecordHeartbeat(ctx, result)

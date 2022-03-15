@@ -36,6 +36,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	workercommon "go.temporal.io/server/service/worker/common"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
+	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
 )
 
 type (
@@ -79,6 +80,9 @@ func (wc *deleteNamespaceComponent) Register(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(DeleteNamespaceWorkflow, workflow.RegisterOptions{Name: WorkflowName})
 	worker.RegisterActivity(wc.deleteNamespaceActivities())
 
+	worker.RegisterWorkflowWithOptions(reclaimresources.ReclaimResourcesWorkflow, workflow.RegisterOptions{Name: reclaimresources.WorkflowName})
+	worker.RegisterActivity(wc.reclaimResourcesActivities())
+
 	worker.RegisterWorkflowWithOptions(deleteexecutions.DeleteExecutionsWorkflow, workflow.RegisterOptions{Name: deleteexecutions.WorkflowName})
 	worker.RegisterActivity(wc.deleteExecutionsActivities())
 }
@@ -89,7 +93,11 @@ func (wc *deleteNamespaceComponent) DedicatedWorkerOptions() *workercommon.Dedic
 }
 
 func (wc *deleteNamespaceComponent) deleteNamespaceActivities() *activities {
-	return NewActivities(wc.visibilityManager, wc.metadataManager, wc.metricsClient, wc.logger)
+	return NewActivities(wc.metadataManager, wc.metricsClient, wc.logger)
+}
+
+func (wc *deleteNamespaceComponent) reclaimResourcesActivities() *reclaimresources.Activities {
+	return reclaimresources.NewActivities(wc.visibilityManager, wc.metadataManager, wc.metricsClient, wc.logger)
 }
 
 func (wc *deleteNamespaceComponent) deleteExecutionsActivities() *deleteexecutions.Activities {

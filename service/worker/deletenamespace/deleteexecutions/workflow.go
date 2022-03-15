@@ -27,7 +27,6 @@ package deleteexecutions
 import (
 	"errors"
 	"fmt"
-	"time"
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -62,14 +61,6 @@ type (
 )
 
 var (
-	DeleteExecutionsWorkflowOptions = workflow.ChildWorkflowOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 5 * time.Second,
-		},
-		WorkflowRunTimeout:       60 * time.Minute,
-		WorkflowExecutionTimeout: 6 * time.Hour,
-	}
-
 	ErrUnableToExecuteActivity = errors.New("unable to execute activity")
 )
 
@@ -99,7 +90,7 @@ func validateParams(params *DeleteExecutionsParams) error {
 
 func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParams) (DeleteExecutionsResult, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Child workflow started.", tag.WorkflowType("DeleteExecutionsWorkflow"))
+	logger.Info("Child workflow started.", tag.WorkflowType(WorkflowName))
 	result := DeleteExecutionsResult{
 		SuccessCount: params.PreviousSuccessCount,
 		ErrorCount:   params.PreviousErrorCount,
@@ -178,7 +169,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	params.PreviousSuccessCount = result.SuccessCount
 	params.PreviousErrorCount = result.ErrorCount
 
-	logger.Info("There are more workflows to delete. Continuing DeleteExecutionsWorkflow as new.", tag.WorkflowNamespace(params.Namespace.String()), tag.NewInt("deleted-executions-count", result.SuccessCount), tag.NewInt("delete-executions-error-count", result.ErrorCount))
+	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.NewInt("deleted-executions-count", result.SuccessCount), tag.NewInt("delete-executions-error-count", result.ErrorCount))
 	// too many pages, and we exceed PageCountPerExecution, so move on to next execution
 	return result, workflow.NewContinueAsNewError(ctx, DeleteExecutionsWorkflow, params)
 }
