@@ -25,8 +25,8 @@
 package deleteexecutions
 
 import (
-	"errors"
 	"fmt"
+	"time"
 
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
@@ -34,14 +34,16 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/worker/deletenamespace/defaults"
+	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 const (
 	WorkflowName = "temporal-sys-delete-executions-workflow"
+
+	heartbeatEveryExecutions = 1000
 )
 
 type (
-	// WorkflowParams is the parameters for add search attributes workflow.
 	DeleteExecutionsParams struct {
 		Namespace   namespace.Name
 		NamespaceID namespace.ID
@@ -61,7 +63,22 @@ type (
 )
 
 var (
-	ErrUnableToExecuteActivity = errors.New("unable to execute activity")
+	retryPolicy = &temporal.RetryPolicy{
+		InitialInterval: 1 * time.Second,
+		MaximumInterval: 10 * time.Second,
+	}
+
+	localActivityOptions = workflow.LocalActivityOptions{
+		RetryPolicy:            retryPolicy,
+		StartToCloseTimeout:    10 * time.Second,
+		ScheduleToCloseTimeout: 5 * time.Minute,
+	}
+
+	deleteWorkflowExecutionsActivityOptions = workflow.ActivityOptions{
+		RetryPolicy:            retryPolicy,
+		StartToCloseTimeout:    60 * time.Minute,
+		ScheduleToCloseTimeout: 6 * time.Hour,
+	}
 )
 
 func validateParams(params *DeleteExecutionsParams) error {
@@ -100,8 +117,10 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		return result, err
 	}
 
-	var a *Activities
+	// Minimum value is heartbeatEveryExecutions/params.DeleteRPS. 2 is "make sure" multiplicator.
+	deleteWorkflowExecutionsActivityOptions.HeartbeatTimeout = time.Duration(heartbeatEveryExecutions/params.DeleteRPS*2) * time.Second
 
+	var a *Activities
 	var nextPageToken []byte
 	runningDeleteExecutionsActivityCount := 0
 	runningDeleteExecutionsSelector := workflow.NewSelector(ctx)
@@ -133,11 +152,11 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			// Wait for one of running activities to complete.
 			runningDeleteExecutionsSelector.Select(ctx)
 			if lastDeleteExecutionsActivityErr != nil {
-				return result, fmt.Errorf("%w: DeleteExecutionsActivity: %v", ErrUnableToExecuteActivity, lastDeleteExecutionsActivityErr)
+				return result, fmt.Errorf("%w: DeleteExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, lastDeleteExecutionsActivityErr)
 			}
 		}
 
-		ctx2 := workflow.WithLocalActivityOptions(ctx, getNextPageTokenActivityOptions)
+		ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 		err := workflow.ExecuteLocalActivity(ctx2, a.GetNextPageTokenActivity, GetNextPageTokenParams{
 			NamespaceID:   params.NamespaceID,
 			Namespace:     params.Namespace,
@@ -145,7 +164,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			NextPageToken: nextPageToken,
 		}).Get(ctx, &nextPageToken)
 		if err != nil {
-			return result, fmt.Errorf("%w: GetNextPageTokenActivity: %v", ErrUnableToExecuteActivity, err)
+			return result, fmt.Errorf("%w: GetNextPageTokenActivity: %v", errors.ErrUnableToExecuteActivity, err)
 		}
 		if nextPageToken == nil {
 			break
@@ -156,7 +175,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	for runningDeleteExecutionsActivityCount > 0 {
 		runningDeleteExecutionsSelector.Select(ctx)
 		if lastDeleteExecutionsActivityErr != nil {
-			return result, fmt.Errorf("%w: DeleteExecutionsActivity: %v", ErrUnableToExecuteActivity, lastDeleteExecutionsActivityErr)
+			return result, fmt.Errorf("%w: DeleteExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, lastDeleteExecutionsActivityErr)
 		}
 	}
 

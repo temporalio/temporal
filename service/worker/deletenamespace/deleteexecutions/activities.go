@@ -26,14 +26,11 @@ package deleteexecutions
 
 import (
 	"context"
-	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log"
@@ -42,10 +39,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/quotas"
-)
-
-const (
-	HeartbeatEveryWorkflowExecutions = 1000
 )
 
 type (
@@ -70,28 +63,10 @@ type (
 		ListPageSize  int
 		NextPageToken []byte
 	}
+
 	DeleteExecutionsActivityResult struct {
 		ErrorCount   int
 		SuccessCount int
-	}
-)
-
-var (
-	getNextPageTokenActivityOptions = workflow.LocalActivityOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-		},
-		StartToCloseTimeout:    10 * time.Second,
-		ScheduleToCloseTimeout: 10 * time.Minute,
-	}
-
-	deleteWorkflowExecutionsActivityOptions = workflow.ActivityOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 5 * time.Second,
-		},
-		StartToCloseTimeout:    60 * time.Minute,
-		ScheduleToCloseTimeout: 6 * time.Hour,
-		HeartbeatTimeout:       5 * time.Minute,
 	}
 )
 
@@ -177,7 +152,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.DeleteExecutionFailuresCount)
 			a.logger.Error("Unable to delete workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 		}
-		if (result.SuccessCount+result.ErrorCount)%HeartbeatEveryWorkflowExecutions == 0 {
+		if (result.SuccessCount+result.ErrorCount)%heartbeatEveryExecutions == 0 {
 			activity.RecordHeartbeat(ctx, result)
 		}
 	}

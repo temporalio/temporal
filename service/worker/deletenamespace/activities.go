@@ -38,15 +38,13 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
 type (
 	activities struct {
-		visibilityManager manager.VisibilityManager
-		metadataManager   persistence.MetadataManager
-		metricsClient     metrics.Client
-		logger            log.Logger
+		metadataManager persistence.MetadataManager
+		metricsClient   metrics.Client
+		logger          log.Logger
 	}
 )
 
@@ -131,12 +129,17 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(_ context.Context, nsN
 		_, err := a.metadataManager.GetNamespace(&persistence.GetNamespaceRequest{
 			Name: newName,
 		})
-
-		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		switch err.(type) {
+		case nil:
+			a.logger.Warn("Regenerate namespace name due to collision.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
+		case *serviceerror.NotFound:
 			a.logger.Info("Generated new name for deleted namespace.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
 			return namespace.Name(newName), nil
+		default:
+			a.metricsClient.IncCounter(metrics.DeleteNamespaceWorkflowScope, metrics.ReadNamespaceFailuresCount)
+			a.logger.Error("Unable to get namespace details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+			return namespace.EmptyName, err
 		}
-		a.logger.Warn("Regenerate namespace name due to collision.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
 	}
 }
 

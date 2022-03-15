@@ -59,6 +59,7 @@ func NewActivities(
 }
 
 func (a *Activities) CheckExecutionsExistActivity(_ context.Context, nsID namespace.ID, nsName namespace.Name) (bool, error) {
+	// TODO: remove this check after CountWorkflowExecutions is implemented in standard visibility.
 	if a.visibilityManager.GetName() == "elasticsearch" {
 		req := &manager.CountWorkflowExecutionsRequest{
 			NamespaceID: nsID,

@@ -25,7 +25,6 @@
 package deletenamespace
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -37,6 +36,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/worker/deletenamespace/defaults"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
+	"go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
 )
 
@@ -48,7 +48,6 @@ const (
 )
 
 type (
-	// DeleteNamespaceWorkflowParams is the parameters for add search attributes workflow.
 	DeleteNamespaceWorkflowParams struct {
 		NamespaceID namespace.ID
 		Namespace   namespace.Name
@@ -65,49 +64,23 @@ type (
 )
 
 var (
-	getNamespaceIDActivityOptions = workflow.LocalActivityOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-		},
-		StartToCloseTimeout:    10 * time.Second,
-		ScheduleToCloseTimeout: 10 * time.Minute,
+	retryPolicy = &temporal.RetryPolicy{
+		InitialInterval: 1 * time.Second,
+		MaximumInterval: 10 * time.Second,
 	}
 
-	markNamespaceAsDeletedActivityOptions = workflow.LocalActivityOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-		},
+	localActivityOptions = workflow.LocalActivityOptions{
+		RetryPolicy:            retryPolicy,
 		StartToCloseTimeout:    10 * time.Second,
-		ScheduleToCloseTimeout: 10 * time.Minute,
-	}
-
-	generateDeletedNamespaceNameActivityOptions = workflow.LocalActivityOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-		},
-		StartToCloseTimeout:    10 * time.Second,
-		ScheduleToCloseTimeout: 10 * time.Minute,
-	}
-
-	renameNamespaceActivityOptions = workflow.LocalActivityOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-		},
-		StartToCloseTimeout:    10 * time.Second,
-		ScheduleToCloseTimeout: 10 * time.Minute,
+		ScheduleToCloseTimeout: 5 * time.Minute,
 	}
 
 	reclaimResourcesWorkflowOptions = workflow.ChildWorkflowOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 5 * time.Second,
-		},
-		WorkflowRunTimeout:       60 * time.Minute,
-		WorkflowExecutionTimeout: 6 * time.Hour,
-		ParentClosePolicy:        enumspb.PARENT_CLOSE_POLICY_ABANDON,
+		RetryPolicy:              retryPolicy,
+		WorkflowExecutionTimeout: 24 * time.Hour,
+		// Important: this is required to make sure the child workflow is not terminated when delete namespace workflow is completed.
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
 	}
-
-	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
-	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
 )
 
 func validateParams(params *DeleteNamespaceWorkflowParams) error {
@@ -144,7 +117,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 1. Get namespaceID.
 	if params.NamespaceID.IsEmpty() {
-		ctx1 := workflow.WithLocalActivityOptions(ctx, getNamespaceIDActivityOptions)
+		ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 		err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
 		if err != nil || params.NamespaceID.IsEmpty() {
 			return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
@@ -153,23 +126,23 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	result.DeletedID = params.NamespaceID
 
 	// Step 2. Mark namespace as deleted.
-	ctx2 := workflow.WithLocalActivityOptions(ctx, markNamespaceAsDeletedActivityOptions)
+	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err := workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", ErrUnableToExecuteActivity, err)
+		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	// Step 3. Rename namespace.
-	ctx3 := workflow.WithLocalActivityOptions(ctx, generateDeletedNamespaceNameActivityOptions)
+	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &result.DeletedName)
 	if err != nil {
-		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", ErrUnableToExecuteActivity, err)
+		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
-	ctx31 := workflow.WithLocalActivityOptions(ctx, renameNamespaceActivityOptions)
+	ctx31 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, result.DeletedName).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", ErrUnableToExecuteActivity, err)
+		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
@@ -189,8 +162,8 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		}})
 	var reclaimResourcesExecution workflow.Execution
 	if err := reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
-		logger.Error("Unable to execute child workflow.", tag.WorkflowType(reclaimresources.WorkflowName))
-		return result, fmt.Errorf("%w: %s: %v", ErrUnableToExecuteChildWorkflow, reclaimresources.WorkflowName, err)
+		logger.Error("Unable to execute child workflow.", tag.WorkflowType(reclaimresources.WorkflowName), tag.Error(err))
+		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, reclaimresources.WorkflowName, err)
 	}
 	logger.Info("Child workflow executed successfully.", tag.WorkflowType(reclaimresources.WorkflowName))
 

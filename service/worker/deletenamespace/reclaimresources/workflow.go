@@ -25,7 +25,6 @@
 package reclaimresources
 
 import (
-	"errors"
 	"fmt"
 	"time"
 
@@ -35,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
+	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 const (
@@ -45,7 +45,6 @@ const (
 )
 
 type (
-	// ReclaimResourcesParams is the parameters for add search attributes workflow.
 	ReclaimResourcesParams struct {
 		deleteexecutions.DeleteExecutionsParams
 	}
@@ -57,32 +56,22 @@ type (
 )
 
 var (
-	checkExecutionsExistActivityOptions = workflow.LocalActivityOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-		},
-		StartToCloseTimeout:    10 * time.Second,
-		ScheduleToCloseTimeout: 10 * time.Minute,
+	retryPolicy = &temporal.RetryPolicy{
+		InitialInterval: 1 * time.Second,
+		MaximumInterval: 10 * time.Second,
 	}
 
-	deleteNamespaceActivityOptions = workflow.LocalActivityOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 1 * time.Second,
-		},
+	localActivityOptions = workflow.LocalActivityOptions{
+		RetryPolicy:            retryPolicy,
 		StartToCloseTimeout:    10 * time.Second,
-		ScheduleToCloseTimeout: 10 * time.Minute,
+		ScheduleToCloseTimeout: 5 * time.Minute,
 	}
 
 	deleteExecutionsWorkflowOptions = workflow.ChildWorkflowOptions{
-		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval: 5 * time.Second,
-		},
+		RetryPolicy:              retryPolicy,
 		WorkflowRunTimeout:       60 * time.Minute,
-		WorkflowExecutionTimeout: 6 * time.Hour,
+		WorkflowExecutionTimeout: 24 * time.Hour,
 	}
-
-	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
-	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
 )
 
 func validateParams(params *ReclaimResourcesParams) error {
@@ -114,10 +103,10 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	}
 
 	// Step 2. Delete namespace.
-	ctx5 := workflow.WithLocalActivityOptions(ctx, deleteNamespaceActivityOptions)
+	ctx5 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 	err = workflow.ExecuteLocalActivity(ctx5, a.DeleteNamespaceActivity, params.Namespace, params.NamespaceID).Get(ctx, nil)
 	if err != nil {
-		return result, fmt.Errorf("%w: DeleteNamespaceActivity: %v", ErrUnableToExecuteActivity, err)
+		return result, fmt.Errorf("%w: DeleteNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	logger.Info("Child workflow finished successfully.", tag.WorkflowType(WorkflowName))
@@ -134,8 +123,8 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		err := workflow.ExecuteChildWorkflow(ctx1, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 
 		if err != nil {
-			logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName))
-			return result, fmt.Errorf("%w: %s: %v", ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
+			logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
+			return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
 		}
 		result.SuccessCount += der.SuccessCount
 		result.ErrorCount += der.ErrorCount
@@ -146,10 +135,10 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 				return result, err
 			}
 
-			ctx2 := workflow.WithLocalActivityOptions(ctx, checkExecutionsExistActivityOptions)
+			ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 			err = workflow.ExecuteLocalActivity(ctx2, a.CheckExecutionsExistActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsExist)
 			if err != nil {
-				return result, fmt.Errorf("%w: CheckExecutionsExistActivity: %v", ErrUnableToExecuteActivity, err)
+				return result, fmt.Errorf("%w: CheckExecutionsExistActivity: %v", errors.ErrUnableToExecuteActivity, err)
 			}
 
 			if !executionsExist {
