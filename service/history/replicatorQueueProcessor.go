@@ -405,7 +405,8 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						VersionHistory:     versionHistory,
+						// make copy of version history to avoid concurrent modification while proto marshalling the data
+						VersionHistory: versionhistory.CopyVersionHistory(versionHistory),
 					},
 				},
 				VisibilityTime: &taskInfo.VisibilityTimestamp,
@@ -465,6 +466,11 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 				}
 			}
 
+			// make copy of version history items to avoid concurrent modification while proto marshalling the data
+			var versionHistoryItemsCopy []*historyspb.VersionHistoryItem
+			for _, v := range versionHistoryItems {
+				versionHistoryItemsCopy = append(versionHistoryItemsCopy, versionhistory.CopyVersionHistoryItem(v))
+			}
 			replicationTask := &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 				SourceTaskId: taskID,
@@ -473,7 +479,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 						NamespaceId:         namespaceID.String(),
 						WorkflowId:          workflowID,
 						RunId:               runID,
-						VersionHistoryItems: versionHistoryItems,
+						VersionHistoryItems: versionHistoryItemsCopy,
 						Events:              eventsBlob,
 						NewRunEvents:        newRunEventsBlob,
 					},
