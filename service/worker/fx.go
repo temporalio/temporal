@@ -79,7 +79,7 @@ func PersistenceMaxQpsProvider(
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	params *resource.BootstrapParams,
-	persistenceConfig config.Persistence,
+	persistenceConfig *config.Persistence,
 ) *Config {
 	return NewConfig(
 		dc,
