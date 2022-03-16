@@ -414,18 +414,10 @@ func (s *Service) startBatcher() {
 }
 
 func (s *Service) startScanner() {
-	svcClient, err := s.sdkClientFactory.NewSystemClient(s.logger)
-	if err != nil {
-		s.logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-	}
-
 	sc := scanner.New(
 		s.logger,
 		s.config.ScannerCfg,
-		svcClient,
+		s.sdkClientFactory.GetSystemClient(s.logger),
 		s.metricsClient,
 		s.executionManager,
 		s.taskManager,

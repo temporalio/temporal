@@ -279,15 +279,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		SkipSchemaUpdate:      request.GetSkipSchemaUpdate(),
 	}
 
-	sdkClient, err := adh.sdkClientFactory.NewSystemClient(adh.logger)
-	if err != nil {
-		adh.logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-		return nil, err
-	}
-
+	sdkClient := adh.sdkClientFactory.GetSystemClient(adh.logger)
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
@@ -387,15 +379,7 @@ func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *admin
 func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName string, runID string) (*adminservice.GetSearchAttributesResponse, error) {
 	var lastErr error
 
-	sdkClient, err := adh.sdkClientFactory.NewSystemClient(adh.logger)
-	if err != nil {
-		adh.logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-		return nil, err
-	}
-
+	sdkClient := adh.sdkClientFactory.GetSystemClient(adh.logger)
 	descResp, err := sdkClient.DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, runID)
 	var wfInfo *workflowpb.WorkflowExecutionInfo
 	if err != nil {

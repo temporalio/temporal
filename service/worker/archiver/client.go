@@ -277,15 +277,6 @@ func (c *client) archiveVisibilityInline(ctx context.Context, request *ClientReq
 }
 
 func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest, taggedLogger log.Logger) error {
-	sdkClient, err := c.sdkClientFactory.NewSystemClient(c.logger)
-	if err != nil {
-		c.logger.Fatal(
-			"error get system sdk client",
-			tag.Error(err),
-		)
-		return err
-	}
-
 	c.metricsScope.IncCounter(metrics.ArchiverClientSendSignalCount)
 	if ok := c.rateLimiter.Allow(); !ok {
 		c.logger.Error(tooManyRequestsErrMsg)
@@ -304,7 +295,9 @@ func (c *client) sendArchiveSignal(ctx context.Context, request *ArchiveRequest,
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
-	_, err = sdkClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
+
+	sdkClient := c.sdkClientFactory.GetSystemClient(c.logger)
+	_, err := sdkClient.SignalWithStartWorkflow(signalCtx, workflowID, signalName, *request, workflowOptions, archivalWorkflowFnName, nil)
 	if err != nil {
 		taggedLogger.Error("failed to send signal to archival system workflow",
 			tag.ArchivalRequestNamespaceID(request.NamespaceID),

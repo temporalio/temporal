@@ -77,15 +77,6 @@ func (s *Batcher) Start() error {
 	// start worker for batch operation workflows
 	ctx := context.WithValue(context.Background(), batcherContextKey, s)
 
-	sdkClient, err := s.sdkClientFactory.NewSystemClient(s.logger)
-	if err != nil {
-		s.logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-		return err
-	}
-
 	workerOpts := worker.Options{
 		MaxConcurrentActivityExecutionSize:     s.cfg.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: s.cfg.MaxConcurrentWorkflowTaskExecutionSize(),
@@ -94,6 +85,8 @@ func (s *Batcher) Start() error {
 
 		BackgroundActivityContext: ctx,
 	}
+
+	sdkClient := s.sdkClientFactory.GetSystemClient(s.logger)
 	batchWorker := worker.New(sdkClient, BatcherTaskQueueName, workerOpts)
 	batchWorker.RegisterWorkflowWithOptions(BatchWorkflow, workflow.RegisterOptions{Name: BatchWFTypeName})
 	batchWorker.RegisterActivityWithOptions(BatchActivity, activity.RegisterOptions{Name: batchActivityName})

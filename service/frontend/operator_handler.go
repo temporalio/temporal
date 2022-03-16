@@ -164,15 +164,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 		SkipSchemaUpdate:      false,
 	}
 
-	sdkClient, err := h.sdkClientFactory.NewSystemClient(h.logger)
-	if err != nil {
-		h.logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-		return nil, err
-	}
-
+	sdkClient := h.sdkClientFactory.GetSystemClient(h.logger)
 	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{

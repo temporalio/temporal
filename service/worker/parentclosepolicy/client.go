@@ -36,7 +36,6 @@ import (
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/sdk"
 )
@@ -81,15 +80,6 @@ func NewClient(
 }
 
 func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
-	sdkClient, err := c.sdkClientFactory.NewSystemClient(c.logger)
-	if err != nil {
-		c.logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-		return err
-	}
-
 	workflowID := getWorkflowID(c.numWorkflows)
 	workflowOptions := sdkclient.StartWorkflowOptions{
 		ID:                    workflowID,
@@ -99,7 +89,9 @@ func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
-	_, err = sdkClient.SignalWithStartWorkflow(signalCtx, workflowID, processorChannelName, request, workflowOptions, processorWFTypeName, nil)
+
+	sdkClient := c.sdkClientFactory.GetSystemClient(c.logger)
+	_, err := sdkClient.SignalWithStartWorkflow(signalCtx, workflowID, processorChannelName, request, workflowOptions, processorWFTypeName, nil)
 	return err
 }
 

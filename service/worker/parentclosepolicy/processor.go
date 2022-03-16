@@ -92,15 +92,7 @@ func New(params *BootstrapParams) *Processor {
 
 // Start starts the scanner
 func (s *Processor) Start() error {
-	svcClient, err := s.svcClientFactory.NewSystemClient(s.logger)
-	if err != nil {
-		s.logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-		return err
-	}
-
+	svcClient := s.svcClientFactory.GetSystemClient(s.logger)
 	processorWorker := worker.New(svcClient, processorTaskQueueName, getWorkerOptions(s))
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})

@@ -536,7 +536,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	}
 
 	mockSdkClient := &sdkmocks.Client{}
-	s.mockResource.SDKClientFactory.EXPECT().NewSystemClient(gomock.Any()).Return(mockSdkClient, nil).AnyTimes()
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
 
 	// Start workflow failed.
 	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
@@ -586,7 +586,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.Nil(resp)
 
 	mockSdkClient := &sdkmocks.Client{}
-	s.mockResource.SDKClientFactory.EXPECT().NewSystemClient(gomock.Any()).Return(mockSdkClient, nil).AnyTimes()
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
 
 	// Elasticsearch is not configured
 	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(

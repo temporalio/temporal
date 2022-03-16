@@ -75,7 +75,7 @@ func (s *clientSuite) SetupTest() {
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverClientScope, gomock.Any()).Return(s.metricsScope)
 	s.sdkClient = &mocks.Client{}
 	s.sdkClientFactory = sdk.NewMockClientFactory(s.controller)
-	s.sdkClientFactory.EXPECT().NewSystemClient(gomock.Any()).Return(s.sdkClient, nil).AnyTimes()
+	s.sdkClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(s.sdkClient).AnyTimes()
 	s.client = NewClient(
 		s.metricsClient,
 		log.NewNoopLogger(),

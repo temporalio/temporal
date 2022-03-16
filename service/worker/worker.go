@@ -74,16 +74,10 @@ func (wm *workerManager) Start() {
 		return
 	}
 
-	sdkClient, err := wm.sdkClientFactory.NewSystemClient(wm.logger)
-	if err != nil {
-		wm.logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-	}
 	defaultWorkerOptions := sdkworker.Options{
 		// TODO: add dynamic config for worker options
 	}
+	sdkClient := wm.sdkClientFactory.GetSystemClient(wm.logger)
 	defaultWorker := sdkworker.New(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
 

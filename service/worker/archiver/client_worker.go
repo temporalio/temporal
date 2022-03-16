@@ -106,14 +106,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
 
-	sdkClient, err := container.SdkClientFactory.NewSystemClient(container.Logger)
-	if err != nil {
-		container.Logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-	}
-
+	sdkClient := container.SdkClientFactory.GetSystemClient(container.Logger)
 	wo := worker.Options{
 		MaxConcurrentActivityExecutionSize:     container.Config.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: container.Config.MaxConcurrentWorkflowTaskExecutionSize(),

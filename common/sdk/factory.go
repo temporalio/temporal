@@ -29,24 +29,28 @@ package sdk
 import (
 	"crypto/tls"
 	"fmt"
+	"sync"
 
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (
 	ClientFactory interface {
-		NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error)
-		NewSystemClient(logger log.Logger) (sdkclient.Client, error)
+		NewClient(namespaceName string, logger log.Logger) sdkclient.Client
+		GetSystemClient(logger log.Logger) sdkclient.Client
 	}
 
 	clientFactory struct {
-		hostPort       string
-		tlsConfig      *tls.Config
-		metricsHandler *MetricsHandler
+		hostPort        string
+		tlsConfig       *tls.Config
+		metricsHandler  *MetricsHandler
+		systemSdkClient sdkclient.Client
+		once            *sync.Once
 	}
 )
 
@@ -57,10 +61,11 @@ func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *Me
 		hostPort:       hostPort,
 		tlsConfig:      tlsConfig,
 		metricsHandler: metricsHandler,
+		once:           &sync.Once{},
 	}
 }
 
-func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error) {
+func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) sdkclient.Client {
 	var client sdkclient.Client
 
 	// Retry for up to 1m, handles frontend service not ready
@@ -82,9 +87,19 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkc
 		return nil
 	}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
 
-	return client, err
+	if err != nil {
+		logger.Fatal(
+			"error getting system sdk client",
+			tag.Error(err),
+		)
+	}
+
+	return client
 }
 
-func (f *clientFactory) NewSystemClient(logger log.Logger) (sdkclient.Client, error) {
-	return f.NewClient(common.SystemLocalNamespace, logger)
+func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
+	f.once.Do(func() {
+		f.systemSdkClient = f.NewClient(common.SystemLocalNamespace, logger)
+	})
+	return f.systemSdkClient
 }
