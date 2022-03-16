@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -73,6 +74,7 @@ type (
 		historyClient          historyservice.HistoryServiceClient
 		namespaceRegistry      namespace.Registry
 		workerServiceResolver  membership.ServiceResolver
+		visibilityManager      manager.VisibilityManager
 
 		archiverProvider provider.ArchiverProvider
 
@@ -135,6 +137,7 @@ func NewService(
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
 	manager *workerManager,
+	visibilityManager manager.VisibilityManager,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
 	if err != nil {
@@ -164,6 +167,7 @@ func NewService(
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
+		visibilityManager:         visibilityManager,
 
 		manager: manager,
 	}, nil
@@ -388,6 +392,7 @@ func (s *Service) Stop() {
 	s.membershipMonitor.Stop()
 	s.clusterMetadata.Stop()
 	s.persistenceBean.Close()
+	s.visibilityManager.Close()
 
 	s.logger.Info(
 		"worker service stopped",
