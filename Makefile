@@ -283,7 +283,7 @@ integration-test: clean-test-results
 	@! grep -q "^--- FAIL" test.log
 
 integration-with-fault-injection-test: clean-test-results
-	@printf $(COLOR) "Run integration tests..."
+	@printf $(COLOR) "Run integration tests with fault injection..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
 		@go test $(INTEG_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log \
 	$(NEWLINE))

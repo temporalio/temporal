@@ -59,6 +59,20 @@ func (m *MockClientFactory) EXPECT() *MockClientFactoryMockRecorder {
 	return m.recorder
 }
 
+// GetSystemClient mocks base method.
+func (m *MockClientFactory) GetSystemClient(logger log.Logger) client.Client {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetSystemClient", logger)
+	ret0, _ := ret[0].(client.Client)
+	return ret0
+}
+
+// GetSystemClient indicates an expected call of GetSystemClient.
+func (mr *MockClientFactoryMockRecorder) GetSystemClient(logger interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSystemClient", reflect.TypeOf((*MockClientFactory)(nil).GetSystemClient), logger)
+}
+
 // NewClient mocks base method.
 func (m *MockClientFactory) NewClient(namespaceName string, logger log.Logger) (client.Client, error) {
 	m.ctrl.T.Helper()
@@ -72,19 +86,4 @@ func (m *MockClientFactory) NewClient(namespaceName string, logger log.Logger) (
 func (mr *MockClientFactoryMockRecorder) NewClient(namespaceName, logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewClient", reflect.TypeOf((*MockClientFactory)(nil).NewClient), namespaceName, logger)
-}
-
-// NewSystemClient mocks base method.
-func (m *MockClientFactory) NewSystemClient(logger log.Logger) (client.Client, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "NewSystemClient", logger)
-	ret0, _ := ret[0].(client.Client)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// NewSystemClient indicates an expected call of NewSystemClient.
-func (mr *MockClientFactoryMockRecorder) NewSystemClient(logger interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewSystemClient", reflect.TypeOf((*MockClientFactory)(nil).NewSystemClient), logger)
 }

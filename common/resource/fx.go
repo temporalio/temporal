@@ -100,7 +100,6 @@ var Module = fx.Options(
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
-	sdk.Module,
 	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(FrontedClientProvider),
 	fx.Provide(GrpcListenerProvider),
