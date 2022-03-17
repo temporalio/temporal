@@ -50,8 +50,8 @@ type (
 	}
 
 	GetNextPageTokenParams struct {
-		NamespaceID   namespace.ID
 		Namespace     namespace.Name
+		NamespaceID   namespace.ID
 		PageSize      int
 		NextPageToken []byte
 	}

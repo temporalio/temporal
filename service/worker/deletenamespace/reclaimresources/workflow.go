@@ -88,7 +88,7 @@ func validateParams(params *ReclaimResourcesParams) error {
 
 func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Child workflow started.", tag.WorkflowType(WorkflowName))
+	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
 
 	if err := validateParams(&params); err != nil {
 		return ReclaimResourcesResult{}, err
@@ -109,7 +109,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 		return result, fmt.Errorf("%w: DeleteNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
-	logger.Info("Child workflow finished successfully.", tag.WorkflowType(WorkflowName))
+	logger.Info("Workflow finished successfully.", tag.WorkflowType(WorkflowName))
 	return result, nil
 }
 

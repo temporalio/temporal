@@ -107,7 +107,7 @@ func validateParams(params *DeleteExecutionsParams) error {
 
 func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParams) (DeleteExecutionsResult, error) {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Child workflow started.", tag.WorkflowType(WorkflowName))
+	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
 	result := DeleteExecutionsResult{
 		SuccessCount: params.PreviousSuccessCount,
 		ErrorCount:   params.PreviousErrorCount,
