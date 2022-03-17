@@ -232,6 +232,12 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 	logger := getActivityLogger(ctx)
 	hbd := HeartBeatDetails{}
 
+	sdkClient, err := batcher.sdkClientFactory.NewClient(batchParams.Namespace, logger)
+	if err != nil {
+		logger.Error("Unable to create SDK client for namespace.", tag.Error(err), tag.WorkflowNamespace(batchParams.Namespace))
+		return hbd, err
+	}
+
 	startOver := true
 	if activity.HasHeartbeatDetails(ctx) {
 		if err := activity.GetHeartbeatDetails(ctx, &hbd); err == nil {
@@ -243,7 +249,6 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 		}
 	}
 
-	sdkClient := batcher.sdkClientFactory.NewClient(batchParams.Namespace, logger)
 	if startOver {
 		resp, err := sdkClient.CountWorkflow(ctx, &workflowservice.CountWorkflowExecutionsRequest{
 			Query: batchParams.Query,

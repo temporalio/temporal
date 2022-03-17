@@ -41,7 +41,7 @@ import (
 
 type (
 	ClientFactory interface {
-		NewClient(namespaceName string, logger log.Logger) sdkclient.Client
+		NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error)
 		GetSystemClient(logger log.Logger) sdkclient.Client
 	}
 
@@ -65,7 +65,7 @@ func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *Me
 	}
 }
 
-func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) sdkclient.Client {
+func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error) {
 	var client sdkclient.Client
 
 	// Retry for up to 1m, handles frontend service not ready
@@ -87,19 +87,21 @@ func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) sdkcl
 		return nil
 	}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
 
-	if err != nil {
-		logger.Fatal(
-			"error getting system sdk client",
-			tag.Error(err),
-		)
-	}
-
-	return client
+	return client, err
 }
 
 func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
 	f.once.Do(func() {
-		f.systemSdkClient = f.NewClient(common.SystemLocalNamespace, logger)
+		client, err := f.NewClient(common.SystemLocalNamespace, logger)
+
+		if err != nil {
+			logger.Fatal(
+				"error getting system sdk client",
+				tag.Error(err),
+			)
+		}
+
+		f.systemSdkClient = client
 	})
 	return f.systemSdkClient
 }
