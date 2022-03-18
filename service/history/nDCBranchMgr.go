@@ -185,6 +185,7 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 	}
 	// the workflow must be updated as active, to send out replication tasks
 	if err := targetWorkflow.context.UpdateWorkflowExecutionAsActive(
+		ctx,
 		r.shard.GetTimeSource().Now(),
 	); err != nil {
 		return nil, 0, err
@@ -243,7 +244,7 @@ func (r *nDCBranchMgrImpl) createNewBranch(
 	namespaceID := executionInfo.NamespaceId
 	workflowID := executionInfo.WorkflowId
 
-	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseBranchLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID, workflowID, uuid.New()),

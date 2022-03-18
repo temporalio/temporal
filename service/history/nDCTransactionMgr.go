@@ -250,6 +250,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	}()
 
 	if _, err := targetWorkflow.getContext().PersistWorkflowEvents(
+		ctx,
 		targetWorkflowEvents,
 	); err != nil {
 		return err
@@ -265,6 +266,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	}
 
 	return targetWorkflow.getContext().UpdateWorkflowExecutionWithNew(
+		ctx,
 		now,
 		updateMode,
 		nil,
@@ -382,13 +384,14 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 }
 
 func (r *nDCTransactionMgrImpl) checkWorkflowExists(
-	_ context.Context,
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) (bool, error) {
 
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
+		ctx,
 		&persistence.GetWorkflowExecutionRequest{
 			ShardID:     r.shard.GetShardID(),
 			NamespaceID: namespaceID.String(),
@@ -408,12 +411,13 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 }
 
 func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
-	_ context.Context,
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 ) (string, error) {
 
 	resp, err := r.shard.GetExecutionManager().GetCurrentExecution(
+		ctx,
 		&persistence.GetCurrentExecutionRequest{
 			ShardID:     r.shard.GetShardID(),
 			NamespaceID: namespaceID.String(),
@@ -452,7 +456,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 		return nil, err
 	}
 
-	msBuilder, err := weContext.LoadWorkflowExecution()
+	msBuilder, err := weContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		// no matter what error happen, we need to retry
 		release(err)

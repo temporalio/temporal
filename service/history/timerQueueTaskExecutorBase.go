@@ -93,7 +93,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
 	switch err.(type) {
 	case nil:
 		if mutableState == nil {
@@ -126,6 +126,7 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	}
 
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weContext,
@@ -146,7 +147,7 @@ func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
 
 func (t *timerQueueTaskExecutorBase) deleteHistoryBranch(branchToken []byte) error {
 	if len(branchToken) > 0 {
-		return t.shard.GetExecutionManager().DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+		return t.shard.GetExecutionManager().DeleteHistoryBranch(context.TODO(), &persistence.DeleteHistoryBranchRequest{
 			ShardID:     t.shard.GetShardID(),
 			BranchToken: branchToken,
 		})

@@ -144,7 +144,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
-	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any()).DoAndReturn(
+	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
@@ -218,7 +218,7 @@ func (s *nDCBranchMgrSuite) TestFlushBufferedEvents() {
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(true, lastWriteVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.mockContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any()).Return(nil)
+	s.mockContext.EXPECT().UpdateWorkflowExecutionAsActive(gomock.Any(), gomock.Any()).Return(nil)
 
 	ctx := context.Background()
 
@@ -324,7 +324,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 	}).AnyTimes()
 
 	shardID := s.mockShard.GetShardID()
-	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any()).DoAndReturn(
+	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{

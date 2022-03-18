@@ -206,7 +206,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	pageToken := []byte("some random token")
 
 	shardID := s.mockShard.GetShardID()
-	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -219,7 +219,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		NextPageToken:  pageToken,
 		Size:           12345,
 	}, nil)
-	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -233,7 +233,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 		Size:           67890,
 	}, nil)
 
-	paginationFn := s.nDCStateRebuilder.getPaginationFn(firstEventID, nextEventID, branchToken)
+	paginationFn := s.nDCStateRebuilder.getPaginationFn(context.Background(), firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
 
 	var result []*HistoryBlobsPaginationItem
@@ -298,7 +298,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 	historySize1 := 12345
 	historySize2 := 67890
 	shardID := s.mockShard.GetShardID()
-	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -312,7 +312,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		Size:           historySize1,
 	}, nil)
 	expectedLastFirstTransactionID := int64(20)
-	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -338,7 +338,7 @@ func (s *nDCStateRebuilderSuite) TestRebuild() {
 		},
 		1234,
 	), nil).AnyTimes()
-	s.mockTaskRefresher.EXPECT().RefreshTasks(s.now, gomock.Any()).Return(nil)
+	s.mockTaskRefresher.EXPECT().RefreshTasks(gomock.Any(), s.now, gomock.Any()).Return(nil)
 
 	rebuildMutableState, rebuiltHistorySize, err := s.nDCStateRebuilder.rebuild(
 		context.Background(),

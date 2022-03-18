@@ -25,6 +25,7 @@
 package persistencetests
 
 import (
+	"context"
 	"runtime/debug"
 	"testing"
 	"time"
@@ -52,6 +53,9 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 )
 
@@ -79,7 +83,13 @@ func (s *ExecutionManagerSuiteForEventsV2) SetupTest() {
 	defer failOnPanic(s.T())
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.ClearTasks()
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), time.Second*30)
+
+	s.ClearTasks(s.ctx)
+}
+
+func (s *ExecutionManagerSuiteForEventsV2) TearDownTest() {
+	s.cancel()
 }
 
 func (s *ExecutionManagerSuiteForEventsV2) newRandomChecksum() *persistencespb.Checksum {
@@ -115,7 +125,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 
 	csum := s.newRandomChecksum()
 
-	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+	_, err0 := s.ExecutionManager.CreateWorkflowExecution(s.ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -156,7 +166,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 
 	s.NoError(err0)
 
-	state0, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	state0, err1 := s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
@@ -175,10 +185,10 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 		StartedId:  5,
 	}}
 
-	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), nil, nil, nil, timerInfos, nil)
+	err2 := s.UpdateWorkflowExecution(s.ctx, updatedInfo, updatedState, int64(5), []int64{int64(4)}, nil, int64(3), nil, nil, nil, timerInfos, nil)
 	s.NoError(err2)
 
-	state, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	state, err1 := s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.TimerInfos))
@@ -189,10 +199,10 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreation() {
 	s.Equal(int64(5), state.TimerInfos[timerID].GetStartedId())
 	s.assertChecksumsEqual(testWorkflowChecksum, state.Checksum)
 
-	err2 = s.UpdateWorkflowExecution(updatedInfo, updatedState, int64(5), nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
+	err2 = s.UpdateWorkflowExecution(s.ctx, updatedInfo, updatedState, int64(5), nil, nil, int64(5), nil, nil, nil, nil, []string{timerID})
 	s.NoError(err2)
 
-	state, err2 = s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	state, err2 = s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.NoError(err2)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(0, len(state.TimerInfos))
@@ -215,7 +225,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 
 	csum := s.newRandomChecksum()
 
-	_, err0 := s.ExecutionManager.CreateWorkflowExecution(&p.CreateWorkflowExecutionRequest{
+	_, err0 := s.ExecutionManager.CreateWorkflowExecution(s.ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		RangeID: s.ShardInfo.GetRangeId(),
 		NewWorkflowSnapshot: p.WorkflowSnapshot{
@@ -261,7 +271,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 
 	s.NoError(err0)
 
-	state0, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	state0, err1 := s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	s.NotNil(info0, "Valid Workflow info expected.")
@@ -286,10 +296,10 @@ func (s *ExecutionManagerSuiteForEventsV2) TestWorkflowCreationWithVersionHistor
 	s.NoError(err)
 	updatedInfo.VersionHistories = versionHistories
 
-	err2 := s.UpdateWorkflowExecution(updatedInfo, updatedState, state0.NextEventId, []int64{int64(4)}, nil, common.EmptyEventID, nil, nil, nil, timerInfos, nil)
+	err2 := s.UpdateWorkflowExecution(s.ctx, updatedInfo, updatedState, state0.NextEventId, []int64{int64(4)}, nil, common.EmptyEventID, nil, nil, nil, timerInfos, nil)
 	s.NoError(err2)
 
-	state, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	state, err1 := s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.NoError(err1)
 	s.NotNil(state, "expected valid state.")
 	s.Equal(1, len(state.TimerInfos))
@@ -315,10 +325,10 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 		workflowExecution.RunId,
 	)
 
-	_, err0 := s.CreateWorkflowExecution(namespaceID, workflowExecution, "queue1", "wType", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(13), 3, 0, 2, nil)
+	_, err0 := s.CreateWorkflowExecution(s.ctx, namespaceID, workflowExecution, "queue1", "wType", timestamp.DurationFromSeconds(20), timestamp.DurationFromSeconds(13), 3, 0, 2, nil)
 	s.NoError(err0)
 
-	state0, err1 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	state0, err1 := s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.NoError(err1)
 	info0 := state0.ExecutionInfo
 	updatedInfo := copyWorkflowExecutionInfo(info0)
@@ -339,7 +349,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 		ScheduleID:  int64(2),
 	}
 
-	_, err2 := s.ExecutionManager.UpdateWorkflowExecution(&p.UpdateWorkflowExecutionRequest{
+	_, err2 := s.ExecutionManager.UpdateWorkflowExecution(s.ctx, &p.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
 		UpdateWorkflowMutation: p.WorkflowMutation{
 			ExecutionInfo:  updatedInfo,
@@ -382,14 +392,14 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 
 	s.NoError(err2)
 
-	prevExecutionState, err3 := s.GetWorkflowMutableState(namespaceID, workflowExecution)
+	prevExecutionState, err3 := s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.NoError(err3)
 	prevExecutionInfo := prevExecutionState.ExecutionInfo
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED, prevExecutionState.ExecutionState.State)
 	s.Equal(int64(5), prevExecutionState.NextEventId)
 	s.Equal(int64(2), prevExecutionInfo.LastWorkflowTaskStartId)
 
-	newExecutionState, err4 := s.GetWorkflowMutableState(namespaceID, newWorkflowExecution)
+	newExecutionState, err4 := s.GetWorkflowMutableState(s.ctx, namespaceID, newWorkflowExecution)
 	s.NoError(err4)
 	newExecutionInfo := newExecutionState.ExecutionInfo
 	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, newExecutionState.ExecutionState.State)
@@ -398,7 +408,7 @@ func (s *ExecutionManagerSuiteForEventsV2) TestContinueAsNew() {
 	s.Equal(common.EmptyEventID, newExecutionInfo.LastWorkflowTaskStartId)
 	s.Equal(int64(2), newExecutionInfo.WorkflowTaskScheduleId)
 
-	newRunID, err5 := s.GetCurrentWorkflowRunID(namespaceID, workflowExecution.WorkflowId)
+	newRunID, err5 := s.GetCurrentWorkflowRunID(s.ctx, namespaceID, workflowExecution.WorkflowId)
 	s.NoError(err5)
 	s.Equal(newWorkflowExecution.RunId, newRunID)
 }

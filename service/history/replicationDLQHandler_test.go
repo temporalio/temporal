@@ -172,7 +172,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 		},
 	}
 
-	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), &persistence.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
@@ -199,6 +199,7 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 	lastMessageID := int64(1)
 
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(
+		gomock.Any(),
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 				ShardID:             s.mockShard.GetShardID(),
@@ -210,7 +211,7 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 		}).Return(nil)
 
 	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	err := s.replicationMessageHandler.purgeMessages(s.sourceCluster, lastMessageID)
+	err := s.replicationMessageHandler.purgeMessages(context.Background(), s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
 func (s *replicationDLQHandlerSuite) TestMergeMessages() {
@@ -260,7 +261,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		},
 	}
 
-	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), &persistence.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
@@ -278,7 +279,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
 	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil)
-	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(&persistence.RangeDeleteReplicationTaskFromDLQRequest{
+	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,

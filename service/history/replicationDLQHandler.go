@@ -64,6 +64,7 @@ type (
 			pageToken []byte,
 		) ([]*replicationspb.ReplicationTask, []byte, error)
 		purgeMessages(
+			ctx context.Context,
 			sourceCluster string,
 			lastMessageID int64,
 		) error
@@ -130,7 +131,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 ) ([]*replicationspb.ReplicationTask, int64, []byte, error) {
 
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
-	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
+	resp, err := r.shard.GetExecutionManager().GetReplicationTasksFromDLQ(ctx, &persistence.GetReplicationTasksFromDLQRequest{
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
@@ -197,12 +198,14 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 }
 
 func (r *replicationDLQHandlerImpl) purgeMessages(
+	ctx context.Context,
 	sourceCluster string,
 	lastMessageID int64,
 ) error {
 
 	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
 	err := r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
+		ctx,
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 				ShardID:             r.shard.GetShardID(),
@@ -258,6 +261,7 @@ func (r *replicationDLQHandlerImpl) mergeMessages(
 	}
 
 	err = r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
+		ctx,
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
 			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 				ShardID:             r.shard.GetShardID(),

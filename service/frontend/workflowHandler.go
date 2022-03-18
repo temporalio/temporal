@@ -568,6 +568,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		if !isWorkflowRunning {
 			if rawHistoryQueryEnabled {
 				historyBlob, _, err = wh.getRawHistory(
+					ctx,
 					wh.metricsScope(ctx),
 					namespaceID,
 					*execution,
@@ -586,6 +587,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 				historyBlob = historyBlob[len(historyBlob)-1:]
 			} else {
 				history, _, err = wh.getHistory(
+					ctx,
 					wh.metricsScope(ctx),
 					namespaceID,
 					namespace.Name(request.GetNamespace()),
@@ -621,6 +623,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 		} else {
 			if rawHistoryQueryEnabled {
 				historyBlob, continuationToken.PersistenceToken, err = wh.getRawHistory(
+					ctx,
 					wh.metricsScope(ctx),
 					namespaceID,
 					*execution,
@@ -633,6 +636,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistory(ctx context.Context, requ
 				)
 			} else {
 				history, continuationToken.PersistenceToken, err = wh.getHistory(
+					ctx,
 					wh.metricsScope(ctx),
 					namespaceID,
 					namespace.Name(request.GetNamespace()),
@@ -804,6 +808,7 @@ func (wh *WorkflowHandler) GetWorkflowExecutionHistoryReverse(ctx context.Contex
 	history.Events = []*historypb.HistoryEvent{}
 	// return all events
 	history, continuationToken.PersistenceToken, continuationToken.NextEventId, err = wh.getHistoryReverse(
+		ctx,
 		wh.metricsScope(ctx),
 		namespaceID,
 		namespace.Name(request.GetNamespace()),
@@ -2997,6 +3002,7 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 }
 
 func (wh *WorkflowHandler) getRawHistory(
+	ctx context.Context,
 	scope metrics.Scope,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
@@ -3010,7 +3016,7 @@ func (wh *WorkflowHandler) getRawHistory(
 	var rawHistory []*commonpb.DataBlob
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 
-	resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	resp, err := wh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -3062,6 +3068,7 @@ func (wh *WorkflowHandler) getRawHistory(
 }
 
 func (wh *WorkflowHandler) getHistory(
+	ctx context.Context,
 	scope metrics.Scope,
 	namespaceID namespace.ID,
 	namespace namespace.Name,
@@ -3079,7 +3086,7 @@ func (wh *WorkflowHandler) getHistory(
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), execution.GetWorkflowId(), wh.config.NumHistoryShards)
 	var err error
 	var historyEvents []*historypb.HistoryEvent
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(wh.persistenceExecutionManager, &persistence.ReadHistoryBranchRequest{
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEvents(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    nextEventID,
@@ -3141,6 +3148,7 @@ func (wh *WorkflowHandler) getHistory(
 }
 
 func (wh *WorkflowHandler) getHistoryReverse(
+	ctx context.Context,
 	scope metrics.Scope,
 	namespaceID namespace.ID,
 	namespace namespace.Name,
@@ -3156,7 +3164,7 @@ func (wh *WorkflowHandler) getHistoryReverse(
 	var err error
 	var historyEvents []*historypb.HistoryEvent
 
-	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
+	historyEvents, size, nextPageToken, err = persistence.ReadFullPageEventsReverse(ctx, wh.persistenceExecutionManager, &persistence.ReadHistoryBranchReverseRequest{
 		BranchToken:            branchToken,
 		MaxEventID:             nextEventID,
 		LastFirstTransactionID: lastFirstTxnID,
@@ -3319,6 +3327,7 @@ func (wh *WorkflowHandler) createPollWorkflowTaskQueueResponse(
 			}
 		}()
 		history, persistenceToken, err = wh.getHistory(
+			ctx,
 			wh.metricsScope(ctx),
 			namespaceID,
 			namespaceEntry.Name(),
@@ -3696,7 +3705,7 @@ func (wh *WorkflowHandler) trimHistoryNode(
 		return // abort
 	}
 
-	_, err = wh.persistenceExecutionManager.TrimHistoryBranch(&persistence.TrimHistoryBranchRequest{
+	_, err = wh.persistenceExecutionManager.TrimHistoryBranch(ctx, &persistence.TrimHistoryBranchRequest{
 		ShardID:       common.WorkflowIDToHistoryShard(namespaceID, workflowID, wh.config.NumHistoryShards),
 		BranchToken:   response.CurrentBranchToken,
 		NodeID:        response.GetLastFirstEventId(),

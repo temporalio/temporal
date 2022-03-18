@@ -29,6 +29,7 @@
 package workflow
 
 import (
+	context "context"
 	reflect "reflect"
 	time "time"
 
@@ -953,18 +954,18 @@ func (mr *MockMutableStateMockRecorder) GetActivityInfoWithTimerHeartbeat(schedu
 }
 
 // GetActivityScheduledEvent mocks base method.
-func (m *MockMutableState) GetActivityScheduledEvent(arg0 int64) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) GetActivityScheduledEvent(arg0 context.Context, arg1 int64) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetActivityScheduledEvent", arg0)
+	ret := m.ctrl.Call(m, "GetActivityScheduledEvent", arg0, arg1)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetActivityScheduledEvent indicates an expected call of GetActivityScheduledEvent.
-func (mr *MockMutableStateMockRecorder) GetActivityScheduledEvent(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GetActivityScheduledEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).GetActivityScheduledEvent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetActivityScheduledEvent", reflect.TypeOf((*MockMutableState)(nil).GetActivityScheduledEvent), arg0, arg1)
 }
 
 // GetChildExecutionInfo mocks base method.
@@ -983,33 +984,33 @@ func (mr *MockMutableStateMockRecorder) GetChildExecutionInfo(arg0 interface{}) 
 }
 
 // GetChildExecutionInitiatedEvent mocks base method.
-func (m *MockMutableState) GetChildExecutionInitiatedEvent(arg0 int64) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) GetChildExecutionInitiatedEvent(arg0 context.Context, arg1 int64) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetChildExecutionInitiatedEvent", arg0)
+	ret := m.ctrl.Call(m, "GetChildExecutionInitiatedEvent", arg0, arg1)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetChildExecutionInitiatedEvent indicates an expected call of GetChildExecutionInitiatedEvent.
-func (mr *MockMutableStateMockRecorder) GetChildExecutionInitiatedEvent(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GetChildExecutionInitiatedEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChildExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetChildExecutionInitiatedEvent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetChildExecutionInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetChildExecutionInitiatedEvent), arg0, arg1)
 }
 
 // GetCompletionEvent mocks base method.
-func (m *MockMutableState) GetCompletionEvent() (*v13.HistoryEvent, error) {
+func (m *MockMutableState) GetCompletionEvent(arg0 context.Context) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCompletionEvent")
+	ret := m.ctrl.Call(m, "GetCompletionEvent", arg0)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCompletionEvent indicates an expected call of GetCompletionEvent.
-func (mr *MockMutableStateMockRecorder) GetCompletionEvent() *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GetCompletionEvent(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCompletionEvent", reflect.TypeOf((*MockMutableState)(nil).GetCompletionEvent))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCompletionEvent", reflect.TypeOf((*MockMutableState)(nil).GetCompletionEvent), arg0)
 }
 
 // GetCronBackoffDuration mocks base method.
@@ -1315,18 +1316,18 @@ func (mr *MockMutableStateMockRecorder) GetRetryBackoffDuration(failure interfac
 }
 
 // GetSignalExternalInitiatedEvent mocks base method.
-func (m *MockMutableState) GetSignalExternalInitiatedEvent(arg0 int64) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) GetSignalExternalInitiatedEvent(arg0 context.Context, arg1 int64) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetSignalExternalInitiatedEvent", arg0)
+	ret := m.ctrl.Call(m, "GetSignalExternalInitiatedEvent", arg0, arg1)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetSignalExternalInitiatedEvent indicates an expected call of GetSignalExternalInitiatedEvent.
-func (mr *MockMutableStateMockRecorder) GetSignalExternalInitiatedEvent(arg0 interface{}) *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GetSignalExternalInitiatedEvent(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSignalExternalInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetSignalExternalInitiatedEvent), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetSignalExternalInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetSignalExternalInitiatedEvent), arg0, arg1)
 }
 
 // GetSignalInfo mocks base method.
@@ -1345,18 +1346,18 @@ func (mr *MockMutableStateMockRecorder) GetSignalInfo(arg0 interface{}) *gomock.
 }
 
 // GetStartEvent mocks base method.
-func (m *MockMutableState) GetStartEvent() (*v13.HistoryEvent, error) {
+func (m *MockMutableState) GetStartEvent(arg0 context.Context) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetStartEvent")
+	ret := m.ctrl.Call(m, "GetStartEvent", arg0)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetStartEvent indicates an expected call of GetStartEvent.
-func (mr *MockMutableStateMockRecorder) GetStartEvent() *gomock.Call {
+func (mr *MockMutableStateMockRecorder) GetStartEvent(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStartEvent", reflect.TypeOf((*MockMutableState)(nil).GetStartEvent))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetStartEvent", reflect.TypeOf((*MockMutableState)(nil).GetStartEvent), arg0)
 }
 
 // GetStartVersion mocks base method.

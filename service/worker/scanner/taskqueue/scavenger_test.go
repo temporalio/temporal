@@ -68,7 +68,7 @@ func (s *ScavengerTestSuite) SetupTest() {
 	executorPollInterval = time.Millisecond * 50
 }
 
-func (s *ScavengerTestSuite) TeardownTest() {
+func (s *ScavengerTestSuite) TearDownTest() {
 	s.controller.Finish()
 }
 

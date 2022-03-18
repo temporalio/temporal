@@ -25,6 +25,7 @@
 package shard
 
 import (
+	"context"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -94,16 +95,16 @@ type (
 		UpdateNamespaceNotificationVersion(namespaceNotificationVersion int64) error
 		UpdateHandoverNamespaces(newNamespaces []*namespace.Namespace, maxRepTaskID int64)
 
-		AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
+		AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution commonpb.WorkflowExecution) (int, error)
 
-		AddTasks(request *persistence.AddHistoryTasksRequest) error
-		CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
-		UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
-		ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error)
-		SetWorkflowExecution(request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error)
+		AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error
+		CreateWorkflowExecution(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error)
+		UpdateWorkflowExecution(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error)
+		ConflictResolveWorkflowExecution(ctx context.Context, request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error)
+		SetWorkflowExecution(ctx context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error)
 		// DeleteWorkflowExecution deletes workflow execution, current workflow execution, and add task to delete visibility.
 		// If branchToken != nil, then delete history also, otherwise leave history.
-		DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64, closeTime *time.Time) error
+		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, version int64, closeTime *time.Time) error
 
 		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
 		GetHistoryClient() historyservice.HistoryServiceClient

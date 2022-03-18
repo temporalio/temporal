@@ -237,7 +237,7 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(weCtx, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -252,6 +252,7 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	}
 
 	return t.workflowDeleteManager.DeleteWorkflowExecution(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weCtx,

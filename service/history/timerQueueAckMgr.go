@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"math"
 	"sort"
 	"sync"
@@ -374,7 +375,7 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 		BatchSize:     batchSize,
 		NextPageToken: pageToken,
 	}
-	response, err := t.executionMgr.GetHistoryTasks(request)
+	response, err := t.executionMgr.GetHistoryTasks(context.TODO(), request)
 	if err != nil {
 		return nil, nil, err
 	}

@@ -27,6 +27,7 @@
 package events
 
 import (
+	"context"
 	"time"
 
 	historypb "go.temporal.io/api/history/v1"
@@ -51,7 +52,7 @@ type (
 	}
 
 	Cache interface {
-		GetEvent(key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
+		GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error)
 		PutEvent(key EventKey, event *historypb.HistoryEvent)
 		DeleteEvent(key EventKey)
 	}
@@ -109,7 +110,7 @@ func (e *CacheImpl) validateKey(key EventKey) bool {
 	return true
 }
 
-func (e *CacheImpl) GetEvent(key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
+func (e *CacheImpl) GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*historypb.HistoryEvent, error) {
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheRequests)
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetEventScope, metrics.CacheLatency)
 	defer sw.Stop()
@@ -125,7 +126,7 @@ func (e *CacheImpl) GetEvent(key EventKey, firstEventID int64, branchToken []byt
 	}
 
 	e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheMissCounter)
-	event, err := e.getHistoryEventFromStore(key, firstEventID, branchToken)
+	event, err := e.getHistoryEventFromStore(ctx, key, firstEventID, branchToken)
 	if err != nil {
 		e.metricsClient.IncCounter(metrics.EventsCacheGetEventScope, metrics.CacheFailures)
 		e.logger.Error("Cache unable to retrieve event from store",
@@ -165,6 +166,7 @@ func (e *CacheImpl) DeleteEvent(key EventKey) {
 }
 
 func (e *CacheImpl) getHistoryEventFromStore(
+	ctx context.Context,
 	key EventKey,
 	firstEventID int64,
 	branchToken []byte,
@@ -174,7 +176,7 @@ func (e *CacheImpl) getHistoryEventFromStore(
 	sw := e.metricsClient.StartTimer(metrics.EventsCacheGetFromStoreScope, metrics.CacheLatency)
 	defer sw.Stop()
 
-	response, err := e.eventsMgr.ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	response, err := e.eventsMgr.ReadHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    firstEventID,
 		MaxEventID:    key.EventID + 1,

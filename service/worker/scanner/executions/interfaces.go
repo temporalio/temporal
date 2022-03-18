@@ -25,6 +25,8 @@
 package executions
 
 import (
+	"context"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 )
 
@@ -41,6 +43,6 @@ type (
 	}
 
 	Validator interface {
-		Validate(mutableState *MutableState) ([]MutableStateValidationResult, error)
+		Validate(ctx context.Context, mutableState *MutableState) ([]MutableStateValidationResult, error)
 	}
 )

@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -52,6 +53,7 @@ var _ ExecutionManager = (*executionManagerImpl)(nil)
 
 // ForkHistoryBranch forks a new branch from a old branch
 func (m *executionManagerImpl) ForkHistoryBranch(
+	_ context.Context,
 	request *ForkHistoryBranchRequest,
 ) (*ForkHistoryBranchResponse, error) {
 
@@ -137,6 +139,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 
 // DeleteHistoryBranch removes a branch
 func (m *executionManagerImpl) DeleteHistoryBranch(
+	_ context.Context,
 	request *DeleteHistoryBranchRequest,
 ) error {
 
@@ -155,7 +158,7 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 	})
 
 	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
-	historyTreeResp, err := m.GetHistoryTree(&GetHistoryTreeRequest{
+	historyTreeResp, err := m.GetHistoryTree(context.TODO(), &GetHistoryTreeRequest{
 		TreeID:      branch.TreeId,
 		ShardID:     &request.ShardID,
 		BranchToken: request.BranchToken,
@@ -214,6 +217,7 @@ findDeleteRanges:
 
 // TrimHistoryBranch trims a branch
 func (m *executionManagerImpl) TrimHistoryBranch(
+	_ context.Context,
 	request *TrimHistoryBranchRequest,
 ) (*TrimHistoryBranchResponse, error) {
 
@@ -309,6 +313,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 
 // GetHistoryTree returns all branch information of a tree
 func (m *executionManagerImpl) GetHistoryTree(
+	_ context.Context,
 	request *GetHistoryTreeRequest,
 ) (*GetHistoryTreeResponse, error) {
 
@@ -422,6 +427,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 
 // AppendHistoryNodes add a node to history node table
 func (m *executionManagerImpl) AppendHistoryNodes(
+	_ context.Context,
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
@@ -441,6 +447,7 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchByBatch(
+	_ context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadHistoryBranchByBatchResponse, error) {
 
@@ -453,6 +460,7 @@ func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 // ReadHistoryBranch returns history node data for a branch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranch(
+	_ context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadHistoryBranchResponse, error) {
 
@@ -466,6 +474,7 @@ func (m *executionManagerImpl) ReadHistoryBranch(
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 // NOTE: this API should only be used by 3+DC
 func (m *executionManagerImpl) ReadRawHistoryBranch(
+	_ context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadRawHistoryBranchResponse, error) {
 
@@ -489,6 +498,7 @@ func (m *executionManagerImpl) ReadRawHistoryBranch(
 // ReadHistoryBranchReverse returns history node data for a branch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchReverse(
+	_ context.Context,
 	request *ReadHistoryBranchReverseRequest,
 ) (*ReadHistoryBranchReverseResponse, error) {
 	resp := &ReadHistoryBranchReverseResponse{}
@@ -498,6 +508,7 @@ func (m *executionManagerImpl) ReadHistoryBranchReverse(
 }
 
 func (m *executionManagerImpl) GetAllHistoryTreeBranches(
+	_ context.Context,
 	request *GetAllHistoryTreeBranchesRequest,
 ) (*GetAllHistoryTreeBranchesResponse, error) {
 	resp, err := m.persistence.GetAllHistoryTreeBranches(request)

@@ -257,7 +257,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_SyncActivit
 		},
 	}
 
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(request).Return(nil)
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
 	s.NoError(err)
 }
@@ -281,7 +281,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_History() {
 		},
 	}
 
-	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(request).Return(nil)
+	s.mockExecutionManager.EXPECT().PutReplicationTaskToDLQ(gomock.Any(), request).Return(nil)
 	err := s.replicationTaskProcessor.handleReplicationDLQTask(request)
 	s.NoError(err)
 }
@@ -384,6 +384,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
+		gomock.Any(),
 		&persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      s.shardID,
 			TaskCategory: tasks.CategoryReplication,

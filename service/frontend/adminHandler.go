@@ -567,7 +567,7 @@ func (adh *AdminHandler) ListHistoryTasks(
 		maxTaskKey.FireTime = timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime)
 		maxTaskKey.TaskID = taskRange.ExclusiveMaxTaskKey.TaskId
 	}
-	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             request.ShardId,
 		TaskCategory:        taskCategory,
 		InclusiveMinTaskKey: minTaskKey,
@@ -737,7 +737,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)
-	rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken: targetVersionHistory.GetBranchToken(),
 		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
 		// ReadRawHistoryBranch is inclusive exclusive.

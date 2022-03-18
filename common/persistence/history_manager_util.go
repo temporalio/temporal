@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	"context"
 	"sort"
 
 	historypb "go.temporal.io/api/history/v1"
@@ -35,11 +36,15 @@ import (
 // ReadFullPageEvents reads a full page of history events from ExecutionManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history events, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageEvents(executionMgr ExecutionManager, req *ReadHistoryBranchRequest) ([]*historypb.HistoryEvent, int, []byte, error) {
+func ReadFullPageEvents(
+	ctx context.Context,
+	executionMgr ExecutionManager,
+	req *ReadHistoryBranchRequest,
+) ([]*historypb.HistoryEvent, int, []byte, error) {
 	var historyEvents []*historypb.HistoryEvent
 	size := 0
 	for {
-		response, err := executionMgr.ReadHistoryBranch(req)
+		response, err := executionMgr.ReadHistoryBranch(ctx, req)
 		if err != nil {
 			return nil, 0, nil, err
 		}
@@ -55,12 +60,16 @@ func ReadFullPageEvents(executionMgr ExecutionManager, req *ReadHistoryBranchReq
 // ReadFullPageEventsByBatch reads a full page of history events by batch from ExecutionManager. Due to storage format of V2 History
 // it is not guaranteed that pageSize amount of data is returned. Function returns the list of history batches, the size
 // of data read, the next page token, and an error if present.
-func ReadFullPageEventsByBatch(executionMgr ExecutionManager, req *ReadHistoryBranchRequest) ([]*historypb.History, int, []byte, error) {
+func ReadFullPageEventsByBatch(
+	ctx context.Context,
+	executionMgr ExecutionManager,
+	req *ReadHistoryBranchRequest,
+) ([]*historypb.History, int, []byte, error) {
 	var historyBatches []*historypb.History
 	eventsRead := 0
 	size := 0
 	for {
-		response, err := executionMgr.ReadHistoryBranchByBatch(req)
+		response, err := executionMgr.ReadHistoryBranchByBatch(ctx, req)
 		if err != nil {
 			return nil, 0, nil, err
 		}
@@ -79,11 +88,15 @@ func ReadFullPageEventsByBatch(executionMgr ExecutionManager, req *ReadHistoryBr
 // ReadFullPageEventsReverse reads a full page of history events from ExecutionManager in reverse orcer. Due to storage
 // format of V2 History it is not guaranteed that pageSize amount of data is returned. Function returns the list of
 // history events, the size of data read, the next page token, and an error if present.
-func ReadFullPageEventsReverse(executionMgr ExecutionManager, req *ReadHistoryBranchReverseRequest) ([]*historypb.HistoryEvent, int, []byte, error) {
+func ReadFullPageEventsReverse(
+	ctx context.Context,
+	executionMgr ExecutionManager,
+	req *ReadHistoryBranchReverseRequest,
+) ([]*historypb.HistoryEvent, int, []byte, error) {
 	var historyEvents []*historypb.HistoryEvent
 	size := 0
 	for {
-		response, err := executionMgr.ReadHistoryBranchReverse(req)
+		response, err := executionMgr.ReadHistoryBranchReverse(ctx, req)
 		if err != nil {
 			return nil, 0, nil, err
 		}

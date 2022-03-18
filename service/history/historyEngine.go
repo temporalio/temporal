@@ -579,6 +579,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = weContext.CreateWorkflowExecution(
+		ctx,
 		now,
 		createMode,
 		prevRunID,
@@ -619,6 +620,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 				return nil, err
 			}
 			err = weContext.CreateWorkflowExecution(
+				ctx,
 				now,
 				createMode,
 				prevRunID,
@@ -809,7 +811,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 	defer func() { release(retErr) }()
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1018,7 +1020,7 @@ func (e *historyEngineImpl) getMutableState(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1094,7 +1096,7 @@ func (e *historyEngineImpl) DescribeMutableState(
 
 	// clear mutable state to force reload from persistence. This API returns both cached and persisted version.
 	context.Clear()
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1166,7 +1168,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err1 := context.LoadWorkflowExecution()
+	mutableState, err1 := context.LoadWorkflowExecution(ctx)
 	if err1 != nil {
 		return nil, err1
 	}
@@ -1210,7 +1212,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	if executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// for closed workflow
 		result.WorkflowExecutionInfo.Status = executionState.Status
-		completionEvent, err := mutableState.GetCompletionEvent()
+		completionEvent, err := mutableState.GetCompletionEvent(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -1234,7 +1236,7 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 				p.HeartbeatDetails = ai.LastHeartbeatDetails
 			}
 			// TODO: move to mutable state instead of loading it from event
-			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ai.ScheduleId)
+			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, ai.ScheduleId)
 			if err != nil {
 				return nil, err
 			}
@@ -1343,7 +1345,7 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				return nil, consts.ErrActivityTaskNotFound
 			}
 
-			scheduledEvent, err := mutableState.GetActivityScheduledEvent(scheduleID)
+			scheduledEvent, err := mutableState.GetActivityScheduledEvent(ctx, scheduleID)
 			if err != nil {
 				return nil, err
 			}
@@ -1970,7 +1972,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	Just_Signal_Loop:
 		for ; attempt <= conditionalRetryCount; attempt++ {
 			// workflow not exist, will create workflow then signal
-			mutableState, err1 := context.LoadWorkflowExecution()
+			mutableState, err1 := context.LoadWorkflowExecution(ctx)
 			if err1 != nil {
 				if _, ok := err1.(*serviceerror.NotFound); ok {
 					break
@@ -2018,7 +2020,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 
 			// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict then reload
 			// the history and try the operation again.
-			if err := context.UpdateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now()); err != nil {
+			if err := context.UpdateWorkflowExecutionAsActive(ctx, e.shard.GetTimeSource().Now()); err != nil {
 				if err == consts.ErrConflict {
 					continue Just_Signal_Loop
 				}
@@ -2164,6 +2166,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		}
 	}
 	err = context.CreateWorkflowExecution(
+		ctx,
 		now,
 		createMode,
 		prevRunID,
@@ -2298,6 +2301,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	defer func() { wfCtx.getReleaseFn()(retError) }()
 
 	return e.workflowDeleteManager.AddDeleteWorkflowExecutionTask(
+		ctx,
 		nsID,
 		commonpb.WorkflowExecution{
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
@@ -2435,7 +2439,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 	defer func() { baseReleaseFn(retError) }()
 
-	baseMutableState, err := baseContext.LoadWorkflowExecution()
+	baseMutableState, err := baseContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -2456,7 +2460,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	}
 
 	// also load the current run of the workflow, it can be different from the base runID
-	resp, err := e.executionManager.GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+	resp, err := e.executionManager.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
 		ShardID:     e.shard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  request.WorkflowExecution.GetWorkflowId(),
@@ -2491,7 +2495,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		}
 		defer func() { currentReleaseFn(retError) }()
 
-		currentMutableState, err = currentContext.LoadWorkflowExecution()
+		currentMutableState, err = currentContext.LoadWorkflowExecution(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -2565,7 +2569,7 @@ func (e *historyEngineImpl) updateWorkflow(
 	}
 	defer func() { workflowContext.getReleaseFn()(retError) }()
 
-	return e.updateWorkflowHelper(workflowContext, action)
+	return e.updateWorkflowHelper(ctx, workflowContext, action)
 }
 
 func (e *historyEngineImpl) updateWorkflowExecution(
@@ -2581,10 +2585,11 @@ func (e *historyEngineImpl) updateWorkflowExecution(
 	}
 	defer func() { workflowContext.getReleaseFn()(retError) }()
 
-	return e.updateWorkflowHelper(workflowContext, action)
+	return e.updateWorkflowHelper(ctx, workflowContext, action)
 }
 
 func (e *historyEngineImpl) updateWorkflowHelper(
+	ctx context.Context,
 	workflowContext workflowContext,
 	action updateWorkflowActionFunc,
 ) (retError error) {
@@ -2602,7 +2607,7 @@ UpdateHistoryLoop:
 				// Reload workflow execution history
 				workflowContext.getContext().Clear()
 				if attempt != conditionalRetryCount {
-					_, err = workflowContext.reloadMutableState()
+					_, err = workflowContext.reloadMutableState(ctx)
 					if err != nil {
 						return err
 					}
@@ -2628,10 +2633,10 @@ UpdateHistoryLoop:
 			}
 		}
 
-		err = workflowContext.getContext().UpdateWorkflowExecutionAsActive(e.shard.GetTimeSource().Now())
+		err = workflowContext.getContext().UpdateWorkflowExecutionAsActive(ctx, e.shard.GetTimeSource().Now())
 		if err == consts.ErrConflict {
 			if attempt != conditionalRetryCount {
-				_, err = workflowContext.reloadMutableState()
+				_, err = workflowContext.reloadMutableState(ctx)
 				if err != nil {
 					return err
 				}
@@ -2644,7 +2649,8 @@ UpdateHistoryLoop:
 }
 
 func (e *historyEngineImpl) failWorkflowTask(
-	context workflow.Context,
+	ctx context.Context,
+	wfContext workflow.Context,
 	scheduleID int64,
 	startedID int64,
 	wtFailedCause *workflowTaskFailedCause,
@@ -2652,10 +2658,10 @@ func (e *historyEngineImpl) failWorkflowTask(
 ) (workflow.MutableState, error) {
 
 	// clear any updates we have accumulated so far
-	context.Clear()
+	wfContext.Clear()
 
 	// Reload workflow execution so we can apply the workflow task failure event
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := wfContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3209,6 +3215,7 @@ func (e *historyEngineImpl) PurgeDLQMessages(
 	}
 
 	return e.replicationDLQHandler.purgeMessages(
+		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageId(),
 	)
@@ -3277,7 +3284,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
 	}
@@ -3296,12 +3303,12 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 
 	now := e.shard.GetTimeSource().Now()
 
-	err = mutableStateTaskRefresher.RefreshTasks(now, mutableState)
+	err = mutableStateTaskRefresher.RefreshTasks(ctx, now, mutableState)
 	if err != nil {
 		return err
 	}
 
-	err = context.UpdateWorkflowExecutionAsActive(now)
+	err = context.UpdateWorkflowExecutionAsActive(ctx, now)
 	if err != nil {
 		return err
 	}
@@ -3329,7 +3336,7 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -3340,7 +3347,7 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	err = e.shard.AddTasks(&persistence.AddHistoryTasksRequest{
+	err = e.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: e.shard.GetShardID(),
 		// RangeID is set by shard
 		NamespaceID: string(namespaceID),
@@ -3398,7 +3405,7 @@ func (e *historyEngineImpl) loadWorkflowOnce(
 		return nil, err
 	}
 
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution(ctx)
 	if err != nil {
 		release(err)
 		return nil, err
@@ -3431,6 +3438,7 @@ func (e *historyEngineImpl) loadWorkflow(
 
 		// workflow not running, need to check current record
 		resp, err := e.shard.GetExecutionManager().GetCurrentExecution(
+			ctx,
 			&persistence.GetCurrentExecutionRequest{
 				ShardID:     e.shard.GetShardID(),
 				NamespaceID: namespaceID.String(),

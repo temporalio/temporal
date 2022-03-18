@@ -193,7 +193,7 @@ func (s *integrationSuite) isHistoryDeleted(execution *commonpb.WorkflowExecutio
 		ShardID: convert.Int32Ptr(shardID),
 	}
 	for i := 0; i < retryLimit; i++ {
-		resp, err := s.testCluster.testBase.ExecutionManager.GetHistoryTree(request)
+		resp, err := s.testCluster.testBase.ExecutionManager.GetHistoryTree(NewContext(), request)
 		s.NoError(err)
 		if len(resp.Branches) == 0 {
 			return true
@@ -214,7 +214,7 @@ func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *
 	}
 
 	for i := 0; i < retryLimit; i++ {
-		_, err := s.testCluster.testBase.ExecutionManager.GetWorkflowExecution(request)
+		_, err := s.testCluster.testBase.ExecutionManager.GetWorkflowExecution(NewContext(), request)
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			return true
 		}
