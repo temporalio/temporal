@@ -419,6 +419,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newStateBuilder             workflow.MutableState
 
 		hasUnhandledEvents bool
+		responseMutations  []workflowTaskResponseMutation
 	)
 	hasUnhandledEvents = msBuilder.HasBufferedEvents()
 
@@ -468,7 +469,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			handler.searchAttributesMapper,
 		)
 
-		if err := workflowTaskHandler.handleCommands(
+		if responseMutations, err = workflowTaskHandler.handleCommands(
 			request.Commands,
 		); err != nil {
 			return nil, err
@@ -617,6 +618,11 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		}
 		// sticky is always enabled when worker request for new workflow task from RespondWorkflowTaskCompleted
 		resp.StartedResponse.StickyExecutionEnabled = true
+	}
+	for _, mutation := range responseMutations {
+		if err := mutation(resp); err != nil {
+			return nil, err
+		}
 	}
 
 	return resp, nil

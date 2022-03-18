@@ -977,7 +977,9 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, err
 	}
 
-	completedResp := &workflowservice.RespondWorkflowTaskCompletedResponse{}
+	completedResp := &workflowservice.RespondWorkflowTaskCompletedResponse{
+		ActivityTasks: histResp.ActivityTasks,
+	}
 	if request.GetReturnNewWorkflowTask() && histResp != nil && histResp.StartedResponse != nil {
 		taskToken := &tokenspb.Task{
 			NamespaceId:     taskToken.GetNamespaceId(),
@@ -986,7 +988,10 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 			ScheduleId:      histResp.StartedResponse.GetScheduledEventId(),
 			ScheduleAttempt: histResp.StartedResponse.GetAttempt(),
 		}
-		token, _ := wh.tokenSerializer.Serialize(taskToken)
+		token, err := wh.tokenSerializer.Serialize(taskToken)
+		if err != nil {
+			return nil, err
+		}
 		workflowExecution := &commonpb.WorkflowExecution{
 			WorkflowId: taskToken.GetWorkflowId(),
 			RunId:      taskToken.GetRunId(),

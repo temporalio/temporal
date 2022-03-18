@@ -251,6 +251,7 @@ type Config struct {
 	ESProcessorAckTimeout             dynamicconfig.DurationPropertyFn
 
 	EnableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
+	EnableActivityLocalDispatch  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 const (
@@ -436,6 +437,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ESProcessorAckTimeout:    dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 1*time.Minute),
 
 		EnableCrossNamespaceCommands: dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
+		EnableActivityLocalDispatch:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableActivityLocalDispatch, false),
 	}
 
 	return cfg
@@ -444,12 +446,4 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 // GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
 func (config *Config) GetShardID(namespaceID namespace.ID, workflowID string) int32 {
 	return common.WorkflowIDToHistoryShard(namespaceID.String(), workflowID, config.NumberOfShards)
-}
-
-func NewDynamicConfig() *Config {
-	dc := dynamicconfig.NewNoopCollection()
-	config := NewConfig(dc, 1, false, "")
-	// reduce the duration of long poll to increase test speed
-	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
-	return config
 }

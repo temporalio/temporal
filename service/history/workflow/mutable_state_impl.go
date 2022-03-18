@@ -1802,6 +1802,7 @@ func (e *MutableStateImpl) ReplicateWorkflowTaskFailedEvent() error {
 func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
+	bypassTaskGeneration bool,
 ) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error) {
 
 	opTag := tag.WorkflowActionActivityTaskScheduled
@@ -1820,12 +1821,15 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 	ai, err := e.ReplicateActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
-	if err := e.taskGenerator.GenerateActivityTasks(
-		timestamp.TimeValue(event.GetEventTime()),
-		event,
-	); err != nil {
-		return nil, nil, err
+	if !bypassTaskGeneration {
+		if err := e.taskGenerator.GenerateActivityTasks(
+			timestamp.TimeValue(event.GetEventTime()),
+			event,
+		); err != nil {
+			return nil, nil, err
+		}
 	}
+
 	return event, ai, err
 }
 
