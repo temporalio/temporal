@@ -59,7 +59,7 @@ type (
 	DeleteExecutionsActivityParams struct {
 		Namespace     namespace.Name
 		NamespaceID   namespace.ID
-		DeleteRPS     int
+		RPS           int
 		ListPageSize  int
 		NextPageToken []byte
 	}
@@ -103,7 +103,7 @@ func (a *Activities) GetNextPageTokenActivity(_ context.Context, params GetNextP
 }
 
 func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
-	rateLimiter := quotas.NewRateLimiter(float64(params.DeleteRPS), params.DeleteRPS)
+	rateLimiter := quotas.NewRateLimiter(float64(params.RPS), params.RPS)
 
 	var result DeleteExecutionsActivityResult
 
@@ -120,7 +120,12 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		return result, err
 	}
 	for _, execution := range resp.Executions {
-		_ = rateLimiter.Wait(ctx)
+		err = rateLimiter.Wait(ctx)
+		if err != nil {
+			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.RateLimiterFailuresCount)
+			a.logger.Error("Workflow execution deletion rate limiter error.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+			return result, err
+		}
 		if execution.Status == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			_, err := a.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 				NamespaceId: params.NamespaceID.String(),
@@ -131,7 +136,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 				},
 			})
 			switch err.(type) {
-			case nil, *serviceerror.NotFound: // Workflow already completed or doesn't exist.
+			case nil, *serviceerror.NotFound: // Workflow execution has already completed or doesn't exist.
 			default:
 				a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.TerminateExecutionFailuresCount)
 				a.logger.Error("Unable to terminate workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
@@ -144,16 +149,20 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 			WorkflowExecution: execution.Execution,
 		})
 		switch err.(type) {
-		case nil, *serviceerror.NotFound: // Workflow doesn't exist. Treat it as success.
+		case nil:
 			result.SuccessCount++
 			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.DeleteExecutionsSuccessCount)
+		case *serviceerror.NotFound: // Workflow execution doesn't exist. Do nothing.
 		default:
 			result.ErrorCount++
 			a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.DeleteExecutionFailuresCount)
 			a.logger.Error("Unable to delete workflow execution.", tag.WorkflowNamespace(params.Namespace.String()), tag.WorkflowID(execution.Execution.GetWorkflowId()), tag.WorkflowRunID(execution.Execution.GetRunId()), tag.Error(err))
 		}
-		if (result.SuccessCount+result.ErrorCount)%heartbeatEveryExecutions == 0 {
-			activity.RecordHeartbeat(ctx, result)
+		activity.RecordHeartbeat(ctx, result)
+		select {
+		case <-ctx.Done():
+			return result, ctx.Err()
+		default:
 		}
 	}
 	return result, nil

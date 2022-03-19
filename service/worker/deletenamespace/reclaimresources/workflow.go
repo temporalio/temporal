@@ -28,7 +28,6 @@ import (
 	"fmt"
 	"time"
 
-	"go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
@@ -63,14 +62,13 @@ var (
 
 	localActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy:            retryPolicy,
-		StartToCloseTimeout:    10 * time.Second,
+		StartToCloseTimeout:    30 * time.Second,
 		ScheduleToCloseTimeout: 5 * time.Minute,
 	}
 
 	deleteExecutionsWorkflowOptions = workflow.ChildWorkflowOptions{
-		RetryPolicy:              retryPolicy,
-		WorkflowRunTimeout:       60 * time.Minute,
-		WorkflowExecutionTimeout: 24 * time.Hour,
+		RetryPolicy:        retryPolicy,
+		WorkflowRunTimeout: 60 * time.Minute,
 	}
 )
 
@@ -97,7 +95,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	var a *Activities
 
 	// Step 1. Delete workflow executions.
-	result, err := deleteWorkflowExecutions(ctx, params, a, logger)
+	result, err := deleteWorkflowExecutions(ctx, params)
 	if err != nil {
 		return result, err
 	}
@@ -113,10 +111,13 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 	return result, nil
 }
 
-func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParams, a *Activities, logger log.Logger) (ReclaimResourcesResult, error) {
+func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParams) (ReclaimResourcesResult, error) {
+	var a *Activities
+	logger := workflow.GetLogger(ctx)
 	deleteAttempt := int32(1)
 	executionsExist := true
 	var result ReclaimResourcesResult
+
 	for executionsExist {
 		ctx1 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
 		var der deleteexecutions.DeleteExecutionsResult

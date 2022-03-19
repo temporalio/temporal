@@ -33,25 +33,20 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/worker/deletenamespace/defaults"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 const (
 	WorkflowName = "temporal-sys-delete-executions-workflow"
-
-	heartbeatEveryExecutions = 1000
 )
 
 type (
 	DeleteExecutionsParams struct {
 		Namespace   namespace.Name
 		NamespaceID namespace.ID
+		Config      DeleteExecutionsConfig
 
-		DeleteRPS                                 int
-		ListPageSize                              int
-		ConcurrentDeleteExecutionsActivitiesCount int
-
+		// To carry over progress results with ContinueAsNew.
 		PreviousSuccessCount int
 		PreviousErrorCount   int
 	}
@@ -70,14 +65,14 @@ var (
 
 	localActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy:            retryPolicy,
-		StartToCloseTimeout:    10 * time.Second,
+		StartToCloseTimeout:    30 * time.Second,
 		ScheduleToCloseTimeout: 5 * time.Minute,
 	}
 
 	deleteWorkflowExecutionsActivityOptions = workflow.ActivityOptions{
-		RetryPolicy:            retryPolicy,
-		StartToCloseTimeout:    60 * time.Minute,
-		ScheduleToCloseTimeout: 6 * time.Hour,
+		RetryPolicy:         retryPolicy,
+		StartToCloseTimeout: 60 * time.Minute,
+		HeartbeatTimeout:    10 * time.Second,
 	}
 )
 
@@ -90,18 +85,8 @@ func validateParams(params *DeleteExecutionsParams) error {
 		return temporal.NewNonRetryableApplicationError("namespace is empty", "", nil)
 	}
 
-	if params.DeleteRPS <= 0 {
-		params.DeleteRPS = defaults.DeleteRPS
-	}
-	if params.ListPageSize <= 0 {
-		params.ListPageSize = defaults.ListPageSize
-	}
-	if params.ConcurrentDeleteExecutionsActivitiesCount <= 0 {
-		params.ConcurrentDeleteExecutionsActivitiesCount = defaults.ConcurrentDeleteExecutionsActivitiesCount
-	}
-	if params.ConcurrentDeleteExecutionsActivitiesCount > defaults.MaxConcurrentDeleteExecutionsActivitiesCount {
-		params.ConcurrentDeleteExecutionsActivitiesCount = defaults.MaxConcurrentDeleteExecutionsActivitiesCount
-	}
+	params.Config.ApplyDefaults()
+
 	return nil
 }
 
@@ -116,9 +101,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	if err := validateParams(&params); err != nil {
 		return result, err
 	}
-
-	// Minimum value is heartbeatEveryExecutions/params.DeleteRPS. 2 is "make sure" multiplicator.
-	deleteWorkflowExecutionsActivityOptions.HeartbeatTimeout = time.Duration(heartbeatEveryExecutions/params.DeleteRPS*2) * time.Second
+	logger.Info("Effective config.", tag.Value(params.Config.String()))
 
 	var a *Activities
 	var nextPageToken []byte
@@ -126,13 +109,13 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	runningDeleteExecutionsSelector := workflow.NewSelector(ctx)
 	var lastDeleteExecutionsActivityErr error
 
-	for i := 0; i < params.ConcurrentDeleteExecutionsActivitiesCount; i++ {
+	for i := 0; i < params.Config.PagesPerExecutionCount; i++ {
 		ctx1 := workflow.WithActivityOptions(ctx, deleteWorkflowExecutionsActivityOptions)
 		deleteExecutionsFuture := workflow.ExecuteActivity(ctx1, a.DeleteExecutionsActivity, &DeleteExecutionsActivityParams{
 			Namespace:     params.Namespace,
 			NamespaceID:   params.NamespaceID,
-			DeleteRPS:     params.DeleteRPS,
-			ListPageSize:  params.ListPageSize,
+			RPS:           params.Config.DeleteActivityRPS,
+			ListPageSize:  params.Config.PageSize,
 			NextPageToken: nextPageToken,
 		})
 		runningDeleteExecutionsActivityCount++
@@ -148,7 +131,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 			result.ErrorCount += der.ErrorCount
 		})
 
-		if runningDeleteExecutionsActivityCount >= params.ConcurrentDeleteExecutionsActivitiesCount {
+		if runningDeleteExecutionsActivityCount >= params.Config.ConcurrentDeleteExecutionsActivities {
 			// Wait for one of running activities to complete.
 			runningDeleteExecutionsSelector.Select(ctx)
 			if lastDeleteExecutionsActivityErr != nil {
@@ -160,7 +143,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		err := workflow.ExecuteLocalActivity(ctx2, a.GetNextPageTokenActivity, GetNextPageTokenParams{
 			NamespaceID:   params.NamespaceID,
 			Namespace:     params.Namespace,
-			PageSize:      params.ListPageSize,
+			PageSize:      params.Config.PageSize,
 			NextPageToken: nextPageToken,
 		}).Get(ctx, &nextPageToken)
 		if err != nil {
@@ -188,7 +171,7 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 	params.PreviousErrorCount = result.ErrorCount
 
 	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
-	// Too many workflow executions, and ConcurrentDeleteExecutionsActivitiesCount activities has been started already.
+	// Too many workflow executions, and ConcurrentDeleteExecutionsActivities activities has been started already.
 	// Continue as new to prevent workflow history size explosion.
 	return result, workflow.NewContinueAsNewError(ctx, DeleteExecutionsWorkflow, params)
 }

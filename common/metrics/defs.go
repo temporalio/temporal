@@ -2210,6 +2210,7 @@ const (
 	ListExecutionsFailuresCount
 	TerminateExecutionFailuresCount
 	DeleteExecutionFailuresCount
+	RateLimiterFailuresCount
 
 	NumWorkerMetrics
 )
@@ -2675,6 +2676,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ListExecutionsFailuresCount:     NewCounterDef("list_executions_failures"),
 		TerminateExecutionFailuresCount: NewCounterDef("terminate_executions_failures"),
 		DeleteExecutionFailuresCount:    NewCounterDef("delete_execution_failures"),
+		RateLimiterFailuresCount:        NewCounterDef("rate_limiter_failures"),
 	},
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),

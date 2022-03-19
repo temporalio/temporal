@@ -71,7 +71,7 @@ func (a *activities) GetNamespaceIDActivity(_ context.Context, nsName namespace.
 	}
 
 	if getNamespaceResponse.Namespace == nil || getNamespaceResponse.Namespace.Info == nil || getNamespaceResponse.Namespace.Info.Id == "" {
-		return namespace.EmptyID, nil
+		return namespace.EmptyID, serviceerror.NewInternal("namespace info is corrupted")
 	}
 
 	return namespace.ID(getNamespaceResponse.Namespace.Info.Id), nil
@@ -114,7 +114,7 @@ func (a *activities) MarkNamespaceDeletedActivity(_ context.Context, nsName name
 }
 
 func (a *activities) GenerateDeletedNamespaceNameActivity(_ context.Context, nsName namespace.Name) (namespace.Name, error) {
-	var letters = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
+	var letters = []rune("1234567890abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ")
 	const suffixLength = 5
 	rand.Seed(time.Now().UnixNano())
 

@@ -58,7 +58,7 @@ func Test_DeleteExecutionsWorkflow(t *testing.T) {
 	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, DeleteExecutionsActivityParams{
 		Namespace:     "namespace",
 		NamespaceID:   "namespace-id",
-		DeleteRPS:     100,
+		RPS:           100,
 		ListPageSize:  1000,
 		NextPageToken: nil,
 	}).Return(DeleteExecutionsActivityResult{
@@ -195,9 +195,11 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions(t *testing.T) {
 	env.RegisterActivity(a.DeleteExecutionsActivity)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
-		NamespaceID:  "namespace-id",
-		Namespace:    "namespace",
-		ListPageSize: 2,
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		Config: DeleteExecutionsConfig{
+			PageSize: 2,
+		},
 	})
 
 	ctrl.Finish()
@@ -206,7 +208,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions(t *testing.T) {
 	var result DeleteExecutionsResult
 	require.NoError(t, env.GetWorkflowResult(&result))
 	require.Equal(t, 0, result.ErrorCount)
-	require.Equal(t, 4, result.SuccessCount)
+	require.Equal(t, 2, result.SuccessCount)
 }
 
 func Test_DeleteExecutionsWorkflow_ActivityError(t *testing.T) {
@@ -282,9 +284,11 @@ func Test_DeleteExecutionsWorkflow_ActivityError(t *testing.T) {
 	env.RegisterActivity(a.DeleteExecutionsActivity)
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
-		NamespaceID:  "namespace-id",
-		Namespace:    "namespace",
-		ListPageSize: 2,
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		Config: DeleteExecutionsConfig{
+			PageSize: 2,
+		},
 	})
 
 	ctrl.Finish()

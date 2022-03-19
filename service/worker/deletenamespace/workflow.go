@@ -34,7 +34,6 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/service/worker/deletenamespace/defaults"
 	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 	"go.temporal.io/server/service/worker/deletenamespace/errors"
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
@@ -52,9 +51,7 @@ type (
 		NamespaceID namespace.ID
 		Namespace   namespace.Name
 
-		DeleteRPS                                 int
-		ListPageSize                              int
-		ConcurrentDeleteExecutionsActivitiesCount int
+		DeleteExecutionsConfig deleteexecutions.DeleteExecutionsConfig
 	}
 
 	DeleteNamespaceWorkflowResult struct {
@@ -71,13 +68,12 @@ var (
 
 	localActivityOptions = workflow.LocalActivityOptions{
 		RetryPolicy:            retryPolicy,
-		StartToCloseTimeout:    10 * time.Second,
+		StartToCloseTimeout:    30 * time.Second,
 		ScheduleToCloseTimeout: 5 * time.Minute,
 	}
 
 	reclaimResourcesWorkflowOptions = workflow.ChildWorkflowOptions{
-		RetryPolicy:              retryPolicy,
-		WorkflowExecutionTimeout: 24 * time.Hour,
+		RetryPolicy: retryPolicy,
 		// Important: this is required to make sure the child workflow is not terminated when delete namespace workflow is completed.
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_ABANDON,
 	}
@@ -88,18 +84,8 @@ func validateParams(params *DeleteNamespaceWorkflowParams) error {
 		return temporal.NewNonRetryableApplicationError("both namespace name and namespace ID are empty", "", nil)
 	}
 
-	if params.DeleteRPS <= 0 {
-		params.DeleteRPS = defaults.DeleteRPS
-	}
-	if params.ListPageSize <= 0 {
-		params.ListPageSize = defaults.ListPageSize
-	}
-	if params.ConcurrentDeleteExecutionsActivitiesCount <= 0 {
-		params.ConcurrentDeleteExecutionsActivitiesCount = defaults.ConcurrentDeleteExecutionsActivitiesCount
-	}
-	if params.ConcurrentDeleteExecutionsActivitiesCount > defaults.MaxConcurrentDeleteExecutionsActivitiesCount {
-		params.ConcurrentDeleteExecutionsActivitiesCount = defaults.MaxConcurrentDeleteExecutionsActivitiesCount
-	}
+	params.DeleteExecutionsConfig.ApplyDefaults()
+
 	return nil
 }
 
@@ -119,7 +105,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	if params.NamespaceID.IsEmpty() {
 		ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
 		err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
-		if err != nil || params.NamespaceID.IsEmpty() {
+		if err != nil {
 			return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 		}
 	}
@@ -154,11 +140,9 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	ctx4 := workflow.WithChildOptions(ctx, reclaimResourcesWorkflowOptions)
 	reclaimResourcesFuture := workflow.ExecuteChildWorkflow(ctx4, reclaimresources.ReclaimResourcesWorkflow, reclaimresources.ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
-			Namespace:    result.DeletedName,
-			NamespaceID:  params.NamespaceID,
-			DeleteRPS:    params.DeleteRPS,
-			ListPageSize: params.ListPageSize,
-			ConcurrentDeleteExecutionsActivitiesCount: params.ConcurrentDeleteExecutionsActivitiesCount,
+			Namespace:   result.DeletedName,
+			NamespaceID: params.NamespaceID,
+			Config:      params.DeleteExecutionsConfig,
 		}})
 	var reclaimResourcesExecution workflow.Execution
 	if err := reclaimResourcesFuture.GetChildWorkflowExecution().Get(ctx, &reclaimResourcesExecution); err != nil {
