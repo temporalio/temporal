@@ -145,7 +145,7 @@ func (s *nDCBranchMgrSuite) TestCreateNewBranch() {
 
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
+		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
 				ForkBranchToken: baseBranchToken,
@@ -325,7 +325,7 @@ func (s *nDCBranchMgrSuite) TestPrepareVersionHistory_BranchNotAppendable_NoMiss
 
 	shardID := s.mockShard.GetShardID()
 	s.mockExecutionManager.EXPECT().ForkHistoryBranch(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
+		func(_ context.Context, input *persistence.ForkHistoryBranchRequest) (*persistence.ForkHistoryBranchResponse, error) {
 			input.Info = ""
 			s.Equal(&persistence.ForkHistoryBranchRequest{
 				ForkBranchToken: baseBranchToken,
