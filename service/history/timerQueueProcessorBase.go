@@ -258,12 +258,12 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			go t.Stop()
 			return nil
 		case <-t.timerGate.FireChan():
-			lookAheadTimer, err := t.readAndFanoutTimerTasks()
+			nextFireTime, err := t.readAndFanoutTimerTasks()
 			if err != nil {
 				return err
 			}
-			if lookAheadTimer != nil {
-				t.timerGate.Update(lookAheadTimer.GetVisibilityTime())
+			if nextFireTime != nil {
+				t.timerGate.Update(*nextFireTime)
 			}
 		case <-pollTimer.C:
 			pollTimer.Reset(backoff.JitDuration(
@@ -271,12 +271,12 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 				t.config.TimerProcessorMaxPollIntervalJitterCoefficient(),
 			))
 			if t.lastPollTime.Add(t.config.TimerProcessorMaxPollInterval()).Before(t.timeSource.Now()) {
-				lookAheadTimer, err := t.readAndFanoutTimerTasks()
+				nextFireTime, err := t.readAndFanoutTimerTasks()
 				if err != nil {
 					return err
 				}
-				if lookAheadTimer != nil {
-					t.timerGate.Update(lookAheadTimer.GetVisibilityTime())
+				if nextFireTime != nil {
+					t.timerGate.Update(*nextFireTime)
 				}
 			}
 		case <-updateAckTimer.C:
@@ -302,7 +302,7 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	}
 }
 
-func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (tasks.Task, error) {
+func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
 		cancel()
@@ -312,7 +312,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (tasks.Task, error) 
 	cancel()
 
 	t.lastPollTime = t.timeSource.Now()
-	timerTasks, lookAheadTask, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
+	timerTasks, nextFireTime, moreTasks, err := t.timerQueueAckMgr.readTimerTasks()
 	if err != nil {
 		t.notifyNewTimer(time.Time{}) // re-enqueue the event
 		return nil, err
@@ -330,10 +330,10 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (tasks.Task, error) 
 	}
 
 	if !moreTasks {
-		if lookAheadTask == nil {
+		if nextFireTime == nil {
 			return nil, nil
 		}
-		return lookAheadTask, nil
+		return nextFireTime, nil
 	}
 
 	t.notifyNewTimer(time.Time{}) // re-enqueue the event
