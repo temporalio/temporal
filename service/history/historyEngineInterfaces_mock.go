@@ -656,11 +656,11 @@ func (mr *MocktimerQueueAckMgrMockRecorder) getReadLevel() *gomock.Call {
 }
 
 // readTimerTasks mocks base method.
-func (m *MocktimerQueueAckMgr) readTimerTasks() ([]tasks.Task, tasks.Task, bool, error) {
+func (m *MocktimerQueueAckMgr) readTimerTasks() ([]tasks.Task, *time.Time, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "readTimerTasks")
 	ret0, _ := ret[0].([]tasks.Task)
-	ret1, _ := ret[1].(tasks.Task)
+	ret1, _ := ret[1].(*time.Time)
 	ret2, _ := ret[2].(bool)
 	ret3, _ := ret[3].(error)
 	return ret0, ret1, ret2, ret3
