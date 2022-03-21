@@ -138,7 +138,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 					"CustomTextField": enumspb.INDEXED_VALUE_TYPE_TEXT,
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomTextField already exists."},
+			Expected: &serviceerror.AlreadyExists{Message: "Search attribute CustomTextField already exists."},
 		},
 	}
 	for _, testCase := range testCases3 {
@@ -174,7 +174,7 @@ func (s *operatorHandlerSuite) Test_AddSearchAttributes() {
 					"CustomTextField": enumspb.INDEXED_VALUE_TYPE_TEXT,
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute CustomTextField already exists."},
+			Expected: &serviceerror.AlreadyExists{Message: "Search attribute CustomTextField already exists."},
 		},
 	}
 	for _, testCase := range testCases2 {
@@ -315,7 +315,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 					"ProductId",
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute ProductId doesn't exist."},
+			Expected: &serviceerror.NotFound{Message: "Search attribute ProductId doesn't exist."},
 		},
 	}
 	for _, testCase := range testCases3 {
@@ -351,7 +351,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 					"ProductId",
 				},
 			},
-			Expected: &serviceerror.InvalidArgument{Message: "Search attribute ProductId doesn't exist."},
+			Expected: &serviceerror.NotFound{Message: "Search attribute ProductId doesn't exist."},
 		},
 	}
 	for _, testCase := range testCases2 {
