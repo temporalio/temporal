@@ -11,7 +11,7 @@ steps:
 
   - wait
 
-  - label: ":docker: build without cgo"
+  - label: ":golang: build without cgo"
     agents:
       queue: "default"
       docker: "*"
