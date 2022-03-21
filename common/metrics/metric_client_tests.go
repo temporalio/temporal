@@ -73,7 +73,7 @@ func (s *MetricTestSuiteBase) TestClientReportCounter() {
 		TestScope1,
 		TestCounterMetric1, 66)
 	testDef := MetricDefs[UnitTestService][TestCounterMetric1]
-	assert.NoError(s.T(), s.metricTestUtility.ContainsCounter(testDef.metricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
+	assert.NoError(s.T(), s.metricTestUtility.ContainsCounter(testDef.MetricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
 	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
 }
 
@@ -82,7 +82,7 @@ func (s *MetricTestSuiteBase) TestClientReportGauge() {
 		TestScope1,
 		TestGaugeMetric1, 66)
 	testDef := MetricDefs[UnitTestService][TestGaugeMetric1]
-	assert.NoError(s.T(), s.metricTestUtility.ContainsGauge(testDef.metricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
+	assert.NoError(s.T(), s.metricTestUtility.ContainsGauge(testDef.MetricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
 	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
 }
 
@@ -92,7 +92,7 @@ func (s *MetricTestSuiteBase) TestClientReportTimer() {
 		TestScope1,
 		TestTimerMetric1, targetDuration)
 	testDef := MetricDefs[UnitTestService][TestTimerMetric1]
-	assert.NoError(s.T(), s.metricTestUtility.ContainsTimer(testDef.metricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, targetDuration))
+	assert.NoError(s.T(), s.metricTestUtility.ContainsTimer(testDef.MetricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, targetDuration))
 	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
 }
 
@@ -101,21 +101,21 @@ func (s *MetricTestSuiteBase) TestClientReportHistogram() {
 		TestScope1,
 		TestDimensionlessHistogramMetric1, 66)
 	testDef := MetricDefs[UnitTestService][TestDimensionlessHistogramMetric1]
-	assert.NoError(s.T(), s.metricTestUtility.ContainsHistogram(testDef.metricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
+	assert.NoError(s.T(), s.metricTestUtility.ContainsHistogram(testDef.MetricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
 	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
 }
 
 func (s *MetricTestSuiteBase) TestScopeReportCounter() {
 	s.testClient.Scope(TestScope1).AddCounter(TestCounterMetric1, 66)
 	testDef := MetricDefs[UnitTestService][TestCounterMetric1]
-	assert.NoError(s.T(), s.metricTestUtility.ContainsCounter(testDef.metricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
+	assert.NoError(s.T(), s.metricTestUtility.ContainsCounter(testDef.MetricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
 	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
 }
 
 func (s *MetricTestSuiteBase) TestScopeReportGauge() {
 	s.testClient.Scope(TestScope1).UpdateGauge(TestGaugeMetric1, 66)
 	testDef := MetricDefs[UnitTestService][TestGaugeMetric1]
-	assert.NoError(s.T(), s.metricTestUtility.ContainsGauge(testDef.metricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
+	assert.NoError(s.T(), s.metricTestUtility.ContainsGauge(testDef.MetricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, 66))
 	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
 }
 
@@ -123,6 +123,6 @@ func (s *MetricTestSuiteBase) TestScopeReportTimer() {
 	targetDuration := time.Second * 100
 	s.testClient.Scope(TestScope1).RecordTimer(TestTimerMetric1, targetDuration)
 	testDef := MetricDefs[UnitTestService][TestTimerMetric1]
-	assert.NoError(s.T(), s.metricTestUtility.ContainsTimer(testDef.metricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, targetDuration))
+	assert.NoError(s.T(), s.metricTestUtility.ContainsTimer(testDef.MetricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation}, targetDuration))
 	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
 }

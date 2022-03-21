@@ -33,7 +33,7 @@ import (
 type tallyScope struct {
 	scope             tally.Scope
 	rootScope         internalScope
-	defs              map[int]metricDefinition
+	defs              map[int]MetricDefinition
 	isNamespaceTagged bool
 	perUnitBuckets    map[MetricUnit]tally.Buckets
 }
@@ -41,7 +41,7 @@ type tallyScope struct {
 func newTallyScopeInternal(
 	rootScope internalScope,
 	scope tally.Scope,
-	defs map[int]metricDefinition,
+	defs map[int]MetricDefinition,
 	isNamespace bool,
 	perUnitBuckets map[MetricUnit]tally.Buckets,
 ) internalScope {
@@ -63,7 +63,7 @@ func (m *tallyScope) IncCounter(id int) {
 
 func (m *tallyScope) AddCounter(id int, delta int64) {
 	def := m.defs[id]
-	m.scope.Counter(def.metricName.String()).Inc(delta)
+	m.scope.Counter(def.MetricName.String()).Inc(delta)
 	if !def.metricRollupName.Empty() {
 		m.rootScope.AddCounterInternal(def.metricRollupName.String(), delta)
 	}
@@ -75,7 +75,7 @@ func (m *tallyScope) AddCounterInternal(name string, delta int64) {
 
 func (m *tallyScope) UpdateGauge(id int, value float64) {
 	def := m.defs[id]
-	m.scope.Gauge(def.metricName.String()).Update(value)
+	m.scope.Gauge(def.MetricName.String()).Update(value)
 	if !def.metricRollupName.Empty() {
 		m.scope.Gauge(def.metricRollupName.String()).Update(value)
 	}
@@ -83,12 +83,12 @@ func (m *tallyScope) UpdateGauge(id int, value float64) {
 
 func (m *tallyScope) StartTimer(id int) Stopwatch {
 	def := m.defs[id]
-	timer := NewStopwatch(m.scope.Timer(def.metricName.String()))
+	timer := NewStopwatch(m.scope.Timer(def.MetricName.String()))
 	switch {
 	case !def.metricRollupName.Empty():
 		return NewCompositeStopwatch(timer, m.rootScope.StartTimerInternal(def.metricRollupName.String()))
 	case m.isNamespaceTagged:
-		timerAll := m.rootScope.StartTimerInternal(def.metricName.String() + totalMetricSuffix)
+		timerAll := m.rootScope.StartTimerInternal(def.MetricName.String() + totalMetricSuffix)
 		return NewCompositeStopwatch(timer, timerAll)
 	default:
 		return timer
@@ -101,12 +101,12 @@ func (m *tallyScope) StartTimerInternal(timer string) Stopwatch {
 
 func (m *tallyScope) RecordTimer(id int, d time.Duration) {
 	def := m.defs[id]
-	m.scope.Timer(def.metricName.String()).Record(d)
+	m.scope.Timer(def.MetricName.String()).Record(d)
 	switch {
 	case !def.metricRollupName.Empty():
 		m.rootScope.RecordTimerInternal(def.metricRollupName.String(), d)
 	case m.isNamespaceTagged:
-		m.rootScope.RecordTimerInternal(def.metricName.String()+totalMetricSuffix, d)
+		m.rootScope.RecordTimerInternal(def.MetricName.String()+totalMetricSuffix, d)
 	}
 }
 
@@ -116,13 +116,13 @@ func (m *tallyScope) RecordTimerInternal(name string, d time.Duration) {
 
 func (m *tallyScope) RecordDistribution(id int, d int) {
 	def := m.defs[id]
-	m.RecordDistributionInternal(def.metricName.String(), def.unit, d)
+	m.RecordDistributionInternal(def.MetricName.String(), def.unit, d)
 
 	switch {
 	case !def.metricRollupName.Empty():
 		m.rootScope.RecordDistributionInternal(def.metricRollupName.String(), def.unit, d)
 	case m.isNamespaceTagged:
-		m.rootScope.RecordDistributionInternal(def.metricName.String()+totalMetricSuffix, def.unit, d)
+		m.rootScope.RecordDistributionInternal(def.MetricName.String()+totalMetricSuffix, def.unit, d)
 	}
 }
 

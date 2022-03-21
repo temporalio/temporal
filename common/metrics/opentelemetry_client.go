@@ -36,7 +36,7 @@ type (
 		// parentReporter is the parent scope for the metrics
 		rootScope    *opentelemetryScope
 		childScopes  map[int]Scope
-		metricDefs   map[int]metricDefinition
+		metricDefs   map[int]MetricDefinition
 		serviceIdx   ServiceIdx
 		scopeWrapper func(impl internalScope) internalScope
 		gaugeCache   OtelGaugeCache
