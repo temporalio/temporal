@@ -206,7 +206,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	var token []byte
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
 	for {
-		response, err := p.executionMgr.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 			ShardID:      p.shard.GetShardID(),
 			TaskCategory: tasks.CategoryReplication,
 			InclusiveMinTaskKey: tasks.Key{
@@ -443,6 +443,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 			}
 
 			eventsBlob, err := p.getEventsBlob(
+				ctx,
 				taskInfo.BranchToken,
 				taskInfo.FirstEventID,
 				taskInfo.NextEventID,
@@ -455,6 +456,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 			if len(taskInfo.NewRunBranchToken) != 0 {
 				// only get the first batch
 				newRunEventsBlob, err = p.getEventsBlob(
+					ctx,
 					taskInfo.NewRunBranchToken,
 					common.FirstEventID,
 					common.FirstEventID+1,
@@ -485,6 +487,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 }
 
 func (p *replicatorQueueProcessorImpl) getEventsBlob(
+	ctx context.Context,
 	branchToken []byte,
 	firstEventID int64,
 	nextEventID int64,
@@ -502,7 +505,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	}
 
 	for {
-		resp, err := p.executionMgr.ReadRawHistoryBranch(req)
+		resp, err := p.executionMgr.ReadRawHistoryBranch(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -572,7 +575,7 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := context.LoadWorkflowExecution()
+	msBuilder, err := context.LoadWorkflowExecution(ctx)
 	switch err.(type) {
 	case nil:
 		if !processTaskIfClosed && !msBuilder.IsWorkflowExecutionRunning() {

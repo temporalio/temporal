@@ -213,7 +213,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 
 	// fork a new history branch
 	shardID := r.shard.GetShardID()
-	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID.String(), r.workflowID, r.newRunID),

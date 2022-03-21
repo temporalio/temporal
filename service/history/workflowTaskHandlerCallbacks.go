@@ -139,7 +139,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 				}, nil
 			}
 
-			startEvent, err := mutableState.GetStartEvent()
+			startEvent, err := mutableState.GetStartEvent(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -342,7 +342,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	var currentWorkflowTask *workflow.WorkflowTaskInfo
 	var currentWorkflowTaskRunning bool
 	for attempt := 1; ; attempt++ {
-		msBuilder, err = weContext.LoadWorkflowExecution()
+		msBuilder, err = weContext.LoadWorkflowExecution(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -368,7 +368,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	}
 
 	executionInfo := msBuilder.GetExecutionInfo()
-	executionStats, err := weContext.LoadExecutionStats()
+	executionStats, err := weContext.LoadExecutionStats(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -469,6 +469,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		)
 
 		if err := workflowTaskHandler.handleCommands(
+			ctx,
 			request.Commands,
 		); err != nil {
 			return nil, err
@@ -498,7 +499,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}
-		msBuilder, err = handler.historyEngine.failWorkflowTask(weContext, scheduleID, startedID, wtFailedCause, request)
+		msBuilder, err = handler.historyEngine.failWorkflowTask(ctx, weContext, scheduleID, startedID, wtFailedCause, request)
 		if err != nil {
 			return nil, err
 		}
@@ -546,6 +547,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		newWorkflowExecutionInfo := newStateBuilder.GetExecutionInfo()
 		newWorkflowExecutionState := newStateBuilder.GetExecutionState()
 		updateErr = weContext.UpdateWorkflowExecutionWithNewAsActive(
+			ctx,
 			handler.shard.GetTimeSource().Now(),
 			workflow.NewContext(
 				handler.shard,
@@ -559,7 +561,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			newStateBuilder,
 		)
 	} else {
-		updateErr = weContext.UpdateWorkflowExecutionAsActive(handler.shard.GetTimeSource().Now())
+		updateErr = weContext.UpdateWorkflowExecutionAsActive(ctx, handler.shard.GetTimeSource().Now())
 	}
 
 	if updateErr != nil {
@@ -572,7 +574,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 		case *persistence.TransactionSizeLimitError:
 			// must reload mutable state because the first call to updateWorkflowExecutionWithContext or continueAsNewWorkflowExecution
 			// clears mutable state if error is returned
-			msBuilder, err = weContext.LoadWorkflowExecution()
+			msBuilder, err = weContext.LoadWorkflowExecution(ctx)
 			if err != nil {
 				return nil, err
 			}
@@ -588,6 +590,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				return nil, err
 			}
 			if err := weContext.UpdateWorkflowExecutionAsActive(
+				ctx,
 				handler.shard.GetTimeSource().Now(),
 			); err != nil {
 				return nil, err

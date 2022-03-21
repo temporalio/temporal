@@ -29,6 +29,7 @@
 package shard
 
 import (
+	context "context"
 	reflect "reflect"
 	time "time"
 
@@ -75,62 +76,62 @@ func (m *MockContext) EXPECT() *MockContextMockRecorder {
 }
 
 // AddTasks mocks base method.
-func (m *MockContext) AddTasks(request *persistence.AddHistoryTasksRequest) error {
+func (m *MockContext) AddTasks(ctx context.Context, request *persistence.AddHistoryTasksRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddTasks", request)
+	ret := m.ctrl.Call(m, "AddTasks", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // AddTasks indicates an expected call of AddTasks.
-func (mr *MockContextMockRecorder) AddTasks(request interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) AddTasks(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockContext)(nil).AddTasks), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockContext)(nil).AddTasks), ctx, request)
 }
 
 // AppendHistoryEvents mocks base method.
-func (m *MockContext) AppendHistoryEvents(request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution v1.WorkflowExecution) (int, error) {
+func (m *MockContext) AppendHistoryEvents(ctx context.Context, request *persistence.AppendHistoryNodesRequest, namespaceID namespace.ID, execution v1.WorkflowExecution) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendHistoryEvents", request, namespaceID, execution)
+	ret := m.ctrl.Call(m, "AppendHistoryEvents", ctx, request, namespaceID, execution)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AppendHistoryEvents indicates an expected call of AppendHistoryEvents.
-func (mr *MockContextMockRecorder) AppendHistoryEvents(request, namespaceID, execution interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) AppendHistoryEvents(ctx, request, namespaceID, execution interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryEvents", reflect.TypeOf((*MockContext)(nil).AppendHistoryEvents), request, namespaceID, execution)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryEvents", reflect.TypeOf((*MockContext)(nil).AppendHistoryEvents), ctx, request, namespaceID, execution)
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockContext) ConflictResolveWorkflowExecution(request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+func (m *MockContext) ConflictResolveWorkflowExecution(ctx context.Context, request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(*persistence.ConflictResolveWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.
-func (mr *MockContextMockRecorder) ConflictResolveWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) ConflictResolveWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ConflictResolveWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockContext)(nil).ConflictResolveWorkflowExecution), ctx, request)
 }
 
 // CreateWorkflowExecution mocks base method.
-func (m *MockContext) CreateWorkflowExecution(request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
+func (m *MockContext) CreateWorkflowExecution(ctx context.Context, request *persistence.CreateWorkflowExecutionRequest) (*persistence.CreateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "CreateWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(*persistence.CreateWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateWorkflowExecution indicates an expected call of CreateWorkflowExecution.
-func (mr *MockContextMockRecorder) CreateWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) CreateWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).CreateWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).CreateWorkflowExecution), ctx, request)
 }
 
 // DeleteFailoverLevel mocks base method.
@@ -148,17 +149,17 @@ func (mr *MockContextMockRecorder) DeleteFailoverLevel(category, failoverID inte
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockContext) DeleteWorkflowExecution(workflowKey definition.WorkflowKey, branchToken []byte, version int64, closeTime *time.Time) error {
+func (m *MockContext) DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, version int64, closeTime *time.Time) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", workflowKey, branchToken, version, closeTime)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, workflowKey, branchToken, version, closeTime)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockContextMockRecorder) DeleteWorkflowExecution(workflowKey, branchToken, version, closeTime interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) DeleteWorkflowExecution(ctx, workflowKey, branchToken, version, closeTime interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), workflowKey, branchToken, version, closeTime)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockContext)(nil).DeleteWorkflowExecution), ctx, workflowKey, branchToken, version, closeTime)
 }
 
 // GenerateTaskID mocks base method.
@@ -585,18 +586,18 @@ func (mr *MockContextMockRecorder) SetCurrentTime(cluster, currentTime interface
 }
 
 // SetWorkflowExecution mocks base method.
-func (m *MockContext) SetWorkflowExecution(request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
+func (m *MockContext) SetWorkflowExecution(ctx context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SetWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "SetWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(*persistence.SetWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SetWorkflowExecution indicates an expected call of SetWorkflowExecution.
-func (mr *MockContextMockRecorder) SetWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) SetWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).SetWorkflowExecution), ctx, request)
 }
 
 // Unload mocks base method.
@@ -706,16 +707,16 @@ func (mr *MockContextMockRecorder) UpdateReplicatorDLQAckLevel(sourCluster, ackL
 }
 
 // UpdateWorkflowExecution mocks base method.
-func (m *MockContext) UpdateWorkflowExecution(request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
+func (m *MockContext) UpdateWorkflowExecution(ctx context.Context, request *persistence.UpdateWorkflowExecutionRequest) (*persistence.UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(*persistence.UpdateWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateWorkflowExecution indicates an expected call of UpdateWorkflowExecution.
-func (mr *MockContextMockRecorder) UpdateWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockContextMockRecorder) UpdateWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).UpdateWorkflowExecution), ctx, request)
 }

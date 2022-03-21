@@ -48,9 +48,9 @@ import (
 
 type (
 	DeleteManager interface {
-		AddDeleteWorkflowExecutionTask(nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState) error
-		DeleteWorkflowExecution(nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
-		DeleteWorkflowExecutionByRetention(nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState) error
+		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 	}
 
 	DeleteManagerImpl struct {
@@ -84,6 +84,7 @@ func NewDeleteManager(
 	return deleteManager
 }
 func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
+	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
 	ms MutableState,
@@ -101,7 +102,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 		return err
 	}
 
-	err = m.shard.AddTasks(&persistence.AddHistoryTasksRequest{
+	err = m.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
 		ShardID: m.shard.GetShardID(),
 		// RangeID is set by shard
 		NamespaceID: nsID.String(),
@@ -119,6 +120,7 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecution(
+	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
@@ -135,6 +137,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	}
 
 	err := m.deleteWorkflowExecutionInternal(
+		ctx,
 		nsID,
 		we,
 		weCtx,
@@ -148,6 +151,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
+	ctx context.Context,
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
@@ -163,6 +167,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 	}
 
 	err := m.deleteWorkflowExecutionInternal(
+		ctx,
 		nsID,
 		we,
 		weCtx,
@@ -176,6 +181,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 }
 
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	we commonpb.WorkflowExecution,
 	weCtx Context,
@@ -192,7 +198,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 
 	shouldDeleteHistory := true
 	if archiveIfEnabled {
-		shouldDeleteHistory, err = m.archiveWorkflowIfEnabled(namespaceID, we, currentBranchToken, weCtx, ms, scope)
+		shouldDeleteHistory, err = m.archiveWorkflowIfEnabled(ctx, namespaceID, we, currentBranchToken, weCtx, ms, scope)
 		if err != nil {
 			return err
 		}
@@ -203,12 +209,13 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		currentBranchToken = nil
 	}
 
-	completionEvent, err := ms.GetCompletionEvent()
+	completionEvent, err := ms.GetCompletionEvent(ctx)
 	if err != nil {
 		return err
 	}
 
 	if err := m.shard.DeleteWorkflowExecution(
+		ctx,
 		definition.WorkflowKey{
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  we.GetWorkflowId(),
@@ -229,6 +236,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 }
 
 func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowExecution commonpb.WorkflowExecution,
 	currentBranchToken []byte,
@@ -271,7 +279,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 		CallerService:        common.HistoryServiceName,
 		AttemptArchiveInline: false, // archive in workflow by default
 	}
-	executionStats, err := weCtx.LoadExecutionStats()
+	executionStats, err := weCtx.LoadExecutionStats(ctx)
 	if err == nil && executionStats.HistorySize < int64(m.config.TimerProcessorHistoryArchivalSizeLimit()) {
 		req.AttemptArchiveInline = true
 	}

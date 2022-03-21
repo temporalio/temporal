@@ -25,6 +25,7 @@
 package events
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -113,6 +114,7 @@ func (s *eventsCacheSuite) TestEventsCacheHitSuccess() {
 		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		event)
 	actualEvent, err := s.cache.GetEvent(
+		context.Background(),
 		EventKey{namespaceID, workflowID, runID, eventID, common.EmptyVersion},
 		eventID, nil)
 	s.Nil(err)
@@ -155,7 +157,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 	}
 
 	shardID := int32(10)
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event1.GetEventId(),
 		MaxEventID:    event6.GetEventId() + 1,
@@ -171,6 +173,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissMultiEventsBatchV2Success() {
 		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2)
 	actualEvent, err := s.cache.GetEvent(
+		context.Background(),
 		EventKey{namespaceID, workflowID, runID, event6.GetEventId(), common.EmptyVersion},
 		event1.GetEventId(), []byte("store_token"))
 	s.Nil(err)
@@ -184,7 +187,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 
 	shardID := int32(10)
 	expectedErr := errors.New("persistence call failed")
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    int64(11),
 		MaxEventID:    int64(15),
@@ -194,6 +197,7 @@ func (s *eventsCacheSuite) TestEventsCacheMissV2Failure() {
 	}).Return(nil, expectedErr)
 
 	actualEvent, err := s.cache.GetEvent(
+		context.Background(),
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), []byte("store_token"))
 	s.Nil(actualEvent)
@@ -216,7 +220,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 	}
 
 	shardID := int32(10)
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   []byte("store_token"),
 		MinEventID:    event2.GetEventId(),
 		MaxEventID:    event2.GetEventId() + 1,
@@ -236,6 +240,7 @@ func (s *eventsCacheSuite) TestEventsCacheDisableSuccess() {
 		event2)
 	s.cache.disabled = true
 	actualEvent, err := s.cache.GetEvent(
+		context.Background(),
 		EventKey{namespaceID, workflowID, runID, event2.GetEventId(), common.EmptyVersion},
 		event2.GetEventId(), []byte("store_token"))
 	s.Nil(err)
@@ -253,7 +258,7 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 		EventId:   14,
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 	}
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    int64(11),
 		MaxEventID:    int64(15),
@@ -266,10 +271,12 @@ func (s *eventsCacheSuite) TestEventsCacheGetCachesResult() {
 	}, nil).Times(1) // will only be called once with two calls to GetEvent
 
 	gotEvent1, _ := s.cache.GetEvent(
+		context.Background(),
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
+		context.Background(),
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)
@@ -286,7 +293,7 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 		EventId:   14,
 		EventType: enumspb.EVENT_TYPE_ACTIVITY_TASK_STARTED,
 	}
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    int64(11),
 		MaxEventID:    int64(15),
@@ -303,10 +310,12 @@ func (s *eventsCacheSuite) TestEventsCacheInvalidKey() {
 		event1)
 
 	gotEvent1, _ := s.cache.GetEvent(
+		context.Background(),
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent1, event1)
 	gotEvent2, _ := s.cache.GetEvent(
+		context.Background(),
 		EventKey{namespaceID, workflowID, runID, int64(14), common.EmptyVersion},
 		int64(11), branchToken)
 	s.Equal(gotEvent2, event1)

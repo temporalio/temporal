@@ -103,7 +103,7 @@ func (r *workflowRebuilderImpl) rebuild(
 		context.Clear()
 	}()
 
-	msRecord, dbRecordVersion, err := r.getMutableState(workflowKey)
+	msRecord, dbRecordVersion, err := r.getMutableState(ctx, workflowKey)
 	if err != nil {
 		return err
 	}
@@ -127,7 +127,7 @@ func (r *workflowRebuilderImpl) rebuild(
 	if err != nil {
 		return err
 	}
-	return r.persistToDB(rebuildMutableState, rebuildHistorySize)
+	return r.persistToDB(ctx, rebuildMutableState, rebuildHistorySize)
 }
 
 func (r *workflowRebuilderImpl) replayResetWorkflow(
@@ -162,6 +162,7 @@ func (r *workflowRebuilderImpl) replayResetWorkflow(
 }
 
 func (r *workflowRebuilderImpl) persistToDB(
+	ctx context.Context,
 	mutableState workflow.MutableState,
 	historySize int64,
 ) error {
@@ -181,6 +182,7 @@ func (r *workflowRebuilderImpl) persistToDB(
 		HistorySize: historySize,
 	}
 	if err := r.transaction.SetWorkflowExecution(
+		ctx,
 		resetWorkflowSnapshot,
 		mutableState.GetNamespaceEntry().ActiveClusterName(),
 	); err != nil {
@@ -190,9 +192,10 @@ func (r *workflowRebuilderImpl) persistToDB(
 }
 
 func (r *workflowRebuilderImpl) getMutableState(
+	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 ) (*persistencespb.WorkflowMutableState, int64, error) {
-	record, err := r.executionMgr.GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+	record, err := r.executionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     r.shard.GetShardID(),
 		NamespaceID: workflowKey.NamespaceID,
 		WorkflowID:  workflowKey.WorkflowID,

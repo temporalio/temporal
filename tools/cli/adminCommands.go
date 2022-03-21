@@ -208,6 +208,8 @@ func AdminDeleteWorkflow(c *cli.Context) {
 		branchTokens = append(branchTokens, historyItem.GetBranchToken())
 	}
 
+	ctx, cancel := newContext(c)
+	defer cancel()
 	for _, branchToken := range branchTokens {
 		branchInfo, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 		if err != nil {
@@ -222,7 +224,7 @@ func AdminDeleteWorkflow(c *cli.Context) {
 			log.NewNoopLogger(),
 			dynamicconfig.GetIntPropertyFn(common.DefaultTransactionSizeLimit),
 		)
-		err = execMgr.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+		err = execMgr.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
 			BranchToken: branchToken,
 			ShardID:     int32(shardIDInt),
 		})
@@ -439,7 +441,9 @@ func AdminDescribeTask(c *cli.Context) {
 	if err != nil {
 		ErrorAndExit("Failed to initialize execution manager", err)
 	}
-	task, err := executionManager.GetHistoryTask(&persistence.GetHistoryTaskRequest{
+	ctx, cancel := newContext(c)
+	defer cancel()
+	task, err := executionManager.GetHistoryTask(ctx, &persistence.GetHistoryTaskRequest{
 		ShardID:      int32(sid),
 		TaskCategory: historyTaskCategory,
 		TaskKey:      taskKey,

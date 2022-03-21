@@ -82,7 +82,7 @@ func newTask(
 		logger:    logger,
 		scavenger: scavenger,
 
-		ctx:         context.Background(),
+		ctx:         context.Background(), // TODO: use context from ExecutionsScavengerActivity
 		rateLimiter: rateLimiter,
 	}
 }
@@ -128,6 +128,7 @@ func (t *task) validate(
 	)
 
 	if validationResults, err := NewMutableStateIDValidator().Validate(
+		t.ctx,
 		mutableState,
 	); err != nil {
 		t.logger.Error("unable to validate mutable state ID",
@@ -144,7 +145,7 @@ func (t *task) validate(
 	if validationResults, err := NewHistoryEventIDValidator(
 		t.shardID,
 		t.executionManager,
-	).Validate(mutableState); err != nil {
+	).Validate(t.ctx, mutableState); err != nil {
 		t.logger.Error("unable to validate history event ID being contiguous",
 			tag.ShardID(t.shardID),
 			tag.WorkflowNamespaceID(mutableState.GetExecutionInfo().GetNamespaceId()),
@@ -166,7 +167,7 @@ func (t *task) getPaginationFn() collection.PaginationFn {
 			PageSize:  executionsPageSize,
 			PageToken: paginationToken,
 		}
-		resp, err := t.executionManager.ListConcreteExecutions(req)
+		resp, err := t.executionManager.ListConcreteExecutions(t.ctx, req)
 		if err != nil {
 			return nil, nil, err
 		}

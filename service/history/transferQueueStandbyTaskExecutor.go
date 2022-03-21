@@ -244,7 +244,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		completionEvent, err := mutableState.GetCompletionEvent()
+		completionEvent, err := mutableState.GetCompletionEvent(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -439,7 +439,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTransferTask(context, taskInfo, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, context, taskInfo, t.metricsClient, t.logger)
 	if err != nil || mutableState == nil {
 		return err
 	}

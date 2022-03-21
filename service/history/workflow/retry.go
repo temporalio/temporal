@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"context"
 	"math"
 	"time"
 
@@ -163,6 +164,7 @@ func matchNonRetryableTypes(
 // Helpers for creating new retry/cron workflows:
 
 func SetupNewWorkflowForRetryOrCron(
+	ctx context.Context,
 	previousMutableState MutableState,
 	newMutableState MutableState,
 	newRunID string,

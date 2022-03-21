@@ -25,6 +25,8 @@
 package workflow
 
 import (
+	"context"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -66,6 +68,7 @@ func NewTransaction(
 }
 
 func (t *TransactionImpl) CreateWorkflowExecution(
+	ctx context.Context,
 	createMode persistence.CreateWorkflowMode,
 	newWorkflowSnapshot *persistence.WorkflowSnapshot,
 	newWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -77,7 +80,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		return 0, err
 	}
 
-	resp, err := createWorkflowExecutionWithRetry(t.shard, &persistence.CreateWorkflowExecutionRequest{
+	resp, err := createWorkflowExecutionWithRetry(ctx, t.shard, &persistence.CreateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                createMode,
@@ -99,6 +102,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 }
 
 func (t *TransactionImpl) ConflictResolveWorkflowExecution(
+	ctx context.Context,
 	conflictResolveMode persistence.ConflictResolveWorkflowMode,
 	resetWorkflowSnapshot *persistence.WorkflowSnapshot,
 	resetWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -114,7 +118,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		return 0, 0, 0, err
 	}
 
-	resp, err := conflictResolveWorkflowExecutionWithRetry(t.shard, &persistence.ConflictResolveWorkflowExecutionRequest{
+	resp, err := conflictResolveWorkflowExecutionWithRetry(ctx, t.shard, &persistence.ConflictResolveWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                    conflictResolveMode,
@@ -156,6 +160,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 }
 
 func (t *TransactionImpl) UpdateWorkflowExecution(
+	ctx context.Context,
 	updateMode persistence.UpdateWorkflowMode,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -168,7 +173,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 	if err != nil {
 		return 0, 0, err
 	}
-	resp, err := updateWorkflowExecutionWithRetry(t.shard, &persistence.UpdateWorkflowExecutionRequest{
+	resp, err := updateWorkflowExecutionWithRetry(ctx, t.shard, &persistence.UpdateWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		Mode:                   updateMode,
@@ -200,6 +205,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 }
 
 func (t *TransactionImpl) SetWorkflowExecution(
+	ctx context.Context,
 	workflowSnapshot *persistence.WorkflowSnapshot,
 	clusterName string,
 ) error {
@@ -208,7 +214,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	_, err = setWorkflowExecutionWithRetry(t.shard, &persistence.SetWorkflowExecutionRequest{
+	_, err = setWorkflowExecutionWithRetry(ctx, t.shard, &persistence.SetWorkflowExecutionRequest{
 		ShardID: t.shard.GetShardID(),
 		// RangeID , this is set by shard context
 		SetWorkflowSnapshot: *workflowSnapshot,
@@ -224,6 +230,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 }
 
 func PersistWorkflowEvents(
+	ctx context.Context,
 	shard shard.Context,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
@@ -234,12 +241,13 @@ func PersistWorkflowEvents(
 
 	firstEventID := workflowEvents.Events[0].EventId
 	if firstEventID == common.FirstEventID {
-		return persistFirstWorkflowEvents(shard, workflowEvents)
+		return persistFirstWorkflowEvents(ctx, shard, workflowEvents)
 	}
-	return persistNonFirstWorkflowEvents(shard, workflowEvents)
+	return persistNonFirstWorkflowEvents(ctx, shard, workflowEvents)
 }
 
 func persistFirstWorkflowEvents(
+	ctx context.Context,
 	shard shard.Context,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
@@ -257,6 +265,7 @@ func persistFirstWorkflowEvents(
 	txnID := workflowEvents.TxnID
 
 	size, err := appendHistoryV2EventsWithRetry(
+		ctx,
 		shard,
 		namespaceID,
 		execution,
@@ -273,6 +282,7 @@ func persistFirstWorkflowEvents(
 }
 
 func persistNonFirstWorkflowEvents(
+	ctx context.Context,
 	shard shard.Context,
 	workflowEvents *persistence.WorkflowEvents,
 ) (int64, error) {
@@ -292,6 +302,7 @@ func persistNonFirstWorkflowEvents(
 	txnID := workflowEvents.TxnID
 
 	size, err := appendHistoryV2EventsWithRetry(
+		ctx,
 		shard,
 		namespaceID,
 		execution,
@@ -307,6 +318,7 @@ func persistNonFirstWorkflowEvents(
 }
 
 func appendHistoryV2EventsWithRetry(
+	ctx context.Context,
 	shard shard.Context,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
@@ -316,7 +328,7 @@ func appendHistoryV2EventsWithRetry(
 	resp := 0
 	op := func() error {
 		var err error
-		resp, err = shard.AppendHistoryEvents(request, namespaceID, execution)
+		resp, err = shard.AppendHistoryEvents(ctx, request, namespaceID, execution)
 		return err
 	}
 
@@ -329,6 +341,7 @@ func appendHistoryV2EventsWithRetry(
 }
 
 func createWorkflowExecutionWithRetry(
+	ctx context.Context,
 	shard shard.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
@@ -336,7 +349,7 @@ func createWorkflowExecutionWithRetry(
 	var resp *persistence.CreateWorkflowExecutionResponse
 	op := func() error {
 		var err error
-		resp, err = shard.CreateWorkflowExecution(request)
+		resp, err = shard.CreateWorkflowExecution(ctx, request)
 		return err
 	}
 
@@ -377,6 +390,7 @@ func createWorkflowExecutionWithRetry(
 }
 
 func conflictResolveWorkflowExecutionWithRetry(
+	ctx context.Context,
 	shard shard.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
@@ -384,7 +398,7 @@ func conflictResolveWorkflowExecutionWithRetry(
 	var resp *persistence.ConflictResolveWorkflowExecutionResponse
 	op := func() error {
 		var err error
-		resp, err = shard.ConflictResolveWorkflowExecution(request)
+		resp, err = shard.ConflictResolveWorkflowExecution(ctx, request)
 		return err
 	}
 
@@ -441,7 +455,7 @@ func getWorkflowExecutionWithRetry(
 	var resp *persistence.GetWorkflowExecutionResponse
 	op := func() error {
 		var err error
-		resp, err = shard.GetExecutionManager().GetWorkflowExecution(request)
+		resp, err = shard.GetExecutionManager().GetWorkflowExecution(context.TODO(), request)
 
 		return err
 	}
@@ -480,6 +494,7 @@ func getWorkflowExecutionWithRetry(
 }
 
 func updateWorkflowExecutionWithRetry(
+	ctx context.Context,
 	shard shard.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
@@ -487,7 +502,7 @@ func updateWorkflowExecutionWithRetry(
 	var resp *persistence.UpdateWorkflowExecutionResponse
 	var err error
 	op := func() error {
-		resp, err = shard.UpdateWorkflowExecution(request)
+		resp, err = shard.UpdateWorkflowExecution(ctx, request)
 		return err
 	}
 
@@ -536,6 +551,7 @@ func updateWorkflowExecutionWithRetry(
 }
 
 func setWorkflowExecutionWithRetry(
+	ctx context.Context,
 	shard shard.Context,
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
@@ -543,7 +559,7 @@ func setWorkflowExecutionWithRetry(
 	var resp *persistence.SetWorkflowExecutionResponse
 	var err error
 	op := func() error {
-		resp, err = shard.SetWorkflowExecution(request)
+		resp, err = shard.SetWorkflowExecution(ctx, request)
 		return err
 	}
 

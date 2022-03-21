@@ -25,6 +25,8 @@
 package workflow
 
 import (
+	"context"
+
 	"go.temporal.io/server/common/persistence"
 )
 
@@ -32,6 +34,7 @@ import (
 type (
 	Transaction interface {
 		CreateWorkflowExecution(
+			ctx context.Context,
 			createMode persistence.CreateWorkflowMode,
 			newWorkflowSnapshot *persistence.WorkflowSnapshot,
 			newWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -39,6 +42,7 @@ type (
 		) (int64, error)
 
 		ConflictResolveWorkflowExecution(
+			ctx context.Context,
 			conflictResolveMode persistence.ConflictResolveWorkflowMode,
 			resetWorkflowSnapshot *persistence.WorkflowSnapshot,
 			resetWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -50,6 +54,7 @@ type (
 		) (int64, int64, int64, error)
 
 		UpdateWorkflowExecution(
+			ctx context.Context,
 			updateMode persistence.UpdateWorkflowMode,
 			currentWorkflowMutation *persistence.WorkflowMutation,
 			currentWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -59,6 +64,7 @@ type (
 		) (int64, int64, error)
 
 		SetWorkflowExecution(
+			ctx context.Context,
 			workflowSnapshot *persistence.WorkflowSnapshot,
 			clusterName string,
 		) error

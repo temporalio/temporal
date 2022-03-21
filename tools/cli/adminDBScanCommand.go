@@ -241,9 +241,12 @@ func AdminDBScan(c *cli.Context) {
 	reports := make(chan *ShardScanReport)
 	for i := int32(0); i < scanWorkerCount; i++ {
 		go func(workerIdx int32) {
+			ctx, cancel := newIndefiniteContext(c)
+			defer cancel()
 			for shardID := lowerShardBound; shardID < upperShardBound; shardID++ {
 				if shardID%scanWorkerCount == workerIdx {
 					reports <- scanShard(
+						ctx,
 						session,
 						shardID,
 						scanOutputDirectories,
@@ -271,6 +274,7 @@ func AdminDBScan(c *cli.Context) {
 }
 
 func scanShard(
+	ctx context.Context,
 	session gocql.Session,
 	shardID int32,
 	scanOutputDirectories *ScanOutputDirectories,
@@ -309,7 +313,7 @@ func scanShard(
 			PageToken: token,
 		}
 		preconditionForDBCall(&report.TotalDBRequests, limiter)
-		resp, err := execMan.ListConcreteExecutions(req)
+		resp, err := execMan.ListConcreteExecutions(ctx, req)
 		if err != nil {
 			report.Failure = &ShardScanReportFailure{
 				Note:    "failed to call ListConcreteExecutions",
@@ -380,6 +384,7 @@ func scanShard(
 			}
 
 			currentExecutionVerificationResult := verifyCurrentExecution(
+				ctx,
 				s.ExecutionInfo,
 				s.ExecutionState,
 				s.NextEventId,
@@ -631,6 +636,7 @@ func verifyActivityIds(
 }
 
 func verifyCurrentExecution(
+	ctx context.Context,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	nextEventID int64,
@@ -651,9 +657,9 @@ func verifyCurrentExecution(
 		WorkflowID:  executionInfo.WorkflowId,
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
-	currentExecution, err := execMan.GetCurrentExecution(getCurrentExecutionRequest)
+	currentExecution, err := execMan.GetCurrentExecution(ctx, getCurrentExecutionRequest)
 
-	ecf, stillOpen := concreteExecutionStillOpen(executionInfo, executionState, shardID, execMan, limiter, totalDBRequests)
+	ecf, stillOpen := concreteExecutionStillOpen(ctx, executionInfo, executionState, shardID, execMan, limiter, totalDBRequests)
 	if ecf != nil {
 		checkFailureWriter.Add(ecf)
 		return VerificationResultCheckFailure
@@ -748,6 +754,7 @@ func concreteExecutionStillExists(
 }
 
 func concreteExecutionStillOpen(
+	ctx context.Context,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 	executionState *persistencespb.WorkflowExecutionState,
 	shardID int32,
@@ -762,7 +769,7 @@ func concreteExecutionStillOpen(
 		RunID:       executionState.GetRunId(),
 	}
 	preconditionForDBCall(totalDBRequests, limiter)
-	ce, err := execMan.GetWorkflowExecution(getConcreteExecution)
+	ce, err := execMan.GetWorkflowExecution(ctx, getConcreteExecution)
 	if err != nil {
 		return &ExecutionCheckFailure{
 			ShardID:     shardID,

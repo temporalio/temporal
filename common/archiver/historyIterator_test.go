@@ -106,7 +106,7 @@ func (s *HistoryIteratorSuite) TearDownTest() {
 }
 
 func (s *HistoryIteratorSuite) TestReadHistory_Failed_EventsV2() {
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any()).Return(nil, errors.New("got error reading history branch"))
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(nil, errors.New("got error reading history branch"))
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	history, err := itr.readHistory(common.FirstEventID)
 	s.Error(err)
@@ -118,7 +118,7 @@ func (s *HistoryIteratorSuite) TestReadHistory_Success_EventsV2() {
 		History:       []*historypb.History{},
 		NextPageToken: []byte{},
 	}
-	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any()).Return(&resp, nil)
+	s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), gomock.Any()).Return(&resp, nil)
 	itr := s.constructTestHistoryIterator(s.mockExecutionMgr, testDefaultTargetHistoryBlobSize, nil)
 	history, err := itr.readHistory(common.FirstEventID)
 	s.NoError(err)
@@ -628,14 +628,14 @@ func (s *HistoryIteratorSuite) initMockExecutionManager(batchInfo []int, returnE
 			ShardID:     testShardId,
 		}
 		if returnErrorOnPage == i {
-			s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(nil, errors.New("got error getting workflow execution history"))
+			s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), req).Return(nil, errors.New("got error getting workflow execution history"))
 			return
 		}
 
 		resp := &persistence.ReadHistoryBranchByBatchResponse{
 			History: s.constructHistoryBatches(batchInfo, p, firstEventIDs[p.firstbatchIdx]),
 		}
-		s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(resp, nil).MaxTimes(2)
+		s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), req).Return(resp, nil).MaxTimes(2)
 	}
 
 	if addNotExistCall {
@@ -646,7 +646,7 @@ func (s *HistoryIteratorSuite) initMockExecutionManager(batchInfo []int, returnE
 			PageSize:    testDefaultPersistencePageSize,
 			ShardID:     testShardId,
 		}
-		s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(req).Return(nil, serviceerror.NewNotFound("Reach the end"))
+		s.mockExecutionMgr.EXPECT().ReadHistoryBranchByBatch(gomock.Any(), req).Return(nil, serviceerror.NewNotFound("Reach the end"))
 	}
 }
 

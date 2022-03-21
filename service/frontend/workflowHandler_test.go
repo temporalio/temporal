@@ -1282,7 +1282,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 		NextPageToken: []byte{},
 		ShardID:       shardID,
 	}
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(req).Return(&persistence.ReadHistoryBranchResponse{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), req).Return(&persistence.ReadHistoryBranchResponse{
 		HistoryEvents: []*historypb.HistoryEvent{
 			{
 				EventId:   int64(100),
@@ -1313,6 +1313,7 @@ func (s *workflowHandlerSuite) TestGetHistory() {
 	wh := s.getWorkflowHandler(s.newConfig())
 
 	history, token, err := wh.getHistory(
+		context.Background(),
 		metrics.NoopScope,
 		namespaceID,
 		namespace,
@@ -1371,7 +1372,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 	}, nil).Times(2)
 
 	// GetWorkflowExecutionHistory will request the last event
-	s.mockExecutionManager.EXPECT().ReadHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    5,
 		MaxEventID:    6,
@@ -1397,7 +1398,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory() {
 		Size:          1,
 	}, nil).Times(2)
 
-	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any()).Return(nil, nil).AnyTimes()
+	s.mockExecutionManager.EXPECT().TrimHistoryBranch(gomock.Any(), gomock.Any()).Return(nil, nil).AnyTimes()
 	s.mockSearchAttributesProvider.EXPECT().GetSearchAttributes(gomock.Any(), false).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
 
 	wh := s.getWorkflowHandler(s.newConfig())
@@ -1492,7 +1493,7 @@ func (s *workflowHandlerSuite) TestGetWorkflowExecutionHistory_RawHistoryWithTra
 		enumspb.ENCODING_TYPE_PROTO3,
 	)
 	s.NoError(err)
-	s.mockExecutionManager.EXPECT().ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	s.mockExecutionManager.EXPECT().ReadRawHistoryBranch(gomock.Any(), &persistence.ReadHistoryBranchRequest{
 		BranchToken:   branchToken,
 		MinEventID:    1,
 		MaxEventID:    5,

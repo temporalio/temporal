@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -126,6 +127,7 @@ func newWorkflowTaskHandler(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommands(
+	ctx context.Context,
 	commands []*commandpb.Command,
 ) error {
 	if err := handler.attrValidator.validateCommandSequence(
@@ -134,7 +136,7 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 		return err
 	}
 	for _, command := range commands {
-		err := handler.handleCommand(command)
+		err := handler.handleCommand(ctx, command)
 		if err != nil || handler.stopProcessing {
 			return err
 		}
@@ -142,46 +144,46 @@ func (handler *workflowTaskHandlerImpl) handleCommands(
 	return nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommand(command *commandpb.Command) error {
+func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, command *commandpb.Command) error {
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
-		return handler.handleCommandScheduleActivity(command.GetScheduleActivityTaskCommandAttributes())
+		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		return handler.handleCommandCompleteWorkflow(command.GetCompleteWorkflowExecutionCommandAttributes())
+		return handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
-		return handler.handleCommandFailWorkflow(command.GetFailWorkflowExecutionCommandAttributes())
+		return handler.handleCommandFailWorkflow(ctx, command.GetFailWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
-		return handler.handleCommandCancelWorkflow(command.GetCancelWorkflowExecutionCommandAttributes())
+		return handler.handleCommandCancelWorkflow(ctx, command.GetCancelWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_TIMER:
-		return handler.handleCommandStartTimer(command.GetStartTimerCommandAttributes())
+		return handler.handleCommandStartTimer(ctx, command.GetStartTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
-		return handler.handleCommandRequestCancelActivity(command.GetRequestCancelActivityTaskCommandAttributes())
+		return handler.handleCommandRequestCancelActivity(ctx, command.GetRequestCancelActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CANCEL_TIMER:
-		return handler.handleCommandCancelTimer(command.GetCancelTimerCommandAttributes())
+		return handler.handleCommandCancelTimer(ctx, command.GetCancelTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_RECORD_MARKER:
-		return handler.handleCommandRecordMarker(command.GetRecordMarkerCommandAttributes())
+		return handler.handleCommandRecordMarker(ctx, command.GetRecordMarkerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleCommandRequestCancelExternalWorkflow(command.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
+		return handler.handleCommandRequestCancelExternalWorkflow(ctx, command.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleCommandSignalExternalWorkflow(command.GetSignalExternalWorkflowExecutionCommandAttributes())
+		return handler.handleCommandSignalExternalWorkflow(ctx, command.GetSignalExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
-		return handler.handleCommandContinueAsNewWorkflow(command.GetContinueAsNewWorkflowExecutionCommandAttributes())
+		return handler.handleCommandContinueAsNewWorkflow(ctx, command.GetContinueAsNewWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-		return handler.handleCommandStartChildWorkflow(command.GetStartChildWorkflowExecutionCommandAttributes())
+		return handler.handleCommandStartChildWorkflow(ctx, command.GetStartChildWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return handler.handleCommandUpsertWorkflowSearchAttributes(command.GetUpsertWorkflowSearchAttributesCommandAttributes())
+		return handler.handleCommandUpsertWorkflowSearchAttributes(ctx, command.GetUpsertWorkflowSearchAttributesCommandAttributes())
 
 	default:
 		return serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
@@ -189,6 +191,7 @@ func (handler *workflowTaskHandlerImpl) handleCommand(command *commandpb.Command
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
+	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
 ) error {
 
@@ -245,6 +248,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
+	_ context.Context,
 	attr *commandpb.RequestCancelActivityTaskCommandAttributes,
 ) error {
 
@@ -298,6 +302,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
+	_ context.Context,
 	attr *commandpb.StartTimerCommandAttributes,
 ) error {
 
@@ -326,6 +331,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
+	ctx context.Context,
 	attr *commandpb.CompleteWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -385,13 +391,14 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 
 	// Check if this workflow has a cron schedule
 	if cronBackoff != backoff.NoBackoff {
-		return handler.handleCron(cronBackoff, attr.GetResult(), nil, newExecutionRunID)
+		return handler.handleCron(ctx, cronBackoff, attr.GetResult(), nil, newExecutionRunID)
 	}
 
 	return nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
+	ctx context.Context,
 	attr *commandpb.FailWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -462,9 +469,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 
 	// Handle retry or cron
 	if retryBackoff != backoff.NoBackoff {
-		return handler.handleRetry(retryBackoff, retryState, attr.GetFailure(), newExecutionRunID)
+		return handler.handleRetry(ctx, retryBackoff, retryState, attr.GetFailure(), newExecutionRunID)
 	} else if cronBackoff != backoff.NoBackoff {
-		return handler.handleCron(cronBackoff, nil, attr.GetFailure(), newExecutionRunID)
+		return handler.handleCron(ctx, cronBackoff, nil, attr.GetFailure(), newExecutionRunID)
 	}
 
 	// No retry or cron
@@ -472,6 +479,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
+	_ context.Context,
 	attr *commandpb.CancelTimerCommandAttributes,
 ) error {
 
@@ -509,6 +517,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
+	_ context.Context,
 	attr *commandpb.CancelWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -549,6 +558,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkflow(
+	_ context.Context,
 	attr *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -591,6 +601,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
+	_ context.Context,
 	attr *commandpb.RecordMarkerCommandAttributes,
 ) error {
 
@@ -623,6 +634,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
+	_ context.Context,
 	attr *commandpb.ContinueAsNewWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -726,6 +738,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
+	_ context.Context,
 	attr *commandpb.StartChildWorkflowExecutionCommandAttributes,
 ) error {
 	handler.metricsClient.IncCounter(
@@ -822,6 +835,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
+	_ context.Context,
 	attr *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
 ) error {
 
@@ -872,6 +886,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttributes(
+	_ context.Context,
 	attr *commandpb.UpsertWorkflowSearchAttributesCommandAttributes,
 ) error {
 
@@ -946,12 +961,13 @@ func searchAttributesSize(fields map[string]*commonpb.Payload) int {
 }
 
 func (handler *workflowTaskHandlerImpl) handleRetry(
+	ctx context.Context,
 	backoffInterval time.Duration,
 	retryState enumspb.RetryState,
 	failure *failurepb.Failure,
 	newRunID string,
 ) error {
-	startEvent, err := handler.mutableState.GetStartEvent()
+	startEvent, err := handler.mutableState.GetStartEvent(ctx)
 	if err != nil {
 		return err
 	}
@@ -966,6 +982,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 		return err
 	}
 	err = workflow.SetupNewWorkflowForRetryOrCron(
+		ctx,
 		handler.mutableState,
 		newStateBuilder,
 		newRunID,
@@ -984,12 +1001,13 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 }
 
 func (handler *workflowTaskHandlerImpl) handleCron(
+	ctx context.Context,
 	backoffInterval time.Duration,
 	lastCompletionResult *commonpb.Payloads,
 	failure *failurepb.Failure,
 	newRunID string,
 ) error {
-	startEvent, err := handler.mutableState.GetStartEvent()
+	startEvent, err := handler.mutableState.GetStartEvent(ctx)
 	if err != nil {
 		return err
 	}
@@ -1008,6 +1026,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		return err
 	}
 	err = workflow.SetupNewWorkflowForRetryOrCron(
+		ctx,
 		handler.mutableState,
 		newStateBuilder,
 		newRunID,

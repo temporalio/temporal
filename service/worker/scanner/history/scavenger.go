@@ -147,7 +147,7 @@ func (s *Scavenger) loadTasks(
 
 	defer close(reqCh)
 
-	iter := collection.NewPagingIteratorWithToken(s.getPaginationFn(), s.hbd.NextPageToken)
+	iter := collection.NewPagingIteratorWithToken(s.getPaginationFn(ctx), s.hbd.NextPageToken)
 	for iter.HasNext() {
 		if err := s.rateLimiter.Wait(ctx); err != nil {
 			// context done
@@ -274,7 +274,7 @@ func (s *Scavenger) handleTask(
 		return err
 	}
 
-	err = s.db.DeleteHistoryBranch(&persistence.DeleteHistoryBranchRequest{
+	err = s.db.DeleteHistoryBranch(ctx, &persistence.DeleteHistoryBranchRequest{
 		ShardID:     task.shardID,
 		BranchToken: branchToken,
 	})
@@ -301,13 +301,15 @@ func (s *Scavenger) handleErr(
 	s.hbd.SuccessCount++
 }
 
-func (s *Scavenger) getPaginationFn() collection.PaginationFn {
+func (s *Scavenger) getPaginationFn(
+	ctx context.Context,
+) collection.PaginationFn {
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 		req := &persistence.GetAllHistoryTreeBranchesRequest{
 			PageSize:      pageSize,
 			NextPageToken: paginationToken,
 		}
-		resp, err := s.db.GetAllHistoryTreeBranches(req)
+		resp, err := s.db.GetAllHistoryTreeBranches(ctx, req)
 		if err != nil {
 			return nil, nil, err
 		}
