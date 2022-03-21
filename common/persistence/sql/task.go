@@ -389,23 +389,23 @@ func (m *sqlTaskManager) GetTasks(
 		return nil, serviceerror.NewUnavailable(err.Error())
 	}
 
-	minTaskID := request.MinTaskIDExclusive
-	maxTaskID := request.MaxTaskIDInclusive
+	inclusiveMinTaskID := request.InclusiveMinTaskID
+	exclusiveMaxTaskID := request.ExclusiveMaxTaskID
 	if len(request.NextPageToken) != 0 {
 		token, err := deserializeMatchingTaskPageToken(request.NextPageToken)
 		if err != nil {
 			return nil, err
 		}
-		minTaskID = token.TaskID
+		inclusiveMinTaskID = token.TaskID
 	}
 
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueue, request.TaskType)
 	rows, err := m.Db.SelectFromTasks(ctx, sqlplugin.TasksFilter{
-		RangeHash:   tqHash,
-		TaskQueueID: tqId,
-		MinTaskID:   &minTaskID,
-		MaxTaskID:   &maxTaskID,
-		PageSize:    &request.PageSize,
+		RangeHash:          tqHash,
+		TaskQueueID:        tqId,
+		InclusiveMinTaskID: &inclusiveMinTaskID,
+		ExclusiveMaxTaskID: &exclusiveMaxTaskID,
+		PageSize:           &request.PageSize,
 	})
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetTasks operation failed. Failed to get rows. Error: %v", err))
@@ -418,15 +418,16 @@ func (m *sqlTaskManager) GetTasks(
 		response.Tasks[i] = persistence.NewDataBlob(v.Data, v.DataEncoding)
 	}
 	if len(rows) == request.PageSize {
-		token, err := serializeMatchingTaskPageToken(&matchingTaskPageToken{
-			TaskID: rows[len(rows)-1].TaskID,
-		})
-		if err != nil {
-			return nil, err
+		nextTaskID := rows[len(rows)-1].TaskID + 1
+		if nextTaskID < exclusiveMaxTaskID {
+			token, err := serializeMatchingTaskPageToken(&matchingTaskPageToken{
+				TaskID: nextTaskID,
+			})
+			if err != nil {
+				return nil, err
+			}
+			response.NextPageToken = token
 		}
-		response.NextPageToken = token
-	} else {
-		response.NextPageToken = nil
 	}
 
 	return response, nil
@@ -465,10 +466,10 @@ func (m *sqlTaskManager) CompleteTasksLessThan(
 	}
 	tqId, tqHash := m.taskQueueIdAndHash(nidBytes, request.TaskQueueName, request.TaskType)
 	result, err := m.Db.DeleteFromTasks(ctx, sqlplugin.TasksFilter{
-		RangeHash:            tqHash,
-		TaskQueueID:          tqId,
-		TaskIDLessThanEquals: &request.TaskID,
-		Limit:                &request.Limit,
+		RangeHash:          tqHash,
+		TaskQueueID:        tqId,
+		ExclusiveMaxTaskID: &request.ExclusiveMaxTaskID,
+		Limit:              &request.Limit,
 	})
 	if err != nil {
 		return 0, serviceerror.NewUnavailable(err.Error())

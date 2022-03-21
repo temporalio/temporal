@@ -549,13 +549,8 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 func (s *ContextImpl) AddTasks(
 	request *persistence.AddHistoryTasksRequest,
 ) error {
-	if err := s.errorByState(); err != nil {
-		return err
-	}
-
-	namespaceID := namespace.ID(request.NamespaceID)
-
 	// do not try to get namespace cache within shard lock
+	namespaceID := namespace.ID(request.NamespaceID)
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
@@ -563,6 +558,10 @@ func (s *ContextImpl) AddTasks(
 
 	s.wLock()
 	defer s.wUnlock()
+
+	if err := s.errorByStateLocked(); err != nil {
+		return err
+	}
 
 	return s.addTasksLocked(request, namespaceEntry)
 }
@@ -570,14 +569,9 @@ func (s *ContextImpl) AddTasks(
 func (s *ContextImpl) CreateWorkflowExecution(
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
-	if err := s.errorByState(); err != nil {
-		return nil, err
-	}
-
+	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
-
-	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -585,6 +579,10 @@ func (s *ContextImpl) CreateWorkflowExecution(
 
 	s.wLock()
 	defer s.wUnlock()
+
+	if err := s.errorByStateLocked(); err != nil {
+		return nil, err
+	}
 
 	transferMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDsLocked(
@@ -608,14 +606,9 @@ func (s *ContextImpl) CreateWorkflowExecution(
 func (s *ContextImpl) UpdateWorkflowExecution(
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
-	if err := s.errorByState(); err != nil {
-		return nil, err
-	}
-
+	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
 	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
-
-	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -623,6 +616,10 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 
 	s.wLock()
 	defer s.wUnlock()
+
+	if err := s.errorByStateLocked(); err != nil {
+		return nil, err
+	}
 
 	transferMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDsLocked(
@@ -656,14 +653,9 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
-	if err := s.errorByState(); err != nil {
-		return nil, err
-	}
-
+	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
-
-	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -671,6 +663,10 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 
 	s.wLock()
 	defer s.wUnlock()
+
+	if err := s.errorByStateLocked(); err != nil {
+		return nil, err
+	}
 
 	transferMaxReadLevel := int64(0)
 	if request.CurrentWorkflowMutation != nil {
@@ -714,14 +710,9 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 func (s *ContextImpl) SetWorkflowExecution(
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
-	if err := s.errorByState(); err != nil {
-		return nil, err
-	}
-
+	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.SetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
-
-	// do not try to get namespace cache within shard lock
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
@@ -729,6 +720,10 @@ func (s *ContextImpl) SetWorkflowExecution(
 
 	s.wLock()
 	defer s.wUnlock()
+
+	if err := s.errorByStateLocked(); err != nil {
+		return nil, err
+	}
 
 	transferMaxReadLevel := int64(0)
 	if err := s.allocateTaskIDsLocked(
@@ -777,9 +772,12 @@ func (s *ContextImpl) AppendHistoryEvents(
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 ) (int, error) {
-	if err := s.errorByState(); err != nil {
+	s.rLock()
+	if err := s.errorByStateLocked(); err != nil {
+		s.rUnlock()
 		return 0, err
 	}
+	s.rUnlock()
 
 	request.ShardID = s.shardID
 
@@ -830,10 +828,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	// The history branch won't be accessible (because mutable state is deleted) and special garbage collection workflow will delete it eventually.
 	// Step 4 shouldn't be done earlier because if this func fails after it, workflow execution will be accessible but won't have history (inconsistent state).
 
-	if err := s.errorByState(); err != nil {
-		return err
-	}
-
 	// Do not get namespace cache within shard lock.
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
 	deleteVisibilityRecord := true
@@ -849,6 +843,10 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 	s.wLock()
 	defer s.wUnlock()
+
+	if err := s.errorByStateLocked(); err != nil {
+		return err
+	}
 
 	// Step 1. Delete visibility.
 	if deleteVisibilityRecord {
@@ -946,12 +944,6 @@ func (s *ContextImpl) GetThrottledLogger() log.Logger {
 
 func (s *ContextImpl) getRangeIDLocked() int64 {
 	return s.shardInfo.GetRangeId()
-}
-
-func (s *ContextImpl) errorByState() error {
-	s.rLock()
-	defer s.rUnlock()
-	return s.errorByStateLocked()
 }
 
 func (s *ContextImpl) errorByStateLocked() error {

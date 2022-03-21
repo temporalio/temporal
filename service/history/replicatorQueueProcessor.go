@@ -382,11 +382,10 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-			versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 			if err != nil {
 				return nil, err
 			}
-
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 				SourceTaskId: taskID,
@@ -405,7 +404,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						VersionHistory:     versionHistory,
+						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
 					},
 				},
 				VisibilityTime: &taskInfo.VisibilityTimestamp,
@@ -541,11 +540,11 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 		return nil, nil, err
 	}
 
-	versionHistory, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
+	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
 	if err != nil {
 		return nil, nil, err
 	}
-	return versionHistory.GetItems(), versionHistory.GetBranchToken(), nil
+	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
 }
 
 func (p *replicatorQueueProcessorImpl) processReplication(

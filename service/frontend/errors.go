@@ -65,8 +65,6 @@ var (
 	errInvalidPageSize                                    = serviceerror.NewInvalidArgument("Invalid PageSize.")
 	errInvalidPaginationToken                             = serviceerror.NewInvalidArgument("Invalid pagination token.")
 	errInvalidFirstNextEventCombination                   = serviceerror.NewInvalidArgument("Invalid FirstEventId and NextEventId combination.")
-	errInvalidStartEventCombination                       = serviceerror.NewInvalidArgument("Invalid StartEventId and StartEventVersion combination.")
-	errInvalidEndEventCombination                         = serviceerror.NewInvalidArgument("Invalid EndEventId and EndEventVersion combination.")
 	errInvalidVersionHistories                            = serviceerror.NewInvalidArgument("Invalid version histories.")
 	errInvalidEventQueryRange                             = serviceerror.NewInvalidArgument("Invalid event query range.")
 	errDLQTypeIsNotSupported                              = serviceerror.NewInvalidArgument("The DLQ type is not supported.")

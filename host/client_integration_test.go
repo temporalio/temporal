@@ -97,9 +97,6 @@ func (s *clientIntegrationSuite) SetupTest() {
 	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
 		HostPort:  s.hostPort,
 		Namespace: s.namespace,
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			DisableHealthCheck: true,
-		},
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))
@@ -249,9 +246,6 @@ func (s *clientIntegrationSuite) startWorkerWithDataConverter(tl string, dataCon
 		HostPort:      s.hostPort,
 		Namespace:     s.namespace,
 		DataConverter: dataConverter,
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			DisableHealthCheck: true,
-		},
 	})
 	if err != nil {
 		s.Logger.Fatal("Error when creating SDK client", tag.Error(err))

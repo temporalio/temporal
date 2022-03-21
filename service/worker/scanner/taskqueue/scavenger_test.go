@@ -201,7 +201,7 @@ func (s *ScavengerTestSuite) setupTaskMgrMocks() {
 		}).AnyTimes()
 	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any()).DoAndReturn(
 		func(req *p.CompleteTasksLessThanRequest) (int, error) {
-			return s.taskTables[req.TaskQueueName].deleteLessThan(req.TaskID, req.Limit), nil
+			return s.taskTables[req.TaskQueueName].deleteLessThan(req.ExclusiveMaxTaskID, req.Limit), nil
 		}).AnyTimes()
 }
 

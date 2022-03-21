@@ -131,8 +131,8 @@ func (t *dbTaskReaderImpl) getPaginationFn(
 			NamespaceID:        t.taskQueueKey.NamespaceID,
 			TaskQueue:          t.taskQueueKey.TaskQueueName,
 			TaskType:           t.taskQueueKey.TaskQueueType,
-			MinTaskIDExclusive: minTaskID, // exclusive
-			MaxTaskIDInclusive: maxTaskID, // inclusive
+			InclusiveMinTaskID: minTaskID + 1,
+			ExclusiveMaxTaskID: maxTaskID + 1,
 			PageSize:           dbTaskReaderPageSize,
 			NextPageToken:      paginationToken,
 		})

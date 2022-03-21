@@ -565,8 +565,8 @@ type (
 		NamespaceID        string
 		TaskQueue          string
 		TaskType           enumspb.TaskQueueType
-		MinTaskIDExclusive int64 // exclusive
-		MaxTaskIDInclusive int64 // inclusive
+		InclusiveMinTaskID int64
+		ExclusiveMaxTaskID int64
 		PageSize           int
 		NextPageToken      []byte
 	}
@@ -585,11 +585,11 @@ type (
 
 	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
 	CompleteTasksLessThanRequest struct {
-		NamespaceID   string
-		TaskQueueName string
-		TaskType      enumspb.TaskQueueType
-		TaskID        int64 // Tasks less than or equal to this ID will be completed
-		Limit         int   // Limit on the max number of tasks that can be completed. Required param
+		NamespaceID        string
+		TaskQueueName      string
+		TaskType           enumspb.TaskQueueType
+		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
+		Limit              int   // Limit on the max number of tasks that can be completed. Required param
 	}
 
 	// CreateNamespaceRequest is used to create the namespace

@@ -115,8 +115,8 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Conflict() {
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		MinTaskIDExclusive: taskID - 1,
-		MaxTaskIDInclusive: taskID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
@@ -144,8 +144,8 @@ func (s *TaskQueueTaskSuite) TestCreateGet_One() {
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		MinTaskIDExclusive: taskID - 1,
-		MaxTaskIDInclusive: taskID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
@@ -190,8 +190,8 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
 			NamespaceID:        s.namespaceID,
 			TaskQueue:          s.taskQueueName,
 			TaskType:           s.taskQueueType,
-			MinTaskIDExclusive: minTaskID - 1,
-			MaxTaskIDInclusive: maxTaskID,
+			InclusiveMinTaskID: minTaskID,
+			ExclusiveMaxTaskID: maxTaskID + 1,
 			PageSize:           1,
 			NextPageToken:      token,
 		})
@@ -231,8 +231,8 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_One() {
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		MinTaskIDExclusive: taskID - 1,
-		MaxTaskIDInclusive: taskID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
@@ -251,14 +251,12 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 	rangeID := rand.Int63()
 	taskQueue := s.createTaskQueue(rangeID)
 
-	var expectedTasks []*persistencespb.AllocatedTaskInfo
 	for i := 0; i < numCreateBatch; i++ {
 		var tasks []*persistencespb.AllocatedTaskInfo
 		for j := 0; j < createBatchSize; j++ {
 			taskID := minTaskID + int64(i*numCreateBatch+j)
 			task := s.randomTask(taskID)
 			tasks = append(tasks, task)
-			expectedTasks = append(expectedTasks, task)
 		}
 		_, err := s.taskManager.CreateTasks(&p.CreateTasksRequest{
 			TaskQueueInfo: &p.PersistedTaskQueueInfo{
@@ -271,11 +269,11 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 	}
 
 	_, err := s.taskManager.CompleteTasksLessThan(&p.CompleteTasksLessThanRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueueName: s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		TaskID:        maxTaskID,
-		Limit:         int(numTasks),
+		NamespaceID:        s.namespaceID,
+		TaskQueueName:      s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		ExclusiveMaxTaskID: maxTaskID + 1,
+		Limit:              int(numTasks),
 	})
 	s.NoError(err)
 
@@ -283,8 +281,8 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		MinTaskIDExclusive: minTaskID - 1,
-		MaxTaskIDInclusive: maxTaskID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID + 1,
 		PageSize:           100,
 		NextPageToken:      nil,
 	})

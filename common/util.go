@@ -84,6 +84,8 @@ const (
 	replicationServiceBusyMaxInterval        = 10 * time.Second
 	replicationServiceBusyExpirationInterval = 30 * time.Second
 
+	sdkClientFactoryRetryExpirationInterval = time.Minute
+
 	defaultInitialInterval            = time.Second
 	defaultMaximumIntervalCoefficient = 100.0
 	defaultBackoffCoefficient         = 2.0
@@ -198,6 +200,15 @@ func CreateReplicationServiceBusyRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(replicationServiceBusyInitialInterval)
 	policy.SetMaximumInterval(replicationServiceBusyMaxInterval)
 	policy.SetExpirationInterval(replicationServiceBusyExpirationInterval)
+
+	return policy
+}
+
+// CreateSdkClientFactoryRetryPolicy creates a retry policy to handle SdkClientFactory NewClient when frontend service is not ready
+func CreateSdkClientFactoryRetryPolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(frontendServiceOperationInitialInterval)
+	policy.SetMaximumInterval(frontendServiceOperationMaxInterval)
+	policy.SetExpirationInterval(sdkClientFactoryRetryExpirationInterval)
 
 	return policy
 }

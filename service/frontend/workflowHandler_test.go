@@ -1756,6 +1756,7 @@ func (s *workflowHandlerSuite) TestGetSystemInfo() {
 	s.Equal(headers.ServerVersion, resp.ServerVersion)
 	s.True(resp.Capabilities.SignalAndQueryHeader)
 	s.True(resp.Capabilities.InternalErrorDifferentiation)
+	s.True(resp.Capabilities.ActivityFailureIncludeHeartbeat)
 }
 
 func (s *workflowHandlerSuite) newConfig() *Config {

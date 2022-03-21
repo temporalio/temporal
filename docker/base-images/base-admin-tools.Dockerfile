@@ -6,7 +6,6 @@ RUN apk add --update --no-cache \
     tzdata \
     bash \
     curl \
-    vim \
     jq \
     mysql-client \
     postgresql-client \

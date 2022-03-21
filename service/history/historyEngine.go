@@ -42,10 +42,10 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 
@@ -112,7 +112,7 @@ type (
 		replicationTaskFetchers       ReplicationTaskFetchers
 		replicationTaskProcessorsLock sync.Mutex
 		replicationTaskProcessors     map[string]ReplicationTaskProcessor
-		publicClient                  sdkclient.Client
+		sdkClientFactory              sdk.ClientFactory
 		eventsReapplier               nDCEventsReapplier
 		matchingClient                matchingservice.MatchingServiceClient
 		rawMatchingClient             matchingservice.MatchingServiceClient
@@ -128,7 +128,7 @@ func NewEngineWithShardContext(
 	visibilityMgr manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
 	config *configs.Config,
 	replicationTaskFetchers ReplicationTaskFetchers,
@@ -165,7 +165,7 @@ func NewEngineWithShardContext(
 		metricsClient:             shard.GetMetricsClient(),
 		eventNotifier:             eventNotifier,
 		config:                    config,
-		publicClient:              publicClient,
+		sdkClientFactory:          sdkClientFactory,
 		matchingClient:            matchingClient,
 		rawMatchingClient:         rawMatchingClient,
 		replicationTaskProcessors: make(map[string]ReplicationTaskProcessor),
@@ -1440,8 +1440,12 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			namespaceName := namespaceEntry.Name()
 			taskQueueName := ai.GetTaskQueue()
 
-			metrics.GetPerTaskQueueScope(metricsScope, namespaceName.String(), taskQueueName, enumspb.TASK_QUEUE_KIND_NORMAL).
-				Tagged(metrics.TaskTypeTag("activity")).
+			metrics.GetPerTaskQueueScope(
+				metricsScope,
+				namespaceName.String(),
+				taskQueueName,
+				enumspb.TASK_QUEUE_KIND_NORMAL,
+			).Tagged(metrics.TaskQueueTypeTag(enumspb.TASK_QUEUE_TYPE_ACTIVITY)).
 				RecordTimer(metrics.TaskScheduleToStartLatency, scheduleToStartLatency)
 
 			response.StartedTime = ai.StartedTime

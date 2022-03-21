@@ -959,6 +959,10 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 		return nil, errRequestNotSet
 	}
 
+	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
+		return nil, errIdentityTooLong
+	}
+
 	taskToken, err := wh.tokenSerializer.Deserialize(request.TaskToken)
 	if err != nil {
 		return nil, err
@@ -971,10 +975,6 @@ func (wh *WorkflowHandler) RespondWorkflowTaskCompleted(
 	)
 	if err != nil {
 		return nil, err
-	}
-
-	if len(request.GetIdentity()) > wh.config.MaxIDLengthLimit() {
-		return nil, errIdentityTooLong
 	}
 
 	completedResp := &workflowservice.RespondWorkflowTaskCompletedResponse{}
@@ -2959,8 +2959,9 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 		// hardcoded boolean true values since older servers will respond with a
 		// form of this message without the field which is implied false.
 		Capabilities: &workflowservice.GetSystemInfoResponse_Capabilities{
-			SignalAndQueryHeader:         true,
-			InternalErrorDifferentiation: true,
+			SignalAndQueryHeader:            true,
+			InternalErrorDifferentiation:    true,
+			ActivityFailureIncludeHeartbeat: true,
 		},
 	}, nil
 }

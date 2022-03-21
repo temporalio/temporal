@@ -844,7 +844,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,taskqueue=makeToast"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,task_type=Activity,taskqueue=makeToast"]
 	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -2031,7 +2031,7 @@ func (m *testTaskManager) CompleteTasksLessThan(request *persistence.CompleteTas
 	keys := tlm.tasks.Keys()
 	for _, key := range keys {
 		id := key.(int64)
-		if id <= request.TaskID {
+		if id < request.ExclusiveMaxTaskID {
 			tlm.tasks.Remove(id)
 		}
 	}
@@ -2097,7 +2097,7 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 
 // GetTasks provides a mock function with given fields: request
 func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
-	m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.MinTaskIDExclusive), tag.ReadLevel(request.MaxTaskIDInclusive))
+	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
 	tlm.Lock()
@@ -2107,10 +2107,10 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	it := tlm.tasks.Iterator()
 	for it.Next() {
 		taskID := it.Key().(int64)
-		if taskID <= request.MinTaskIDExclusive {
+		if taskID < request.InclusiveMinTaskID {
 			continue
 		}
-		if taskID > request.MaxTaskIDInclusive {
+		if taskID >= request.ExclusiveMaxTaskID {
 			break
 		}
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))

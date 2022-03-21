@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"go.temporal.io/sdk/activity"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/sdk/worker"
@@ -38,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/sdk"
 )
 
 type (
@@ -54,7 +54,7 @@ type (
 	// the sub-system
 	BootstrapParams struct {
 		// SdkSystemClient is an instance of temporal service client
-		SdkSystemClient sdkclient.Client
+		SdkClientFactory sdk.ClientFactory
 		// MetricsClient is an instance of metrics object for emitting stats
 		MetricsClient metrics.Client
 		// Logger is the logger
@@ -69,30 +69,31 @@ type (
 
 	// Processor is the background sub-system that execute workflow for ParentClosePolicy
 	Processor struct {
-		svcClient      sdkclient.Client
-		clientBean     client.Bean
-		metricsClient  metrics.Client
-		cfg            Config
-		logger         log.Logger
-		currentCluster string
+		svcClientFactory sdk.ClientFactory
+		clientBean       client.Bean
+		metricsClient    metrics.Client
+		cfg              Config
+		logger           log.Logger
+		currentCluster   string
 	}
 )
 
 // New returns a new instance as daemon
 func New(params *BootstrapParams) *Processor {
 	return &Processor{
-		svcClient:      params.SdkSystemClient,
-		metricsClient:  params.MetricsClient,
-		cfg:            params.Config,
-		logger:         log.With(params.Logger, tag.ComponentBatcher),
-		clientBean:     params.ClientBean,
-		currentCluster: params.CurrentCluster,
+		svcClientFactory: params.SdkClientFactory,
+		metricsClient:    params.MetricsClient,
+		cfg:              params.Config,
+		logger:           log.With(params.Logger, tag.ComponentBatcher),
+		clientBean:       params.ClientBean,
+		currentCluster:   params.CurrentCluster,
 	}
 }
 
 // Start starts the scanner
 func (s *Processor) Start() error {
-	processorWorker := worker.New(s.svcClient, processorTaskQueueName, getWorkerOptions(s))
+	svcClient := s.svcClientFactory.GetSystemClient(s.logger)
+	processorWorker := worker.New(svcClient, processorTaskQueueName, getWorkerOptions(s))
 	processorWorker.RegisterWorkflowWithOptions(ProcessorWorkflow, workflow.RegisterOptions{Name: processorWFTypeName})
 	processorWorker.RegisterActivityWithOptions(ProcessorActivity, activity.RegisterOptions{Name: processorActivityName})
 
