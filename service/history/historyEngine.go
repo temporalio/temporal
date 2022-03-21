@@ -3029,6 +3029,11 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSignalWithStart(
 	)
 }
 
+// applyWorkflowIDReusePolicyHelper returns updateWorkflowActionFunc
+// for updating the previous execution and an error if the situation is
+// not allowed by the workflowIDReusePolicy.
+// Both result may be nil, if the case is allow and no update is needed
+// for the previous execution.
 func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevStartRequestID,
 	prevRunID string,
