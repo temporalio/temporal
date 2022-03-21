@@ -6,7 +6,7 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 ## Prerequisites
 
 ### Build prerequisites 
-* [Go Lang](https://golang.org/) (minimum version required is 1.17.3):
+* [Go Lang](https://golang.org/) (minimum version required is 1.18):
   - Install on macOS with `brew install go`.
   - Install on Ubuntu with `sudo apt install golang`.
 * [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/) (only if you are going to change `proto` files):
