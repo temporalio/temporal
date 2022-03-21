@@ -11,11 +11,15 @@ steps:
 
   - wait
 
-  - label: ":docker: build docker images"
+  - label: ":golang: build without cgo"
     agents:
       queue: "default"
       docker: "*"
-    command: "docker build ."
+    command: "CGO_ENABLED=0 make bins"
+    plugins:
+      - docker-compose#v3.8.0:
+          run: build
+          config: ./develop/buildkite/docker-compose.yml
 
   - label: ":golang: unit test"
     agents:

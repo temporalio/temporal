@@ -105,6 +105,53 @@ func (s *integrationSuite) TestStartWorkflowExecution() {
 	s.Nil(we2)
 }
 
+func (s *integrationSuite) TestStartWorkflowExecution_TerminateIfRunning() {
+	id := "integration-start-workflow-terminate-if-running-test"
+	wt := "integration-start-workflow-terminate-if-running-test-type"
+	tl := "integration-start-workflow-terminate-if-running-test-taskqueue"
+	identity := "worker1"
+
+	request := &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:          uuid.New(),
+		Namespace:          s.namespace,
+		WorkflowId:         id,
+		WorkflowType:       &commonpb.WorkflowType{Name: wt},
+		TaskQueue:          &taskqueuepb.TaskQueue{Name: tl},
+		Input:              nil,
+		WorkflowRunTimeout: timestamp.DurationPtr(100 * time.Second),
+		Identity:           identity,
+	}
+
+	we0, err0 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err0)
+
+	request.RequestId = uuid.New()
+	request.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING
+	we1, err1 := s.engine.StartWorkflowExecution(NewContext(), request)
+	s.NoError(err1)
+	s.NotEqual(we0.RunId, we1.RunId)
+
+	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we0.RunId,
+		},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+
+	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we1.RunId,
+		},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
+}
+
 func (s *integrationSuite) TestTerminateWorkflow() {
 	id := "integration-terminate-workflow-test"
 	wt := "integration-terminate-workflow-test-type"

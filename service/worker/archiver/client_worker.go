@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"go.temporal.io/sdk/activity"
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 
@@ -41,6 +40,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/sdk"
 )
 
 type (
@@ -57,7 +57,7 @@ type (
 
 	// BootstrapContainer contains everything need for bootstrapping
 	BootstrapContainer struct {
-		SdkSystemClient  sdkclient.Client
+		SdkClientFactory sdk.ClientFactory
 		MetricsClient    metrics.Client
 		Logger           log.Logger
 		HistoryV2Manager persistence.ExecutionManager
@@ -105,6 +105,8 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 	globalMetricsClient = container.MetricsClient
 	globalConfig = container.Config
 	actCtx := context.WithValue(context.Background(), bootstrapContainerKey, container)
+
+	sdkClient := container.SdkClientFactory.GetSystemClient(container.Logger)
 	wo := worker.Options{
 		MaxConcurrentActivityExecutionSize:     container.Config.MaxConcurrentActivityExecutionSize(),
 		MaxConcurrentWorkflowTaskExecutionSize: container.Config.MaxConcurrentWorkflowTaskExecutionSize(),
@@ -113,7 +115,7 @@ func NewClientWorker(container *BootstrapContainer) ClientWorker {
 		BackgroundActivityContext:              actCtx,
 	}
 	clientWorker := &clientWorker{
-		worker:            worker.New(container.SdkSystemClient, workflowTaskQueue, wo),
+		worker:            worker.New(sdkClient, workflowTaskQueue, wo),
 		namespaceRegistry: container.NamespaceCache,
 	}
 

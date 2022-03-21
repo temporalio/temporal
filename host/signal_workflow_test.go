@@ -1559,4 +1559,32 @@ func (s *integrationSuite) TestSignalWithStartWorkflow_IDReusePolicy() {
 	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
 	s.NoError(err)
 	s.NotEmpty(resp.GetRunId())
+
+	// test policy WorkflowIdReusePolicyTerminateIfRunning
+	prevRunID := resp.RunId
+	sRequest.WorkflowIdReusePolicy = enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING
+	resp, err = s.engine.SignalWithStartWorkflowExecution(NewContext(), sRequest)
+	s.NoError(err)
+	s.NotEmpty(resp.GetRunId())
+	s.NotEqual(prevRunID, resp.GetRunId())
+
+	descResp, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      prevRunID,
+		},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, descResp.WorkflowExecutionInfo.Status)
+
+	descResp, err = s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      resp.GetRunId(),
+		},
+	})
+	s.NoError(err)
+	s.Equal(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING, descResp.WorkflowExecutionInfo.Status)
 }

@@ -28,7 +28,6 @@ import (
 	"context"
 	"net"
 
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -54,6 +53,7 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
@@ -287,7 +287,7 @@ func ReplicationTaskFetchersProvider(
 
 func ArchivalClientProvider(
 	archiverProvider provider.ArchiverProvider,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
 	metricsClient metrics.Client,
 	config *configs.Config,
@@ -295,7 +295,7 @@ func ArchivalClientProvider(
 	return warchiver.NewClient(
 		metricsClient,
 		logger,
-		publicClient,
+		sdkClientFactory,
 		config.NumArchiveSystemWorkflows,
 		config.ArchiveRequestRPS,
 		archiverProvider,

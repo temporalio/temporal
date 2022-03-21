@@ -2964,8 +2964,9 @@ func (wh *WorkflowHandler) GetSystemInfo(ctx context.Context, request *workflows
 		// hardcoded boolean true values since older servers will respond with a
 		// form of this message without the field which is implied false.
 		Capabilities: &workflowservice.GetSystemInfoResponse_Capabilities{
-			SignalAndQueryHeader:         true,
-			InternalErrorDifferentiation: true,
+			SignalAndQueryHeader:            true,
+			InternalErrorDifferentiation:    true,
+			ActivityFailureIncludeHeartbeat: true,
 		},
 	}, nil
 }

@@ -123,8 +123,7 @@ func (b *clientFactory) SDKClient(c *cli.Context, namespace string) sdkclient.Cl
 		Logger:    log.NewSdkLogger(b.logger),
 		Identity:  getCliIdentity(),
 		ConnectionOptions: sdkclient.ConnectionOptions{
-			DisableHealthCheck: true,
-			TLS:                tlsConfig,
+			TLS: tlsConfig,
 		},
 		HeadersProvider: headersprovider.GetCurrent(),
 	})

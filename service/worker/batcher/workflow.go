@@ -266,10 +266,7 @@ func BatchActivity(ctx context.Context, batchParams BatchParams) (HeartBeatDetai
 	}
 
 	for {
-		// TODO https://github.com/uber/cadence/issues/2154
-		//  Need to improve scan concurrency because it will hold an ES resource until the workflow finishes.
-		//  And we can't use list API because terminate / reset will mutate the result.
-		resp, err := sdkClient.ScanWorkflow(ctx, &workflowservice.ScanWorkflowExecutionsRequest{
+		resp, err := sdkClient.ListWorkflow(ctx, &workflowservice.ListWorkflowExecutionsRequest{
 			PageSize:      int32(pageSize),
 			NextPageToken: hbd.PageToken,
 			Query:         batchParams.Query,

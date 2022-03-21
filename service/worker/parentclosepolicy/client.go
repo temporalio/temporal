@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/sdk"
 )
 
 type (
@@ -47,10 +48,10 @@ type (
 	}
 
 	clientImpl struct {
-		metricsClient  metrics.Client
-		logger         log.Logger
-		temporalClient sdkclient.Client
-		numWorkflows   int
+		metricsClient    metrics.Client
+		logger           log.Logger
+		sdkClientFactory sdk.ClientFactory
+		numWorkflows     int
 	}
 )
 
@@ -67,14 +68,14 @@ const (
 func NewClient(
 	metricsClient metrics.Client,
 	logger log.Logger,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	numWorkflows int,
 ) Client {
 	return &clientImpl{
-		metricsClient:  metricsClient,
-		logger:         logger,
-		temporalClient: publicClient,
-		numWorkflows:   numWorkflows,
+		metricsClient:    metricsClient,
+		logger:           logger,
+		sdkClientFactory: sdkClientFactory,
+		numWorkflows:     numWorkflows,
 	}
 }
 
@@ -88,7 +89,9 @@ func (c *clientImpl) SendParentClosePolicyRequest(request Request) error {
 	}
 	signalCtx, cancel := context.WithTimeout(context.Background(), signalTimeout)
 	defer cancel()
-	_, err := c.temporalClient.SignalWithStartWorkflow(signalCtx, workflowID, processorChannelName, request, workflowOptions, processorWFTypeName, nil)
+
+	sdkClient := c.sdkClientFactory.GetSystemClient(c.logger)
+	_, err := sdkClient.SignalWithStartWorkflow(signalCtx, workflowID, processorChannelName, request, workflowOptions, processorWFTypeName, nil)
 	return err
 }
 
