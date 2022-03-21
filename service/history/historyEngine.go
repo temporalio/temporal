@@ -3045,7 +3045,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevStatus enumspb.WorkflowExecutionStatus,
 	newExecution commonpb.WorkflowExecution,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
-) (prevExecutionUpdateFn updateWorkflowActionFunc, err error) {
+) (updateWorkflowActionFunc, error) {
 
 	// here we know there is some information about the prev workflow, i.e. either running right now
 	// or has history check if the this workflow is finished
