@@ -297,7 +297,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		if err != nil {
 			return err
 		}
-		response := &workflowservice.PollActivityTaskQueueResponse{
+		activityTask := &workflowservice.PollActivityTaskQueueResponse{
 			ActivityId:   attr.ActivityId,
 			ActivityType: attr.ActivityType,
 			Header:       attr.Header,
@@ -318,7 +318,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 			WorkflowType:                handler.mutableState.GetWorkflowType(),
 			WorkflowNamespace:           namespace,
 		}
-		resp.ActivityTasks = append(resp.ActivityTasks, response)
+		resp.ActivityTasks = append(resp.ActivityTasks, activityTask)
 		return nil
 	}, nil
 }
