@@ -103,17 +103,19 @@ type (
 		// from persistent storage, returning an instance of
 		// serviceerror.NotFound if there is no matching Namespace.
 		GetNamespace(
-			request *persistence.GetNamespaceRequest,
+			context.Context,
+			*persistence.GetNamespaceRequest,
 		) (*persistence.GetNamespaceResponse, error)
 
 		// ListNamespaces fetches a paged set of namespace persistent state
 		// instances.
 		ListNamespaces(
+			context.Context,
 			*persistence.ListNamespacesRequest,
 		) (*persistence.ListNamespacesResponse, error)
 
 		// GetMetadata fetches the notification version for Temporal namespaces.
-		GetMetadata() (*persistence.GetMetadataResponse, error)
+		GetMetadata(context.Context) (*persistence.GetMetadataResponse, error)
 	}
 
 	// PrepareCallbackFn is function to be called before CallbackFn is called,
@@ -379,7 +381,7 @@ func (r *registry) refreshLoop(ctx context.Context) error {
 func (r *registry) refreshNamespaces(ctx context.Context) error {
 	// first load the metadata record, then load namespaces
 	// this can guarantee that namespaces in the cache are not updated more than metadata record
-	metadata, err := r.persistence.GetMetadata()
+	metadata, err := r.persistence.GetMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -390,7 +392,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	namespaceIDsDb := make(map[ID]struct{})
 
 	for {
-		response, err := r.persistence.ListNamespaces(request)
+		response, err := r.persistence.ListNamespaces(ctx, request)
 		if err != nil {
 			return err
 		}

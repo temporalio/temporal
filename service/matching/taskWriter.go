@@ -198,10 +198,11 @@ func (w *taskWriter) allocTaskIDs(ctx context.Context, count int) ([]int64, erro
 }
 
 func (w *taskWriter) appendTasks(
+	ctx context.Context,
 	tasks []*persistencespb.AllocatedTaskInfo,
 ) (*persistence.CreateTasksResponse, error) {
 
-	resp, err := w.tlMgr.db.CreateTasks(tasks)
+	resp, err := w.tlMgr.db.CreateTasks(ctx, tasks)
 	if err != nil {
 		w.tlMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -246,7 +247,7 @@ writerLoop:
 				maxReadLevel = taskIDs[i]
 			}
 
-			resp, err := w.appendTasks(tasks)
+			resp, err := w.appendTasks(ctx, tasks)
 			w.sendWriteResponse(reqs, resp, err)
 			// Update the maxReadLevel after the writes are completed.
 			if maxReadLevel > 0 {
@@ -294,7 +295,7 @@ func (w *taskWriter) renewLeaseWithRetry(
 ) (taskQueueState, error) {
 	var newState taskQueueState
 	op := func(context.Context) (err error) {
-		newState, err = w.idAlloc.RenewLease()
+		newState, err = w.idAlloc.RenewLease(ctx)
 		return
 	}
 	w.tlMgr.metricScope.IncCounter(metrics.LeaseRequestPerTaskQueueCounter)

@@ -363,7 +363,7 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 	}
 
 	// Success case.
-	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes("random-index-name", gomock.Any()).Return(nil)
+	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes(gomock.Any(), "random-index-name", gomock.Any()).Return(nil)
 
 	resp, err := handler.RemoveSearchAttributes(ctx, &operatorservice.RemoveSearchAttributesRequest{
 		SearchAttributes: []string{

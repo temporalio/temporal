@@ -105,7 +105,7 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Once_Success() {
 	s.taskOwnership.EXPECT().flushTasks(task).Return(nil)
 
 	fut := s.taskFlusher.appendTask(task)
-	s.taskFlusher.flushTasks()
+	s.taskFlusher.flushTasks(context.Background())
 
 	_, err := fut.Get(ctx)
 	s.NoError(err)
@@ -125,7 +125,7 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Once_Failed() {
 	s.taskOwnership.EXPECT().flushTasks(task).Return(randomErr)
 
 	fut := s.taskFlusher.appendTask(task)
-	s.taskFlusher.flushTasks()
+	s.taskFlusher.flushTasks(context.Background())
 
 	_, err := fut.Get(ctx)
 	s.Equal(randomErr, err)
@@ -150,9 +150,9 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_OnePage_Success() {
 		futures = append(futures, fut)
 	}
 
-	s.taskOwnership.EXPECT().flushTasks(tasks...).Return(nil)
+	s.taskOwnership.EXPECT().flushTasks(gomock.Any(), tasks...).Return(nil)
 
-	s.taskFlusher.flushTasks()
+	s.taskFlusher.flushTasks(context.Background())
 
 	for _, fut := range futures {
 		_, err := fut.Get(ctx)
@@ -180,9 +180,9 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_OnePage_Failed() {
 		futures = append(futures, fut)
 	}
 
-	s.taskOwnership.EXPECT().flushTasks(tasks...).Return(randomErr)
+	s.taskOwnership.EXPECT().flushTasks(gomock.Any(), tasks...).Return(randomErr)
 
-	s.taskFlusher.flushTasks()
+	s.taskFlusher.flushTasks(context.Background())
 
 	for _, fut := range futures {
 		_, err := fut.Get(ctx)
@@ -218,10 +218,10 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_MultiPage_Success() {
 	}
 
 	for _, tasks := range taskBatch {
-		s.taskOwnership.EXPECT().flushTasks(tasks...).Return(nil)
+		s.taskOwnership.EXPECT().flushTasks(gomock.Any(), tasks...).Return(nil)
 	}
 
-	s.taskFlusher.flushTasks()
+	s.taskFlusher.flushTasks(context.Background())
 
 	for _, fut := range futures {
 		_, err := fut.Get(ctx)
@@ -253,10 +253,10 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_MultiPage_Failed() {
 	}
 
 	for _, tasks := range taskBatch {
-		s.taskOwnership.EXPECT().flushTasks(tasks...).Return(randomErr)
+		s.taskOwnership.EXPECT().flushTasks(gomock.Any(), tasks...).Return(randomErr)
 	}
 
-	s.taskFlusher.flushTasks()
+	s.taskFlusher.flushTasks(context.Background())
 
 	for _, fut := range futures {
 		_, err := fut.Get(ctx)

@@ -305,7 +305,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 }
 
 // RemoveSearchAttributes remove search attribute from the cluster.
-func (adh *AdminHandler) RemoveSearchAttributes(_ context.Context, request *adminservice.RemoveSearchAttributesRequest) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
+func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *adminservice.RemoveSearchAttributesRequest) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminRemoveSearchAttributesScope)
@@ -345,7 +345,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(_ context.Context, request *admi
 		delete(newCustomSearchAttributes, saName)
 	}
 
-	err = adh.saManager.SaveSearchAttributes(indexName, newCustomSearchAttributes)
+	err = adh.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
 		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope)
 	}
@@ -792,7 +792,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 
 // DescribeCluster return information about a temporal cluster
 func (adh *AdminHandler) DescribeCluster(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.DescribeClusterRequest,
 ) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -845,6 +845,7 @@ func (adh *AdminHandler) DescribeCluster(
 		request.ClusterName = adh.clusterMetadata.GetCurrentClusterName()
 	}
 	metadata, err := adh.clusterMetadataManager.GetClusterMetadata(
+		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	)
 	if err != nil {
@@ -869,7 +870,7 @@ func (adh *AdminHandler) DescribeCluster(
 
 // ListClusters return information about temporal clusters
 func (adh *AdminHandler) ListClusters(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.ListClustersRequest,
 ) (_ *adminservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -884,7 +885,7 @@ func (adh *AdminHandler) ListClusters(
 		request.PageSize = listClustersPageSize
 	}
 
-	resp, err := adh.clusterMetadataManager.ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+	resp, err := adh.clusterMetadataManager.ListClusterMetadata(ctx, &persistence.ListClusterMetadataRequest{
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
@@ -903,7 +904,7 @@ func (adh *AdminHandler) ListClusters(
 }
 
 func (adh *AdminHandler) ListClusterMembers(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.ListClusterMembersRequest,
 ) (_ *adminservice.ListClusterMembersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -928,7 +929,7 @@ func (adh *AdminHandler) ListClusterMembers(
 		startedTime = *startedTimeRef
 	}
 
-	resp, err := metadataMgr.GetClusterMembers(&persistence.GetClusterMembersRequest{
+	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
 		LastHeartbeatWithin: heartbit,
 		RPCAddressEquals:    net.ParseIP(request.GetRpcAddress()),
 		HostIDEquals:        uuid.Parse(request.GetHostId()),
@@ -989,6 +990,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	var updateRequestVersion int64 = 0
 	clusterMetadataMrg := adh.clusterMetadataManager
 	clusterData, err := clusterMetadataMrg.GetClusterMetadata(
+		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: resp.GetClusterName()},
 	)
 	switch err.(type) {
@@ -1000,7 +1002,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		return nil, adh.error(err, scope)
 	}
 
-	applied, err := clusterMetadataMrg.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
@@ -1026,7 +1028,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 }
 
 func (adh *AdminHandler) RemoveRemoteCluster(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.RemoveRemoteClusterRequest,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -1035,6 +1037,7 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 	defer sw.Stop()
 
 	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
+		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	); err != nil {
 		return nil, adh.error(err, scope)
@@ -1227,6 +1230,7 @@ func (adh *AdminHandler) GetDLQMessages(
 			default:
 				var err error
 				tasks, token, err = adh.namespaceDLQHandler.Read(
+					ctx,
 					request.GetInclusiveEndMessageId(),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken())
@@ -1286,7 +1290,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				return adh.namespaceDLQHandler.Purge(request.GetInclusiveEndMessageId())
+				return adh.namespaceDLQHandler.Purge(ctx, request.GetInclusiveEndMessageId())
 			}
 		}
 	default:
@@ -1346,6 +1350,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			default:
 				var err error
 				token, err = adh.namespaceDLQHandler.Merge(
+					ctx,
 					request.GetInclusiveEndMessageId(),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken(),
@@ -1452,7 +1457,7 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		return nil, adh.error(err, scope)
 	}
 
-	resp, err := adh.taskManager.GetTasks(&persistence.GetTasksRequest{
+	resp, err := adh.taskManager.GetTasks(ctx, &persistence.GetTasksRequest{
 		NamespaceID:        namespaceID.String(),
 		TaskQueue:          request.GetTaskQueue(),
 		TaskType:           request.GetTaskQueueType(),

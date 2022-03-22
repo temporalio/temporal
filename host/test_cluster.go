@@ -25,6 +25,7 @@
 package host
 
 import (
+	"context"
 	"fmt"
 	"os"
 
@@ -166,7 +167,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	}
 
 	for clusterName, clusterInfo := range clusterMetadataConfig.ClusterInformation {
-		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+		_, err := testBase.ClusterMetadataManager.SaveClusterMetadata(context.Background(), &persistence.SaveClusterMetadataRequest{
 			ClusterMetadata: persistencespb.ClusterMetadata{
 				HistoryShardCount:        options.HistoryConfig.NumHistoryShards,
 				ClusterName:              clusterName,
@@ -185,6 +186,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 	// This will save custom test search attributes to cluster metadata.
 	// Actual Elasticsearch fields are created from index template (testdata/es_v7_index_template.json).
 	err := testBase.SearchAttributesManager.SaveSearchAttributes(
+		context.Background(),
 		options.ESConfig.GetVisibilityIndex(),
 		searchattribute.TestNameTypeMap.Custom(),
 	)

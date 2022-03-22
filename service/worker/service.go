@@ -25,6 +25,7 @@
 package worker
 
 import (
+	"context"
 	"math/rand"
 	"sync/atomic"
 	"time"
@@ -331,7 +332,7 @@ func (s *Service) Start() {
 	// seed the random generator once for this service
 	rand.Seed(time.Now().UnixNano())
 
-	s.ensureSystemNamespaceExists()
+	s.ensureSystemNamespaceExists(context.TODO())
 	s.startScanner()
 
 	if s.clusterMetadata.IsGlobalNamespaceEnabled() {
@@ -469,8 +470,10 @@ func (s *Service) startArchiver() {
 	}
 }
 
-func (s *Service) ensureSystemNamespaceExists() {
-	_, err := s.metadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: common.SystemLocalNamespace})
+func (s *Service) ensureSystemNamespaceExists(
+	ctx context.Context,
+) {
+	_, err := s.metadataManager.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: common.SystemLocalNamespace})
 	switch err.(type) {
 	case nil:
 		// noop

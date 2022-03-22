@@ -25,6 +25,9 @@
 package persistencetests
 
 import (
+	"context"
+	"time"
+
 	"github.com/stretchr/testify/require"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -39,6 +42,9 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 )
 
@@ -50,6 +56,12 @@ func (s *ShardPersistenceSuite) SetupSuite() {
 func (s *ShardPersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), time.Second*30)
+}
+
+// TearDownTest implementation
+func (s *ShardPersistenceSuite) TearDownTest() {
+	s.cancel()
 }
 
 // TearDownSuite implementation
@@ -63,7 +75,7 @@ func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
 	owner := "test_get_shard"
 	rangeID := int64(131)
 
-	shardInfo, err := s.GetOrCreateShard(shardID, owner, rangeID)
+	shardInfo, err := s.GetOrCreateShard(s.ctx, shardID, owner, rangeID)
 	s.NoError(err)
 	s.NotNil(shardInfo)
 	s.Equal(shardID, shardInfo.GetShardId())
@@ -72,7 +84,7 @@ func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
 	s.Equal(int32(0), shardInfo.StolenSinceRenew)
 
 	// should not set any info
-	shardInfo, err = s.GetOrCreateShard(shardID, "new_owner", 567)
+	shardInfo, err = s.GetOrCreateShard(s.ctx, shardID, "new_owner", 567)
 	s.NoError(err)
 	s.NotNil(shardInfo)
 	s.Equal(shardID, shardInfo.GetShardId())
@@ -86,7 +98,7 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	owner := "test_update_shard"
 	rangeID := int64(141)
 
-	shardInfo, err1 := s.GetOrCreateShard(shardID, owner, rangeID)
+	shardInfo, err1 := s.GetOrCreateShard(s.ctx, shardID, owner, rangeID)
 	s.NoError(err1)
 	s.NotNil(shardInfo)
 	s.Equal(shardID, shardInfo.GetShardId())
@@ -107,10 +119,10 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	updatedInfo.StolenSinceRenew = updatedStolenSinceRenew
 	updatedTimerAckLevel := timestamp.TimeNowPtrUtc()
 	updatedInfo.TimerAckLevelTime = updatedTimerAckLevel
-	err2 := s.UpdateShard(updatedInfo, shardInfo.GetRangeId())
+	err2 := s.UpdateShard(s.ctx, updatedInfo, shardInfo.GetRangeId())
 	s.Nil(err2)
 
-	info1, err3 := s.GetOrCreateShard(shardID, "", 0)
+	info1, err3 := s.GetOrCreateShard(s.ctx, shardID, "", 0)
 	s.Nil(err3)
 	s.NotNil(info1)
 	s.Equal(updatedOwner, info1.Owner)
@@ -125,11 +137,11 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	failedUpdateInfo.Owner = "failed_owner"
 	failedUpdateInfo.TransferAckLevel = int64(4000)
 	failedUpdateInfo.ReplicationAckLevel = int64(5000)
-	err4 := s.UpdateShard(failedUpdateInfo, shardInfo.GetRangeId())
+	err4 := s.UpdateShard(s.ctx, failedUpdateInfo, shardInfo.GetRangeId())
 	s.NotNil(err4)
 	s.IsType(&p.ShardOwnershipLostError{}, err4)
 
-	info2, err5 := s.GetOrCreateShard(shardID, "", 0)
+	info2, err5 := s.GetOrCreateShard(s.ctx, shardID, "", 0)
 	s.Nil(err5)
 	s.NotNil(info2)
 	s.Equal(updatedOwner, info2.Owner)

@@ -199,7 +199,7 @@ func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64)
 	var response *persistence.GetTasksResponse
 	var err error
 	err = executeWithRetry(func() error {
-		response, err = tr.tlMgr.db.GetTasks(readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
+		response, err = tr.tlMgr.db.GetTasks(context.TODO(), readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
 		return err
 	})
 	if err != nil {
@@ -270,7 +270,7 @@ func (tr *taskReader) addSingleTaskToBuffer(
 func (tr *taskReader) persistAckLevel() error {
 	ackLevel := tr.tlMgr.taskAckManager.getAckLevel()
 	tr.emitTaskLagMetric(ackLevel)
-	return tr.tlMgr.db.UpdateState(ackLevel)
+	return tr.tlMgr.db.UpdateState(context.TODO(), ackLevel)
 }
 
 func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {

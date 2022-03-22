@@ -229,7 +229,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(ctx context.Context, reques
 		delete(newCustomSearchAttributes, saName)
 	}
 
-	err = h.saManager.SaveSearchAttributes(indexName, newCustomSearchAttributes)
+	err = h.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
 		return nil, h.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope, endpointName)
 	}

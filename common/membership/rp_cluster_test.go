@@ -65,8 +65,8 @@ func NewTestRingpopCluster(
 	defer ctrl.Finish()
 
 	mockMgr := persistence.NewMockClusterMetadataManager(ctrl)
-	mockMgr.EXPECT().PruneClusterMembership(gomock.Any()).Return(nil).AnyTimes()
-	mockMgr.EXPECT().UpsertClusterMembership(gomock.Any()).Return(nil).AnyTimes()
+	mockMgr.EXPECT().PruneClusterMembership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+	mockMgr.EXPECT().UpsertClusterMembership(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
 	cluster := &TestRingpopCluster{
 		hostUUIDs:    make([]string, size),
@@ -119,7 +119,7 @@ func NewTestRingpopCluster(
 	}
 
 	firstGetClusterMemberCall := true
-	mockMgr.EXPECT().GetClusterMembers(gomock.Any()).DoAndReturn(
+	mockMgr.EXPECT().GetClusterMembers(gomock.Any(), gomock.Any()).DoAndReturn(
 		func(_ *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
 			res := &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}
 

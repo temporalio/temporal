@@ -25,6 +25,8 @@
 package matching
 
 import (
+	"context"
+
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -47,7 +49,7 @@ var (
 type (
 	dbTaskWriter interface {
 		appendTask(task *persistencespb.TaskInfo) future.Future
-		flushTasks()
+		flushTasks(ctx context.Context)
 		notifyFlushChan() <-chan struct{}
 	}
 
@@ -102,13 +104,17 @@ func (f *dbTaskWriterImpl) appendTask(
 	return fut
 }
 
-func (f *dbTaskWriterImpl) flushTasks() {
+func (f *dbTaskWriterImpl) flushTasks(
+	ctx context.Context,
+) {
 	for len(f.taskBuffer) > 0 {
-		f.flushTasksOnce()
+		f.flushTasksOnce(ctx)
 	}
 }
 
-func (f *dbTaskWriterImpl) flushTasksOnce() {
+func (f *dbTaskWriterImpl) flushTasksOnce(
+	ctx context.Context,
+) {
 	tasks := make([]*persistencespb.TaskInfo, 0, dbTaskFlusherBatchSize)
 	futures := make([]*future.FutureImpl, 0, len(tasks))
 
@@ -126,7 +132,7 @@ FlushLoop:
 	if len(tasks) == 0 {
 		return
 	}
-	err := f.ownership.flushTasks(tasks...)
+	err := f.ownership.flushTasks(ctx, tasks...)
 	for _, fut := range futures {
 		fut.Set(nil, err)
 	}

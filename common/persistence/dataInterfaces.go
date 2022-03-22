@@ -976,8 +976,8 @@ type (
 	ShardManager interface {
 		Closeable
 		GetName() string
-		GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
-		UpdateShard(request *UpdateShardRequest) error
+		GetOrCreateShard(ctx context.Context, request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
+		UpdateShard(ctx context.Context, request *UpdateShardRequest) error
 	}
 
 	// ExecutionManager is used to manage workflow executions
@@ -1043,14 +1043,14 @@ type (
 	TaskManager interface {
 		Closeable
 		GetName() string
-		CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error)
-		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
-		GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error)
-		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
-		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
-		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
-		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
-		CompleteTask(request *CompleteTaskRequest) error
+		CreateTaskQueue(ctx context.Context, request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error)
+		UpdateTaskQueue(ctx context.Context, request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		GetTaskQueue(ctx context.Context, request *GetTaskQueueRequest) (*GetTaskQueueResponse, error)
+		ListTaskQueue(ctx context.Context, request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		DeleteTaskQueue(ctx context.Context, request *DeleteTaskQueueRequest) error
+		CreateTasks(ctx context.Context, request *CreateTasksRequest) (*CreateTasksResponse, error)
+		GetTasks(ctx context.Context, request *GetTasksRequest) (*GetTasksResponse, error)
+		CompleteTask(ctx context.Context, request *CompleteTaskRequest) error
 		// CompleteTasksLessThan completes tasks less than or equal to the given task id
 		// This API takes a limit parameter which specifies the count of maxRows that
 		// can be deleted. This parameter may be ignored by the underlying storage, but
@@ -1060,36 +1060,36 @@ type (
 		// On success, this method returns:
 		//  - number of rows actually deleted, if limit is honored
 		//  - UnknownNumRowsDeleted, when all rows below value are deleted
-		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
+		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities
 	MetadataManager interface {
 		Closeable
 		GetName() string
-		CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error)
-		GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error)
-		UpdateNamespace(request *UpdateNamespaceRequest) error
-		RenameNamespace(request *RenameNamespaceRequest) error
-		DeleteNamespace(request *DeleteNamespaceRequest) error
-		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
-		ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error)
-		GetMetadata() (*GetMetadataResponse, error)
-		InitializeSystemNamespaces(currentClusterName string) error
+		CreateNamespace(ctx context.Context, request *CreateNamespaceRequest) (*CreateNamespaceResponse, error)
+		GetNamespace(ctx context.Context, request *GetNamespaceRequest) (*GetNamespaceResponse, error)
+		UpdateNamespace(ctx context.Context, request *UpdateNamespaceRequest) error
+		RenameNamespace(ctx context.Context, request *RenameNamespaceRequest) error
+		DeleteNamespace(ctx context.Context, request *DeleteNamespaceRequest) error
+		DeleteNamespaceByName(ctx context.Context, request *DeleteNamespaceByNameRequest) error
+		ListNamespaces(ctx context.Context, request *ListNamespacesRequest) (*ListNamespacesResponse, error)
+		GetMetadata(ctx context.Context) (*GetMetadataResponse, error)
+		InitializeSystemNamespaces(ctx context.Context, currentClusterName string) error
 	}
 
 	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration
 	ClusterMetadataManager interface {
 		Closeable
 		GetName() string
-		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
-		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
-		PruneClusterMembership(request *PruneClusterMembershipRequest) error
-		ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error)
-		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
-		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
-		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
-		DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error
+		GetClusterMembers(ctx context.Context, request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
+		UpsertClusterMembership(ctx context.Context, request *UpsertClusterMembershipRequest) error
+		PruneClusterMembership(ctx context.Context, request *PruneClusterMembershipRequest) error
+		ListClusterMetadata(ctx context.Context, request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error)
+		GetCurrentClusterMetadata(ctx context.Context) (*GetClusterMetadataResponse, error)
+		GetClusterMetadata(ctx context.Context, request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
+		SaveClusterMetadata(ctx context.Context, request *SaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 )
 

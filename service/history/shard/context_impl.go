@@ -993,7 +993,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 		updatedShardInfo.StolenSinceRenew++
 	}
 
-	err := s.persistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
+	err := s.persistenceShardManager.UpdateShard(context.TODO(), &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId()})
 	if err != nil {
@@ -1043,7 +1043,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	updatedShardInfo := copyShardInfo(s.shardInfo)
 	s.emitShardInfoMetricsLogsLocked()
 
-	err = s.persistenceShardManager.UpdateShard(&persistence.UpdateShardRequest{
+	err = s.persistenceShardManager.UpdateShard(context.TODO(), &persistence.UpdateShardRequest{
 		ShardInfo:       updatedShardInfo.ShardInfo,
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
@@ -1502,7 +1502,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 	s.rUnlock()
 
 	// We don't have any shardInfo yet, load it (outside of context rwlock)
-	resp, err := s.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+	resp, err := s.persistenceShardManager.GetOrCreateShard(context.TODO(), &persistence.GetOrCreateShardRequest{
 		ShardID:          s.shardID,
 		LifecycleContext: s.lifecycleCtx,
 	})

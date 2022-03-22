@@ -143,21 +143,27 @@ func (p *shardRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *shardRateLimitedPersistenceClient) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
+func (p *shardRateLimitedPersistenceClient) GetOrCreateShard(
+	ctx context.Context,
+	request *GetOrCreateShardRequest,
+) (*GetOrCreateShardResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.GetOrCreateShard(request)
+	response, err := p.persistence.GetOrCreateShard(ctx, request)
 	return response, err
 }
 
-func (p *shardRateLimitedPersistenceClient) UpdateShard(request *UpdateShardRequest) error {
+func (p *shardRateLimitedPersistenceClient) UpdateShard(
+	ctx context.Context,
+	request *UpdateShardRequest,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.UpdateShard(request)
+	err := p.persistence.UpdateShard(ctx, request)
 	return err
 }
 
@@ -389,73 +395,100 @@ func (p *taskRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *taskRateLimitedPersistenceClient) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
+func (p *taskRateLimitedPersistenceClient) CreateTasks(
+	ctx context.Context,
+	request *CreateTasksRequest,
+) (*CreateTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.CreateTasks(request)
+	response, err := p.persistence.CreateTasks(ctx, request)
 	return response, err
 }
 
-func (p *taskRateLimitedPersistenceClient) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
+func (p *taskRateLimitedPersistenceClient) GetTasks(
+	ctx context.Context,
+	request *GetTasksRequest,
+) (*GetTasksResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.GetTasks(request)
+	response, err := p.persistence.GetTasks(ctx, request)
 	return response, err
 }
 
-func (p *taskRateLimitedPersistenceClient) CompleteTask(request *CompleteTaskRequest) error {
+func (p *taskRateLimitedPersistenceClient) CompleteTask(
+	ctx context.Context,
+	request *CompleteTaskRequest,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.CompleteTask(request)
+	err := p.persistence.CompleteTask(ctx, request)
 	return err
 }
 
-func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error) {
+func (p *taskRateLimitedPersistenceClient) CompleteTasksLessThan(
+	ctx context.Context,
+	request *CompleteTasksLessThanRequest,
+) (int, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return 0, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.CompleteTasksLessThan(request)
+	return p.persistence.CompleteTasksLessThan(ctx, request)
 }
 
-func (p *taskRateLimitedPersistenceClient) CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
+func (p *taskRateLimitedPersistenceClient) CreateTaskQueue(
+	ctx context.Context,
+	request *CreateTaskQueueRequest,
+) (*CreateTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.CreateTaskQueue(request)
+	return p.persistence.CreateTaskQueue(ctx, request)
 }
 
-func (p *taskRateLimitedPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
+func (p *taskRateLimitedPersistenceClient) UpdateTaskQueue(
+	ctx context.Context,
+	request *UpdateTaskQueueRequest,
+) (*UpdateTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.UpdateTaskQueue(request)
+	return p.persistence.UpdateTaskQueue(ctx, request)
 }
 
-func (p *taskRateLimitedPersistenceClient) GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error) {
+func (p *taskRateLimitedPersistenceClient) GetTaskQueue(
+	ctx context.Context,
+	request *GetTaskQueueRequest,
+) (*GetTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.GetTaskQueue(request)
+	return p.persistence.GetTaskQueue(ctx, request)
 }
 
-func (p *taskRateLimitedPersistenceClient) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
+func (p *taskRateLimitedPersistenceClient) ListTaskQueue(
+	ctx context.Context,
+	request *ListTaskQueueRequest,
+) (*ListTaskQueueResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return p.persistence.ListTaskQueue(request)
+	return p.persistence.ListTaskQueue(ctx, request)
 }
 
-func (p *taskRateLimitedPersistenceClient) DeleteTaskQueue(request *DeleteTaskQueueRequest) error {
+func (p *taskRateLimitedPersistenceClient) DeleteTaskQueue(
+	ctx context.Context,
+	request *DeleteTaskQueueRequest,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return p.persistence.DeleteTaskQueue(request)
+	return p.persistence.DeleteTaskQueue(ctx, request)
 }
 
 func (p *taskRateLimitedPersistenceClient) Close() {
@@ -466,75 +499,98 @@ func (p *metadataRateLimitedPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *metadataRateLimitedPersistenceClient) CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
+func (p *metadataRateLimitedPersistenceClient) CreateNamespace(
+	ctx context.Context,
+	request *CreateNamespaceRequest,
+) (*CreateNamespaceResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.CreateNamespace(request)
+	response, err := p.persistence.CreateNamespace(ctx, request)
 	return response, err
 }
 
-func (p *metadataRateLimitedPersistenceClient) GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error) {
+func (p *metadataRateLimitedPersistenceClient) GetNamespace(
+	ctx context.Context,
+	request *GetNamespaceRequest,
+) (*GetNamespaceResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.GetNamespace(request)
+	response, err := p.persistence.GetNamespace(ctx, request)
 	return response, err
 }
 
-func (p *metadataRateLimitedPersistenceClient) UpdateNamespace(request *UpdateNamespaceRequest) error {
+func (p *metadataRateLimitedPersistenceClient) UpdateNamespace(
+	ctx context.Context,
+	request *UpdateNamespaceRequest,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.UpdateNamespace(request)
+	err := p.persistence.UpdateNamespace(ctx, request)
 	return err
 }
 
-func (p *metadataRateLimitedPersistenceClient) RenameNamespace(request *RenameNamespaceRequest) error {
+func (p *metadataRateLimitedPersistenceClient) RenameNamespace(
+	ctx context.Context,
+	request *RenameNamespaceRequest,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.RenameNamespace(request)
+	err := p.persistence.RenameNamespace(ctx, request)
 	return err
 }
 
-func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(request *DeleteNamespaceRequest) error {
+func (p *metadataRateLimitedPersistenceClient) DeleteNamespace(
+	ctx context.Context,
+	request *DeleteNamespaceRequest,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteNamespace(request)
+	err := p.persistence.DeleteNamespace(ctx, request)
 	return err
 }
 
-func (p *metadataRateLimitedPersistenceClient) DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error {
+func (p *metadataRateLimitedPersistenceClient) DeleteNamespaceByName(
+	ctx context.Context,
+	request *DeleteNamespaceByNameRequest,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	err := p.persistence.DeleteNamespaceByName(request)
+	err := p.persistence.DeleteNamespaceByName(ctx, request)
 	return err
 }
 
-func (p *metadataRateLimitedPersistenceClient) ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error) {
+func (p *metadataRateLimitedPersistenceClient) ListNamespaces(
+	ctx context.Context,
+	request *ListNamespacesRequest,
+) (*ListNamespacesResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.ListNamespaces(request)
+	response, err := p.persistence.ListNamespaces(ctx, request)
 	return response, err
 }
 
-func (p *metadataRateLimitedPersistenceClient) GetMetadata() (*GetMetadataResponse, error) {
+func (p *metadataRateLimitedPersistenceClient) GetMetadata(
+	ctx context.Context,
+) (*GetMetadataResponse, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	response, err := p.persistence.GetMetadata()
+	response, err := p.persistence.GetMetadata(ctx)
 	return response, err
 }
 
@@ -763,65 +819,91 @@ func (c *clusterMetadataRateLimitedPersistenceClient) GetName() string {
 	return c.persistence.GetName()
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMembers(
+	ctx context.Context,
+	request *GetClusterMembersRequest,
+) (*GetClusterMembersResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.persistence.GetClusterMembers(request)
+	return c.persistence.GetClusterMembers(ctx, request)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {
+func (c *clusterMetadataRateLimitedPersistenceClient) UpsertClusterMembership(
+	ctx context.Context,
+	request *UpsertClusterMembershipRequest,
+) error {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return c.persistence.UpsertClusterMembership(request)
+	return c.persistence.UpsertClusterMembership(ctx, request)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
+func (c *clusterMetadataRateLimitedPersistenceClient) PruneClusterMembership(
+	ctx context.Context,
+	request *PruneClusterMembershipRequest,
+) error {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return c.persistence.PruneClusterMembership(request)
+	return c.persistence.PruneClusterMembership(ctx, request)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) ListClusterMetadata(
+	ctx context.Context,
+	request *ListClusterMetadataRequest,
+) (*ListClusterMetadataResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.persistence.ListClusterMetadata(request)
+	return c.persistence.ListClusterMetadata(ctx, request)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) GetCurrentClusterMetadata(
+	ctx context.Context,
+) (*GetClusterMetadataResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.persistence.GetCurrentClusterMetadata()
+	return c.persistence.GetCurrentClusterMetadata(ctx)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) GetClusterMetadata(
+	ctx context.Context,
+	request *GetClusterMetadataRequest,
+) (*GetClusterMetadataResponse, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
-	return c.persistence.GetClusterMetadata(request)
+	return c.persistence.GetClusterMetadata(ctx, request)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
+func (c *clusterMetadataRateLimitedPersistenceClient) SaveClusterMetadata(
+	ctx context.Context,
+	request *SaveClusterMetadataRequest,
+) (bool, error) {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return false, ErrPersistenceLimitExceeded
 	}
-	return c.persistence.SaveClusterMetadata(request)
+	return c.persistence.SaveClusterMetadata(ctx, request)
 }
 
-func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+func (c *clusterMetadataRateLimitedPersistenceClient) DeleteClusterMetadata(
+	ctx context.Context,
+	request *DeleteClusterMetadataRequest,
+) error {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return c.persistence.DeleteClusterMetadata(request)
+	return c.persistence.DeleteClusterMetadata(ctx, request)
 }
 
-func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {
+func (c *metadataRateLimitedPersistenceClient) InitializeSystemNamespaces(
+	ctx context.Context,
+	currentClusterName string,
+) error {
 	if ok := c.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
-	return c.persistence.InitializeSystemNamespaces(currentClusterName)
+	return c.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
 }

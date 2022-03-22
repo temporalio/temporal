@@ -2922,10 +2922,10 @@ func (wh *WorkflowHandler) DescribeTaskQueue(ctx context.Context, request *workf
 }
 
 // GetClusterInfo return information about Temporal deployment.
-func (wh *WorkflowHandler) GetClusterInfo(_ context.Context, _ *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
+func (wh *WorkflowHandler) GetClusterInfo(ctx context.Context, _ *workflowservice.GetClusterInfoRequest) (_ *workflowservice.GetClusterInfoResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
-	metadata, err := wh.clusterMetadataManager.GetCurrentClusterMetadata()
+	metadata, err := wh.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
