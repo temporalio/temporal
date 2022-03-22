@@ -29,7 +29,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/build"
+	"go.temporal.io/server/common/build"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
 )
@@ -73,13 +73,13 @@ func NewRuntimeMetricsReporter(
 		logger:         logger,
 		lastNumGC:      memstats.NumGC,
 		quit:           make(chan struct{}),
-		buildTime:      build.InfoData.BuildTime(),
+		buildTime:      build.InfoData.GitTime,
 		buildInfoScope: scope.Tagged(
 			map[string]string{
 				gitRevisionTag:   build.InfoData.GitRevision,
-				buildDateTag:     build.InfoData.BuildTime().Format(time.RFC3339),
-				buildPlatformTag: runtime.GOARCH,
-				goVersionTag:     runtime.Version(),
+				buildDateTag:     build.InfoData.GitTime.Format(time.RFC3339),
+				buildPlatformTag: build.InfoData.GoArch,
+				goVersionTag:     build.InfoData.GoVersion,
 				buildVersionTag:  headers.ServerVersion,
 			},
 		),
