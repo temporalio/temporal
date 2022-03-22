@@ -39,8 +39,6 @@ import (
 const (
 	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-reclaim-namespace-resources-workflow"
-
-	checkMaxAttempts = 10
 )
 
 type (
@@ -118,11 +116,10 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 	executionsExist := true
 	var result ReclaimResourcesResult
 
-	for executionsExist {
+	for {
 		ctx1 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
 		var der deleteexecutions.DeleteExecutionsResult
 		err := workflow.ExecuteChildWorkflow(ctx1, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
-
 		if err != nil {
 			logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
 			return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
@@ -130,42 +127,31 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		result.SuccessCount += der.SuccessCount
 		result.ErrorCount += der.ErrorCount
 
-		for checkAttempt := int32(1); checkAttempt <= checkMaxAttempts; checkAttempt++ {
-			err = workflow.Sleep(ctx, visibilityDelay(der.SuccessCount))
-			if err != nil {
-				return result, err
-			}
-
-			ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-			err = workflow.ExecuteLocalActivity(ctx2, a.CheckExecutionsExistActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsExist)
-			if err != nil {
-				return result, fmt.Errorf("%w: CheckExecutionsExistActivity: %v", errors.ErrUnableToExecuteActivity, err)
-			}
-
-			if !executionsExist {
-				break
-			}
-			logger.Info("Workflow executions are still not deleted.", tag.WorkflowNamespace(params.Namespace.String()), tag.Attempt(checkAttempt))
+		checkExecutionsActivityOptions := workflow.ActivityOptions{
+			// 445 seconds of total retry interval.
+			RetryPolicy: &temporal.RetryPolicy{
+				InitialInterval:    1 * time.Second,
+				MaximumInterval:    200 * time.Second,
+				BackoffCoefficient: 1.8,
+				MaximumAttempts:    10,
+			},
+			StartToCloseTimeout:    30 * time.Second,
+			ScheduleToCloseTimeout: 600 * time.Second,
 		}
-		if executionsExist {
-			logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
-			deleteAttempt++
+		ctx2 := workflow.WithActivityOptions(ctx, checkExecutionsActivityOptions)
+		err = workflow.ExecuteActivity(ctx2, a.CheckExecutionsExistActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsExist)
+		if err != nil {
+			return result, fmt.Errorf("%w: CheckExecutionsExistActivity: %v", errors.ErrUnableToExecuteActivity, err)
 		}
+
+		if !executionsExist {
+			break
+		}
+
+		logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
+		deleteAttempt++
 	}
 
 	logger.Info("All workflow executions has been deleted successfully.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
 	return result, nil
-}
-
-// visibilityDelay returns approximate delay for workflow to sleep and wait for internal tasks to be processed.
-func visibilityDelay(successCount int) time.Duration {
-	const delayPerWorkflowExecution = 10 * time.Millisecond
-	vd := time.Duration(successCount) * delayPerWorkflowExecution
-	if vd < 1*time.Second {
-		vd = 1 * time.Second
-	}
-	if vd > 10*time.Second {
-		vd = 10 * time.Second
-	}
-	return vd
 }
