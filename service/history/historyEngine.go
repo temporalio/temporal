@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	historyspb "go.temporal.io/server/api/history/v1"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -51,6 +50,7 @@ import (
 	"go.temporal.io/server/service/history/tasks"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -79,7 +79,6 @@ import (
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
-
 	"go.temporal.io/server/service/worker/archiver"
 )
 
@@ -3214,7 +3213,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					continue
 				}
 				versionHistories := sourceMutableState.GetExecutionInfo().GetVersionHistories()
-				if e.containsReappliedEvent(versionHistories, event.GetEventId(), event.GetVersion()) {
+				if e.containsHistoryEvent(versionHistories, event.GetEventId(), event.GetVersion()) {
 					continue
 				}
 
@@ -3603,7 +3602,7 @@ func (e *historyEngineImpl) metricsScope(ctx context.Context) metrics.Scope {
 	return interceptor.MetricsScope(ctx, e.logger)
 }
 
-func (e *historyEngineImpl) containsReappliedEvent(
+func (e *historyEngineImpl) containsHistoryEvent(
 	versionHistories *historyspb.VersionHistories,
 	reappliedEventID int64,
 	reappliedEventVersion int64,
