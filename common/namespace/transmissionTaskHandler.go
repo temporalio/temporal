@@ -25,6 +25,8 @@
 package namespace
 
 import (
+	"context"
+
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 
@@ -41,6 +43,7 @@ type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
 		HandleTransmissionTask(
+			ctx context.Context,
 			namespaceOperation enumsspb.NamespaceOperation,
 			info *persistencespb.NamespaceInfo,
 			config *persistencespb.NamespaceConfig,
@@ -70,6 +73,7 @@ func NewNamespaceReplicator(
 
 // HandleTransmissionTask handle transmission of the namespace replication task
 func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
+	ctx context.Context,
 	namespaceOperation enumsspb.NamespaceOperation,
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
@@ -116,6 +120,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	}
 
 	return namespaceReplicator.namespaceReplicationQueue.Publish(
+		ctx,
 		&replicationspb.ReplicationTask{
 			TaskType:   taskType,
 			Attributes: task,

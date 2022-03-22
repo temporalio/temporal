@@ -25,8 +25,10 @@
 package persistencetests
 
 import (
+	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -42,6 +44,9 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 )
 
@@ -53,6 +58,11 @@ func (s *QueuePersistenceSuite) SetupSuite() {
 func (s *QueuePersistenceSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), time.Second*30)
+}
+
+func (s *QueuePersistenceSuite) TearDownTest() {
+	s.cancel()
 }
 
 // TearDownSuite implementation
@@ -89,7 +99,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 		go func() {
 			defer wg.Done()
 			for message := range messageChan {
-				err := s.Publish(message)
+				err := s.Publish(s.ctx, message)
 				s.Nil(err, "Enqueue message failed.")
 			}
 		}()
@@ -97,7 +107,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 
 	wg.Wait()
 
-	result, lastRetrievedMessageID, err := s.GetReplicationMessages(persistence.EmptyQueueMessageID, numMessages)
+	result, lastRetrievedMessageID, err := s.GetReplicationMessages(s.ctx, persistence.EmptyQueueMessageID, numMessages)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Len(result, numMessages)
 	s.Equal(int64(numMessages-1), lastRetrievedMessageID)
@@ -105,30 +115,30 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 
 // TestQueueMetadataOperations tests queue metadata operations
 func (s *QueuePersistenceSuite) TestQueueMetadataOperations() {
-	clusterAckLevels, err := s.GetAckLevels()
+	clusterAckLevels, err := s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
 	s.Assert().Len(clusterAckLevels, 0)
 
-	err = s.UpdateAckLevel(10, "test1")
+	err = s.UpdateAckLevel(s.ctx, 10, "test1")
 	s.Require().NoError(err)
 
-	clusterAckLevels, err = s.GetAckLevels()
+	clusterAckLevels, err = s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
 	s.Assert().Len(clusterAckLevels, 1)
 	s.Assert().Equal(int64(10), clusterAckLevels["test1"])
 
-	err = s.UpdateAckLevel(20, "test1")
+	err = s.UpdateAckLevel(s.ctx, 20, "test1")
 	s.Require().NoError(err)
 
-	clusterAckLevels, err = s.GetAckLevels()
+	clusterAckLevels, err = s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
 	s.Assert().Len(clusterAckLevels, 1)
 	s.Assert().Equal(int64(20), clusterAckLevels["test1"])
 
-	err = s.UpdateAckLevel(25, "test2")
+	err = s.UpdateAckLevel(s.ctx, 25, "test2")
 	s.Require().NoError(err)
 
-	clusterAckLevels, err = s.GetAckLevels()
+	clusterAckLevels, err = s.GetAckLevels(s.ctx)
 	s.Require().NoError(err)
 	s.Assert().Len(clusterAckLevels, 2)
 	s.Assert().Equal(int64(20), clusterAckLevels["test1"])
@@ -165,7 +175,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 		go func() {
 			defer wg.Done()
 			for message := range messageChan {
-				err := s.PublishToNamespaceDLQ(message)
+				err := s.PublishToNamespaceDLQ(s.ctx, message)
 				s.Nil(err, "Enqueue message failed.")
 			}
 		}()
@@ -173,28 +183,28 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 
 	wg.Wait()
 
-	result1, token, err := s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, maxMessageID, numMessages/2, nil)
+	result1, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages/2, nil)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.NotNil(token)
-	result2, token, err := s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
+	result2, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result1)+len(result2), numMessages)
-	_, _, err = s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
+	_, _, err = s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, 1<<63-1, numMessages, nil)
 	s.NoError(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 
 	lastMessageID := result2[len(result2)-1].SourceTaskId
-	err = s.DeleteMessageFromNamespaceDLQ(lastMessageID)
+	err = s.DeleteMessageFromNamespaceDLQ(s.ctx, lastMessageID)
 	s.NoError(err)
-	result3, token, err := s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
+	result3, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result3), numMessages-1)
 
-	err = s.RangeDeleteMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, lastMessageID)
+	err = s.RangeDeleteMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, lastMessageID)
 	s.NoError(err)
-	result4, token, err := s.GetMessagesFromNamespaceDLQ(persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
+	result4, token, err := s.GetMessagesFromNamespaceDLQ(s.ctx, persistence.EmptyQueueMessageID, maxMessageID, numMessages, token)
 	s.Nil(err, "GetReplicationMessages failed.")
 	s.Equal(len(token), 0)
 	s.Equal(len(result4), 0)
@@ -202,21 +212,21 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 
 // TestNamespaceDLQMetadataOperations tests queue metadata operations
 func (s *QueuePersistenceSuite) TestNamespaceDLQMetadataOperations() {
-	ackLevel, err := s.GetNamespaceDLQAckLevel()
+	ackLevel, err := s.GetNamespaceDLQAckLevel(s.ctx)
 	s.Require().NoError(err)
 	s.Equal(persistence.EmptyQueueMessageID, ackLevel)
 
-	err = s.UpdateNamespaceDLQAckLevel(10)
+	err = s.UpdateNamespaceDLQAckLevel(s.ctx, 10)
 	s.NoError(err)
 
-	ackLevel, err = s.GetNamespaceDLQAckLevel()
+	ackLevel, err = s.GetNamespaceDLQAckLevel(s.ctx)
 	s.Require().NoError(err)
 	s.Equal(int64(10), ackLevel)
 
-	err = s.UpdateNamespaceDLQAckLevel(1)
+	err = s.UpdateNamespaceDLQAckLevel(s.ctx, 1)
 	s.NoError(err)
 
-	ackLevel, err = s.GetNamespaceDLQAckLevel()
+	ackLevel, err = s.GetNamespaceDLQAckLevel(s.ctx)
 	s.Require().NoError(err)
 	s.Equal(int64(10), ackLevel)
 }

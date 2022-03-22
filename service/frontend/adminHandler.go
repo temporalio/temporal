@@ -1070,7 +1070,7 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
-func (adh *AdminHandler) GetNamespaceReplicationMessages(_ context.Context, request *adminservice.GetNamespaceReplicationMessagesRequest) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
+func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, request *adminservice.GetNamespaceReplicationMessagesRequest) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetNamespaceReplicationMessagesScope)
@@ -1086,7 +1086,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(_ context.Context, requ
 
 	lastMessageID := request.GetLastRetrievedMessageId()
 	if request.GetLastRetrievedMessageId() == defaultLastMessageID {
-		if clusterAckLevels, err := adh.namespaceReplicationQueue.GetAckLevels(); err == nil {
+		if clusterAckLevels, err := adh.namespaceReplicationQueue.GetAckLevels(ctx); err == nil {
 			if ackLevel, ok := clusterAckLevels[request.GetClusterName()]; ok {
 				lastMessageID = ackLevel
 			}
@@ -1094,6 +1094,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(_ context.Context, requ
 	}
 
 	replicationTasks, lastMessageID, err := adh.namespaceReplicationQueue.GetReplicationMessages(
+		ctx,
 		lastMessageID,
 		getNamespaceReplicationMessageBatchSize,
 	)
@@ -1103,6 +1104,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(_ context.Context, requ
 
 	if request.GetLastProcessedMessageId() != defaultLastMessageID {
 		if err := adh.namespaceReplicationQueue.UpdateAckLevel(
+			ctx,
 			request.GetLastProcessedMessageId(),
 			request.GetClusterName(),
 		); err != nil {

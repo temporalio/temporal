@@ -27,6 +27,7 @@
 package persistence
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"sync/atomic"
@@ -101,18 +102,18 @@ type (
 	// NamespaceReplicationQueue is used to publish and list namespace replication tasks
 	NamespaceReplicationQueue interface {
 		common.Daemon
-		Publish(message interface{}) error
-		GetReplicationMessages(lastMessageID int64, maxCount int) ([]*replicationspb.ReplicationTask, int64, error)
-		UpdateAckLevel(lastProcessedMessageID int64, clusterName string) error
-		GetAckLevels() (map[string]int64, error)
+		Publish(ctx context.Context, message interface{}) error
+		GetReplicationMessages(ctx context.Context, lastMessageID int64, maxCount int) ([]*replicationspb.ReplicationTask, int64, error)
+		UpdateAckLevel(ctx context.Context, lastProcessedMessageID int64, clusterName string) error
+		GetAckLevels(ctx context.Context) (map[string]int64, error)
 
-		PublishToDLQ(message interface{}) error
-		GetMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
-		UpdateDLQAckLevel(lastProcessedMessageID int64) error
-		GetDLQAckLevel() (int64, error)
+		PublishToDLQ(ctx context.Context, message interface{}) error
+		GetMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
+		UpdateDLQAckLevel(ctx context.Context, lastProcessedMessageID int64) error
+		GetDLQAckLevel(ctx context.Context) (int64, error)
 
-		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
-		DeleteMessageFromDLQ(messageID int64) error
+		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
+		DeleteMessageFromDLQ(ctx context.Context, messageID int64) error
 	}
 )
 
@@ -120,7 +121,7 @@ func (q *namespaceReplicationQueueImpl) Start() {
 	if !atomic.CompareAndSwapInt32(&q.status, common.DaemonStatusInitialized, common.DaemonStatusStarted) {
 		return
 	}
-	go q.purgeProcessor()
+	go q.purgeProcessor(context.TODO())
 }
 
 func (q *namespaceReplicationQueueImpl) Stop() {
@@ -130,7 +131,10 @@ func (q *namespaceReplicationQueueImpl) Stop() {
 	close(q.done)
 }
 
-func (q *namespaceReplicationQueueImpl) Publish(message interface{}) error {
+func (q *namespaceReplicationQueueImpl) Publish(
+	_ context.Context,
+	message interface{},
+) error {
 	task, ok := message.(*replicationspb.ReplicationTask)
 	if !ok {
 		return errors.New("wrong message type")
@@ -143,7 +147,10 @@ func (q *namespaceReplicationQueueImpl) Publish(message interface{}) error {
 	return q.queue.EnqueueMessage(*blob)
 }
 
-func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error {
+func (q *namespaceReplicationQueueImpl) PublishToDLQ(
+	_ context.Context,
+	message interface{},
+) error {
 	task, ok := message.(*replicationspb.ReplicationTask)
 	if !ok {
 		return errors.New("wrong message type")
@@ -168,6 +175,7 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(message interface{}) error 
 }
 
 func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
+	_ context.Context,
 	lastMessageID int64,
 	pageSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
@@ -192,20 +200,22 @@ func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
 }
 
 func (q *namespaceReplicationQueueImpl) UpdateAckLevel(
+	ctx context.Context,
 	lastProcessedMessageID int64,
 	clusterName string,
 ) error {
-	return q.updateAckLevelWithRetry(lastProcessedMessageID, clusterName, false)
+	return q.updateAckLevelWithRetry(ctx, lastProcessedMessageID, clusterName, false)
 }
 
 func (q *namespaceReplicationQueueImpl) updateAckLevelWithRetry(
+	ctx context.Context,
 	lastProcessedMessageID int64,
 	clusterName string,
 	isDLQ bool,
 ) error {
 conditionFailedRetry:
 	for {
-		err := q.updateAckLevel(lastProcessedMessageID, clusterName, isDLQ)
+		err := q.updateAckLevel(ctx, lastProcessedMessageID, clusterName, isDLQ)
 		switch err.(type) {
 		case *ConditionFailedError:
 			continue conditionFailedRetry
@@ -216,6 +226,7 @@ conditionFailedRetry:
 }
 
 func (q *namespaceReplicationQueueImpl) updateAckLevel(
+	_ context.Context,
 	lastProcessedMessageID int64,
 	clusterName string,
 	isDLQ bool,
@@ -270,7 +281,9 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 	return nil
 }
 
-func (q *namespaceReplicationQueueImpl) GetAckLevels() (map[string]int64, error) {
+func (q *namespaceReplicationQueueImpl) GetAckLevels(
+	_ context.Context,
+) (map[string]int64, error) {
 	metadata, err := q.queue.GetAckLevels()
 	if err != nil {
 		return nil, err
@@ -295,6 +308,7 @@ func (q *namespaceReplicationQueueImpl) ackLevelsFromBlob(blob *commonpb.DataBlo
 }
 
 func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
+	_ context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 	pageSize int,
@@ -322,12 +336,15 @@ func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
 }
 
 func (q *namespaceReplicationQueueImpl) UpdateDLQAckLevel(
+	ctx context.Context,
 	lastProcessedMessageID int64,
 ) error {
-	return q.updateAckLevelWithRetry(lastProcessedMessageID, localNamespaceReplicationCluster, true)
+	return q.updateAckLevelWithRetry(ctx, lastProcessedMessageID, localNamespaceReplicationCluster, true)
 }
 
-func (q *namespaceReplicationQueueImpl) GetDLQAckLevel() (int64, error) {
+func (q *namespaceReplicationQueueImpl) GetDLQAckLevel(
+	_ context.Context,
+) (int64, error) {
 	metadata, err := q.queue.GetDLQAckLevels()
 	if err != nil {
 		return EmptyQueueMessageID, err
@@ -345,6 +362,7 @@ func (q *namespaceReplicationQueueImpl) GetDLQAckLevel() (int64, error) {
 }
 
 func (q *namespaceReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
+	_ context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
@@ -360,14 +378,17 @@ func (q *namespaceReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
 }
 
 func (q *namespaceReplicationQueueImpl) DeleteMessageFromDLQ(
+	_ context.Context,
 	messageID int64,
 ) error {
 
 	return q.queue.DeleteMessageFromDLQ(messageID)
 }
 
-func (q *namespaceReplicationQueueImpl) purgeAckedMessages() error {
-	ackLevelByCluster, err := q.GetAckLevels()
+func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
+	ctx context.Context,
+) error {
+	ackLevelByCluster, err := q.GetAckLevels(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to purge messages: %v", err)
 	}
@@ -396,7 +417,9 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages() error {
 	return nil
 }
 
-func (q *namespaceReplicationQueueImpl) purgeProcessor() {
+func (q *namespaceReplicationQueueImpl) purgeProcessor(
+	ctx context.Context,
+) {
 	ticker := time.NewTicker(purgeInterval)
 	defer ticker.Stop()
 
@@ -406,7 +429,7 @@ func (q *namespaceReplicationQueueImpl) purgeProcessor() {
 			return
 		case <-ticker.C:
 			if q.ackLevelUpdated {
-				err := q.purgeAckedMessages()
+				err := q.purgeAckedMessages(ctx)
 				if err != nil {
 					q.logger.Warn("Failed to purge acked namespace replication messages.", tag.Error(err))
 				} else {

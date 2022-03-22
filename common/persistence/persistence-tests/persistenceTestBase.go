@@ -1366,6 +1366,7 @@ func (g *TestTransferTaskIDGenerator) GenerateTransferTaskID() (int64, error) {
 
 // Publish is a utility method to add messages to the queue
 func (s *TestBase) Publish(
+	ctx context.Context,
 	message interface{},
 ) error {
 
@@ -1375,7 +1376,7 @@ func (s *TestBase) Publish(
 
 	return backoff.Retry(
 		func() error {
-			return s.NamespaceReplicationQueue.Publish(message)
+			return s.NamespaceReplicationQueue.Publish(ctx, message)
 		},
 		retryPolicy,
 		func(e error) bool {
@@ -1390,29 +1391,34 @@ func isMessageIDConflictError(err error) bool {
 
 // GetReplicationMessages is a utility method to get messages from the queue
 func (s *TestBase) GetReplicationMessages(
+	ctx context.Context,
 	lastMessageID int64,
 	pageSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 
-	return s.NamespaceReplicationQueue.GetReplicationMessages(lastMessageID, pageSize)
+	return s.NamespaceReplicationQueue.GetReplicationMessages(ctx, lastMessageID, pageSize)
 }
 
 // UpdateAckLevel updates replication queue ack level
 func (s *TestBase) UpdateAckLevel(
+	ctx context.Context,
 	lastProcessedMessageID int64,
 	clusterName string,
 ) error {
 
-	return s.NamespaceReplicationQueue.UpdateAckLevel(lastProcessedMessageID, clusterName)
+	return s.NamespaceReplicationQueue.UpdateAckLevel(ctx, lastProcessedMessageID, clusterName)
 }
 
 // GetAckLevels returns replication queue ack levels
-func (s *TestBase) GetAckLevels() (map[string]int64, error) {
-	return s.NamespaceReplicationQueue.GetAckLevels()
+func (s *TestBase) GetAckLevels(
+	ctx context.Context,
+) (map[string]int64, error) {
+	return s.NamespaceReplicationQueue.GetAckLevels(ctx)
 }
 
 // PublishToNamespaceDLQ is a utility method to add messages to the namespace DLQ
 func (s *TestBase) PublishToNamespaceDLQ(
+	ctx context.Context,
 	message interface{},
 ) error {
 
@@ -1420,9 +1426,10 @@ func (s *TestBase) PublishToNamespaceDLQ(
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
 
-	return backoff.Retry(
-		func() error {
-			return s.NamespaceReplicationQueue.PublishToDLQ(message)
+	return backoff.RetryContext(
+		ctx,
+		func(ctx context.Context) error {
+			return s.NamespaceReplicationQueue.PublishToDLQ(ctx, message)
 		},
 		retryPolicy,
 		func(e error) bool {
@@ -1432,6 +1439,7 @@ func (s *TestBase) PublishToNamespaceDLQ(
 
 // GetMessagesFromNamespaceDLQ is a utility method to get messages from the namespace DLQ
 func (s *TestBase) GetMessagesFromNamespaceDLQ(
+	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 	pageSize int,
@@ -1439,6 +1447,7 @@ func (s *TestBase) GetMessagesFromNamespaceDLQ(
 ) ([]*replicationspb.ReplicationTask, []byte, error) {
 
 	return s.NamespaceReplicationQueue.GetMessagesFromDLQ(
+		ctx,
 		firstMessageID,
 		lastMessageID,
 		pageSize,
@@ -1448,32 +1457,37 @@ func (s *TestBase) GetMessagesFromNamespaceDLQ(
 
 // UpdateNamespaceDLQAckLevel updates namespace dlq ack level
 func (s *TestBase) UpdateNamespaceDLQAckLevel(
+	ctx context.Context,
 	lastProcessedMessageID int64,
 ) error {
 
-	return s.NamespaceReplicationQueue.UpdateDLQAckLevel(lastProcessedMessageID)
+	return s.NamespaceReplicationQueue.UpdateDLQAckLevel(ctx, lastProcessedMessageID)
 }
 
 // GetNamespaceDLQAckLevel returns namespace dlq ack level
-func (s *TestBase) GetNamespaceDLQAckLevel() (int64, error) {
-	return s.NamespaceReplicationQueue.GetDLQAckLevel()
+func (s *TestBase) GetNamespaceDLQAckLevel(
+	ctx context.Context,
+) (int64, error) {
+	return s.NamespaceReplicationQueue.GetDLQAckLevel(ctx)
 }
 
 // DeleteMessageFromNamespaceDLQ deletes one message from namespace DLQ
 func (s *TestBase) DeleteMessageFromNamespaceDLQ(
+	ctx context.Context,
 	messageID int64,
 ) error {
 
-	return s.NamespaceReplicationQueue.DeleteMessageFromDLQ(messageID)
+	return s.NamespaceReplicationQueue.DeleteMessageFromDLQ(ctx, messageID)
 }
 
 // RangeDeleteMessagesFromNamespaceDLQ deletes messages from namespace DLQ
 func (s *TestBase) RangeDeleteMessagesFromNamespaceDLQ(
+	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
 
-	return s.NamespaceReplicationQueue.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
+	return s.NamespaceReplicationQueue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 }
 
 // GenerateTransferTaskIDs helper
