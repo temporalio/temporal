@@ -505,16 +505,19 @@ func (s *VisibilityPersistenceSuite) TestFilteringByStatus() {
 }
 
 // TestDelete test
-func (s *VisibilityPersistenceSuite) TestDelete() {
-	nRows := 5
+func (s *VisibilityPersistenceSuite) TestDeleteWorkflow() {
+	openRows := 10
+	closedRows := 5
 	testNamespaceUUID := namespace.ID(uuid.New())
 	closeTime := time.Now().UTC()
 	startTime := closeTime.Add(-5 * time.Second)
-	for i := 0; i < nRows; i++ {
+	var pendingExecutions []commonpb.WorkflowExecution
+	for i := 0; i < openRows; i++ {
 		workflowExecution := commonpb.WorkflowExecution{
 			WorkflowId: uuid.New(),
 			RunId:      uuid.New(),
 		}
+		pendingExecutions = append(pendingExecutions, workflowExecution)
 		err0 := s.VisibilityMgr.RecordWorkflowExecutionStarted(&manager.RecordWorkflowExecutionStartedRequest{
 			VisibilityRequestBase: &manager.VisibilityRequestBase{
 				NamespaceID:      testNamespaceUUID,
@@ -524,10 +527,13 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 			},
 		})
 		s.Nil(err0)
+	}
+
+	for i := 0; i < closedRows; i++ {
 		closeReq := &manager.RecordWorkflowExecutionClosedRequest{
 			VisibilityRequestBase: &manager.VisibilityRequestBase{
 				NamespaceID:      testNamespaceUUID,
-				Execution:        workflowExecution,
+				Execution:        pendingExecutions[i],
 				WorkflowTypeName: "visibility-workflow",
 				StartTime:        startTime,
 				Status:           enumspb.WORKFLOW_EXECUTION_STATUS_FAILED,
@@ -546,27 +552,53 @@ func (s *VisibilityPersistenceSuite) TestDelete() {
 		PageSize:          10,
 	})
 	s.Nil(err3)
-	s.Equal(nRows, len(resp.Executions))
+	s.Equal(closedRows, len(resp.Executions))
 
-	remaining := nRows
+	// Delete closed workflow
 	for _, row := range resp.Executions {
 		err4 := s.VisibilityMgr.DeleteWorkflowExecution(&manager.VisibilityDeleteWorkflowExecutionRequest{
 			NamespaceID: testNamespaceUUID,
 			WorkflowID:  row.GetExecution().GetWorkflowId(),
 			RunID:       row.GetExecution().GetRunId(),
-			CloseTime:   closeTime,
+			CloseTime:   &closeTime,
 		})
 		s.Nil(err4)
-		remaining--
-		resp, err5 := s.VisibilityMgr.ListClosedWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
-			NamespaceID:       testNamespaceUUID,
-			EarliestStartTime: startTime,
-			LatestStartTime:   closeTime,
-			PageSize:          10,
-		})
-		s.Nil(err5)
-		s.Equal(remaining, len(resp.Executions))
 	}
+	resp, err5 := s.VisibilityMgr.ListClosedWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
+		NamespaceID:       testNamespaceUUID,
+		EarliestStartTime: startTime,
+		LatestStartTime:   closeTime,
+		PageSize:          10,
+	})
+	s.Nil(err5)
+	s.Equal(0, len(resp.Executions))
+
+	resp, err6 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
+		NamespaceID:       testNamespaceUUID,
+		EarliestStartTime: startTime,
+		LatestStartTime:   closeTime,
+		PageSize:          10,
+	})
+	s.Nil(err6)
+	s.Equal(openRows-closedRows, len(resp.Executions))
+	// Delete open workflow
+	for _, row := range resp.Executions {
+		err7 := s.VisibilityMgr.DeleteWorkflowExecution(&manager.VisibilityDeleteWorkflowExecutionRequest{
+			NamespaceID: testNamespaceUUID,
+			WorkflowID:  row.GetExecution().GetWorkflowId(),
+			RunID:       row.GetExecution().GetRunId(),
+			StartTime:   &startTime,
+		})
+		s.Nil(err7)
+	}
+	resp, err8 := s.VisibilityMgr.ListOpenWorkflowExecutions(&manager.ListWorkflowExecutionsRequest{
+		NamespaceID:       testNamespaceUUID,
+		EarliestStartTime: startTime,
+		LatestStartTime:   closeTime,
+		PageSize:          10,
+	})
+	s.Nil(err8)
+	s.Equal(0, len(resp.Executions))
 }
 
 // TestUpsertWorkflowExecution test

@@ -28,6 +28,7 @@ package workflow
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -128,14 +129,6 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	sourceTaskVersion int64,
 ) error {
 
-	if ms.IsWorkflowExecutionRunning() {
-		// DeleteWorkflowExecution is called from transfer task queue processor
-		// and corresponding transfer task is created only if workflow is not running.
-		// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
-		// workflow should not be deleted. NotFound errors are ignored by task processor.
-		return consts.ErrWorkflowNotCompleted
-	}
-
 	err := m.deleteWorkflowExecutionInternal(
 		ctx,
 		nsID,
@@ -209,8 +202,17 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		currentBranchToken = nil
 	}
 
+	var startTime *time.Time
+	var closeTime *time.Time
+
 	completionEvent, err := ms.GetCompletionEvent(ctx)
-	if err != nil {
+	switch {
+	case err == ErrMissingWorkflowCompletionEvent:
+		// delete open workflow execution
+		startTime = ms.GetExecutionInfo().GetStartTime()
+	case err == nil:
+		closeTime = completionEvent.GetEventTime()
+	default:
 		return err
 	}
 
@@ -223,7 +225,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		},
 		currentBranchToken,
 		newTaskVersion,
-		completionEvent.GetEventTime(),
+		startTime,
+		closeTime,
 	); err != nil {
 		return err
 	}

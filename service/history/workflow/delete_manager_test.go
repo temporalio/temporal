@@ -105,7 +105,7 @@ func (s *deleteManagerWorkflowSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
+func (s *deleteManagerWorkflowSuite) TestDeleteClosedWorkflowExecution() {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -113,7 +113,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
@@ -132,7 +131,46 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		},
 		[]byte{22, 8, 78},
 		int64(1),
+		nil,
 		&closeTime,
+	).Return(nil)
+	mockWeCtx.EXPECT().Clear()
+
+	err := s.deleteManager.DeleteWorkflowExecution(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockWeCtx,
+		mockMutableState,
+		1,
+	)
+	s.NoError(err)
+}
+
+func (s *deleteManagerWorkflowSuite) TestDeleteOpenWorkflowExecution() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := NewMockContext(s.controller)
+	mockMutableState := NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+	startTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{StartTime: &startTime})
+	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(nil, ErrMissingWorkflowCompletionEvent)
+
+	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		gomock.Any(),
+		definition.WorkflowKey{
+			NamespaceID: tests.NamespaceID.String(),
+			WorkflowID:  tests.WorkflowID,
+			RunID:       tests.RunID,
+		},
+		[]byte{22, 8, 78},
+		int64(1),
+		&startTime,
+		nil,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
@@ -155,7 +193,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
@@ -174,6 +211,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		},
 		[]byte{22, 8, 78},
 		int64(1),
+		nil,
 		&closeTime,
 	).Return(serviceerror.NewInternal("test error"))
 
@@ -248,6 +286,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		},
 		nil,
 		int64(1),
+		nil,
 		&closeTime,
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()

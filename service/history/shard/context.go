@@ -104,7 +104,7 @@ type (
 		SetWorkflowExecution(ctx context.Context, request *persistence.SetWorkflowExecutionRequest) (*persistence.SetWorkflowExecutionResponse, error)
 		// DeleteWorkflowExecution deletes workflow execution, current workflow execution, and add task to delete visibility.
 		// If branchToken != nil, then delete history also, otherwise leave history.
-		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, version int64, closeTime *time.Time) error
+		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, version int64, startTime *time.Time, closeTime *time.Time) error
 
 		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
 		GetHistoryClient() historyservice.HistoryServiceClient
