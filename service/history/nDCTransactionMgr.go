@@ -30,6 +30,8 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common"
+
 	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
@@ -37,7 +39,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -346,7 +347,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 		baseNextEventID := baseMutableState.GetNextEventID()
 
-		if err = r.workflowResetter.resetWorkflow(
+		err = r.workflowResetter.resetWorkflow(
 			ctx,
 			namespaceID,
 			workflowID,
@@ -361,7 +362,14 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			eventsReapplicationResetWorkflowReason,
 			targetWorkflowEvents.Events,
 			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
-		); err != nil {
+		)
+		switch err.(type) {
+		case *serviceerror.InvalidArgument:
+			// no-op. Usually this is due to reset workflow with pending child workflows
+			r.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
+		case nil:
+			//no-op
+		default:
 			return 0, workflow.TransactionPolicyActive, err
 		}
 		// after the reset of target workflow (current workflow) with additional events to be reapplied
