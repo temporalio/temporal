@@ -28,6 +28,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	historyspb "go.temporal.io/server/api/history/v1"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -3185,13 +3186,23 @@ func (e *historyEngineImpl) ReapplyEvents(
 		ctx,
 		namespaceID,
 		currentExecution,
-		func(context workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
+		func(context workflow.Context, mutableState workflow.MutableState) (action *updateWorkflowAction, retErr error) {
 			// Filter out reapply event from the same cluster
 			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
 			lastWriteVersion, err := mutableState.GetLastWriteVersion()
 			if err != nil {
 				return nil, err
 			}
+			sourceMutableState := mutableState
+			if sourceMutableState.GetWorkflowKey().RunID != runID {
+				originCtx, err := e.loadWorkflowOnce(ctx, namespaceID, workflowID, runID)
+				if err != nil {
+					return nil, err
+				}
+				defer func() { originCtx.getReleaseFn()(retErr) }()
+				sourceMutableState = originCtx.getMutableState()
+			}
+
 			for _, event := range reapplyEvents {
 				if event.GetVersion() == lastWriteVersion {
 					// The reapply is from the same cluster. Ignoring.
@@ -3202,6 +3213,11 @@ func (e *historyEngineImpl) ReapplyEvents(
 					// already apply the signal
 					continue
 				}
+				versionHistories := sourceMutableState.GetExecutionInfo().GetVersionHistories()
+				if e.containsReappliedEvent(versionHistories, event.GetEventId(), event.GetVersion()) {
+					continue
+				}
+
 				toReapplyEvents = append(toReapplyEvents, event)
 			}
 			if len(toReapplyEvents) == 0 {
@@ -3585,6 +3601,20 @@ func (e *historyEngineImpl) loadWorkflow(
 
 func (e *historyEngineImpl) metricsScope(ctx context.Context) metrics.Scope {
 	return interceptor.MetricsScope(ctx, e.logger)
+}
+
+func (e *historyEngineImpl) containsReappliedEvent(
+	versionHistories *historyspb.VersionHistories,
+	reappliedEventID int64,
+	reappliedEventVersion int64,
+) bool {
+	// Check if the source workflow contains the reapply event.
+	// If it does, it means the event is received in this cluster, no need to reapply.
+	_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+		versionHistories,
+		versionhistory.NewVersionHistoryItem(reappliedEventID, reappliedEventVersion),
+	)
+	return err == nil
 }
 
 func getMetadataChangeCallbackID(componentName string, shardId int32) string {
