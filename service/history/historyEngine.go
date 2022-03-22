@@ -3089,7 +3089,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				// TODO when https://github.com/uber/cadence/issues/2420 is finished, remove this block,
 				//  since cannot reapply event to a finished workflow which had no workflow tasks started
 				if baseRebuildLastEventID == common.EmptyEventID {
-					e.logger.Warn("cannot reapply event to a finished workflow",
+					e.logger.Warn("cannot reapply event to a finished workflow with no workflow task",
 						tag.WorkflowNamespaceID(namespaceID.String()),
 						tag.WorkflowID(currentExecution.GetWorkflowId()),
 					)
@@ -3112,7 +3112,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 				baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 				baseNextEventID := mutableState.GetNextEventID()
 
-				if err = e.workflowResetter.resetWorkflow(
+				err = e.workflowResetter.resetWorkflow(
 					ctx,
 					namespaceID,
 					workflowID,
@@ -3134,7 +3134,14 @@ func (e *historyEngineImpl) ReapplyEvents(
 					eventsReapplicationResetWorkflowReason,
 					toReapplyEvents,
 					enumspb.RESET_REAPPLY_TYPE_SIGNAL,
-				); err != nil {
+				)
+				switch err.(type) {
+				case *serviceerror.InvalidArgument:
+					// no-op. Usually this is due to reset workflow with pending child workflows
+					e.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
+				case nil:
+					//no-op
+				default:
 					return nil, err
 				}
 				return &updateWorkflowAction{
