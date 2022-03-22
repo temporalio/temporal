@@ -171,6 +171,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		)
 		switch resendErr.(type) {
 		case *serviceerror.NotFound:
+			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
 			//no-op
@@ -234,6 +235,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 		)
 		switch resendErr.(type) {
 		case *serviceerror.NotFound:
+			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
 			//no-op
