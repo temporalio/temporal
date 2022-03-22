@@ -49,7 +49,7 @@ import (
 type (
 	DeleteManager interface {
 		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState) error
-		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64, forceDelete bool) error
 		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 	}
 
@@ -126,9 +126,10 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	weCtx Context,
 	ms MutableState,
 	sourceTaskVersion int64,
+	forceDelete bool,
 ) error {
 
-	if ms.IsWorkflowExecutionRunning() {
+	if !forceDelete && ms.IsWorkflowExecutionRunning() {
 		// DeleteWorkflowExecution is called from transfer task queue processor
 		// and corresponding transfer task is created only if workflow is not running.
 		// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),

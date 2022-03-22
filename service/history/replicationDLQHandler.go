@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 var (
@@ -81,16 +82,29 @@ type (
 		taskExecutorsLock sync.Mutex
 		taskExecutors     map[string]replicationTaskExecutor
 		shard             shard.Context
+		deleteManager     workflow.DeleteManager
+		workflowCache     workflow.Cache
 		logger            log.Logger
 	}
 )
 
-func newLazyReplicationDLQHandler(shard shard.Context) replicationDLQHandler {
-	return newReplicationDLQHandler(shard, make(map[string]replicationTaskExecutor))
+func newLazyReplicationDLQHandler(
+	shard shard.Context,
+	deleteManager workflow.DeleteManager,
+	workflowCache workflow.Cache,
+) replicationDLQHandler {
+	return newReplicationDLQHandler(
+		shard,
+		deleteManager,
+		workflowCache,
+		make(map[string]replicationTaskExecutor),
+	)
 }
 
 func newReplicationDLQHandler(
 	shard shard.Context,
+	deleteManager workflow.DeleteManager,
+	workflowCache workflow.Cache,
 	taskExecutors map[string]replicationTaskExecutor,
 ) replicationDLQHandler {
 
@@ -99,6 +113,8 @@ func newReplicationDLQHandler(
 	}
 	return &replicationDLQHandlerImpl{
 		shard:         shard,
+		deleteManager: deleteManager,
+		workflowCache: workflowCache,
 		taskExecutors: taskExecutors,
 		logger:        shard.GetLogger(),
 	}
@@ -324,6 +340,8 @@ func (r *replicationDLQHandlerImpl) getOrCreateTaskExecutor(clusterName string) 
 		r.shard.GetNamespaceRegistry(),
 		resender,
 		engine,
+		r.deleteManager,
+		r.workflowCache,
 		r.shard.GetMetricsClient(),
 		r.shard.GetLogger(),
 	)

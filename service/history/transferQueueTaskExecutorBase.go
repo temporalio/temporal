@@ -258,5 +258,6 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		weCtx,
 		mutableState,
 		task.GetVersion(),
+		false,
 	)
 }

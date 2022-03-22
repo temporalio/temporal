@@ -143,6 +143,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		mockWeCtx,
 		mockMutableState,
 		1,
+		false,
 	)
 	s.NoError(err)
 }
@@ -184,8 +185,52 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		mockWeCtx,
 		mockMutableState,
 		1,
+		false,
 	)
 	s.Error(err)
+}
+
+func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_ForceDelete() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	mockWeCtx := NewMockContext(s.controller)
+	mockMutableState := NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Times(0)
+	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
+	completionEvent := &historypb.HistoryEvent{
+		EventId:   int64(1),
+		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+		EventTime: &closeTime,
+	}
+	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
+
+	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		gomock.Any(),
+		definition.WorkflowKey{
+			NamespaceID: tests.NamespaceID.String(),
+			WorkflowID:  tests.WorkflowID,
+			RunID:       tests.RunID,
+		},
+		[]byte{22, 8, 78},
+		int64(1),
+		&closeTime,
+	).Return(nil)
+	mockWeCtx.EXPECT().Clear()
+
+	err := s.deleteManager.DeleteWorkflowExecution(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockWeCtx,
+		mockMutableState,
+		1,
+		true,
+	)
+	s.NoError(err)
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_ArchivalNotInline() {
