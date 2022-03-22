@@ -31,4 +31,5 @@ import (
 var (
 	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
 	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
+	ErrExecutionsStillExist         = errors.New("executions are still exist")
 )

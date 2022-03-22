@@ -25,6 +25,7 @@
 package reclaimresources
 
 import (
+	stderrors "errors"
 	"fmt"
 	"time"
 
@@ -113,7 +114,6 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 	var a *Activities
 	logger := workflow.GetLogger(ctx)
 	deleteAttempt := int32(1)
-	executionsExist := true
 	var result ReclaimResourcesResult
 
 	for {
@@ -139,13 +139,13 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 			ScheduleToCloseTimeout: 600 * time.Second,
 		}
 		ctx2 := workflow.WithActivityOptions(ctx, checkExecutionsActivityOptions)
-		err = workflow.ExecuteActivity(ctx2, a.CheckExecutionsExistActivity, params.NamespaceID, params.Namespace).Get(ctx, &executionsExist)
-		if err != nil {
-			return result, fmt.Errorf("%w: CheckExecutionsExistActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		err = workflow.ExecuteActivity(ctx2, a.EnsureNoExecutionsActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
+		if err == nil {
+			break
 		}
 
-		if !executionsExist {
-			break
+		if !stderrors.Is(err, errors.ErrExecutionsStillExist) {
+			return result, fmt.Errorf("%w: CheckExecutionsExistActivity: %v", errors.ErrUnableToExecuteActivity, err)
 		}
 
 		logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))

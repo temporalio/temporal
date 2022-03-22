@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 type (
@@ -58,7 +59,7 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) CheckExecutionsExistActivity(_ context.Context, nsID namespace.ID, nsName namespace.Name) (bool, error) {
+func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
 	// TODO: remove this check after CountWorkflowExecutions is implemented in standard visibility.
 	if a.visibilityManager.GetName() == "elasticsearch" {
 		req := &manager.CountWorkflowExecutionsRequest{
@@ -69,10 +70,13 @@ func (a *Activities) CheckExecutionsExistActivity(_ context.Context, nsID namesp
 		if err != nil {
 			a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 			a.logger.Error("Unable to count workflows.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
-			return false, err
+			return err
 		}
 
-		return resp.Count > 0, nil
+		if resp.Count > 0 {
+			return errors.ErrExecutionsStillExist
+		}
+		return nil
 	}
 
 	req := &manager.ListWorkflowExecutionsRequestV2{
@@ -84,10 +88,13 @@ func (a *Activities) CheckExecutionsExistActivity(_ context.Context, nsID namesp
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to count workflows using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
-		return false, err
+		return err
 	}
 
-	return len(resp.Executions) > 0, nil
+	if len(resp.Executions) > 0 {
+		return errors.ErrExecutionsStillExist
+	}
+	return nil
 }
 
 func (a *Activities) DeleteNamespaceActivity(_ context.Context, nsName namespace.Name, nsID namespace.ID) error {
