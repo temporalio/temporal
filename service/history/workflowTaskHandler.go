@@ -35,9 +35,10 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 
-	"go.temporal.io/server/common/searchattribute"
-
+	"go.temporal.io/server/api/historyservice/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/enums"
@@ -47,6 +48,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -78,12 +80,17 @@ type (
 		metricsClient     metrics.Client
 		config            *configs.Config
 		shard             shard.Context
+		tokenSerializer   common.TaskTokenSerializer
 	}
 
 	workflowTaskFailedCause struct {
 		failedCause enumspb.WorkflowTaskFailedCause
 		causeErr    error
 	}
+
+	workflowTaskResponseMutation func(
+		resp *historyservice.RespondWorkflowTaskCompletedResponse,
+	) error
 )
 
 func newWorkflowTaskHandler(
@@ -123,77 +130,83 @@ func newWorkflowTaskHandler(
 		metricsClient:     metricsClient,
 		config:            config,
 		shard:             shard,
+		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 	}
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommands(
 	ctx context.Context,
 	commands []*commandpb.Command,
-) error {
+) ([]workflowTaskResponseMutation, error) {
 	if err := handler.attrValidator.validateCommandSequence(
 		commands,
 	); err != nil {
-		return err
+		return nil, err
 	}
+
+	var mutations []workflowTaskResponseMutation
 	for _, command := range commands {
-		err := handler.handleCommand(ctx, command)
+		mutation, err := handler.handleCommand(ctx, command)
 		if err != nil || handler.stopProcessing {
-			return err
+			return nil, err
+		}
+		if mutation != nil {
+			mutations = append(mutations, mutation)
 		}
 	}
-	return nil
+	return mutations, nil
 }
 
-func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, command *commandpb.Command) error {
+func (handler *workflowTaskHandlerImpl) handleCommand(ctx context.Context, command *commandpb.Command) (workflowTaskResponseMutation, error) {
 	switch command.GetCommandType() {
 	case enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:
 		return handler.handleCommandScheduleActivity(ctx, command.GetScheduleActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_COMPLETE_WORKFLOW_EXECUTION:
-		return handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
+		return nil, handler.handleCommandCompleteWorkflow(ctx, command.GetCompleteWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_FAIL_WORKFLOW_EXECUTION:
-		return handler.handleCommandFailWorkflow(ctx, command.GetFailWorkflowExecutionCommandAttributes())
+		return nil, handler.handleCommandFailWorkflow(ctx, command.GetFailWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CANCEL_WORKFLOW_EXECUTION:
-		return handler.handleCommandCancelWorkflow(ctx, command.GetCancelWorkflowExecutionCommandAttributes())
+		return nil, handler.handleCommandCancelWorkflow(ctx, command.GetCancelWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_TIMER:
-		return handler.handleCommandStartTimer(ctx, command.GetStartTimerCommandAttributes())
+		return nil, handler.handleCommandStartTimer(ctx, command.GetStartTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_ACTIVITY_TASK:
-		return handler.handleCommandRequestCancelActivity(ctx, command.GetRequestCancelActivityTaskCommandAttributes())
+		return nil, handler.handleCommandRequestCancelActivity(ctx, command.GetRequestCancelActivityTaskCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CANCEL_TIMER:
-		return handler.handleCommandCancelTimer(ctx, command.GetCancelTimerCommandAttributes())
+		return nil, handler.handleCommandCancelTimer(ctx, command.GetCancelTimerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_RECORD_MARKER:
-		return handler.handleCommandRecordMarker(ctx, command.GetRecordMarkerCommandAttributes())
+		return nil, handler.handleCommandRecordMarker(ctx, command.GetRecordMarkerCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleCommandRequestCancelExternalWorkflow(ctx, command.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
+		return nil, handler.handleCommandRequestCancelExternalWorkflow(ctx, command.GetRequestCancelExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION:
-		return handler.handleCommandSignalExternalWorkflow(ctx, command.GetSignalExternalWorkflowExecutionCommandAttributes())
+		return nil, handler.handleCommandSignalExternalWorkflow(ctx, command.GetSignalExternalWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_CONTINUE_AS_NEW_WORKFLOW_EXECUTION:
-		return handler.handleCommandContinueAsNewWorkflow(ctx, command.GetContinueAsNewWorkflowExecutionCommandAttributes())
+		return nil, handler.handleCommandContinueAsNewWorkflow(ctx, command.GetContinueAsNewWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:
-		return handler.handleCommandStartChildWorkflow(ctx, command.GetStartChildWorkflowExecutionCommandAttributes())
+		return nil, handler.handleCommandStartChildWorkflow(ctx, command.GetStartChildWorkflowExecutionCommandAttributes())
 
 	case enumspb.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:
-		return handler.handleCommandUpsertWorkflowSearchAttributes(ctx, command.GetUpsertWorkflowSearchAttributesCommandAttributes())
+		return nil, handler.handleCommandUpsertWorkflowSearchAttributes(ctx, command.GetUpsertWorkflowSearchAttributesCommandAttributes())
 
 	default:
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Unknown command type: %v", command.GetCommandType()))
 	}
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	_ context.Context,
 	attr *commandpb.ScheduleActivityTaskCommandAttributes,
-) error {
+) (workflowTaskResponseMutation, error) {
 
 	handler.metricsClient.IncCounter(
 		metrics.HistoryRespondWorkflowTaskCompletedScope,
@@ -206,7 +219,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
 		}
 		targetNamespaceID = targetNamespaceEntry.ID()
 	}
@@ -222,7 +235,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		},
 		enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES,
 	); err != nil || handler.stopProcessing {
-		return err
+		return nil, err
 	}
 
 	failWorkflow, err := handler.sizeLimitChecker.failWorkflowIfPayloadSizeExceedsLimit(
@@ -232,19 +245,82 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	)
 	if err != nil || failWorkflow {
 		handler.stopProcessing = true
-		return err
+		return nil, err
 	}
 
 	enums.SetDefaultTaskQueueKind(&attr.GetTaskQueue().Kind)
 
-	_, _, err = handler.mutableState.AddActivityTaskScheduledEvent(handler.workflowTaskCompletedID, attr)
+	localDispatchActivity := false
+	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
+	if attr.RequestStart && handler.config.EnableActivityLocalDispatch(namespace) {
+		localDispatchActivity = true
+	}
+
+	event, ai, err := handler.mutableState.AddActivityTaskScheduledEvent(
+		handler.workflowTaskCompletedID,
+		attr,
+		localDispatchActivity,
+	)
 	if err != nil {
 		if _, ok := err.(*serviceerror.InvalidArgument); ok {
-			return handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
+			return nil, handler.failCommand(enumspb.WORKFLOW_TASK_FAILED_CAUSE_SCHEDULE_ACTIVITY_DUPLICATE_ID, err)
 		}
-		return err
+		return nil, err
 	}
-	return nil
+
+	if !localDispatchActivity {
+		return nil, nil
+	}
+
+	if _, err := handler.mutableState.AddActivityTaskStartedEvent(
+		ai,
+		event.GetEventId(),
+		uuid.New(),
+		handler.identity,
+	); err != nil {
+		return nil, err
+	}
+	return func(resp *historyservice.RespondWorkflowTaskCompletedResponse) error {
+		runID := handler.mutableState.GetExecutionState().RunId
+		attr := event.GetActivityTaskScheduledEventAttributes()
+
+		taskToken := &tokenspb.Task{
+			NamespaceId:     namespaceID.String(),
+			WorkflowId:      executionInfo.WorkflowId,
+			RunId:           runID,
+			ScheduleId:      event.EventId,
+			ScheduleAttempt: ai.Attempt,
+			ActivityId:      attr.ActivityId,
+			ActivityType:    attr.ActivityType.GetName(),
+		}
+		serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
+		if err != nil {
+			return err
+		}
+		activityTask := &workflowservice.PollActivityTaskQueueResponse{
+			ActivityId:   attr.ActivityId,
+			ActivityType: attr.ActivityType,
+			Header:       attr.Header,
+			Input:        attr.Input,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: executionInfo.WorkflowId,
+				RunId:      runID,
+			},
+			CurrentAttemptScheduledTime: ai.ScheduledTime,
+			ScheduledTime:               event.EventTime,
+			ScheduleToCloseTimeout:      attr.ScheduleToCloseTimeout,
+			StartedTime:                 ai.StartedTime,
+			StartToCloseTimeout:         attr.StartToCloseTimeout,
+			HeartbeatTimeout:            attr.HeartbeatTimeout,
+			TaskToken:                   serializedToken,
+			Attempt:                     ai.Attempt,
+			HeartbeatDetails:            ai.LastHeartbeatDetails,
+			WorkflowType:                handler.mutableState.GetWorkflowType(),
+			WorkflowNamespace:           namespace,
+		}
+		resp.ActivityTasks = append(resp.ActivityTasks, activityTask)
+		return nil
+	}, nil
 }
 
 func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
