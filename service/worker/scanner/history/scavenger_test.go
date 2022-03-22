@@ -94,7 +94,7 @@ func (s *ScavengerTestSuite) createTestScavenger(
 func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 	db, _, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -114,7 +114,7 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 		},
 	}, nil)
 
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -146,7 +146,7 @@ func (s *ScavengerTestSuite) TestAllSkipTasksTwoPages() {
 func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 	db, _, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -166,7 +166,7 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 		},
 	}, nil)
 
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -198,7 +198,7 @@ func (s *ScavengerTestSuite) TestAllErrorSplittingTasksTwoPages() {
 func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 	db, client, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -218,7 +218,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 		},
 	}, nil)
 
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -279,7 +279,7 @@ func (s *ScavengerTestSuite) TestNoGarbageTwoPages() {
 func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 	db, client, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -298,7 +298,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 			},
 		},
 	}, nil)
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -349,25 +349,25 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 
 	branchToken1, err := p.NewHistoryBranchTokenByBranchID(treeID1, branchID1)
 	s.Nil(err)
-	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken1,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID1", "workflowID1", s.numShards),
 	}).Return(nil)
 	branchToken2, err := p.NewHistoryBranchTokenByBranchID(treeID2, branchID2)
 	s.Nil(err)
-	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken2,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID2", "workflowID2", s.numShards),
 	}).Return(nil)
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
-	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
-	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
 	}).Return(nil)
@@ -384,7 +384,7 @@ func (s *ScavengerTestSuite) TestDeletingBranchesTwoPages() {
 func (s *ScavengerTestSuite) TestMixesTwoPages() {
 	db, client, scvgr, controller := s.createTestScavenger(100)
 	defer controller.Finish()
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize: pageSize,
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
 		NextPageToken: []byte("page1"),
@@ -405,7 +405,7 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 			},
 		},
 	}, nil)
-	db.EXPECT().GetAllHistoryTreeBranches(&p.GetAllHistoryTreeBranchesRequest{
+	db.EXPECT().GetAllHistoryTreeBranches(gomock.Any(), &p.GetAllHistoryTreeBranchesRequest{
 		PageSize:      pageSize,
 		NextPageToken: []byte("page1"),
 	}).Return(&p.GetAllHistoryTreeBranchesResponse{
@@ -459,14 +459,14 @@ func (s *ScavengerTestSuite) TestMixesTwoPages() {
 
 	branchToken3, err := p.NewHistoryBranchTokenByBranchID(treeID3, branchID3)
 	s.Nil(err)
-	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken3,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID3", "workflowID3", s.numShards),
 	}).Return(nil)
 
 	branchToken4, err := p.NewHistoryBranchTokenByBranchID(treeID4, branchID4)
 	s.Nil(err)
-	db.EXPECT().DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+	db.EXPECT().DeleteHistoryBranch(gomock.Any(), &p.DeleteHistoryBranchRequest{
 		BranchToken: branchToken4,
 		ShardID:     common.WorkflowIDToHistoryShard("namespaceID4", "workflowID4", s.numShards),
 	}).Return(fmt.Errorf("failed to delete history"))

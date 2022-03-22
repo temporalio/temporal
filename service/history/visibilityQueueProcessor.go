@@ -255,7 +255,7 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      t.shard.GetShardID(),
 			TaskCategory: tasks.CategoryVisibility,
 			InclusiveMinTaskKey: tasks.Key{
@@ -306,7 +306,7 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
 
-	response, err := t.executionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
 		ShardID:      t.shard.GetShardID(),
 		TaskCategory: tasks.CategoryVisibility,
 		InclusiveMinTaskKey: tasks.Key{

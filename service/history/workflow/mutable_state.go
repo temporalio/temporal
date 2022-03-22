@@ -27,6 +27,7 @@
 package workflow
 
 import (
+	"context"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -140,14 +141,14 @@ type (
 		GetActivityByActivityID(string) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfoWithTimerHeartbeat(scheduleEventID int64) (*persistencespb.ActivityInfo, time.Time, bool)
-		GetActivityScheduledEvent(int64) (*historypb.HistoryEvent, error)
+		GetActivityScheduledEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetChildExecutionInfo(int64) (*persistencespb.ChildExecutionInfo, bool)
-		GetChildExecutionInitiatedEvent(int64) (*historypb.HistoryEvent, error)
-		GetCompletionEvent() (*historypb.HistoryEvent, error)
+		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
+		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetWorkflowTaskInfo(int64) (*WorkflowTaskInfo, bool)
 		GetNamespaceEntry() *namespace.Namespace
-		GetStartEvent() (*historypb.HistoryEvent, error)
-		GetSignalExternalInitiatedEvent(int64) (*historypb.HistoryEvent, error)
+		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
+		GetSignalExternalInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetFirstRunID() (string, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetCurrentVersion() int64

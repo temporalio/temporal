@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
@@ -120,9 +121,10 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		EventTime: &closeTime,
 	}
-	mockMutableState.EXPECT().GetCompletionEvent().Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		gomock.Any(),
 		definition.WorkflowKey{
 			NamespaceID: tests.NamespaceID.String(),
 			WorkflowID:  tests.WorkflowID,
@@ -135,6 +137,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockWeCtx.EXPECT().Clear()
 
 	err := s.deleteManager.DeleteWorkflowExecution(
+		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
@@ -160,9 +163,10 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		EventTime: &closeTime,
 	}
-	mockMutableState.EXPECT().GetCompletionEvent().Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		gomock.Any(),
 		definition.WorkflowKey{
 			NamespaceID: tests.NamespaceID.String(),
 			WorkflowID:  tests.WorkflowID,
@@ -174,6 +178,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	).Return(serviceerror.NewInternal("test error"))
 
 	err := s.deleteManager.DeleteWorkflowExecution(
+		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
@@ -200,7 +205,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		EventTime: &closeTime,
 	}
-	mockMutableState.EXPECT().GetCompletionEvent().Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
 
 	// ====================== Archival mocks =======================================
 	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
@@ -223,7 +228,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
 	s.mockShardContext.EXPECT().GetShardID().Return(int32(1))
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(1))
-	mockWeCtx.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
+	mockWeCtx.EXPECT().LoadExecutionStats(gomock.Any()).Return(&persistencespb.ExecutionStats{
 		HistorySize: 22,
 	}, nil)
 	mockSearchAttributesProvider := searchattribute.NewMockProvider(s.controller)
@@ -235,6 +240,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	// =============================================================
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
+		gomock.Any(),
 		definition.WorkflowKey{
 			NamespaceID: tests.NamespaceID.String(),
 			WorkflowID:  tests.WorkflowID,
@@ -247,6 +253,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockWeCtx.EXPECT().Clear()
 
 	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
+		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
@@ -289,7 +296,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
 	s.mockShardContext.EXPECT().GetShardID().Return(int32(1))
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(1))
-	mockWeCtx.EXPECT().LoadExecutionStats().Return(&persistencespb.ExecutionStats{
+	mockWeCtx.EXPECT().LoadExecutionStats(gomock.Any()).Return(&persistencespb.ExecutionStats{
 		HistorySize: 22 * 1024 * 1024 * 1024,
 	}, nil)
 	mockSearchAttributesProvider := searchattribute.NewMockProvider(s.controller)
@@ -299,6 +306,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	// =============================================================
 
 	err := s.deleteManager.DeleteWorkflowExecutionByRetention(
+		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockWeCtx,

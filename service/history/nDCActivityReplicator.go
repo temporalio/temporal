@@ -113,7 +113,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := executionContext.LoadWorkflowExecution()
+	mutableState, err := executionContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
@@ -190,6 +190,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	return executionContext.UpdateWorkflowExecutionWithNew(
+		ctx,
 		now,
 		updateMode,
 		nil, // no new workflow

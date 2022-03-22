@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 
@@ -55,26 +56,26 @@ type (
 	OperatorHandlerImpl struct {
 		status int32
 
-		healthStatus  int32
-		logger        log.Logger
-		esConfig      *esclient.Config
-		esClient      esclient.Client
-		sdkClient     sdkclient.Client
-		metricsClient metrics.Client
-		saProvider    searchattribute.Provider
-		saManager     searchattribute.Manager
-		healthServer  *health.Server
+		healthStatus     int32
+		logger           log.Logger
+		esConfig         *esclient.Config
+		esClient         esclient.Client
+		sdkClientFactory sdk.ClientFactory
+		metricsClient    metrics.Client
+		saProvider       searchattribute.Provider
+		saManager        searchattribute.Manager
+		healthServer     *health.Server
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		EsConfig        *esclient.Config
-		EsClient        esclient.Client
-		Logger          log.Logger
-		SdkSystemClient sdkclient.Client
-		MetricsClient   metrics.Client
-		SaProvider      searchattribute.Provider
-		SaManager       searchattribute.Manager
-		healthServer    *health.Server
+		EsConfig         *esclient.Config
+		EsClient         esclient.Client
+		Logger           log.Logger
+		sdkClientFactory sdk.ClientFactory
+		MetricsClient    metrics.Client
+		SaProvider       searchattribute.Provider
+		SaManager        searchattribute.Manager
+		healthServer     *health.Server
 	}
 )
 
@@ -84,15 +85,15 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:        args.Logger,
-		status:        common.DaemonStatusInitialized,
-		esConfig:      args.EsConfig,
-		esClient:      args.EsClient,
-		sdkClient:     args.SdkSystemClient,
-		metricsClient: args.MetricsClient,
-		saProvider:    args.SaProvider,
-		saManager:     args.SaManager,
-		healthServer:  args.healthServer,
+		logger:           args.Logger,
+		status:           common.DaemonStatusInitialized,
+		esConfig:         args.EsConfig,
+		esClient:         args.EsClient,
+		sdkClientFactory: args.sdkClientFactory,
+		metricsClient:    args.MetricsClient,
+		saProvider:       args.SaProvider,
+		saManager:        args.SaManager,
+		healthServer:     args.healthServer,
 	}
 
 	return handler
@@ -149,7 +150,7 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 			return nil, h.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeIsReservedMessage, saName)), scope, endpointName)
 		}
 		if currentSearchAttributes.IsDefined(saName) {
-			return nil, h.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName)), scope, endpointName)
+			return nil, h.error(serviceerror.NewAlreadyExist(fmt.Sprintf(errSearchAttributeAlreadyExistsMessage, saName)), scope, endpointName)
 		}
 		if _, ok := enumspb.IndexedValueType_name[int32(saType)]; !ok {
 			return nil, h.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnknownSearchAttributeTypeMessage, saType)), scope, endpointName)
@@ -163,7 +164,8 @@ func (h *OperatorHandlerImpl) AddSearchAttributes(ctx context.Context, request *
 		SkipSchemaUpdate:      false,
 	}
 
-	run, err := h.sdkClient.ExecuteWorkflow(
+	sdkClient := h.sdkClientFactory.GetSystemClient(h.logger)
+	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
 			TaskQueue: worker.DefaultWorkerTaskQueue,
@@ -219,7 +221,7 @@ func (h *OperatorHandlerImpl) RemoveSearchAttributes(ctx context.Context, reques
 
 	for _, saName := range request.GetSearchAttributes() {
 		if !currentSearchAttributes.IsDefined(saName) {
-			return nil, h.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName)), scope, endpointName)
+			return nil, h.error(serviceerror.NewNotFound(fmt.Sprintf(errSearchAttributeDoesntExistMessage, saName)), scope, endpointName)
 		}
 		if _, ok := newCustomSearchAttributes[saName]; !ok {
 			return nil, h.error(serviceerror.NewInvalidArgument(fmt.Sprintf(errUnableToRemoveNonCustomSearchAttributesMessage, saName)), scope, endpointName)

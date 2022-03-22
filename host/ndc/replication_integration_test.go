@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/host"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -139,7 +140,7 @@ Loop:
 		var token []byte
 		for doPaging := true; doPaging; doPaging = len(token) > 0 {
 			request.NextPageToken = token
-			response, err := executionManager.GetReplicationTasksFromDLQ(request)
+			response, err := executionManager.GetReplicationTasksFromDLQ(host.NewContext(), request)
 			if err != nil {
 				continue Loop
 			}

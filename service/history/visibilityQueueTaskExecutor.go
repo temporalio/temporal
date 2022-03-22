@@ -115,7 +115,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution()
+	mutableState, err := weContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
 	}
@@ -189,7 +189,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution()
+	mutableState, err := weContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
 	}
@@ -337,7 +337,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution()
+	mutableState, err := weContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
 	}
@@ -356,7 +356,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
-	completionEvent, err := mutableState.GetCompletionEvent()
+	completionEvent, err := mutableState.GetCompletionEvent(ctx)
 	if err != nil {
 		return err
 	}

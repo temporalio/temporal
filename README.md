@@ -29,6 +29,8 @@ docker-compose up
 
 Refer to Temporal [docker-compose](https://github.com/temporalio/docker-compose) repo for more advanced options.
 
+For more details on Docker images refer to [docker-builds](https://github.com/temporalio/docker-builds) repo.
+
 ### Run the Samples
 
 Clone or download samples for [Go](https://github.com/temporalio/samples-go) or [Java](https://github.com/temporalio/samples-java) and run them with the local Temporal server.

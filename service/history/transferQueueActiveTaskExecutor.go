@@ -38,7 +38,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -53,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
@@ -77,7 +77,7 @@ func newTransferQueueActiveTaskExecutor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	logger log.Logger,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -99,7 +99,7 @@ func newTransferQueueActiveTaskExecutor(
 		parentClosePolicyClient: parentclosepolicy.NewClient(
 			shard.GetMetricsClient(),
 			shard.GetLogger(),
-			publicClient,
+			sdkClientFactory,
 			config.NumParentClosePolicySystemWorkflows(),
 		),
 		registry: shard.GetNamespaceRegistry(),
@@ -157,7 +157,7 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -202,7 +202,7 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -271,7 +271,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -291,7 +291,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
-	completionEvent, err := mutableState.GetCompletionEvent()
+	completionEvent, err := mutableState.GetCompletionEvent(ctx)
 	if err != nil {
 		return err
 	}
@@ -389,7 +389,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(executionContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, executionContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -415,7 +415,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	// handle workflow cancel itself
 	if task.NamespaceID == task.TargetNamespaceID && task.WorkflowID == task.TargetWorkflowID {
 		// it does not matter if the run ID is a mismatch
-		err = t.requestCancelExternalExecutionFailed(task, executionContext, targetNamespace, task.TargetWorkflowID, task.TargetRunID)
+		err = t.requestCancelExternalExecutionFailed(ctx, task, executionContext, targetNamespace, task.TargetWorkflowID, task.TargetRunID)
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
 			return nil
@@ -437,6 +437,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			return err
 		}
 		return t.requestCancelExternalExecutionFailed(
+			ctx,
 			task,
 			executionContext,
 			targetNamespace,
@@ -447,6 +448,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 
 	// Record ExternalWorkflowExecutionCancelRequested in source execution
 	return t.requestCancelExternalExecutionCompleted(
+		ctx,
 		task,
 		executionContext,
 		targetNamespace,
@@ -474,7 +476,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -494,7 +496,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		return nil
 	}
 
-	initiatedEvent, err := mutableState.GetSignalExternalInitiatedEvent(task.InitiatedID)
+	initiatedEvent, err := mutableState.GetSignalExternalInitiatedEvent(ctx, task.InitiatedID)
 	if err != nil {
 		return err
 	}
@@ -510,6 +512,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	if task.NamespaceID == task.TargetNamespaceID && task.WorkflowID == task.TargetWorkflowID {
 		// it does not matter if the run ID is a mismatch
 		return t.signalExternalExecutionFailed(
+			ctx,
 			task,
 			weContext,
 			targetNamespace,
@@ -534,6 +537,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			return err
 		}
 		return t.signalExternalExecutionFailed(
+			ctx,
 			task,
 			weContext,
 			targetNamespace,
@@ -544,6 +548,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 
 	err = t.signalExternalExecutionCompleted(
+		ctx,
 		task,
 		weContext,
 		targetNamespace,
@@ -593,7 +598,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, context, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -634,7 +639,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return nil
 	}
 
-	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(task.InitiatedID)
+	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, task.InitiatedID)
 	if err != nil {
 		return err
 	}
@@ -666,7 +671,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// Check to see if the error is non-transient, in which case add StartChildWorkflowExecutionFailed
 		// event and complete transfer task by setting the err = nil
 		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
-			err = t.recordStartChildExecutionFailed(task, context, attributes)
+			err = t.recordStartChildExecutionFailed(ctx, task, context, attributes)
 		}
 
 		return err
@@ -676,7 +681,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		tag.WorkflowID(attributes.WorkflowId), tag.WorkflowRunID(childRunID))
 
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
-	err = t.recordChildExecutionStarted(task, context, attributes, childRunID)
+	err = t.recordChildExecutionStarted(ctx, task, context, attributes, childRunID)
 	if err != nil {
 		return err
 	}
@@ -710,7 +715,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	}
 	defer func() { currentRelease(retError) }()
 
-	currentMutableState, err := loadMutableStateForTransferTask(currentContext, task, t.metricsClient, t.logger)
+	currentMutableState, err := loadMutableStateForTransferTask(ctx, currentContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -728,7 +733,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	if !currentMutableState.IsWorkflowExecutionRunning() {
 		// it means this this might not be current anymore, we need to check
 		var resp *persistence.GetCurrentExecutionResponse
-		resp, err = t.shard.GetExecutionManager().GetCurrentExecution(&persistence.GetCurrentExecutionRequest{
+		resp, err = t.shard.GetExecutionManager().GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
 			ShardID:     t.shard.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,
@@ -800,7 +805,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 			return err
 		}
 		defer func() { baseRelease(retError) }()
-		baseMutableState, err = loadMutableStateForTransferTask(baseContext, task, t.metricsClient, t.logger)
+		baseMutableState, err = loadMutableStateForTransferTask(ctx, baseContext, task, t.metricsClient, t.logger)
 		if err != nil {
 			return err
 		}
@@ -824,13 +829,14 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 }
 
 func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
+	ctx context.Context,
 	task *tasks.StartChildExecutionTask,
 	context workflow.Context,
 	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	runID string,
 ) error {
 
-	return t.updateWorkflowExecution(context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow execution already completed.")
@@ -858,12 +864,13 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 }
 
 func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
+	ctx context.Context,
 	task *tasks.StartChildExecutionTask,
 	context workflow.Context,
 	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 ) error {
 
-	return t.updateWorkflowExecution(context, true,
+	return t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return serviceerror.NewNotFound("Workflow execution already completed.")
@@ -910,6 +917,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionCompleted(
+	ctx context.Context,
 	task *tasks.CancelExecutionTask,
 	context workflow.Context,
 	targetNamespace namespace.Name,
@@ -917,7 +925,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	targetRunID string,
 ) error {
 
-	err := t.updateWorkflowExecution(context, true,
+	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
@@ -946,6 +954,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
+	ctx context.Context,
 	task *tasks.SignalExecutionTask,
 	context workflow.Context,
 	targetNamespace namespace.Name,
@@ -954,7 +963,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	control string,
 ) error {
 
-	err := t.updateWorkflowExecution(context, true,
+	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
@@ -984,6 +993,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
+	ctx context.Context,
 	task *tasks.CancelExecutionTask,
 	context workflow.Context,
 	targetNamespace namespace.Name,
@@ -991,7 +1001,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	targetRunID string,
 ) error {
 
-	err := t.updateWorkflowExecution(context, true,
+	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
@@ -1021,6 +1031,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
+	ctx context.Context,
 	task *tasks.SignalExecutionTask,
 	context workflow.Context,
 	targetNamespace namespace.Name,
@@ -1029,7 +1040,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	control string,
 ) error {
 
-	err := t.updateWorkflowExecution(context, true,
+	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return &serviceerror.NotFound{Message: "Workflow is not running."}
@@ -1060,12 +1071,13 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 }
 
 func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
+	ctx context.Context,
 	context workflow.Context,
 	createWorkflowTask bool,
 	action func(builder workflow.MutableState) error,
 ) error {
 
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := context.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
 	}
@@ -1082,7 +1094,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 		}
 	}
 
-	return context.UpdateWorkflowExecutionAsActive(t.shard.GetTimeSource().Now())
+	return context.UpdateWorkflowExecutionAsActive(ctx, t.shard.GetTimeSource().Now())
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetry(

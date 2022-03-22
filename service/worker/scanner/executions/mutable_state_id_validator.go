@@ -25,6 +25,7 @@
 package executions
 
 import (
+	"context"
 	"fmt"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -56,6 +57,7 @@ func NewMutableStateIDValidator() *mutableStateIDValidator {
 
 // Validate does shallow correctness check of IDs in mutable state.
 func (v *mutableStateIDValidator) Validate(
+	ctx context.Context,
 	mutableState *MutableState,
 ) ([]MutableStateValidationResult, error) {
 

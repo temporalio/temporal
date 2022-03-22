@@ -25,6 +25,8 @@
 package history
 
 import (
+	"context"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -73,7 +75,7 @@ func (t *transferQueueProcessorBase) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
 
-	response, err := t.executionManager.GetHistoryTasks(&persistence.GetHistoryTasksRequest{
+	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
 		ShardID:      t.shard.GetShardID(),
 		TaskCategory: tasks.CategoryTransfer,
 		InclusiveMinTaskKey: tasks.Key{

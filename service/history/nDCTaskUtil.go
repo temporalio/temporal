@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -71,13 +72,15 @@ func VerifyTaskVersion(
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
-	context workflow.Context,
+	ctx context.Context,
+	wfContext workflow.Context,
 	transferTask tasks.Task,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	return LoadMutableStateForTask(
-		context,
+		ctx,
+		wfContext,
 		transferTask,
 		getTransferTaskEventIDAndRetryable,
 		metricsClient.Scope(metrics.TransferQueueProcessorScope),
@@ -88,13 +91,15 @@ func loadMutableStateForTransferTask(
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
-	context workflow.Context,
+	ctx context.Context,
+	wfContext workflow.Context,
 	timerTask tasks.Task,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 	return LoadMutableStateForTask(
-		context,
+		ctx,
+		wfContext,
 		timerTask,
 		getTimerTaskEventIDAndRetryable,
 		metricsClient.Scope(metrics.TimerQueueProcessorScope),
@@ -103,14 +108,15 @@ func loadMutableStateForTimerTask(
 }
 
 func LoadMutableStateForTask(
-	context workflow.Context,
+	ctx context.Context,
+	wfContext workflow.Context,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
 	scope metrics.Scope,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := wfContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -124,9 +130,9 @@ func LoadMutableStateForTask(
 	}
 
 	scope.IncCounter(metrics.StaleMutableStateCounter)
-	context.Clear()
+	wfContext.Clear()
 
-	mutableState, err = context.LoadWorkflowExecution()
+	mutableState, err = wfContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}

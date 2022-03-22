@@ -27,13 +27,13 @@ package worker
 import (
 	"sync/atomic"
 
-	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
 
@@ -44,7 +44,7 @@ type (
 	workerManager struct {
 		status           int32
 		logger           log.Logger
-		sdkClient        sdkclient.Client
+		sdkClientFactory sdk.ClientFactory
 		workers          []sdkworker.Worker
 		workerComponents []workercommon.WorkerComponent
 	}
@@ -52,7 +52,7 @@ type (
 	initParams struct {
 		fx.In
 		Logger           log.Logger
-		SdkSystemClient  sdkclient.Client
+		SdkClientFactory sdk.ClientFactory
 		WorkerComponents []workercommon.WorkerComponent `group:"workerComponent"`
 	}
 )
@@ -60,7 +60,7 @@ type (
 func NewWorkerManager(params initParams) *workerManager {
 	return &workerManager{
 		logger:           params.Logger,
-		sdkClient:        params.SdkSystemClient,
+		sdkClientFactory: params.SdkClientFactory,
 		workerComponents: params.WorkerComponents,
 	}
 }
@@ -77,7 +77,8 @@ func (wm *workerManager) Start() {
 	defaultWorkerOptions := sdkworker.Options{
 		// TODO: add dynamic config for worker options
 	}
-	defaultWorker := sdkworker.New(wm.sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
+	sdkClient := wm.sdkClientFactory.GetSystemClient(wm.logger)
+	defaultWorker := sdkworker.New(sdkClient, DefaultWorkerTaskQueue, defaultWorkerOptions)
 	wm.workers = []sdkworker.Worker{defaultWorker}
 
 	for _, wc := range wm.workerComponents {
@@ -87,7 +88,7 @@ func (wm *workerManager) Start() {
 			wc.Register(defaultWorker)
 		} else {
 			// this worker component requires a dedicated worker
-			dedicatedWorker := sdkworker.New(wm.sdkClient, workerOptions.TaskQueue, workerOptions.Options)
+			dedicatedWorker := sdkworker.New(sdkClient, workerOptions.TaskQueue, workerOptions.Options)
 			wc.Register(dedicatedWorker)
 			wm.workers = append(wm.workers, dedicatedWorker)
 		}

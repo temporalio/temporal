@@ -247,7 +247,7 @@ func (s *activitiesSuite) TestUploadHistory_Success() {
 func (s *activitiesSuite) TestDeleteHistoryActivity_Fail_DeleteFromV2NonRetryableError() {
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverDeleteHistoryActivityScope, []metrics.Tag{metrics.NamespaceTag(testNamespace)}).Return(s.metricsScope)
 	s.metricsScope.EXPECT().IncCounter(metrics.ArchiverNonRetryableErrorCount)
-	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any()).Return(errPersistenceNonRetryable)
+	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Return(errPersistenceNonRetryable)
 	container := &BootstrapContainer{
 		Logger:           s.logger,
 		MetricsClient:    s.metricsClient,

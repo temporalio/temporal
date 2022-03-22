@@ -33,8 +33,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	sdkclient "go.temporal.io/sdk/client"
-
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -44,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
@@ -68,7 +67,7 @@ type (
 		historyEngine             shard.Engine
 		workflowCache             workflow.Cache
 		archivalClient            archiver.Client
-		publicClient              sdkclient.Client
+		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
 		metricsClient             metrics.Client
@@ -90,7 +89,7 @@ func newTransferQueueProcessor(
 	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
-	publicClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 ) queues.Processor {
@@ -107,7 +106,7 @@ func newTransferQueueProcessor(
 		historyEngine:            historyEngine,
 		workflowCache:            workflowCache,
 		archivalClient:           archivalClient,
-		publicClient:             publicClient,
+		sdkClientFactory:         sdkClientFactory,
 		taskAllocator:            taskAllocator,
 		config:                   config,
 		metricsClient:            shard.GetMetricsClient(),
@@ -120,7 +119,7 @@ func newTransferQueueProcessor(
 			shard,
 			workflowCache,
 			archivalClient,
-			publicClient,
+			sdkClientFactory,
 			matchingClient,
 			historyClient,
 			taskAllocator,
@@ -211,7 +210,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		t.shard,
 		t.workflowCache,
 		t.archivalClient,
-		t.publicClient,
+		t.sdkClientFactory,
 		t.matchingClient,
 		t.historyClient,
 		namespaceIDs,
@@ -313,7 +312,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(&persistence.RangeCompleteHistoryTasksRequest{
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:      t.shard.GetShardID(),
 			TaskCategory: tasks.CategoryTransfer,
 			InclusiveMinTaskKey: tasks.Key{

@@ -610,7 +610,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 		WorkflowId:  workflowID,
 		RunId:       runID,
 	}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
@@ -668,7 +668,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
@@ -742,7 +742,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
@@ -817,7 +817,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
@@ -847,6 +847,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(),
 		gomock.Any(),
 		persistence.UpdateWorkflowModeBypassCurrent,
 		workflow.Context(nil),
@@ -907,7 +908,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
@@ -937,6 +938,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(),
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		workflow.Context(nil),

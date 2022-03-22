@@ -3,7 +3,7 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
-bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
+bins: clean-bins temporal-server temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
@@ -37,10 +37,6 @@ PERSISTENCE_DRIVER ?= cassandra
 # make install-schema TEMPORAL_DB=temporal2 VISIBILITY_DB=temporal_visibility2
 TEMPORAL_DB ?= temporal
 VISIBILITY_DB ?= temporal_visibility
-
-DOCKER_IMAGE_TAG ?= test
-# Pass "registry" to automatically push image to the docker hub.
-DOCKER_BUILDX_OUTPUT ?= image
 
 ifdef TEST_TAG
 override TEST_TAG := -tags $(TEST_TAG)
@@ -103,7 +99,7 @@ update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
 	@go install golang.org/x/lint/golint@latest
 	@go install golang.org/x/tools/cmd/goimports@latest
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.2.2
+	@go install honnef.co/go/tools/cmd/staticcheck@master # TODO: Set concrete version above 0.2.2 here.
 	@go install github.com/kisielk/errcheck@v1.6.0
 	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.29.4
 	@go install github.com/bufbuild/buf/cmd/buf@v0.56.0
@@ -175,8 +171,6 @@ copyright-proto:
 ##### Binaries #####
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
-	@rm -f tctl
-	@rm -f tctl-authorization-plugin
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
@@ -185,14 +179,6 @@ temporal-server:
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	@./develop/scripts/create_build_info_data.sh
 	go build -o temporal-server ./cmd/server
-
-tctl:
-	@printf $(COLOR) "Build tctl with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	go build -o tctl ./cmd/tools/cli
-
-plugins:
-	@printf $(COLOR) "Build tctl-authorization-plugin with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	go build -o tctl-authorization-plugin ./cmd/tools/cli/plugins/authorization
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
@@ -283,7 +269,7 @@ integration-test: clean-test-results
 	@! grep -q "^--- FAIL" test.log
 
 integration-with-fault-injection-test: clean-test-results
-	@printf $(COLOR) "Run integration tests..."
+	@printf $(COLOR) "Run integration tests with fault injection..."
 	$(foreach INTEG_TEST_DIR,$(INTEG_TEST_DIRS),\
 		@go test $(INTEG_TEST_DIR) -timeout=$(TEST_TIMEOUT) $(TEST_TAG) -race  -PersistenceFaultInjectionRate=0.005 | tee -a test.log \
 	$(NEWLINE))
@@ -456,55 +442,6 @@ fossa-test:
 	fossa test --timeout 1800
 
 build-fossa: bins fossa-analyze fossa-delay fossa-test
-
-##### Docker #####
-docker-server:
-	@printf $(COLOR) "Building docker image temporalio/server:$(DOCKER_IMAGE_TAG)..."
-	docker build . -t temporalio/server:$(DOCKER_IMAGE_TAG) --target temporal-server
-
-docker-auto-setup:
-	@printf $(COLOR) "Build docker image temporalio/auto-setup:$(DOCKER_IMAGE_TAG)..."
-	docker build . -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) --target temporal-auto-setup
-
-docker-tctl:
-	@printf $(COLOR) "Build docker image temporalio/tctl:$(DOCKER_IMAGE_TAG)..."
-	docker build . -t temporalio/tctl:$(DOCKER_IMAGE_TAG) --target temporal-tctl
-
-docker-admin-tools:
-	@printf $(COLOR) "Build docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
-	docker build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --target temporal-admin-tools
-
-docker-buildx-container:
-	docker buildx create --name builder-x --driver docker-container --use
-
-docker-server-x:
-	@printf $(COLOR) "Building cross-platform docker image temporalio/server:$(DOCKER_IMAGE_TAG)..."
-	docker buildx build . -t temporalio/server:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-server
-
-docker-auto-setup-x:
-	@printf $(COLOR) "Build cross-platform docker image temporalio/auto-setup:$(DOCKER_IMAGE_TAG)..."
-	docker buildx build . -t temporalio/auto-setup:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-auto-setup
-
-docker-tctl-x:
-	@printf $(COLOR) "Build cross-platform docker image temporalio/tctl:$(DOCKER_IMAGE_TAG)..."
-	docker buildx build . -t temporalio/tctl:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-tctl
-
-docker-admin-tools-x:
-	@printf $(COLOR) "Build cross-platform docker image temporalio/admin-tools:$(DOCKER_IMAGE_TAG)..."
-	docker buildx build . -t temporalio/admin-tools:$(DOCKER_IMAGE_TAG) --platform linux/amd64,linux/arm64 --output type=$(DOCKER_BUILDX_OUTPUT) --target temporal-admin-tools
-
-##### goreleaser #####
-goreleaser-install:
-	@printf $(COLOR) "Install/update goreleaser tool..."
-	@go install github.com/goreleaser/goreleaser@latest
-
-goreleaser-build:
-	@printf $(COLOR) "Build release binaries from current commit..."
-	@goreleaser release --snapshot --rm-dist
-
-goreleaser-release:
-	@printf $(COLOR) "Build and publish release binaries to the latest release tag..."
-	@goreleaser release --rm-dist
 
 ##### Grafana #####
 update-dashboards:

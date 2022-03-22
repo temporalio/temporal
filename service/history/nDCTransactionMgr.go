@@ -30,6 +30,8 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common"
+
 	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
@@ -37,7 +39,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -250,6 +251,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	}()
 
 	if _, err := targetWorkflow.getContext().PersistWorkflowEvents(
+		ctx,
 		targetWorkflowEvents,
 	); err != nil {
 		return err
@@ -265,6 +267,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflow(
 	}
 
 	return targetWorkflow.getContext().UpdateWorkflowExecutionWithNew(
+		ctx,
 		now,
 		updateMode,
 		nil,
@@ -344,7 +347,7 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 		baseCurrentBranchToken := baseCurrentVersionHistory.GetBranchToken()
 		baseNextEventID := baseMutableState.GetNextEventID()
 
-		if err = r.workflowResetter.resetWorkflow(
+		err = r.workflowResetter.resetWorkflow(
 			ctx,
 			namespaceID,
 			workflowID,
@@ -359,7 +362,14 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 			eventsReapplicationResetWorkflowReason,
 			targetWorkflowEvents.Events,
 			enumspb.RESET_REAPPLY_TYPE_SIGNAL,
-		); err != nil {
+		)
+		switch err.(type) {
+		case *serviceerror.InvalidArgument:
+			// no-op. Usually this is due to reset workflow with pending child workflows
+			r.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
+		case nil:
+			//no-op
+		default:
 			return 0, workflow.TransactionPolicyActive, err
 		}
 		// after the reset of target workflow (current workflow) with additional events to be reapplied
@@ -382,13 +392,14 @@ func (r *nDCTransactionMgrImpl) backfillWorkflowEventsReapply(
 }
 
 func (r *nDCTransactionMgrImpl) checkWorkflowExists(
-	_ context.Context,
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) (bool, error) {
 
 	_, err := r.shard.GetExecutionManager().GetWorkflowExecution(
+		ctx,
 		&persistence.GetWorkflowExecutionRequest{
 			ShardID:     r.shard.GetShardID(),
 			NamespaceID: namespaceID.String(),
@@ -408,12 +419,13 @@ func (r *nDCTransactionMgrImpl) checkWorkflowExists(
 }
 
 func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
-	_ context.Context,
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 ) (string, error) {
 
 	resp, err := r.shard.GetExecutionManager().GetCurrentExecution(
+		ctx,
 		&persistence.GetCurrentExecutionRequest{
 			ShardID:     r.shard.GetShardID(),
 			NamespaceID: namespaceID.String(),
@@ -452,7 +464,7 @@ func (r *nDCTransactionMgrImpl) loadNDCWorkflow(
 		return nil, err
 	}
 
-	msBuilder, err := weContext.LoadWorkflowExecution()
+	msBuilder, err := weContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		// no matter what error happen, we need to retry
 		release(err)

@@ -7,7 +7,6 @@ archives:
   - id: default
     builds:
       - temporal-server
-      - tctl
       - temporal-cassandra-tool
       - temporal-sql-tool
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
@@ -20,7 +19,6 @@ archives:
   - id: no-cgo
     builds:
       - temporal-server-no-cgo
-      - tctl-no-cgo
       - temporal-cassandra-tool-no-cgo
       - temporal-sql-tool-no-cgo
     name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}_no_cgo"
@@ -44,26 +42,6 @@ builds:
   - id: temporal-server-no-cgo
     dir: cmd/server
     binary: temporal-server
-    env:
-      - CGO_ENABLED=0
-    goos:
-      - linux
-    goarch:
-      - amd64
-      - arm64
-  - id: tctl
-    dir: cmd/tools/cli
-    binary: tctl
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-  - id: tctl-no-cgo
-    dir: cmd/tools/cli
-    binary: tctl
     env:
       - CGO_ENABLED=0
     goos:

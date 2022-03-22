@@ -90,7 +90,7 @@ type (
 
 	timerQueueAckMgr interface {
 		getFinishedChan() <-chan struct{}
-		readTimerTasks() ([]tasks.Task, tasks.Task, bool, error)
+		readTimerTasks() ([]tasks.Task, *time.Time, bool, error)
 		completeTimerTask(time.Time, int64)
 		getAckLevel() tasks.Key
 		getReadLevel() tasks.Key

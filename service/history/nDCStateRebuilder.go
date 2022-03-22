@@ -119,6 +119,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	requestID string,
 ) (workflow.MutableState, int64, error) {
 	iter := collection.NewPagingIterator(r.getPaginationFn(
+		ctx,
 		common.FirstEventID,
 		baseLastEventID+1,
 		baseBranchToken,
@@ -194,7 +195,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
 
 	// refresh tasks to be generated
-	if err := r.taskRefresher.RefreshTasks(now, rebuiltMutableState); err != nil {
+	if err := r.taskRefresher.RefreshTasks(ctx, now, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
 
@@ -245,12 +246,13 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 }
 
 func (r *nDCStateRebuilderImpl) getPaginationFn(
+	ctx context.Context,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
 ) collection.PaginationFn {
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
-		resp, err := r.executionMgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
 			MaxEventID:    nextEventID,

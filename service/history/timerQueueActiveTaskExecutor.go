@@ -132,7 +132,7 @@ func (t *timerQueueActiveTaskExecutor) executeUserTimerTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -169,7 +169,7 @@ Loop:
 		return nil
 	}
 
-	return t.updateWorkflowExecution(weContext, mutableState, timerFired)
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, timerFired)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
@@ -192,7 +192,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -279,7 +279,7 @@ Loop:
 	if !updateMutableState {
 		return nil
 	}
-	return t.updateWorkflowExecution(weContext, mutableState, scheduleWorkflowTask)
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, scheduleWorkflowTask)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
@@ -302,7 +302,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -357,7 +357,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTaskTimeoutTask(
 		scheduleWorkflowTask = true
 	}
 
-	return t.updateWorkflowExecution(weContext, mutableState, scheduleWorkflowTask)
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, scheduleWorkflowTask)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
@@ -380,7 +380,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -400,7 +400,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowBackoffTimerTask(
 	}
 
 	// schedule first workflow task
-	return t.updateWorkflowExecution(weContext, mutableState, true)
+	return t.updateWorkflowExecution(ctx, weContext, mutableState, true)
 }
 
 func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
@@ -423,7 +423,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -497,7 +497,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTimerTask(weContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -551,10 +551,10 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	if initiator == enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED {
 		// We apply the update to execution using optimistic concurrency.  If it fails due to a conflict than reload
 		// the history and try the operation again.
-		return t.updateWorkflowExecution(weContext, mutableState, false)
+		return t.updateWorkflowExecution(ctx, weContext, mutableState, false)
 	}
 
-	startEvent, err := mutableState.GetStartEvent()
+	startEvent, err := mutableState.GetStartEvent(ctx)
 	if err != nil {
 		return err
 	}
@@ -569,6 +569,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 		return err
 	}
 	err = workflow.SetupNewWorkflowForRetryOrCron(
+		ctx,
 		mutableState,
 		newMutableState,
 		newRunID,
@@ -585,6 +586,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	newExecutionInfo := newMutableState.GetExecutionInfo()
 	newExecutionState := newMutableState.GetExecutionState()
 	return weContext.UpdateWorkflowExecutionWithNewAsActive(
+		ctx,
 		t.shard.GetTimeSource().Now(),
 		workflow.NewContext(
 			t.shard,
@@ -608,6 +610,7 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
+	ctx context.Context,
 	context workflow.Context,
 	mutableState workflow.MutableState,
 	scheduleNewWorkflowTask bool,
@@ -623,7 +626,7 @@ func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
 	}
 
 	now := t.shard.GetTimeSource().Now()
-	err = context.UpdateWorkflowExecutionAsActive(now)
+	err = context.UpdateWorkflowExecutionAsActive(ctx, now)
 	if err != nil {
 		if shard.IsShardOwnershipLostError(err) {
 			// Shard is stolen.  Stop timer processing to reduce duplicates

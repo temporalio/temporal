@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -111,10 +112,11 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
 	s.True(operationPossiblySucceeded(timeoutErr))
 
-	s.mockShard.EXPECT().CreateWorkflowExecution(gomock.Any()).Return(nil, timeoutErr)
+	s.mockShard.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification()
 
 	_, err := s.transaction.CreateWorkflowExecution(
+		context.Background(),
 		persistence.CreateWorkflowModeBrandNew,
 		&persistence.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -135,11 +137,12 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
 	s.True(operationPossiblySucceeded(timeoutErr))
 
-	s.mockShard.EXPECT().UpdateWorkflowExecution(gomock.Any()).Return(nil, timeoutErr)
+	s.mockShard.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification() // for current workflow mutation
 	s.setupMockForTaskNotification() // for new workflow snapshot
 
 	_, _, err := s.transaction.UpdateWorkflowExecution(
+		context.Background(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		&persistence.WorkflowMutation{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{
@@ -162,12 +165,13 @@ func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFa
 	timeoutErr := &persistence.TimeoutError{}
 	s.True(operationPossiblySucceeded(timeoutErr))
 
-	s.mockShard.EXPECT().ConflictResolveWorkflowExecution(gomock.Any()).Return(nil, timeoutErr)
+	s.mockShard.EXPECT().ConflictResolveWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification() // for reset workflow snapshot
 	s.setupMockForTaskNotification() // for new workflow snapshot
 	s.setupMockForTaskNotification() // for current workflow mutation
 
 	_, _, _, err := s.transaction.ConflictResolveWorkflowExecution(
+		context.Background(),
 		persistence.ConflictResolveWorkflowModeUpdateCurrent,
 		&persistence.WorkflowSnapshot{
 			ExecutionInfo: &persistencespb.WorkflowExecutionInfo{

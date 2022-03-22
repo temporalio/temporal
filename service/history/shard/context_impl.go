@@ -547,6 +547,7 @@ func (s *ContextImpl) UpdateHandoverNamespaces(namespaces []*namespace.Namespace
 }
 
 func (s *ContextImpl) AddTasks(
+	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
 	// do not try to get namespace cache within shard lock
@@ -563,10 +564,11 @@ func (s *ContextImpl) AddTasks(
 		return err
 	}
 
-	return s.addTasksLocked(request, namespaceEntry)
+	return s.addTasksLocked(ctx, request, namespaceEntry)
 }
 
 func (s *ContextImpl) CreateWorkflowExecution(
+	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
@@ -596,7 +598,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
-	resp, err := s.executionManager.CreateWorkflowExecution(request)
+	resp, err := s.executionManager.CreateWorkflowExecution(ctx, request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -604,6 +606,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 }
 
 func (s *ContextImpl) UpdateWorkflowExecution(
+	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
@@ -643,7 +646,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
-	resp, err := s.executionManager.UpdateWorkflowExecution(request)
+	resp, err := s.executionManager.UpdateWorkflowExecution(ctx, request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -651,6 +654,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 }
 
 func (s *ContextImpl) ConflictResolveWorkflowExecution(
+	ctx context.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
@@ -700,7 +704,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
-	resp, err := s.executionManager.ConflictResolveWorkflowExecution(request)
+	resp, err := s.executionManager.ConflictResolveWorkflowExecution(ctx, request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -708,6 +712,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 }
 
 func (s *ContextImpl) SetWorkflowExecution(
+	ctx context.Context,
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
 	// do not try to get namespace cache within shard lock
@@ -737,7 +742,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
-	resp, err := s.executionManager.SetWorkflowExecution(request)
+	resp, err := s.executionManager.SetWorkflowExecution(ctx, request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
@@ -745,6 +750,7 @@ func (s *ContextImpl) SetWorkflowExecution(
 }
 
 func (s *ContextImpl) addTasksLocked(
+	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 	namespaceEntry *namespace.Namespace,
 ) error {
@@ -759,7 +765,7 @@ func (s *ContextImpl) addTasksLocked(
 	}
 
 	request.RangeID = s.getRangeIDLocked()
-	err := s.executionManager.AddHistoryTasks(request)
+	err := s.executionManager.AddHistoryTasks(ctx, request)
 	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
@@ -768,6 +774,7 @@ func (s *ContextImpl) addTasksLocked(
 }
 
 func (s *ContextImpl) AppendHistoryEvents(
+	ctx context.Context,
 	request *persistence.AppendHistoryNodesRequest,
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
@@ -800,7 +807,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 				tag.WorkflowHistorySizeBytes(size))
 		}
 	}()
-	resp, err0 := s.GetExecutionManager().AppendHistoryNodes(request)
+	resp, err0 := s.GetExecutionManager().AppendHistoryNodes(ctx, request)
 	if resp != nil {
 		size = resp.Size
 	}
@@ -808,6 +815,7 @@ func (s *ContextImpl) AppendHistoryEvents(
 }
 
 func (s *ContextImpl) DeleteWorkflowExecution(
+	ctx context.Context,
 	key definition.WorkflowKey,
 	branchToken []byte,
 	newTaskVersion int64,
@@ -868,7 +876,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 				},
 			},
 		}
-		err = s.addTasksLocked(addTasksRequest, namespaceEntry)
+		err = s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
 		if err != nil {
 			return err
 		}
@@ -882,7 +890,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		RunID:       key.RunID,
 	}
 	op := func() error {
-		return s.GetExecutionManager().DeleteCurrentWorkflowExecution(delCurRequest)
+		return s.GetExecutionManager().DeleteCurrentWorkflowExecution(ctx, delCurRequest)
 	}
 	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
@@ -897,7 +905,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		RunID:       key.RunID,
 	}
 	op = func() error {
-		return s.GetExecutionManager().DeleteWorkflowExecution(delRequest)
+		return s.GetExecutionManager().DeleteWorkflowExecution(ctx, delRequest)
 	}
 	err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 	if err != nil {
@@ -911,7 +919,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 			ShardID:     s.shardID,
 		}
 		op := func() error {
-			return s.GetExecutionManager().DeleteHistoryBranch(delHistoryRequest)
+			return s.GetExecutionManager().DeleteHistoryBranch(ctx, delHistoryRequest)
 		}
 		err = backoff.Retry(op, persistenceOperationRetryPolicy, common.IsPersistenceTransientError)
 		if err != nil {

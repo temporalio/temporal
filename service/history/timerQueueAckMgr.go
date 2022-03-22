@@ -25,12 +25,14 @@
 package history
 
 import (
+	"context"
 	"math"
 	"sort"
 	"sync"
 	"time"
 
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -173,7 +175,7 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 	return t.finishedChan
 }
 
-func (t *timerQueueAckMgrImpl) readTimerTasks() ([]tasks.Task, tasks.Task, bool, error) {
+func (t *timerQueueAckMgrImpl) readTimerTasks() ([]tasks.Task, *time.Time, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
 		t.maxQueryLevel = t.shard.GetQueueMaxReadLevel(tasks.CategoryTimer, t.clusterName).FireTime
 	}
@@ -204,7 +206,7 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]tasks.Task, tasks.Task, bool,
 	// We also get a look ahead task but it doesn't move the read level, this is for timer
 	// to wait on it instead of doing queries.
 
-	var lookAheadTask tasks.Task
+	var nextFireTime *time.Time
 	filteredTasks := []tasks.Task{}
 
 TaskFilterLoop:
@@ -217,8 +219,8 @@ TaskFilterLoop:
 		}
 
 		if !t.isProcessNow(timerKey.FireTime) {
-			lookAheadTask = task                // this means there is task in the time range (now, now + offset)
-			t.maxQueryLevel = timerKey.FireTime // adjust maxQueryLevel so that this task will be read next time
+			nextFireTime = timestamp.TimePtr(task.GetVisibilityTime()) // this means there is task in the time range (now, now + offset)
+			t.maxQueryLevel = timerKey.FireTime                        // adjust maxQueryLevel so that this task will be read next time
 			break TaskFilterLoop
 		}
 
@@ -229,7 +231,7 @@ TaskFilterLoop:
 		filteredTasks = append(filteredTasks, task)
 	}
 
-	if lookAheadTask != nil || !morePage {
+	if nextFireTime != nil || !morePage {
 		if t.isReadFinished {
 			t.minQueryLevel = maximumTime // set it to the maximum time to avoid any mistakenly read
 		} else {
@@ -241,8 +243,8 @@ TaskFilterLoop:
 	t.Unlock()
 
 	// only do lookahead when not in failover mode
-	if len(t.pageToken) == 0 && lookAheadTask == nil && !t.isFailover {
-		lookAheadTask, err = t.readLookAheadTask()
+	if len(t.pageToken) == 0 && nextFireTime == nil && !t.isFailover {
+		nextFireTime, err = t.readLookAheadTask()
 		if err != nil {
 			// NOTE do not return nil filtered task
 			// or otherwise the tasks are loaded and will never be dispatched
@@ -253,15 +255,15 @@ TaskFilterLoop:
 
 	// We may have large number of timers which need to be fired immediately.  Return true in such case so the pump
 	// can call back immediately to retrieve more tasks
-	moreTasks := lookAheadTask == nil && morePage
+	moreTasks := nextFireTime == nil && morePage
 
-	return filteredTasks, lookAheadTask, moreTasks, nil
+	return filteredTasks, nextFireTime, moreTasks, nil
 }
 
 // read lookAheadTask from s.GetTimerMaxReadLevel to poll interval from there.
-func (t *timerQueueAckMgrImpl) readLookAheadTask() (tasks.Task, error) {
+func (t *timerQueueAckMgrImpl) readLookAheadTask() (*time.Time, error) {
 	minQueryLevel := t.maxQueryLevel
-	maxQueryLevel := maximumTime
+	maxQueryLevel := minQueryLevel.Add(t.config.TimerProcessorMaxPollInterval())
 
 	var tasks []tasks.Task
 	var err error
@@ -270,9 +272,9 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (tasks.Task, error) {
 		return nil, err
 	}
 	if len(tasks) == 1 {
-		return tasks[0], nil
+		return timestamp.TimePtr(tasks[0].GetVisibilityTime()), nil
 	}
-	return nil, nil
+	return timestamp.TimePtr(maxQueryLevel), nil
 }
 
 func (t *timerQueueAckMgrImpl) completeTimerTask(
@@ -374,7 +376,7 @@ func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestam
 		BatchSize:     batchSize,
 		NextPageToken: pageToken,
 	}
-	response, err := t.executionMgr.GetHistoryTasks(request)
+	response, err := t.executionMgr.GetHistoryTasks(context.TODO(), request)
 	if err != nil {
 		return nil, nil, err
 	}

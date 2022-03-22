@@ -231,6 +231,7 @@ func (r *workflowResetterImpl) resetWorkflow(
 	}
 
 	return r.persistToDB(
+		ctx,
 		currentWorkflow,
 		currentWorkflowMutation,
 		currentWorkflowEventsSeq,
@@ -341,6 +342,7 @@ func (r *workflowResetterImpl) reapplyEventsToResetWorkflow(
 }
 
 func (r *workflowResetterImpl) persistToDB(
+	ctx context.Context,
 	currentWorkflow nDCWorkflow,
 	currentWorkflowMutation *persistence.WorkflowMutation,
 	currentWorkflowEventsSeq []*persistence.WorkflowEvents,
@@ -361,6 +363,7 @@ func (r *workflowResetterImpl) persistToDB(
 
 	if currentWorkflowMutation != nil {
 		if currentWorkflowSizeDiff, resetWorkflowSizeDiff, err := r.transaction.UpdateWorkflowExecution(
+			ctx,
 			persistence.UpdateWorkflowModeUpdateCurrent,
 			currentWorkflowMutation,
 			currentWorkflowEventsSeq,
@@ -384,6 +387,7 @@ func (r *workflowResetterImpl) persistToDB(
 	}
 
 	return resetWorkflow.getContext().CreateWorkflowExecution(
+		ctx,
 		now,
 		persistence.CreateWorkflowModeWorkflowIDReuse,
 		currentRunID,
@@ -407,6 +411,7 @@ func (r *workflowResetterImpl) replayResetWorkflow(
 ) (nDCWorkflow, error) {
 
 	resetBranchToken, err := r.forkAndGenerateBranchToken(
+		ctx,
 		namespaceID,
 		workflowID,
 		baseBranchToken,
@@ -545,6 +550,7 @@ func (r *workflowResetterImpl) failInflightActivity(
 }
 
 func (r *workflowResetterImpl) forkAndGenerateBranchToken(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	forkBranchToken []byte,
@@ -553,7 +559,7 @@ func (r *workflowResetterImpl) forkAndGenerateBranchToken(
 ) ([]byte, error) {
 	// fork a new history branch
 	shardID := r.shard.GetShardID()
-	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: forkBranchToken,
 		ForkNodeID:      forkNodeID,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(namespaceID.String(), workflowID, resetRunID),
@@ -599,6 +605,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 
 	// first special handling the remaining events for base workflow
 	nextRunID, err := r.reapplyWorkflowEvents(
+		ctx,
 		resetMutableState,
 		baseRebuildNextEventID,
 		baseNextEventID,
@@ -630,7 +637,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		}
 		defer func() { release(retError) }()
 
-		mutableState, err := context.LoadWorkflowExecution()
+		mutableState, err := context.LoadWorkflowExecution(ctx)
 		if err != nil {
 			// no matter what error happen, we need to retry
 			return 0, nil, err
@@ -653,6 +660,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 		}
 
 		nextRunID, err = r.reapplyWorkflowEvents(
+			ctx,
 			resetMutableState,
 			common.FirstEventID,
 			nextWorkflowNextEventID,
@@ -673,6 +681,7 @@ func (r *workflowResetterImpl) reapplyContinueAsNewWorkflowEvents(
 }
 
 func (r *workflowResetterImpl) reapplyWorkflowEvents(
+	ctx context.Context,
 	mutableState workflow.MutableState,
 	firstEventID int64,
 	nextEventID int64,
@@ -684,6 +693,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 	//  after the above change, this API do not have to return the continue as new run ID
 
 	iter := collection.NewPagingIterator(r.getPaginationFn(
+		ctx,
 		firstEventID,
 		nextEventID,
 		branchToken,
@@ -737,6 +747,7 @@ func (r *workflowResetterImpl) reapplyEvents(
 }
 
 func (r *workflowResetterImpl) getPaginationFn(
+	ctx context.Context,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
@@ -744,7 +755,7 @@ func (r *workflowResetterImpl) getPaginationFn(
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
 
-		resp, err := r.executionMgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
 			MaxEventID:    nextEventID,

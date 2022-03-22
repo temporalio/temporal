@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"math"
 	"math/rand"
 	"testing"
@@ -55,6 +56,9 @@ type (
 		ShardManager     p.ShardManager
 		ExecutionManager p.ExecutionManager
 		Logger           log.Logger
+
+		Ctx    context.Context
+		Cancel context.CancelFunc
 	}
 )
 
@@ -83,6 +87,7 @@ func NewExecutionMutableStateTaskSuite(
 
 func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
 
 	s.ShardID = 1 + rand.Int31n(16)
 	resp, err := s.ShardManager.GetOrCreateShard(&p.GetOrCreateShardRequest{
@@ -112,7 +117,7 @@ func (s *ExecutionMutableStateTaskSuite) SetupTest() {
 
 func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 	for _, category := range []tasks.Category{tasks.CategoryTransfer, tasks.CategoryReplication, tasks.CategoryVisibility} {
-		err := s.ExecutionManager.RangeCompleteHistoryTasks(&p.RangeCompleteHistoryTasksRequest{
+		err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.ShardID,
 			TaskCategory:        category,
 			InclusiveMinTaskKey: tasks.Key{TaskID: 0},
@@ -120,13 +125,15 @@ func (s *ExecutionMutableStateTaskSuite) TearDownTest() {
 		})
 		s.NoError(err)
 	}
-	err := s.ExecutionManager.RangeCompleteHistoryTasks(&p.RangeCompleteHistoryTasksRequest{
+	err := s.ExecutionManager.RangeCompleteHistoryTasks(s.Ctx, &p.RangeCompleteHistoryTasksRequest{
 		ShardID:             s.ShardID,
 		TaskCategory:        tasks.CategoryTimer,
 		InclusiveMinTaskKey: tasks.Key{FireTime: time.Unix(0, 0)},
 		ExclusiveMaxTaskKey: tasks.Key{FireTime: time.Unix(0, math.MaxInt64)},
 	})
 	s.NoError(err)
+
+	s.Cancel()
 }
 
 func (s *ExecutionMutableStateTaskSuite) TestAddGetTransferTasks_Multiple() {
@@ -239,7 +246,7 @@ func (s *ExecutionMutableStateTaskSuite) AddRandomTasks(
 		now = now.Add(time.Duration(rand.Int63n(1000_000_000)) + time.Millisecond)
 	}
 
-	err := s.ExecutionManager.AddHistoryTasks(&p.AddHistoryTasksRequest{
+	err := s.ExecutionManager.AddHistoryTasks(s.Ctx, &p.AddHistoryTasksRequest{
 		ShardID:     s.ShardID,
 		RangeID:     s.RangeID,
 		NamespaceID: s.WorkflowKey.NamespaceID,
@@ -269,7 +276,7 @@ func (s *ExecutionMutableStateTaskSuite) PaginateTasks(
 	}
 	var loadedTasks []tasks.Task
 	for {
-		response, err := s.ExecutionManager.GetHistoryTasks(request)
+		response, err := s.ExecutionManager.GetHistoryTasks(s.Ctx, request)
 		s.NoError(err)
 		s.True(len(response.Tasks) <= batchSize)
 		loadedTasks = append(loadedTasks, response.Tasks...)

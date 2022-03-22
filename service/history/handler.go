@@ -563,7 +563,7 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 }
 
 // RemoveTask returns information about the internal states of a history host
-func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
+func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
 	var err error
 	var category tasks.Category
 	switch categoryID := request.GetCategory(); categoryID {
@@ -583,7 +583,7 @@ func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTa
 		}
 	}
 
-	err = h.persistenceExecutionManager.CompleteHistoryTask(&persistence.CompleteHistoryTaskRequest{
+	err = h.persistenceExecutionManager.CompleteHistoryTask(ctx, &persistence.CompleteHistoryTaskRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: category,
 		TaskKey: tasks.Key{

@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
@@ -267,6 +268,7 @@ func NewMutableState(
 }
 
 func newMutableStateBuilderFromDB(
+	ctx context.Context,
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
@@ -317,7 +319,7 @@ func newMutableStateBuilderFromDB(
 	// Workflows created before 1.11 doesn't have ExecutionTime and it must be computed for backwards compatibility.
 	// Remove this "if" block when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
 	if mutableState.executionInfo.ExecutionTime == nil {
-		startEvent, err := mutableState.GetStartEvent()
+		startEvent, err := mutableState.GetStartEvent(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -582,6 +584,7 @@ func (e *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 }
 
 func (e *MutableStateImpl) GetActivityScheduledEvent(
+	ctx context.Context,
 	scheduleEventID int64,
 ) (*historypb.HistoryEvent, error) {
 
@@ -595,6 +598,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 		return nil, err
 	}
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -657,6 +661,7 @@ func (e *MutableStateImpl) GetChildExecutionInfo(
 // GetChildExecutionInitiatedEvent reads out the ChildExecutionInitiatedEvent from mutable state for in-progress child
 // executions
 func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
+	ctx context.Context,
 	initiatedEventID int64,
 ) (*historypb.HistoryEvent, error) {
 
@@ -670,6 +675,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		return nil, err
 	}
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -739,6 +745,7 @@ func (e *MutableStateImpl) GetSignalInfo(
 
 // GetSignalExternalInitiatedEvent get the details about signal external workflow
 func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
+	ctx context.Context,
 	initiatedEventID int64,
 ) (*historypb.HistoryEvent, error) {
 	si, ok := e.pendingSignalInfoIDs[initiatedEventID]
@@ -751,6 +758,7 @@ func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
 		return nil, err
 	}
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -771,7 +779,9 @@ func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
 }
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
-func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error) {
+func (e *MutableStateImpl) GetCompletionEvent(
+	ctx context.Context,
+) (*historypb.HistoryEvent, error) {
 	if e.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
@@ -786,6 +796,7 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 	}
 
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -806,7 +817,9 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 }
 
 // GetStartEvent retrieves the workflow start event from mutable state
-func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
+func (e *MutableStateImpl) GetStartEvent(
+	ctx context.Context,
+) (*historypb.HistoryEvent, error) {
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
 	if err != nil {
@@ -818,6 +831,7 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 	}
 
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -845,7 +859,7 @@ func (e *MutableStateImpl) GetFirstRunID() (string, error) {
 	if len(firstRunID) != 0 {
 		return firstRunID, nil
 	}
-	currentStartEvent, err := e.GetStartEvent()
+	currentStartEvent, err := e.GetStartEvent(context.TODO())
 	if err != nil {
 		return "", err
 	}
