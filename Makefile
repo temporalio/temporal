@@ -2,8 +2,8 @@
 # Install all tools and builds binaries.
 install: update-tools bins
 
-# Rebuild binaries (used for docker builds).
-bins: clean-bins temporal-server tctl plugins temporal-cassandra-tool temporal-sql-tool
+# Rebuild binaries (used by Dockerfile).
+bins: clean-bins temporal-server temporal-cassandra-tool temporal-sql-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
@@ -171,8 +171,6 @@ copyright-proto:
 ##### Binaries #####
 clean-bins:
 	@printf $(COLOR) "Delete old binaries..."
-	@rm -f tctl
-	@rm -f tctl-authorization-plugin
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
@@ -181,14 +179,6 @@ temporal-server:
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	@./develop/scripts/create_build_info_data.sh
 	go build -o temporal-server ./cmd/server
-
-tctl:
-	@printf $(COLOR) "Build tctl with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	go build -o tctl ./cmd/tools/cli
-
-plugins:
-	@printf $(COLOR) "Build tctl-authorization-plugin with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	go build -o tctl-authorization-plugin ./cmd/tools/cli/plugins/authorization
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
