@@ -99,7 +99,7 @@ update-checkers:
 	@printf $(COLOR) "Install/update check tools..."
 	@go install golang.org/x/lint/golint@latest
 	@go install golang.org/x/tools/cmd/goimports@latest
-	@go install honnef.co/go/tools/cmd/staticcheck@v0.2.2
+	@go install honnef.co/go/tools/cmd/staticcheck@master # TODO: Set concrete version above 0.2.2 here.
 	@go install github.com/kisielk/errcheck@v1.6.0
 	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.29.4
 	@go install github.com/bufbuild/buf/cmd/buf@v0.56.0
