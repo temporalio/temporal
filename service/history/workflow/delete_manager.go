@@ -28,10 +28,12 @@ package workflow
 
 import (
 	"context"
+
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -205,15 +207,14 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	var startTime *time.Time
 	var closeTime *time.Time
 
-	completionEvent, err := ms.GetCompletionEvent(ctx)
-	switch {
-	case err == ErrMissingWorkflowCompletionEvent:
-		// delete open workflow execution
-		startTime = ms.GetExecutionInfo().GetStartTime()
-	case err == nil:
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		completionEvent, err := ms.GetCompletionEvent(ctx)
+		if err != nil {
+			return err
+		}
 		closeTime = completionEvent.GetEventTime()
-	default:
-		return err
+	} else {
+		startTime = ms.GetExecutionInfo().GetStartTime()
 	}
 
 	if err := m.shard.DeleteWorkflowExecution(

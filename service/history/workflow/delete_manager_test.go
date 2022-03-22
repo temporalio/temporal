@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
@@ -121,7 +122,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteClosedWorkflowExecution() {
 		EventTime: &closeTime,
 	}
 	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
-
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
 		definition.WorkflowKey{
@@ -158,7 +159,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteOpenWorkflowExecution() {
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	startTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{StartTime: &startTime})
-	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(nil, ErrMissingWorkflowCompletionEvent)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING})
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -201,6 +202,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		EventTime: &closeTime,
 	}
 	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -244,6 +246,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 		EventTime: &closeTime,
 	}
 	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 
 	// ====================== Archival mocks =======================================
 	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
