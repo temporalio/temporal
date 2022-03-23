@@ -200,7 +200,7 @@ func (p *namespaceReplicationMessageProcessor) putNamespaceReplicationTaskToDLQ(
 		metrics.NamespaceReplicationTaskScope,
 		metrics.NamespaceTag(namespaceAttribute.GetInfo().GetName()),
 	).IncCounter(metrics.NamespaceReplicationEnqueueDLQCount)
-	return p.namespaceReplicationQueue.PublishToDLQ(task)
+	return p.namespaceReplicationQueue.PublishToDLQ(context.TODO(), task)
 }
 
 func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(

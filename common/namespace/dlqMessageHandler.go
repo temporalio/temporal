@@ -73,12 +73,13 @@ func (d *dlqMessageHandlerImpl) Read(
 	pageToken []byte,
 ) ([]*replicationspb.ReplicationTask, []byte, error) {
 
-	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return d.namespaceReplicationQueue.GetMessagesFromDLQ(
+		ctx,
 		ackLevel,
 		lastMessageID,
 		pageSize,
@@ -92,12 +93,13 @@ func (d *dlqMessageHandlerImpl) Purge(
 	lastMessageID int64,
 ) error {
 
-	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel(ctx)
 	if err != nil {
 		return err
 	}
 
 	if err := d.namespaceReplicationQueue.RangeDeleteMessagesFromDLQ(
+		ctx,
 		ackLevel,
 		lastMessageID,
 	); err != nil {
@@ -105,6 +107,7 @@ func (d *dlqMessageHandlerImpl) Purge(
 	}
 
 	if err := d.namespaceReplicationQueue.UpdateDLQAckLevel(
+		ctx,
 		lastMessageID,
 	); err != nil {
 		d.logger.Error("Failed to update DLQ ack level after purging messages", tag.Error(err))
@@ -121,12 +124,13 @@ func (d *dlqMessageHandlerImpl) Merge(
 	pageToken []byte,
 ) ([]byte, error) {
 
-	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	messages, token, err := d.namespaceReplicationQueue.GetMessagesFromDLQ(
+		ctx,
 		ackLevel,
 		lastMessageID,
 		pageSize,
@@ -153,13 +157,14 @@ func (d *dlqMessageHandlerImpl) Merge(
 	}
 
 	if err := d.namespaceReplicationQueue.RangeDeleteMessagesFromDLQ(
+		ctx,
 		ackLevel,
 		ackedMessageID,
 	); err != nil {
 		d.logger.Error("failed to delete merged tasks on merging namespace DLQ message", tag.Error(err))
 		return nil, err
 	}
-	if err := d.namespaceReplicationQueue.UpdateDLQAckLevel(ackedMessageID); err != nil {
+	if err := d.namespaceReplicationQueue.UpdateDLQAckLevel(ctx, ackedMessageID); err != nil {
 		d.logger.Error("failed to update ack level on merging namespace DLQ message", tag.Error(err))
 	}
 

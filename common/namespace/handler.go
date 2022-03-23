@@ -268,6 +268,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 
 	err = d.namespaceReplicator.HandleTransmissionTask(
+		ctx,
 		enumsspb.NAMESPACE_OPERATION_CREATE,
 		namespaceRequest.Namespace.Info,
 		namespaceRequest.Namespace.Config,
@@ -570,8 +571,16 @@ func (d *HandlerImpl) UpdateNamespace(
 		}
 	}
 
-	err = d.namespaceReplicator.HandleTransmissionTask(enumsspb.NAMESPACE_OPERATION_UPDATE,
-		info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err = d.namespaceReplicator.HandleTransmissionTask(
+		ctx,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+	)
 	if err != nil {
 		return nil, err
 	}
