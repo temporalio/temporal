@@ -97,7 +97,7 @@ func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namesp
 	return nil
 }
 
-func (a *Activities) DeleteNamespaceActivity(_ context.Context, nsName namespace.Name, nsID namespace.ID) error {
+func (a *Activities) DeleteNamespaceActivity(_ context.Context, nsID namespace.ID, nsName namespace.Name) error {
 	deleteNamespaceRequest := &persistence.DeleteNamespaceByNameRequest{
 		Name: nsName.String(),
 	}

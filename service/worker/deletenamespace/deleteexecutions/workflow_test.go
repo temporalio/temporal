@@ -25,6 +25,7 @@
 package deleteexecutions
 
 import (
+	"context"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -34,15 +35,18 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
+	"go.temporal.io/sdk/workflow"
 
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
-func Test_DeleteExecutionsWorkflow(t *testing.T) {
+func Test_DeleteExecutionsWorkflow_Success(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
@@ -79,7 +83,7 @@ func Test_DeleteExecutionsWorkflow(t *testing.T) {
 	require.Equal(t, 2, result.SuccessCount)
 }
 
-func Test_DeleteExecutionsWorkflow_NoExecutions(t *testing.T) {
+func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
@@ -119,7 +123,112 @@ func Test_DeleteExecutionsWorkflow_NoExecutions(t *testing.T) {
 	require.Equal(t, 0, result.SuccessCount)
 }
 
-func Test_DeleteExecutionsWorkflow_ManyExecutions(t *testing.T) {
+func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	var a *Activities
+
+	getNextPageTokenPageNumber := 0
+	env.OnActivity(a.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
+		require.Equal(t, namespace.Name("namespace"), params.Namespace)
+		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
+		require.Equal(t, 3, params.PageSize)
+		if getNextPageTokenPageNumber == 0 {
+			require.Nil(t, params.NextPageToken)
+		} else {
+			require.Equal(t, []byte{3, 22, 83}, params.NextPageToken)
+		}
+
+		getNextPageTokenPageNumber++
+		if getNextPageTokenPageNumber == 100 { // Emulate 100 pages of executions.
+			return nil, nil
+		}
+		return []byte{3, 22, 83}, nil
+	})
+
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params DeleteExecutionsActivityParams) (DeleteExecutionsActivityResult, error) {
+		require.Equal(t, namespace.Name("namespace"), params.Namespace)
+		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
+		require.Equal(t, 100, params.RPS)
+		require.Equal(t, 3, params.ListPageSize)
+		if getNextPageTokenPageNumber == 0 {
+			require.Nil(t, params.NextPageToken)
+		} else {
+			require.Equal(t, []byte{3, 22, 83}, params.NextPageToken)
+		}
+
+		return DeleteExecutionsActivityResult{
+			ErrorCount:   1,
+			SuccessCount: 2,
+		}, nil
+	})
+
+	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		Config: DeleteExecutionsConfig{
+			PageSize: 3,
+		},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	var result DeleteExecutionsResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, 100, result.ErrorCount)
+	require.Equal(t, 200, result.SuccessCount)
+}
+
+func Test_DeleteExecutionsWorkflow_ManyExecutions_ContinueAsNew(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	var a *Activities
+
+	env.OnActivity(a.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil)
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{}, nil)
+
+	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		Config: DeleteExecutionsConfig{
+			PageSize: 3,
+		},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	wfErr := env.GetWorkflowError()
+	require.Error(t, wfErr)
+	var errContinueAsNew *workflow.ContinueAsNewError
+	require.ErrorAs(t, wfErr, &errContinueAsNew)
+}
+
+func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	var a *Activities
+
+	env.OnActivity(a.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil)
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{}, serviceerror.NewUnavailable("random error"))
+
+	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		Config: DeleteExecutionsConfig{
+			PageSize: 3,
+		},
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	wfErr := env.GetWorkflowError()
+	require.Error(t, wfErr)
+	var errApplication *temporal.ApplicationError
+	require.ErrorAs(t, wfErr, &errApplication)
+}
+
+func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
@@ -211,7 +320,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions(t *testing.T) {
 	require.Equal(t, 2, result.SuccessCount)
 }
 
-func Test_DeleteExecutionsWorkflow_ActivityError(t *testing.T) {
+func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 

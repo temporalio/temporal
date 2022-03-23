@@ -26,10 +26,16 @@ package errors
 
 import (
 	"errors"
+
+	"go.temporal.io/sdk/temporal"
+)
+
+const (
+	ExecutionsStillExistErrType = "ExecutionsStillExist"
 )
 
 var (
 	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
 	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
-	ErrExecutionsStillExist         = errors.New("executions are still exist")
+	ErrExecutionsStillExist         = temporal.NewApplicationError("executions are still exist", ExecutionsStillExistErrType)
 )

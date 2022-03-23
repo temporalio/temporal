@@ -80,6 +80,8 @@ func validateParams(params *ReclaimResourcesParams) error {
 		return temporal.NewNonRetryableApplicationError("namespace is empty", "", nil)
 	}
 
+	params.Config.ApplyDefaults()
+
 	return nil
 }
 
@@ -101,7 +103,7 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	// Step 2. Delete namespace.
 	ctx5 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx5, a.DeleteNamespaceActivity, params.Namespace, params.NamespaceID).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx5, a.DeleteNamespaceActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: DeleteNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
@@ -127,8 +129,8 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		result.SuccessCount += der.SuccessCount
 		result.ErrorCount += der.ErrorCount
 
-		checkExecutionsActivityOptions := workflow.ActivityOptions{
-			// 445 seconds of total retry interval.
+		ensureNoExecutionsActivityOptions := workflow.ActivityOptions{
+			// 445 seconds of total retry intervals.
 			RetryPolicy: &temporal.RetryPolicy{
 				InitialInterval:    1 * time.Second,
 				MaximumInterval:    200 * time.Second,
@@ -138,18 +140,21 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 			StartToCloseTimeout:    30 * time.Second,
 			ScheduleToCloseTimeout: 600 * time.Second,
 		}
-		ctx2 := workflow.WithActivityOptions(ctx, checkExecutionsActivityOptions)
+		ctx2 := workflow.WithActivityOptions(ctx, ensureNoExecutionsActivityOptions)
 		err = workflow.ExecuteActivity(ctx2, a.EnsureNoExecutionsActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 		if err == nil {
 			break
 		}
-
-		if !stderrors.Is(err, errors.ErrExecutionsStillExist) {
-			return result, fmt.Errorf("%w: CheckExecutionsExistActivity: %v", errors.ErrUnableToExecuteActivity, err)
+		var appErr *temporal.ApplicationError
+		if stderrors.As(err, &appErr) {
+			switch appErr.Type() {
+			case errors.ExecutionsStillExistErrType:
+				logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
+				deleteAttempt++
+				continue
+			}
 		}
-
-		logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
-		deleteAttempt++
+		return result, fmt.Errorf("%w: EnsureNoExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	logger.Info("All workflow executions has been deleted successfully.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
