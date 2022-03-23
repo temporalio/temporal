@@ -27,6 +27,7 @@
 package searchattribute
 
 import (
+	"context"
 	"errors"
 	"fmt"
 
@@ -45,7 +46,7 @@ type (
 
 	Manager interface {
 		Provider
-		SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error
+		SaveSearchAttributes(ctx context.Context, indexName string, newCustomSearchAttributes map[string]enumspb.IndexedValueType) error
 	}
 )
 

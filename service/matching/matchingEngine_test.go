@@ -1951,7 +1951,10 @@ func newTestTaskQueueID(namespaceID namespace.ID, name string, taskType enumspb.
 	return result
 }
 
-func (m *testTaskManager) CreateTaskQueue(request *persistence.CreateTaskQueueRequest) (*persistence.CreateTaskQueueResponse, error) {
+func (m *testTaskManager) CreateTaskQueue(
+	_ context.Context,
+	request *persistence.CreateTaskQueueRequest,
+) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.GetNamespaceId()), tli.Name, tli.TaskType))
 	tlm.Lock()
@@ -1969,7 +1972,10 @@ func (m *testTaskManager) CreateTaskQueue(request *persistence.CreateTaskQueueRe
 }
 
 // UpdateTaskQueue provides a mock function with given fields: request
-func (m *testTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueRequest) (*persistence.UpdateTaskQueueResponse, error) {
+func (m *testTaskManager) UpdateTaskQueue(
+	_ context.Context,
+	request *persistence.UpdateTaskQueueRequest,
+) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.GetNamespaceId()), tli.Name, tli.TaskType))
 	tlm.Lock()
@@ -1985,7 +1991,10 @@ func (m *testTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueRe
 	return &persistence.UpdateTaskQueueResponse{}, nil
 }
 
-func (m *testTaskManager) GetTaskQueue(request *persistence.GetTaskQueueRequest) (*persistence.GetTaskQueueResponse, error) {
+func (m *testTaskManager) GetTaskQueue(
+	_ context.Context,
+	request *persistence.GetTaskQueueRequest,
+) (*persistence.GetTaskQueueResponse, error) {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2008,7 +2017,10 @@ func (m *testTaskManager) GetTaskQueue(request *persistence.GetTaskQueueRequest)
 }
 
 // CompleteTask provides a mock function with given fields: request
-func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
+func (m *testTaskManager) CompleteTask(
+	_ context.Context,
+	request *persistence.CompleteTaskRequest,
+) error {
 	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.Name(request.TaskQueue.TaskQueueName), tag.WorkflowTaskQueueType(request.TaskQueue.TaskQueueType))
 	if request.TaskID <= 0 {
 		panic(fmt.Errorf("invalid taskID=%v", request.TaskID))
@@ -2024,7 +2036,10 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 	return nil
 }
 
-func (m *testTaskManager) CompleteTasksLessThan(request *persistence.CompleteTasksLessThanRequest) (int, error) {
+func (m *testTaskManager) CompleteTasksLessThan(
+	_ context.Context,
+	request *persistence.CompleteTasksLessThanRequest,
+) (int, error) {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueueName, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2038,11 +2053,17 @@ func (m *testTaskManager) CompleteTasksLessThan(request *persistence.CompleteTas
 	return persistence.UnknownNumRowsAffected, nil
 }
 
-func (m *testTaskManager) ListTaskQueue(_ *persistence.ListTaskQueueRequest) (*persistence.ListTaskQueueResponse, error) {
+func (m *testTaskManager) ListTaskQueue(
+	_ context.Context,
+	_ *persistence.ListTaskQueueRequest,
+) (*persistence.ListTaskQueueResponse, error) {
 	return nil, fmt.Errorf("unsupported operation")
 }
 
-func (m *testTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueRequest) error {
+func (m *testTaskManager) DeleteTaskQueue(
+	_ context.Context,
+	request *persistence.DeleteTaskQueueRequest,
+) error {
 	m.Lock()
 	defer m.Unlock()
 	key := newTestTaskQueueID(namespace.ID(request.TaskQueue.NamespaceID), request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
@@ -2051,7 +2072,10 @@ func (m *testTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueRe
 }
 
 // CreateTask provides a mock function with given fields: request
-func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
+func (m *testTaskManager) CreateTasks(
+	_ context.Context,
+	request *persistence.CreateTasksRequest,
+) (*persistence.CreateTasksResponse, error) {
 	namespaceID := namespace.ID(request.TaskQueueInfo.Data.GetNamespaceId())
 	taskQueue := request.TaskQueueInfo.Data.Name
 	taskType := request.TaskQueueInfo.Data.TaskType
@@ -2096,7 +2120,10 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 }
 
 // GetTasks provides a mock function with given fields: request
-func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
+func (m *testTaskManager) GetTasks(
+	_ context.Context,
+	request *persistence.GetTasksRequest,
+) (*persistence.GetTasksResponse, error) {
 	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))

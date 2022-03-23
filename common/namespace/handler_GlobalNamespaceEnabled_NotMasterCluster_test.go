@@ -491,7 +491,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
 
-	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
+	_, err := s.MetadataManager.CreateNamespace(context.Background(), &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),
@@ -550,7 +550,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
 
-	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
+	_, err := s.MetadataManager.CreateNamespace(context.Background(), &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),
@@ -627,7 +627,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
 
-	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
+	_, err := s.MetadataManager.CreateNamespace(context.Background(), &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),

@@ -29,6 +29,7 @@
 package namespace
 
 import (
+	context "context"
 	reflect "reflect"
 	time "time"
 
@@ -97,48 +98,48 @@ func (m *MockPersistence) EXPECT() *MockPersistenceMockRecorder {
 }
 
 // GetMetadata mocks base method.
-func (m *MockPersistence) GetMetadata() (*persistence.GetMetadataResponse, error) {
+func (m *MockPersistence) GetMetadata(arg0 context.Context) (*persistence.GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetadata")
+	ret := m.ctrl.Call(m, "GetMetadata", arg0)
 	ret0, _ := ret[0].(*persistence.GetMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMetadata indicates an expected call of GetMetadata.
-func (mr *MockPersistenceMockRecorder) GetMetadata() *gomock.Call {
+func (mr *MockPersistenceMockRecorder) GetMetadata(arg0 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockPersistence)(nil).GetMetadata))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockPersistence)(nil).GetMetadata), arg0)
 }
 
 // GetNamespace mocks base method.
-func (m *MockPersistence) GetNamespace(request *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
+func (m *MockPersistence) GetNamespace(arg0 context.Context, arg1 *persistence.GetNamespaceRequest) (*persistence.GetNamespaceResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespace", request)
+	ret := m.ctrl.Call(m, "GetNamespace", arg0, arg1)
 	ret0, _ := ret[0].(*persistence.GetNamespaceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNamespace indicates an expected call of GetNamespace.
-func (mr *MockPersistenceMockRecorder) GetNamespace(request interface{}) *gomock.Call {
+func (mr *MockPersistenceMockRecorder) GetNamespace(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockPersistence)(nil).GetNamespace), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockPersistence)(nil).GetNamespace), arg0, arg1)
 }
 
 // ListNamespaces mocks base method.
-func (m *MockPersistence) ListNamespaces(arg0 *persistence.ListNamespacesRequest) (*persistence.ListNamespacesResponse, error) {
+func (m *MockPersistence) ListNamespaces(arg0 context.Context, arg1 *persistence.ListNamespacesRequest) (*persistence.ListNamespacesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListNamespaces", arg0)
+	ret := m.ctrl.Call(m, "ListNamespaces", arg0, arg1)
 	ret0, _ := ret[0].(*persistence.ListNamespacesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListNamespaces indicates an expected call of ListNamespaces.
-func (mr *MockPersistenceMockRecorder) ListNamespaces(arg0 interface{}) *gomock.Call {
+func (mr *MockPersistenceMockRecorder) ListNamespaces(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockPersistence)(nil).ListNamespaces), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockPersistence)(nil).ListNamespaces), arg0, arg1)
 }
 
 // MockRegistry is a mock of Registry interface.

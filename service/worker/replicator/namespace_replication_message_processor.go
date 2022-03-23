@@ -25,6 +25,7 @@
 package replicator
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 
@@ -209,7 +210,7 @@ func (p *namespaceReplicationMessageProcessor) handleNamespaceReplicationTask(
 	sw := p.metricsClient.StartTimer(metrics.NamespaceReplicationTaskScope, metrics.ReplicatorLatency)
 	defer sw.Stop()
 
-	return p.taskExecutor.Execute(task.GetNamespaceTaskAttributes())
+	return p.taskExecutor.Execute(context.TODO(), task.GetNamespaceTaskAttributes())
 }
 
 func (p *namespaceReplicationMessageProcessor) Stop() {

@@ -381,8 +381,8 @@ func (m *metadataImpl) refreshLoop(ctx context.Context) error {
 	}
 }
 
-func (m *metadataImpl) refreshClusterMetadata(_ context.Context) error {
-	clusterMetadataMap, err := m.listAllClusterMetadataFromDB()
+func (m *metadataImpl) refreshClusterMetadata(ctx context.Context) error {
+	clusterMetadataMap, err := m.listAllClusterMetadataFromDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -486,7 +486,9 @@ func updateVersionToClusterName(clusterInfo map[string]ClusterInformation, failo
 	return versionToClusterName
 }
 
-func (m *metadataImpl) listAllClusterMetadataFromDB() (map[string]*ClusterInformation, error) {
+func (m *metadataImpl) listAllClusterMetadataFromDB(
+	ctx context.Context,
+) (map[string]*ClusterInformation, error) {
 	result := make(map[string]*ClusterInformation)
 	if m.clusterMetadataStore == nil {
 		return result, nil
@@ -494,6 +496,7 @@ func (m *metadataImpl) listAllClusterMetadataFromDB() (map[string]*ClusterInform
 
 	paginationFn := func(paginationToken []byte) ([]interface{}, []byte, error) {
 		resp, err := m.clusterMetadataStore.ListClusterMetadata(
+			ctx,
 			&persistence.ListClusterMetadataRequest{
 				PageSize:      defaultClusterMetadataPageSize,
 				NextPageToken: paginationToken,

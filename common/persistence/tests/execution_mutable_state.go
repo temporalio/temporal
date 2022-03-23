@@ -103,7 +103,7 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
 
 	s.ShardID = 1 + rand.Int31n(16)
-	resp, err := s.ShardManager.GetOrCreateShard(&p.GetOrCreateShardRequest{
+	resp, err := s.ShardManager.GetOrCreateShard(s.Ctx, &p.GetOrCreateShardRequest{
 		ShardID: s.ShardID,
 		InitialShardInfo: &persistencespb.ShardInfo{
 			ShardId: s.ShardID,
@@ -113,7 +113,7 @@ func (s *ExecutionMutableStateSuite) SetupTest() {
 	s.NoError(err)
 	previousRangeID := resp.ShardInfo.RangeId
 	resp.ShardInfo.RangeId += 1
-	err = s.ShardManager.UpdateShard(&p.UpdateShardRequest{
+	err = s.ShardManager.UpdateShard(s.Ctx, &p.UpdateShardRequest{
 		ShardInfo:       resp.ShardInfo,
 		PreviousRangeID: previousRangeID,
 	})

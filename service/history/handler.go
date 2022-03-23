@@ -603,9 +603,9 @@ func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseSha
 }
 
 // GetShard gets a shard hosted by this instance
-func (h *Handler) GetShard(_ context.Context, request *historyservice.GetShardRequest) (_ *historyservice.GetShardResponse, retError error) {
+func (h *Handler) GetShard(ctx context.Context, request *historyservice.GetShardRequest) (_ *historyservice.GetShardResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	resp, err := h.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+	resp, err := h.persistenceShardManager.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
 		ShardID: request.ShardId,
 	})
 	if err != nil {

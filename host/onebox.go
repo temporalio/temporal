@@ -729,7 +729,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 }
 
 func (c *temporalImpl) createSystemNamespace() error {
-	err := c.metadataMgr.InitializeSystemNamespaces(c.clusterMetadataConfig.CurrentClusterName)
+	err := c.metadataMgr.InitializeSystemNamespaces(context.Background(), c.clusterMetadataConfig.CurrentClusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
 	}

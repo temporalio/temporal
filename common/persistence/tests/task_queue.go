@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -54,6 +55,9 @@ type (
 
 		taskManager p.TaskManager
 		logger      log.Logger
+
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 )
 
@@ -82,6 +86,7 @@ func (s *TaskQueueSuite) TearDownSuite() {
 
 func (s *TaskQueueSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), time.Second*30)
 
 	s.stickyTTL = time.Second * 10
 	s.namespaceID = uuid.New().String()
@@ -92,7 +97,7 @@ func (s *TaskQueueSuite) SetupTest() {
 }
 
 func (s *TaskQueueSuite) TearDownTest() {
-
+	s.cancel()
 }
 
 func (s *TaskQueueSuite) TestCreate_Normal() {
@@ -113,7 +118,7 @@ func (s *TaskQueueSuite) TestCreate_Normal_Dup() {
 	rangID := rand.Int63()
 	taskQueue := s.createTaskQueue(rangID, enumspb.TASK_QUEUE_KIND_NORMAL)
 
-	_, err := s.taskManager.CreateTaskQueue(&p.CreateTaskQueueRequest{
+	_, err := s.taskManager.CreateTaskQueue(s.ctx, &p.CreateTaskQueueRequest{
 		RangeID:       rangID,
 		TaskQueueInfo: s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_NORMAL),
 	})
@@ -126,7 +131,7 @@ func (s *TaskQueueSuite) TestCreate_Sticky_Dup() {
 	rangID := rand.Int63()
 	taskQueue := s.createTaskQueue(rangID, enumspb.TASK_QUEUE_KIND_STICKY)
 
-	_, err := s.taskManager.CreateTaskQueue(&p.CreateTaskQueueRequest{
+	_, err := s.taskManager.CreateTaskQueue(s.ctx, &p.CreateTaskQueueRequest{
 		RangeID:       rangID,
 		TaskQueueInfo: s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_STICKY),
 	})
@@ -141,7 +146,7 @@ func (s *TaskQueueSuite) TestUpdate_Normal() {
 
 	rangID := rand.Int63()
 	taskQueue = s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_NORMAL)
-	_, err := s.taskManager.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
+	_, err := s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
 		RangeID:       rangID,
 		TaskQueueInfo: taskQueue,
 
@@ -157,7 +162,7 @@ func (s *TaskQueueSuite) TestUpdate_Normal_Conflict() {
 	taskQueue := s.createTaskQueue(prevRangeID, enumspb.TASK_QUEUE_KIND_NORMAL)
 
 	rangID := rand.Int63()
-	_, err := s.taskManager.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
+	_, err := s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
 		RangeID:       rangID,
 		TaskQueueInfo: s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_NORMAL),
 
@@ -174,7 +179,7 @@ func (s *TaskQueueSuite) TestUpdate_Sticky() {
 
 	rangID := rand.Int63()
 	taskQueue = s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_STICKY)
-	_, err := s.taskManager.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
+	_, err := s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
 		RangeID:       rangID,
 		TaskQueueInfo: taskQueue,
 
@@ -190,7 +195,7 @@ func (s *TaskQueueSuite) TestUpdate_Sticky_Conflict() {
 	taskQueue := s.createTaskQueue(prevRangeID, enumspb.TASK_QUEUE_KIND_STICKY)
 
 	rangID := rand.Int63()
-	_, err := s.taskManager.UpdateTaskQueue(&p.UpdateTaskQueueRequest{
+	_, err := s.taskManager.UpdateTaskQueue(s.ctx, &p.UpdateTaskQueueRequest{
 		RangeID:       rangID,
 		TaskQueueInfo: s.randomTaskQueueInfo(enumspb.TASK_QUEUE_KIND_STICKY),
 
@@ -210,7 +215,7 @@ func (s *TaskQueueSuite) TestDelete() {
 		),
 	)
 
-	err := s.taskManager.DeleteTaskQueue(&p.DeleteTaskQueueRequest{
+	err := s.taskManager.DeleteTaskQueue(s.ctx, &p.DeleteTaskQueueRequest{
 		TaskQueue: &p.TaskQueueKey{
 			NamespaceID:   taskQueue.NamespaceId,
 			TaskQueueName: taskQueue.Name,
@@ -232,7 +237,7 @@ func (s *TaskQueueSuite) TestDelete_Conflict() {
 		),
 	)
 
-	err := s.taskManager.DeleteTaskQueue(&p.DeleteTaskQueueRequest{
+	err := s.taskManager.DeleteTaskQueue(s.ctx, &p.DeleteTaskQueueRequest{
 		TaskQueue: &p.TaskQueueKey{
 			NamespaceID:   taskQueue.NamespaceId,
 			TaskQueueName: taskQueue.Name,
@@ -254,7 +259,7 @@ func (s *TaskQueueSuite) createTaskQueue(
 	taskQueueKind enumspb.TaskQueueKind,
 ) *persistencespb.TaskQueueInfo {
 	taskQueue := s.randomTaskQueueInfo(taskQueueKind)
-	_, err := s.taskManager.CreateTaskQueue(&p.CreateTaskQueueRequest{
+	_, err := s.taskManager.CreateTaskQueue(s.ctx, &p.CreateTaskQueueRequest{
 		RangeID:       rangeID,
 		TaskQueueInfo: taskQueue,
 	})
@@ -287,7 +292,7 @@ func (s *TaskQueueSuite) assertMissingFromDB(
 	taskQueue string,
 	taskType enumspb.TaskQueueType,
 ) {
-	_, err := s.taskManager.GetTaskQueue(&p.GetTaskQueueRequest{
+	_, err := s.taskManager.GetTaskQueue(s.ctx, &p.GetTaskQueueRequest{
 		NamespaceID: namespaceID,
 		TaskQueue:   taskQueue,
 		TaskType:    taskType,
@@ -299,7 +304,7 @@ func (s *TaskQueueSuite) assertEqualWithDB(
 	rangeID int64,
 	taskQueueInfo *persistencespb.TaskQueueInfo,
 ) {
-	resp, err := s.taskManager.GetTaskQueue(&p.GetTaskQueueRequest{
+	resp, err := s.taskManager.GetTaskQueue(s.ctx, &p.GetTaskQueueRequest{
 		NamespaceID: taskQueueInfo.NamespaceId,
 		TaskQueue:   taskQueueInfo.Name,
 		TaskType:    taskQueueInfo.TaskType,

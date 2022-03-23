@@ -25,6 +25,7 @@
 package frontend
 
 import (
+	"context"
 	"runtime"
 	"sync"
 	"time"
@@ -71,7 +72,7 @@ func NewVersionChecker(
 func (vc *VersionChecker) Start() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.startOnce.Do(func() {
-			go vc.versionCheckLoop()
+			go vc.versionCheckLoop(context.TODO())
 		})
 	}
 }
@@ -84,24 +85,28 @@ func (vc *VersionChecker) Stop() {
 	}
 }
 
-func (vc *VersionChecker) versionCheckLoop() {
+func (vc *VersionChecker) versionCheckLoop(
+	ctx context.Context,
+) {
 	timer := time.NewTicker(VersionCheckInterval)
 	defer timer.Stop()
-	vc.performVersionCheck()
+	vc.performVersionCheck(ctx)
 	for {
 		select {
 		case <-vc.shutdownChan:
 			return
 		case <-timer.C:
-			vc.performVersionCheck()
+			vc.performVersionCheck(ctx)
 		}
 	}
 }
 
-func (vc *VersionChecker) performVersionCheck() {
+func (vc *VersionChecker) performVersionCheck(
+	ctx context.Context,
+) {
 	sw := vc.metricsScope.StartTimer(metrics.VersionCheckLatency)
 	defer sw.Stop()
-	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata()
+	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
 		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
 		return
@@ -122,7 +127,7 @@ func (vc *VersionChecker) performVersionCheck() {
 		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
 		return
 	}
-	err = vc.saveVersionInfo(resp)
+	err = vc.saveVersionInfo(ctx, resp)
 	if err != nil {
 		vc.metricsScope.IncCounter(metrics.VersionCheckFailedCount)
 		return
@@ -152,8 +157,8 @@ func (vc *VersionChecker) getVersionInfo(req *check.VersionCheckRequest) (*check
 	return check.NewCaller().Call(req)
 }
 
-func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) error {
-	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata()
+func (vc *VersionChecker) saveVersionInfo(ctx context.Context, resp *check.VersionCheckResponse) error {
+	metadata, err := vc.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -163,7 +168,7 @@ func (vc *VersionChecker) saveVersionInfo(resp *check.VersionCheckResponse) erro
 		return err
 	}
 	metadata.VersionInfo = versionInfo
-	saved, err := vc.clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	saved, err := vc.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: metadata.ClusterMetadata, Version: metadata.Version})
 	if err != nil {
 		return err

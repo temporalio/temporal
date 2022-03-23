@@ -66,7 +66,7 @@ type (
 	taskQueueManagerOpt func(*taskQueueManagerImpl)
 
 	idBlockAllocator interface {
-		RenewLease() (taskQueueState, error)
+		RenewLease(context.Context) (taskQueueState, error)
 		RangeID() int64
 	}
 
@@ -256,8 +256,8 @@ func (c *taskQueueManagerImpl) Stop() {
 	) {
 		return
 	}
-	_ = c.db.UpdateState(c.taskAckManager.getAckLevel())
-	c.taskGC.RunNow(c.taskAckManager.getAckLevel())
+	_ = c.db.UpdateState(context.TODO(), c.taskAckManager.getAckLevel())
+	c.taskGC.RunNow(context.TODO(), c.taskAckManager.getAckLevel())
 	c.liveness.Stop()
 	c.taskWriter.Stop()
 	c.taskReader.Stop()
@@ -484,7 +484,7 @@ func (c *taskQueueManagerImpl) completeTask(task *persistencespb.AllocatedTaskIn
 	}
 
 	ackLevel := c.taskAckManager.completeTask(task.GetTaskId())
-	c.taskGC.Run(ackLevel)
+	c.taskGC.Run(context.TODO(), ackLevel) // TODO: completeTaskFunc and task.finish() should take in a context
 }
 
 func rangeIDToTaskIDBlock(rangeID int64, rangeSize int64) taskIDBlock {

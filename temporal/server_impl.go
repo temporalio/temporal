@@ -112,12 +112,14 @@ func (s *ServerImpl) Start() error {
 	s.logger.Debug(s.so.config.String())
 
 	if err := initSystemNamespaces(
+		context.TODO(),
 		&s.persistenceConfig,
 		s.clusterMetadata.CurrentClusterName,
 		s.so.persistenceServiceResolver,
 		s.persistenceFactoryProvider,
 		s.logger,
-		s.so.customDataStoreFactory); err != nil {
+		s.so.customDataStoreFactory,
+	); err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
@@ -241,6 +243,7 @@ func NewBootstrapParams(
 }
 
 func initSystemNamespaces(
+	ctx context.Context,
 	cfg *config.Persistence,
 	currentClusterName string,
 	persistenceServiceResolver resolver.ServiceResolver,
@@ -272,7 +275,7 @@ func initSystemNamespaces(
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	if err = metadataManager.InitializeSystemNamespaces(currentClusterName); err != nil {
+	if err = metadataManager.InitializeSystemNamespaces(ctx, currentClusterName); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
 	return nil
