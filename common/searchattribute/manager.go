@@ -121,7 +121,7 @@ func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, no
 }
 
 func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
-	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(context.Background())
+	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(context.TODO())
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:

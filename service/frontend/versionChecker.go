@@ -72,7 +72,7 @@ func NewVersionChecker(
 func (vc *VersionChecker) Start() {
 	if vc.config.EnableServerVersionCheck() {
 		vc.startOnce.Do(func() {
-			go vc.versionCheckLoop()
+			go vc.versionCheckLoop(context.TODO())
 		})
 	}
 }
@@ -85,16 +85,18 @@ func (vc *VersionChecker) Stop() {
 	}
 }
 
-func (vc *VersionChecker) versionCheckLoop() {
+func (vc *VersionChecker) versionCheckLoop(
+	ctx context.Context,
+) {
 	timer := time.NewTicker(VersionCheckInterval)
 	defer timer.Stop()
-	vc.performVersionCheck(context.Background())
+	vc.performVersionCheck(ctx)
 	for {
 		select {
 		case <-vc.shutdownChan:
 			return
 		case <-timer.C:
-			vc.performVersionCheck(context.Background())
+			vc.performVersionCheck(ctx)
 		}
 	}
 }
