@@ -102,7 +102,7 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Once_Success() {
 	ctx := context.Background()
 	task := s.randomTask()
 
-	s.taskOwnership.EXPECT().flushTasks(task).Return(nil)
+	s.taskOwnership.EXPECT().flushTasks(gomock.Any(), task).Return(nil)
 
 	fut := s.taskFlusher.appendTask(task)
 	s.taskFlusher.flushTasks(context.Background())
@@ -122,7 +122,7 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Once_Failed() {
 	task := s.randomTask()
 	randomErr := serviceerror.NewUnavailable("random error")
 
-	s.taskOwnership.EXPECT().flushTasks(task).Return(randomErr)
+	s.taskOwnership.EXPECT().flushTasks(gomock.Any(), task).Return(randomErr)
 
 	fut := s.taskFlusher.appendTask(task)
 	s.taskFlusher.flushTasks(context.Background())

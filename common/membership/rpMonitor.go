@@ -245,7 +245,7 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager, 
 
 	for {
 		resp, err := manager.GetClusterMembers(
-			context.Background(),
+			context.TODO(),
 			&persistence.GetClusterMembersRequest{
 				LastHeartbeatWithin: healthyHostLastHeartbeatCutoff,
 				PageSize:            pageSize,
