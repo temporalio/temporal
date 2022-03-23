@@ -26,6 +26,7 @@ package deleteexecutions
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -129,19 +130,23 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 
 	var a *Activities
 
-	getNextPageTokenPageNumber := 0
+	var pageNumber atomic.Value
+	pageNumber.Store(0)
+
 	env.OnActivity(a.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return(func(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
 		require.Equal(t, namespace.Name("namespace"), params.Namespace)
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
 		require.Equal(t, 3, params.PageSize)
-		if getNextPageTokenPageNumber == 0 {
+		pn := pageNumber.Load().(int)
+		if pn == 0 {
 			require.Nil(t, params.NextPageToken)
 		} else {
 			require.Equal(t, []byte{3, 22, 83}, params.NextPageToken)
 		}
 
-		getNextPageTokenPageNumber++
-		if getNextPageTokenPageNumber == 100 { // Emulate 100 pages of executions.
+		pn++
+		pageNumber.Store(pn)
+		if pn == 100 { // Emulate 100 pages of executions.
 			return nil, nil
 		}
 		return []byte{3, 22, 83}, nil
@@ -152,7 +157,7 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_NoContinueAsNew(t *testing.T) 
 		require.Equal(t, namespace.ID("namespace-id"), params.NamespaceID)
 		require.Equal(t, 100, params.RPS)
 		require.Equal(t, 3, params.ListPageSize)
-		if getNextPageTokenPageNumber == 0 {
+		if pageNumber.Load().(int) == 0 {
 			require.Nil(t, params.NextPageToken)
 		} else {
 			require.Equal(t, []byte{3, 22, 83}, params.NextPageToken)
