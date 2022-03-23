@@ -28,6 +28,8 @@ package history
 
 import (
 	"context"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/service/history/tasks"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -182,6 +184,21 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		mutableState,
 	).CreateNextActivityTimer(); err != nil {
 		return err
+	}
+
+	// sync activity with empty started ID means activity retry
+	if request.StartedId == common.EmptyEventID {
+		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
+			WorkflowKey: definition.WorkflowKey{
+				NamespaceID: request.GetNamespaceId(),
+				WorkflowID:  request.GetWorkflowId(),
+				RunID:       request.GetRunId(),
+			},
+			VisibilityTimestamp: *request.GetScheduledTime(),
+			EventID:             request.GetScheduledId(),
+			Version:             request.GetVersion(),
+			Attempt:             request.GetAttempt(),
+		})
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent

@@ -99,6 +99,7 @@ type (
 	}
 
 	pushActivityTaskToMatchingInfo struct {
+		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
 	}
 
@@ -119,10 +120,12 @@ func newHistoryResendInfo(
 }
 
 func newPushActivityToMatchingInfo(
+	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
 ) *pushActivityTaskToMatchingInfo {
 
 	return &pushActivityTaskToMatchingInfo{
+		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
 	}
 }
