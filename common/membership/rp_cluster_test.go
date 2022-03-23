@@ -25,6 +25,7 @@
 package membership
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -120,7 +121,7 @@ func NewTestRingpopCluster(
 
 	firstGetClusterMemberCall := true
 	mockMgr.EXPECT().GetClusterMembers(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(_ *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
+		func(_ context.Context, _ *persistence.GetClusterMembersRequest) (*persistence.GetClusterMembersResponse, error) {
 			res := &persistence.GetClusterMembersResponse{ActiveMembers: []*persistence.ClusterMember{seedMember}}
 
 			if firstGetClusterMemberCall {

@@ -25,6 +25,7 @@
 package taskqueue
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -185,22 +186,22 @@ func (s *ScavengerTestSuite) runScavenger() {
 
 func (s *ScavengerTestSuite) setupTaskMgrMocks() {
 	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(req *p.ListTaskQueueRequest) (*p.ListTaskQueueResponse, error) {
+		func(_ context.Context, req *p.ListTaskQueueRequest) (*p.ListTaskQueueResponse, error) {
 			items, next := s.taskQueueTable.list(req.PageToken, req.PageSize)
 			return &p.ListTaskQueueResponse{Items: items, NextPageToken: next}, nil
 		}).AnyTimes()
 	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(req *p.DeleteTaskQueueRequest) error {
+		func(_ context.Context, req *p.DeleteTaskQueueRequest) error {
 			s.taskQueueTable.delete(req.TaskQueue.TaskQueueName)
 			return nil
 		}).AnyTimes()
 	s.taskMgr.EXPECT().GetTasks(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(req *p.GetTasksRequest) (*p.GetTasksResponse, error) {
+		func(_ context.Context, req *p.GetTasksRequest) (*p.GetTasksResponse, error) {
 			result := s.taskTables[req.TaskQueue].get(req.PageSize)
 			return &p.GetTasksResponse{Tasks: result}, nil
 		}).AnyTimes()
 	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any(), gomock.Any()).DoAndReturn(
-		func(req *p.CompleteTasksLessThanRequest) (int, error) {
+		func(_ context.Context, req *p.CompleteTasksLessThanRequest) (int, error) {
 			return s.taskTables[req.TaskQueueName].deleteLessThan(req.ExclusiveMaxTaskID, req.Limit), nil
 		}).AnyTimes()
 }

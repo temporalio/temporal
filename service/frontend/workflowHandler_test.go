@@ -699,10 +699,12 @@ func (s *workflowHandlerSuite) TestDeprecateNamespace_Success() {
 			},
 		},
 	}, nil)
-	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(func(request *persistence.UpdateNamespaceRequest) error {
-		s.Equal(enumspb.NAMESPACE_STATE_DEPRECATED, request.Namespace.Info.State)
-		return nil
-	})
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Equal(enumspb.NAMESPACE_STATE_DEPRECATED, request.Namespace.Info.State)
+			return nil
+		},
+	)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -745,10 +747,12 @@ func (s *workflowHandlerSuite) TestDeprecateNamespace_Error() {
 			},
 		},
 	}, nil)
-	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(func(request *persistence.UpdateNamespaceRequest) error {
-		s.Equal(enumspb.NAMESPACE_STATE_DEPRECATED, request.Namespace.Info.State)
-		return serviceerror.NewInternal("db is down")
-	})
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Equal(enumspb.NAMESPACE_STATE_DEPRECATED, request.Namespace.Info.State)
+			return serviceerror.NewInternal("db is down")
+		},
+	)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -791,10 +795,12 @@ func (s *workflowHandlerSuite) TestDeleteNamespace_Success() {
 			},
 		},
 	}, nil)
-	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(func(request *persistence.UpdateNamespaceRequest) error {
-		s.Equal(enumspb.NAMESPACE_STATE_DELETED, request.Namespace.Info.State)
-		return nil
-	})
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Equal(enumspb.NAMESPACE_STATE_DELETED, request.Namespace.Info.State)
+			return nil
+		},
+	)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
@@ -837,10 +843,12 @@ func (s *workflowHandlerSuite) TestDeleteNamespace_Error() {
 			},
 		},
 	}, nil)
-	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(func(request *persistence.UpdateNamespaceRequest) error {
-		s.Equal(enumspb.NAMESPACE_STATE_DELETED, request.Namespace.Info.State)
-		return serviceerror.NewInternal("db is down")
-	})
+	s.mockMetadataMgr.EXPECT().UpdateNamespace(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, request *persistence.UpdateNamespaceRequest) error {
+			s.Equal(enumspb.NAMESPACE_STATE_DELETED, request.Namespace.Info.State)
+			return serviceerror.NewInternal("db is down")
+		},
+	)
 
 	wh := s.getWorkflowHandler(s.newConfig())
 
