@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -74,6 +75,7 @@ type (
 		historyClient          historyservice.HistoryServiceClient
 		namespaceRegistry      namespace.Registry
 		workerServiceResolver  membership.ServiceResolver
+		visibilityManager      manager.VisibilityManager
 
 		archiverProvider provider.ArchiverProvider
 
@@ -105,6 +107,13 @@ type (
 		PersistenceGlobalMaxQPS       dynamicconfig.IntPropertyFn
 		EnableBatcher                 dynamicconfig.BoolPropertyFn
 		EnableParentClosePolicyWorker dynamicconfig.BoolPropertyFn
+
+		StandardVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+		StandardVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+		AdvancedVisibilityPersistenceMaxReadQPS   dynamicconfig.IntPropertyFn
+		AdvancedVisibilityPersistenceMaxWriteQPS  dynamicconfig.IntPropertyFn
+		EnableReadVisibilityFromES                dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -129,6 +138,7 @@ func NewService(
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
 	manager *workerManager,
+	visibilityManager manager.VisibilityManager,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
 	if err != nil {
@@ -158,13 +168,14 @@ func NewService(
 		metadataManager:           metadataManager,
 		taskManager:               taskManager,
 		historyClient:             historyClient,
+		visibilityManager:         visibilityManager,
 
 		manager: manager,
 	}, nil
 }
 
 // NewConfig builds the new Config for worker service
-func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams) *Config {
+func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams, enableReadFromES bool) *Config {
 	config := &Config{
 		ArchiverConfig: &archiver.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
@@ -293,6 +304,13 @@ func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams) *
 			dynamicconfig.WorkerPersistenceGlobalMaxQPS,
 			0,
 		),
+
+		StandardVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxReadQPS, 9000),
+		StandardVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.StandardVisibilityPersistenceMaxWriteQPS, 9000),
+		AdvancedVisibilityPersistenceMaxReadQPS:   dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxReadQPS, 9000),
+		AdvancedVisibilityPersistenceMaxWriteQPS:  dc.GetIntProperty(dynamicconfig.AdvancedVisibilityPersistenceMaxWriteQPS, 9000),
+		EnableReadVisibilityFromES:                dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadVisibilityFromES, enableReadFromES),
+		EnableReadFromSecondaryAdvancedVisibility: dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableReadFromSecondaryAdvancedVisibility, false),
 	}
 	return config
 }
@@ -375,6 +393,7 @@ func (s *Service) Stop() {
 	s.membershipMonitor.Stop()
 	s.clusterMetadata.Stop()
 	s.persistenceBean.Close()
+	s.visibilityManager.Close()
 
 	s.logger.Info(
 		"worker service stopped",
