@@ -182,7 +182,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 	visibilityManager.EXPECT().GetName().Return("elasticsearch")
 
-	visibilityManager.EXPECT().CountWorkflowExecutions(&manager.CountWorkflowExecutionsRequest{
+	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
 	}).Return(&manager.CountWorkflowExecutionsResponse{
