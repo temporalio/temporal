@@ -30,19 +30,17 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/tasks"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -51,6 +49,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -195,7 +194,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 				WorkflowID:  request.GetWorkflowId(),
 				RunID:       request.GetRunId(),
 			},
-			VisibilityTimestamp: *request.GetScheduledTime(),
+			VisibilityTimestamp: eventTime,
 			EventID:             request.GetScheduledId(),
 			Version:             request.GetVersion(),
 			Attempt:             request.GetAttempt(),

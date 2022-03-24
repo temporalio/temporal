@@ -820,15 +820,18 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
+
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
+	now := time.Now()
 	request := &historyservice.SyncActivityRequest{
 		NamespaceId:    namespaceID.String(),
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
+		ScheduledTime:  &now,
 		VersionHistory: incomingVersionHistory,
 	}
 
@@ -843,7 +846,16 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	}, true)
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
-
+	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityRetryTimerTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: request.NamespaceId,
+			WorkflowID:  request.WorkflowId,
+			RunID:       request.RunId,
+		},
+		VisibilityTimestamp: now,
+		EventID:             request.GetScheduledId(),
+		Version:             request.GetVersion(),
+	})
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
@@ -914,12 +926,14 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
+	now := time.Now()
 	request := &historyservice.SyncActivityRequest{
 		NamespaceId:    namespaceID.String(),
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
+		ScheduledTime:  &now,
 		VersionHistory: incomingVersionHistory,
 	}
 
@@ -934,6 +948,16 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	}, true)
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
+	s.mockMutableState.EXPECT().AddTasks(&tasks.ActivityRetryTimerTask{
+		WorkflowKey: definition.WorkflowKey{
+			NamespaceID: request.NamespaceId,
+			WorkflowID:  request.WorkflowId,
+			RunID:       request.RunId,
+		},
+		VisibilityTimestamp: now,
+		EventID:             request.GetScheduledId(),
+		Version:             request.GetVersion(),
+	})
 
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 

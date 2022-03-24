@@ -144,7 +144,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		}
 
 		if activityInfo.StartedId == common.EmptyEventID {
-			return newPushActivityToMatchingInfo(activityInfo.TaskQueue, *activityInfo.ScheduleToStartTimeout), nil
+			return newPushActivityToMatchingInfo(*activityInfo.ScheduleToStartTimeout), nil
 		}
 
 		return nil, nil
