@@ -187,7 +187,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	// sync activity with empty started ID means activity retry
-	if request.StartedId == common.EmptyEventID {
+	if request.StartedId == common.EmptyEventID && request.Attempt > activityInfo.GetAttempt() {
 		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 			WorkflowKey: definition.WorkflowKey{
 				NamespaceID: request.GetNamespaceId(),
