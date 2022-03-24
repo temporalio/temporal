@@ -99,7 +99,7 @@ var (
 // AddSearchAttributesWorkflow is the workflow that adds search attributes to the cluster for specific index.
 func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) error {
 	logger := workflow.GetLogger(ctx)
-	logger.Info("Workflow started.", "wf-type", WorkflowName)
+	logger.Info("Workflow started.", tag.WorkflowType(WorkflowName))
 
 	var a *activities
 	var err error
@@ -124,7 +124,7 @@ func AddSearchAttributesWorkflow(ctx workflow.Context, params WorkflowParams) er
 		return fmt.Errorf("%w: UpdateClusterMetadataActivity: %v", ErrUnableToExecuteActivity, err)
 	}
 
-	logger.Info("Workflow finished successfully.", "wf-type", WorkflowName)
+	logger.Info("Workflow finished successfully.", tag.WorkflowType(WorkflowName))
 	return nil
 }
 

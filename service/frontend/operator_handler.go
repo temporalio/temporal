@@ -39,10 +39,13 @@ import (
 
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/addsearchattributes"
+	"go.temporal.io/server/service/worker/deletenamespace"
+	"go.temporal.io/server/service/worker/deletenamespace/deleteexecutions"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -276,6 +279,65 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request 
 	}, nil
 }
 
+func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *operatorservice.DeleteNamespaceRequest) (_ *operatorservice.DeleteNamespaceResponse, retError error) {
+	const endpointName = "DeleteNamespace"
+
+	defer log.CapturePanic(h.logger, &retError)
+
+	scope, sw := h.startRequestProfile(metrics.OperatorDeleteNamespaceScope)
+	defer sw.Stop()
+
+	// validate request
+	if request == nil {
+		return nil, h.error(errRequestNotSet, scope, endpointName)
+	}
+
+	if request.GetNamespace() == "" && request.GetNamespaceId() == "" {
+		return nil, h.error(errNamespaceNotSet, scope, endpointName)
+	}
+
+	// Execute workflow.
+	wfParams := deletenamespace.DeleteNamespaceWorkflowParams{
+		NamespaceID: namespace.ID(request.GetNamespaceId()),
+		Namespace:   namespace.Name(request.GetNamespace()),
+		DeleteExecutionsConfig: deleteexecutions.DeleteExecutionsConfig{
+			DeleteActivityRPS:                    int(request.GetDeleteActivityRps()),
+			PageSize:                             int(request.GetPageSize()),
+			PagesPerExecutionCount:               int(request.GetPagesPerExecutionCount()),
+			ConcurrentDeleteExecutionsActivities: int(request.GetConcurrentDeleteExecutionsActivities()),
+		},
+	}
+
+	sdkClient := h.sdkClientFactory.GetSystemClient(h.logger)
+	run, err := sdkClient.ExecuteWorkflow(
+		ctx,
+		sdkclient.StartWorkflowOptions{
+			TaskQueue: worker.DefaultWorkerTaskQueue,
+			ID:        deleteexecutions.WorkflowName,
+		},
+		deletenamespace.WorkflowName,
+		wfParams,
+	)
+	if err != nil {
+		return nil, h.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToStartWorkflowMessage, deletenamespace.WorkflowName, err)), scope, endpointName)
+	}
+
+	// Wait for workflow to complete.
+	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
+	err = run.Get(ctx, &wfResult)
+	if err != nil {
+		scope.IncCounter(metrics.DeleteNamespaceFailuresCount)
+		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
+		return nil, h.error(serviceerror.NewSystemWorkflow(execution, err), scope, endpointName)
+	}
+	scope.IncCounter(metrics.DeleteNamespaceSuccessCount)
+
+	return &operatorservice.DeleteNamespaceResponse{
+		DeletedId:   wfResult.DeletedID.String(),
+		DeletedName: wfResult.DeletedName.String(),
+	}, nil
+}
+
 // startRequestProfile initiates recording of request metrics
 func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, metrics.Stopwatch) {
 	metricsScope := h.metricsClient.Scope(scope)
@@ -287,21 +349,17 @@ func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, met
 func (h *OperatorHandlerImpl) error(err error, scope metrics.Scope, endpointName string) error {
 	switch err := err.(type) {
 	case *serviceerror.Unavailable:
-		h.logger.Error("["+endpointName+"] Unavailable error", tag.Error(err))
+		h.logger.Error("Unavailable error.", tag.Error(err), tag.Endpoint(endpointName))
 		scope.IncCounter(metrics.ServiceFailures)
-		return err
 	case *serviceerror.InvalidArgument:
 		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
-		return err
 	case *serviceerror.ResourceExhausted:
 		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
-		return err
 	case *serviceerror.NotFound:
-		return err
+	default:
+		h.logger.Error("Unknown error.", tag.Error(err), tag.Endpoint(endpointName))
+		scope.IncCounter(metrics.ServiceFailures)
 	}
-
-	h.logger.Error("["+endpointName+"] Unknown error", tag.Error(err))
-	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
 }
