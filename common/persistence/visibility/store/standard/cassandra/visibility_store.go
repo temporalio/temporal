@@ -446,6 +446,8 @@ func (v *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDel
 			namespacePartition,
 			persistence.UnixMilliseconds(*request.CloseTime),
 			request.RunID)
+	} else {
+		panic("both StartTime and CloseTime are nil")
 	}
 
 	if err := query.Consistency(v.lowConslevel).Exec(); err != nil {

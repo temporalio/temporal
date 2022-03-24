@@ -29,13 +29,8 @@ package workflow
 import (
 	"context"
 
-	"go.temporal.io/api/serviceerror"
-
-	"time"
-
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -88,6 +83,7 @@ func NewDeleteManager(
 
 	return deleteManager
 }
+
 func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
@@ -132,6 +128,14 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	ms MutableState,
 	sourceTaskVersion int64,
 ) error {
+
+	if ms.IsWorkflowExecutionRunning() {
+		// DeleteWorkflowExecution is called from transfer task queue processor
+		// and corresponding transfer task is created only if workflow is not running.
+		// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
+		// workflow should not be deleted. NotFound errors are ignored by task processor.
+		return consts.ErrWorkflowNotCompleted
+	}
 
 	err := m.deleteWorkflowExecutionInternal(
 		ctx,
@@ -206,21 +210,9 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		currentBranchToken = nil
 	}
 
-	var startTime *time.Time
-	var closeTime *time.Time
-
-	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		completionEvent, err := ms.GetCompletionEvent(ctx)
-		if err != nil {
-			return err
-		}
-		closeTime = completionEvent.GetEventTime()
-	} else {
-		startTime = ms.GetExecutionInfo().GetStartTime()
-		// only allow deleting open workflow in passive clusters
-		if ms.GetNamespaceEntry().ActiveClusterName() == m.shard.GetClusterMetadata().GetCurrentClusterName() {
-			return serviceerror.NewInvalidArgument("cannot delete open workflow from the active cluster")
-		}
+	completionEvent, err := ms.GetCompletionEvent(ctx)
+	if err != nil {
+		return err
 	}
 
 	if err := m.shard.DeleteWorkflowExecution(
@@ -232,8 +224,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		},
 		currentBranchToken,
 		newTaskVersion,
-		startTime,
-		closeTime,
+		nil,
+		completionEvent.GetEventTime(),
 	); err != nil {
 		return err
 	}
