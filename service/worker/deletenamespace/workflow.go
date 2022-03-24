@@ -82,7 +82,11 @@ var (
 
 func validateParams(params *DeleteNamespaceWorkflowParams) error {
 	if params.Namespace.IsEmpty() && params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("both namespace name and namespace ID are empty", "", nil)
+		return temporal.NewNonRetryableApplicationError("namespace or namespace ID is required", "", nil)
+	}
+
+	if !params.Namespace.IsEmpty() && !params.NamespaceID.IsEmpty() {
+		return temporal.NewNonRetryableApplicationError("only one of namespace or namespace ID must be set", "", nil)
 	}
 
 	params.DeleteExecutionsConfig.ApplyDefaults()
@@ -103,20 +107,18 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	var a *activities
 
 	// Step 1. Get namespace info.
-	if params.NamespaceID.IsEmpty() || params.Namespace.IsEmpty() {
-		ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		var namespaceInfo getNamespaceInfoResult
-		err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
-		if err != nil {
-			return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
-		}
-		params.Namespace = namespaceInfo.Namespace
-		params.NamespaceID = namespaceInfo.NamespaceID
+	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	var namespaceInfo getNamespaceInfoResult
+	err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
+	if err != nil {
+		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 	}
+	params.Namespace = namespaceInfo.Namespace
+	params.NamespaceID = namespaceInfo.NamespaceID
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err := workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}

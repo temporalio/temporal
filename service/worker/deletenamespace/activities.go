@@ -32,6 +32,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/sdk/temporal"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -77,7 +78,7 @@ func (a *activities) GetNamespaceInfoActivity(ctx context.Context, nsID namespac
 	}
 
 	if getNamespaceResponse.Namespace == nil || getNamespaceResponse.Namespace.Info == nil || getNamespaceResponse.Namespace.Info.Id == "" {
-		return getNamespaceInfoResult{}, serviceerror.NewInternal("namespace info is corrupted")
+		return getNamespaceInfoResult{}, temporal.NewNonRetryableApplicationError("namespace info is corrupted", "", nil)
 	}
 
 	return getNamespaceInfoResult{
