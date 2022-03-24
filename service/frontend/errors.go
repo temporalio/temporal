@@ -31,6 +31,7 @@ var (
 	errTaskQueueNotSet                                    = serviceerror.NewInvalidArgument("TaskQueue is not set on request.")
 	errExecutionNotSet                                    = serviceerror.NewInvalidArgument("Execution is not set on request.")
 	errNamespaceNotSet                                    = serviceerror.NewInvalidArgument("Namespace is not set on request.")
+	errBothNamespaceIDAndNameSet                          = serviceerror.NewInvalidArgument("Only one of namespace name or Id should be set on request.")
 	errWorkflowIDNotSet                                   = serviceerror.NewInvalidArgument("WorkflowId is not set on request.")
 	errActivityIDNotSet                                   = serviceerror.NewInvalidArgument("ActivityId is not set on request.")
 	errSignalNameNotSet                                   = serviceerror.NewInvalidArgument("SignalName is not set on request.")

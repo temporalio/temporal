@@ -296,6 +296,10 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		return nil, h.error(errNamespaceNotSet, scope, endpointName)
 	}
 
+	if request.GetNamespace() != "" && request.GetNamespaceId() != "" {
+		return nil, h.error(errBothNamespaceIDAndNameSet, scope, endpointName)
+	}
+
 	// Execute workflow.
 	wfParams := deletenamespace.DeleteNamespaceWorkflowParams{
 		NamespaceID: namespace.ID(request.GetNamespaceId()),
