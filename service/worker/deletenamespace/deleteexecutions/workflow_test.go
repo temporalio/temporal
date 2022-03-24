@@ -90,7 +90,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_NoExecutions(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
-	visibilityManager.EXPECT().ListWorkflowExecutions(&manager.ListWorkflowExecutionsRequestV2{
+	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   "namespace-id",
 		Namespace:     "namespace",
 		PageSize:      1000,
@@ -240,7 +240,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 	// First page.
-	visibilityManager.EXPECT().ListWorkflowExecutions(&manager.ListWorkflowExecutionsRequestV2{
+	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   "namespace-id",
 		Namespace:     "namespace",
 		PageSize:      2,
@@ -266,7 +266,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	}, nil).Times(2)
 
 	// Second page.
-	visibilityManager.EXPECT().ListWorkflowExecutions(&manager.ListWorkflowExecutionsRequestV2{
+	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   "namespace-id",
 		Namespace:     "namespace",
 		PageSize:      2,
@@ -332,7 +332,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
 	// First page.
-	visibilityManager.EXPECT().ListWorkflowExecutions(&manager.ListWorkflowExecutionsRequestV2{
+	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   "namespace-id",
 		Namespace:     "namespace",
 		PageSize:      2,
@@ -358,7 +358,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	}, nil).Times(2)
 
 	// Second page.
-	visibilityManager.EXPECT().ListWorkflowExecutions(&manager.ListWorkflowExecutionsRequestV2{
+	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   "namespace-id",
 		Namespace:     "namespace",
 		PageSize:      2,

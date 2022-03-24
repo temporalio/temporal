@@ -84,7 +84,7 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) GetNextPageTokenActivity(_ context.Context, params GetNextPageTokenParams) ([]byte, error) {
+func (a *Activities) GetNextPageTokenActivity(ctx context.Context, params GetNextPageTokenParams) ([]byte, error) {
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID:   params.NamespaceID,
 		Namespace:     params.Namespace,
@@ -92,7 +92,7 @@ func (a *Activities) GetNextPageTokenActivity(_ context.Context, params GetNextP
 		NextPageToken: params.NextPageToken,
 	}
 
-	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
+	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to list all workflows to get next page token.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
@@ -113,7 +113,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 		PageSize:      params.ListPageSize,
 		NextPageToken: params.NextPageToken,
 	}
-	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
+	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to list all workflows.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))

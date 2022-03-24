@@ -59,14 +59,14 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) EnsureNoExecutionsActivity(_ context.Context, nsID namespace.ID, nsName namespace.Name) error {
+func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
 	// TODO: remove this check after CountWorkflowExecutions is implemented in standard visibility.
 	if a.visibilityManager.GetName() == "elasticsearch" {
 		req := &manager.CountWorkflowExecutionsRequest{
 			NamespaceID: nsID,
 			Namespace:   nsName,
 		}
-		resp, err := a.visibilityManager.CountWorkflowExecutions(req)
+		resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 		if err != nil {
 			a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 			a.logger.Error("Unable to count workflows.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
@@ -84,7 +84,7 @@ func (a *Activities) EnsureNoExecutionsActivity(_ context.Context, nsID namespac
 		Namespace:   nsName,
 		PageSize:    1,
 	}
-	resp, err := a.visibilityManager.ListWorkflowExecutions(req)
+	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 		a.logger.Error("Unable to count workflows using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
