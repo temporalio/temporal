@@ -819,6 +819,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	key definition.WorkflowKey,
 	branchToken []byte,
 	newTaskVersion int64,
+	startTime *time.Time,
 	closeTime *time.Time,
 ) error {
 	// DeleteWorkflowExecution is a 4-steps process (order is very important and should not be changed):
@@ -871,6 +872,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 						WorkflowKey:         key,
 						VisibilityTimestamp: s.timeSource.Now(),
 						Version:             newTaskVersion,
+						StartTime:           startTime,
 						CloseTime:           closeTime,
 					},
 				},

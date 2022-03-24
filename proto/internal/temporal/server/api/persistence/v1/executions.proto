@@ -191,6 +191,7 @@ message VisibilityTaskInfo {
     int64 task_id = 6;
     google.protobuf.Timestamp visibility_time = 7 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp close_time = 8 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp start_time = 9 [(gogoproto.stdtime) = true];
 }
 
 // timer column
