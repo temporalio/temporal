@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -104,7 +105,7 @@ func (s *deleteManagerWorkflowSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *deleteManagerWorkflowSuite) TestDeleteClosedWorkflowExecution() {
+func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -112,6 +113,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteClosedWorkflowExecution() {
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
@@ -119,8 +121,8 @@ func (s *deleteManagerWorkflowSuite) TestDeleteClosedWorkflowExecution() {
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		EventTime: &closeTime,
 	}
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
+
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
 		definition.WorkflowKey{
@@ -154,6 +156,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
@@ -161,7 +164,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
 		EventTime: &closeTime,
 	}
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
