@@ -25,6 +25,8 @@
 package visibility
 
 import (
+	"context"
+
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
@@ -61,13 +63,16 @@ func (v *visibilityManagerDual) GetName() string {
 	return "VisibilityManagerDual"
 }
 
-func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(request *manager.RecordWorkflowExecutionStartedRequest) error {
+func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(
+	ctx context.Context,
+	request *manager.RecordWorkflowExecutionStartedRequest,
+) error {
 	ms, err := v.managerSelector.writeManagers()
 	if err != nil {
 		return err
 	}
 	for _, m := range ms {
-		err = m.RecordWorkflowExecutionStarted(request)
+		err = m.RecordWorkflowExecutionStarted(ctx, request)
 		if err != nil {
 			return err
 		}
@@ -75,13 +80,16 @@ func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(request *manager.
 	return nil
 }
 
-func (v *visibilityManagerDual) RecordWorkflowExecutionClosed(request *manager.RecordWorkflowExecutionClosedRequest) error {
+func (v *visibilityManagerDual) RecordWorkflowExecutionClosed(
+	ctx context.Context,
+	request *manager.RecordWorkflowExecutionClosedRequest,
+) error {
 	ms, err := v.managerSelector.writeManagers()
 	if err != nil {
 		return err
 	}
 	for _, m := range ms {
-		err = m.RecordWorkflowExecutionClosed(request)
+		err = m.RecordWorkflowExecutionClosed(ctx, request)
 		if err != nil {
 			return err
 		}
@@ -89,13 +97,16 @@ func (v *visibilityManagerDual) RecordWorkflowExecutionClosed(request *manager.R
 	return nil
 }
 
-func (v *visibilityManagerDual) UpsertWorkflowExecution(request *manager.UpsertWorkflowExecutionRequest) error {
+func (v *visibilityManagerDual) UpsertWorkflowExecution(
+	ctx context.Context,
+	request *manager.UpsertWorkflowExecutionRequest,
+) error {
 	ms, err := v.managerSelector.writeManagers()
 	if err != nil {
 		return err
 	}
 	for _, m := range ms {
-		err = m.UpsertWorkflowExecution(request)
+		err = m.UpsertWorkflowExecution(ctx, request)
 		if err != nil {
 			return err
 		}
@@ -103,13 +114,16 @@ func (v *visibilityManagerDual) UpsertWorkflowExecution(request *manager.UpsertW
 	return nil
 }
 
-func (v *visibilityManagerDual) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+func (v *visibilityManagerDual) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *manager.VisibilityDeleteWorkflowExecutionRequest,
+) error {
 	ms, err := v.managerSelector.writeManagers()
 	if err != nil {
 		return err
 	}
 	for _, m := range ms {
-		err = m.DeleteWorkflowExecution(request)
+		err = m.DeleteWorkflowExecution(ctx, request)
 		if err != nil {
 			return err
 		}
@@ -117,42 +131,72 @@ func (v *visibilityManagerDual) DeleteWorkflowExecution(request *manager.Visibil
 	return nil
 }
 
-func (v *visibilityManagerDual) ListOpenWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutions(request)
+func (v *visibilityManagerDual) ListOpenWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListClosedWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutions(request)
+func (v *visibilityManagerDual) ListClosedWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListOpenWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByType(request)
+func (v *visibilityManagerDual) ListOpenWorkflowExecutionsByType(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByType(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByType(request)
+func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByType(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByType(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListOpenWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByWorkflowID(request)
+func (v *visibilityManagerDual) ListOpenWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByWorkflowID(request)
+func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByStatus(request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByStatus(request)
+func (v *visibilityManagerDual) ListClosedWorkflowExecutionsByStatus(
+	ctx context.Context,
+	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListClosedWorkflowExecutionsByStatus(ctx, request)
 }
 
-func (v *visibilityManagerDual) ListWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ListWorkflowExecutions(request)
+func (v *visibilityManagerDual) ListWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ListWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) ScanWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).ScanWorkflowExecutions(request)
+func (v *visibilityManagerDual) ScanWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*manager.ListWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).ScanWorkflowExecutions(ctx, request)
 }
 
-func (v *visibilityManagerDual) CountWorkflowExecutions(request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
-	return v.managerSelector.readManager(request.Namespace).CountWorkflowExecutions(request)
+func (v *visibilityManagerDual) CountWorkflowExecutions(
+	ctx context.Context,
+	request *manager.CountWorkflowExecutionsRequest,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	return v.managerSelector.readManager(request.Namespace).CountWorkflowExecutions(ctx, request)
 }

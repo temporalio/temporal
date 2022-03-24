@@ -2270,6 +2270,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 			err = errNoPermission
 		} else {
 			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByWorkflowID(
+				ctx,
 				&manager.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
@@ -2281,7 +2282,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByType(&manager.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2289,7 +2290,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 		wh.logger.Debug("List open workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
 	} else {
-		persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutions(baseReq)
+		persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutions(ctx, baseReq)
 	}
 
 	if err != nil {
@@ -2363,6 +2364,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 			err = errNoPermission
 		} else {
 			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByWorkflowID(
+				ctx,
 				&manager.ListWorkflowExecutionsByWorkflowIDRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					WorkflowID:                    request.GetExecutionFilter().GetWorkflowId(),
@@ -2374,7 +2376,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
 			err = errNoPermission
 		} else {
-			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByType(&manager.ListWorkflowExecutionsByTypeRequest{
+			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				WorkflowTypeName:              request.GetTypeFilter().GetName(),
 			})
@@ -2388,7 +2390,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				err = errStatusFilterMustBeNotRunning
 			} else {
-				persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByStatus(&manager.ListClosedWorkflowExecutionsByStatusRequest{
+				persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByStatus(ctx, &manager.ListClosedWorkflowExecutionsByStatusRequest{
 					ListWorkflowExecutionsRequest: baseReq,
 					Status:                        request.GetStatusFilter().GetStatus(),
 				})
@@ -2397,7 +2399,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 		wh.logger.Debug("List closed workflow with filter",
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByStatus)
 	} else {
-		persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutions(baseReq)
+		persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutions(ctx, baseReq)
 	}
 
 	if err != nil {
@@ -2447,7 +2449,7 @@ func (wh *WorkflowHandler) ListWorkflowExecutions(ctx context.Context, request *
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
-	persistenceResp, err := wh.visibilityMrg.ListWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.ListWorkflowExecutions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -2581,7 +2583,7 @@ func (wh *WorkflowHandler) ScanWorkflowExecutions(ctx context.Context, request *
 		NextPageToken: request.NextPageToken,
 		Query:         request.GetQuery(),
 	}
-	persistenceResp, err := wh.visibilityMrg.ScanWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.ScanWorkflowExecutions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -2620,7 +2622,7 @@ func (wh *WorkflowHandler) CountWorkflowExecutions(ctx context.Context, request 
 		Namespace:   namespaceName,
 		Query:       request.GetQuery(),
 	}
-	persistenceResp, err := wh.visibilityMrg.CountWorkflowExecutions(req)
+	persistenceResp, err := wh.visibilityMrg.CountWorkflowExecutions(ctx, req)
 	if err != nil {
 		return nil, err
 	}
