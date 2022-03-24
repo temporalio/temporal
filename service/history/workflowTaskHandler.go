@@ -252,7 +252,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 
 	localDispatchActivity := false
 	namespace := handler.mutableState.GetNamespaceEntry().Name().String()
-	if attr.RequestStart && handler.config.EnableActivityLocalDispatch(namespace) {
+	if attr.RequestEagerExecution && handler.config.EnableActivityLocalDispatch(namespace) {
 		localDispatchActivity = true
 	}
 

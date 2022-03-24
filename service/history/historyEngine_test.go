@@ -1677,7 +1677,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityLocalDispatch() {
 				ScheduleToStartTimeout: scheduleToStartTimeout,
 				StartToCloseTimeout:    startToCloseTimeout,
 				HeartbeatTimeout:       heartbeatTimeout,
-				RequestStart:           false,
+				RequestEagerExecution:  false,
 			}},
 		},
 		{
@@ -1691,7 +1691,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityLocalDispatch() {
 				ScheduleToStartTimeout: scheduleToStartTimeout,
 				StartToCloseTimeout:    startToCloseTimeout,
 				HeartbeatTimeout:       heartbeatTimeout,
-				RequestStart:           true,
+				RequestEagerExecution:  true,
 			}},
 		},
 	}
