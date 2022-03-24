@@ -48,6 +48,7 @@ const (
 
 type (
 	DeleteNamespaceWorkflowParams struct {
+		// One of NamespaceID or Namespace must be provided.
 		NamespaceID namespace.ID
 		Namespace   namespace.Name
 
@@ -101,15 +102,17 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	var a *activities
 
-	// Step 1. Get namespaceID.
-	if params.NamespaceID.IsEmpty() {
+	// Step 1. Get namespace info.
+	if params.NamespaceID.IsEmpty() || params.Namespace.IsEmpty() {
 		ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
+		var namespaceInfo getNamespaceInfoResult
+		err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
 		if err != nil {
 			return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 		}
+		params.Namespace = namespaceInfo.Namespace
+		params.NamespaceID = namespaceInfo.NamespaceID
 	}
-	result.DeletedID = params.NamespaceID
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
@@ -117,6 +120,8 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	if err != nil {
 		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
+
+	result.DeletedID = params.NamespaceID
 
 	// Step 3. Rename namespace.
 	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)

@@ -46,6 +46,11 @@ type (
 		metricsClient   metrics.Client
 		logger          log.Logger
 	}
+
+	getNamespaceInfoResult struct {
+		NamespaceID namespace.ID
+		Namespace   namespace.Name
+	}
 )
 
 func NewActivities(
@@ -60,21 +65,25 @@ func NewActivities(
 	}
 }
 
-func (a *activities) GetNamespaceIDActivity(ctx context.Context, nsName namespace.Name) (namespace.ID, error) {
+func (a *activities) GetNamespaceInfoActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) (getNamespaceInfoResult, error) {
 	getNamespaceRequest := &persistence.GetNamespaceRequest{
 		Name: nsName.String(),
+		ID:   nsID.String(),
 	}
 
 	getNamespaceResponse, err := a.metadataManager.GetNamespace(ctx, getNamespaceRequest)
 	if err != nil {
-		return namespace.EmptyID, err
+		return getNamespaceInfoResult{}, err
 	}
 
 	if getNamespaceResponse.Namespace == nil || getNamespaceResponse.Namespace.Info == nil || getNamespaceResponse.Namespace.Info.Id == "" {
-		return namespace.EmptyID, serviceerror.NewInternal("namespace info is corrupted")
+		return getNamespaceInfoResult{}, serviceerror.NewInternal("namespace info is corrupted")
 	}
 
-	return namespace.ID(getNamespaceResponse.Namespace.Info.Id), nil
+	return getNamespaceInfoResult{
+		NamespaceID: namespace.ID(getNamespaceResponse.Namespace.Info.Id),
+		Namespace:   namespace.Name(getNamespaceResponse.Namespace.Info.Name),
+	}, nil
 }
 
 func (a *activities) MarkNamespaceDeletedActivity(ctx context.Context, nsName namespace.Name) error {
