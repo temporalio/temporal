@@ -92,10 +92,10 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 ) (retError error) {
 
 	// sync activity info will only be sent from active side, when
-	// 1. activity has retry policy and activity got started
-	// 2. activity heart beat
+	// 1. activity retry
+	// 2. activity start
+	// 3. activity heart beat
 	// no sync activity task will be sent when active side fail / timeout activity,
-	// since standby side does not have activity retry timer
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
