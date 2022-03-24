@@ -850,11 +850,6 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		}
 	}
 
-	// only allow deleting open workflow in passive clusters
-	if startTime != nil && namespaceEntry.ActiveClusterName() == s.clusterMetadata.GetCurrentClusterName() {
-		return serviceerror.NewInvalidArgument("Cannot delete open workflow in active cluster")
-	}
-
 	s.wLock()
 	defer s.wUnlock()
 

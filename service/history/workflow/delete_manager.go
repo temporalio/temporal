@@ -28,6 +28,7 @@ package workflow
 
 import (
 	"context"
+	"go.temporal.io/api/serviceerror"
 
 	"time"
 
@@ -215,6 +216,10 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		closeTime = completionEvent.GetEventTime()
 	} else {
 		startTime = ms.GetExecutionInfo().GetStartTime()
+		// only allow deleting open workflow in passive clusters
+		if ms.GetNamespaceEntry().ActiveClusterName() == m.shard.GetClusterMetadata().GetCurrentClusterName() {
+			return serviceerror.NewInvalidArgument("cannot delete open workflow from the active cluster")
+		}
 	}
 
 	if err := m.shard.DeleteWorkflowExecution(
