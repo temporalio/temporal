@@ -190,7 +190,7 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	}, nil)
 
 	metadataManager := persistence.NewMockMetadataManager(ctrl)
-	metadataManager.EXPECT().DeleteNamespaceByName(&persistence.DeleteNamespaceByNameRequest{
+	metadataManager.EXPECT().DeleteNamespaceByName(gomock.Any(), &persistence.DeleteNamespaceByNameRequest{
 		Name: "namespace",
 	}).Return(nil)
 

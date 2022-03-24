@@ -59,7 +59,7 @@ func NewActivities(
 	}
 }
 
-func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+func (a *Activities) EnsureNoExecutionsActivity(_ context.Context, nsID namespace.ID, nsName namespace.Name) error {
 	// TODO: remove this check after CountWorkflowExecutions is implemented in standard visibility.
 	if a.visibilityManager.GetName() == "elasticsearch" {
 		req := &manager.CountWorkflowExecutionsRequest{
@@ -97,12 +97,12 @@ func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namesp
 	return nil
 }
 
-func (a *Activities) DeleteNamespaceActivity(_ context.Context, nsID namespace.ID, nsName namespace.Name) error {
+func (a *Activities) DeleteNamespaceActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
 	deleteNamespaceRequest := &persistence.DeleteNamespaceByNameRequest{
 		Name: nsName.String(),
 	}
 
-	err := a.metadataManager.DeleteNamespaceByName(deleteNamespaceRequest)
+	err := a.metadataManager.DeleteNamespaceByName(ctx, deleteNamespaceRequest)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceFailuresCount)
 		a.logger.Error("Unable delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
