@@ -29,6 +29,7 @@
 package namespace
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -59,15 +60,15 @@ func (m *MockReplicationTaskExecutor) EXPECT() *MockReplicationTaskExecutorMockR
 }
 
 // Execute mocks base method.
-func (m *MockReplicationTaskExecutor) Execute(task *repication.NamespaceTaskAttributes) error {
+func (m *MockReplicationTaskExecutor) Execute(ctx context.Context, task *repication.NamespaceTaskAttributes) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Execute", task)
+	ret := m.ctrl.Call(m, "Execute", ctx, task)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Execute indicates an expected call of Execute.
-func (mr *MockReplicationTaskExecutorMockRecorder) Execute(task interface{}) *gomock.Call {
+func (mr *MockReplicationTaskExecutorMockRecorder) Execute(ctx, task interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockReplicationTaskExecutor)(nil).Execute), task)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Execute", reflect.TypeOf((*MockReplicationTaskExecutor)(nil).Execute), ctx, task)
 }

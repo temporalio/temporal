@@ -29,6 +29,7 @@
 package searchattribute
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -112,15 +113,15 @@ func (mr *MockManagerMockRecorder) GetSearchAttributes(indexName, forceRefreshCa
 }
 
 // SaveSearchAttributes mocks base method.
-func (m *MockManager) SaveSearchAttributes(indexName string, newCustomSearchAttributes map[string]v1.IndexedValueType) error {
+func (m *MockManager) SaveSearchAttributes(ctx context.Context, indexName string, newCustomSearchAttributes map[string]v1.IndexedValueType) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveSearchAttributes", indexName, newCustomSearchAttributes)
+	ret := m.ctrl.Call(m, "SaveSearchAttributes", ctx, indexName, newCustomSearchAttributes)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SaveSearchAttributes indicates an expected call of SaveSearchAttributes.
-func (mr *MockManagerMockRecorder) SaveSearchAttributes(indexName, newCustomSearchAttributes interface{}) *gomock.Call {
+func (mr *MockManagerMockRecorder) SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveSearchAttributes", reflect.TypeOf((*MockManager)(nil).SaveSearchAttributes), indexName, newCustomSearchAttributes)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveSearchAttributes", reflect.TypeOf((*MockManager)(nil).SaveSearchAttributes), ctx, indexName, newCustomSearchAttributes)
 }

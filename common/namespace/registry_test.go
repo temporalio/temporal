@@ -160,11 +160,11 @@ func (s *registrySuite) TestListNamespace() {
 
 	pageToken := []byte("some random page token")
 
-	s.regPersistence.EXPECT().GetMetadata().Return(
+	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
-	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      namespace.CacheRefreshPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -172,7 +172,7 @@ func (s *registrySuite) TestListNamespace() {
 		NextPageToken: pageToken,
 	}, nil)
 
-	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      namespace.CacheRefreshPageSize,
 		NextPageToken: pageToken,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -257,11 +257,11 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 	entry2 := namespace.FromPersistentState(namespaceRecord2)
 	namespaceNotificationVersion++
 
-	s.regPersistence.EXPECT().GetMetadata().Return(
+	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
-	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      namespace.CacheRefreshPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -355,11 +355,11 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	entry2Old := namespace.FromPersistentState(namespaceRecord2Old)
 	namespaceNotificationVersion++
 
-	s.regPersistence.EXPECT().GetMetadata().Return(
+	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
-	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      namespace.CacheRefreshPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -434,11 +434,11 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	s.Empty(entriesOld)
 	s.Empty(entriesNew)
 
-	s.regPersistence.EXPECT().GetMetadata().Return(
+	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
-	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      namespace.CacheRefreshPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -461,7 +461,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 
 func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	namespaceNotificationVersion := int64(999999) // make this notification version really large for test
-	s.regPersistence.EXPECT().GetMetadata().Return(
+	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
@@ -487,7 +487,7 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 	}
 	entryOld := namespace.FromPersistentState(namespaceRecordOld)
 
-	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      namespace.CacheRefreshPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -583,11 +583,11 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	}
 	namespaceNotificationVersion++
 
-	s.regPersistence.EXPECT().GetMetadata().Return(
+	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
-	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      namespace.CacheRefreshPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -601,11 +601,11 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	s.registry.Start()
 	defer s.registry.Stop()
 
-	s.regPersistence.EXPECT().GetMetadata().Return(
+	s.regPersistence.EXPECT().GetMetadata(gomock.Any()).Return(
 		&persistence.GetMetadataResponse{
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
-	s.regPersistence.EXPECT().ListNamespaces(&persistence.ListNamespacesRequest{
+	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
 		PageSize:      namespace.CacheRefreshPageSize,
 		NextPageToken: nil,
 	}).Return(&persistence.ListNamespacesResponse{
@@ -640,9 +640,9 @@ func TestCacheByName(t *testing.T) {
 		},
 	}
 	regPersist := persistence.NewMockMetadataManager(gomock.NewController(t))
-	regPersist.EXPECT().GetMetadata().Return(
+	regPersist.EXPECT().GetMetadata(gomock.Any()).Return(
 		&persistence.GetMetadataResponse{NotificationVersion: nsrec.NotificationVersion + 1}, nil)
-	regPersist.EXPECT().ListNamespaces(gomock.Any()).Return(&persistence.ListNamespacesResponse{
+	regPersist.EXPECT().ListNamespaces(gomock.Any(), gomock.Any()).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{&nsrec},
 	}, nil)
 	reg := namespace.NewRegistry(

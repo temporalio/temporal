@@ -160,7 +160,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 		s.Nil(newMetadata)
 	}
 
-	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(gomock.Any()).Return(
+	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(gomock.Any(), gomock.Any()).Return(
 		&persistence.ListClusterMetadataResponse{
 			ClusterMetadata: []*persistence.GetClusterMetadataResponse{
 				{
@@ -190,7 +190,7 @@ func (s *metadataSuite) Test_RefreshClusterMetadata_Success() {
 func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 	nextPageSizeToken := []byte{1}
 	newClusterName := uuid.New()
-	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(gomock.Any(), &persistence.ListClusterMetadataRequest{
 		PageSize:      defaultClusterMetadataPageSize,
 		NextPageToken: nil,
 	}).Return(
@@ -208,7 +208,7 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 			},
 			NextPageToken: nextPageSizeToken,
 		}, nil).Times(1)
-	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+	s.mockClusterMetadataStore.EXPECT().ListClusterMetadata(gomock.Any(), &persistence.ListClusterMetadataRequest{
 		PageSize:      defaultClusterMetadataPageSize,
 		NextPageToken: nextPageSizeToken,
 	}).Return(
@@ -226,7 +226,7 @@ func (s *metadataSuite) Test_ListAllClusterMetadataFromDB_Success() {
 			},
 		}, nil).Times(1)
 
-	resp, err := s.metadata.listAllClusterMetadataFromDB()
+	resp, err := s.metadata.listAllClusterMetadataFromDB(context.Background())
 	s.NoError(err)
 	s.Equal(2, len(resp))
 }

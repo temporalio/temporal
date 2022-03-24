@@ -177,7 +177,6 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	@./develop/scripts/create_build_info_data.sh
 	go build -o temporal-server ./cmd/server
 
 temporal-cassandra-tool:

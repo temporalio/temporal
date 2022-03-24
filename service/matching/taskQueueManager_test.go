@@ -153,7 +153,7 @@ func (a *testIDBlockAlloc) RangeID() int64 {
 	return a.rid
 }
 
-func (a *testIDBlockAlloc) RenewLease() (taskQueueState, error) {
+func (a *testIDBlockAlloc) RenewLease(_ context.Context) (taskQueueState, error) {
 	s, err := a.alloc()
 	if err == nil {
 		a.rid = s.rangeID

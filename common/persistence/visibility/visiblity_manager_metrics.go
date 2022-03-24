@@ -25,6 +25,8 @@
 package visibility
 
 import (
+	"context"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/common/log"
@@ -66,100 +68,142 @@ func (m *visibilityManagerMetrics) GetName() string {
 	return m.delegate.GetName()
 }
 
-func (m *visibilityManagerMetrics) RecordWorkflowExecutionStarted(request *manager.RecordWorkflowExecutionStartedRequest) error {
+func (m *visibilityManagerMetrics) RecordWorkflowExecutionStarted(
+	ctx context.Context,
+	request *manager.RecordWorkflowExecutionStartedRequest,
+) error {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceRecordWorkflowExecutionStartedScope)
-	err := m.delegate.RecordWorkflowExecutionStarted(request)
+	err := m.delegate.RecordWorkflowExecutionStarted(ctx, request)
 	sw.Stop()
 	return m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) RecordWorkflowExecutionClosed(request *manager.RecordWorkflowExecutionClosedRequest) error {
+func (m *visibilityManagerMetrics) RecordWorkflowExecutionClosed(
+	ctx context.Context,
+	request *manager.RecordWorkflowExecutionClosedRequest,
+) error {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceRecordWorkflowExecutionClosedScope)
-	err := m.delegate.RecordWorkflowExecutionClosed(request)
+	err := m.delegate.RecordWorkflowExecutionClosed(ctx, request)
 	sw.Stop()
 	return m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) UpsertWorkflowExecution(request *manager.UpsertWorkflowExecutionRequest) error {
+func (m *visibilityManagerMetrics) UpsertWorkflowExecution(
+	ctx context.Context,
+	request *manager.UpsertWorkflowExecutionRequest,
+) error {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceUpsertWorkflowExecutionScope)
-	err := m.delegate.UpsertWorkflowExecution(request)
+	err := m.delegate.UpsertWorkflowExecution(ctx, request)
 	sw.Stop()
 	return m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+func (m *visibilityManagerMetrics) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *manager.VisibilityDeleteWorkflowExecutionRequest,
+) error {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceDeleteWorkflowExecutionScope)
-	err := m.delegate.DeleteWorkflowExecution(request)
+	err := m.delegate.DeleteWorkflowExecution(ctx, request)
 	sw.Stop()
 	return m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ListOpenWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ListOpenWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsScope)
-	response, err := m.delegate.ListOpenWorkflowExecutions(request)
+	response, err := m.delegate.ListOpenWorkflowExecutions(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ListClosedWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ListClosedWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsScope)
-	response, err := m.delegate.ListClosedWorkflowExecutions(request)
+	response, err := m.delegate.ListClosedWorkflowExecutions(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByType(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsByTypeScope)
-	response, err := m.delegate.ListOpenWorkflowExecutionsByType(request)
+	response, err := m.delegate.ListOpenWorkflowExecutionsByType(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByType(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByTypeScope)
-	response, err := m.delegate.ListClosedWorkflowExecutionsByType(request)
+	response, err := m.delegate.ListClosedWorkflowExecutionsByType(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ListOpenWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceListOpenWorkflowExecutionsByWorkflowIDScope)
-	response, err := m.delegate.ListOpenWorkflowExecutionsByWorkflowID(request)
+	response, err := m.delegate.ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByWorkflowIDScope)
-	response, err := m.delegate.ListClosedWorkflowExecutionsByWorkflowID(request)
+	response, err := m.delegate.ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByStatus(request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ListClosedWorkflowExecutionsByStatus(
+	ctx context.Context,
+	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceListClosedWorkflowExecutionsByStatusScope)
-	response, err := m.delegate.ListClosedWorkflowExecutionsByStatus(request)
+	response, err := m.delegate.ListClosedWorkflowExecutionsByStatus(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ListWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ListWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceListWorkflowExecutionsScope)
-	response, err := m.delegate.ListWorkflowExecutions(request)
+	response, err := m.delegate.ListWorkflowExecutions(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) ScanWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) ScanWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceScanWorkflowExecutionsScope)
-	response, err := m.delegate.ScanWorkflowExecutions(request)
+	response, err := m.delegate.ScanWorkflowExecutions(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }
 
-func (m *visibilityManagerMetrics) CountWorkflowExecutions(request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerMetrics) CountWorkflowExecutions(
+	ctx context.Context,
+	request *manager.CountWorkflowExecutionsRequest,
+) (*manager.CountWorkflowExecutionsResponse, error) {
 	scope, sw := m.tagScope(metrics.VisibilityPersistenceCountWorkflowExecutionsScope)
-	response, err := m.delegate.CountWorkflowExecutions(request)
+	response, err := m.delegate.CountWorkflowExecutions(ctx, request)
 	sw.Stop()
 	return response, m.updateErrorMetric(scope, err)
 }

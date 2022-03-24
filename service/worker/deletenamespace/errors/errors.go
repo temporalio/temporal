@@ -22,10 +22,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build !cgo
+package errors
 
-package cgo
+import (
+	"errors"
+
+	"go.temporal.io/sdk/temporal"
+)
 
 const (
-	Enabled = false
+	ExecutionsStillExistErrType = "ExecutionsStillExist"
+)
+
+var (
+	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
+	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
+	ErrExecutionsStillExist         = temporal.NewApplicationError("executions are still exist", ExecutionsStillExistErrType)
 )

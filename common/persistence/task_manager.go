@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	"context"
 	"fmt"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -59,7 +60,10 @@ func (m *taskManagerImpl) GetName() string {
 	return m.taskStore.GetName()
 }
 
-func (m *taskManagerImpl) CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
+func (m *taskManagerImpl) CreateTaskQueue(
+	_ context.Context,
+	request *CreateTaskQueueRequest,
+) (*CreateTaskQueueResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("CreateTaskQueue encountered LastUpdateTime not set")
@@ -87,7 +91,10 @@ func (m *taskManagerImpl) CreateTaskQueue(request *CreateTaskQueueRequest) (*Cre
 	return &CreateTaskQueueResponse{}, nil
 }
 
-func (m *taskManagerImpl) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
+func (m *taskManagerImpl) UpdateTaskQueue(
+	_ context.Context,
+	request *UpdateTaskQueueRequest,
+) (*UpdateTaskQueueResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo
 	if taskQueueInfo.LastUpdateTime == nil {
 		panic("UpdateTaskQueue encountered LastUpdateTime not set")
@@ -115,7 +122,10 @@ func (m *taskManagerImpl) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*Upd
 	return m.taskStore.UpdateTaskQueue(internalRequest)
 }
 
-func (m *taskManagerImpl) GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error) {
+func (m *taskManagerImpl) GetTaskQueue(
+	_ context.Context,
+	request *GetTaskQueueRequest,
+) (*GetTaskQueueResponse, error) {
 	response, err := m.taskStore.GetTaskQueue(&InternalGetTaskQueueRequest{
 		NamespaceID: request.NamespaceID,
 		TaskQueue:   request.TaskQueue,
@@ -135,7 +145,10 @@ func (m *taskManagerImpl) GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQu
 	}, nil
 }
 
-func (m *taskManagerImpl) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
+func (m *taskManagerImpl) ListTaskQueue(
+	_ context.Context,
+	request *ListTaskQueueRequest,
+) (*ListTaskQueueResponse, error) {
 	internalResp, err := m.taskStore.ListTaskQueue(request)
 	if err != nil {
 		return nil, err
@@ -158,11 +171,17 @@ func (m *taskManagerImpl) ListTaskQueue(request *ListTaskQueueRequest) (*ListTas
 	}, nil
 }
 
-func (m *taskManagerImpl) DeleteTaskQueue(request *DeleteTaskQueueRequest) error {
+func (m *taskManagerImpl) DeleteTaskQueue(
+	_ context.Context,
+	request *DeleteTaskQueueRequest,
+) error {
 	return m.taskStore.DeleteTaskQueue(request)
 }
 
-func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
+func (m *taskManagerImpl) CreateTasks(
+	_ context.Context,
+	request *CreateTasksRequest,
+) (*CreateTasksResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo.Data
 	taskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
 	taskQueueInfoBlob, err := m.serializer.TaskQueueInfoToBlob(taskQueueInfo, enumspb.ENCODING_TYPE_PROTO3)
@@ -193,7 +212,10 @@ func (m *taskManagerImpl) CreateTasks(request *CreateTasksRequest) (*CreateTasks
 	return m.taskStore.CreateTasks(internalRequest)
 }
 
-func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
+func (m *taskManagerImpl) GetTasks(
+	_ context.Context,
+	request *GetTasksRequest,
+) (*GetTasksResponse, error) {
 	if request.InclusiveMinTaskID >= request.ExclusiveMaxTaskID {
 		return &GetTasksResponse{}, nil
 	}
@@ -213,10 +235,16 @@ func (m *taskManagerImpl) GetTasks(request *GetTasksRequest) (*GetTasksResponse,
 	return &GetTasksResponse{Tasks: tasks, NextPageToken: internalResp.NextPageToken}, nil
 }
 
-func (m *taskManagerImpl) CompleteTask(request *CompleteTaskRequest) error {
+func (m *taskManagerImpl) CompleteTask(
+	_ context.Context,
+	request *CompleteTaskRequest,
+) error {
 	return m.taskStore.CompleteTask(request)
 }
 
-func (m *taskManagerImpl) CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error) {
+func (m *taskManagerImpl) CompleteTasksLessThan(
+	_ context.Context,
+	request *CompleteTasksLessThanRequest,
+) (int, error) {
 	return m.taskStore.CompleteTasksLessThan(request)
 }

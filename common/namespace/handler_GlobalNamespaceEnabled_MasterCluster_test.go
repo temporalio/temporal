@@ -441,7 +441,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 		})
 	}
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(0)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(0)
 
 	retention := 1 * time.Hour * 24
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
@@ -503,7 +503,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestRegisterG
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
@@ -569,7 +569,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	s.True(len(clusters) > 1)
 	isGlobalNamespace := true
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(2)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
@@ -653,7 +653,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	s.True(len(clusters) > 1)
 	isGlobalNamespace := true
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(2)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
@@ -761,7 +761,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) TestUpdateGet
 	s.True(len(clusters) > 1)
 	isGlobalNamespace := true
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil).Times(2)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil).Times(2)
 
 	registerResp, err := s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,

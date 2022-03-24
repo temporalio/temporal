@@ -148,9 +148,9 @@ func (d *dbTaskManager) Start() {
 	}
 
 	d.signalDispatch()
-	go d.acquireLoop()
-	go d.writerEventLoop()
-	go d.readerEventLoop()
+	go d.acquireLoop(context.TODO())
+	go d.writerEventLoop(context.TODO())
+	go d.readerEventLoop(context.TODO())
 }
 
 func (d *dbTaskManager) Stop() {
@@ -169,12 +169,14 @@ func (d *dbTaskManager) isStopped() bool {
 	return atomic.LoadInt32(&d.status) == common.DaemonStatusStopped
 }
 
-func (d *dbTaskManager) acquireLoop() {
+func (d *dbTaskManager) acquireLoop(
+	ctx context.Context,
+) {
 	defer close(d.startupChan)
 
 AcquireLoop:
 	for !d.isStopped() {
-		err := d.acquireOwnership()
+		err := d.acquireOwnership(ctx)
 		if err == nil {
 			break AcquireLoop
 		}
@@ -186,7 +188,9 @@ AcquireLoop:
 	}
 }
 
-func (d *dbTaskManager) writerEventLoop() {
+func (d *dbTaskManager) writerEventLoop(
+	ctx context.Context,
+) {
 	<-d.startupChan
 
 	updateQueueTicker := time.NewTicker(dbTaskUpdateQueueInterval)
@@ -209,18 +213,20 @@ func (d *dbTaskManager) writerEventLoop() {
 			d.Stop()
 
 		case <-updateQueueTicker.C:
-			d.persistTaskQueue()
+			d.persistTaskQueue(ctx)
 		case <-flushTicker.C:
-			d.taskWriter.flushTasks()
+			d.taskWriter.flushTasks(ctx)
 			d.signalDispatch()
 		case <-d.taskWriter.notifyFlushChan():
-			d.taskWriter.flushTasks()
+			d.taskWriter.flushTasks(ctx)
 			d.signalDispatch()
 		}
 	}
 }
 
-func (d *dbTaskManager) readerEventLoop() {
+func (d *dbTaskManager) readerEventLoop(
+	ctx context.Context,
+) {
 	<-d.startupChan
 
 	updateAckTicker := time.NewTicker(dbTaskUpdateAckInterval)
@@ -243,16 +249,18 @@ func (d *dbTaskManager) readerEventLoop() {
 		case <-updateAckTicker.C:
 			d.updateAckTaskID()
 		case <-dbTaskAckTicker.C:
-			d.deleteAckedTasks()
+			d.deleteAckedTasks(ctx)
 		case <-d.dispatchChan:
-			d.readAndDispatchTasks()
+			d.readAndDispatchTasks(ctx)
 		}
 	}
 }
 
-func (d *dbTaskManager) acquireOwnership() error {
+func (d *dbTaskManager) acquireOwnership(
+	ctx context.Context,
+) error {
 	taskQueueOwnership := d.taskQueueOwnershipProvider()
-	if err := taskQueueOwnership.takeTaskQueueOwnership(); err != nil {
+	if err := taskQueueOwnership.takeTaskQueueOwnership(ctx); err != nil {
 		return err
 	}
 	d.taskReader = d.taskReaderProvider(taskQueueOwnership)
@@ -283,8 +291,10 @@ func (d *dbTaskManager) BufferAndWriteTask(
 	}
 }
 
-func (d *dbTaskManager) readAndDispatchTasks() {
-	iter := d.taskReader.taskIterator(d.taskQueueOwnership.getLastAllocatedTaskID())
+func (d *dbTaskManager) readAndDispatchTasks(
+	ctx context.Context,
+) {
+	iter := d.taskReader.taskIterator(ctx, d.taskQueueOwnership.getLastAllocatedTaskID())
 	for iter.HasNext() {
 		item, err := iter.Next()
 		if err != nil {
@@ -326,12 +336,14 @@ func (d *dbTaskManager) updateAckTaskID() {
 	d.taskQueueOwnership.updateAckedTaskID(ackedTaskID)
 }
 
-func (d *dbTaskManager) deleteAckedTasks() {
+func (d *dbTaskManager) deleteAckedTasks(
+	ctx context.Context,
+) {
 	ackedTaskID := d.taskQueueOwnership.getAckedTaskID()
 	if ackedTaskID <= d.maxDeletedTaskIDInclusive {
 		return
 	}
-	_, err := d.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
+	_, err := d.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
 		NamespaceID:        d.taskQueueKey.NamespaceID,
 		TaskQueueName:      d.taskQueueKey.TaskQueueName,
 		TaskType:           d.taskQueueKey.TaskQueueType,
@@ -345,8 +357,10 @@ func (d *dbTaskManager) deleteAckedTasks() {
 	d.maxDeletedTaskIDInclusive = ackedTaskID
 }
 
-func (d *dbTaskManager) persistTaskQueue() {
-	err := d.taskQueueOwnership.persistTaskQueue()
+func (d *dbTaskManager) persistTaskQueue(
+	ctx context.Context,
+) {
+	err := d.taskQueueOwnership.persistTaskQueue(ctx)
 	if err != nil {
 		d.logger.Error("dbTaskManager encountered unknown error", tag.Error(err))
 	}

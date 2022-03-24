@@ -87,7 +87,7 @@ func (t *visibilityQueueTaskExecutor) execute(
 	case *tasks.CloseExecutionVisibilityTask:
 		return t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
-		return t.processDeleteExecution(task)
+		return t.processDeleteExecution(ctx, task)
 	default:
 		return errUnknownVisibilityTask
 	}
@@ -152,6 +152,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	release(nil)
 
 	return t.recordStartExecution(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
@@ -215,6 +216,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	release(nil)
 
 	return t.upsertExecution(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
@@ -231,6 +233,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) recordStartExecution(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -269,10 +272,11 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 			SearchAttributes: searchAttributes,
 		},
 	}
-	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
+	return t.visibilityMgr.RecordWorkflowExecutionStarted(ctx, request)
 }
 
 func (t *visibilityQueueTaskExecutor) upsertExecution(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -312,7 +316,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 		},
 	}
 
-	return t.visibilityMgr.UpsertWorkflowExecution(request)
+	return t.visibilityMgr.UpsertWorkflowExecution(ctx, request)
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
@@ -379,6 +383,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.recordCloseExecution(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
@@ -397,6 +402,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) recordCloseExecution(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -418,7 +424,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 		return err
 	}
 
-	return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{
+	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
 			Namespace:   namespaceEntry.Name(),
@@ -442,6 +448,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
+	ctx context.Context,
 	task *tasks.DeleteExecutionVisibilityTask,
 ) (retError error) {
 	if task.CloseTime == nil {
@@ -458,7 +465,7 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		StartTime:   task.StartTime,
 		CloseTime:   task.CloseTime,
 	}
-	return t.visibilityMgr.DeleteWorkflowExecution(request)
+	return t.visibilityMgr.DeleteWorkflowExecution(ctx, request)
 }
 
 func getWorkflowMemo(

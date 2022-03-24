@@ -25,6 +25,7 @@
 package taskqueue
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -184,31 +185,31 @@ func (s *ScavengerTestSuite) runScavenger() {
 }
 
 func (s *ScavengerTestSuite) setupTaskMgrMocks() {
-	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any()).DoAndReturn(
-		func(req *p.ListTaskQueueRequest) (*p.ListTaskQueueResponse, error) {
+	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.ListTaskQueueRequest) (*p.ListTaskQueueResponse, error) {
 			items, next := s.taskQueueTable.list(req.PageToken, req.PageSize)
 			return &p.ListTaskQueueResponse{Items: items, NextPageToken: next}, nil
 		}).AnyTimes()
-	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any()).DoAndReturn(
-		func(req *p.DeleteTaskQueueRequest) error {
+	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.DeleteTaskQueueRequest) error {
 			s.taskQueueTable.delete(req.TaskQueue.TaskQueueName)
 			return nil
 		}).AnyTimes()
-	s.taskMgr.EXPECT().GetTasks(gomock.Any()).DoAndReturn(
-		func(req *p.GetTasksRequest) (*p.GetTasksResponse, error) {
+	s.taskMgr.EXPECT().GetTasks(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.GetTasksRequest) (*p.GetTasksResponse, error) {
 			result := s.taskTables[req.TaskQueue].get(req.PageSize)
 			return &p.GetTasksResponse{Tasks: result}, nil
 		}).AnyTimes()
-	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any()).DoAndReturn(
-		func(req *p.CompleteTasksLessThanRequest) (int, error) {
+	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any(), gomock.Any()).DoAndReturn(
+		func(_ context.Context, req *p.CompleteTasksLessThanRequest) (int, error) {
 			return s.taskTables[req.TaskQueueName].deleteLessThan(req.ExclusiveMaxTaskID, req.Limit), nil
 		}).AnyTimes()
 }
 
 func (s *ScavengerTestSuite) setupTaskMgrMocksWithErrors() {
-	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any()).Return(nil, errTest)
-	s.taskMgr.EXPECT().GetTasks(gomock.Any()).Return(nil, errTest)
-	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any()).Return(0, errTest)
-	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any()).Return(errTest)
+	s.taskMgr.EXPECT().ListTaskQueue(gomock.Any(), gomock.Any()).Return(nil, errTest)
+	s.taskMgr.EXPECT().GetTasks(gomock.Any(), gomock.Any()).Return(nil, errTest)
+	s.taskMgr.EXPECT().CompleteTasksLessThan(gomock.Any(), gomock.Any()).Return(0, errTest)
+	s.taskMgr.EXPECT().DeleteTaskQueue(gomock.Any(), gomock.Any()).Return(errTest)
 	s.setupTaskMgrMocks()
 }

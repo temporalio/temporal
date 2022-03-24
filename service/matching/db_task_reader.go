@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"context"
 	"sort"
 	"sync"
 
@@ -41,7 +42,7 @@ const (
 
 type (
 	dbTaskReader interface {
-		taskIterator(maxTaskID int64) collection.Iterator
+		taskIterator(ctx context.Context, maxTaskID int64) collection.Iterator
 		ackTask(taskID int64)
 		moveAckedTaskID() int64
 	}
@@ -76,9 +77,10 @@ func newDBTaskReader(
 }
 
 func (t *dbTaskReaderImpl) taskIterator(
+	ctx context.Context,
 	maxTaskID int64,
 ) collection.Iterator {
-	return collection.NewPagingIterator(t.getPaginationFn(maxTaskID))
+	return collection.NewPagingIterator(t.getPaginationFn(ctx, maxTaskID))
 }
 
 func (t *dbTaskReaderImpl) ackTask(taskID int64) {
@@ -120,6 +122,7 @@ func (t *dbTaskReaderImpl) moveAckedTaskID() int64 {
 }
 
 func (t *dbTaskReaderImpl) getPaginationFn(
+	ctx context.Context,
 	maxTaskID int64,
 ) collection.PaginationFn {
 	t.Lock()
@@ -127,7 +130,7 @@ func (t *dbTaskReaderImpl) getPaginationFn(
 	minTaskID := t.loadedTaskID
 
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
-		response, err := t.store.GetTasks(&persistence.GetTasksRequest{
+		response, err := t.store.GetTasks(ctx, &persistence.GetTasksRequest{
 			NamespaceID:        t.taskQueueKey.NamespaceID,
 			TaskQueue:          t.taskQueueKey.TaskQueueName,
 			TaskType:           t.taskQueueKey.TaskQueueType,

@@ -188,6 +188,7 @@ message RespondWorkflowTaskCompletedRequest {
 
 message RespondWorkflowTaskCompletedResponse {
     RecordWorkflowTaskStartedResponse started_response = 1;
+    repeated temporal.api.workflowservice.v1.PollActivityTaskQueueResponse activity_tasks = 2;
 }
 
 message RespondWorkflowTaskFailedRequest {

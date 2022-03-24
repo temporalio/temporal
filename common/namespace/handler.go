@@ -117,7 +117,7 @@ func NewHandler(
 
 // RegisterNamespace register a new namespace
 func (d *HandlerImpl) RegisterNamespace(
-	_ context.Context,
+	ctx context.Context,
 	registerRequest *workflowservice.RegisterNamespaceRequest,
 ) (*workflowservice.RegisterNamespaceResponse, error) {
 
@@ -141,7 +141,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	}
 
 	// first check if the name is already registered as the local namespace
-	_, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: registerRequest.GetNamespace()})
+	_, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: registerRequest.GetNamespace()})
 	switch err.(type) {
 	case nil:
 		// namespace already exists, cannot proceed
@@ -262,12 +262,13 @@ func (d *HandlerImpl) RegisterNamespace(
 		IsGlobalNamespace: isGlobalNamespace,
 	}
 
-	namespaceResponse, err := d.metadataMgr.CreateNamespace(namespaceRequest)
+	namespaceResponse, err := d.metadataMgr.CreateNamespace(ctx, namespaceRequest)
 	if err != nil {
 		return nil, err
 	}
 
 	err = d.namespaceReplicator.HandleTransmissionTask(
+		ctx,
 		enumsspb.NAMESPACE_OPERATION_CREATE,
 		namespaceRequest.Namespace.Info,
 		namespaceRequest.Namespace.Config,
@@ -299,7 +300,7 @@ func (d *HandlerImpl) ListNamespaces(
 		pageSize = int(listRequest.GetPageSize())
 	}
 
-	resp, err := d.metadataMgr.ListNamespaces(&persistence.ListNamespacesRequest{
+	resp, err := d.metadataMgr.ListNamespaces(ctx, &persistence.ListNamespacesRequest{
 		PageSize:      pageSize,
 		NextPageToken: listRequest.NextPageToken,
 	})
@@ -341,7 +342,7 @@ func (d *HandlerImpl) DescribeNamespace(
 		Name: describeRequest.GetNamespace(),
 		ID:   describeRequest.GetId(),
 	}
-	resp, err := d.metadataMgr.GetNamespace(req)
+	resp, err := d.metadataMgr.GetNamespace(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -365,12 +366,12 @@ func (d *HandlerImpl) UpdateNamespace(
 	// this version can be regarded as the lock on the v2 namespace table
 	// and since we do not know which table will return the namespace afterwards
 	// this call has to be made
-	metadata, err := d.metadataMgr.GetMetadata()
+	metadata, err := d.metadataMgr.GetMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: updateRequest.GetNamespace()})
+	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: updateRequest.GetNamespace()})
 	if err != nil {
 		return nil, err
 	}
@@ -564,14 +565,22 @@ func (d *HandlerImpl) UpdateNamespace(
 			IsGlobalNamespace:   isGlobalNamespace,
 			NotificationVersion: notificationVersion,
 		}
-		err = d.metadataMgr.UpdateNamespace(updateReq)
+		err = d.metadataMgr.UpdateNamespace(ctx, updateReq)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	err = d.namespaceReplicator.HandleTransmissionTask(enumsspb.NAMESPACE_OPERATION_UPDATE,
-		info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err = d.namespaceReplicator.HandleTransmissionTask(
+		ctx,
+		enumsspb.NAMESPACE_OPERATION_UPDATE,
+		info,
+		config,
+		replicationConfig,
+		configVersion,
+		failoverVersion,
+		isGlobalNamespace,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -606,12 +615,12 @@ func (d *HandlerImpl) DeprecateNamespace(
 	// this version can be regarded as the lock on the v2 namespace table
 	// and since we do not know which table will return the namespace afterwards
 	// this call has to be made
-	metadata, err := d.metadataMgr.GetMetadata()
+	metadata, err := d.metadataMgr.GetMetadata(ctx)
 	if err != nil {
 		return nil, err
 	}
 	notificationVersion := metadata.NotificationVersion
-	getResponse, err := d.metadataMgr.GetNamespace(&persistence.GetNamespaceRequest{Name: deprecateRequest.GetNamespace()})
+	getResponse, err := d.metadataMgr.GetNamespace(ctx, &persistence.GetNamespaceRequest{Name: deprecateRequest.GetNamespace()})
 	if err != nil {
 		return nil, err
 	}
@@ -630,7 +639,7 @@ func (d *HandlerImpl) DeprecateNamespace(
 		NotificationVersion: notificationVersion,
 		IsGlobalNamespace:   getResponse.IsGlobalNamespace,
 	}
-	err = d.metadataMgr.UpdateNamespace(updateReq)
+	err = d.metadataMgr.UpdateNamespace(ctx, updateReq)
 	if err != nil {
 		return nil, err
 	}
