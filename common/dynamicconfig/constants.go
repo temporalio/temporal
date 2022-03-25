@@ -217,6 +217,13 @@ const (
 	// of Timeout and if no activity is seen even after that the connection is closed.
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
 
+	// DeleteNamespaceDeleteActivityRPS is RPS per every parallel delete executions activity.
+	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
+	DeleteNamespaceDeleteActivityRPS = "frontend.deleteNamespaceDeleteActivityRPS"
+	// DeleteNamespaceConcurrentDeleteExecutionsActivities is a number of concurrent delete executions activities.
+	// Must be not greater than 256 and number of worker cores in the cluster.
+	DeleteNamespaceConcurrentDeleteExecutionsActivities = "frontend.deleteNamespaceConcurrentDeleteExecutionsActivities"
+
 	// key for matching
 
 	// MatchingRPS is request rate per second for each matching host

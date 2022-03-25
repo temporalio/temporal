@@ -421,6 +421,7 @@ func AdminHandlerProvider(
 }
 
 func OperatorHandlerProvider(
+	config *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
 	logger resource.SnTaggedLogger,
@@ -431,6 +432,7 @@ func OperatorHandlerProvider(
 	healthServer *health.Server,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
+		config,
 		esConfig,
 		esClient,
 		logger,

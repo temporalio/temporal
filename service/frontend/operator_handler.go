@@ -61,6 +61,7 @@ type (
 
 		healthStatus     int32
 		logger           log.Logger
+		config           *Config
 		esConfig         *esclient.Config
 		esClient         esclient.Client
 		sdkClientFactory sdk.ClientFactory
@@ -71,6 +72,7 @@ type (
 	}
 
 	NewOperatorHandlerImplArgs struct {
+		config           *Config
 		EsConfig         *esclient.Config
 		EsClient         esclient.Client
 		Logger           log.Logger
@@ -90,6 +92,7 @@ func NewOperatorHandlerImpl(
 	handler := &OperatorHandlerImpl{
 		logger:           args.Logger,
 		status:           common.DaemonStatusInitialized,
+		config:           args.config,
 		esConfig:         args.EsConfig,
 		esClient:         args.EsClient,
 		sdkClientFactory: args.sdkClientFactory,
@@ -292,23 +295,16 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		return nil, h.error(errRequestNotSet, scope, endpointName)
 	}
 
-	if request.GetNamespace() == "" && request.GetNamespaceId() == "" {
+	if request.GetNamespace() == "" {
 		return nil, h.error(errNamespaceNotSet, scope, endpointName)
-	}
-
-	if request.GetNamespace() != "" && request.GetNamespaceId() != "" {
-		return nil, h.error(errBothNamespaceIDAndNameSet, scope, endpointName)
 	}
 
 	// Execute workflow.
 	wfParams := deletenamespace.DeleteNamespaceWorkflowParams{
-		NamespaceID: namespace.ID(request.GetNamespaceId()),
-		Namespace:   namespace.Name(request.GetNamespace()),
+		Namespace: namespace.Name(request.GetNamespace()),
 		DeleteExecutionsConfig: deleteexecutions.DeleteExecutionsConfig{
-			DeleteActivityRPS:                    int(request.GetDeleteActivityRps()),
-			PageSize:                             int(request.GetPageSize()),
-			PagesPerExecutionCount:               int(request.GetPagesPerExecutionCount()),
-			ConcurrentDeleteExecutionsActivities: int(request.GetConcurrentDeleteExecutionsActivities()),
+			DeleteActivityRPS:                    h.config.DeleteNamespaceDeleteActivityRPS(),
+			ConcurrentDeleteExecutionsActivities: h.config.DeleteNamespaceConcurrentDeleteExecutionsActivities(),
 		},
 	}
 
@@ -337,8 +333,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	scope.IncCounter(metrics.DeleteNamespaceSuccessCount)
 
 	return &operatorservice.DeleteNamespaceResponse{
-		DeletedNamespaceId: wfResult.DeletedNamespaceID.String(),
-		DeletedNamespace:   wfResult.DeletedNamespace.String(),
+		DeletedNamespace: wfResult.DeletedNamespace.String(),
 	}, nil
 }
 
