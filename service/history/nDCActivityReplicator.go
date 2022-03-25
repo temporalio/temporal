@@ -28,6 +28,8 @@ package history
 
 import (
 	"context"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/service/history/tasks"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -40,7 +42,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
@@ -49,7 +50,6 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -156,6 +156,22 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		return nil
 	}
 
+	// sync activity with empty started ID means activity retry
+	eventTime := timestamp.TimeValue(request.GetScheduledTime())
+	if request.StartedId == common.EmptyEventID && request.Attempt > activityInfo.GetAttempt() {
+		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
+			WorkflowKey: definition.WorkflowKey{
+				NamespaceID: request.GetNamespaceId(),
+				WorkflowID:  request.GetWorkflowId(),
+				RunID:       request.GetRunId(),
+			},
+			VisibilityTimestamp: eventTime,
+			EventID:             request.GetScheduledId(),
+			Version:             request.GetVersion(),
+			Attempt:             request.GetAttempt(),
+		})
+	}
+
 	refreshTask := r.testRefreshActivityTimerTaskMask(
 		request.GetVersion(),
 		request.GetAttempt(),
@@ -167,7 +183,6 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	// see whether we need to refresh the activity timer
-	eventTime := timestamp.TimeValue(request.GetScheduledTime())
 	startedTime := timestamp.TimeValue(request.GetStartedTime())
 	lastHeartbeatTime := timestamp.TimeValue(request.GetLastHeartbeatTime())
 	if eventTime.Before(startedTime) {
@@ -184,21 +199,6 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		mutableState,
 	).CreateNextActivityTimer(); err != nil {
 		return err
-	}
-
-	// sync activity with empty started ID means activity retry
-	if request.StartedId == common.EmptyEventID && request.Attempt > activityInfo.GetAttempt() {
-		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
-			WorkflowKey: definition.WorkflowKey{
-				NamespaceID: request.GetNamespaceId(),
-				WorkflowID:  request.GetWorkflowId(),
-				RunID:       request.GetRunId(),
-			},
-			VisibilityTimestamp: eventTime,
-			EventID:             request.GetScheduledId(),
-			Version:             request.GetVersion(),
-			Attempt:             request.GetAttempt(),
-		})
 	}
 
 	updateMode := persistence.UpdateWorkflowModeUpdateCurrent
