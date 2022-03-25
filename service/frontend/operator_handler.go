@@ -337,8 +337,8 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	scope.IncCounter(metrics.DeleteNamespaceSuccessCount)
 
 	return &operatorservice.DeleteNamespaceResponse{
-		DeletedId:   wfResult.DeletedID.String(),
-		DeletedName: wfResult.DeletedName.String(),
+		DeletedNamespaceId: wfResult.DeletedNamespaceID.String(),
+		DeletedNamespace:   wfResult.DeletedNamespace.String(),
 	}, nil
 }
 
