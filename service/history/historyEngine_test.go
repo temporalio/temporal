@@ -887,7 +887,7 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedUpdateExecutionFailed() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, errors.New("FAILED"))
-	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
 
 	_, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -1639,6 +1639,111 @@ func (s *engineSuite) TestRespondWorkflowTaskCompletedSingleActivityScheduledWor
 	s.Equal(5*time.Second, timestamp.DurationValue(activity1Attributes.HeartbeatTimeout))
 }
 
+func (s *engineSuite) TestRespondWorkflowTaskCompleted_ActivityLocalDispatch() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	tl := "testTaskQueue"
+	tt := &tokenspb.Task{
+		ScheduleAttempt: 1,
+		WorkflowId:      tests.WorkflowID,
+		RunId:           we.GetRunId(),
+		ScheduleId:      2,
+	}
+	taskToken, _ := tt.Marshal()
+	identity := "testIdentity"
+	input := payloads.EncodeString("input")
+
+	msBuilder := workflow.TestLocalMutableState(s.mockHistoryEngine.shard, s.eventsCache,
+		tests.LocalNamespaceEntry, log.NewTestLogger(), we.GetRunId())
+	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 90*time.Second, 200*time.Second, identity)
+	di := addWorkflowTaskScheduledEvent(msBuilder)
+	addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, tl, identity)
+
+	scheduleToCloseTimeout := timestamp.DurationPtr(90 * time.Second)
+	scheduleToStartTimeout := timestamp.DurationPtr(10 * time.Second)
+	startToCloseTimeout := timestamp.DurationPtr(50 * time.Second)
+	heartbeatTimeout := timestamp.DurationPtr(5 * time.Second)
+	commands := []*commandpb.Command{
+		{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             "activity1",
+				ActivityType:           &commonpb.ActivityType{Name: "activity_type1"},
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+				Input:                  input,
+				ScheduleToCloseTimeout: scheduleToCloseTimeout,
+				ScheduleToStartTimeout: scheduleToStartTimeout,
+				StartToCloseTimeout:    startToCloseTimeout,
+				HeartbeatTimeout:       heartbeatTimeout,
+				RequestEagerExecution:  false,
+			}},
+		},
+		{
+			CommandType: enumspb.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK,
+			Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
+				ActivityId:             "activity2",
+				ActivityType:           &commonpb.ActivityType{Name: "activity_type2"},
+				TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
+				Input:                  input,
+				ScheduleToCloseTimeout: scheduleToCloseTimeout,
+				ScheduleToStartTimeout: scheduleToStartTimeout,
+				StartToCloseTimeout:    startToCloseTimeout,
+				HeartbeatTimeout:       heartbeatTimeout,
+				RequestEagerExecution:  true,
+			}},
+		},
+	}
+
+	ms := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+
+	resp, err := s.mockHistoryEngine.RespondWorkflowTaskCompleted(context.Background(), &historyservice.RespondWorkflowTaskCompletedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		CompleteRequest: &workflowservice.RespondWorkflowTaskCompletedRequest{
+			TaskToken: taskToken,
+			Commands:  commands,
+			Identity:  identity,
+		},
+	})
+	s.NoError(err)
+	executionBuilder := s.getBuilder(tests.NamespaceID, we)
+	s.Equal(int64(7), executionBuilder.GetNextEventID())
+	s.Equal(int64(3), executionBuilder.GetExecutionInfo().LastWorkflowTaskStartId)
+	s.Equal(enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING, executionBuilder.GetExecutionState().State)
+	s.False(executionBuilder.HasPendingWorkflowTask())
+
+	ai1, ok := executionBuilder.GetActivityByActivityID("activity1")
+	s.True(ok)
+	s.Equal(common.EmptyEventID, ai1.StartedId)
+
+	ai2, ok := executionBuilder.GetActivityByActivityID("activity2")
+	s.True(ok)
+	s.Equal(common.TransientEventID, ai2.StartedId)
+	s.NotZero(ai2.StartedTime)
+
+	scheduledEvent := s.getActivityScheduledEvent(executionBuilder, ai2.ScheduleId)
+
+	s.Len(resp.ActivityTasks, 1)
+	activityTask := resp.ActivityTasks[0]
+	s.Equal("activity2", activityTask.ActivityId)
+	s.Equal("activity_type2", activityTask.ActivityType.GetName())
+	s.Equal(input, activityTask.Input)
+	s.Equal(we, *activityTask.WorkflowExecution)
+	s.Equal(scheduledEvent.EventTime, activityTask.CurrentAttemptScheduledTime)
+	s.Equal(scheduledEvent.EventTime, activityTask.ScheduledTime)
+	s.Equal(*scheduleToCloseTimeout, *activityTask.ScheduleToCloseTimeout)
+	s.Equal(startToCloseTimeout, activityTask.StartToCloseTimeout)
+	s.Equal(heartbeatTimeout, activityTask.HeartbeatTimeout)
+	s.Equal(int32(1), activityTask.Attempt)
+	s.Nil(activityTask.HeartbeatDetails)
+	s.Equal(tests.LocalNamespaceEntry.Name().String(), activityTask.WorkflowNamespace)
+}
+
 func (s *engineSuite) TestRespondWorkflowTaskCompleted_WorkflowTaskHeartbeatTimeout() {
 
 	we := commonpb.WorkflowExecution{
@@ -2354,7 +2459,7 @@ func (s *engineSuite) TestRespondActivityTaskCompletedUpdateExecutionFailed() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, errors.New("FAILED"))
-	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
 
 	err := s.mockHistoryEngine.RespondActivityTaskCompleted(context.Background(), &historyservice.RespondActivityTaskCompletedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -2890,7 +2995,7 @@ func (s *engineSuite) TestRespondActivityTaskFailedUpdateExecutionFailed() {
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, errors.New("FAILED"))
-	s.mockShardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
+	s.mockShardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil).AnyTimes() // might be called in background goroutine
 
 	err := s.mockHistoryEngine.RespondActivityTaskFailed(context.Background(), &historyservice.RespondActivityTaskFailedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -5038,7 +5143,7 @@ func addActivityTaskScheduledEvent(
 		ScheduleToStartTimeout: &scheduleToStartTimeout,
 		StartToCloseTimeout:    &startToCloseTimeout,
 		HeartbeatTimeout:       &heartbeatTimeout,
-	})
+	}, false)
 
 	return event, ai
 }
@@ -5066,7 +5171,7 @@ func addActivityTaskScheduledEventWithRetry(
 		StartToCloseTimeout:    &startToCloseTimeout,
 		HeartbeatTimeout:       &heartbeatTimeout,
 		RetryPolicy:            retryPolicy,
-	})
+	}, false)
 
 	return event, ai
 }

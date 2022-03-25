@@ -26,6 +26,7 @@ package host
 
 import (
 	"bytes"
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -304,7 +305,7 @@ func (s *IntegrationBase) registerArchivalNamespace(archivalNamespace string) er
 		},
 		IsGlobalNamespace: false,
 	}
-	response, err := s.testCluster.testBase.MetadataManager.CreateNamespace(namespaceRequest)
+	response, err := s.testCluster.testBase.MetadataManager.CreateNamespace(context.Background(), namespaceRequest)
 
 	s.Logger.Info("Register namespace succeeded",
 		tag.WorkflowNamespace(archivalNamespace),

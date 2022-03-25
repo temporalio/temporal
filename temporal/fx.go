@@ -572,6 +572,7 @@ func ApplyClusterMetadataConfigProvider(
 	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) (*cluster.Config, config.Persistence, error) {
+	ctx := context.TODO()
 	logger = log.With(logger, tag.ComponentMetadataInitializer)
 
 	clusterName := persistenceClient.ClusterName(config.ClusterMetadata.CurrentClusterName)
@@ -614,6 +615,7 @@ func ApplyClusterMetadataConfigProvider(
 		// Only configure current cluster metadata from static config file
 		clusterId := uuid.New()
 		applied, err := clusterMetadataManager.SaveClusterMetadata(
+			ctx,
 			&persistence.SaveClusterMetadataRequest{
 				ClusterMetadata: persistencespb.ClusterMetadata{
 					HistoryShardCount:        config.Persistence.NumHistoryShards,
@@ -633,7 +635,7 @@ func ApplyClusterMetadataConfigProvider(
 			continue
 		}
 
-		resp, err := clusterMetadataManager.GetClusterMetadata(&persistence.GetClusterMetadataRequest{
+		resp, err := clusterMetadataManager.GetClusterMetadata(ctx, &persistence.GetClusterMetadataRequest{
 			ClusterName: clusterName,
 		})
 		if err != nil {
@@ -648,6 +650,7 @@ func ApplyClusterMetadataConfigProvider(
 			currentMetadata.FailoverVersionIncrement = clusterData.FailoverVersionIncrement
 
 			applied, err = clusterMetadataManager.SaveClusterMetadata(
+				ctx,
 				&persistence.SaveClusterMetadataRequest{
 					ClusterMetadata: currentMetadata,
 					Version:         resp.Version,
@@ -683,7 +686,7 @@ func ApplyClusterMetadataConfigProvider(
 			config.ClusterMetadata.FailoverVersionIncrement = resp.FailoverVersionIncrement
 		}
 	}
-	err = loadClusterInformationFromStore(config, clusterMetadataManager, logger)
+	err = loadClusterInformationFromStore(ctx, config, clusterMetadataManager, logger)
 	if err != nil {
 		return config.ClusterMetadata, config.Persistence, fmt.Errorf("error while loading metadata from cluster: %w", err)
 	}
@@ -695,13 +698,13 @@ func PersistenceFactoryProvider() persistenceClient.FactoryProviderFn {
 }
 
 // TODO: move this to cluster.fx
-func loadClusterInformationFromStore(config *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
+func loadClusterInformationFromStore(ctx context.Context, config *config.Config, clusterMsg persistence.ClusterMetadataManager, logger log.Logger) error {
 	iter := collection.NewPagingIterator(func(paginationToken []byte) ([]interface{}, []byte, error) {
 		request := &persistence.ListClusterMetadataRequest{
 			PageSize:      100,
 			NextPageToken: nil,
 		}
-		resp, err := clusterMsg.ListClusterMetadata(request)
+		resp, err := clusterMsg.ListClusterMetadata(ctx, request)
 		if err != nil {
 			return nil, nil, err
 		}

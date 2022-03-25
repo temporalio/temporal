@@ -727,7 +727,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
 	}
 
 	// Success case.
-	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes("random-index-name", gomock.Any()).Return(nil)
+	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes(gomock.Any(), "random-index-name", gomock.Any()).Return(nil)
 
 	resp, err := handler.RemoveSearchAttributes(ctx, &adminservice.RemoveSearchAttributesRequest{
 		SearchAttributes: []string{
@@ -741,6 +741,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
 	).Return(nil)
 
@@ -751,6 +752,7 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
 	).Return(fmt.Errorf("test error"))
 
@@ -779,11 +781,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			Version: recordVersion,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        0,
@@ -819,11 +821,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		nil,
 		serviceerror.NewNotFound("expected empty result"),
 	)
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        0,
@@ -995,7 +997,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Err
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		nil,
 		fmt.Errorf("test error"),
 	)
@@ -1023,11 +1025,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		nil,
 		serviceerror.NewNotFound("expected empty result"),
 	)
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        0,
@@ -1063,11 +1065,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		nil,
 		serviceerror.NewNotFound("expected empty result"),
 	)
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        0,
@@ -1101,7 +1103,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.ExecutionMgr.EXPECT().GetName().Return("")
 	s.mockVisibilityMgr.EXPECT().GetName().Return("")
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: persistencespb.ClusterMetadata{
 				ClusterName:              clusterName,
@@ -1140,7 +1142,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.ExecutionMgr.EXPECT().GetName().Return("")
 	s.mockVisibilityMgr.EXPECT().GetName().Return("")
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: persistencespb.ClusterMetadata{
 				ClusterName:              clusterName,
@@ -1166,7 +1168,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 func (s *adminHandlerSuite) Test_ListClusters_Success() {
 	var pageSize int32 = 1
 
-	s.mockClusterMetadataManager.EXPECT().ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().ListClusterMetadata(gomock.Any(), &persistence.ListClusterMetadataRequest{
 		PageSize: int(pageSize),
 	}).Return(
 		&persistence.ListClusterMetadataResponse{

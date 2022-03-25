@@ -1,7 +1,6 @@
 before:
   hooks:
     - go mod download
-    - ./develop/scripts/create_build_info_data.sh
 
 archives:
   - id: default

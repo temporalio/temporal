@@ -83,6 +83,7 @@ func NewDeleteManager(
 
 	return deleteManager
 }
+
 func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	ctx context.Context,
 	nsID namespace.ID,
@@ -224,6 +225,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		},
 		currentBranchToken,
 		newTaskVersion,
+		nil,
 		completionEvent.GetEventTime(),
 	); err != nil {
 		return err

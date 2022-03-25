@@ -25,6 +25,7 @@
 package namespace
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -120,7 +121,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(&replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -151,7 +152,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 		},
 	}).Return(nil)
 
-	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err := s.namespaceReplicator.HandleTransmissionTask(context.Background(), namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
 }
 
@@ -195,7 +196,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_RegisterNamespaceTask
 	}
 	isGlobalNamespace := false
 
-	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err := s.namespaceReplicator.HandleTransmissionTask(context.Background(), namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
 }
 
@@ -241,7 +242,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 	}
 	isGlobalNamespace := true
 
-	s.namespaceReplicationQueue.EXPECT().Publish(&replicationspb.ReplicationTask{
+	s.namespaceReplicationQueue.EXPECT().Publish(gomock.Any(), &replicationspb.ReplicationTask{
 		TaskType: taskType,
 		Attributes: &replicationspb.ReplicationTask_NamespaceTaskAttributes{
 			NamespaceTaskAttributes: &replicationspb.NamespaceTaskAttributes{
@@ -271,7 +272,7 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_I
 		},
 	}).Return(nil)
 
-	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err := s.namespaceReplicator.HandleTransmissionTask(context.Background(), namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
 }
 
@@ -314,6 +315,6 @@ func (s *transmissionTaskSuite) TestHandleTransmissionTask_UpdateNamespaceTask_N
 	}
 	isGlobalNamespace := false
 
-	err := s.namespaceReplicator.HandleTransmissionTask(namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
+	err := s.namespaceReplicator.HandleTransmissionTask(context.Background(), namespaceOperation, info, config, replicationConfig, configVersion, failoverVersion, isGlobalNamespace)
 	s.Nil(err)
 }

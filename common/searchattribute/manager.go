@@ -25,6 +25,7 @@
 package searchattribute
 
 import (
+	"context"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -120,7 +121,7 @@ func (m *managerImpl) needRefreshCache(saCache cache, forceRefreshCache bool, no
 }
 
 func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) {
-	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata()
+	clusterMetadata, err := m.clusterMetadataManager.GetCurrentClusterMetadata(context.TODO())
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound:
@@ -156,11 +157,12 @@ func (m *managerImpl) refreshCache(saCache cache, now time.Time) (cache, error) 
 // SaveSearchAttributes saves search attributes to cluster metadata.
 // indexName can be an empty string when Elasticsearch is not configured.
 func (m *managerImpl) SaveSearchAttributes(
+	ctx context.Context,
 	indexName string,
 	newCustomSearchAttributes map[string]enumspb.IndexedValueType,
 ) error {
 
-	clusterMetadataResponse, err := m.clusterMetadataManager.GetCurrentClusterMetadata()
+	clusterMetadataResponse, err := m.clusterMetadataManager.GetCurrentClusterMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -170,7 +172,7 @@ func (m *managerImpl) SaveSearchAttributes(
 		clusterMetadata.IndexSearchAttributes = map[string]*persistencespb.IndexSearchAttributes{indexName: nil}
 	}
 	clusterMetadata.IndexSearchAttributes[indexName] = &persistencespb.IndexSearchAttributes{CustomSearchAttributes: newCustomSearchAttributes}
-	_, err = m.clusterMetadataManager.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	_, err = m.clusterMetadataManager.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: clusterMetadata,
 		Version:         clusterMetadataResponse.Version,
 	})

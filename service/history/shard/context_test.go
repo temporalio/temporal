@@ -159,7 +159,7 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 			cluster.TestCurrentClusterName: timestamp.TimePtr(now),
 		},
 	}
-	s.mockResource.ShardMgr.EXPECT().GetOrCreateShard(gomock.Any()).Return(
+	s.mockResource.ShardMgr.EXPECT().GetOrCreateShard(gomock.Any(), gomock.Any()).Return(
 		&persistence.GetOrCreateShardResponse{
 			ShardInfo: persistenceShardInfo,
 		},

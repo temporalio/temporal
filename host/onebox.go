@@ -708,6 +708,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Provide(func() *esclient.Config { return c.esConfig }),
 
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
@@ -729,7 +730,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 }
 
 func (c *temporalImpl) createSystemNamespace() error {
-	err := c.metadataMgr.InitializeSystemNamespaces(c.clusterMetadataConfig.CurrentClusterName)
+	err := c.metadataMgr.InitializeSystemNamespaces(context.Background(), c.clusterMetadataConfig.CurrentClusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
 	}

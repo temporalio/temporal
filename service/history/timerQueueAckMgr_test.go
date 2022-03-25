@@ -505,7 +505,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.False(moreTasks)
 
 	// we are not testing shard context
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	timerSequenceID1 := tasks.Key{
 		FireTime: timer1.VisibilityTimestamp,
 		TaskID:   timer1.TaskID,
@@ -515,7 +515,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	timerSequenceID3 := tasks.Key{
 		FireTime: timer3.VisibilityTimestamp,
 		TaskID:   timer3.TaskID,
@@ -527,7 +527,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 
 	// we are not testing shard context
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	timerSequenceID2 := tasks.Key{
 		FireTime: timer2.VisibilityTimestamp,
 		TaskID:   timer2.TaskID,
@@ -827,7 +827,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer2.VisibilityTimestamp, timer2.TaskID)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID2])
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
@@ -841,7 +841,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer3.VisibilityTimestamp, timer3.TaskID)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID3])
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
@@ -855,7 +855,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer1.VisibilityTimestamp, timer1.TaskID)
 	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID1])
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():

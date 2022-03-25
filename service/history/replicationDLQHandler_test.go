@@ -213,7 +213,7 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 			SourceClusterName: s.sourceCluster,
 		}).Return(nil)
 
-	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	err := s.replicationMessageHandler.purgeMessages(context.Background(), s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
@@ -292,7 +292,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		SourceClusterName: s.sourceCluster,
 	}).Return(nil)
 
-	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 
 	token, err := s.replicationMessageHandler.mergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)

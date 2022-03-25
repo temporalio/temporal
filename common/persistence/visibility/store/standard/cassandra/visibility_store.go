@@ -433,13 +433,24 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 }
 
 func (v *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
-	query := v.session.Query(templateDeleteWorkflowExecutionClosed,
-		request.NamespaceID.String(),
-		namespacePartition,
-		persistence.UnixMilliseconds(request.CloseTime),
-		request.RunID).
-		Consistency(v.lowConslevel)
-	if err := query.Exec(); err != nil {
+	var query gocql.Query
+	if request.StartTime != nil {
+		query = v.session.Query(templateDeleteWorkflowExecutionStarted,
+			request.NamespaceID.String(),
+			namespacePartition,
+			persistence.UnixMilliseconds(*request.StartTime),
+			request.RunID)
+	} else if request.CloseTime != nil {
+		query = v.session.Query(templateDeleteWorkflowExecutionClosed,
+			request.NamespaceID.String(),
+			namespacePartition,
+			persistence.UnixMilliseconds(*request.CloseTime),
+			request.RunID)
+	} else {
+		panic("both StartTime and CloseTime are nil")
+	}
+
+	if err := query.Consistency(v.lowConslevel).Exec(); err != nil {
 		return gocql.ConvertError("DeleteWorkflowExecution", err)
 	}
 	return nil

@@ -33,7 +33,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	m "go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -108,7 +107,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
+	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:       task.TargetNamespaceID,
 		SourceNamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
@@ -135,7 +134,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	_, err := t.matchingClient.AddWorkflowTask(ctx, &m.AddWorkflowTaskRequest{
+	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,

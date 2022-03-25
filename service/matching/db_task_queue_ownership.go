@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -51,13 +52,13 @@ type (
 	dbTaskQueueOwnershipStatus int
 
 	dbTaskQueueOwnership interface {
-		takeTaskQueueOwnership() error
+		takeTaskQueueOwnership(ctx context.Context) error
 		getShutdownChan() <-chan struct{}
 		getAckedTaskID() int64
 		updateAckedTaskID(taskID int64)
 		getLastAllocatedTaskID() int64
-		persistTaskQueue() error
-		flushTasks(taskInfos ...*persistencespb.TaskInfo) error
+		persistTaskQueue(ctx context.Context) error
+		flushTasks(ctx context.Context, taskInfos ...*persistencespb.TaskInfo) error
 	}
 
 	dbTaskQueueOwnershipState struct {
@@ -135,11 +136,13 @@ func (m *dbTaskQueueOwnershipImpl) getLastAllocatedTaskID() int64 {
 	return m.ownershipState.lastAllocatedTaskID
 }
 
-func (m *dbTaskQueueOwnershipImpl) takeTaskQueueOwnership() error {
+func (m *dbTaskQueueOwnershipImpl) takeTaskQueueOwnership(
+	ctx context.Context,
+) error {
 	m.Lock()
 	defer m.Unlock()
 
-	response, err := m.store.GetTaskQueue(&persistence.GetTaskQueueRequest{
+	response, err := m.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: m.taskQueueKey.NamespaceID,
 		TaskQueue:   m.taskQueueKey.TaskQueueName,
 		TaskType:    m.taskQueueKey.TaskQueueType,
@@ -147,14 +150,14 @@ func (m *dbTaskQueueOwnershipImpl) takeTaskQueueOwnership() error {
 	switch err.(type) {
 	case nil:
 		m.updateStateLocked(response.RangeID, response.TaskQueueInfo.AckLevel)
-		if err := m.renewTaskQueueLocked(response.RangeID + 1); err != nil {
+		if err := m.renewTaskQueueLocked(ctx, response.RangeID+1); err != nil {
 			return err
 		}
 		m.status = dbTaskQueueOwnershipStatusOwned
 		return nil
 
 	case *serviceerror.NotFound:
-		if _, err := m.store.CreateTaskQueue(&persistence.CreateTaskQueueRequest{
+		if _, err := m.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
 			RangeID: dbTaskInitialRangeID,
 			TaskQueueInfo: &persistencespb.TaskQueueInfo{
 				NamespaceId:    m.taskQueueKey.NamespaceID,
@@ -180,9 +183,10 @@ func (m *dbTaskQueueOwnershipImpl) takeTaskQueueOwnership() error {
 }
 
 func (m *dbTaskQueueOwnershipImpl) renewTaskQueueLocked(
+	ctx context.Context,
 	rangeID int64,
 ) error {
-	_, err := m.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+	_, err := m.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 		RangeID:       rangeID,
 		TaskQueueInfo: m.taskQueueInfoLocked(),
 		PrevRangeID:   m.ownershipState.rangeID,
@@ -196,20 +200,23 @@ func (m *dbTaskQueueOwnershipImpl) renewTaskQueueLocked(
 	return nil
 }
 
-func (m *dbTaskQueueOwnershipImpl) persistTaskQueue() error {
+func (m *dbTaskQueueOwnershipImpl) persistTaskQueue(
+	ctx context.Context,
+) error {
 	m.Lock()
 	defer m.Unlock()
 
-	return m.renewTaskQueueLocked(m.ownershipState.rangeID)
+	return m.renewTaskQueueLocked(ctx, m.ownershipState.rangeID)
 }
 
 func (m *dbTaskQueueOwnershipImpl) flushTasks(
+	ctx context.Context,
 	taskInfos ...*persistencespb.TaskInfo,
 ) error {
 	m.Lock()
 	defer m.Unlock()
 
-	taskIDs, err := m.generatedTaskIDsLocked(len(taskInfos))
+	taskIDs, err := m.generatedTaskIDsLocked(ctx, len(taskInfos))
 	if err != nil {
 		return err
 	}
@@ -221,7 +228,7 @@ func (m *dbTaskQueueOwnershipImpl) flushTasks(
 			TaskId: taskID,
 		}
 	}
-	_, err = m.store.CreateTasks(&persistence.CreateTasksRequest{
+	_, err = m.store.CreateTasks(ctx, &persistence.CreateTasksRequest{
 		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
 			Data:    m.taskQueueInfoLocked(),
 			RangeID: m.ownershipState.rangeID,
@@ -237,10 +244,11 @@ func (m *dbTaskQueueOwnershipImpl) flushTasks(
 }
 
 func (m *dbTaskQueueOwnershipImpl) generatedTaskIDsLocked(
+	ctx context.Context,
 	numTasks int,
 ) ([]int64, error) {
 	if m.ownershipState.maxTaskIDInclusive-m.ownershipState.lastAllocatedTaskID < int64(numTasks) {
-		if err := m.renewTaskQueueLocked(m.ownershipState.rangeID + 1); err != nil {
+		if err := m.renewTaskQueueLocked(ctx, m.ownershipState.rangeID+1); err != nil {
 			return nil, err
 		}
 	}

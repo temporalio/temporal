@@ -25,6 +25,7 @@
 package membership
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"math/rand"
@@ -156,8 +157,11 @@ func ServiceNameToServiceTypeEnum(name string) (persistence.ServiceType, error) 
 	}
 }
 
-func (rpo *ringpopMonitor) upsertMyMembership(request *persistence.UpsertClusterMembershipRequest) error {
-	err := rpo.metadataManager.UpsertClusterMembership(request)
+func (rpo *ringpopMonitor) upsertMyMembership(
+	ctx context.Context,
+	request *persistence.UpsertClusterMembershipRequest,
+) error {
+	err := rpo.metadataManager.UpsertClusterMembership(ctx, request)
 
 	if err == nil {
 		rpo.logger.Debug("Membership heartbeat upserted successfully",
@@ -187,7 +191,10 @@ func SplitHostPortTyped(hostPort string) (net.IP, uint16, error) {
 
 func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	// Start by cleaning up expired records to avoid growth
-	err := rpo.metadataManager.PruneClusterMembership(&persistence.PruneClusterMembershipRequest{MaxRecordsPruned: 10})
+	err := rpo.metadataManager.PruneClusterMembership(context.TODO(), &persistence.PruneClusterMembershipRequest{MaxRecordsPruned: 10})
+	if err != nil {
+		return err
+	}
 
 	sessionStarted := time.Now().UTC()
 
@@ -217,7 +224,7 @@ func (rpo *ringpopMonitor) startHeartbeat(broadcastHostport string) error {
 	// Expire in 48 hours to allow for inspection of table by humans for debug scenarios.
 	// For bootstrapping, we filter to a much shorter duration on the
 	// read side by filtering on the last time a heartbeat was seen.
-	err = rpo.upsertMyMembership(req)
+	err = rpo.upsertMyMembership(context.TODO(), req)
 	if err == nil {
 		rpo.logger.Info("Membership heartbeat upserted successfully",
 			tag.Address(broadcastAddress.String()),
@@ -238,6 +245,7 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager, 
 
 	for {
 		resp, err := manager.GetClusterMembers(
+			context.TODO(),
 			&persistence.GetClusterMembersRequest{
 				LastHeartbeatWithin: healthyHostLastHeartbeatCutoff,
 				PageSize:            pageSize,
@@ -270,7 +278,7 @@ func fetchCurrentBootstrapHostports(manager persistence.ClusterMetadataManager, 
 func (rpo *ringpopMonitor) startHeartbeatUpsertLoop(request *persistence.UpsertClusterMembershipRequest) {
 	loopUpsertMembership := func() {
 		for {
-			err := rpo.upsertMyMembership(request)
+			err := rpo.upsertMyMembership(context.TODO(), request)
 
 			if err != nil {
 				rpo.logger.Error("Membership upsert failed.", tag.Error(err))

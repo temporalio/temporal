@@ -25,6 +25,8 @@
 package visibility
 
 import (
+	"context"
+
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -67,91 +69,144 @@ func (m *visibilityManagerRateLimited) GetName() string {
 
 // Below are write APIs.
 
-func (m *visibilityManagerRateLimited) RecordWorkflowExecutionStarted(request *manager.RecordWorkflowExecutionStartedRequest) error {
+func (m *visibilityManagerRateLimited) RecordWorkflowExecutionStarted(
+	ctx context.Context,
+	request *manager.RecordWorkflowExecutionStartedRequest,
+) error {
 	if ok := m.writeRateLimiter.Allow(); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.RecordWorkflowExecutionStarted(request)
+	return m.delegate.RecordWorkflowExecutionStarted(ctx, request)
 }
 
-func (m *visibilityManagerRateLimited) RecordWorkflowExecutionClosed(request *manager.RecordWorkflowExecutionClosedRequest) error {
+func (m *visibilityManagerRateLimited) RecordWorkflowExecutionClosed(
+	ctx context.Context,
+	request *manager.RecordWorkflowExecutionClosedRequest,
+) error {
 	if ok := m.writeRateLimiter.Allow(); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.RecordWorkflowExecutionClosed(request)
+	return m.delegate.RecordWorkflowExecutionClosed(ctx, request)
 }
-func (m *visibilityManagerRateLimited) UpsertWorkflowExecution(request *manager.UpsertWorkflowExecutionRequest) error {
+
+func (m *visibilityManagerRateLimited) UpsertWorkflowExecution(
+	ctx context.Context,
+	request *manager.UpsertWorkflowExecutionRequest,
+) error {
 	if ok := m.writeRateLimiter.Allow(); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.UpsertWorkflowExecution(request)
+	return m.delegate.UpsertWorkflowExecution(ctx, request)
 }
-func (m *visibilityManagerRateLimited) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+
+func (m *visibilityManagerRateLimited) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *manager.VisibilityDeleteWorkflowExecutionRequest,
+) error {
 	if ok := m.writeRateLimiter.Allow(); !ok {
 		return persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.DeleteWorkflowExecution(request)
+	return m.delegate.DeleteWorkflowExecution(ctx, request)
 }
 
 // Below are read APIs.
 
-func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ListOpenWorkflowExecutions(request)
+	return m.delegate.ListOpenWorkflowExecutions(ctx, request)
 }
-func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ListClosedWorkflowExecutions(request)
+	return m.delegate.ListClosedWorkflowExecutions(ctx, request)
 }
-func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutionsByType(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ListOpenWorkflowExecutionsByType(request)
+	return m.delegate.ListOpenWorkflowExecutionsByType(ctx, request)
 }
-func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByType(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ListClosedWorkflowExecutionsByType(request)
+	return m.delegate.ListClosedWorkflowExecutionsByType(ctx, request)
 }
-func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) ListOpenWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ListOpenWorkflowExecutionsByWorkflowID(request)
+	return m.delegate.ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
 }
-func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ListClosedWorkflowExecutionsByWorkflowID(request)
+	return m.delegate.ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
 }
-func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByStatus(request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*manager.ListWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) ListClosedWorkflowExecutionsByStatus(
+	ctx context.Context,
+	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ListClosedWorkflowExecutionsByStatus(request)
+	return m.delegate.ListClosedWorkflowExecutionsByStatus(ctx, request)
 }
-func (m *visibilityManagerRateLimited) ListWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) ListWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ListWorkflowExecutions(request)
+	return m.delegate.ListWorkflowExecutions(ctx, request)
 }
-func (m *visibilityManagerRateLimited) ScanWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*manager.ListWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) ScanWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*manager.ListWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.ScanWorkflowExecutions(request)
+	return m.delegate.ScanWorkflowExecutions(ctx, request)
 }
-func (m *visibilityManagerRateLimited) CountWorkflowExecutions(request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
+
+func (m *visibilityManagerRateLimited) CountWorkflowExecutions(
+	ctx context.Context,
+	request *manager.CountWorkflowExecutionsRequest,
+) (*manager.CountWorkflowExecutionsResponse, error) {
 	if ok := m.readRateLimiter.Allow(); !ok {
 		return nil, persistence.ErrPersistenceLimitExceeded
 	}
-	return m.delegate.CountWorkflowExecutions(request)
+	return m.delegate.CountWorkflowExecutions(ctx, request)
 }

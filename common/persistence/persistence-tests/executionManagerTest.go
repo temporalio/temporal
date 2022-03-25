@@ -3167,7 +3167,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 		ShardID:          shardID,
 		InitialShardInfo: shardInfo,
 	}
-	resp, err := s.ShardMgr.GetOrCreateShard(request)
+	resp, err := s.ShardMgr.GetOrCreateShard(s.ctx, request)
 	s.NoError(err)
 
 	shardInfo.ClusterTransferAckLevel = map[string]int64{
@@ -3176,7 +3176,7 @@ func (s *ExecutionManagerSuite) TestCreateGetShardBackfill() {
 	shardInfo.ClusterTimerAckLevel = map[string]*time.Time{
 		s.ClusterMetadata.GetCurrentClusterName(): currentClusterTimerAck,
 	}
-	resp, err = s.ShardMgr.GetOrCreateShard(&p.GetOrCreateShardRequest{ShardID: shardID})
+	resp, err = s.ShardMgr.GetOrCreateShard(s.ctx, &p.GetOrCreateShardRequest{ShardID: shardID})
 	s.NoError(err)
 	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
@@ -3241,7 +3241,7 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		ShardID:          shardID,
 		InitialShardInfo: shardInfo,
 	}
-	resp, err := s.ShardMgr.GetOrCreateShard(createRequest)
+	resp, err := s.ShardMgr.GetOrCreateShard(s.ctx, createRequest)
 	s.NoError(err)
 	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))
@@ -3300,9 +3300,9 @@ func (s *ExecutionManagerSuite) TestCreateGetUpdateGetShard() {
 		ShardInfo:       shardInfo,
 		PreviousRangeID: rangeID,
 	}
-	s.Nil(s.ShardMgr.UpdateShard(updateRequest))
+	s.Nil(s.ShardMgr.UpdateShard(s.ctx, updateRequest))
 
-	resp, err = s.ShardMgr.GetOrCreateShard(&p.GetOrCreateShardRequest{ShardID: shardID})
+	resp, err = s.ShardMgr.GetOrCreateShard(s.ctx, &p.GetOrCreateShardRequest{ShardID: shardID})
 	s.NoError(err)
 	s.True(timeComparatorGoPtr(shardInfo.UpdateTime, resp.ShardInfo.UpdateTime, TimePrecision))
 	s.True(timeComparatorGoPtr(shardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], resp.ShardInfo.ClusterTimerAckLevel[cluster.TestCurrentClusterName], TimePrecision))

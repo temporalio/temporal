@@ -28,6 +28,8 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/api/matchingservice/v1"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -59,6 +61,7 @@ func newTimerQueueStandbyProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	workflowDeleteManager workflow.DeleteManager,
+	matchingClient matchingservice.MatchingServiceClient,
 	clusterName string,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -104,6 +107,7 @@ func newTimerQueueStandbyProcessor(
 			workflowCache,
 			workflowDeleteManager,
 			nDCHistoryResender,
+			matchingClient,
 			logger,
 			clusterName,
 			shard.GetConfig(),
