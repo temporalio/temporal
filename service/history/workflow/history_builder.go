@@ -587,6 +587,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionCancelRequestedEvent(
 	event := b.createNewHistoryEvent(enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCEL_REQUESTED, b.timeSource.Now())
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
 		WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
+			Cause:                     request.CancelRequest.Reason,
 			Identity:                  request.CancelRequest.Identity,
 			ExternalInitiatedEventId:  request.ExternalInitiatedEventId,
 			ExternalWorkflowExecution: request.ExternalWorkflowExecution,
@@ -626,6 +627,7 @@ func (b *HistoryBuilder) AddRequestCancelExternalWorkflowExecutionInitiatedEvent
 			},
 			Control:           command.Control,
 			ChildWorkflowOnly: command.ChildWorkflowOnly,
+			Reason:            command.Reason,
 		},
 	}
 

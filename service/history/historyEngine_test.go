@@ -5219,6 +5219,7 @@ func addRequestCancelInitiatedEvent(builder workflow.MutableState, workflowTaskC
 			Namespace:  namespace.String(),
 			WorkflowId: workflowID,
 			RunId:      runID,
+			Reason:     "cancellation reason",
 		})
 
 	return event, rci
