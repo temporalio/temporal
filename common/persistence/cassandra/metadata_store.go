@@ -307,46 +307,65 @@ func (m *MetadataStore) GetNamespace(request *p.GetNamespaceRequest) (*p.Interna
 	}, nil
 }
 
-func (m *MetadataStore) ListNamespaces(request *p.ListNamespacesRequest) (*p.InternalListNamespacesResponse, error) {
+func (m *MetadataStore) ListNamespaces(request *p.InternalListNamespacesRequest) (*p.InternalListNamespacesResponse, error) {
 	query := m.session.Query(templateListNamespaceQueryV2, constNamespacePartition)
-	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
-
+	pageSize := request.PageSize
+	nextPageToken := request.NextPageToken
 	response := &p.InternalListNamespacesResponse{}
-	for {
-		var name string
-		var detail []byte
-		var detailEncoding string
-		var notificationVersion int64
-		var isGlobal bool
-		if !iter.Scan(
-			nil,
-			&name,
-			&detail,
-			&detailEncoding,
-			&notificationVersion,
-			&isGlobal,
-		) {
-			// done iterating over all namespaces in this page
-			break
-		}
 
-		// do not include the metadata record
-		if name != namespaceMetadataRecordName {
+	for {
+		iter := query.PageSize(pageSize).PageState(nextPageToken).Iter()
+		skippedRows := 0
+
+		for {
+			var name string
+			var detail []byte
+			var detailEncoding string
+			var notificationVersion int64
+			var isGlobal bool
+			if !iter.Scan(
+				nil,
+				&name,
+				&detail,
+				&detailEncoding,
+				&notificationVersion,
+				&isGlobal,
+			) {
+				// done iterating over all namespaces in this page
+				break
+			}
+
+			// do not include the metadata record
+			if name == namespaceMetadataRecordName {
+				skippedRows++
+				continue
+			}
 			response.Namespaces = append(response.Namespaces, &p.InternalGetNamespaceResponse{
 				Namespace:           p.NewDataBlob(detail, detailEncoding),
 				IsGlobal:            isGlobal,
 				NotificationVersion: notificationVersion,
 			})
 		}
+		if len(iter.PageState()) > 0 {
+			nextPageToken = iter.PageState()
+		} else {
+			nextPageToken = nil
+		}
+		if err := iter.Close(); err != nil {
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNamespaces operation failed. Error: %v", err))
+		}
+
+		if len(nextPageToken) == 0 {
+			// No more records in DB.
+			break
+		}
+		if skippedRows == 0 {
+			break
+		}
+		pageSize = skippedRows
 	}
 
-	if len(iter.PageState()) > 0 {
-		response.NextPageToken = iter.PageState()
-	}
-	if err := iter.Close(); err != nil {
-		return nil, serviceerror.NewUnavailable(fmt.Sprintf("ListNamespaces operation failed. Error: %v", err))
-	}
-
+	response.NextPageToken = nextPageToken
 	return response, nil
 }
 

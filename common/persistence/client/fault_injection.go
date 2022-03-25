@@ -741,7 +741,7 @@ func (m *FaultInjectionMetadataStore) DeleteNamespaceByName(request *persistence
 	return m.baseMetadataStore.DeleteNamespaceByName(request)
 }
 
-func (m *FaultInjectionMetadataStore) ListNamespaces(request *persistence.ListNamespacesRequest) (
+func (m *FaultInjectionMetadataStore) ListNamespaces(request *persistence.InternalListNamespacesRequest) (
 	*persistence.InternalListNamespacesResponse,
 	error,
 ) {

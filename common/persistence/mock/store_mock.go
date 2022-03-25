@@ -432,7 +432,7 @@ func (mr *MockMetadataStoreMockRecorder) GetNamespace(request interface{}) *gomo
 }
 
 // ListNamespaces mocks base method.
-func (m *MockMetadataStore) ListNamespaces(request *persistence.ListNamespacesRequest) (*persistence.InternalListNamespacesResponse, error) {
+func (m *MockMetadataStore) ListNamespaces(request *persistence.InternalListNamespacesRequest) (*persistence.InternalListNamespacesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListNamespaces", request)
 	ret0, _ := ret[0].(*persistence.InternalListNamespacesResponse)
