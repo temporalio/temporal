@@ -2209,43 +2209,6 @@ func (wh *WorkflowHandler) TerminateWorkflowExecution(ctx context.Context, reque
 	return &workflowservice.TerminateWorkflowExecutionResponse{}, nil
 }
 
-// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
-// This method is EXPERIMENTAL and may be changed or removed in a later release.
-func (wh *WorkflowHandler) DeleteWorkflowExecution(ctx context.Context, request *workflowservice.DeleteWorkflowExecutionRequest) (_ *workflowservice.DeleteWorkflowExecutionResponse, retError error) {
-	defer log.CapturePanic(wh.logger, &retError)
-
-	if wh.isStopped() {
-		return nil, errShuttingDown
-	}
-
-	if err := wh.versionChecker.ClientSupported(ctx, wh.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
-
-	if request == nil {
-		return nil, errRequestNotSet
-	}
-
-	if err := wh.validateExecution(request.WorkflowExecution); err != nil {
-		return nil, err
-	}
-
-	namespaceID, err := wh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = wh.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
-		NamespaceId:       namespaceID.String(),
-		WorkflowExecution: request.GetWorkflowExecution(),
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &workflowservice.DeleteWorkflowExecutionResponse{}, nil
-}
-
 // ListOpenWorkflowExecutions is a visibility API to list the open executions in a specific namespace.
 func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, request *workflowservice.ListOpenWorkflowExecutionsRequest) (_ *workflowservice.ListOpenWorkflowExecutionsResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)

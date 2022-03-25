@@ -33,12 +33,15 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/worker"
@@ -274,6 +277,43 @@ func (h *OperatorHandlerImpl) ListSearchAttributes(ctx context.Context, request 
 		SystemAttributes: searchAttributes.System(),
 		StorageSchema:    esMapping,
 	}, nil
+}
+
+// DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
+// This method is EXPERIMENTAL and may be changed or removed in a later release.
+func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, request *operatorservice.DeleteWorkflowExecutionRequest) (_ *workflowservice.DeleteWorkflowExecutionResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	if err := h.versionChecker.ClientSupported(ctx, h.config.EnableClientVersionCheck()); err != nil {
+		return nil, err
+	}
+
+	if request == nil {
+		return nil, errRequestNotSet
+	}
+
+	if err := h.validateExecution(request.WorkflowExecution); err != nil {
+		return nil, err
+	}
+
+	namespaceID, err := h.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+
+	_, err = h.historyClient.DeleteWorkflowExecution(ctx, &historyservice.DeleteWorkflowExecutionRequest{
+		NamespaceId:       namespaceID.String(),
+		WorkflowExecution: request.GetWorkflowExecution(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &operatorservice.DeleteWorkflowExecutionResponse{}, nil
 }
 
 // startRequestProfile initiates recording of request metrics
