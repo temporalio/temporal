@@ -32,6 +32,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/persistence/client"
 )
 
 // ErrUnknownService is thrown for a service that is not tracked by this instance
@@ -99,4 +101,19 @@ type (
 		// Members returns all host addresses in hashring for any particular role
 		Members() []*HostInfo
 	}
+
+	HostInfoProvider interface {
+		Start() error
+		HostInfo() *HostInfo
+	}
+
+	// MembershipMonitorFactory provides a bootstrapped membership monitor
+	MembershipMonitorFactory interface {
+		// GetMembershipMonitor return a membership monitor
+		GetMembershipMonitor() (Monitor, error)
+	}
+
+	// MembershipFactoryInitializerFunc is used for deferred initialization of the MembershipFactory
+	// to allow for the PersistenceBean to be constructed further downstream.
+	MembershipFactoryInitializerFunc func(persistenceBean client.Bean, logger log.Logger) (MembershipMonitorFactory, error)
 )

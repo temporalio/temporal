@@ -22,17 +22,55 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package resource
-
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination interfaces_mock.go
+package membership
 
 import (
-	"go.temporal.io/server/common/membership"
+	"context"
+
+	"go.uber.org/fx"
+)
+
+var HostInfoProviderModule = fx.Options(
+	fx.Provide(NewHostInfoProvider),
+	fx.Invoke(HostInfoProviderLifetimeHooks),
 )
 
 type (
-	HostInfoProvider interface {
-		Start() error
-		HostInfo() *membership.HostInfo
+	CachingHostInfoProvider struct {
+		hostInfo          *HostInfo
+		membershipMonitor Monitor
 	}
 )
+
+func NewHostInfoProvider(membershipMonitor Monitor) HostInfoProvider {
+	return &CachingHostInfoProvider{
+		membershipMonitor: membershipMonitor,
+	}
+}
+
+func (hip *CachingHostInfoProvider) Start() error {
+	var err error
+	hip.hostInfo, err = hip.membershipMonitor.WhoAmI()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (hip *CachingHostInfoProvider) HostInfo() *HostInfo {
+	return hip.hostInfo
+}
+
+func HostInfoProviderLifetimeHooks(
+	lc fx.Lifecycle,
+	provider HostInfoProvider,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				return provider.Start()
+			},
+		},
+	)
+
+}

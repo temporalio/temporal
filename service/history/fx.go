@@ -130,7 +130,7 @@ func HandlerProvider(
 	saMapper searchattribute.Mapper,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
-	hostInfoProvider resource.HostInfoProvider,
+	hostInfoProvider membership.HostInfoProvider,
 	shardController *shard.ControllerImpl,
 	eventNotifier events.Notifier,
 	replicationTaskFetchers ReplicationTaskFetchers,

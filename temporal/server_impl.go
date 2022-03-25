@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resolver"
@@ -194,7 +195,7 @@ func NewBootstrapParams(
 	}
 
 	params.MembershipFactoryInitializer =
-		func(persistenceBean persistenceClient.Bean, logger log.Logger) (resource.MembershipMonitorFactory, error) {
+		func(persistenceBean persistenceClient.Bean, logger log.Logger) (membership.MembershipMonitorFactory, error) {
 			return ringpop.NewRingpopFactory(
 				&cfg.Global.Membership,
 				rpcFactory.GetRingpopChannel(),

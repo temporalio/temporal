@@ -111,7 +111,7 @@ var Module = fx.Options(
 	fx.Provide(HistoryClientProvider),
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
-	HostInfoProviderModule,
+	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
 )
 
@@ -233,12 +233,12 @@ func MembershipFactoryProvider(
 	params *BootstrapParams,
 	persistenceBean persistenceClient.Bean,
 	logger SnTaggedLogger,
-) (MembershipMonitorFactory, error) {
+) (membership.MembershipMonitorFactory, error) {
 	return params.MembershipFactoryInitializer(persistenceBean, logger)
 }
 
 // TODO: Seems that this factory mostly handles singleton logic. We should be able to handle it via IOC.
-func MembershipMonitorProvider(membershipFactory MembershipMonitorFactory) (membership.Monitor, error) {
+func MembershipMonitorProvider(membershipFactory membership.MembershipMonitorFactory) (membership.Monitor, error) {
 	return membershipFactory.GetMembershipMonitor()
 }
 

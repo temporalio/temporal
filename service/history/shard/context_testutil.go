@@ -32,6 +32,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
@@ -45,7 +46,7 @@ type ContextTest struct {
 	Resource *resource.Test
 
 	MockEventsCache      *events.MockCache
-	MockHostInfoProvider *resource.MockHostInfoProvider
+	MockHostInfoProvider *membership.MockHostInfoProvider
 }
 
 var _ Context = (*ContextTest)(nil)
@@ -69,7 +70,7 @@ func NewTestContext(
 ) *ContextTest {
 	resourceTest := resource.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
-	hostInfoProvider := resource.NewMockHostInfoProvider(ctrl)
+	hostInfoProvider := membership.NewMockHostInfoProvider(ctrl)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
 	if shardInfo.QueueAckLevels == nil {
 		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)

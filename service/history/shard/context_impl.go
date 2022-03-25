@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 
@@ -54,7 +55,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
@@ -101,7 +101,7 @@ type (
 		saMapper                searchattribute.Mapper
 		clusterMetadata         cluster.Metadata
 		archivalMetadata        archiver.ArchivalMetadata
-		hostInfoProvider        resource.HostInfoProvider
+		hostInfoProvider        membership.HostInfoProvider
 
 		// Context that lives for the lifetime of the shard context
 		lifecycleCtx    context.Context
@@ -1721,7 +1721,7 @@ func newContext(
 	saMapper searchattribute.Mapper,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
-	hostInfoProvider resource.HostInfoProvider,
+	hostInfoProvider membership.HostInfoProvider,
 ) (*ContextImpl, error) {
 
 	hostIdentity := hostInfoProvider.HostInfo().Identity()

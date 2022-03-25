@@ -55,7 +55,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -89,7 +88,7 @@ type (
 		saMapper                    searchattribute.Mapper
 		clusterMetadata             cluster.Metadata
 		archivalMetadata            archiver.ArchivalMetadata
-		hostInfoProvider            resource.HostInfoProvider
+		hostInfoProvider            membership.HostInfoProvider
 		controller                  *shard.ControllerImpl
 	}
 
@@ -108,7 +107,7 @@ type (
 		SaMapper                    searchattribute.Mapper
 		ClusterMetadata             cluster.Metadata
 		ArchivalMetadata            archiver.ArchivalMetadata
-		HostInfoProvider            resource.HostInfoProvider
+		HostInfoProvider            membership.HostInfoProvider
 		ShardController             *shard.ControllerImpl
 		EventNotifier               events.Notifier
 		ReplicationTaskFetchers     ReplicationTaskFetchers

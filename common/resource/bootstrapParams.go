@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
-	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/sdk"
 )
 
@@ -47,7 +46,7 @@ type (
 		ThrottledLogger log.Logger
 		NamespaceLogger log.Logger
 
-		MembershipFactoryInitializer MembershipFactoryInitializerFunc
+		MembershipFactoryInitializer membership.MembershipFactoryInitializerFunc
 		RPCFactory                   common.RPCFactory
 		ClientFactoryProvider        client.FactoryProvider
 		PersistenceConfig            config.Persistence
@@ -60,14 +59,4 @@ type (
 		ArchivalMetadata             archiver.ArchivalMetadata
 		ArchiverProvider             provider.ArchiverProvider
 	}
-
-	// MembershipMonitorFactory provides a bootstrapped membership monitor
-	MembershipMonitorFactory interface {
-		// GetMembershipMonitor return a membership monitor
-		GetMembershipMonitor() (membership.Monitor, error)
-	}
-
-	// MembershipFactoryInitializerFunc is used for deferred initialization of the MembershipFactory
-	// to allow for the PersistenceBean to be constructed further downstream.
-	MembershipFactoryInitializerFunc func(persistenceBean persistenceClient.Bean, logger log.Logger) (MembershipMonitorFactory, error)
 )

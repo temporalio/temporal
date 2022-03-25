@@ -379,7 +379,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
 		c.logger)
 	tallyScope := tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (membership.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
@@ -478,7 +478,7 @@ func (c *temporalImpl) startHistory(
 		params.ThrottledLogger = c.logger
 		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, grpcPort, membershipPorts[i], c.logger)
 		tallyMetricsScope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
+		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (membership.MembershipMonitorFactory, error) {
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadataConfig = c.clusterMetadataConfig
@@ -581,7 +581,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
 	tallyMetricsScope := tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (membership.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
@@ -650,7 +650,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	params.ThrottledLogger = c.logger
 	params.RPCFactory = newRPCFactoryImpl(serviceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
 	tallyMetricsScope := tally.NewTestScope(serviceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
+	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (membership.MembershipMonitorFactory, error) {
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 
@@ -788,7 +788,7 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 	return pConfig, nil
 }
 
-func newMembershipFactory(serviceName string, hosts map[string][]string) resource.MembershipMonitorFactory {
+func newMembershipFactory(serviceName string, hosts map[string][]string) membership.MembershipMonitorFactory {
 	return &membershipFactoryImpl{
 		serviceName: serviceName,
 		hosts:       hosts,
