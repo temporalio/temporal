@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/visibility"
 	"go.temporal.io/server/common/persistence/visibility/manager"
@@ -52,7 +53,6 @@ var Module = fx.Options(
 	resource.Module,
 	deletenamespace.Module,
 	fx.Provide(VisibilityManagerProvider),
-	fx.Provide(ParamsExpandProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(ConfigProvider),
@@ -61,10 +61,6 @@ var Module = fx.Options(
 	fx.Provide(NewWorkerManager),
 	fx.Invoke(ServiceLifetimeHooks),
 )
-
-func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
-	return params.RPCFactory
-}
 
 func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {
 	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
@@ -78,19 +74,19 @@ func PersistenceMaxQpsProvider(
 
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
-	params *resource.BootstrapParams,
 	persistenceConfig *config.Persistence,
 ) *Config {
 	return NewConfig(
 		dc,
-		params,
+		persistenceConfig,
 		persistenceConfig.AdvancedVisibilityConfigExist(),
 	)
 }
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	params *resource.BootstrapParams,
+	metricsClient metrics.Client,
+	persistenceConfig *config.Persistence,
 	serviceConfig *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
@@ -99,7 +95,7 @@ func VisibilityManagerProvider(
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
-		params.PersistenceConfig,
+		*persistenceConfig,
 		persistenceServiceResolver,
 		esConfig.GetVisibilityIndex(),
 		esConfig.GetSecondaryVisibilityIndex(),
@@ -115,7 +111,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // worker visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // worker visibility never write
-		params.MetricsClient,
+		metricsClient,
 		logger,
 	)
 }

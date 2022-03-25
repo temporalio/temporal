@@ -113,15 +113,14 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockVisibilityMgr = manager.NewMockVisibilityManager(s.controller)
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
-	params := &resource.BootstrapParams{
-		PersistenceConfig: config.Persistence{
-			NumHistoryShards: 1,
-		},
+	persistenceConfig := &config.Persistence{
+		NumHistoryShards: 1,
 	}
-	config := &Config{}
+
+	cfg := &Config{}
 	args := NewAdminHandlerArgs{
-		params,
-		config,
+		persistenceConfig,
+		cfg,
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
 		nil,

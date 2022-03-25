@@ -67,7 +67,6 @@ var Module = fx.Options(
 	resource.Module,
 	workflow.Module,
 	shard.Module,
-	fx.Provide(ParamsExpandProvider), // BootstrapParams should be deprecated
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(TelemetryInterceptorProvider),
@@ -166,10 +165,6 @@ func HistoryEngineFactoryProvider(
 	}
 }
 
-func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
-	return params.RPCFactory
-}
-
 func ConfigProvider(
 	dc *dynamicconfig.Collection,
 	persistenceConfig config.Persistence,
@@ -228,7 +223,8 @@ func PersistenceMaxQpsProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	params *resource.BootstrapParams,
+	metricsClient metrics.Client,
+	persistenceConfig *config.Persistence,
 	esProcessorConfig *elasticsearch.ProcessorConfig,
 	serviceConfig *configs.Config,
 	esConfig *esclient.Config,
@@ -238,7 +234,7 @@ func VisibilityManagerProvider(
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
-		params.PersistenceConfig,
+		*persistenceConfig,
 		persistenceServiceResolver,
 		esConfig.GetVisibilityIndex(),
 		esConfig.GetSecondaryVisibilityIndex(),
@@ -254,7 +250,7 @@ func VisibilityManagerProvider(
 		serviceConfig.AdvancedVisibilityWritingMode,
 		dynamicconfig.GetBoolPropertyFnFilteredByNamespace(false), // history visibility never read
 		serviceConfig.EnableWriteToSecondaryAdvancedVisibility,
-		params.MetricsClient,
+		metricsClient,
 		logger,
 	)
 }

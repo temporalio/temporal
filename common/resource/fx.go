@@ -26,6 +26,7 @@ package resource
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"time"
@@ -56,6 +57,8 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -81,21 +84,15 @@ type (
 var Module = fx.Options(
 	persistenceClient.Module,
 	fx.Provide(SnTaggedLoggerProvider),
-	fx.Provide(ThrottledLoggerProvider),
-	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(HostNameProvider),
-	fx.Provide(ServiceNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
-	fx.Provide(MetricsClientProvider),
 	fx.Provide(MetricsUserScopeProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
 	fx.Provide(NamespaceRegistryProvider),
 	namespace.RegistryLifetimeHooksModule,
 	fx.Provide(serialization.NewSerializer),
-	fx.Provide(ArchivalMetadataProvider),
-	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
 	fx.Provide(MembershipFactoryProvider),
@@ -103,10 +100,8 @@ var Module = fx.Options(
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
-	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(FrontedClientProvider),
 	fx.Provide(GrpcListenerProvider),
-	fx.Provide(InstanceIDProvider),
 	fx.Provide(RingpopChannelProvider),
 	fx.Invoke(RingpopChannelLifetimeHooks),
 	fx.Provide(RuntimeMetricsReporterProvider),
@@ -134,18 +129,6 @@ func ThrottledLoggerProvider(
 
 func GrpcListenerProvider(factory common.RPCFactory) net.Listener {
 	return factory.GetGRPCListener()
-}
-
-func MetricsClientProvider(params *BootstrapParams) metrics.Client {
-	return params.MetricsClient
-}
-
-func PersistenceConfigProvider(params *BootstrapParams) *config.Persistence {
-	return &params.PersistenceConfig
-}
-
-func ServiceNameProvider(params *BootstrapParams) ServiceName {
-	return ServiceName(params.Name)
 }
 
 func HostNameProvider() (HostName, error) {
@@ -193,14 +176,6 @@ func NamespaceRegistryProvider(
 	)
 }
 
-func ArchivalMetadataProvider(params *BootstrapParams) archiver.ArchivalMetadata {
-	return params.ArchivalMetadata
-}
-
-func ArchiverProviderProvider(params *BootstrapParams) provider.ArchiverProvider {
-	return params.ArchiverProvider
-}
-
 func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
@@ -233,21 +208,16 @@ func ClientBeanProvider(
 }
 
 func MembershipFactoryProvider(
-	params *BootstrapParams,
-	persistenceBean persistenceClient.Bean,
+	init membership.MembershipFactoryInitializerFunc,
+	bean persistenceClient.Bean,
 	logger SnTaggedLogger,
 ) (membership.MembershipMonitorFactory, error) {
-	return params.MembershipFactoryInitializer(persistenceBean, logger)
+	return init(bean, logger)
 }
 
 // TODO: Seems that this factory mostly handles singleton logic. We should be able to handle it via IOC.
 func MembershipMonitorProvider(membershipFactory membership.MembershipMonitorFactory) (membership.Monitor, error) {
 	return membershipFactory.GetMembershipMonitor()
-}
-
-// TODO (alex): move this to `sdk` package after BootstrapParams removal.
-func SdkClientFactoryProvider(params *BootstrapParams) sdk.ClientFactory {
-	return params.SdkClientFactory
 }
 
 func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
@@ -275,10 +245,6 @@ func RingpopChannelLifetimeHooks(
 			},
 		},
 	)
-}
-
-func InstanceIDProvider(params *BootstrapParams) InstanceID {
-	return InstanceID(params.InstanceID)
 }
 
 func MetricsUserScopeProvider(serverMetricsClient metrics.Client) metrics.UserScope {
@@ -360,4 +326,57 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 		common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
+}
+
+func MetricsClientProvider(logger log.Logger, serviceName ServiceName, serverReporter ServerReporter) (metrics.Client, error) {
+	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
+	return serverReporter.NewClient(logger, serviceIdx)
+}
+
+func PersistenceConfigProvider(persistenceConfig config.Persistence) *config.Persistence {
+	return &persistenceConfig
+}
+
+func ArchivalMetadataProvider(dc *dynamicconfig.Collection, cfg *config.Config) archiver.ArchivalMetadata {
+	return archiver.NewArchivalMetadata(
+		dc,
+		cfg.Archival.History.State,
+		cfg.Archival.History.EnableRead,
+		cfg.Archival.Visibility.State,
+		cfg.Archival.Visibility.EnableRead,
+		&cfg.NamespaceDefaults.Archival,
+	)
+}
+
+func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
+	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
+}
+
+func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, metricsClient metrics.Client) (sdk.ClientFactory, error) {
+	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
+	}
+
+	return sdk.NewClientFactory(
+		cfg.PublicClient.HostPort,
+		tlsFrontendConfig,
+		sdk.NewMetricHandler(metricsClient.UserScope()),
+	), nil
+}
+
+func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {
+	return cfg.DCRedirectionPolicy
+}
+
+func RPCFactoryProvider(
+	cfg *config.Config,
+	svcName ServiceName,
+	logger log.Logger,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	dc *dynamicconfig.Collection,
+	clusterMetadata *cluster.Config,
+) common.RPCFactory {
+	svcCfg := cfg.Services[string(svcName)]
+	return rpc.NewFactory(&svcCfg.RPC, string(svcName), logger, tlsConfigProvider, dc, clusterMetadata)
 }

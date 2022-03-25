@@ -178,7 +178,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
-	// resource.ServerReporter
+	// ServerReporter
 	serverReporter := so.metricsReporter
 	if serverReporter == nil {
 		if so.config.Global.Metrics == nil {
@@ -375,7 +375,7 @@ func HistoryServiceProvider(
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(resource.NewBootstrapParams),
+		// fx.Provide(resource.NewBootstrapParams),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
 		history.QueueProcessorModule,
 		history.Module,
@@ -433,7 +433,7 @@ func MatchingServiceProvider(
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(resource.NewBootstrapParams),
+		// fx.Provide(resource.NewBootstrapParams),
 		matching.Module,
 		fx.NopLogger,
 	)
@@ -489,7 +489,7 @@ func FrontendServiceProvider(
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(resource.NewBootstrapParams),
+		// fx.Provide(resource.NewBootstrapParams),
 		frontend.Module,
 		fx.NopLogger,
 	)
@@ -545,7 +545,7 @@ func WorkerServiceProvider(
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(resource.NewBootstrapParams),
+		// fx.Provide(resource.NewBootstrapParams),
 		worker.Module,
 		fx.NopLogger,
 	)
