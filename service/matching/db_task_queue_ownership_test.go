@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -112,12 +113,12 @@ func (s *dbTaskOwnershipSuite) TearDownTest() {
 }
 
 func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Success() {
-	s.taskStore.EXPECT().GetTaskQueue(&persistence.GetTaskQueueRequest{
+	s.taskStore.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
 		NamespaceID: s.namespaceID,
 		TaskQueue:   s.taskQueueName,
 		TaskType:    s.taskQueueType,
 	}).Return(nil, serviceerror.NewNotFound("random error message"))
-	s.taskStore.EXPECT().CreateTaskQueue(&persistence.CreateTaskQueueRequest{
+	s.taskStore.EXPECT().CreateTaskQueue(gomock.Any(), &persistence.CreateTaskQueueRequest{
 		RangeID: dbTaskInitialRangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    s.namespaceID,
@@ -131,7 +132,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Success() {
 	}).Return(&persistence.CreateTaskQueueResponse{}, nil)
 
 	minTaskID, maxTaskID := rangeIDToTaskIDRange(dbTaskInitialRangeID, s.taskIDRangeSize)
-	err := s.taskOwnership.takeTaskQueueOwnership()
+	err := s.taskOwnership.takeTaskQueueOwnership(context.Background())
 	s.NoError(err)
 	s.Equal(s.now, *s.taskOwnership.stateLastUpdateTime)
 	s.Equal(dbTaskQueueOwnershipState{
@@ -150,12 +151,12 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Success() {
 }
 
 func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Failed() {
-	s.taskStore.EXPECT().GetTaskQueue(&persistence.GetTaskQueueRequest{
+	s.taskStore.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
 		NamespaceID: s.namespaceID,
 		TaskQueue:   s.taskQueueName,
 		TaskType:    s.taskQueueType,
 	}).Return(nil, serviceerror.NewNotFound("random error message"))
-	s.taskStore.EXPECT().CreateTaskQueue(&persistence.CreateTaskQueueRequest{
+	s.taskStore.EXPECT().CreateTaskQueue(gomock.Any(), &persistence.CreateTaskQueueRequest{
 		RangeID: dbTaskInitialRangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    s.namespaceID,
@@ -168,7 +169,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Create_Failed() {
 		},
 	}).Return(nil, &persistence.ConditionFailedError{})
 
-	err := s.taskOwnership.takeTaskQueueOwnership()
+	err := s.taskOwnership.takeTaskQueueOwnership(context.Background())
 	s.Error(err)
 	s.Nil(s.taskOwnership.stateLastUpdateTime)
 	s.Nil(s.taskOwnership.ownershipState)
@@ -180,7 +181,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Success() {
 	minTaskID, maxTaskID := rangeIDToTaskIDRange(rangeID, s.taskIDRangeSize)
 	ackedTaskID := minTaskID + rand.Int63n(maxTaskID-minTaskID)
 	taskQueueInfo := s.randomTaskQueue(ackedTaskID)
-	s.taskStore.EXPECT().GetTaskQueue(&persistence.GetTaskQueueRequest{
+	s.taskStore.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
 		NamespaceID: s.namespaceID,
 		TaskQueue:   s.taskQueueName,
 		TaskType:    s.taskQueueType,
@@ -188,7 +189,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Success() {
 		RangeID:       rangeID,
 		TaskQueueInfo: taskQueueInfo,
 	}, nil)
-	s.taskStore.EXPECT().UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+	s.taskStore.EXPECT().UpdateTaskQueue(gomock.Any(), &persistence.UpdateTaskQueueRequest{
 		PrevRangeID: rangeID,
 		RangeID:     rangeID + 1,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
@@ -203,7 +204,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Success() {
 	}).Return(&persistence.UpdateTaskQueueResponse{}, nil)
 
 	minTaskID, maxTaskID = rangeIDToTaskIDRange(rangeID+1, s.taskIDRangeSize)
-	err := s.taskOwnership.takeTaskQueueOwnership()
+	err := s.taskOwnership.takeTaskQueueOwnership(context.Background())
 	s.NoError(err)
 	s.Equal(s.now, *s.taskOwnership.stateLastUpdateTime)
 	s.Equal(dbTaskQueueOwnershipState{
@@ -226,7 +227,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Failed() {
 	minTaskID, maxTaskID := rangeIDToTaskIDRange(rangeID, s.taskIDRangeSize)
 	ackedTaskID := minTaskID + rand.Int63n(maxTaskID-minTaskID)
 	taskQueueInfo := s.randomTaskQueue(ackedTaskID)
-	s.taskStore.EXPECT().GetTaskQueue(&persistence.GetTaskQueueRequest{
+	s.taskStore.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
 		NamespaceID: s.namespaceID,
 		TaskQueue:   s.taskQueueName,
 		TaskType:    s.taskQueueType,
@@ -234,7 +235,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Failed() {
 		RangeID:       rangeID,
 		TaskQueueInfo: taskQueueInfo,
 	}, nil)
-	s.taskStore.EXPECT().UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+	s.taskStore.EXPECT().UpdateTaskQueue(gomock.Any(), &persistence.UpdateTaskQueueRequest{
 		PrevRangeID: rangeID,
 		RangeID:     rangeID + 1,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
@@ -248,7 +249,7 @@ func (s *dbTaskOwnershipSuite) TestTaskOwnership_Update_Failed() {
 		},
 	}).Return(nil, &persistence.ConditionFailedError{})
 
-	err := s.taskOwnership.takeTaskQueueOwnership()
+	err := s.taskOwnership.takeTaskQueueOwnership(context.Background())
 	s.Error(err)
 	s.Nil(s.taskOwnership.stateLastUpdateTime)
 	s.Nil(s.taskOwnership.ownershipState)
@@ -267,7 +268,7 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_Success() {
 		TaskId: s.taskOwnership.getLastAllocatedTaskID() + 2,
 	}
 
-	s.taskStore.EXPECT().CreateTasks(&persistence.CreateTasksRequest{
+	s.taskStore.EXPECT().CreateTasks(gomock.Any(), &persistence.CreateTasksRequest{
 		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
 			Data:    s.taskOwnership.taskQueueInfoLocked(),
 			RangeID: ownershipState.rangeID,
@@ -275,7 +276,7 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_Success() {
 		Tasks: []*persistencespb.AllocatedTaskInfo{task1, task2},
 	}).Return(&persistence.CreateTasksResponse{}, nil)
 
-	err := s.taskOwnership.flushTasks(task1.Data, task2.Data)
+	err := s.taskOwnership.flushTasks(context.Background(), task1.Data, task2.Data)
 	s.NoError(err)
 	s.Equal(dbTaskQueueOwnershipState{
 		rangeID:             ownershipState.rangeID,
@@ -304,7 +305,7 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_Failed() {
 		TaskId: s.taskOwnership.getLastAllocatedTaskID() + 2,
 	}
 
-	s.taskStore.EXPECT().CreateTasks(&persistence.CreateTasksRequest{
+	s.taskStore.EXPECT().CreateTasks(gomock.Any(), &persistence.CreateTasksRequest{
 		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
 			Data:    s.taskOwnership.taskQueueInfoLocked(),
 			RangeID: ownershipState.rangeID,
@@ -312,7 +313,7 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_Failed() {
 		Tasks: []*persistencespb.AllocatedTaskInfo{task1, task2},
 	}).Return(nil, serviceerror.NewUnavailable("random error"))
 
-	err := s.taskOwnership.flushTasks(task1.Data, task2.Data)
+	err := s.taskOwnership.flushTasks(context.Background(), task1.Data, task2.Data)
 	s.Error(err)
 	s.Equal(dbTaskQueueOwnershipState{
 		rangeID:             ownershipState.rangeID,
@@ -341,7 +342,7 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_OwnershipLost() {
 		TaskId: s.taskOwnership.getLastAllocatedTaskID() + 2,
 	}
 
-	s.taskStore.EXPECT().CreateTasks(&persistence.CreateTasksRequest{
+	s.taskStore.EXPECT().CreateTasks(gomock.Any(), &persistence.CreateTasksRequest{
 		TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
 			Data:    s.taskOwnership.taskQueueInfoLocked(),
 			RangeID: ownershipState.rangeID,
@@ -349,7 +350,7 @@ func (s *dbTaskOwnershipSuite) TestFlushTasks_OwnershipLost() {
 		Tasks: []*persistencespb.AllocatedTaskInfo{task1, task2},
 	}).Return(nil, &persistence.ConditionFailedError{})
 
-	err := s.taskOwnership.flushTasks(task1.Data, task2.Data)
+	err := s.taskOwnership.flushTasks(context.Background(), task1.Data, task2.Data)
 	s.Error(err)
 	s.Nil(s.taskOwnership.ownershipState)
 	<-s.taskOwnership.getShutdownChan()
@@ -365,7 +366,7 @@ func (s *dbTaskOwnershipSuite) TestGenerateTaskID_WithinRange() {
 
 	var actualTaskIDs []int64
 	for i := 0; i < int(s.taskIDRangeSize); i++ {
-		taskIDs, err := s.taskOwnership.generatedTaskIDsLocked(1)
+		taskIDs, err := s.taskOwnership.generatedTaskIDsLocked(context.Background(), 1)
 		s.NoError(err)
 		s.Equal(1, len(taskIDs))
 		actualTaskIDs = append(actualTaskIDs, taskIDs[0])
@@ -384,11 +385,11 @@ func (s *dbTaskOwnershipSuite) TestGenerateTaskID_WithinRange() {
 func (s *dbTaskOwnershipSuite) TestGenerateTaskID_OutOfRange() {
 	prevOwnershipState := s.prepareTaskQueueOwnership(rand.Int63())
 	for i := 0; i < int(s.taskIDRangeSize)-1; i++ {
-		_, err := s.taskOwnership.generatedTaskIDsLocked(1)
+		_, err := s.taskOwnership.generatedTaskIDsLocked(context.Background(), 1)
 		s.NoError(err)
 	}
 
-	s.taskStore.EXPECT().UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+	s.taskStore.EXPECT().UpdateTaskQueue(gomock.Any(), &persistence.UpdateTaskQueueRequest{
 		PrevRangeID: prevOwnershipState.rangeID,
 		RangeID:     prevOwnershipState.rangeID + 1,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
@@ -404,7 +405,7 @@ func (s *dbTaskOwnershipSuite) TestGenerateTaskID_OutOfRange() {
 
 	minTaskID, maxTaskID := rangeIDToTaskIDRange(prevOwnershipState.rangeID+1, s.taskIDRangeSize)
 	expectedTaskIDs := []int64{minTaskID + 1, minTaskID + 2}
-	actualTaskIDs, err := s.taskOwnership.generatedTaskIDsLocked(2)
+	actualTaskIDs, err := s.taskOwnership.generatedTaskIDsLocked(context.Background(), 2)
 	s.NoError(err)
 	s.Equal(expectedTaskIDs, actualTaskIDs)
 	s.Equal(dbTaskQueueOwnershipState{
@@ -422,7 +423,7 @@ func (s *dbTaskOwnershipSuite) prepareTaskQueueOwnership(
 	minTaskID, maxTaskID := rangeIDToTaskIDRange(targetRangeID-1, s.taskIDRangeSize)
 	ackedTaskID := minTaskID + rand.Int63n(maxTaskID-minTaskID)
 	taskQueueInfo := s.randomTaskQueue(ackedTaskID)
-	s.taskStore.EXPECT().GetTaskQueue(&persistence.GetTaskQueueRequest{
+	s.taskStore.EXPECT().GetTaskQueue(gomock.Any(), &persistence.GetTaskQueueRequest{
 		NamespaceID: s.namespaceID,
 		TaskQueue:   s.taskQueueName,
 		TaskType:    s.taskQueueType,
@@ -430,7 +431,7 @@ func (s *dbTaskOwnershipSuite) prepareTaskQueueOwnership(
 		RangeID:       targetRangeID - 1,
 		TaskQueueInfo: taskQueueInfo,
 	}, nil)
-	s.taskStore.EXPECT().UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+	s.taskStore.EXPECT().UpdateTaskQueue(gomock.Any(), &persistence.UpdateTaskQueueRequest{
 		PrevRangeID: targetRangeID - 1,
 		RangeID:     targetRangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
@@ -444,7 +445,7 @@ func (s *dbTaskOwnershipSuite) prepareTaskQueueOwnership(
 		},
 	}).Return(&persistence.UpdateTaskQueueResponse{}, nil)
 
-	err := s.taskOwnership.takeTaskQueueOwnership()
+	err := s.taskOwnership.takeTaskQueueOwnership(context.Background())
 	s.NoError(err)
 	return *s.taskOwnership.ownershipState
 }

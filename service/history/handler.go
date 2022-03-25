@@ -62,6 +62,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -562,35 +563,34 @@ func (h *Handler) DescribeHistoryHost(_ context.Context, _ *historyservice.Descr
 }
 
 // RemoveTask returns information about the internal states of a history host
-func (h *Handler) RemoveTask(_ context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
-	executionMgr := h.persistenceExecutionManager
-
+func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.RemoveTaskRequest) (_ *historyservice.RemoveTaskResponse, retError error) {
 	var err error
-	switch request.GetCategory() {
+	var category tasks.Category
+	switch categoryID := request.GetCategory(); categoryID {
 	case enumsspb.TASK_CATEGORY_TRANSFER:
-		err = executionMgr.CompleteTransferTask(&persistence.CompleteTransferTaskRequest{
-			ShardID: request.GetShardId(),
-			TaskID:  request.GetTaskId(),
-		})
+		category = tasks.CategoryTransfer
 	case enumsspb.TASK_CATEGORY_VISIBILITY:
-		err = executionMgr.CompleteVisibilityTask(&persistence.CompleteVisibilityTaskRequest{
-			ShardID: request.GetShardId(),
-			TaskID:  request.GetTaskId(),
-		})
+		category = tasks.CategoryVisibility
 	case enumsspb.TASK_CATEGORY_TIMER:
-		err = executionMgr.CompleteTimerTask(&persistence.CompleteTimerTaskRequest{
-			ShardID:             request.GetShardId(),
-			VisibilityTimestamp: timestamp.TimeValue(request.GetVisibilityTime()),
-			TaskID:              request.GetTaskId(),
-		})
+		category = tasks.CategoryTimer
 	case enumsspb.TASK_CATEGORY_REPLICATION:
-		err = executionMgr.CompleteReplicationTask(&persistence.CompleteReplicationTaskRequest{
-			ShardID: request.GetShardId(),
-			TaskID:  request.GetTaskId(),
-		})
+		category = tasks.CategoryReplication
 	default:
-		err = errInvalidTaskType
+		var ok bool
+		category, ok = tasks.GetCategoryByID(int32(categoryID))
+		if !ok {
+			return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task category ID: %v", categoryID))
+		}
 	}
+
+	err = h.persistenceExecutionManager.CompleteHistoryTask(ctx, &persistence.CompleteHistoryTaskRequest{
+		ShardID:      request.GetShardId(),
+		TaskCategory: category,
+		TaskKey: tasks.Key{
+			TaskID:   request.GetTaskId(),
+			FireTime: timestamp.TimeValue(request.GetVisibilityTime()),
+		},
+	})
 
 	return &historyservice.RemoveTaskResponse{}, err
 }
@@ -603,9 +603,9 @@ func (h *Handler) CloseShard(_ context.Context, request *historyservice.CloseSha
 }
 
 // GetShard gets a shard hosted by this instance
-func (h *Handler) GetShard(_ context.Context, request *historyservice.GetShardRequest) (_ *historyservice.GetShardResponse, retError error) {
+func (h *Handler) GetShard(ctx context.Context, request *historyservice.GetShardRequest) (_ *historyservice.GetShardResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-	resp, err := h.persistenceShardManager.GetOrCreateShard(&persistence.GetOrCreateShardRequest{
+	resp, err := h.persistenceShardManager.GetOrCreateShard(ctx, &persistence.GetOrCreateShardRequest{
 		ShardID: request.ShardId,
 	})
 	if err != nil {
@@ -614,10 +614,44 @@ func (h *Handler) GetShard(_ context.Context, request *historyservice.GetShardRe
 	return &historyservice.GetShardResponse{ShardInfo: resp.ShardInfo}, nil
 }
 
+// RebuildMutableState attempts to rebuild mutable state according to persisted history events
+func (h *Handler) RebuildMutableState(ctx context.Context, request *historyservice.RebuildMutableStateRequest) (_ *historyservice.RebuildMutableStateResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	workflowExecution := request.Execution
+	workflowID := workflowExecution.GetWorkflowId()
+	engine, err := h.controller.GetEngine(ctx, namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	if err := engine.RebuildMutableState(ctx, namespaceID, commonpb.WorkflowExecution{
+		WorkflowId: workflowExecution.WorkflowId,
+		RunId:      workflowExecution.RunId,
+	}); err != nil {
+		return nil, h.convertError(err)
+	}
+	return &historyservice.RebuildMutableStateResponse{}, nil
+}
+
 // DescribeMutableState - returns the internal analysis of workflow execution state
 func (h *Handler) DescribeMutableState(ctx context.Context, request *historyservice.DescribeMutableStateRequest) (_ *historyservice.DescribeMutableStateResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -643,6 +677,10 @@ func (h *Handler) GetMutableState(ctx context.Context, request *historyservice.G
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -667,6 +705,10 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
 
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -690,6 +732,10 @@ func (h *Handler) PollMutableState(ctx context.Context, request *historyservice.
 func (h *Handler) DescribeWorkflowExecution(ctx context.Context, request *historyservice.DescribeWorkflowExecutionRequest) (_ *historyservice.DescribeWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
 	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
 
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
@@ -1096,6 +1142,10 @@ func (h *Handler) ReplicateEventsV2(ctx context.Context, request *historyservice
 		return nil, errShuttingDown
 	}
 
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if namespaceID == "" {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1160,6 +1210,10 @@ func (h *Handler) SyncActivity(ctx context.Context, request *historyservice.Sync
 		return nil, errShuttingDown
 	}
 
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
+	}
+
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	if request.GetNamespaceId() == "" || uuid.Parse(request.GetNamespaceId()) == nil {
 		return nil, h.convertError(errNamespaceNotSet)
@@ -1194,6 +1248,9 @@ func (h *Handler) GetReplicationMessages(ctx context.Context, request *historyse
 
 	if h.isStopped() {
 		return nil, errShuttingDown
+	}
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
 	}
 
 	var wg sync.WaitGroup
@@ -1247,6 +1304,9 @@ func (h *Handler) GetDLQReplicationMessages(ctx context.Context, request *histor
 
 	if h.isStopped() {
 		return nil, errShuttingDown
+	}
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
 	}
 
 	taskInfoPerShard := map[int32][]*replicationspb.ReplicationTaskInfo{}
@@ -1487,6 +1547,9 @@ func (h *Handler) GetReplicationStatus(
 	if h.isStopped() {
 		return nil, errShuttingDown
 	}
+	if err := h.validateReplicationConfig(); err != nil {
+		return nil, err
+	}
 
 	resp := &historyservice.GetReplicationStatusResponse{}
 	for _, shardID := range h.controller.ShardIDs() {
@@ -1523,6 +1586,13 @@ func (h *Handler) convertError(err error) error {
 	}
 
 	return err
+}
+
+func (h *Handler) validateReplicationConfig() error {
+	if !h.clusterMetadata.IsGlobalNamespaceEnabled() {
+		return serviceerror.NewUnavailable("The cluster has global namespace disabled. The operation is not supported.")
+	}
+	return nil
 }
 
 func validateTaskToken(taskToken *tokenspb.Task) error {

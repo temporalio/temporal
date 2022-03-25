@@ -32,8 +32,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
@@ -65,16 +67,18 @@ type Config struct {
 	EnableReadFromSecondaryAdvancedVisibility dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	ESIndexMaxResultWindow                    dynamicconfig.IntPropertyFn
 
-	HistoryMaxPageSize           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	RPS                          dynamicconfig.IntPropertyFn
-	MaxNamespaceRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxNamespaceCountPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
-	GlobalNamespaceRPS           dynamicconfig.IntPropertyFnWithNamespaceFilter
-	MaxIDLengthLimit             dynamicconfig.IntPropertyFn
-	EnableClientVersionCheck     dynamicconfig.BoolPropertyFn
-	DisallowQuery                dynamicconfig.BoolPropertyFnWithNamespaceFilter
-	ShutdownDrainDuration        dynamicconfig.DurationPropertyFn
+	HistoryMaxPageSize                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	RPS                                    dynamicconfig.IntPropertyFn
+	MaxNamespaceRPSPerInstance             dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceBurstPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceCountPerInstance           dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceVisibilityRPSPerInstance   dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxNamespaceVisibilityBurstPerInstance dynamicconfig.IntPropertyFnWithNamespaceFilter
+	GlobalNamespaceRPS                     dynamicconfig.IntPropertyFnWithNamespaceFilter
+	MaxIDLengthLimit                       dynamicconfig.IntPropertyFn
+	EnableClientVersionCheck               dynamicconfig.BoolPropertyFn
+	DisallowQuery                          dynamicconfig.BoolPropertyFnWithNamespaceFilter
+	ShutdownDrainDuration                  dynamicconfig.DurationPropertyFn
 
 	MaxBadBinaries dynamicconfig.IntPropertyFnWithNamespaceFilter
 
@@ -151,6 +155,8 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		MaxNamespaceRPSPerInstance:             dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceRPSPerInstance, 2400),
 		MaxNamespaceBurstPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceBurstPerInstance, 4800),
 		MaxNamespaceCountPerInstance:           dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceCountPerInstance, 1200),
+		MaxNamespaceVisibilityRPSPerInstance:   dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityRPSPerInstance, 10),
+		MaxNamespaceVisibilityBurstPerInstance: dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxNamespaceVisibilityBurstPerInstance, 10),
 		GlobalNamespaceRPS:                     dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendGlobalNamespaceRPS, 0),
 		MaxIDLengthLimit:                       dc.GetIntProperty(dynamicconfig.MaxIDLengthLimit, 1000),
 		MaxBadBinaries:                         dc.GetIntPropertyFilteredByNamespace(dynamicconfig.FrontendMaxBadBinaries, namespace.MaxBadBinaries),
@@ -186,14 +192,15 @@ type Service struct {
 	status int32
 	config *Config
 
+	healthServer      *health.Server
 	handler           Handler
 	adminHandler      *AdminHandler
+	operatorHandler   *OperatorHandlerImpl
 	versionChecker    *VersionChecker
 	visibilityManager manager.VisibilityManager
 	server            *grpc.Server
 
 	serverMetricsReporter          metrics.Reporter
-	sdkMetricsReporter             metrics.Reporter
 	logger                         log.Logger
 	grpcListener                   net.Listener
 	userMetricsScope               metrics.UserScope
@@ -203,8 +210,10 @@ type Service struct {
 func NewService(
 	serviceConfig *Config,
 	server *grpc.Server,
+	healthServer *health.Server,
 	handler Handler,
 	adminHandler *AdminHandler,
+	operatorHandler *OperatorHandlerImpl,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
@@ -216,8 +225,10 @@ func NewService(
 		status:                         common.DaemonStatusInitialized,
 		config:                         serviceConfig,
 		server:                         server,
+		healthServer:                   healthServer,
 		handler:                        handler,
 		adminHandler:                   adminHandler,
+		operatorHandler:                operatorHandler,
 		versionChecker:                 versionChecker,
 		visibilityManager:              visibilityMgr,
 		logger:                         logger,
@@ -236,10 +247,10 @@ func (s *Service) Start() {
 	logger := s.logger
 	logger.Info("frontend starting")
 
+	healthpb.RegisterHealthServer(s.server, s.healthServer)
 	workflowservice.RegisterWorkflowServiceServer(s.server, s.handler)
-	healthpb.RegisterHealthServer(s.server, s.handler)
-
 	adminservice.RegisterAdminServiceServer(s.server, s.adminHandler)
+	operatorservice.RegisterOperatorServiceServer(s.server, s.operatorHandler)
 
 	reflection.Register(s.server)
 
@@ -247,8 +258,10 @@ func (s *Service) Start() {
 	s.userMetricsScope.AddCounter(metrics.RestartCount, 1)
 	rand.Seed(time.Now().UnixNano())
 
-	s.adminHandler.Start()
 	s.versionChecker.Start()
+	s.adminHandler.Start()
+	s.operatorHandler.Start()
+	s.handler.Start()
 
 	listener := s.grpcListener
 	logger.Info("Starting to serve on frontend listener")
@@ -275,12 +288,14 @@ func (s *Service) Stop() {
 	requestDrainTime := common.MinDuration(time.Second, s.config.ShutdownDrainDuration())
 	failureDetectionTime := common.MaxDuration(0, s.config.ShutdownDrainDuration()-requestDrainTime)
 
-	logger.Info("ShutdownHandler: Updating rpc health status to ShuttingDown")
-	s.handler.UpdateHealthStatus(HealthStatusShuttingDown)
+	logger.Info("ShutdownHandler: Updating gRPC health status to ShuttingDown")
+	s.healthServer.Shutdown()
 
 	logger.Info("ShutdownHandler: Waiting for others to discover I am unhealthy")
 	time.Sleep(failureDetectionTime)
 
+	s.handler.Stop()
+	s.operatorHandler.Stop()
 	s.adminHandler.Stop()
 	s.versionChecker.Stop()
 	s.visibilityManager.Close()
@@ -295,20 +310,17 @@ func (s *Service) Stop() {
 		s.serverMetricsReporter.Stop(logger)
 	}
 
-	if s.sdkMetricsReporter != nil {
-		s.sdkMetricsReporter.Stop(logger)
-	}
-
 	logger.Info("frontend stopped")
 }
 
 func namespaceRPS(
-	config *Config,
+	perInstanceRPSFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
+	globalRPSFn dynamicconfig.IntPropertyFnWithNamespaceFilter,
 	frontendResolver membership.ServiceResolver,
 	namespace string,
 ) float64 {
-	hostRPS := float64(config.MaxNamespaceRPSPerInstance(namespace))
-	globalRPS := float64(config.GlobalNamespaceRPS(namespace))
+	hostRPS := float64(perInstanceRPSFn(namespace))
+	globalRPS := float64(globalRPSFn(namespace))
 	hosts := float64(numFrontendHosts(frontendResolver))
 
 	rps := hostRPS + globalRPS*math.Exp((1.0-hosts)/8.0)

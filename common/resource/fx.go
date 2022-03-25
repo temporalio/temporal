@@ -100,10 +100,8 @@ var Module = fx.Options(
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
-	sdk.Module,
 	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(FrontedClientProvider),
-	fx.Provide(PersistenceFaultInjectionFactoryProvider),
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(InstanceIDProvider),
 	fx.Provide(RingpopChannelProvider),
@@ -256,10 +254,6 @@ func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServi
 		common.CreateFrontendServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
-}
-
-func PersistenceFaultInjectionFactoryProvider(factory persistenceClient.Factory) *persistenceClient.FaultInjectionDataStoreFactory {
-	return factory.FaultInjection()
 }
 
 func RingpopChannelProvider(rpcFactory common.RPCFactory) *tchannel.Channel {

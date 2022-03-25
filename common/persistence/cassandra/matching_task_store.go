@@ -39,6 +39,99 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
+const (
+	templateCreateTaskQuery = `INSERT INTO tasks (` +
+		`namespace_id, task_queue_name, task_queue_type, type, task_id, task, task_encoding) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?)`
+
+	templateCreateTaskWithTTLQuery = `INSERT INTO tasks (` +
+		`namespace_id, task_queue_name, task_queue_type, type, task_id, task, task_encoding) ` +
+		`VALUES(?, ?, ?, ?, ?, ?, ?) USING TTL ?`
+
+	templateGetTasksQuery = `SELECT task_id, task, task_encoding ` +
+		`FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id >= ? ` +
+		`and task_id < ?`
+
+	templateCompleteTaskQuery = `DELETE FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ?`
+
+	templateCompleteTasksLessThanQuery = `DELETE FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
+		`AND type = ? ` +
+		`AND task_id < ? `
+
+	templateGetTaskQueueQuery = `SELECT ` +
+		`range_id, ` +
+		`task_queue, ` +
+		`task_queue_encoding ` +
+		`FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ?`
+
+	templateInsertTaskQueueQuery = `INSERT INTO tasks (` +
+		`namespace_id, ` +
+		`task_queue_name, ` +
+		`task_queue_type, ` +
+		`type, ` +
+		`task_id, ` +
+		`range_id, ` +
+		`task_queue, ` +
+		`task_queue_encoding ` +
+		`) VALUES (?, ?, ?, ?, ?, ?, ?, ?) IF NOT EXISTS`
+
+	templateUpdateTaskQueueQuery = `UPDATE tasks SET ` +
+		`range_id = ?, ` +
+		`task_queue = ?, ` +
+		`task_queue_encoding = ? ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ? ` +
+		`IF range_id = ?`
+
+	templateUpdateTaskQueueQueryWithTTLPart1 = `INSERT INTO tasks (` +
+		`namespace_id, ` +
+		`task_queue_name, ` +
+		`task_queue_type, ` +
+		`type, ` +
+		`task_id ` +
+		`) VALUES (?, ?, ?, ?, ?) USING TTL ?`
+
+	templateUpdateTaskQueueQueryWithTTLPart2 = `UPDATE tasks USING TTL ? SET ` +
+		`range_id = ?, ` +
+		`task_queue = ?, ` +
+		`task_queue_encoding = ? ` +
+		`WHERE namespace_id = ? ` +
+		`and task_queue_name = ? ` +
+		`and task_queue_type = ? ` +
+		`and type = ? ` +
+		`and task_id = ? ` +
+		`IF range_id = ?`
+
+	templateDeleteTaskQueueQuery = `DELETE FROM tasks ` +
+		`WHERE namespace_id = ? ` +
+		`AND task_queue_name = ? ` +
+		`AND task_queue_type = ? ` +
+		`AND type = ? ` +
+		`AND task_id = ? ` +
+		`IF range_id = ?`
+)
+
 type (
 	MatchingTaskStore struct {
 		Session gocql.Session
@@ -90,7 +183,7 @@ func (d *MatchingTaskStore) CreateTaskQueue(
 func (d *MatchingTaskStore) GetTaskQueue(
 	request *p.InternalGetTaskQueueRequest,
 ) (*p.InternalGetTaskQueueResponse, error) {
-	query := d.Session.Query(templateGetTaskQueue,
+	query := d.Session.Query(templateGetTaskQueueQuery,
 		request.NamespaceID,
 		request.TaskQueue,
 		request.TaskType,
@@ -295,8 +388,8 @@ func (d *MatchingTaskStore) GetTasks(
 		request.TaskQueue,
 		request.TaskType,
 		rowTypeTask,
-		request.MinTaskIDExclusive,
-		request.MaxTaskIDInclusive,
+		request.InclusiveMinTaskID,
+		request.ExclusiveMaxTaskID,
 	)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -362,14 +455,14 @@ func (d *MatchingTaskStore) CompleteTask(
 	return nil
 }
 
-// CompleteTasksLessThan deletes all tasks less than or equal to the given task id. This API ignores the
+// CompleteTasksLessThan deletes all tasks less than the given task id. This API ignores the
 // Limit request parameter i.e. either all tasks leq the task_id will be deleted or an error will
 // be returned to the caller
 func (d *MatchingTaskStore) CompleteTasksLessThan(
 	request *p.CompleteTasksLessThanRequest,
 ) (int, error) {
 	query := d.Session.Query(templateCompleteTasksLessThanQuery,
-		request.NamespaceID, request.TaskQueueName, request.TaskType, rowTypeTask, request.TaskID)
+		request.NamespaceID, request.TaskQueueName, request.TaskType, rowTypeTask, request.ExclusiveMaxTaskID)
 	err := query.Exec()
 	if err != nil {
 		return 0, gocql.ConvertError("CompleteTasksLessThan", err)

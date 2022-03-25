@@ -25,10 +25,13 @@
 package metrics
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/uber-go/tally/v4"
 )
+
+var _ Client = (*TallyClient)(nil)
 
 // TallyClient is used for reporting metrics by various Temporal services
 type TallyClient struct {
@@ -39,13 +42,14 @@ type TallyClient struct {
 	serviceIdx      ServiceIdx
 	scopeWrapper    func(impl internalScope) internalScope
 	perUnitBuckets  map[MetricUnit]tally.Buckets
+	userScope       UserScope
 }
 
 // NewClient creates and returns a new instance of
 // Client implementation
 // reporter holds the common tags for the service
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx ServiceIdx) Client {
+func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx ServiceIdx) (Client, error) {
 	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
 
 	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
@@ -57,6 +61,13 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
+	serviceTypeTagValue, err := MetricsServiceIdxToServiceName(serviceIdx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize metrics client: %w", err)
+	}
+
+	rootScope := scope.Tagged(map[string]string{serviceName: serviceTypeTagValue})
+
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &TallyClient{
 		globalRootScope: scope,
@@ -65,6 +76,7 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 		serviceIdx:      serviceIdx,
 		scopeWrapper:    scopeWrapper,
 		perUnitBuckets:  perUnitBuckets,
+		userScope:       newTallyUserScope(scope),
 	}
 
 	for idx, def := range ScopeDefs[Common] {
@@ -73,7 +85,7 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
-		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)
+		metricsClient.childScopes[idx] = rootScope.Tagged(scopeTags)
 	}
 
 	for idx, def := range ScopeDefs[serviceIdx] {
@@ -82,10 +94,10 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
-		metricsClient.childScopes[idx] = scope.Tagged(scopeTags)
+		metricsClient.childScopes[idx] = rootScope.Tagged(scopeTags)
 	}
 
-	return metricsClient
+	return metricsClient, nil
 }
 
 // IncCounter increments one for a counter and emits
@@ -139,7 +151,7 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	return m.scopeWrapper(
 		newTallyScopeInternal(
 			newTallyScopeInternal(
-				NoopScope(0),
+				noopInternalScope,
 				scope,
 				m.metricDefs,
 				false,
@@ -156,5 +168,5 @@ func (m *TallyClient) Scope(scopeIdx int, tags ...Tag) Scope {
 // UserScope returns a new metrics scope that can be used to add additional
 // information to the metrics emitted by user code
 func (m *TallyClient) UserScope() UserScope {
-	return newTallyUserScope(m.globalRootScope)
+	return m.userScope
 }

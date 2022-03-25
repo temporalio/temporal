@@ -132,10 +132,10 @@ func (s *dbTaskManagerSuite) TearDownTest() {
 }
 
 func (s *dbTaskManagerSuite) TestAcquireOwnership_Success() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID).AnyTimes()
 
-	err := s.dbTaskManager.acquireOwnership()
+	err := s.dbTaskManager.acquireOwnership(context.Background())
 	s.NoError(err)
 	s.NotNil(s.dbTaskManager.taskWriter)
 	s.NotNil(s.dbTaskManager.taskReader)
@@ -143,9 +143,9 @@ func (s *dbTaskManagerSuite) TestAcquireOwnership_Success() {
 }
 
 func (s *dbTaskManagerSuite) TestAcquireOwnership_Failed() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(serviceerror.NewUnavailable("some random error"))
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(serviceerror.NewUnavailable("some random error"))
 
-	err := s.dbTaskManager.acquireOwnership()
+	err := s.dbTaskManager.acquireOwnership(context.Background())
 	s.Error(err)
 	s.Nil(s.dbTaskManager.taskWriter)
 	s.Nil(s.dbTaskManager.taskReader)
@@ -153,11 +153,11 @@ func (s *dbTaskManagerSuite) TestAcquireOwnership_Failed() {
 }
 
 func (s *dbTaskManagerSuite) TestStart_Success() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getShutdownChan().Return(nil).AnyTimes()
-	s.taskReader.EXPECT().taskIterator(s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
+	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
 		func(paginationToken []byte) ([]interface{}, []byte, error) {
 			return nil, nil, nil
 		},
@@ -171,13 +171,13 @@ func (s *dbTaskManagerSuite) TestStart_Success() {
 
 func (s *dbTaskManagerSuite) TestStart_ErrorThenSuccess() {
 	gomock.InOrder(
-		s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(serviceerror.NewUnavailable("some random error")),
-		s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil),
+		s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(serviceerror.NewUnavailable("some random error")),
+		s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil),
 	)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getShutdownChan().Return(nil).AnyTimes()
-	s.taskReader.EXPECT().taskIterator(s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
+	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
 		func(paginationToken []byte) ([]interface{}, []byte, error) {
 			return nil, nil, nil
 		},
@@ -190,7 +190,7 @@ func (s *dbTaskManagerSuite) TestStart_ErrorThenSuccess() {
 }
 
 func (s *dbTaskManagerSuite) TestStart_Error() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(&persistence.ConditionFailedError{})
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(&persistence.ConditionFailedError{})
 
 	s.dbTaskManager.Start()
 	<-s.dbTaskManager.startupChan
@@ -198,7 +198,7 @@ func (s *dbTaskManagerSuite) TestStart_Error() {
 }
 
 func (s *dbTaskManagerSuite) TestBufferAndWriteTask_NotReady() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(serviceerror.NewUnavailable("some random error")).AnyTimes()
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(serviceerror.NewUnavailable("some random error")).AnyTimes()
 	s.dbTaskManager.Start()
 
 	taskInfo := &persistencespb.TaskInfo{}
@@ -208,11 +208,11 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_NotReady() {
 }
 
 func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getShutdownChan().Return(nil).AnyTimes()
-	s.taskReader.EXPECT().taskIterator(s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
+	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
 		func(paginationToken []byte) ([]interface{}, []byte, error) {
 			return nil, nil, nil
 		},
@@ -232,9 +232,9 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
 }
 
 func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Expired() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID)
-	err := s.dbTaskManager.acquireOwnership()
+	err := s.dbTaskManager.acquireOwnership(context.Background())
 	s.NoError(err)
 
 	// make sure no signal exists in dispatch chan
@@ -255,14 +255,14 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Expired() {
 		},
 	}
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
-	s.taskReader.EXPECT().taskIterator(s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
+	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
 		func(paginationToken []byte) ([]interface{}, []byte, error) {
 			return []interface{}{allocatedTaskInfo}, nil, nil
 		},
 	))
 	s.taskReader.EXPECT().ackTask(allocatedTaskInfo.TaskId)
 
-	s.dbTaskManager.readAndDispatchTasks()
+	s.dbTaskManager.readAndDispatchTasks(context.Background())
 }
 
 func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Dispatch() {
@@ -271,9 +271,9 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Dispatch() {
 		dispatchedTasks = append(dispatchedTasks, task.event.AllocatedTaskInfo)
 		return nil
 	}
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID)
-	err := s.dbTaskManager.acquireOwnership()
+	err := s.dbTaskManager.acquireOwnership(context.Background())
 	s.NoError(err)
 
 	// make sure no signal exists in dispatch chan
@@ -294,20 +294,20 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Dispatch() {
 		},
 	}
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
-	s.taskReader.EXPECT().taskIterator(s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
+	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
 		func(paginationToken []byte) ([]interface{}, []byte, error) {
 			return []interface{}{allocatedTaskInfo}, nil, nil
 		},
 	))
 
-	s.dbTaskManager.readAndDispatchTasks()
+	s.dbTaskManager.readAndDispatchTasks(context.Background())
 	s.Equal([]*persistencespb.AllocatedTaskInfo{allocatedTaskInfo}, dispatchedTasks)
 }
 
 func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadFailure() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID)
-	err := s.dbTaskManager.acquireOwnership()
+	err := s.dbTaskManager.acquireOwnership(context.Background())
 	s.NoError(err)
 
 	// make sure no signal exists in dispatch chan
@@ -317,13 +317,13 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadFailure() {
 	}
 
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
-	s.taskReader.EXPECT().taskIterator(s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
+	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
 		func(paginationToken []byte) ([]interface{}, []byte, error) {
 			return nil, nil, serviceerror.NewUnavailable("random error")
 		},
 	))
 
-	s.dbTaskManager.readAndDispatchTasks()
+	s.dbTaskManager.readAndDispatchTasks(context.Background())
 	select {
 	case <-s.dbTaskManager.dispatchChan:
 		// noop
@@ -333,9 +333,9 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadFailure() {
 }
 
 func (s *dbTaskManagerSuite) TestUpdateAckTaskID() {
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID)
-	err := s.dbTaskManager.acquireOwnership()
+	err := s.dbTaskManager.acquireOwnership(context.Background())
 	s.NoError(err)
 
 	ackedTaskID := rand.Int63()
@@ -347,41 +347,41 @@ func (s *dbTaskManagerSuite) TestUpdateAckTaskID() {
 
 func (s *dbTaskManagerSuite) TestDeleteAckedTasks_Success() {
 	maxDeletedTaskIDInclusive := s.ackedTaskID - 100
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID).AnyTimes()
-	err := s.dbTaskManager.acquireOwnership()
+	err := s.dbTaskManager.acquireOwnership(context.Background())
 	s.NoError(err)
 	s.dbTaskManager.maxDeletedTaskIDInclusive = maxDeletedTaskIDInclusive
 
-	s.store.EXPECT().CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueueName: s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		TaskID:        s.ackedTaskID,
-		Limit:         100000,
+	s.store.EXPECT().CompleteTasksLessThan(gomock.Any(), &persistence.CompleteTasksLessThanRequest{
+		NamespaceID:        s.namespaceID,
+		TaskQueueName:      s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		ExclusiveMaxTaskID: s.ackedTaskID + 1,
+		Limit:              100000,
 	}).Return(0, nil)
 
-	s.dbTaskManager.deleteAckedTasks()
+	s.dbTaskManager.deleteAckedTasks(context.Background())
 	s.Equal(s.ackedTaskID, s.dbTaskManager.maxDeletedTaskIDInclusive)
 }
 
 func (s *dbTaskManagerSuite) TestDeleteAckedTasks_Failed() {
 	maxDeletedTaskIDInclusive := s.ackedTaskID - 100
-	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership().Return(nil)
+	s.taskQueueOwnership.EXPECT().takeTaskQueueOwnership(gomock.Any()).Return(nil)
 	s.taskQueueOwnership.EXPECT().getAckedTaskID().Return(s.ackedTaskID).AnyTimes()
-	err := s.dbTaskManager.acquireOwnership()
+	err := s.dbTaskManager.acquireOwnership(context.Background())
 	s.NoError(err)
 	s.dbTaskManager.maxDeletedTaskIDInclusive = maxDeletedTaskIDInclusive
 
-	s.store.EXPECT().CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueueName: s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		TaskID:        s.ackedTaskID,
-		Limit:         100000,
+	s.store.EXPECT().CompleteTasksLessThan(gomock.Any(), &persistence.CompleteTasksLessThanRequest{
+		NamespaceID:        s.namespaceID,
+		TaskQueueName:      s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		ExclusiveMaxTaskID: s.ackedTaskID + 1,
+		Limit:              100000,
 	}).Return(0, serviceerror.NewUnavailable("random error"))
 
-	s.dbTaskManager.deleteAckedTasks()
+	s.dbTaskManager.deleteAckedTasks(context.Background())
 	s.Equal(maxDeletedTaskIDInclusive, s.dbTaskManager.maxDeletedTaskIDInclusive)
 }
 

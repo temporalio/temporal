@@ -92,10 +92,9 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 
 	s.timerQueueTaskExecutorBase = newTimerQueueTaskExecutorBase(
 		s.testShardContext,
-		s.mockDeleteManager,
 		s.mockCache,
+		s.mockDeleteManager,
 		s.testShardContext.GetLogger(),
-		s.testShardContext.GetMetricsClient(),
 		config,
 	)
 }
@@ -125,13 +124,15 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 
 	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
 
-	mockWeCtx.EXPECT().LoadWorkflowExecution().Return(mockMutableState, nil)
+	mockWeCtx.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 
 	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
+		gomock.Any(),
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
@@ -166,13 +167,15 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 
 	s.mockCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), tests.NamespaceID, we, workflow.CallerTypeTask).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
 
-	mockWeCtx.EXPECT().LoadWorkflowExecution().Return(mockMutableState, nil)
+	mockWeCtx.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(mockMutableState, nil)
 	mockMutableState.EXPECT().GetLastWriteVersion().Return(int64(1), nil)
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{})
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
 
 	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
+		gomock.Any(),
 		tests.NamespaceID,
 		we,
 		mockWeCtx,

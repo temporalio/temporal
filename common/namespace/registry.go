@@ -103,17 +103,19 @@ type (
 		// from persistent storage, returning an instance of
 		// serviceerror.NotFound if there is no matching Namespace.
 		GetNamespace(
-			request *persistence.GetNamespaceRequest,
+			context.Context,
+			*persistence.GetNamespaceRequest,
 		) (*persistence.GetNamespaceResponse, error)
 
 		// ListNamespaces fetches a paged set of namespace persistent state
 		// instances.
 		ListNamespaces(
+			context.Context,
 			*persistence.ListNamespacesRequest,
 		) (*persistence.ListNamespacesResponse, error)
 
 		// GetMetadata fetches the notification version for Temporal namespaces.
-		GetMetadata() (*persistence.GetMetadataResponse, error)
+		GetMetadata(context.Context) (*persistence.GetMetadataResponse, error)
 	}
 
 	// PrepareCallbackFn is function to be called before CallbackFn is called,
@@ -379,48 +381,50 @@ func (r *registry) refreshLoop(ctx context.Context) error {
 func (r *registry) refreshNamespaces(ctx context.Context) error {
 	// first load the metadata record, then load namespaces
 	// this can guarantee that namespaces in the cache are not updated more than metadata record
-	metadata, err := r.persistence.GetMetadata()
+	metadata, err := r.persistence.GetMetadata(ctx)
 	if err != nil {
 		return err
 	}
 	namespaceNotificationVersion := metadata.NotificationVersion
 
-	var token []byte
 	request := &persistence.ListNamespacesRequest{PageSize: CacheRefreshPageSize}
-	var namespaces Namespaces
-	continuePage := true
+	var namespacesDb Namespaces
+	namespaceIDsDb := make(map[ID]struct{})
 
-	for continuePage {
-		request.NextPageToken = token
-		response, err := r.persistence.ListNamespaces(request)
+	for {
+		response, err := r.persistence.ListNamespaces(ctx, request)
 		if err != nil {
 			return err
 		}
-		token = response.NextPageToken
-		for _, namespace := range response.Namespaces {
-			namespaces = append(namespaces, FromPersistentState(namespace))
+		for _, namespaceDb := range response.Namespaces {
+			namespacesDb = append(namespacesDb, FromPersistentState(namespaceDb))
+			namespaceIDsDb[ID(namespaceDb.Namespace.Info.Id)] = struct{}{}
 		}
-		continuePage = len(token) != 0
+		if len(response.NextPageToken) == 0 {
+			break
+		}
+		request.NextPageToken = response.NextPageToken
 	}
 
-	// we mush apply the namespace change by order
-	// since history shard have to update the shard info
-	// with namespace change version.
-	sort.Sort(namespaces)
+	// Sort namespaces by notification version because changes must be applied in this order
+	// because history shard has to update the shard info with namespace change version.
+	sort.Sort(namespacesDb)
 
-	var oldEntries []*Namespace
-	var newEntries []*Namespace
-
-	// make a copy of the existing namespace cache, so we can calculate diff and do compare and swap
+	// Make a copy of the existing namespace cache (excluding deleted), so we can calculate diff and do "compare and swap".
 	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts)
 	newCacheByID := cache.New(cacheMaxSize, &cacheOpts)
 	for _, namespace := range r.getAllNamespace() {
+		if _, namespaceExistsDb := namespaceIDsDb[namespace.ID()]; !namespaceExistsDb {
+			continue
+		}
 		newCacheNameToID.Put(Name(namespace.info.Name), ID(namespace.info.Id))
 		newCacheByID.Put(ID(namespace.info.Id), namespace)
 	}
 
+	var oldEntries []*Namespace
+	var newEntries []*Namespace
 UpdateLoop:
-	for _, namespace := range namespaces {
+	for _, namespace := range namespacesDb {
 		if namespace.notificationVersion >= namespaceNotificationVersion {
 			// this guarantee that namespace change events before the
 			// namespaceNotificationVersion is loaded into the cache.

@@ -36,6 +36,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
 
+	enumspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -106,18 +107,18 @@ func (s *taskProcessorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 
 	s.scopeIdx = 0
-	s.scope = metrics.NewNoopMetricsClient().Scope(s.scopeIdx)
+	s.scope = metrics.NoopClient.Scope(s.scopeIdx)
 	s.notificationChan = make(chan struct{})
 	h := &historyEngineImpl{
 		shard:         s.mockShard,
 		logger:        s.logger,
 		metricsClient: s.mockShard.GetMetricsClient(),
 	}
-	options := taskProcessorOptions{
-		queueSize:   s.mockShard.GetConfig().TimerTaskBatchSize() * s.mockShard.GetConfig().TimerTaskWorkerCount(),
-		workerCount: s.mockShard.GetConfig().TimerTaskWorkerCount(),
+	options := TaskProcessorOptions{
+		QueueSize:   s.mockShard.GetConfig().TimerTaskBatchSize() * s.mockShard.GetConfig().TimerTaskWorkerCount(),
+		WorkerCount: s.mockShard.GetConfig().TimerTaskWorkerCount(),
 	}
-	s.taskProcessor = newTaskProcessor(options, s.mockShard, h.historyCache, s.logger)
+	s.taskProcessor = NewTaskProcessor(options, s.mockShard, h.historyCache, s.logger)
 }
 
 func (s *taskProcessorSuite) TearDownTest() {
@@ -138,15 +139,11 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
-	var taskFilterErr taskFilter = func(task tasks.Task) (bool, error) {
-		return false, errors.New("some random error")
-	}
-	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
-		return true, nil
+	task := NewTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	var taskFilterErr taskFilter = func(task tasks.Task) bool {
+		return false
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilterErr)
-	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
 	s.mockProcessor.EXPECT().process(typeOfCtx, task).Return(s.scopeIdx, nil)
 	s.mockProcessor.EXPECT().complete(task)
 	s.mockShard.Resource.NamespaceCache.EXPECT().GetNamespaceName(gomock.Any()).Return(tests.Namespace, nil)
@@ -157,10 +154,10 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceErrRetry_ProcessNoEr
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	task := NewTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
 	task.shouldProcessTask = false
-	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
-		return false, nil
+	var taskFilter taskFilter = func(task tasks.Task) bool {
+		return false
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
 	s.mockProcessor.EXPECT().process(typeOfCtx, task).Return(s.scopeIdx, nil)
@@ -173,9 +170,9 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceFalse_ProcessNoErr()
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() {
-	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
-	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
-		return true, nil
+	task := NewTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	var taskFilter taskFilter = func(task tasks.Task) bool {
+		return true
 	}
 
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
@@ -190,9 +187,9 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessNoErr() 
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr() {
 	err := errors.New("some random err")
-	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
-	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
-		return true, nil
+	task := NewTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	var taskFilter taskFilter = func(task tasks.Task) bool {
+		return true
 	}
 	s.mockProcessor.EXPECT().getTaskFilter().Return(taskFilter)
 	s.mockProcessor.EXPECT().process(typeOfCtx, task).Return(s.scopeIdx, err)
@@ -208,7 +205,7 @@ func (s *taskProcessorSuite) TestProcessTaskAndAck_NamespaceTrue_ProcessErrNoErr
 func (s *taskProcessorSuite) TestHandleTaskError_EntityNotExists() {
 	err := serviceerror.NewNotFound("")
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := NewTaskInfo(s.mockProcessor, nil, s.logger)
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 
@@ -216,7 +213,7 @@ func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskRetry() {
 	err := consts.ErrTaskRetry
 	delay := time.Second
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := NewTaskInfo(s.mockProcessor, nil, s.logger)
 	go func() {
 		time.Sleep(delay)
 		s.notificationChan <- struct{}{}
@@ -231,14 +228,14 @@ func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskRetry() {
 func (s *taskProcessorSuite) TestHandleTaskError_ErrTaskDiscarded() {
 	err := consts.ErrTaskDiscarded
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := NewTaskInfo(s.mockProcessor, nil, s.logger)
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 
 func (s *taskProcessorSuite) TestHandleTaskError_NamespaceNotActiveError() {
 	err := serviceerror.NewNamespaceNotActive("", "", "")
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := NewTaskInfo(s.mockProcessor, nil, s.logger)
 	taskInfo.startTime = time.Now().UTC().Add(-namespace.CacheRefreshInterval * time.Duration(3))
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 
@@ -249,22 +246,22 @@ func (s *taskProcessorSuite) TestHandleTaskError_NamespaceNotActiveError() {
 func (s *taskProcessorSuite) TestHandleTaskError_CurrentWorkflowConditionFailedError() {
 	err := &persistence.CurrentWorkflowConditionFailedError{}
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := NewTaskInfo(s.mockProcessor, nil, s.logger)
 	s.Nil(s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 
 func (s *taskProcessorSuite) TestHandleTaskError_RandomErr() {
 	err := errors.New("random error")
 
-	taskInfo := newTaskInfo(s.mockProcessor, nil, s.logger)
+	taskInfo := NewTaskInfo(s.mockProcessor, nil, s.logger)
 	s.Equal(err, s.taskProcessor.handleTaskError(s.scope, taskInfo, s.notificationChan, err))
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_SetsUserLatencyCorrectly() {
-	task := newTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
+	task := NewTaskInfo(s.mockProcessor, &taskForTest{Key: tasks.Key{TaskID: 12345, FireTime: time.Now().UTC()}}, s.logger)
 	task.shouldProcessTask = false
-	var taskFilter taskFilter = func(task tasks.Task) (bool, error) {
-		return false, nil
+	var taskFilter taskFilter = func(task tasks.Task) bool {
+		return false
 	}
 	expectedUserLatency := int64(133)
 	updateContext := func(ctx context.Context, taskInfo interface{}) {
@@ -310,3 +307,5 @@ func (t *taskForTest) GetVersion() int64             { panic("implement me") }
 func (t *taskForTest) SetVersion(_ int64)            { panic("implement me") }
 func (t *taskForTest) SetTaskID(_ int64)             { panic("implement me") }
 func (t *taskForTest) SetVisibilityTime(_ time.Time) { panic("implement me") }
+func (t *taskForTest) GetCategory() tasks.Category   { panic("implement me") }
+func (t *taskForTest) GetType() enumspb.TaskType     { panic("implement me") }

@@ -36,8 +36,11 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -57,12 +60,13 @@ type (
 
 func newTransferQueueActiveProcessor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
+	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
-	registry namespace.Registry,
 ) *transferQueueActiveProcessorImpl {
 
 	config := shard.GetConfig()
@@ -83,14 +87,18 @@ func newTransferQueueActiveProcessor(
 	}
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	transferTaskFilter := func(task tasks.Task) (bool, error) {
+	transferTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetTransferMaxReadLevel()
+		return shard.GetQueueMaxReadLevel(tasks.CategoryTransfer, currentClusterName).TaskID
 	}
 	updateTransferAckLevel := func(ackLevel int64) error {
-		return shard.UpdateTransferClusterAckLevel(currentClusterName, ackLevel)
+		return shard.UpdateQueueClusterAckLevel(
+			tasks.CategoryTransfer,
+			currentClusterName,
+			tasks.Key{TaskID: ackLevel},
+		)
 	}
 
 	transferQueueShutdown := func() error {
@@ -101,16 +109,16 @@ func newTransferQueueActiveProcessor(
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		logger:             logger,
-		metricsClient:      historyEngine.metricsClient,
+		metricsClient:      shard.GetMetricsClient(),
 		transferTaskFilter: transferTaskFilter,
 		taskExecutor: newTransferQueueActiveTaskExecutor(
 			shard,
-			historyEngine,
+			workflowCache,
+			archivalClient,
+			sdkClientFactory,
 			logger,
-			historyEngine.metricsClient,
 			config,
 			matchingClient,
-			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
@@ -126,7 +134,7 @@ func newTransferQueueActiveProcessor(
 		shard,
 		options,
 		processor,
-		shard.GetTransferClusterAckLevel(currentClusterName),
+		shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID,
 		logger,
 	)
 
@@ -136,7 +144,7 @@ func newTransferQueueActiveProcessor(
 		options,
 		processor,
 		queueAckMgr,
-		historyEngine.historyCache,
+		workflowCache,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
@@ -148,7 +156,9 @@ func newTransferQueueActiveProcessor(
 
 func newTransferQueueFailoverProcessor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
+	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	namespaceIDs map[string]struct{},
@@ -157,7 +167,6 @@ func newTransferQueueFailoverProcessor(
 	maxLevel int64,
 	taskAllocator taskAllocator,
 	logger log.Logger,
-	registry namespace.Registry,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
 	config := shard.GetConfig()
@@ -185,7 +194,7 @@ func newTransferQueueFailoverProcessor(
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
 
-	transferTaskFilter := func(task tasks.Task) (bool, error) {
+	transferTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
@@ -193,35 +202,36 @@ func newTransferQueueFailoverProcessor(
 	}
 	failoverStartTime := shard.GetTimeSource().Now()
 	updateTransferAckLevel := func(ackLevel int64) error {
-		return shard.UpdateTransferFailoverLevel(
+		return shard.UpdateFailoverLevel(
+			tasks.CategoryTransfer,
 			failoverUUID,
-			persistence.TransferFailoverLevel{
+			persistence.FailoverLevel{
 				StartTime:    failoverStartTime,
-				MinLevel:     minLevel,
-				CurrentLevel: ackLevel,
-				MaxLevel:     maxLevel,
+				MinLevel:     tasks.Key{TaskID: minLevel},
+				CurrentLevel: tasks.Key{TaskID: ackLevel},
+				MaxLevel:     tasks.Key{TaskID: maxLevel},
 				NamespaceIDs: namespaceIDs,
 			},
 		)
 	}
 	transferQueueShutdown := func() error {
-		return shard.DeleteTransferFailoverLevel(failoverUUID)
+		return shard.DeleteFailoverLevel(tasks.CategoryTransfer, failoverUUID)
 	}
 
 	processor := &transferQueueActiveProcessorImpl{
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		logger:             logger,
-		metricsClient:      historyEngine.metricsClient,
+		metricsClient:      shard.GetMetricsClient(),
 		transferTaskFilter: transferTaskFilter,
 		taskExecutor: newTransferQueueActiveTaskExecutor(
 			shard,
-			historyEngine,
+			workflowCache,
+			archivalClient,
+			sdkClientFactory,
 			logger,
-			historyEngine.metricsClient,
 			config,
 			matchingClient,
-			registry,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
@@ -247,7 +257,7 @@ func newTransferQueueFailoverProcessor(
 		options,
 		processor,
 		queueAckMgr,
-		historyEngine.historyCache,
+		workflowCache,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)

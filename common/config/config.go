@@ -70,8 +70,6 @@ type (
 	Service struct {
 		// RPC is the rpc configuration
 		RPC RPC `yaml:"rpc"`
-		// Deprecated. Use Metrics in global section instead.
-		Metrics metrics.Config `yaml:"metrics"`
 	}
 
 	// PProf contains the config items for the pprof utility
@@ -116,6 +114,8 @@ type (
 		Frontend GroupTLS `yaml:"frontend"`
 		// SystemWorker controls TLS setting for System Workers connecting to Frontend.
 		SystemWorker WorkerTLS `yaml:"systemWorker"`
+		// RemoteFrontendClients controls TLS setting for talking to remote cluster.
+		RemoteClusters map[string]GroupTLS `yaml:"remoteClusters"`
 		// ExpirationChecks defines settings for periodic checks for expiration of certificates
 		ExpirationChecks CertExpirationValidation `yaml:"expirationChecks"`
 		// Interval between refreshes of certificates loaded from files
@@ -484,9 +484,12 @@ func (c *Config) String() string {
 	return maskedYaml
 }
 
-func (r *GroupTLS) IsEnabled() bool {
-	return r.Server.KeyFile != "" || r.Server.KeyData != "" ||
-		len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0 ||
+func (r *GroupTLS) IsServerEnabled() bool {
+	return r.Server.KeyFile != "" || r.Server.KeyData != ""
+}
+
+func (r *GroupTLS) IsClientEnabled() bool {
+	return len(r.Client.RootCAFiles) > 0 || len(r.Client.RootCAData) > 0 ||
 		r.Client.ForceTLS
 }
 

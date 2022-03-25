@@ -150,7 +150,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) dispatchForNewWorkflow(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
-	_ context.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -177,6 +177,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 			return err
 		}
 		return targetWorkflow.getContext().CreateWorkflowExecution(
+			ctx,
 			now,
 			createMode,
 			prevRunID,
@@ -192,6 +193,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	return targetWorkflow.getContext().CreateWorkflowExecution(
+		ctx,
 		now,
 		createMode,
 		prevRunID,
@@ -203,7 +205,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
-	_ context.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -245,6 +247,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = targetWorkflow.getContext().CreateWorkflowExecution(
+		ctx,
 		now,
 		createMode,
 		prevRunID,
@@ -265,7 +268,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 }
 
 func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
-	_ context.Context,
+	ctx context.Context,
 	now time.Time,
 	currentWorkflow nDCWorkflow,
 	targetWorkflow nDCWorkflow,
@@ -282,6 +285,7 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) suppressCurrentAndCreateAsCurrent(
 	}
 
 	return currentWorkflow.getContext().UpdateWorkflowExecutionWithNew(
+		ctx,
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetWorkflow.getContext(),
@@ -350,11 +354,4 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) cleanupTransaction(
 	if targetWorkflow != nil {
 		targetWorkflow.getReleaseFn()(err)
 	}
-}
-
-func (r *nDCTransactionMgrForNewWorkflowImpl) persistNewNDCWorkflowEvents(
-	targetNewWorkflow nDCWorkflow,
-	targetNewWorkflowEvents *persistence.WorkflowEvents,
-) (int64, error) {
-	return targetNewWorkflow.getContext().PersistWorkflowEvents(targetNewWorkflowEvents)
 }

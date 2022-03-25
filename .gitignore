@@ -24,11 +24,7 @@
 
 # Goreleaser
 /dist
-/bin
 
 # Fossa
 .fossa.yml
-
-# Build info
-build/info/data.json
 

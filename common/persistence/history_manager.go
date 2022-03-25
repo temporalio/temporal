@@ -25,6 +25,7 @@
 package persistence
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/pborman/uuid"
@@ -52,6 +53,7 @@ var _ ExecutionManager = (*executionManagerImpl)(nil)
 
 // ForkHistoryBranch forks a new branch from a old branch
 func (m *executionManagerImpl) ForkHistoryBranch(
+	_ context.Context,
 	request *ForkHistoryBranchRequest,
 ) (*ForkHistoryBranchResponse, error) {
 
@@ -137,6 +139,7 @@ func (m *executionManagerImpl) ForkHistoryBranch(
 
 // DeleteHistoryBranch removes a branch
 func (m *executionManagerImpl) DeleteHistoryBranch(
+	_ context.Context,
 	request *DeleteHistoryBranchRequest,
 ) error {
 
@@ -155,7 +158,7 @@ func (m *executionManagerImpl) DeleteHistoryBranch(
 	})
 
 	// Get the entire history tree, so we know if any part of the target branch is referenced by other branches.
-	historyTreeResp, err := m.GetHistoryTree(&GetHistoryTreeRequest{
+	historyTreeResp, err := m.GetHistoryTree(context.TODO(), &GetHistoryTreeRequest{
 		TreeID:      branch.TreeId,
 		ShardID:     &request.ShardID,
 		BranchToken: request.BranchToken,
@@ -214,6 +217,7 @@ findDeleteRanges:
 
 // TrimHistoryBranch trims a branch
 func (m *executionManagerImpl) TrimHistoryBranch(
+	_ context.Context,
 	request *TrimHistoryBranchRequest,
 ) (*TrimHistoryBranchResponse, error) {
 
@@ -244,7 +248,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 	var pageToken []byte
 	transactionIDToNode := map[int64]historyNodeMetadata{}
 	for doContinue := true; doContinue; doContinue = len(pageToken) > 0 {
-		token, err := m.deserializeToken(pageToken, minNodeID-1)
+		token, err := m.deserializeToken(pageToken, minNodeID-1, defaultLastTransactionID)
 		if err != nil {
 			return nil, err
 		}
@@ -277,7 +281,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 			}
 		}
 
-		pageToken, err = m.serializeToken(token)
+		pageToken, err = m.serializeToken(token, false)
 		if err != nil {
 			return nil, err
 		}
@@ -309,6 +313,7 @@ func (m *executionManagerImpl) TrimHistoryBranch(
 
 // GetHistoryTree returns all branch information of a tree
 func (m *executionManagerImpl) GetHistoryTree(
+	_ context.Context,
 	request *GetHistoryTreeRequest,
 ) (*GetHistoryTreeResponse, error) {
 
@@ -422,6 +427,7 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 
 // AppendHistoryNodes add a node to history node table
 func (m *executionManagerImpl) AppendHistoryNodes(
+	_ context.Context,
 	request *AppendHistoryNodesRequest,
 ) (*AppendHistoryNodesResponse, error) {
 
@@ -441,6 +447,7 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 // ReadHistoryBranchByBatch returns history node data for a branch by batch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranchByBatch(
+	_ context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadHistoryBranchByBatchResponse, error) {
 
@@ -453,6 +460,7 @@ func (m *executionManagerImpl) ReadHistoryBranchByBatch(
 // ReadHistoryBranch returns history node data for a branch
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 func (m *executionManagerImpl) ReadHistoryBranch(
+	_ context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadHistoryBranchResponse, error) {
 
@@ -466,6 +474,7 @@ func (m *executionManagerImpl) ReadHistoryBranch(
 // Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
 // NOTE: this API should only be used by 3+DC
 func (m *executionManagerImpl) ReadRawHistoryBranch(
+	_ context.Context,
 	request *ReadHistoryBranchRequest,
 ) (*ReadRawHistoryBranchResponse, error) {
 
@@ -474,7 +483,7 @@ func (m *executionManagerImpl) ReadRawHistoryBranch(
 		return nil, err
 	}
 
-	nextPageToken, err := m.serializeToken(token)
+	nextPageToken, err := m.serializeToken(token, false)
 	if err != nil {
 		return nil, err
 	}
@@ -486,7 +495,20 @@ func (m *executionManagerImpl) ReadRawHistoryBranch(
 	}, nil
 }
 
+// ReadHistoryBranchReverse returns history node data for a branch
+// Pagination is implemented here, the actual minNodeID passing to persistence layer is calculated along with token's LastNodeID
+func (m *executionManagerImpl) ReadHistoryBranchReverse(
+	_ context.Context,
+	request *ReadHistoryBranchReverseRequest,
+) (*ReadHistoryBranchReverseResponse, error) {
+	resp := &ReadHistoryBranchReverseResponse{}
+	var err error
+	resp.HistoryEvents, _, resp.NextPageToken, resp.Size, err = m.readHistoryBranchReverse(request)
+	return resp, err
+}
+
 func (m *executionManagerImpl) GetAllHistoryTreeBranches(
+	_ context.Context,
 	request *GetAllHistoryTreeBranchesRequest,
 ) (*GetAllHistoryTreeBranchesResponse, error) {
 	resp, err := m.persistence.GetAllHistoryTreeBranches(request)
@@ -573,6 +595,65 @@ func (m *executionManagerImpl) readRawHistoryBranch(
 	return resp.Nodes, token, nil
 }
 
+func (m *executionManagerImpl) readRawHistoryBranchReverse(
+	shardID int32,
+	treeID string,
+	branchAncestors []*persistencespb.HistoryBranchRange,
+	minNodeID int64,
+	maxNodeID int64,
+	token *historyPagingToken,
+	pageSize int,
+	metadataOnly bool,
+) ([]InternalHistoryNode, *historyPagingToken, error) {
+	if token.CurrentRangeIndex == notStartedIndex {
+		for i := range branchAncestors {
+			idx := len(branchAncestors) - 1 - i
+			br := branchAncestors[idx]
+			// Skip branches that don't have relevant nodes
+			if maxNodeID <= br.GetBeginNodeId() {
+				continue
+			}
+			if minNodeID >= br.GetEndNodeId() {
+				break
+			}
+
+			if token.CurrentRangeIndex == notStartedIndex {
+				token.CurrentRangeIndex = idx
+			}
+			token.FinalRangeIndex = idx
+		}
+
+		if token.CurrentRangeIndex == notStartedIndex {
+			return nil, nil, serviceerror.NewDataLoss("branchRange is corrupted")
+		}
+	}
+
+	currentBranch := branchAncestors[token.CurrentRangeIndex]
+	// minNodeID remains the same, since caller can read from the middle
+	// maxNodeID need to be shortened since this branch can contain additional history nodes
+	if currentBranch.GetEndNodeId() < maxNodeID {
+		maxNodeID = currentBranch.GetEndNodeId()
+	}
+	branchID := currentBranch.GetBranchId()
+
+	resp, err := m.persistence.ReadHistoryBranch(&InternalReadHistoryBranchRequest{
+		ShardID:       shardID,
+		TreeID:        treeID,
+		BranchID:      branchID,
+		MinNodeID:     minNodeID,
+		MaxNodeID:     maxNodeID,
+		NextPageToken: token.StoreToken,
+		PageSize:      pageSize,
+		MetadataOnly:  metadataOnly,
+		ReverseOrder:  true,
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	token.StoreToken = resp.NextPageToken
+	return resp.Nodes, token, nil
+}
+
 func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	request *ReadHistoryBranchRequest,
 ) ([]*commonpb.DataBlob, []int64, *historyPagingToken, int, error) {
@@ -604,6 +685,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	token, err := m.deserializeToken(
 		request.NextPageToken,
 		request.MinEventID-1,
+		defaultLastTransactionID,
 	)
 	if err != nil {
 		return nil, nil, nil, 0, err
@@ -648,6 +730,92 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		lastNode := nodes[len(nodes)-1]
 		token.LastNodeID = lastNode.NodeID
 		token.LastTransactionID = lastNode.TransactionID
+	}
+
+	return dataBlobs, transactionIDs, token, dataSize, nil
+}
+
+func (m *executionManagerImpl) readRawHistoryBranchReverseAndFilter(
+	request *ReadHistoryBranchReverseRequest,
+) ([]*commonpb.DataBlob, []int64, *historyPagingToken, int, error) {
+
+	shardID := request.ShardID
+	branchToken := request.BranchToken
+	minNodeID := common.FirstEventID
+	maxNodeID := request.MaxEventID
+	if maxNodeID == common.EmptyEventID {
+		maxNodeID = common.EndEventID
+	} else {
+		maxNodeID++ // downstream code is exclusive on maxNodeID
+	}
+
+	branch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	treeID := branch.TreeId
+	branchID := branch.BranchId
+	branchAncestors := branch.Ancestors
+
+	// merge tree ID & branch ID into branch ancestors so the processing logic is simple
+	beginNodeID := common.FirstEventID
+	if len(branch.Ancestors) > 0 {
+		beginNodeID = branch.Ancestors[len(branch.Ancestors)-1].GetEndNodeId()
+	}
+	branchAncestors = append(branchAncestors, &persistencespb.HistoryBranchRange{
+		BranchId:    branchID,
+		BeginNodeId: beginNodeID,
+		EndNodeId:   maxNodeID,
+	})
+
+	token, err := m.deserializeToken(
+		request.NextPageToken,
+		request.MaxEventID,
+		request.LastFirstTransactionID,
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	nodes, token, err := m.readRawHistoryBranchReverse(
+		shardID,
+		treeID,
+		branchAncestors,
+		minNodeID,
+		maxNodeID,
+		token,
+		request.PageSize,
+		false,
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	if len(nodes) == 0 && len(request.NextPageToken) == 0 {
+		return nil, nil, nil, 0, serviceerror.NewNotFound("Workflow execution history not found.")
+	}
+
+	nodes, err = m.filterHistoryNodesReverse(
+		token.LastNodeID,
+		token.LastTransactionID,
+		nodes,
+	)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	var dataBlobs []*commonpb.DataBlob
+	transactionIDs := make([]int64, 0, len(nodes))
+	dataSize := 0
+	if len(nodes) > 0 {
+		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
+		for index, node := range nodes {
+			dataBlobs[index] = node.Events
+			dataSize += len(node.Events.Data)
+			transactionIDs = append(transactionIDs, node.TransactionID)
+		}
+		lastNode := nodes[len(nodes)-1]
+		token.LastNodeID = lastNode.NodeID
+		token.LastTransactionID = lastNode.PrevTransactionID
 	}
 
 	return dataBlobs, transactionIDs, token, dataSize, nil
@@ -705,11 +873,73 @@ func (m *executionManagerImpl) readHistoryBranch(
 		token.LastEventID = lastEvent.GetEventId()
 	}
 
-	nextPageToken, err := m.serializeToken(token)
+	nextPageToken, err := m.serializeToken(token, false)
 	if err != nil {
 		return nil, nil, nil, nil, 0, err
 	}
 	return historyEvents, historyEventBatches, transactionIDs, nextPageToken, dataSize, nil
+}
+
+func (m *executionManagerImpl) readHistoryBranchReverse(
+	request *ReadHistoryBranchReverseRequest,
+) ([]*historypb.HistoryEvent, []int64, []byte, int, error) {
+
+	dataBlobs, transactionIDs, token, dataSize, err := m.readRawHistoryBranchReverseAndFilter(request)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+
+	historyEvents := make([]*historypb.HistoryEvent, 0, request.PageSize)
+
+	for _, batch := range dataBlobs {
+		events, err := m.serializer.DeserializeEvents(batch)
+		if err != nil {
+			return nil, nil, nil, dataSize, err
+		}
+		if len(events) == 0 {
+			m.logger.Error("Empty events in a batch")
+			return nil, nil, nil, dataSize, serviceerror.NewDataLoss(fmt.Sprintf("corrupted history event batch, empty events"))
+		}
+
+		firstEvent := events[0]           // first
+		eventCount := len(events)         // length
+		lastEvent := events[eventCount-1] // last
+
+		if firstEvent.GetVersion() != lastEvent.GetVersion() || firstEvent.GetEventId()+int64(eventCount-1) != lastEvent.GetEventId() {
+			// in a single batch, version should be the same, and ID should be contiguous
+			m.logger.Error("Corrupted event batch",
+				tag.FirstEventVersion(firstEvent.GetVersion()), tag.WorkflowFirstEventID(firstEvent.GetEventId()),
+				tag.LastEventVersion(lastEvent.GetVersion()), tag.WorkflowNextEventID(lastEvent.GetEventId()),
+				tag.Counter(eventCount))
+			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, wrong version and IDs")
+		}
+		if (token.LastEventID != common.EmptyEventID) && (lastEvent.GetEventId() != token.LastEventID-1) {
+			m.logger.Error("Corrupted non-contiguous event batch",
+				tag.WorkflowFirstEventID(firstEvent.GetEventId()),
+				tag.WorkflowNextEventID(lastEvent.GetEventId()),
+				tag.TokenLastEventID(token.LastEventID),
+				tag.Counter(eventCount))
+			return historyEvents, transactionIDs, nil, dataSize, serviceerror.NewDataLoss("corrupted history event batch, eventID is not contiguous")
+		}
+
+		events = m.reverseSlice(events)
+
+		historyEvents = append(historyEvents, events...)
+		token.LastEventID = firstEvent.GetEventId()
+	}
+
+	nextPageToken, err := m.serializeToken(token, true)
+	if err != nil {
+		return nil, nil, nil, 0, err
+	}
+	return historyEvents, transactionIDs, nextPageToken, dataSize, nil
+}
+
+func (m *executionManagerImpl) reverseSlice(events []*historypb.HistoryEvent) []*historypb.HistoryEvent {
+	for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
+		events[i], events[j] = events[j], events[i]
+	}
+	return events
 }
 
 func (m *executionManagerImpl) filterHistoryNodes(
@@ -748,21 +978,49 @@ func (m *executionManagerImpl) filterHistoryNodes(
 	return result, nil
 }
 
+func (m *executionManagerImpl) filterHistoryNodesReverse(
+	lastNodeID int64,
+	lastTransactionID int64,
+	nodes []InternalHistoryNode,
+) ([]InternalHistoryNode, error) {
+	var result []InternalHistoryNode
+	for _, node := range nodes {
+		if lastNodeID == defaultLastNodeID {
+			lastNodeID = node.NodeID
+		}
+		if node.TransactionID != lastTransactionID {
+			continue
+		}
+
+		switch {
+		case node.NodeID > lastNodeID:
+			return nil, serviceerror.NewUnavailable(fmt.Sprintf("corrupted data, nodeID cannot decrease"))
+		default:
+			lastTransactionID = node.PrevTransactionID
+			lastNodeID = node.NodeID
+			result = append(result, node)
+		}
+	}
+	return result, nil
+}
+
 func (m *executionManagerImpl) deserializeToken(
 	token []byte,
 	defaultLastEventID int64,
+	lastTransactionId int64,
 ) (*historyPagingToken, error) {
 
 	return m.pagingTokenSerializer.Deserialize(
 		token,
 		defaultLastEventID,
 		defaultLastNodeID,
-		defaultLastTransactionID,
+		lastTransactionId,
 	)
 }
 
 func (m *executionManagerImpl) serializeToken(
 	pagingToken *historyPagingToken,
+	reverseOrder bool,
 ) ([]byte, error) {
 
 	if len(pagingToken.StoreToken) == 0 {
@@ -771,7 +1029,12 @@ func (m *executionManagerImpl) serializeToken(
 			return nil, nil
 		}
 
-		pagingToken.CurrentRangeIndex++
+		if reverseOrder {
+			pagingToken.CurrentRangeIndex--
+
+		} else {
+			pagingToken.CurrentRangeIndex++
+		}
 		return m.pagingTokenSerializer.Serialize(pagingToken)
 	}
 

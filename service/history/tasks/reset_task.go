@@ -27,8 +27,11 @@ package tasks
 import (
 	"time"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
+
+var _ Task = (*ResetWorkflowTask)(nil)
 
 type (
 	ResetWorkflowTask struct {
@@ -68,4 +71,12 @@ func (a *ResetWorkflowTask) GetVisibilityTime() time.Time {
 
 func (a *ResetWorkflowTask) SetVisibilityTime(timestamp time.Time) {
 	a.VisibilityTimestamp = timestamp
+}
+
+func (a *ResetWorkflowTask) GetCategory() Category {
+	return CategoryTransfer
+}
+
+func (a *ResetWorkflowTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW
 }

@@ -57,12 +57,12 @@ func NewOtelMetricTestUtility() *OtelMetricTestUtility {
 	reporter := NewTestOtelReporter()
 	return &OtelMetricTestUtility{
 		reporter:   reporter,
-		gaugeCache: NewOtelGaugeCache(reporter),
+		gaugeCache: NewOtelGaugeCache(reporter.GetMeterMust()),
 	}
 }
 
 func (t *OtelMetricTestUtility) GetClient(config *ClientConfig, idx ServiceIdx) Client {
-	result, err := newOpentelemeteryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
+	result, err := NewOpentelemeteryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
 	if err != nil {
 		panic(err)
 	}
@@ -205,3 +205,7 @@ func (t TestOtelReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (C
 }
 
 func (t TestOtelReporter) Stop(logger log.Logger) {}
+
+func (t TestOtelReporter) UserScope() UserScope {
+	return NoopUserScope
+}

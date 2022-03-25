@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"fmt"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -40,22 +41,31 @@ type (
 		serviceIdx   ServiceIdx
 		scopeWrapper func(impl internalScope) internalScope
 		gaugeCache   OtelGaugeCache
-		userScope    *opentelemetryUserScope
+		userScope    UserScope
 	}
 )
 
 // NewOpentelemeteryClientByReporter creates and returns a new instance of Client implementation
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter OpentelemetryReporter, logger log.Logger, gaugeCache OtelGaugeCache) (Client, error) {
+func NewOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter OpentelemetryReporter, logger log.Logger, gaugeCache OtelGaugeCache) (Client, error) {
 	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
 
 	scopeWrapper := func(impl internalScope) internalScope {
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
-	userScope := newOpentelemetryUserScope(reporter, clientConfig.Tags, gaugeCache)
+	globalRootScope := newOpentelemetryScope(serviceIdx, reporter.GetMeterMust(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
 
-	globalRootScope := newOpentelemetryScope(serviceIdx, reporter, nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
+	serviceTypeTagValue, err := MetricsServiceIdxToServiceName(serviceIdx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to initialize metrics client: %w", err)
+	}
+
+	rootTags := make(map[string]string, len(clientConfig.Tags)+1)
+	for k, v := range clientConfig.Tags {
+		rootTags[k] = v
+	}
+	rootTags[serviceName] = serviceTypeTagValue
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
 	metricsClient := &opentelemetryClient{
@@ -65,7 +75,7 @@ func newOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 		serviceIdx:   serviceIdx,
 		scopeWrapper: scopeWrapper,
 		gaugeCache:   gaugeCache,
-		userScope:    userScope,
+		userScope:    reporter.UserScope(),
 	}
 
 	for idx, def := range ScopeDefs[Common] {

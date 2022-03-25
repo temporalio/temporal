@@ -33,6 +33,7 @@ import (
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -137,7 +138,7 @@ func (r *nDCWorkflowResetterImpl) resetWorkflow(
 		),
 		baseBranchToken,
 		baseLastEventID,
-		baseLastEventVersion,
+		convert.Int64Ptr(baseLastEventVersion),
 		definition.NewWorkflowKey(
 			r.namespaceID.String(),
 			r.workflowID,
@@ -212,7 +213,7 @@ func (r *nDCWorkflowResetterImpl) getResetBranchToken(
 
 	// fork a new history branch
 	shardID := r.shard.GetShardID()
-	resp, err := r.executionMgr.ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	resp, err := r.executionMgr.ForkHistoryBranch(ctx, &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: baseBranchToken,
 		ForkNodeID:      baseLastEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(r.namespaceID.String(), r.workflowID, r.newRunID),

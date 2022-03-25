@@ -31,6 +31,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/shuffle"
 )
@@ -167,8 +168,8 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Multiple() {
 	numTasks := 20
 
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.VisibilityTasksRow
@@ -183,17 +184,22 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertSelect_Multiple() {
 	s.NoError(err)
 	s.Equal(numTasks, int(rowsAffected))
 
-	filter := sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+	for _, pageSize := range []int{numTasks / 2, numTasks * 2} {
+		filter := sqlplugin.VisibilityTasksRangeFilter{
+			ShardID:            shardID,
+			InclusiveMinTaskID: minTaskID,
+			ExclusiveMaxTaskID: maxTaskID,
+			PageSize:           pageSize,
+		}
+		rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), filter)
+		s.NoError(err)
+		s.NotEmpty(rows)
+		s.True(len(rows) <= filter.PageSize)
+		for index := range rows {
+			rows[index].ShardID = shardID
+		}
+		s.Equal(tasks[:common.MinInt(numTasks, pageSize)], rows)
 	}
-	rows, err := s.store.RangeSelectFromVisibilityTasks(newExecutionContext(), filter)
-	s.NoError(err)
-	for index := range rows {
-		rows[index].ShardID = shardID
-	}
-	s.Equal(tasks, rows)
 }
 
 func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Single() {
@@ -221,12 +227,13 @@ func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Single() {
 func (s *historyHistoryVisibilityTaskSuite) TestDeleteSelect_Multiple() {
 	shardID := rand.Int31()
 	minTaskID := int64(1)
-	maxTaskID := int64(100)
+	maxTaskID := int64(101)
 
 	filter := sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
+		PageSize:           int(maxTaskID - minTaskID),
 	}
 	result, err := s.store.RangeDeleteFromVisibilityTasks(newExecutionContext(), filter)
 	s.NoError(err)
@@ -275,8 +282,8 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Multiple() {
 	numTasks := 20
 
 	shardID := rand.Int31()
-	minTaskID := int64(0)
-	taskID := minTaskID + 1
+	minTaskID := int64(1)
+	taskID := minTaskID
 	maxTaskID := taskID + int64(numTasks)
 
 	var tasks []sqlplugin.VisibilityTasksRow
@@ -292,9 +299,10 @@ func (s *historyHistoryVisibilityTaskSuite) TestInsertDeleteSelect_Multiple() {
 	s.Equal(numTasks, int(rowsAffected))
 
 	filter := sqlplugin.VisibilityTasksRangeFilter{
-		ShardID:   shardID,
-		MinTaskID: minTaskID,
-		MaxTaskID: maxTaskID,
+		ShardID:            shardID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID,
+		PageSize:           int(maxTaskID - minTaskID),
 	}
 	result, err = s.store.RangeDeleteFromVisibilityTasks(newExecutionContext(), filter)
 	s.NoError(err)

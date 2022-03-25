@@ -29,23 +29,28 @@ package sdk
 import (
 	"crypto/tls"
 	"fmt"
+	"sync"
 
 	sdkclient "go.temporal.io/sdk/client"
 
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type (
 	ClientFactory interface {
 		NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error)
-		NewSystemClient(logger log.Logger) (sdkclient.Client, error)
+		GetSystemClient(logger log.Logger) sdkclient.Client
 	}
 
 	clientFactory struct {
-		hostPort       string
-		tlsConfig      *tls.Config
-		metricsHandler *MetricsHandler
+		hostPort        string
+		tlsConfig       *tls.Config
+		metricsHandler  *MetricsHandler
+		systemSdkClient sdkclient.Client
+		once            *sync.Once
 	}
 )
 
@@ -56,27 +61,47 @@ func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *Me
 		hostPort:       hostPort,
 		tlsConfig:      tlsConfig,
 		metricsHandler: metricsHandler,
+		once:           &sync.Once{},
 	}
 }
 
 func (f *clientFactory) NewClient(namespaceName string, logger log.Logger) (sdkclient.Client, error) {
-	sdkClient, err := sdkclient.NewClient(sdkclient.Options{
-		HostPort:       f.hostPort,
-		Namespace:      namespaceName,
-		MetricsHandler: f.metricsHandler,
-		Logger:         log.NewSdkLogger(logger),
-		ConnectionOptions: sdkclient.ConnectionOptions{
-			TLS:                f.tlsConfig,
-			DisableHealthCheck: true,
-		},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("unable to create SDK client: %w", err)
-	}
+	var client sdkclient.Client
 
-	return sdkClient, nil
+	// Retry for up to 1m, handles frontend service not ready
+	err := backoff.Retry(func() error {
+		sdkClient, err := sdkclient.NewClient(sdkclient.Options{
+			HostPort:       f.hostPort,
+			Namespace:      namespaceName,
+			MetricsHandler: f.metricsHandler,
+			Logger:         log.NewSdkLogger(logger),
+			ConnectionOptions: sdkclient.ConnectionOptions{
+				TLS: f.tlsConfig,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("unable to create SDK client: %w", err)
+		}
+
+		client = sdkClient
+		return nil
+	}, common.CreateSdkClientFactoryRetryPolicy(), common.IsContextDeadlineExceededErr)
+
+	return client, err
 }
 
-func (f *clientFactory) NewSystemClient(logger log.Logger) (sdkclient.Client, error) {
-	return f.NewClient(common.SystemLocalNamespace, logger)
+func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
+	f.once.Do(func() {
+		client, err := f.NewClient(common.SystemLocalNamespace, logger)
+
+		if err != nil {
+			logger.Fatal(
+				"error getting system sdk client",
+				tag.Error(err),
+			)
+		}
+
+		f.systemSdkClient = client
+	})
+	return f.systemSdkClient
 }

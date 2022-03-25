@@ -160,25 +160,15 @@ type (
 	// ShardInfoWithFailover describes a shard
 	ShardInfoWithFailover struct {
 		*persistencespb.ShardInfo
-		TransferFailoverLevels map[string]TransferFailoverLevel // uuid -> TransferFailoverLevel
-		TimerFailoverLevels    map[string]TimerFailoverLevel    // uuid -> TimerFailoverLevel
+		FailoverLevels map[tasks.Category]map[string]FailoverLevel // uuid -> FailoverLevel
 	}
 
-	// TransferFailoverLevel contains corresponding start / end level
-	TransferFailoverLevel struct {
+	// FailoverLevel contains corresponding start / end level
+	FailoverLevel struct {
 		StartTime    time.Time
-		MinLevel     int64
-		CurrentLevel int64
-		MaxLevel     int64
-		NamespaceIDs map[string]struct{}
-	}
-
-	// TimerFailoverLevel contains namespace IDs and corresponding start / end level
-	TimerFailoverLevel struct {
-		StartTime    time.Time
-		MinLevel     time.Time
-		CurrentLevel time.Time
-		MaxLevel     time.Time
+		MinLevel     tasks.Key
+		CurrentLevel tasks.Key
+		MaxLevel     tasks.Key
 		NamespaceIDs map[string]struct{}
 	}
 
@@ -208,8 +198,8 @@ type (
 		PreviousRangeID int64
 	}
 
-	// AddTasksRequest is used to write new tasks
-	AddTasksRequest struct {
+	// AddHistoryTasksRequest is used to write new tasks
+	AddHistoryTasksRequest struct {
 		ShardID int32
 		RangeID int64
 
@@ -217,10 +207,7 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		TransferTasks    []tasks.Task
-		TimerTasks       []tasks.Task
-		ReplicationTasks []tasks.Task
-		VisibilityTasks  []tasks.Task
+		Tasks map[tasks.Category][]tasks.Task
 	}
 
 	// CreateWorkflowExecutionRequest is used to write a new workflow execution
@@ -240,49 +227,6 @@ type (
 	// CreateWorkflowExecutionResponse is the response to CreateWorkflowExecutionRequest
 	CreateWorkflowExecutionResponse struct {
 		NewMutableStateStats MutableStateStatistics
-	}
-
-	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
-	GetWorkflowExecutionRequest struct {
-		ShardID     int32
-		NamespaceID string
-		WorkflowID  string
-		RunID       string
-	}
-
-	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
-	GetWorkflowExecutionResponse struct {
-		State             *persistencespb.WorkflowMutableState
-		DBRecordVersion   int64
-		MutableStateStats MutableStateStatistics
-	}
-
-	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
-	GetCurrentExecutionRequest struct {
-		ShardID     int32
-		NamespaceID string
-		WorkflowID  string
-	}
-
-	// ListConcreteExecutionsRequest is request to ListConcreteExecutions
-	ListConcreteExecutionsRequest struct {
-		ShardID   int32
-		PageSize  int
-		PageToken []byte
-	}
-
-	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
-	ListConcreteExecutionsResponse struct {
-		States    []*persistencespb.WorkflowMutableState
-		PageToken []byte
-	}
-
-	// GetCurrentExecutionResponse is the response to GetCurrentExecution
-	GetCurrentExecutionResponse struct {
-		StartRequestID string
-		RunID          string
-		State          enumsspb.WorkflowExecutionState
-		Status         enumspb.WorkflowExecutionStatus
 	}
 
 	// UpdateWorkflowExecutionRequest is used to update a workflow execution
@@ -330,6 +274,61 @@ type (
 		CurrentMutableStateStats *MutableStateStatistics
 	}
 
+	// GetCurrentExecutionRequest is used to retrieve the current RunId for an execution
+	GetCurrentExecutionRequest struct {
+		ShardID     int32
+		NamespaceID string
+		WorkflowID  string
+	}
+
+	// GetCurrentExecutionResponse is the response to GetCurrentExecution
+	GetCurrentExecutionResponse struct {
+		StartRequestID string
+		RunID          string
+		State          enumsspb.WorkflowExecutionState
+		Status         enumspb.WorkflowExecutionStatus
+	}
+
+	// GetWorkflowExecutionRequest is used to retrieve the info of a workflow execution
+	GetWorkflowExecutionRequest struct {
+		ShardID     int32
+		NamespaceID string
+		WorkflowID  string
+		RunID       string
+	}
+
+	// GetWorkflowExecutionResponse is the response to GetWorkflowExecutionRequest
+	GetWorkflowExecutionResponse struct {
+		State             *persistencespb.WorkflowMutableState
+		DBRecordVersion   int64
+		MutableStateStats MutableStateStatistics
+	}
+
+	// SetWorkflowExecutionRequest is used to overwrite the info of a workflow execution
+	SetWorkflowExecutionRequest struct {
+		ShardID int32
+		RangeID int64
+
+		SetWorkflowSnapshot WorkflowSnapshot
+	}
+
+	// SetWorkflowExecutionResponse is the response to SetWorkflowExecutionRequest
+	SetWorkflowExecutionResponse struct {
+	}
+
+	// ListConcreteExecutionsRequest is request to ListConcreteExecutions
+	ListConcreteExecutionsRequest struct {
+		ShardID   int32
+		PageSize  int
+		PageToken []byte
+	}
+
+	// ListConcreteExecutionsResponse is response to ListConcreteExecutions
+	ListConcreteExecutionsResponse struct {
+		States    []*persistencespb.WorkflowMutableState
+		PageToken []byte
+	}
+
 	// WorkflowEvents is used as generic workflow history events transaction container
 	WorkflowEvents struct {
 		NamespaceID string
@@ -363,10 +362,7 @@ type (
 		NewBufferedEvents         []*historypb.HistoryEvent
 		ClearBufferedEvents       bool
 
-		TransferTasks    []tasks.Task
-		ReplicationTasks []tasks.Task
-		TimerTasks       []tasks.Task
-		VisibilityTasks  []tasks.Task
+		Tasks map[tasks.Category][]tasks.Task
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64
@@ -388,10 +384,7 @@ type (
 		SignalInfos         map[int64]*persistencespb.SignalInfo
 		SignalRequestedIDs  map[string]struct{}
 
-		TransferTasks    []tasks.Task
-		ReplicationTasks []tasks.Task
-		TimerTasks       []tasks.Task
-		VisibilityTasks  []tasks.Task
+		Tasks map[tasks.Category][]tasks.Task
 
 		// TODO deprecate Condition in favor of DBRecordVersion
 		Condition       int64
@@ -415,67 +408,51 @@ type (
 		RunID       string
 	}
 
-	// GetTransferTaskRequest is the request for GetTransferTask
-	GetTransferTaskRequest struct {
-		ShardID int32
-		TaskID  int64
+	// GetHistoryTaskRequest is used to get a workflow task
+	GetHistoryTaskRequest struct {
+		ShardID      int32
+		TaskCategory tasks.Category
+		TaskKey      tasks.Key
 	}
 
-	// GetTransferTaskResponse is the response to GetTransferTask
-	GetTransferTaskResponse struct {
+	// GetHistoryTaskResponse is the response for GetHistoryTask
+	GetHistoryTaskResponse struct {
 		Task tasks.Task
 	}
 
-	// GetTransferTasksRequest is used to read tasks from the transfer task queue
-	GetTransferTasksRequest struct {
-		ShardID       int32
-		ReadLevel     int64
-		MaxReadLevel  int64
-		BatchSize     int
-		NextPageToken []byte
+	// GetHistoryTasksRequest is used to get a range of history tasks
+	// Either max TaskID or FireTime is required depending on the
+	// task category type. Min TaskID or FireTime is optional.
+	GetHistoryTasksRequest struct {
+		ShardID             int32
+		TaskCategory        tasks.Category
+		InclusiveMinTaskKey tasks.Key
+		ExclusiveMaxTaskKey tasks.Key
+		BatchSize           int
+		NextPageToken       []byte
 	}
 
-	// GetTransferTasksResponse is the response to GetTransferTasksRequest
-	GetTransferTasksResponse struct {
+	// GetHistoryTasksResponse is the response for GetHistoryTasks
+	GetHistoryTasksResponse struct {
 		Tasks         []tasks.Task
 		NextPageToken []byte
 	}
 
-	// GetVisibilityTaskRequest is the request for GetVisibilityTask
-	GetVisibilityTaskRequest struct {
-		ShardID int32
-		TaskID  int64
+	// CompleteHistoryTaskRequest delete one history task
+	CompleteHistoryTaskRequest struct {
+		ShardID      int32
+		TaskCategory tasks.Category
+		TaskKey      tasks.Key
 	}
 
-	// GetVisibilityTaskResponse is the response to GetVisibilityTask
-	GetVisibilityTaskResponse struct {
-		Task tasks.Task
-	}
-
-	// GetVisibilityTasksRequest is used to read tasks from the visibility task queue
-	GetVisibilityTasksRequest struct {
-		ShardID       int32
-		ReadLevel     int64
-		MaxReadLevel  int64
-		BatchSize     int
-		NextPageToken []byte
-	}
-
-	// GetVisibilityTasksResponse is the response to GetVisibilityTasksRequest
-	GetVisibilityTasksResponse struct {
-		Tasks         []tasks.Task
-		NextPageToken []byte
-	}
-
-	// GetReplicationTaskRequest is the request for GetReplicationTask
-	GetReplicationTaskRequest struct {
-		ShardID int32
-		TaskID  int64
-	}
-
-	// GetReplicationTaskResponse is the response to GetReplicationTask
-	GetReplicationTaskResponse struct {
-		Task tasks.Task
+	// RangeCompleteHistoryTasksRequest deletes a range of history tasks
+	// Either max TaskID or FireTime is required depending on the
+	// task category type. Min TaskID or FireTime is optional.
+	RangeCompleteHistoryTasksRequest struct {
+		ShardID             int32
+		TaskCategory        tasks.Category
+		InclusiveMinTaskKey tasks.Key
+		ExclusiveMaxTaskKey tasks.Key
 	}
 
 	// GetReplicationTasksRequest is used to read tasks from the replication task queue
@@ -487,50 +464,6 @@ type (
 		NextPageToken []byte
 	}
 
-	// GetReplicationTasksResponse is the response to GetReplicationTask
-	GetReplicationTasksResponse struct {
-		Tasks         []tasks.Task
-		NextPageToken []byte
-	}
-
-	// CompleteTransferTaskRequest is used to complete a task in the transfer task queue
-	CompleteTransferTaskRequest struct {
-		ShardID int32
-		TaskID  int64
-	}
-
-	// RangeCompleteTransferTaskRequest is used to complete a range of tasks in the transfer task queue
-	RangeCompleteTransferTaskRequest struct {
-		ShardID              int32
-		ExclusiveBeginTaskID int64
-		InclusiveEndTaskID   int64
-	}
-
-	// CompleteVisibilityTaskRequest is used to complete a task in the visibility task queue
-	CompleteVisibilityTaskRequest struct {
-		ShardID int32
-		TaskID  int64
-	}
-
-	// RangeCompleteVisibilityTaskRequest is used to complete a range of tasks in the visibility task queue
-	RangeCompleteVisibilityTaskRequest struct {
-		ShardID              int32
-		ExclusiveBeginTaskID int64
-		InclusiveEndTaskID   int64
-	}
-
-	// CompleteReplicationTaskRequest is used to complete a task in the replication task queue
-	CompleteReplicationTaskRequest struct {
-		ShardID int32
-		TaskID  int64
-	}
-
-	// RangeCompleteReplicationTaskRequest is used to complete a range of task in the replication task queue
-	RangeCompleteReplicationTaskRequest struct {
-		ShardID            int32
-		InclusiveEndTaskID int64
-	}
-
 	// PutReplicationTaskToDLQRequest is used to put a replication task to dlq
 	PutReplicationTaskToDLQRequest struct {
 		ShardID           int32
@@ -540,41 +473,23 @@ type (
 
 	// GetReplicationTasksFromDLQRequest is used to get replication tasks from dlq
 	GetReplicationTasksFromDLQRequest struct {
-		ShardID           int32
+		GetHistoryTasksRequest
+
 		SourceClusterName string
-		GetReplicationTasksRequest
 	}
 
 	// DeleteReplicationTaskFromDLQRequest is used to delete replication task from DLQ
 	DeleteReplicationTaskFromDLQRequest struct {
-		ShardID           int32
+		CompleteHistoryTaskRequest
+
 		SourceClusterName string
-		TaskID            int64
 	}
 
 	// RangeDeleteReplicationTaskFromDLQRequest is used to delete replication tasks from DLQ
 	RangeDeleteReplicationTaskFromDLQRequest struct {
-		ShardID              int32
-		SourceClusterName    string
-		ExclusiveBeginTaskID int64
-		InclusiveEndTaskID   int64
-	}
+		RangeCompleteHistoryTasksRequest
 
-	// GetReplicationTasksFromDLQResponse is the response for GetReplicationTasksFromDLQ
-	GetReplicationTasksFromDLQResponse = GetReplicationTasksResponse
-
-	// RangeCompleteTimerTaskRequest is used to complete a range of tasks in the timer task queue
-	RangeCompleteTimerTaskRequest struct {
-		ShardID                 int32
-		InclusiveBeginTimestamp time.Time
-		ExclusiveEndTimestamp   time.Time
-	}
-
-	// CompleteTimerTaskRequest is used to complete a task in the timer task queue
-	CompleteTimerTaskRequest struct {
-		ShardID             int32
-		VisibilityTimestamp time.Time
-		TaskID              int64
+		SourceClusterName string
 	}
 
 	// CreateTaskQueueRequest create a new task queue
@@ -650,8 +565,8 @@ type (
 		NamespaceID        string
 		TaskQueue          string
 		TaskType           enumspb.TaskQueueType
-		MinTaskIDExclusive int64 // exclusive
-		MaxTaskIDInclusive int64 // inclusive
+		InclusiveMinTaskID int64
+		ExclusiveMaxTaskID int64
 		PageSize           int
 		NextPageToken      []byte
 	}
@@ -670,39 +585,11 @@ type (
 
 	// CompleteTasksLessThanRequest contains the request params needed to invoke CompleteTasksLessThan API
 	CompleteTasksLessThanRequest struct {
-		NamespaceID   string
-		TaskQueueName string
-		TaskType      enumspb.TaskQueueType
-		TaskID        int64 // Tasks less than or equal to this ID will be completed
-		Limit         int   // Limit on the max number of tasks that can be completed. Required param
-	}
-
-	// GetTimerTaskRequest is the request for GetTimerTask
-	GetTimerTaskRequest struct {
-		ShardID             int32
-		TaskID              int64
-		VisibilityTimestamp time.Time
-	}
-
-	// GetTimerTaskResponse is the response to GetTimerTask
-	GetTimerTaskResponse struct {
-		Task tasks.Task
-	}
-
-	// GetTimerTasksRequest is the request for GetTimerTasks
-	// TODO: replace this with an iterator that can configure min and max index.
-	GetTimerTasksRequest struct {
-		ShardID       int32
-		MinTimestamp  time.Time
-		MaxTimestamp  time.Time
-		BatchSize     int
-		NextPageToken []byte
-	}
-
-	// GetTimerTasksResponse is the response for GetTimerTasks
-	GetTimerTasksResponse struct {
-		Tasks         []tasks.Task
-		NextPageToken []byte
+		NamespaceID        string
+		TaskQueueName      string
+		TaskType           enumspb.TaskQueueType
+		ExclusiveMaxTaskID int64 // Tasks less than this ID will be completed
+		Limit              int   // Limit on the max number of tasks that can be completed. Required param
 	}
 
 	// CreateNamespaceRequest is used to create the namespace
@@ -734,6 +621,12 @@ type (
 		Namespace           *persistencespb.NamespaceDetail
 		IsGlobalNamespace   bool
 		NotificationVersion int64
+	}
+
+	// RenameNamespaceRequest is used to rename namespace.
+	RenameNamespaceRequest struct {
+		PreviousName string
+		NewName      string
 	}
 
 	// DeleteNamespaceRequest is used to delete namespace entry from namespaces table
@@ -838,6 +731,35 @@ type (
 
 	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
 	ReadHistoryBranchResponse struct {
+		// History events
+		HistoryEvents []*historypb.HistoryEvent
+		// Token to read next page if there are more events beyond page size.
+		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
+		// Empty means we have reached the last page, not need to continue
+		NextPageToken []byte
+		// Size of history read from store
+		Size int
+	}
+
+	// ReadHistoryBranchRequest is used to read a history branch
+	ReadHistoryBranchReverseRequest struct {
+		// The shard to get history branch data
+		ShardID int32
+		// The branch to be read
+		BranchToken []byte
+		// Get the history nodes upto MaxEventID.  Exclusive.
+		MaxEventID int64
+		// Maximum number of batches of events per page. Not that number of events in a batch >=1, it is not number of events per page.
+		// However for a single page, it is also possible that the returned events is less than PageSize (event zero events) due to stale events.
+		PageSize int
+		// LastFirstTransactionID specified in mutable state. Only used for reading in reverse order.
+		LastFirstTransactionID int64
+		// Token to continue reading next page of history append transactions.  Pass in empty slice for first page
+		NextPageToken []byte
+	}
+
+	// ReadHistoryBranchResponse is the response to ReadHistoryBranchRequest
+	ReadHistoryBranchReverseResponse struct {
 		// History events
 		HistoryEvents []*historypb.HistoryEvent
 		// Token to read next page if there are more events beyond page size.
@@ -1054,8 +976,8 @@ type (
 	ShardManager interface {
 		Closeable
 		GetName() string
-		GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
-		UpdateShard(request *UpdateShardRequest) error
+		GetOrCreateShard(ctx context.Context, request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
+		UpdateShard(ctx context.Context, request *UpdateShardRequest) error
 	}
 
 	// ExecutionManager is used to manage workflow executions
@@ -1063,92 +985,72 @@ type (
 		Closeable
 		GetName() string
 
-		CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
-		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
-		UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
-		ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error)
-		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
-		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
-		GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
+		CreateWorkflowExecution(ctx context.Context, request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error)
+		UpdateWorkflowExecution(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error)
+		ConflictResolveWorkflowExecution(ctx context.Context, request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error)
+		DeleteWorkflowExecution(ctx context.Context, request *DeleteWorkflowExecutionRequest) error
+		DeleteCurrentWorkflowExecution(ctx context.Context, request *DeleteCurrentWorkflowExecutionRequest) error
+		GetCurrentExecution(ctx context.Context, request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error)
+		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error)
+		SetWorkflowExecution(ctx context.Context, request *SetWorkflowExecutionRequest) (*SetWorkflowExecutionResponse, error)
 
 		// Scan operations
 
-		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
+		ListConcreteExecutions(ctx context.Context, request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error)
 
 		// Tasks related APIs
 
-		AddTasks(request *AddTasksRequest) error
+		AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error
+		GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error)
+		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error)
+		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
+		RangeCompleteHistoryTasks(ctx context.Context, request *RangeCompleteHistoryTasksRequest) error
 
-		// transfer tasks
-
-		GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error)
-		GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error)
-		CompleteTransferTask(request *CompleteTransferTaskRequest) error
-		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
-
-		// timer tasks
-
-		GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error)
-		GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error)
-		CompleteTimerTask(request *CompleteTimerTaskRequest) error
-		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// replication tasks
-
-		GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error)
-		GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error)
-		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
-		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
-		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
-		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error)
-		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
-		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
-
-		// visibility tasks
-
-		GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error)
-		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error)
-		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
-		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
+		PutReplicationTaskToDLQ(ctx context.Context, request *PutReplicationTaskToDLQRequest) error
+		GetReplicationTasksFromDLQ(ctx context.Context, request *GetReplicationTasksFromDLQRequest) (*GetHistoryTasksResponse, error)
+		DeleteReplicationTaskFromDLQ(ctx context.Context, request *DeleteReplicationTaskFromDLQRequest) error
+		RangeDeleteReplicationTaskFromDLQ(ctx context.Context, request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 		// For Temporal, treeID is new runID, except for fork(reset), treeID will be the runID that it forks from.
 
 		// AppendHistoryNodes add a node to history node table
-		AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
+		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
-		ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
+		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch
-		ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error)
+		ReadHistoryBranchByBatch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error)
+		// ReadHistoryBranch returns history node data for a branch
+		ReadHistoryBranchReverse(ctx context.Context, request *ReadHistoryBranchReverseRequest) (*ReadHistoryBranchReverseResponse, error)
 		// ReadRawHistoryBranch returns history node raw data for a branch ByBatch
 		// NOTE: this API should only be used by 3+DC
-		ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error)
+		ReadRawHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
-		ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
+		ForkHistoryBranch(ctx context.Context, request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error)
 		// DeleteHistoryBranch removes a branch
 		// If this is the last branch to delete, it will also remove the root node
-		DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error
+		DeleteHistoryBranch(ctx context.Context, request *DeleteHistoryBranchRequest) error
 		// TrimHistoryBranch validate & trim a history branch
-		TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
+		TrimHistoryBranch(ctx context.Context, request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error)
 		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
+		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
-		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
+		GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error)
 	}
 
 	// TaskManager is used to manage tasks
 	TaskManager interface {
 		Closeable
 		GetName() string
-		CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error)
-		UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
-		GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error)
-		ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
-		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
-		CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error)
-		GetTasks(request *GetTasksRequest) (*GetTasksResponse, error)
-		CompleteTask(request *CompleteTaskRequest) error
+		CreateTaskQueue(ctx context.Context, request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error)
+		UpdateTaskQueue(ctx context.Context, request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		GetTaskQueue(ctx context.Context, request *GetTaskQueueRequest) (*GetTaskQueueResponse, error)
+		ListTaskQueue(ctx context.Context, request *ListTaskQueueRequest) (*ListTaskQueueResponse, error)
+		DeleteTaskQueue(ctx context.Context, request *DeleteTaskQueueRequest) error
+		CreateTasks(ctx context.Context, request *CreateTasksRequest) (*CreateTasksResponse, error)
+		GetTasks(ctx context.Context, request *GetTasksRequest) (*GetTasksResponse, error)
+		CompleteTask(ctx context.Context, request *CompleteTaskRequest) error
 		// CompleteTasksLessThan completes tasks less than or equal to the given task id
 		// This API takes a limit parameter which specifies the count of maxRows that
 		// can be deleted. This parameter may be ignored by the underlying storage, but
@@ -1158,35 +1060,36 @@ type (
 		// On success, this method returns:
 		//  - number of rows actually deleted, if limit is honored
 		//  - UnknownNumRowsDeleted, when all rows below value are deleted
-		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
+		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
 	}
 
 	// MetadataManager is used to manage metadata CRUD for namespace entities
 	MetadataManager interface {
 		Closeable
 		GetName() string
-		CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error)
-		GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error)
-		UpdateNamespace(request *UpdateNamespaceRequest) error
-		DeleteNamespace(request *DeleteNamespaceRequest) error
-		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
-		ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error)
-		GetMetadata() (*GetMetadataResponse, error)
-		InitializeSystemNamespaces(currentClusterName string) error
+		CreateNamespace(ctx context.Context, request *CreateNamespaceRequest) (*CreateNamespaceResponse, error)
+		GetNamespace(ctx context.Context, request *GetNamespaceRequest) (*GetNamespaceResponse, error)
+		UpdateNamespace(ctx context.Context, request *UpdateNamespaceRequest) error
+		RenameNamespace(ctx context.Context, request *RenameNamespaceRequest) error
+		DeleteNamespace(ctx context.Context, request *DeleteNamespaceRequest) error
+		DeleteNamespaceByName(ctx context.Context, request *DeleteNamespaceByNameRequest) error
+		ListNamespaces(ctx context.Context, request *ListNamespacesRequest) (*ListNamespacesResponse, error)
+		GetMetadata(ctx context.Context) (*GetMetadataResponse, error)
+		InitializeSystemNamespaces(ctx context.Context, currentClusterName string) error
 	}
 
 	// ClusterMetadataManager is used to manage cluster-wide metadata and configuration
 	ClusterMetadataManager interface {
 		Closeable
 		GetName() string
-		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
-		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
-		PruneClusterMembership(request *PruneClusterMembershipRequest) error
-		ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error)
-		GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error)
-		GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
-		SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error)
-		DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error
+		GetClusterMembers(ctx context.Context, request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
+		UpsertClusterMembership(ctx context.Context, request *UpsertClusterMembershipRequest) error
+		PruneClusterMembership(ctx context.Context, request *PruneClusterMembershipRequest) error
+		ListClusterMetadata(ctx context.Context, request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error)
+		GetCurrentClusterMetadata(ctx context.Context) (*GetClusterMetadataResponse, error)
+		GetClusterMetadata(ctx context.Context, request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error)
+		SaveClusterMetadata(ctx context.Context, request *SaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error
 	}
 )
 
@@ -1286,27 +1189,6 @@ func SplitHistoryGarbageCleanupInfo(info string) (namespaceID, workflowID, runID
 	workflowEnd := len(info) - len(runID) - 1
 	workflowID = info[len(namespaceID)+1 : workflowEnd]
 	return
-}
-
-// NewGetReplicationTasksFromDLQRequest creates a new GetReplicationTasksFromDLQRequest
-func NewGetReplicationTasksFromDLQRequest(
-	shardID int32,
-	sourceClusterName string,
-	readLevel int64,
-	maxReadLevel int64,
-	batchSize int,
-	nextPageToken []byte,
-) *GetReplicationTasksFromDLQRequest {
-	return &GetReplicationTasksFromDLQRequest{
-		ShardID:           shardID,
-		SourceClusterName: sourceClusterName,
-		GetReplicationTasksRequest: GetReplicationTasksRequest{
-			MinTaskID:     readLevel,
-			MaxTaskID:     maxReadLevel,
-			BatchSize:     batchSize,
-			NextPageToken: nextPageToken,
-		},
-	}
 }
 
 type ServiceType int

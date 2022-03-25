@@ -79,14 +79,12 @@ type (
 		GetDLQMessages(ctx context.Context, messagesRequest *historyservice.GetDLQMessagesRequest) (*historyservice.GetDLQMessagesResponse, error)
 		PurgeDLQMessages(ctx context.Context, messagesRequest *historyservice.PurgeDLQMessagesRequest) error
 		MergeDLQMessages(ctx context.Context, messagesRequest *historyservice.MergeDLQMessagesRequest) (*historyservice.MergeDLQMessagesResponse, error)
+		RebuildMutableState(ctx context.Context, namespaceUUID namespace.ID, execution commonpb.WorkflowExecution) error
 		RefreshWorkflowTasks(ctx context.Context, namespaceUUID namespace.ID, execution commonpb.WorkflowExecution) error
 		GenerateLastHistoryReplicationTasks(ctx context.Context, request *historyservice.GenerateLastHistoryReplicationTasksRequest) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error)
 		GetReplicationStatus(ctx context.Context, request *historyservice.GetReplicationStatusRequest) (*historyservice.ShardReplicationStatus, error)
 
 		NotifyNewHistoryEvent(event *events.Notification)
-		NotifyNewTransferTasks(clusterName string, tasks []tasks.Task)
-		NotifyNewTimerTasks(clusterName string, tasks []tasks.Task)
-		NotifyNewVisibilityTasks(tasks []tasks.Task)
-		NotifyNewReplicationTasks(tasks []tasks.Task)
+		NotifyNewTasks(clusterName string, tasks map[tasks.Category][]tasks.Task)
 	}
 )

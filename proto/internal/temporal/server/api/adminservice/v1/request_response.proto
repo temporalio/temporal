@@ -50,6 +50,14 @@ import "temporal/server/api/persistence/v1/namespaces.proto";
 import "temporal/server/api/persistence/v1/workflow_mutable_state.proto";
 import "temporal/server/api/persistence/v1/tasks.proto";
 
+message RebuildMutableStateRequest {
+    string namespace = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message RebuildMutableStateResponse {
+}
+
 message DescribeMutableStateRequest {
     string namespace = 1;
     temporal.api.common.v1.WorkflowExecution execution = 2;
@@ -94,55 +102,15 @@ message GetShardResponse {
     temporal.server.api.persistence.v1.ShardInfo shard_info = 1;
 }
 
-message ListTransferTasksRequest{ 
+message ListHistoryTasksRequest {
     int32 shard_id = 1;
-    int64 min_task_id = 2;
-    int64 max_task_id = 4;
-    int32 batch_size = 5;
-    bytes next_page_token = 6;
-}
-
-message ListTransferTasksResponse {
-    repeated Task tasks = 1;
-    bytes next_page_token = 2;
-}
-
-message ListVisibilityTasksRequest{
-    int32 shard_id = 1;
-    int64 read_level = 2;
-    int64 max_read_level = 4;
-    int32 batch_size = 5;
-    bytes next_page_token = 6;
-}
-
- message ListVisibilityTasksResponse {
-    repeated Task tasks = 1;
-    bytes next_page_token = 2;
-}
-
-message ListTimerTasksRequest{ 
-    int32 shard_id = 1;
-    google.protobuf.Timestamp min_time = 2 [(gogoproto.stdtime) = true];
-    google.protobuf.Timestamp max_time = 3 [(gogoproto.stdtime) = true];
+    temporal.server.api.enums.v1.TaskCategory category = 2;
+    temporal.server.api.history.v1.TaskRange task_range = 3;
     int32 batch_size = 4;
     bytes next_page_token = 5;
 }
 
-
-message ListTimerTasksResponse {
-    repeated Task tasks = 1;
-    bytes next_page_token = 2;
-}
-
-message ListReplicationTasksRequest {
-    int32 shard_id = 1;
-    int64 min_task_id = 2;
-    int64 max_task_id = 3;
-    int32 batch_size = 4;
-    bytes next_page_token = 5;
-}
-
-message ListReplicationTasksResponse {
+message ListHistoryTasksResponse {
     repeated Task tasks = 1;
     bytes next_page_token = 2;
 }
@@ -388,8 +356,10 @@ message GetTaskQueueTasksRequest {
     int64 min_task_id = 4;
     int64 max_task_id = 5;
     int32 batch_size = 6;
+    bytes next_page_token = 7;
 }
 
 message GetTaskQueueTasksResponse {
     repeated temporal.server.api.persistence.v1.AllocatedTaskInfo tasks = 1;
+    bytes next_page_token = 2;
 }

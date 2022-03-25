@@ -29,6 +29,7 @@
 package persistence
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -119,32 +120,32 @@ func (mr *MockShardManagerMockRecorder) GetName() *gomock.Call {
 }
 
 // GetOrCreateShard mocks base method.
-func (m *MockShardManager) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
+func (m *MockShardManager) GetOrCreateShard(ctx context.Context, request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOrCreateShard", request)
+	ret := m.ctrl.Call(m, "GetOrCreateShard", ctx, request)
 	ret0, _ := ret[0].(*GetOrCreateShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetOrCreateShard indicates an expected call of GetOrCreateShard.
-func (mr *MockShardManagerMockRecorder) GetOrCreateShard(request interface{}) *gomock.Call {
+func (mr *MockShardManagerMockRecorder) GetOrCreateShard(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateShard", reflect.TypeOf((*MockShardManager)(nil).GetOrCreateShard), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrCreateShard", reflect.TypeOf((*MockShardManager)(nil).GetOrCreateShard), ctx, request)
 }
 
 // UpdateShard mocks base method.
-func (m *MockShardManager) UpdateShard(request *UpdateShardRequest) error {
+func (m *MockShardManager) UpdateShard(ctx context.Context, request *UpdateShardRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateShard", request)
+	ret := m.ctrl.Call(m, "UpdateShard", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateShard indicates an expected call of UpdateShard.
-func (mr *MockShardManagerMockRecorder) UpdateShard(request interface{}) *gomock.Call {
+func (mr *MockShardManagerMockRecorder) UpdateShard(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateShard", reflect.TypeOf((*MockShardManager)(nil).UpdateShard), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateShard", reflect.TypeOf((*MockShardManager)(nil).UpdateShard), ctx, request)
 }
 
 // MockExecutionManager is a mock of ExecutionManager interface.
@@ -170,33 +171,33 @@ func (m *MockExecutionManager) EXPECT() *MockExecutionManagerMockRecorder {
 	return m.recorder
 }
 
-// AddTasks mocks base method.
-func (m *MockExecutionManager) AddTasks(request *AddTasksRequest) error {
+// AddHistoryTasks mocks base method.
+func (m *MockExecutionManager) AddHistoryTasks(ctx context.Context, request *AddHistoryTasksRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AddTasks", request)
+	ret := m.ctrl.Call(m, "AddHistoryTasks", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// AddTasks indicates an expected call of AddTasks.
-func (mr *MockExecutionManagerMockRecorder) AddTasks(request interface{}) *gomock.Call {
+// AddHistoryTasks indicates an expected call of AddHistoryTasks.
+func (mr *MockExecutionManagerMockRecorder) AddHistoryTasks(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddTasks", reflect.TypeOf((*MockExecutionManager)(nil).AddTasks), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHistoryTasks", reflect.TypeOf((*MockExecutionManager)(nil).AddHistoryTasks), ctx, request)
 }
 
 // AppendHistoryNodes mocks base method.
-func (m *MockExecutionManager) AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
+func (m *MockExecutionManager) AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "AppendHistoryNodes", request)
+	ret := m.ctrl.Call(m, "AppendHistoryNodes", ctx, request)
 	ret0, _ := ret[0].(*AppendHistoryNodesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // AppendHistoryNodes indicates an expected call of AppendHistoryNodes.
-func (mr *MockExecutionManagerMockRecorder) AppendHistoryNodes(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) AppendHistoryNodes(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryNodes", reflect.TypeOf((*MockExecutionManager)(nil).AppendHistoryNodes), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryNodes", reflect.TypeOf((*MockExecutionManager)(nil).AppendHistoryNodes), ctx, request)
 }
 
 // Close mocks base method.
@@ -211,206 +212,194 @@ func (mr *MockExecutionManagerMockRecorder) Close() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Close", reflect.TypeOf((*MockExecutionManager)(nil).Close))
 }
 
-// CompleteReplicationTask mocks base method.
-func (m *MockExecutionManager) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
+// CompleteHistoryTask mocks base method.
+func (m *MockExecutionManager) CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompleteReplicationTask", request)
+	ret := m.ctrl.Call(m, "CompleteHistoryTask", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// CompleteReplicationTask indicates an expected call of CompleteReplicationTask.
-func (mr *MockExecutionManagerMockRecorder) CompleteReplicationTask(request interface{}) *gomock.Call {
+// CompleteHistoryTask indicates an expected call of CompleteHistoryTask.
+func (mr *MockExecutionManagerMockRecorder) CompleteHistoryTask(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteReplicationTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteReplicationTask), request)
-}
-
-// CompleteTimerTask mocks base method.
-func (m *MockExecutionManager) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompleteTimerTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CompleteTimerTask indicates an expected call of CompleteTimerTask.
-func (mr *MockExecutionManagerMockRecorder) CompleteTimerTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTimerTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteTimerTask), request)
-}
-
-// CompleteTransferTask mocks base method.
-func (m *MockExecutionManager) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompleteTransferTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CompleteTransferTask indicates an expected call of CompleteTransferTask.
-func (mr *MockExecutionManagerMockRecorder) CompleteTransferTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTransferTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteTransferTask), request)
-}
-
-// CompleteVisibilityTask mocks base method.
-func (m *MockExecutionManager) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompleteVisibilityTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// CompleteVisibilityTask indicates an expected call of CompleteVisibilityTask.
-func (mr *MockExecutionManagerMockRecorder) CompleteVisibilityTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteVisibilityTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteVisibilityTask), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteHistoryTask", reflect.TypeOf((*MockExecutionManager)(nil).CompleteHistoryTask), ctx, request)
 }
 
 // ConflictResolveWorkflowExecution mocks base method.
-func (m *MockExecutionManager) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error) {
+func (m *MockExecutionManager) ConflictResolveWorkflowExecution(ctx context.Context, request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "ConflictResolveWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(*ConflictResolveWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ConflictResolveWorkflowExecution indicates an expected call of ConflictResolveWorkflowExecution.
-func (mr *MockExecutionManagerMockRecorder) ConflictResolveWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) ConflictResolveWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).ConflictResolveWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ConflictResolveWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).ConflictResolveWorkflowExecution), ctx, request)
 }
 
 // CreateWorkflowExecution mocks base method.
-func (m *MockExecutionManager) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
+func (m *MockExecutionManager) CreateWorkflowExecution(ctx context.Context, request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "CreateWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(*CreateWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateWorkflowExecution indicates an expected call of CreateWorkflowExecution.
-func (mr *MockExecutionManagerMockRecorder) CreateWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) CreateWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).CreateWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).CreateWorkflowExecution), ctx, request)
 }
 
 // DeleteCurrentWorkflowExecution mocks base method.
-func (m *MockExecutionManager) DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error {
+func (m *MockExecutionManager) DeleteCurrentWorkflowExecution(ctx context.Context, request *DeleteCurrentWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteCurrentWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "DeleteCurrentWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteCurrentWorkflowExecution indicates an expected call of DeleteCurrentWorkflowExecution.
-func (mr *MockExecutionManagerMockRecorder) DeleteCurrentWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) DeleteCurrentWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCurrentWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).DeleteCurrentWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteCurrentWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).DeleteCurrentWorkflowExecution), ctx, request)
 }
 
 // DeleteHistoryBranch mocks base method.
-func (m *MockExecutionManager) DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error {
+func (m *MockExecutionManager) DeleteHistoryBranch(ctx context.Context, request *DeleteHistoryBranchRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteHistoryBranch", request)
+	ret := m.ctrl.Call(m, "DeleteHistoryBranch", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteHistoryBranch indicates an expected call of DeleteHistoryBranch.
-func (mr *MockExecutionManagerMockRecorder) DeleteHistoryBranch(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) DeleteHistoryBranch(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).DeleteHistoryBranch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).DeleteHistoryBranch), ctx, request)
 }
 
 // DeleteReplicationTaskFromDLQ mocks base method.
-func (m *MockExecutionManager) DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error {
+func (m *MockExecutionManager) DeleteReplicationTaskFromDLQ(ctx context.Context, request *DeleteReplicationTaskFromDLQRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteReplicationTaskFromDLQ", request)
+	ret := m.ctrl.Call(m, "DeleteReplicationTaskFromDLQ", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteReplicationTaskFromDLQ indicates an expected call of DeleteReplicationTaskFromDLQ.
-func (mr *MockExecutionManagerMockRecorder) DeleteReplicationTaskFromDLQ(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) DeleteReplicationTaskFromDLQ(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).DeleteReplicationTaskFromDLQ), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).DeleteReplicationTaskFromDLQ), ctx, request)
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockExecutionManager) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
+func (m *MockExecutionManager) DeleteWorkflowExecution(ctx context.Context, request *DeleteWorkflowExecutionRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockExecutionManagerMockRecorder) DeleteWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) DeleteWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).DeleteWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).DeleteWorkflowExecution), ctx, request)
 }
 
 // ForkHistoryBranch mocks base method.
-func (m *MockExecutionManager) ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
+func (m *MockExecutionManager) ForkHistoryBranch(ctx context.Context, request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ForkHistoryBranch", request)
+	ret := m.ctrl.Call(m, "ForkHistoryBranch", ctx, request)
 	ret0, _ := ret[0].(*ForkHistoryBranchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ForkHistoryBranch indicates an expected call of ForkHistoryBranch.
-func (mr *MockExecutionManagerMockRecorder) ForkHistoryBranch(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) ForkHistoryBranch(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ForkHistoryBranch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ForkHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ForkHistoryBranch), ctx, request)
 }
 
 // GetAllHistoryTreeBranches mocks base method.
-func (m *MockExecutionManager) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
+func (m *MockExecutionManager) GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAllHistoryTreeBranches", request)
+	ret := m.ctrl.Call(m, "GetAllHistoryTreeBranches", ctx, request)
 	ret0, _ := ret[0].(*GetAllHistoryTreeBranchesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetAllHistoryTreeBranches indicates an expected call of GetAllHistoryTreeBranches.
-func (mr *MockExecutionManagerMockRecorder) GetAllHistoryTreeBranches(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) GetAllHistoryTreeBranches(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllHistoryTreeBranches", reflect.TypeOf((*MockExecutionManager)(nil).GetAllHistoryTreeBranches), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllHistoryTreeBranches", reflect.TypeOf((*MockExecutionManager)(nil).GetAllHistoryTreeBranches), ctx, request)
 }
 
 // GetCurrentExecution mocks base method.
-func (m *MockExecutionManager) GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error) {
+func (m *MockExecutionManager) GetCurrentExecution(ctx context.Context, request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentExecution", request)
+	ret := m.ctrl.Call(m, "GetCurrentExecution", ctx, request)
 	ret0, _ := ret[0].(*GetCurrentExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCurrentExecution indicates an expected call of GetCurrentExecution.
-func (mr *MockExecutionManagerMockRecorder) GetCurrentExecution(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) GetCurrentExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentExecution", reflect.TypeOf((*MockExecutionManager)(nil).GetCurrentExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentExecution", reflect.TypeOf((*MockExecutionManager)(nil).GetCurrentExecution), ctx, request)
+}
+
+// GetHistoryTask mocks base method.
+func (m *MockExecutionManager) GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*GetHistoryTaskResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryTask", ctx, request)
+	ret0, _ := ret[0].(*GetHistoryTaskResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHistoryTask indicates an expected call of GetHistoryTask.
+func (mr *MockExecutionManagerMockRecorder) GetHistoryTask(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTask", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTask), ctx, request)
+}
+
+// GetHistoryTasks mocks base method.
+func (m *MockExecutionManager) GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*GetHistoryTasksResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetHistoryTasks", ctx, request)
+	ret0, _ := ret[0].(*GetHistoryTasksResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetHistoryTasks indicates an expected call of GetHistoryTasks.
+func (mr *MockExecutionManagerMockRecorder) GetHistoryTasks(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTasks), ctx, request)
 }
 
 // GetHistoryTree mocks base method.
-func (m *MockExecutionManager) GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
+func (m *MockExecutionManager) GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetHistoryTree", request)
+	ret := m.ctrl.Call(m, "GetHistoryTree", ctx, request)
 	ret0, _ := ret[0].(*GetHistoryTreeResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetHistoryTree indicates an expected call of GetHistoryTree.
-func (mr *MockExecutionManagerMockRecorder) GetHistoryTree(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) GetHistoryTree(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTree), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetHistoryTree", reflect.TypeOf((*MockExecutionManager)(nil).GetHistoryTree), ctx, request)
 }
 
 // GetName mocks base method.
@@ -427,328 +416,196 @@ func (mr *MockExecutionManagerMockRecorder) GetName() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetName", reflect.TypeOf((*MockExecutionManager)(nil).GetName))
 }
 
-// GetReplicationTask mocks base method.
-func (m *MockExecutionManager) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationTask", request)
-	ret0, _ := ret[0].(*GetReplicationTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetReplicationTask indicates an expected call of GetReplicationTask.
-func (mr *MockExecutionManagerMockRecorder) GetReplicationTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTask", reflect.TypeOf((*MockExecutionManager)(nil).GetReplicationTask), request)
-}
-
-// GetReplicationTasks mocks base method.
-func (m *MockExecutionManager) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationTasks", request)
-	ret0, _ := ret[0].(*GetReplicationTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetReplicationTasks indicates an expected call of GetReplicationTasks.
-func (mr *MockExecutionManagerMockRecorder) GetReplicationTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetReplicationTasks), request)
-}
-
 // GetReplicationTasksFromDLQ mocks base method.
-func (m *MockExecutionManager) GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*GetReplicationTasksFromDLQResponse, error) {
+func (m *MockExecutionManager) GetReplicationTasksFromDLQ(ctx context.Context, request *GetReplicationTasksFromDLQRequest) (*GetHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationTasksFromDLQ", request)
-	ret0, _ := ret[0].(*GetReplicationTasksFromDLQResponse)
+	ret := m.ctrl.Call(m, "GetReplicationTasksFromDLQ", ctx, request)
+	ret0, _ := ret[0].(*GetHistoryTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetReplicationTasksFromDLQ indicates an expected call of GetReplicationTasksFromDLQ.
-func (mr *MockExecutionManagerMockRecorder) GetReplicationTasksFromDLQ(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) GetReplicationTasksFromDLQ(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).GetReplicationTasksFromDLQ), request)
-}
-
-// GetTimerTask mocks base method.
-func (m *MockExecutionManager) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTimerTask", request)
-	ret0, _ := ret[0].(*GetTimerTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTimerTask indicates an expected call of GetTimerTask.
-func (mr *MockExecutionManagerMockRecorder) GetTimerTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerTask", reflect.TypeOf((*MockExecutionManager)(nil).GetTimerTask), request)
-}
-
-// GetTimerTasks mocks base method.
-func (m *MockExecutionManager) GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTimerTasks", request)
-	ret0, _ := ret[0].(*GetTimerTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTimerTasks indicates an expected call of GetTimerTasks.
-func (mr *MockExecutionManagerMockRecorder) GetTimerTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimerTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetTimerTasks), request)
-}
-
-// GetTransferTask mocks base method.
-func (m *MockExecutionManager) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTransferTask", request)
-	ret0, _ := ret[0].(*GetTransferTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTransferTask indicates an expected call of GetTransferTask.
-func (mr *MockExecutionManagerMockRecorder) GetTransferTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferTask", reflect.TypeOf((*MockExecutionManager)(nil).GetTransferTask), request)
-}
-
-// GetTransferTasks mocks base method.
-func (m *MockExecutionManager) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTransferTasks", request)
-	ret0, _ := ret[0].(*GetTransferTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetTransferTasks indicates an expected call of GetTransferTasks.
-func (mr *MockExecutionManagerMockRecorder) GetTransferTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTransferTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetTransferTasks), request)
-}
-
-// GetVisibilityTask mocks base method.
-func (m *MockExecutionManager) GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTask", request)
-	ret0, _ := ret[0].(*GetVisibilityTaskResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetVisibilityTask indicates an expected call of GetVisibilityTask.
-func (mr *MockExecutionManagerMockRecorder) GetVisibilityTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTask", reflect.TypeOf((*MockExecutionManager)(nil).GetVisibilityTask), request)
-}
-
-// GetVisibilityTasks mocks base method.
-func (m *MockExecutionManager) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetVisibilityTasks", request)
-	ret0, _ := ret[0].(*GetVisibilityTasksResponse)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetVisibilityTasks indicates an expected call of GetVisibilityTasks.
-func (mr *MockExecutionManagerMockRecorder) GetVisibilityTasks(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVisibilityTasks", reflect.TypeOf((*MockExecutionManager)(nil).GetVisibilityTasks), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationTasksFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).GetReplicationTasksFromDLQ), ctx, request)
 }
 
 // GetWorkflowExecution mocks base method.
-func (m *MockExecutionManager) GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error) {
+func (m *MockExecutionManager) GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "GetWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(*GetWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetWorkflowExecution indicates an expected call of GetWorkflowExecution.
-func (mr *MockExecutionManagerMockRecorder) GetWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) GetWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).GetWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).GetWorkflowExecution), ctx, request)
 }
 
 // ListConcreteExecutions mocks base method.
-func (m *MockExecutionManager) ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
+func (m *MockExecutionManager) ListConcreteExecutions(ctx context.Context, request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListConcreteExecutions", request)
+	ret := m.ctrl.Call(m, "ListConcreteExecutions", ctx, request)
 	ret0, _ := ret[0].(*ListConcreteExecutionsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListConcreteExecutions indicates an expected call of ListConcreteExecutions.
-func (mr *MockExecutionManagerMockRecorder) ListConcreteExecutions(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) ListConcreteExecutions(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConcreteExecutions", reflect.TypeOf((*MockExecutionManager)(nil).ListConcreteExecutions), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListConcreteExecutions", reflect.TypeOf((*MockExecutionManager)(nil).ListConcreteExecutions), ctx, request)
 }
 
 // PutReplicationTaskToDLQ mocks base method.
-func (m *MockExecutionManager) PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error {
+func (m *MockExecutionManager) PutReplicationTaskToDLQ(ctx context.Context, request *PutReplicationTaskToDLQRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PutReplicationTaskToDLQ", request)
+	ret := m.ctrl.Call(m, "PutReplicationTaskToDLQ", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PutReplicationTaskToDLQ indicates an expected call of PutReplicationTaskToDLQ.
-func (mr *MockExecutionManagerMockRecorder) PutReplicationTaskToDLQ(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) PutReplicationTaskToDLQ(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutReplicationTaskToDLQ", reflect.TypeOf((*MockExecutionManager)(nil).PutReplicationTaskToDLQ), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PutReplicationTaskToDLQ", reflect.TypeOf((*MockExecutionManager)(nil).PutReplicationTaskToDLQ), ctx, request)
 }
 
-// RangeCompleteReplicationTask mocks base method.
-func (m *MockExecutionManager) RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error {
+// RangeCompleteHistoryTasks mocks base method.
+func (m *MockExecutionManager) RangeCompleteHistoryTasks(ctx context.Context, request *RangeCompleteHistoryTasksRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeCompleteReplicationTask", request)
+	ret := m.ctrl.Call(m, "RangeCompleteHistoryTasks", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
-// RangeCompleteReplicationTask indicates an expected call of RangeCompleteReplicationTask.
-func (mr *MockExecutionManagerMockRecorder) RangeCompleteReplicationTask(request interface{}) *gomock.Call {
+// RangeCompleteHistoryTasks indicates an expected call of RangeCompleteHistoryTasks.
+func (mr *MockExecutionManagerMockRecorder) RangeCompleteHistoryTasks(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteReplicationTask", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteReplicationTask), request)
-}
-
-// RangeCompleteTimerTask mocks base method.
-func (m *MockExecutionManager) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeCompleteTimerTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RangeCompleteTimerTask indicates an expected call of RangeCompleteTimerTask.
-func (mr *MockExecutionManagerMockRecorder) RangeCompleteTimerTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTimerTask", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteTimerTask), request)
-}
-
-// RangeCompleteTransferTask mocks base method.
-func (m *MockExecutionManager) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeCompleteTransferTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RangeCompleteTransferTask indicates an expected call of RangeCompleteTransferTask.
-func (mr *MockExecutionManagerMockRecorder) RangeCompleteTransferTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteTransferTask", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteTransferTask), request)
-}
-
-// RangeCompleteVisibilityTask mocks base method.
-func (m *MockExecutionManager) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeCompleteVisibilityTask", request)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// RangeCompleteVisibilityTask indicates an expected call of RangeCompleteVisibilityTask.
-func (mr *MockExecutionManagerMockRecorder) RangeCompleteVisibilityTask(request interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteVisibilityTask", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteVisibilityTask), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeCompleteHistoryTasks", reflect.TypeOf((*MockExecutionManager)(nil).RangeCompleteHistoryTasks), ctx, request)
 }
 
 // RangeDeleteReplicationTaskFromDLQ mocks base method.
-func (m *MockExecutionManager) RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error {
+func (m *MockExecutionManager) RangeDeleteReplicationTaskFromDLQ(ctx context.Context, request *RangeDeleteReplicationTaskFromDLQRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeDeleteReplicationTaskFromDLQ", request)
+	ret := m.ctrl.Call(m, "RangeDeleteReplicationTaskFromDLQ", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RangeDeleteReplicationTaskFromDLQ indicates an expected call of RangeDeleteReplicationTaskFromDLQ.
-func (mr *MockExecutionManagerMockRecorder) RangeDeleteReplicationTaskFromDLQ(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) RangeDeleteReplicationTaskFromDLQ(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).RangeDeleteReplicationTaskFromDLQ), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteReplicationTaskFromDLQ", reflect.TypeOf((*MockExecutionManager)(nil).RangeDeleteReplicationTaskFromDLQ), ctx, request)
 }
 
 // ReadHistoryBranch mocks base method.
-func (m *MockExecutionManager) ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error) {
+func (m *MockExecutionManager) ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadHistoryBranch", request)
+	ret := m.ctrl.Call(m, "ReadHistoryBranch", ctx, request)
 	ret0, _ := ret[0].(*ReadHistoryBranchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ReadHistoryBranch indicates an expected call of ReadHistoryBranch.
-func (mr *MockExecutionManagerMockRecorder) ReadHistoryBranch(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) ReadHistoryBranch(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ReadHistoryBranch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ReadHistoryBranch), ctx, request)
 }
 
 // ReadHistoryBranchByBatch mocks base method.
-func (m *MockExecutionManager) ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
+func (m *MockExecutionManager) ReadHistoryBranchByBatch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadHistoryBranchByBatch", request)
+	ret := m.ctrl.Call(m, "ReadHistoryBranchByBatch", ctx, request)
 	ret0, _ := ret[0].(*ReadHistoryBranchByBatchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ReadHistoryBranchByBatch indicates an expected call of ReadHistoryBranchByBatch.
-func (mr *MockExecutionManagerMockRecorder) ReadHistoryBranchByBatch(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) ReadHistoryBranchByBatch(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranchByBatch", reflect.TypeOf((*MockExecutionManager)(nil).ReadHistoryBranchByBatch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranchByBatch", reflect.TypeOf((*MockExecutionManager)(nil).ReadHistoryBranchByBatch), ctx, request)
+}
+
+// ReadHistoryBranchReverse mocks base method.
+func (m *MockExecutionManager) ReadHistoryBranchReverse(ctx context.Context, request *ReadHistoryBranchReverseRequest) (*ReadHistoryBranchReverseResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ReadHistoryBranchReverse", ctx, request)
+	ret0, _ := ret[0].(*ReadHistoryBranchReverseResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ReadHistoryBranchReverse indicates an expected call of ReadHistoryBranchReverse.
+func (mr *MockExecutionManagerMockRecorder) ReadHistoryBranchReverse(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadHistoryBranchReverse", reflect.TypeOf((*MockExecutionManager)(nil).ReadHistoryBranchReverse), ctx, request)
 }
 
 // ReadRawHistoryBranch mocks base method.
-func (m *MockExecutionManager) ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
+func (m *MockExecutionManager) ReadRawHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ReadRawHistoryBranch", request)
+	ret := m.ctrl.Call(m, "ReadRawHistoryBranch", ctx, request)
 	ret0, _ := ret[0].(*ReadRawHistoryBranchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ReadRawHistoryBranch indicates an expected call of ReadRawHistoryBranch.
-func (mr *MockExecutionManagerMockRecorder) ReadRawHistoryBranch(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) ReadRawHistoryBranch(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ReadRawHistoryBranch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ReadRawHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).ReadRawHistoryBranch), ctx, request)
+}
+
+// SetWorkflowExecution mocks base method.
+func (m *MockExecutionManager) SetWorkflowExecution(ctx context.Context, request *SetWorkflowExecutionRequest) (*SetWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "SetWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(*SetWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// SetWorkflowExecution indicates an expected call of SetWorkflowExecution.
+func (mr *MockExecutionManagerMockRecorder) SetWorkflowExecution(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SetWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).SetWorkflowExecution), ctx, request)
 }
 
 // TrimHistoryBranch mocks base method.
-func (m *MockExecutionManager) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
+func (m *MockExecutionManager) TrimHistoryBranch(ctx context.Context, request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "TrimHistoryBranch", request)
+	ret := m.ctrl.Call(m, "TrimHistoryBranch", ctx, request)
 	ret0, _ := ret[0].(*TrimHistoryBranchResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // TrimHistoryBranch indicates an expected call of TrimHistoryBranch.
-func (mr *MockExecutionManagerMockRecorder) TrimHistoryBranch(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) TrimHistoryBranch(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).TrimHistoryBranch), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrimHistoryBranch", reflect.TypeOf((*MockExecutionManager)(nil).TrimHistoryBranch), ctx, request)
 }
 
 // UpdateWorkflowExecution mocks base method.
-func (m *MockExecutionManager) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
+func (m *MockExecutionManager) UpdateWorkflowExecution(ctx context.Context, request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", request)
+	ret := m.ctrl.Call(m, "UpdateWorkflowExecution", ctx, request)
 	ret0, _ := ret[0].(*UpdateWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateWorkflowExecution indicates an expected call of UpdateWorkflowExecution.
-func (mr *MockExecutionManagerMockRecorder) UpdateWorkflowExecution(request interface{}) *gomock.Call {
+func (mr *MockExecutionManagerMockRecorder) UpdateWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).UpdateWorkflowExecution), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowExecution", reflect.TypeOf((*MockExecutionManager)(nil).UpdateWorkflowExecution), ctx, request)
 }
 
 // MockTaskManager is a mock of TaskManager interface.
@@ -787,76 +644,76 @@ func (mr *MockTaskManagerMockRecorder) Close() *gomock.Call {
 }
 
 // CompleteTask mocks base method.
-func (m *MockTaskManager) CompleteTask(request *CompleteTaskRequest) error {
+func (m *MockTaskManager) CompleteTask(ctx context.Context, request *CompleteTaskRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompleteTask", request)
+	ret := m.ctrl.Call(m, "CompleteTask", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // CompleteTask indicates an expected call of CompleteTask.
-func (mr *MockTaskManagerMockRecorder) CompleteTask(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) CompleteTask(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTask", reflect.TypeOf((*MockTaskManager)(nil).CompleteTask), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTask", reflect.TypeOf((*MockTaskManager)(nil).CompleteTask), ctx, request)
 }
 
 // CompleteTasksLessThan mocks base method.
-func (m *MockTaskManager) CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error) {
+func (m *MockTaskManager) CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CompleteTasksLessThan", request)
+	ret := m.ctrl.Call(m, "CompleteTasksLessThan", ctx, request)
 	ret0, _ := ret[0].(int)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CompleteTasksLessThan indicates an expected call of CompleteTasksLessThan.
-func (mr *MockTaskManagerMockRecorder) CompleteTasksLessThan(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) CompleteTasksLessThan(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTasksLessThan", reflect.TypeOf((*MockTaskManager)(nil).CompleteTasksLessThan), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CompleteTasksLessThan", reflect.TypeOf((*MockTaskManager)(nil).CompleteTasksLessThan), ctx, request)
 }
 
 // CreateTaskQueue mocks base method.
-func (m *MockTaskManager) CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
+func (m *MockTaskManager) CreateTaskQueue(ctx context.Context, request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTaskQueue", request)
+	ret := m.ctrl.Call(m, "CreateTaskQueue", ctx, request)
 	ret0, _ := ret[0].(*CreateTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateTaskQueue indicates an expected call of CreateTaskQueue.
-func (mr *MockTaskManagerMockRecorder) CreateTaskQueue(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) CreateTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).CreateTaskQueue), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).CreateTaskQueue), ctx, request)
 }
 
 // CreateTasks mocks base method.
-func (m *MockTaskManager) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
+func (m *MockTaskManager) CreateTasks(ctx context.Context, request *CreateTasksRequest) (*CreateTasksResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateTasks", request)
+	ret := m.ctrl.Call(m, "CreateTasks", ctx, request)
 	ret0, _ := ret[0].(*CreateTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateTasks indicates an expected call of CreateTasks.
-func (mr *MockTaskManagerMockRecorder) CreateTasks(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) CreateTasks(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTasks", reflect.TypeOf((*MockTaskManager)(nil).CreateTasks), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateTasks", reflect.TypeOf((*MockTaskManager)(nil).CreateTasks), ctx, request)
 }
 
 // DeleteTaskQueue mocks base method.
-func (m *MockTaskManager) DeleteTaskQueue(request *DeleteTaskQueueRequest) error {
+func (m *MockTaskManager) DeleteTaskQueue(ctx context.Context, request *DeleteTaskQueueRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteTaskQueue", request)
+	ret := m.ctrl.Call(m, "DeleteTaskQueue", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteTaskQueue indicates an expected call of DeleteTaskQueue.
-func (mr *MockTaskManagerMockRecorder) DeleteTaskQueue(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) DeleteTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).DeleteTaskQueue), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).DeleteTaskQueue), ctx, request)
 }
 
 // GetName mocks base method.
@@ -874,63 +731,63 @@ func (mr *MockTaskManagerMockRecorder) GetName() *gomock.Call {
 }
 
 // GetTaskQueue mocks base method.
-func (m *MockTaskManager) GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error) {
+func (m *MockTaskManager) GetTaskQueue(ctx context.Context, request *GetTaskQueueRequest) (*GetTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTaskQueue", request)
+	ret := m.ctrl.Call(m, "GetTaskQueue", ctx, request)
 	ret0, _ := ret[0].(*GetTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetTaskQueue indicates an expected call of GetTaskQueue.
-func (mr *MockTaskManagerMockRecorder) GetTaskQueue(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) GetTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueue), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).GetTaskQueue), ctx, request)
 }
 
 // GetTasks mocks base method.
-func (m *MockTaskManager) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
+func (m *MockTaskManager) GetTasks(ctx context.Context, request *GetTasksRequest) (*GetTasksResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetTasks", request)
+	ret := m.ctrl.Call(m, "GetTasks", ctx, request)
 	ret0, _ := ret[0].(*GetTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetTasks indicates an expected call of GetTasks.
-func (mr *MockTaskManagerMockRecorder) GetTasks(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) GetTasks(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasks", reflect.TypeOf((*MockTaskManager)(nil).GetTasks), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTasks", reflect.TypeOf((*MockTaskManager)(nil).GetTasks), ctx, request)
 }
 
 // ListTaskQueue mocks base method.
-func (m *MockTaskManager) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
+func (m *MockTaskManager) ListTaskQueue(ctx context.Context, request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListTaskQueue", request)
+	ret := m.ctrl.Call(m, "ListTaskQueue", ctx, request)
 	ret0, _ := ret[0].(*ListTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListTaskQueue indicates an expected call of ListTaskQueue.
-func (mr *MockTaskManagerMockRecorder) ListTaskQueue(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) ListTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).ListTaskQueue), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).ListTaskQueue), ctx, request)
 }
 
 // UpdateTaskQueue mocks base method.
-func (m *MockTaskManager) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
+func (m *MockTaskManager) UpdateTaskQueue(ctx context.Context, request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateTaskQueue", request)
+	ret := m.ctrl.Call(m, "UpdateTaskQueue", ctx, request)
 	ret0, _ := ret[0].(*UpdateTaskQueueResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // UpdateTaskQueue indicates an expected call of UpdateTaskQueue.
-func (mr *MockTaskManagerMockRecorder) UpdateTaskQueue(request interface{}) *gomock.Call {
+func (mr *MockTaskManagerMockRecorder) UpdateTaskQueue(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).UpdateTaskQueue), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateTaskQueue", reflect.TypeOf((*MockTaskManager)(nil).UpdateTaskQueue), ctx, request)
 }
 
 // MockMetadataManager is a mock of MetadataManager interface.
@@ -969,61 +826,61 @@ func (mr *MockMetadataManagerMockRecorder) Close() *gomock.Call {
 }
 
 // CreateNamespace mocks base method.
-func (m *MockMetadataManager) CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
+func (m *MockMetadataManager) CreateNamespace(ctx context.Context, request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateNamespace", request)
+	ret := m.ctrl.Call(m, "CreateNamespace", ctx, request)
 	ret0, _ := ret[0].(*CreateNamespaceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // CreateNamespace indicates an expected call of CreateNamespace.
-func (mr *MockMetadataManagerMockRecorder) CreateNamespace(request interface{}) *gomock.Call {
+func (mr *MockMetadataManagerMockRecorder) CreateNamespace(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNamespace", reflect.TypeOf((*MockMetadataManager)(nil).CreateNamespace), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateNamespace", reflect.TypeOf((*MockMetadataManager)(nil).CreateNamespace), ctx, request)
 }
 
 // DeleteNamespace mocks base method.
-func (m *MockMetadataManager) DeleteNamespace(request *DeleteNamespaceRequest) error {
+func (m *MockMetadataManager) DeleteNamespace(ctx context.Context, request *DeleteNamespaceRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteNamespace", request)
+	ret := m.ctrl.Call(m, "DeleteNamespace", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteNamespace indicates an expected call of DeleteNamespace.
-func (mr *MockMetadataManagerMockRecorder) DeleteNamespace(request interface{}) *gomock.Call {
+func (mr *MockMetadataManagerMockRecorder) DeleteNamespace(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNamespace", reflect.TypeOf((*MockMetadataManager)(nil).DeleteNamespace), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNamespace", reflect.TypeOf((*MockMetadataManager)(nil).DeleteNamespace), ctx, request)
 }
 
 // DeleteNamespaceByName mocks base method.
-func (m *MockMetadataManager) DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error {
+func (m *MockMetadataManager) DeleteNamespaceByName(ctx context.Context, request *DeleteNamespaceByNameRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteNamespaceByName", request)
+	ret := m.ctrl.Call(m, "DeleteNamespaceByName", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteNamespaceByName indicates an expected call of DeleteNamespaceByName.
-func (mr *MockMetadataManagerMockRecorder) DeleteNamespaceByName(request interface{}) *gomock.Call {
+func (mr *MockMetadataManagerMockRecorder) DeleteNamespaceByName(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNamespaceByName", reflect.TypeOf((*MockMetadataManager)(nil).DeleteNamespaceByName), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNamespaceByName", reflect.TypeOf((*MockMetadataManager)(nil).DeleteNamespaceByName), ctx, request)
 }
 
 // GetMetadata mocks base method.
-func (m *MockMetadataManager) GetMetadata() (*GetMetadataResponse, error) {
+func (m *MockMetadataManager) GetMetadata(ctx context.Context) (*GetMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMetadata")
+	ret := m.ctrl.Call(m, "GetMetadata", ctx)
 	ret0, _ := ret[0].(*GetMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetMetadata indicates an expected call of GetMetadata.
-func (mr *MockMetadataManagerMockRecorder) GetMetadata() *gomock.Call {
+func (mr *MockMetadataManagerMockRecorder) GetMetadata(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockMetadataManager)(nil).GetMetadata))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMetadata", reflect.TypeOf((*MockMetadataManager)(nil).GetMetadata), ctx)
 }
 
 // GetName mocks base method.
@@ -1041,61 +898,75 @@ func (mr *MockMetadataManagerMockRecorder) GetName() *gomock.Call {
 }
 
 // GetNamespace mocks base method.
-func (m *MockMetadataManager) GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error) {
+func (m *MockMetadataManager) GetNamespace(ctx context.Context, request *GetNamespaceRequest) (*GetNamespaceResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetNamespace", request)
+	ret := m.ctrl.Call(m, "GetNamespace", ctx, request)
 	ret0, _ := ret[0].(*GetNamespaceResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetNamespace indicates an expected call of GetNamespace.
-func (mr *MockMetadataManagerMockRecorder) GetNamespace(request interface{}) *gomock.Call {
+func (mr *MockMetadataManagerMockRecorder) GetNamespace(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockMetadataManager)(nil).GetNamespace), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetNamespace", reflect.TypeOf((*MockMetadataManager)(nil).GetNamespace), ctx, request)
 }
 
 // InitializeSystemNamespaces mocks base method.
-func (m *MockMetadataManager) InitializeSystemNamespaces(currentClusterName string) error {
+func (m *MockMetadataManager) InitializeSystemNamespaces(ctx context.Context, currentClusterName string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "InitializeSystemNamespaces", currentClusterName)
+	ret := m.ctrl.Call(m, "InitializeSystemNamespaces", ctx, currentClusterName)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // InitializeSystemNamespaces indicates an expected call of InitializeSystemNamespaces.
-func (mr *MockMetadataManagerMockRecorder) InitializeSystemNamespaces(currentClusterName interface{}) *gomock.Call {
+func (mr *MockMetadataManagerMockRecorder) InitializeSystemNamespaces(ctx, currentClusterName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeSystemNamespaces", reflect.TypeOf((*MockMetadataManager)(nil).InitializeSystemNamespaces), currentClusterName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "InitializeSystemNamespaces", reflect.TypeOf((*MockMetadataManager)(nil).InitializeSystemNamespaces), ctx, currentClusterName)
 }
 
 // ListNamespaces mocks base method.
-func (m *MockMetadataManager) ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error) {
+func (m *MockMetadataManager) ListNamespaces(ctx context.Context, request *ListNamespacesRequest) (*ListNamespacesResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListNamespaces", request)
+	ret := m.ctrl.Call(m, "ListNamespaces", ctx, request)
 	ret0, _ := ret[0].(*ListNamespacesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListNamespaces indicates an expected call of ListNamespaces.
-func (mr *MockMetadataManagerMockRecorder) ListNamespaces(request interface{}) *gomock.Call {
+func (mr *MockMetadataManagerMockRecorder) ListNamespaces(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockMetadataManager)(nil).ListNamespaces), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListNamespaces", reflect.TypeOf((*MockMetadataManager)(nil).ListNamespaces), ctx, request)
+}
+
+// RenameNamespace mocks base method.
+func (m *MockMetadataManager) RenameNamespace(ctx context.Context, request *RenameNamespaceRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "RenameNamespace", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// RenameNamespace indicates an expected call of RenameNamespace.
+func (mr *MockMetadataManagerMockRecorder) RenameNamespace(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RenameNamespace", reflect.TypeOf((*MockMetadataManager)(nil).RenameNamespace), ctx, request)
 }
 
 // UpdateNamespace mocks base method.
-func (m *MockMetadataManager) UpdateNamespace(request *UpdateNamespaceRequest) error {
+func (m *MockMetadataManager) UpdateNamespace(ctx context.Context, request *UpdateNamespaceRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateNamespace", request)
+	ret := m.ctrl.Call(m, "UpdateNamespace", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateNamespace indicates an expected call of UpdateNamespace.
-func (mr *MockMetadataManagerMockRecorder) UpdateNamespace(request interface{}) *gomock.Call {
+func (mr *MockMetadataManagerMockRecorder) UpdateNamespace(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockMetadataManager)(nil).UpdateNamespace), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockMetadataManager)(nil).UpdateNamespace), ctx, request)
 }
 
 // MockClusterMetadataManager is a mock of ClusterMetadataManager interface.
@@ -1134,62 +1005,62 @@ func (mr *MockClusterMetadataManagerMockRecorder) Close() *gomock.Call {
 }
 
 // DeleteClusterMetadata mocks base method.
-func (m *MockClusterMetadataManager) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+func (m *MockClusterMetadataManager) DeleteClusterMetadata(ctx context.Context, request *DeleteClusterMetadataRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteClusterMetadata", request)
+	ret := m.ctrl.Call(m, "DeleteClusterMetadata", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteClusterMetadata indicates an expected call of DeleteClusterMetadata.
-func (mr *MockClusterMetadataManagerMockRecorder) DeleteClusterMetadata(request interface{}) *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) DeleteClusterMetadata(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).DeleteClusterMetadata), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).DeleteClusterMetadata), ctx, request)
 }
 
 // GetClusterMembers mocks base method.
-func (m *MockClusterMetadataManager) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
+func (m *MockClusterMetadataManager) GetClusterMembers(ctx context.Context, request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterMembers", request)
+	ret := m.ctrl.Call(m, "GetClusterMembers", ctx, request)
 	ret0, _ := ret[0].(*GetClusterMembersResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterMembers indicates an expected call of GetClusterMembers.
-func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMembers(request interface{}) *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMembers(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMembers", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMembers), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMembers", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMembers), ctx, request)
 }
 
 // GetClusterMetadata mocks base method.
-func (m *MockClusterMetadataManager) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
+func (m *MockClusterMetadataManager) GetClusterMetadata(ctx context.Context, request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetClusterMetadata", request)
+	ret := m.ctrl.Call(m, "GetClusterMetadata", ctx, request)
 	ret0, _ := ret[0].(*GetClusterMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetClusterMetadata indicates an expected call of GetClusterMetadata.
-func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadata(request interface{}) *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) GetClusterMetadata(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadata), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetClusterMetadata), ctx, request)
 }
 
 // GetCurrentClusterMetadata mocks base method.
-func (m *MockClusterMetadataManager) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
+func (m *MockClusterMetadataManager) GetCurrentClusterMetadata(ctx context.Context) (*GetClusterMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetCurrentClusterMetadata")
+	ret := m.ctrl.Call(m, "GetCurrentClusterMetadata", ctx)
 	ret0, _ := ret[0].(*GetClusterMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetCurrentClusterMetadata indicates an expected call of GetCurrentClusterMetadata.
-func (mr *MockClusterMetadataManagerMockRecorder) GetCurrentClusterMetadata() *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) GetCurrentClusterMetadata(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetCurrentClusterMetadata))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).GetCurrentClusterMetadata), ctx)
 }
 
 // GetName mocks base method.
@@ -1207,59 +1078,59 @@ func (mr *MockClusterMetadataManagerMockRecorder) GetName() *gomock.Call {
 }
 
 // ListClusterMetadata mocks base method.
-func (m *MockClusterMetadataManager) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
+func (m *MockClusterMetadataManager) ListClusterMetadata(ctx context.Context, request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "ListClusterMetadata", request)
+	ret := m.ctrl.Call(m, "ListClusterMetadata", ctx, request)
 	ret0, _ := ret[0].(*ListClusterMetadataResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // ListClusterMetadata indicates an expected call of ListClusterMetadata.
-func (mr *MockClusterMetadataManagerMockRecorder) ListClusterMetadata(request interface{}) *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) ListClusterMetadata(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).ListClusterMetadata), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).ListClusterMetadata), ctx, request)
 }
 
 // PruneClusterMembership mocks base method.
-func (m *MockClusterMetadataManager) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
+func (m *MockClusterMetadataManager) PruneClusterMembership(ctx context.Context, request *PruneClusterMembershipRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PruneClusterMembership", request)
+	ret := m.ctrl.Call(m, "PruneClusterMembership", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PruneClusterMembership indicates an expected call of PruneClusterMembership.
-func (mr *MockClusterMetadataManagerMockRecorder) PruneClusterMembership(request interface{}) *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) PruneClusterMembership(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PruneClusterMembership", reflect.TypeOf((*MockClusterMetadataManager)(nil).PruneClusterMembership), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PruneClusterMembership", reflect.TypeOf((*MockClusterMetadataManager)(nil).PruneClusterMembership), ctx, request)
 }
 
 // SaveClusterMetadata mocks base method.
-func (m *MockClusterMetadataManager) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
+func (m *MockClusterMetadataManager) SaveClusterMetadata(ctx context.Context, request *SaveClusterMetadataRequest) (bool, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SaveClusterMetadata", request)
+	ret := m.ctrl.Call(m, "SaveClusterMetadata", ctx, request)
 	ret0, _ := ret[0].(bool)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // SaveClusterMetadata indicates an expected call of SaveClusterMetadata.
-func (mr *MockClusterMetadataManagerMockRecorder) SaveClusterMetadata(request interface{}) *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) SaveClusterMetadata(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).SaveClusterMetadata), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SaveClusterMetadata", reflect.TypeOf((*MockClusterMetadataManager)(nil).SaveClusterMetadata), ctx, request)
 }
 
 // UpsertClusterMembership mocks base method.
-func (m *MockClusterMetadataManager) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {
+func (m *MockClusterMetadataManager) UpsertClusterMembership(ctx context.Context, request *UpsertClusterMembershipRequest) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpsertClusterMembership", request)
+	ret := m.ctrl.Call(m, "UpsertClusterMembership", ctx, request)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpsertClusterMembership indicates an expected call of UpsertClusterMembership.
-func (mr *MockClusterMetadataManagerMockRecorder) UpsertClusterMembership(request interface{}) *gomock.Call {
+func (mr *MockClusterMetadataManagerMockRecorder) UpsertClusterMembership(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertClusterMembership", reflect.TypeOf((*MockClusterMetadataManager)(nil).UpsertClusterMembership), request)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpsertClusterMembership", reflect.TypeOf((*MockClusterMetadataManager)(nil).UpsertClusterMembership), ctx, request)
 }

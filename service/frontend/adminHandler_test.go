@@ -30,6 +30,8 @@ import (
 	"fmt"
 	"testing"
 
+	"google.golang.org/grpc/health"
+
 	"go.temporal.io/server/api/adminservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
@@ -68,11 +70,10 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller          *gomock.Controller
-		mockResource        *resource.Test
-		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
-		mockSdkSystemClient *sdkmocks.Client
-		mockNamespaceCache  *namespace.MockRegistry
+		controller         *gomock.Controller
+		mockResource       *resource.Test
+		mockHistoryClient  *historyservicemock.MockHistoryServiceClient
+		mockNamespaceCache *namespace.MockRegistry
 
 		mockExecutionMgr           *persistence.MockExecutionManager
 		mockVisibilityMgr          *manager.MockVisibilityManager
@@ -112,8 +113,6 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockVisibilityMgr = manager.NewMockVisibilityManager(s.controller)
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
-	s.mockSdkSystemClient = &sdkmocks.Client{}
-
 	params := &resource.BootstrapParams{
 		PersistenceConfig: config.Persistence{
 			NumHistoryShards: 1,
@@ -136,7 +135,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetClientFactory(),
 		s.mockResource.GetClientBean(),
 		s.mockResource.GetHistoryClient(),
-		s.mockSdkSystemClient,
+		s.mockResource.GetSDKClientFactory(),
 		s.mockResource.GetMembershipMonitor(),
 		s.mockResource.GetArchiverProvider(),
 		s.mockResource.GetMetricsClient(),
@@ -145,6 +144,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetSearchAttributesManager(),
 		s.mockMetadata,
 		s.mockResource.GetArchivalMetadata(),
+		health.NewServer(),
 	}
 	s.handler = NewAdminHandler(args)
 	s.handler.Start()
@@ -247,7 +247,7 @@ func (s *adminHandlerSuite) Test_GetWorkflowExecutionRawHistoryV2() {
 	}
 	s.mockHistoryClient.EXPECT().GetMutableState(gomock.Any(), gomock.Any()).Return(mState, nil).AnyTimes()
 
-	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
+	s.mockExecutionMgr.EXPECT().ReadRawHistoryBranch(gomock.Any(), gomock.Any()).Return(&persistence.ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: []*commonpb.DataBlob{},
 		NextPageToken:     []byte{},
 		Size:              0,
@@ -535,8 +535,11 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 		})
 	}
 
+	mockSdkClient := &sdkmocks.Client{}
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
+
 	// Start workflow failed.
-	s.mockSdkSystemClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
+	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
 	resp, err := handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -549,7 +552,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	// Workflow failed.
 	mockRun := &sdkmocks.WorkflowRun{}
 	mockRun.On("Get", mock.Anything, nil).Return(errors.New("workflow failed")).Once()
-	s.mockSdkSystemClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(mockRun, nil)
+	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-add-search-attributes-workflow", mock.Anything).Return(mockRun, nil)
 	resp, err = handler.AddSearchAttributes(ctx, &adminservice.AddSearchAttributesRequest{
 		SearchAttributes: map[string]enumspb.IndexedValueType{
 			"CustomAttr": enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -570,7 +573,7 @@ func (s *adminHandlerSuite) Test_AddSearchAttributes() {
 	s.NoError(err)
 	s.NotNil(resp)
 	mockRun.AssertExpectations(s.T())
-	s.mockSdkSystemClient.AssertExpectations(s.T())
+	mockSdkClient.AssertExpectations(s.T())
 }
 
 func (s *adminHandlerSuite) Test_GetSearchAttributes() {
@@ -582,8 +585,11 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.Equal(&serviceerror.InvalidArgument{Message: "Request is nil."}, err)
 	s.Nil(resp)
 
+	mockSdkClient := &sdkmocks.Client{}
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
+
 	// Elasticsearch is not configured
-	s.mockSdkSystemClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -599,7 +605,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 		},
 	}
 
-	s.mockSdkSystemClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -607,7 +613,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	s.mockSdkSystemClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
 		&workflowservice.DescribeWorkflowExecutionResponse{}, nil).Once()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "another-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("another-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -615,7 +621,7 @@ func (s *adminHandlerSuite) Test_GetSearchAttributes() {
 	s.NoError(err)
 	s.NotNil(resp)
 
-	s.mockSdkSystemClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
+	mockSdkClient.On("DescribeWorkflowExecution", mock.Anything, "temporal-sys-add-search-attributes-workflow", "").Return(
 		nil, errors.New("random error")).Once()
 	s.mockResource.ESClient.EXPECT().GetMapping(gomock.Any(), "random-index-name").Return(map[string]string{"col": "type"}, nil)
 	s.mockResource.SearchAttributesProvider.EXPECT().GetSearchAttributes("random-index-name", true).Return(searchattribute.TestNameTypeMap, nil).AnyTimes()
@@ -721,7 +727,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
 	}
 
 	// Success case.
-	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes("random-index-name", gomock.Any()).Return(nil)
+	s.mockResource.SearchAttributesManager.EXPECT().SaveSearchAttributes(gomock.Any(), "random-index-name", gomock.Any()).Return(nil)
 
 	resp, err := handler.RemoveSearchAttributes(ctx, &adminservice.RemoveSearchAttributesRequest{
 		SearchAttributes: []string{
@@ -735,6 +741,7 @@ func (s *adminHandlerSuite) Test_RemoveSearchAttributes() {
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 	var clusterName = "cluster"
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
 	).Return(nil)
 
@@ -745,6 +752,7 @@ func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Success() {
 func (s *adminHandlerSuite) Test_RemoveRemoteCluster_Error() {
 	var clusterName = "cluster"
 	s.mockClusterMetadataManager.EXPECT().DeleteClusterMetadata(
+		gomock.Any(),
 		&persistence.DeleteClusterMetadataRequest{ClusterName: clusterName},
 	).Return(fmt.Errorf("test error"))
 
@@ -773,11 +781,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			Version: recordVersion,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        0,
@@ -813,11 +821,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		nil,
 		serviceerror.NewNotFound("expected empty result"),
 	)
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        0,
@@ -989,7 +997,7 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Err
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		nil,
 		fmt.Errorf("test error"),
 	)
@@ -1017,11 +1025,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		nil,
 		serviceerror.NewNotFound("expected empty result"),
 	)
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        0,
@@ -1057,11 +1065,11 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 			InitialFailoverVersion:   0,
 			IsGlobalNamespaceEnabled: true,
 		}, nil)
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		nil,
 		serviceerror.NewNotFound("expected empty result"),
 	)
-	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().SaveClusterMetadata(gomock.Any(), &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              clusterName,
 			HistoryShardCount:        0,
@@ -1095,7 +1103,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.ExecutionMgr.EXPECT().GetName().Return("")
 	s.mockVisibilityMgr.EXPECT().GetName().Return("")
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: persistencespb.ClusterMetadata{
 				ClusterName:              clusterName,
@@ -1134,7 +1142,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 	s.mockResource.WorkerServiceResolver.EXPECT().MemberCount().Return(0)
 	s.mockResource.ExecutionMgr.EXPECT().GetName().Return("")
 	s.mockVisibilityMgr.EXPECT().GetName().Return("")
-	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(&persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
+	s.mockClusterMetadataManager.EXPECT().GetClusterMetadata(gomock.Any(), &persistence.GetClusterMetadataRequest{ClusterName: clusterName}).Return(
 		&persistence.GetClusterMetadataResponse{
 			ClusterMetadata: persistencespb.ClusterMetadata{
 				ClusterName:              clusterName,
@@ -1160,7 +1168,7 @@ func (s *adminHandlerSuite) Test_DescribeCluster_NonCurrentCluster_Success() {
 func (s *adminHandlerSuite) Test_ListClusters_Success() {
 	var pageSize int32 = 1
 
-	s.mockClusterMetadataManager.EXPECT().ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+	s.mockClusterMetadataManager.EXPECT().ListClusterMetadata(gomock.Any(), &persistence.ListClusterMetadataRequest{
 		PageSize: int(pageSize),
 	}).Return(
 		&persistence.ListClusterMetadataResponse{

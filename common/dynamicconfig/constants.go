@@ -109,6 +109,8 @@ const (
 	EnableParentClosePolicyWorker = "system.enableParentClosePolicyWorker"
 	// EnableStickyQuery indicates if sticky query should be enabled per namespace
 	EnableStickyQuery = "system.enableStickyQuery"
+	// EnableActivityLocalDispatch indicates if acitivty local dispatch is enabled per namespace
+	EnableActivityLocalDispatch = "system.enableActivityLocalDispatch"
 
 	// key for size limit
 
@@ -152,6 +154,12 @@ const (
 	FrontendMaxNamespaceBurstPerInstance = "frontend.namespaceBurst"
 	// FrontendMaxNamespaceCountPerInstance is workflow namespace count limit per second
 	FrontendMaxNamespaceCountPerInstance = "frontend.namespaceCount"
+	// FrontendMaxNamespaceVisibilityRPSPerInstance is namespace rate limit per second for visibility APIs.
+	// This config is EXPERIMENTAL and may be changed or removed in a later release.
+	FrontendMaxNamespaceVisibilityRPSPerInstance = "frontend.namespaceRPS.visibility"
+	// FrontendMaxNamespaceVisibilityBurstPerInstance is namespace burst limit for visibility APIs.
+	// This config is EXPERIMENTAL and may be changed or removed in a later release.
+	FrontendMaxNamespaceVisibilityBurstPerInstance = "frontend.namespaceBurst.visibility"
 	// FrontendGlobalNamespaceRPS is workflow namespace rate limit per second for the whole cluster
 	FrontendGlobalNamespaceRPS = "frontend.globalNamespacerps"
 	// FrontendThrottledLogRPS is the rate limit on number of log messages emitted per second for throttled logger
@@ -455,6 +463,8 @@ const (
 	StickyTTL = "history.stickyTTL"
 	// WorkflowTaskHeartbeatTimeout for workflow task heartbeat
 	WorkflowTaskHeartbeatTimeout = "history.workflowTaskHeartbeatTimeout"
+	// WorkflowTaskCriticalAttempts is the number of attempts for a workflow task that's regarded as critical
+	WorkflowTaskCriticalAttempts = "history.workflowTaskCriticalAttempt"
 	// DefaultWorkflowTaskTimeout for a workflow task
 	DefaultWorkflowTaskTimeout = "history.defaultWorkflowTaskTimeout"
 	// SkipReapplicationByNamespaceID is whether skipping a event re-application for a namespace
@@ -576,7 +586,7 @@ const (
 type Filter int
 
 func (f Filter) String() string {
-	if f <= unknownFilter || f > TaskType {
+	if f <= unknownFilter || f >= lastFilterTypeForTest {
 		return filters[unknownFilter]
 	}
 	return filters[f]
@@ -607,8 +617,6 @@ const (
 	// lastFilterTypeForTest must be the last one in this const group for testing purpose
 	lastFilterTypeForTest
 )
-
-const DefaultNumTaskQueuePartitions = 4
 
 // FilterOption is used to provide filters for dynamic config keys
 type FilterOption func(filterMap map[Filter]interface{})

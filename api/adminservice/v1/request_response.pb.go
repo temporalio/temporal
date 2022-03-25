@@ -68,6 +68,92 @@ var _ = time.Kitchen
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
+type RebuildMutableStateRequest struct {
+	Namespace string                `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
+	Execution *v1.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+}
+
+func (m *RebuildMutableStateRequest) Reset()      { *m = RebuildMutableStateRequest{} }
+func (*RebuildMutableStateRequest) ProtoMessage() {}
+func (*RebuildMutableStateRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cc07c1a2abe7cb51, []int{0}
+}
+func (m *RebuildMutableStateRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RebuildMutableStateRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RebuildMutableStateRequest.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RebuildMutableStateRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RebuildMutableStateRequest.Merge(m, src)
+}
+func (m *RebuildMutableStateRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *RebuildMutableStateRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_RebuildMutableStateRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RebuildMutableStateRequest proto.InternalMessageInfo
+
+func (m *RebuildMutableStateRequest) GetNamespace() string {
+	if m != nil {
+		return m.Namespace
+	}
+	return ""
+}
+
+func (m *RebuildMutableStateRequest) GetExecution() *v1.WorkflowExecution {
+	if m != nil {
+		return m.Execution
+	}
+	return nil
+}
+
+type RebuildMutableStateResponse struct {
+}
+
+func (m *RebuildMutableStateResponse) Reset()      { *m = RebuildMutableStateResponse{} }
+func (*RebuildMutableStateResponse) ProtoMessage() {}
+func (*RebuildMutableStateResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_cc07c1a2abe7cb51, []int{1}
+}
+func (m *RebuildMutableStateResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *RebuildMutableStateResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_RebuildMutableStateResponse.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *RebuildMutableStateResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_RebuildMutableStateResponse.Merge(m, src)
+}
+func (m *RebuildMutableStateResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *RebuildMutableStateResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_RebuildMutableStateResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_RebuildMutableStateResponse proto.InternalMessageInfo
+
 type DescribeMutableStateRequest struct {
 	Namespace string                `protobuf:"bytes,1,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	Execution *v1.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
@@ -76,7 +162,7 @@ type DescribeMutableStateRequest struct {
 func (m *DescribeMutableStateRequest) Reset()      { *m = DescribeMutableStateRequest{} }
 func (*DescribeMutableStateRequest) ProtoMessage() {}
 func (*DescribeMutableStateRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{0}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{2}
 }
 func (m *DescribeMutableStateRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -129,7 +215,7 @@ type DescribeMutableStateResponse struct {
 func (m *DescribeMutableStateResponse) Reset()      { *m = DescribeMutableStateResponse{} }
 func (*DescribeMutableStateResponse) ProtoMessage() {}
 func (*DescribeMutableStateResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{1}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{3}
 }
 func (m *DescribeMutableStateResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -198,7 +284,7 @@ type DescribeHistoryHostRequest struct {
 func (m *DescribeHistoryHostRequest) Reset()      { *m = DescribeHistoryHostRequest{} }
 func (*DescribeHistoryHostRequest) ProtoMessage() {}
 func (*DescribeHistoryHostRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{2}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{4}
 }
 func (m *DescribeHistoryHostRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -266,7 +352,7 @@ type DescribeHistoryHostResponse struct {
 func (m *DescribeHistoryHostResponse) Reset()      { *m = DescribeHistoryHostResponse{} }
 func (*DescribeHistoryHostResponse) ProtoMessage() {}
 func (*DescribeHistoryHostResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{3}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{5}
 }
 func (m *DescribeHistoryHostResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -337,7 +423,7 @@ type CloseShardRequest struct {
 func (m *CloseShardRequest) Reset()      { *m = CloseShardRequest{} }
 func (*CloseShardRequest) ProtoMessage() {}
 func (*CloseShardRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{4}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{6}
 }
 func (m *CloseShardRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -379,7 +465,7 @@ type CloseShardResponse struct {
 func (m *CloseShardResponse) Reset()      { *m = CloseShardResponse{} }
 func (*CloseShardResponse) ProtoMessage() {}
 func (*CloseShardResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{5}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{7}
 }
 func (m *CloseShardResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -415,7 +501,7 @@ type GetShardRequest struct {
 func (m *GetShardRequest) Reset()      { *m = GetShardRequest{} }
 func (*GetShardRequest) ProtoMessage() {}
 func (*GetShardRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{6}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{8}
 }
 func (m *GetShardRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -458,7 +544,7 @@ type GetShardResponse struct {
 func (m *GetShardResponse) Reset()      { *m = GetShardResponse{} }
 func (*GetShardResponse) ProtoMessage() {}
 func (*GetShardResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{7}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{9}
 }
 func (m *GetShardResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -494,151 +580,25 @@ func (m *GetShardResponse) GetShardInfo() *v11.ShardInfo {
 	return nil
 }
 
-type ListTransferTasksRequest struct {
-	ShardId       int32  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	MinTaskId     int64  `protobuf:"varint,2,opt,name=min_task_id,json=minTaskId,proto3" json:"min_task_id,omitempty"`
-	MaxTaskId     int64  `protobuf:"varint,4,opt,name=max_task_id,json=maxTaskId,proto3" json:"max_task_id,omitempty"`
-	BatchSize     int32  `protobuf:"varint,5,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	NextPageToken []byte `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
+type ListHistoryTasksRequest struct {
+	ShardId       int32            `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	Category      v13.TaskCategory `protobuf:"varint,2,opt,name=category,proto3,enum=temporal.server.api.enums.v1.TaskCategory" json:"category,omitempty"`
+	TaskRange     *v14.TaskRange   `protobuf:"bytes,3,opt,name=task_range,json=taskRange,proto3" json:"task_range,omitempty"`
+	BatchSize     int32            `protobuf:"varint,4,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
+	NextPageToken []byte           `protobuf:"bytes,5,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 }
 
-func (m *ListTransferTasksRequest) Reset()      { *m = ListTransferTasksRequest{} }
-func (*ListTransferTasksRequest) ProtoMessage() {}
-func (*ListTransferTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{8}
-}
-func (m *ListTransferTasksRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ListTransferTasksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ListTransferTasksRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ListTransferTasksRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListTransferTasksRequest.Merge(m, src)
-}
-func (m *ListTransferTasksRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *ListTransferTasksRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListTransferTasksRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ListTransferTasksRequest proto.InternalMessageInfo
-
-func (m *ListTransferTasksRequest) GetShardId() int32 {
-	if m != nil {
-		return m.ShardId
-	}
-	return 0
-}
-
-func (m *ListTransferTasksRequest) GetMinTaskId() int64 {
-	if m != nil {
-		return m.MinTaskId
-	}
-	return 0
-}
-
-func (m *ListTransferTasksRequest) GetMaxTaskId() int64 {
-	if m != nil {
-		return m.MaxTaskId
-	}
-	return 0
-}
-
-func (m *ListTransferTasksRequest) GetBatchSize() int32 {
-	if m != nil {
-		return m.BatchSize
-	}
-	return 0
-}
-
-func (m *ListTransferTasksRequest) GetNextPageToken() []byte {
-	if m != nil {
-		return m.NextPageToken
-	}
-	return nil
-}
-
-type ListTransferTasksResponse struct {
-	Tasks         []*Task `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	NextPageToken []byte  `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-}
-
-func (m *ListTransferTasksResponse) Reset()      { *m = ListTransferTasksResponse{} }
-func (*ListTransferTasksResponse) ProtoMessage() {}
-func (*ListTransferTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{9}
-}
-func (m *ListTransferTasksResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ListTransferTasksResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ListTransferTasksResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ListTransferTasksResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListTransferTasksResponse.Merge(m, src)
-}
-func (m *ListTransferTasksResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *ListTransferTasksResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListTransferTasksResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ListTransferTasksResponse proto.InternalMessageInfo
-
-func (m *ListTransferTasksResponse) GetTasks() []*Task {
-	if m != nil {
-		return m.Tasks
-	}
-	return nil
-}
-
-func (m *ListTransferTasksResponse) GetNextPageToken() []byte {
-	if m != nil {
-		return m.NextPageToken
-	}
-	return nil
-}
-
-type ListVisibilityTasksRequest struct {
-	ShardId       int32  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	ReadLevel     int64  `protobuf:"varint,2,opt,name=read_level,json=readLevel,proto3" json:"read_level,omitempty"`
-	MaxReadLevel  int64  `protobuf:"varint,4,opt,name=max_read_level,json=maxReadLevel,proto3" json:"max_read_level,omitempty"`
-	BatchSize     int32  `protobuf:"varint,5,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	NextPageToken []byte `protobuf:"bytes,6,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-}
-
-func (m *ListVisibilityTasksRequest) Reset()      { *m = ListVisibilityTasksRequest{} }
-func (*ListVisibilityTasksRequest) ProtoMessage() {}
-func (*ListVisibilityTasksRequest) Descriptor() ([]byte, []int) {
+func (m *ListHistoryTasksRequest) Reset()      { *m = ListHistoryTasksRequest{} }
+func (*ListHistoryTasksRequest) ProtoMessage() {}
+func (*ListHistoryTasksRequest) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cc07c1a2abe7cb51, []int{10}
 }
-func (m *ListVisibilityTasksRequest) XXX_Unmarshal(b []byte) error {
+func (m *ListHistoryTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ListVisibilityTasksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ListHistoryTasksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_ListVisibilityTasksRequest.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ListHistoryTasksRequest.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -648,69 +608,69 @@ func (m *ListVisibilityTasksRequest) XXX_Marshal(b []byte, deterministic bool) (
 		return b[:n], nil
 	}
 }
-func (m *ListVisibilityTasksRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListVisibilityTasksRequest.Merge(m, src)
+func (m *ListHistoryTasksRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListHistoryTasksRequest.Merge(m, src)
 }
-func (m *ListVisibilityTasksRequest) XXX_Size() int {
+func (m *ListHistoryTasksRequest) XXX_Size() int {
 	return m.Size()
 }
-func (m *ListVisibilityTasksRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListVisibilityTasksRequest.DiscardUnknown(m)
+func (m *ListHistoryTasksRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListHistoryTasksRequest.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_ListVisibilityTasksRequest proto.InternalMessageInfo
+var xxx_messageInfo_ListHistoryTasksRequest proto.InternalMessageInfo
 
-func (m *ListVisibilityTasksRequest) GetShardId() int32 {
+func (m *ListHistoryTasksRequest) GetShardId() int32 {
 	if m != nil {
 		return m.ShardId
 	}
 	return 0
 }
 
-func (m *ListVisibilityTasksRequest) GetReadLevel() int64 {
+func (m *ListHistoryTasksRequest) GetCategory() v13.TaskCategory {
 	if m != nil {
-		return m.ReadLevel
+		return m.Category
 	}
-	return 0
+	return v13.TASK_CATEGORY_UNSPECIFIED
 }
 
-func (m *ListVisibilityTasksRequest) GetMaxReadLevel() int64 {
+func (m *ListHistoryTasksRequest) GetTaskRange() *v14.TaskRange {
 	if m != nil {
-		return m.MaxReadLevel
+		return m.TaskRange
 	}
-	return 0
+	return nil
 }
 
-func (m *ListVisibilityTasksRequest) GetBatchSize() int32 {
+func (m *ListHistoryTasksRequest) GetBatchSize() int32 {
 	if m != nil {
 		return m.BatchSize
 	}
 	return 0
 }
 
-func (m *ListVisibilityTasksRequest) GetNextPageToken() []byte {
+func (m *ListHistoryTasksRequest) GetNextPageToken() []byte {
 	if m != nil {
 		return m.NextPageToken
 	}
 	return nil
 }
 
-type ListVisibilityTasksResponse struct {
+type ListHistoryTasksResponse struct {
 	Tasks         []*Task `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
 	NextPageToken []byte  `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 }
 
-func (m *ListVisibilityTasksResponse) Reset()      { *m = ListVisibilityTasksResponse{} }
-func (*ListVisibilityTasksResponse) ProtoMessage() {}
-func (*ListVisibilityTasksResponse) Descriptor() ([]byte, []int) {
+func (m *ListHistoryTasksResponse) Reset()      { *m = ListHistoryTasksResponse{} }
+func (*ListHistoryTasksResponse) ProtoMessage() {}
+func (*ListHistoryTasksResponse) Descriptor() ([]byte, []int) {
 	return fileDescriptor_cc07c1a2abe7cb51, []int{11}
 }
-func (m *ListVisibilityTasksResponse) XXX_Unmarshal(b []byte) error {
+func (m *ListHistoryTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ListVisibilityTasksResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *ListHistoryTasksResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_ListVisibilityTasksResponse.Marshal(b, m, deterministic)
+		return xxx_messageInfo_ListHistoryTasksResponse.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -720,278 +680,26 @@ func (m *ListVisibilityTasksResponse) XXX_Marshal(b []byte, deterministic bool) 
 		return b[:n], nil
 	}
 }
-func (m *ListVisibilityTasksResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListVisibilityTasksResponse.Merge(m, src)
+func (m *ListHistoryTasksResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ListHistoryTasksResponse.Merge(m, src)
 }
-func (m *ListVisibilityTasksResponse) XXX_Size() int {
+func (m *ListHistoryTasksResponse) XXX_Size() int {
 	return m.Size()
 }
-func (m *ListVisibilityTasksResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListVisibilityTasksResponse.DiscardUnknown(m)
+func (m *ListHistoryTasksResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ListHistoryTasksResponse.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_ListVisibilityTasksResponse proto.InternalMessageInfo
+var xxx_messageInfo_ListHistoryTasksResponse proto.InternalMessageInfo
 
-func (m *ListVisibilityTasksResponse) GetTasks() []*Task {
+func (m *ListHistoryTasksResponse) GetTasks() []*Task {
 	if m != nil {
 		return m.Tasks
 	}
 	return nil
 }
 
-func (m *ListVisibilityTasksResponse) GetNextPageToken() []byte {
-	if m != nil {
-		return m.NextPageToken
-	}
-	return nil
-}
-
-type ListTimerTasksRequest struct {
-	ShardId       int32      `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	MinTime       *time.Time `protobuf:"bytes,2,opt,name=min_time,json=minTime,proto3,stdtime" json:"min_time,omitempty"`
-	MaxTime       *time.Time `protobuf:"bytes,3,opt,name=max_time,json=maxTime,proto3,stdtime" json:"max_time,omitempty"`
-	BatchSize     int32      `protobuf:"varint,4,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	NextPageToken []byte     `protobuf:"bytes,5,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-}
-
-func (m *ListTimerTasksRequest) Reset()      { *m = ListTimerTasksRequest{} }
-func (*ListTimerTasksRequest) ProtoMessage() {}
-func (*ListTimerTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{12}
-}
-func (m *ListTimerTasksRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ListTimerTasksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ListTimerTasksRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ListTimerTasksRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListTimerTasksRequest.Merge(m, src)
-}
-func (m *ListTimerTasksRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *ListTimerTasksRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListTimerTasksRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ListTimerTasksRequest proto.InternalMessageInfo
-
-func (m *ListTimerTasksRequest) GetShardId() int32 {
-	if m != nil {
-		return m.ShardId
-	}
-	return 0
-}
-
-func (m *ListTimerTasksRequest) GetMinTime() *time.Time {
-	if m != nil {
-		return m.MinTime
-	}
-	return nil
-}
-
-func (m *ListTimerTasksRequest) GetMaxTime() *time.Time {
-	if m != nil {
-		return m.MaxTime
-	}
-	return nil
-}
-
-func (m *ListTimerTasksRequest) GetBatchSize() int32 {
-	if m != nil {
-		return m.BatchSize
-	}
-	return 0
-}
-
-func (m *ListTimerTasksRequest) GetNextPageToken() []byte {
-	if m != nil {
-		return m.NextPageToken
-	}
-	return nil
-}
-
-type ListTimerTasksResponse struct {
-	Tasks         []*Task `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	NextPageToken []byte  `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-}
-
-func (m *ListTimerTasksResponse) Reset()      { *m = ListTimerTasksResponse{} }
-func (*ListTimerTasksResponse) ProtoMessage() {}
-func (*ListTimerTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{13}
-}
-func (m *ListTimerTasksResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ListTimerTasksResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ListTimerTasksResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ListTimerTasksResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListTimerTasksResponse.Merge(m, src)
-}
-func (m *ListTimerTasksResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *ListTimerTasksResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListTimerTasksResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ListTimerTasksResponse proto.InternalMessageInfo
-
-func (m *ListTimerTasksResponse) GetTasks() []*Task {
-	if m != nil {
-		return m.Tasks
-	}
-	return nil
-}
-
-func (m *ListTimerTasksResponse) GetNextPageToken() []byte {
-	if m != nil {
-		return m.NextPageToken
-	}
-	return nil
-}
-
-type ListReplicationTasksRequest struct {
-	ShardId       int32  `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
-	MinTaskId     int64  `protobuf:"varint,2,opt,name=min_task_id,json=minTaskId,proto3" json:"min_task_id,omitempty"`
-	MaxTaskId     int64  `protobuf:"varint,3,opt,name=max_task_id,json=maxTaskId,proto3" json:"max_task_id,omitempty"`
-	BatchSize     int32  `protobuf:"varint,4,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
-	NextPageToken []byte `protobuf:"bytes,5,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-}
-
-func (m *ListReplicationTasksRequest) Reset()      { *m = ListReplicationTasksRequest{} }
-func (*ListReplicationTasksRequest) ProtoMessage() {}
-func (*ListReplicationTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{14}
-}
-func (m *ListReplicationTasksRequest) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ListReplicationTasksRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ListReplicationTasksRequest.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ListReplicationTasksRequest) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListReplicationTasksRequest.Merge(m, src)
-}
-func (m *ListReplicationTasksRequest) XXX_Size() int {
-	return m.Size()
-}
-func (m *ListReplicationTasksRequest) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListReplicationTasksRequest.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ListReplicationTasksRequest proto.InternalMessageInfo
-
-func (m *ListReplicationTasksRequest) GetShardId() int32 {
-	if m != nil {
-		return m.ShardId
-	}
-	return 0
-}
-
-func (m *ListReplicationTasksRequest) GetMinTaskId() int64 {
-	if m != nil {
-		return m.MinTaskId
-	}
-	return 0
-}
-
-func (m *ListReplicationTasksRequest) GetMaxTaskId() int64 {
-	if m != nil {
-		return m.MaxTaskId
-	}
-	return 0
-}
-
-func (m *ListReplicationTasksRequest) GetBatchSize() int32 {
-	if m != nil {
-		return m.BatchSize
-	}
-	return 0
-}
-
-func (m *ListReplicationTasksRequest) GetNextPageToken() []byte {
-	if m != nil {
-		return m.NextPageToken
-	}
-	return nil
-}
-
-type ListReplicationTasksResponse struct {
-	Tasks         []*Task `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
-	NextPageToken []byte  `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
-}
-
-func (m *ListReplicationTasksResponse) Reset()      { *m = ListReplicationTasksResponse{} }
-func (*ListReplicationTasksResponse) ProtoMessage() {}
-func (*ListReplicationTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{15}
-}
-func (m *ListReplicationTasksResponse) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *ListReplicationTasksResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_ListReplicationTasksResponse.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *ListReplicationTasksResponse) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ListReplicationTasksResponse.Merge(m, src)
-}
-func (m *ListReplicationTasksResponse) XXX_Size() int {
-	return m.Size()
-}
-func (m *ListReplicationTasksResponse) XXX_DiscardUnknown() {
-	xxx_messageInfo_ListReplicationTasksResponse.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_ListReplicationTasksResponse proto.InternalMessageInfo
-
-func (m *ListReplicationTasksResponse) GetTasks() []*Task {
-	if m != nil {
-		return m.Tasks
-	}
-	return nil
-}
-
-func (m *ListReplicationTasksResponse) GetNextPageToken() []byte {
+func (m *ListHistoryTasksResponse) GetNextPageToken() []byte {
 	if m != nil {
 		return m.NextPageToken
 	}
@@ -1011,7 +719,7 @@ type Task struct {
 func (m *Task) Reset()      { *m = Task{} }
 func (*Task) ProtoMessage() {}
 func (*Task) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{16}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{12}
 }
 func (m *Task) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1099,7 +807,7 @@ type RemoveTaskRequest struct {
 func (m *RemoveTaskRequest) Reset()      { *m = RemoveTaskRequest{} }
 func (*RemoveTaskRequest) ProtoMessage() {}
 func (*RemoveTaskRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{17}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{13}
 }
 func (m *RemoveTaskRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1162,7 +870,7 @@ type RemoveTaskResponse struct {
 func (m *RemoveTaskResponse) Reset()      { *m = RemoveTaskResponse{} }
 func (*RemoveTaskResponse) ProtoMessage() {}
 func (*RemoveTaskResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{18}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{14}
 }
 func (m *RemoveTaskResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1210,7 +918,7 @@ func (m *GetWorkflowExecutionRawHistoryV2Request) Reset() {
 }
 func (*GetWorkflowExecutionRawHistoryV2Request) ProtoMessage() {}
 func (*GetWorkflowExecutionRawHistoryV2Request) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{19}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{15}
 }
 func (m *GetWorkflowExecutionRawHistoryV2Request) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1306,7 +1014,7 @@ func (m *GetWorkflowExecutionRawHistoryV2Response) Reset() {
 }
 func (*GetWorkflowExecutionRawHistoryV2Response) ProtoMessage() {}
 func (*GetWorkflowExecutionRawHistoryV2Response) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{20}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{16}
 }
 func (m *GetWorkflowExecutionRawHistoryV2Response) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1364,7 +1072,7 @@ type GetReplicationMessagesRequest struct {
 func (m *GetReplicationMessagesRequest) Reset()      { *m = GetReplicationMessagesRequest{} }
 func (*GetReplicationMessagesRequest) ProtoMessage() {}
 func (*GetReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{21}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{17}
 }
 func (m *GetReplicationMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1414,7 +1122,7 @@ type GetReplicationMessagesResponse struct {
 func (m *GetReplicationMessagesResponse) Reset()      { *m = GetReplicationMessagesResponse{} }
 func (*GetReplicationMessagesResponse) ProtoMessage() {}
 func (*GetReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{22}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{18}
 }
 func (m *GetReplicationMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1465,7 +1173,7 @@ func (m *GetNamespaceReplicationMessagesRequest) Reset() {
 }
 func (*GetNamespaceReplicationMessagesRequest) ProtoMessage() {}
 func (*GetNamespaceReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{23}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{19}
 }
 func (m *GetNamespaceReplicationMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1524,7 +1232,7 @@ func (m *GetNamespaceReplicationMessagesResponse) Reset() {
 }
 func (*GetNamespaceReplicationMessagesResponse) ProtoMessage() {}
 func (*GetNamespaceReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{24}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{20}
 }
 func (m *GetNamespaceReplicationMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1567,7 +1275,7 @@ type GetDLQReplicationMessagesRequest struct {
 func (m *GetDLQReplicationMessagesRequest) Reset()      { *m = GetDLQReplicationMessagesRequest{} }
 func (*GetDLQReplicationMessagesRequest) ProtoMessage() {}
 func (*GetDLQReplicationMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{25}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{21}
 }
 func (m *GetDLQReplicationMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1610,7 +1318,7 @@ type GetDLQReplicationMessagesResponse struct {
 func (m *GetDLQReplicationMessagesResponse) Reset()      { *m = GetDLQReplicationMessagesResponse{} }
 func (*GetDLQReplicationMessagesResponse) ProtoMessage() {}
 func (*GetDLQReplicationMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{26}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{22}
 }
 func (m *GetDLQReplicationMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1656,7 +1364,7 @@ type ReapplyEventsRequest struct {
 func (m *ReapplyEventsRequest) Reset()      { *m = ReapplyEventsRequest{} }
 func (*ReapplyEventsRequest) ProtoMessage() {}
 func (*ReapplyEventsRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{27}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{23}
 }
 func (m *ReapplyEventsRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1712,7 +1420,7 @@ type ReapplyEventsResponse struct {
 func (m *ReapplyEventsResponse) Reset()      { *m = ReapplyEventsResponse{} }
 func (*ReapplyEventsResponse) ProtoMessage() {}
 func (*ReapplyEventsResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{28}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{24}
 }
 func (m *ReapplyEventsResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1750,7 +1458,7 @@ type AddSearchAttributesRequest struct {
 func (m *AddSearchAttributesRequest) Reset()      { *m = AddSearchAttributesRequest{} }
 func (*AddSearchAttributesRequest) ProtoMessage() {}
 func (*AddSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{29}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{25}
 }
 func (m *AddSearchAttributesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1806,7 +1514,7 @@ type AddSearchAttributesResponse struct {
 func (m *AddSearchAttributesResponse) Reset()      { *m = AddSearchAttributesResponse{} }
 func (*AddSearchAttributesResponse) ProtoMessage() {}
 func (*AddSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{30}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{26}
 }
 func (m *AddSearchAttributesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1843,7 +1551,7 @@ type RemoveSearchAttributesRequest struct {
 func (m *RemoveSearchAttributesRequest) Reset()      { *m = RemoveSearchAttributesRequest{} }
 func (*RemoveSearchAttributesRequest) ProtoMessage() {}
 func (*RemoveSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{31}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{27}
 }
 func (m *RemoveSearchAttributesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1892,7 +1600,7 @@ type RemoveSearchAttributesResponse struct {
 func (m *RemoveSearchAttributesResponse) Reset()      { *m = RemoveSearchAttributesResponse{} }
 func (*RemoveSearchAttributesResponse) ProtoMessage() {}
 func (*RemoveSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{32}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{28}
 }
 func (m *RemoveSearchAttributesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1928,7 +1636,7 @@ type GetSearchAttributesRequest struct {
 func (m *GetSearchAttributesRequest) Reset()      { *m = GetSearchAttributesRequest{} }
 func (*GetSearchAttributesRequest) ProtoMessage() {}
 func (*GetSearchAttributesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{33}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{29}
 }
 func (m *GetSearchAttributesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1975,7 +1683,7 @@ type GetSearchAttributesResponse struct {
 func (m *GetSearchAttributesResponse) Reset()      { *m = GetSearchAttributesResponse{} }
 func (*GetSearchAttributesResponse) ProtoMessage() {}
 func (*GetSearchAttributesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{34}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{30}
 }
 func (m *GetSearchAttributesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2039,7 +1747,7 @@ type DescribeClusterRequest struct {
 func (m *DescribeClusterRequest) Reset()      { *m = DescribeClusterRequest{} }
 func (*DescribeClusterRequest) ProtoMessage() {}
 func (*DescribeClusterRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{35}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{31}
 }
 func (m *DescribeClusterRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2093,7 +1801,7 @@ type DescribeClusterResponse struct {
 func (m *DescribeClusterResponse) Reset()      { *m = DescribeClusterResponse{} }
 func (*DescribeClusterResponse) ProtoMessage() {}
 func (*DescribeClusterResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{36}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{32}
 }
 func (m *DescribeClusterResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2214,7 +1922,7 @@ type ListClustersRequest struct {
 func (m *ListClustersRequest) Reset()      { *m = ListClustersRequest{} }
 func (*ListClustersRequest) ProtoMessage() {}
 func (*ListClustersRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{37}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{33}
 }
 func (m *ListClustersRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2265,7 +1973,7 @@ type ListClustersResponse struct {
 func (m *ListClustersResponse) Reset()      { *m = ListClustersResponse{} }
 func (*ListClustersResponse) ProtoMessage() {}
 func (*ListClustersResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{38}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{34}
 }
 func (m *ListClustersResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2316,7 +2024,7 @@ type AddOrUpdateRemoteClusterRequest struct {
 func (m *AddOrUpdateRemoteClusterRequest) Reset()      { *m = AddOrUpdateRemoteClusterRequest{} }
 func (*AddOrUpdateRemoteClusterRequest) ProtoMessage() {}
 func (*AddOrUpdateRemoteClusterRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{39}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{35}
 }
 func (m *AddOrUpdateRemoteClusterRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2365,7 +2073,7 @@ type AddOrUpdateRemoteClusterResponse struct {
 func (m *AddOrUpdateRemoteClusterResponse) Reset()      { *m = AddOrUpdateRemoteClusterResponse{} }
 func (*AddOrUpdateRemoteClusterResponse) ProtoMessage() {}
 func (*AddOrUpdateRemoteClusterResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{40}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{36}
 }
 func (m *AddOrUpdateRemoteClusterResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2401,7 +2109,7 @@ type RemoveRemoteClusterRequest struct {
 func (m *RemoveRemoteClusterRequest) Reset()      { *m = RemoveRemoteClusterRequest{} }
 func (*RemoveRemoteClusterRequest) ProtoMessage() {}
 func (*RemoveRemoteClusterRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{41}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{37}
 }
 func (m *RemoveRemoteClusterRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2443,7 +2151,7 @@ type RemoveRemoteClusterResponse struct {
 func (m *RemoveRemoteClusterResponse) Reset()      { *m = RemoveRemoteClusterResponse{} }
 func (*RemoveRemoteClusterResponse) ProtoMessage() {}
 func (*RemoveRemoteClusterResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{42}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{38}
 }
 func (m *RemoveRemoteClusterResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2489,7 +2197,7 @@ type ListClusterMembersRequest struct {
 func (m *ListClusterMembersRequest) Reset()      { *m = ListClusterMembersRequest{} }
 func (*ListClusterMembersRequest) ProtoMessage() {}
 func (*ListClusterMembersRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{43}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{39}
 }
 func (m *ListClusterMembersRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2575,7 +2283,7 @@ type ListClusterMembersResponse struct {
 func (m *ListClusterMembersResponse) Reset()      { *m = ListClusterMembersResponse{} }
 func (*ListClusterMembersResponse) ProtoMessage() {}
 func (*ListClusterMembersResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{44}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{40}
 }
 func (m *ListClusterMembersResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2630,7 +2338,7 @@ type GetDLQMessagesRequest struct {
 func (m *GetDLQMessagesRequest) Reset()      { *m = GetDLQMessagesRequest{} }
 func (*GetDLQMessagesRequest) ProtoMessage() {}
 func (*GetDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{45}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{41}
 }
 func (m *GetDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2710,7 +2418,7 @@ type GetDLQMessagesResponse struct {
 func (m *GetDLQMessagesResponse) Reset()      { *m = GetDLQMessagesResponse{} }
 func (*GetDLQMessagesResponse) ProtoMessage() {}
 func (*GetDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{46}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{42}
 }
 func (m *GetDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2770,7 +2478,7 @@ type PurgeDLQMessagesRequest struct {
 func (m *PurgeDLQMessagesRequest) Reset()      { *m = PurgeDLQMessagesRequest{} }
 func (*PurgeDLQMessagesRequest) ProtoMessage() {}
 func (*PurgeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{47}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{43}
 }
 func (m *PurgeDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2833,7 +2541,7 @@ type PurgeDLQMessagesResponse struct {
 func (m *PurgeDLQMessagesResponse) Reset()      { *m = PurgeDLQMessagesResponse{} }
 func (*PurgeDLQMessagesResponse) ProtoMessage() {}
 func (*PurgeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{48}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{44}
 }
 func (m *PurgeDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2874,7 +2582,7 @@ type MergeDLQMessagesRequest struct {
 func (m *MergeDLQMessagesRequest) Reset()      { *m = MergeDLQMessagesRequest{} }
 func (*MergeDLQMessagesRequest) ProtoMessage() {}
 func (*MergeDLQMessagesRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{49}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{45}
 }
 func (m *MergeDLQMessagesRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2952,7 +2660,7 @@ type MergeDLQMessagesResponse struct {
 func (m *MergeDLQMessagesResponse) Reset()      { *m = MergeDLQMessagesResponse{} }
 func (*MergeDLQMessagesResponse) ProtoMessage() {}
 func (*MergeDLQMessagesResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{50}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{46}
 }
 func (m *MergeDLQMessagesResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2996,7 +2704,7 @@ type RefreshWorkflowTasksRequest struct {
 func (m *RefreshWorkflowTasksRequest) Reset()      { *m = RefreshWorkflowTasksRequest{} }
 func (*RefreshWorkflowTasksRequest) ProtoMessage() {}
 func (*RefreshWorkflowTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{51}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{47}
 }
 func (m *RefreshWorkflowTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3045,7 +2753,7 @@ type RefreshWorkflowTasksResponse struct {
 func (m *RefreshWorkflowTasksResponse) Reset()      { *m = RefreshWorkflowTasksResponse{} }
 func (*RefreshWorkflowTasksResponse) ProtoMessage() {}
 func (*RefreshWorkflowTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{52}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{48}
 }
 func (m *RefreshWorkflowTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3088,7 +2796,7 @@ type ResendReplicationTasksRequest struct {
 func (m *ResendReplicationTasksRequest) Reset()      { *m = ResendReplicationTasksRequest{} }
 func (*ResendReplicationTasksRequest) ProtoMessage() {}
 func (*ResendReplicationTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{53}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{49}
 }
 func (m *ResendReplicationTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3179,7 +2887,7 @@ type ResendReplicationTasksResponse struct {
 func (m *ResendReplicationTasksResponse) Reset()      { *m = ResendReplicationTasksResponse{} }
 func (*ResendReplicationTasksResponse) ProtoMessage() {}
 func (*ResendReplicationTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{54}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{50}
 }
 func (m *ResendReplicationTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3215,12 +2923,13 @@ type GetTaskQueueTasksRequest struct {
 	MinTaskId     int64             `protobuf:"varint,4,opt,name=min_task_id,json=minTaskId,proto3" json:"min_task_id,omitempty"`
 	MaxTaskId     int64             `protobuf:"varint,5,opt,name=max_task_id,json=maxTaskId,proto3" json:"max_task_id,omitempty"`
 	BatchSize     int32             `protobuf:"varint,6,opt,name=batch_size,json=batchSize,proto3" json:"batch_size,omitempty"`
+	NextPageToken []byte            `protobuf:"bytes,7,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 }
 
 func (m *GetTaskQueueTasksRequest) Reset()      { *m = GetTaskQueueTasksRequest{} }
 func (*GetTaskQueueTasksRequest) ProtoMessage() {}
 func (*GetTaskQueueTasksRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{55}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{51}
 }
 func (m *GetTaskQueueTasksRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3291,14 +3000,22 @@ func (m *GetTaskQueueTasksRequest) GetBatchSize() int32 {
 	return 0
 }
 
+func (m *GetTaskQueueTasksRequest) GetNextPageToken() []byte {
+	if m != nil {
+		return m.NextPageToken
+	}
+	return nil
+}
+
 type GetTaskQueueTasksResponse struct {
-	Tasks []*v11.AllocatedTaskInfo `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
+	Tasks         []*v11.AllocatedTaskInfo `protobuf:"bytes,1,rep,name=tasks,proto3" json:"tasks,omitempty"`
+	NextPageToken []byte                   `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"`
 }
 
 func (m *GetTaskQueueTasksResponse) Reset()      { *m = GetTaskQueueTasksResponse{} }
 func (*GetTaskQueueTasksResponse) ProtoMessage() {}
 func (*GetTaskQueueTasksResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_cc07c1a2abe7cb51, []int{56}
+	return fileDescriptor_cc07c1a2abe7cb51, []int{52}
 }
 func (m *GetTaskQueueTasksResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3334,7 +3051,16 @@ func (m *GetTaskQueueTasksResponse) GetTasks() []*v11.AllocatedTaskInfo {
 	return nil
 }
 
+func (m *GetTaskQueueTasksResponse) GetNextPageToken() []byte {
+	if m != nil {
+		return m.NextPageToken
+	}
+	return nil
+}
+
 func init() {
+	proto.RegisterType((*RebuildMutableStateRequest)(nil), "temporal.server.api.adminservice.v1.RebuildMutableStateRequest")
+	proto.RegisterType((*RebuildMutableStateResponse)(nil), "temporal.server.api.adminservice.v1.RebuildMutableStateResponse")
 	proto.RegisterType((*DescribeMutableStateRequest)(nil), "temporal.server.api.adminservice.v1.DescribeMutableStateRequest")
 	proto.RegisterType((*DescribeMutableStateResponse)(nil), "temporal.server.api.adminservice.v1.DescribeMutableStateResponse")
 	proto.RegisterType((*DescribeHistoryHostRequest)(nil), "temporal.server.api.adminservice.v1.DescribeHistoryHostRequest")
@@ -3343,14 +3069,8 @@ func init() {
 	proto.RegisterType((*CloseShardResponse)(nil), "temporal.server.api.adminservice.v1.CloseShardResponse")
 	proto.RegisterType((*GetShardRequest)(nil), "temporal.server.api.adminservice.v1.GetShardRequest")
 	proto.RegisterType((*GetShardResponse)(nil), "temporal.server.api.adminservice.v1.GetShardResponse")
-	proto.RegisterType((*ListTransferTasksRequest)(nil), "temporal.server.api.adminservice.v1.ListTransferTasksRequest")
-	proto.RegisterType((*ListTransferTasksResponse)(nil), "temporal.server.api.adminservice.v1.ListTransferTasksResponse")
-	proto.RegisterType((*ListVisibilityTasksRequest)(nil), "temporal.server.api.adminservice.v1.ListVisibilityTasksRequest")
-	proto.RegisterType((*ListVisibilityTasksResponse)(nil), "temporal.server.api.adminservice.v1.ListVisibilityTasksResponse")
-	proto.RegisterType((*ListTimerTasksRequest)(nil), "temporal.server.api.adminservice.v1.ListTimerTasksRequest")
-	proto.RegisterType((*ListTimerTasksResponse)(nil), "temporal.server.api.adminservice.v1.ListTimerTasksResponse")
-	proto.RegisterType((*ListReplicationTasksRequest)(nil), "temporal.server.api.adminservice.v1.ListReplicationTasksRequest")
-	proto.RegisterType((*ListReplicationTasksResponse)(nil), "temporal.server.api.adminservice.v1.ListReplicationTasksResponse")
+	proto.RegisterType((*ListHistoryTasksRequest)(nil), "temporal.server.api.adminservice.v1.ListHistoryTasksRequest")
+	proto.RegisterType((*ListHistoryTasksResponse)(nil), "temporal.server.api.adminservice.v1.ListHistoryTasksResponse")
 	proto.RegisterType((*Task)(nil), "temporal.server.api.adminservice.v1.Task")
 	proto.RegisterType((*RemoveTaskRequest)(nil), "temporal.server.api.adminservice.v1.RemoveTaskRequest")
 	proto.RegisterType((*RemoveTaskResponse)(nil), "temporal.server.api.adminservice.v1.RemoveTaskResponse")
@@ -3405,199 +3125,241 @@ func init() {
 }
 
 var fileDescriptor_cc07c1a2abe7cb51 = []byte{
-	// 3040 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x5a, 0xcd, 0x6f, 0x1b, 0xc7,
-	0x15, 0xf7, 0x92, 0xa2, 0x44, 0x3e, 0x7d, 0xaf, 0x2d, 0x8b, 0xa6, 0x2c, 0x4a, 0x61, 0x1c, 0xc7,
-	0x76, 0x13, 0xaa, 0x56, 0xda, 0xc4, 0x89, 0x1b, 0x04, 0xb2, 0xec, 0x28, 0x42, 0xa5, 0x7c, 0xac,
-	0x1c, 0xbb, 0x08, 0x10, 0x6c, 0x86, 0xbb, 0x23, 0x6a, 0xe1, 0xfd, 0xca, 0xce, 0x90, 0x96, 0x02,
-	0xf4, 0x3b, 0xfd, 0xb8, 0xd5, 0x40, 0x51, 0x20, 0xc8, 0x5f, 0xd0, 0x1e, 0x8a, 0xde, 0x7a, 0x2a,
-	0x50, 0x14, 0xbd, 0xe4, 0x18, 0xf4, 0x14, 0xb4, 0x05, 0xd2, 0xc8, 0x97, 0xf6, 0x16, 0xa0, 0x40,
-	0xcf, 0xc5, 0x7c, 0x2d, 0x77, 0xc9, 0x25, 0x45, 0xc5, 0x1f, 0x87, 0xdc, 0xb8, 0x6f, 0xde, 0x7b,
-	0xf3, 0xde, 0x6f, 0xde, 0xbc, 0x79, 0xf3, 0x86, 0xf0, 0x12, 0xc5, 0x5e, 0x18, 0x44, 0xc8, 0x5d,
-	0x21, 0x38, 0x6a, 0xe3, 0x68, 0x05, 0x85, 0xce, 0x0a, 0xb2, 0x3d, 0xc7, 0x67, 0xdf, 0x8e, 0x85,
-	0x57, 0xda, 0x97, 0x57, 0x22, 0xfc, 0x7e, 0x0b, 0x13, 0x6a, 0x46, 0x98, 0x84, 0x81, 0x4f, 0x70,
-	0x3d, 0x8c, 0x02, 0x1a, 0xe8, 0x4f, 0x2a, 0xd9, 0xba, 0x90, 0xad, 0xa3, 0xd0, 0xa9, 0x27, 0x65,
-	0xeb, 0xed, 0xcb, 0x95, 0xa5, 0x66, 0x10, 0x34, 0x5d, 0xbc, 0xc2, 0x45, 0x1a, 0xad, 0xdd, 0x15,
-	0xea, 0x78, 0x98, 0x50, 0xe4, 0x85, 0x42, 0x4b, 0xa5, 0xda, 0xcd, 0x60, 0xb7, 0x22, 0x44, 0x9d,
-	0xc0, 0x97, 0xe3, 0x4f, 0xd8, 0x38, 0xc4, 0xbe, 0x8d, 0x7d, 0xcb, 0xc1, 0x64, 0xa5, 0x19, 0x34,
-	0x03, 0x4e, 0xe7, 0xbf, 0x24, 0x4b, 0x2d, 0x76, 0x82, 0x59, 0x8f, 0xfd, 0x96, 0x47, 0x98, 0xd9,
-	0x56, 0xe0, 0x79, 0xb1, 0x9a, 0xa7, 0xb2, 0x79, 0x7c, 0xe4, 0x61, 0x12, 0x22, 0x4b, 0xfa, 0x54,
-	0x39, 0x9f, 0xcd, 0x46, 0x11, 0xb9, 0x63, 0xbe, 0xdf, 0xc2, 0x2d, 0xc5, 0x77, 0x2e, 0xc5, 0x27,
-	0x66, 0x62, 0x8c, 0x1e, 0x26, 0x04, 0x35, 0x71, 0xe6, 0xa4, 0x6d, 0x1c, 0x11, 0x27, 0x8b, 0x2d,
-	0x3d, 0xe9, 0xdd, 0x20, 0xba, 0xb3, 0xeb, 0x06, 0x77, 0x7b, 0xf9, 0x2e, 0xa6, 0xf8, 0x22, 0x1c,
-	0xba, 0x8e, 0xc5, 0xa1, 0xea, 0x65, 0x7d, 0x3a, 0xc5, 0x1a, 0x7b, 0xd9, 0xcb, 0xf8, 0x4c, 0x56,
-	0x00, 0x58, 0x6e, 0x8b, 0x50, 0x1c, 0x0d, 0xb2, 0x20, 0xc1, 0x9d, 0x0d, 0xf8, 0xa5, 0xc1, 0xac,
-	0x62, 0x86, 0x1e, 0x6b, 0xb3, 0x78, 0x19, 0xf8, 0x83, 0xac, 0xdd, 0x73, 0x08, 0x0d, 0xa2, 0x83,
-	0x5e, 0x6b, 0xeb, 0x59, 0xdc, 0x03, 0xb0, 0xf8, 0x66, 0x16, 0xff, 0x40, 0x98, 0x5f, 0xcc, 0x92,
-	0x08, 0xd9, 0x3a, 0x13, 0x8a, 0x7d, 0x31, 0x87, 0x74, 0xd5, 0xf4, 0x30, 0x45, 0x36, 0xa2, 0x48,
-	0x8a, 0x3e, 0x37, 0x84, 0x28, 0xde, 0xc7, 0x56, 0x8b, 0xcd, 0x4c, 0x8e, 0x21, 0x14, 0x3b, 0xa8,
-	0x84, 0x5e, 0x19, 0x42, 0x48, 0x05, 0x9d, 0xe9, 0xb5, 0x28, 0x6a, 0xb8, 0xd8, 0x24, 0x14, 0xd1,
-	0x81, 0x38, 0x76, 0x29, 0x60, 0x8b, 0x24, 0x27, 0xac, 0x7d, 0xa8, 0xc1, 0xc2, 0x75, 0x4c, 0xac,
-	0xc8, 0x69, 0xe0, 0x6d, 0xa1, 0x6f, 0x87, 0xa9, 0x33, 0x44, 0x1e, 0xd1, 0xcf, 0x42, 0x29, 0x36,
-	0xb2, 0xac, 0x2d, 0x6b, 0x17, 0x4a, 0x46, 0x87, 0xa0, 0x6f, 0x40, 0x29, 0xf6, 0xbb, 0x9c, 0x5b,
-	0xd6, 0x2e, 0x8c, 0xaf, 0x5e, 0x8c, 0x2d, 0xe0, 0x39, 0x46, 0xc6, 0x59, 0xfb, 0x72, 0xfd, 0xb6,
-	0x34, 0xfb, 0x86, 0x12, 0x30, 0x3a, 0xb2, 0xb5, 0x3f, 0xe6, 0xe0, 0x6c, 0xb6, 0x19, 0x22, 0x8d,
-	0xe9, 0x67, 0xa0, 0x48, 0xf6, 0x50, 0x64, 0x9b, 0x8e, 0x2d, 0xcd, 0x18, 0xe3, 0xdf, 0x9b, 0xb6,
-	0xfe, 0x04, 0x4c, 0xc8, 0xb0, 0x32, 0x91, 0x6d, 0x47, 0xdc, 0x8e, 0x92, 0x31, 0x2e, 0x69, 0x6b,
-	0xb6, 0x1d, 0xe9, 0x7b, 0x70, 0xd2, 0x42, 0xd6, 0x1e, 0x4e, 0x43, 0x56, 0xce, 0x73, 0x8b, 0xaf,
-	0xd4, 0xb3, 0x92, 0x63, 0x02, 0xb3, 0xa4, 0xf5, 0x29, 0xe3, 0x66, 0xb9, 0xd2, 0x24, 0x49, 0xf7,
-	0xe1, 0x34, 0x0b, 0x9c, 0x06, 0x22, 0xdd, 0x93, 0x8d, 0x3c, 0xe0, 0x64, 0xa7, 0x94, 0xde, 0x24,
-	0xb5, 0xf6, 0x37, 0x0d, 0x2a, 0x0a, 0xb8, 0xd7, 0x84, 0xc7, 0xaf, 0x05, 0x84, 0xaa, 0xe5, 0x63,
-	0xd8, 0x04, 0x84, 0x72, 0x60, 0x30, 0x21, 0x12, 0xba, 0x71, 0x46, 0x5b, 0x13, 0xa4, 0x14, 0xb2,
-	0x0c, 0xba, 0x42, 0x07, 0xd9, 0xd4, 0xe2, 0xe7, 0xbb, 0x17, 0xff, 0x7b, 0xa0, 0xc7, 0xa1, 0xd8,
-	0x89, 0x82, 0x91, 0xe3, 0x46, 0xc1, 0xec, 0xdd, 0x6e, 0x52, 0xed, 0x5e, 0xae, 0x13, 0x94, 0x29,
-	0xa7, 0x64, 0x30, 0x3c, 0x09, 0x93, 0xdc, 0x44, 0x62, 0xfa, 0x2d, 0xaf, 0x81, 0x23, 0xee, 0x56,
-	0xc1, 0x98, 0x10, 0xc4, 0xd7, 0x39, 0x4d, 0x5f, 0x80, 0x92, 0xf2, 0x8b, 0x94, 0x73, 0xcb, 0xf9,
-	0x0b, 0x05, 0xa3, 0x28, 0x1d, 0x23, 0xfa, 0xbb, 0x30, 0x1d, 0x3b, 0x62, 0xf2, 0x55, 0x94, 0xc1,
-	0xf0, 0xad, 0xcc, 0xf5, 0xe9, 0x1c, 0x3d, 0xed, 0xcb, 0xf5, 0xd7, 0xd5, 0xc7, 0x3a, 0x93, 0xdb,
-	0xf4, 0x77, 0x03, 0x63, 0xca, 0x4f, 0xd1, 0xf4, 0xe7, 0x61, 0x5e, 0xcc, 0x6d, 0x05, 0x3e, 0x8d,
-	0x02, 0xd7, 0xc5, 0x11, 0x8f, 0x82, 0x16, 0xe1, 0xf8, 0x94, 0x8c, 0x39, 0x3e, 0xbc, 0x1e, 0x8f,
-	0xee, 0xf0, 0x41, 0xbd, 0x0c, 0x63, 0x6a, 0xa5, 0x0a, 0x22, 0xc8, 0xe5, 0x67, 0xad, 0x0e, 0xb3,
-	0xeb, 0x6e, 0x40, 0xf0, 0x0e, 0x93, 0x53, 0xab, 0xdb, 0xbd, 0x29, 0x3a, 0x4b, 0x57, 0x3b, 0x05,
-	0x7a, 0x92, 0x5f, 0x00, 0x57, 0x7b, 0x06, 0xa6, 0x37, 0x30, 0x1d, 0x56, 0xc7, 0x7b, 0x30, 0xd3,
-	0xe1, 0x96, 0xd0, 0x6f, 0x01, 0x48, 0x76, 0x7f, 0x37, 0xe0, 0x02, 0xe3, 0xab, 0xcf, 0x0e, 0x13,
-	0xd3, 0x5c, 0x0d, 0x07, 0x4b, 0x2c, 0x0b, 0xfb, 0x59, 0xfb, 0x93, 0x06, 0xe5, 0x2d, 0x87, 0xd0,
-	0x9b, 0x11, 0xf2, 0xc9, 0x2e, 0x8e, 0x6e, 0xb2, 0xcc, 0x74, 0xb4, 0x65, 0x7a, 0x15, 0xc6, 0x3d,
-	0xc7, 0x37, 0xf9, 0x51, 0x2f, 0xc3, 0x36, 0x6f, 0x94, 0x3c, 0xc7, 0x67, 0x0a, 0xe4, 0x38, 0xda,
-	0x8f, 0xc7, 0x47, 0xe4, 0x38, 0xda, 0x97, 0xe3, 0x8b, 0x00, 0x0d, 0x44, 0xad, 0x3d, 0x93, 0x38,
-	0x1f, 0x60, 0x0e, 0x75, 0xc1, 0x28, 0x71, 0xca, 0x8e, 0xf3, 0x01, 0xd6, 0xcf, 0xc3, 0xb4, 0x8f,
-	0xf7, 0xa9, 0x19, 0xa2, 0x26, 0x36, 0x69, 0x70, 0x07, 0xfb, 0xe5, 0xd1, 0x65, 0xed, 0xc2, 0x84,
-	0x31, 0xc9, 0xc8, 0x6f, 0xa2, 0x26, 0xbe, 0xc9, 0x88, 0x2c, 0x79, 0x9e, 0xc9, 0x30, 0x5f, 0x42,
-	0xf5, 0x0a, 0x14, 0x78, 0xa6, 0x2d, 0x6b, 0xcb, 0xf9, 0xf4, 0x96, 0xe8, 0x5f, 0x83, 0xd5, 0x99,
-	0x0a, 0x43, 0xc8, 0x65, 0x99, 0x91, 0xcb, 0x32, 0xe3, 0xaf, 0x1a, 0x54, 0x98, 0x19, 0xb7, 0x1c,
-	0xe2, 0x34, 0x1c, 0xd7, 0xa1, 0x07, 0xc3, 0xe2, 0xb8, 0x08, 0x10, 0x61, 0x64, 0x9b, 0x2e, 0x6e,
-	0x63, 0x57, 0xc1, 0xc8, 0x28, 0x5b, 0x8c, 0xa0, 0x9f, 0x83, 0x29, 0x06, 0x63, 0x82, 0x45, 0x20,
-	0x39, 0xe1, 0xa1, 0x7d, 0x23, 0xe6, 0x7a, 0x48, 0x60, 0xfe, 0x5c, 0x83, 0x85, 0x4c, 0x2f, 0x1e,
-	0x37, 0x9c, 0xff, 0xd5, 0x60, 0x8e, 0xaf, 0xaa, 0xe3, 0x0d, 0x1f, 0x91, 0x57, 0xa1, 0xc8, 0x23,
-	0xd2, 0xf1, 0xb0, 0x3c, 0x08, 0x2b, 0x75, 0x51, 0x2d, 0xd7, 0x55, 0xb5, 0x5c, 0xbf, 0xa9, 0xca,
-	0xe9, 0x6b, 0x23, 0xf7, 0x3e, 0x5f, 0xd2, 0x8c, 0x31, 0x16, 0xb0, 0x8e, 0x87, 0xb9, 0x30, 0x0b,
-	0x57, 0x26, 0x9c, 0x1f, 0x5a, 0x18, 0xed, 0x73, 0xe1, 0x34, 0xfc, 0x23, 0x43, 0xc0, 0x5f, 0xc8,
-	0xf2, 0xfa, 0xc7, 0x1a, 0x9c, 0xee, 0xf6, 0xfa, 0x71, 0x23, 0xff, 0x67, 0x19, 0x02, 0x46, 0xa7,
-	0x8e, 0x7b, 0x44, 0x19, 0x21, 0x3f, 0x38, 0x23, 0x7c, 0x65, 0x14, 0x7f, 0xa1, 0xc1, 0xd9, 0x6c,
-	0x0f, 0x1e, 0x37, 0x96, 0x1f, 0xe5, 0x60, 0x84, 0xc9, 0xb1, 0x12, 0xa0, 0x73, 0xd4, 0xc5, 0xd5,
-	0xd3, 0x78, 0x4c, 0xdb, 0xb4, 0xf5, 0x25, 0x18, 0x8f, 0x4f, 0x72, 0x09, 0x5e, 0xc9, 0x00, 0x45,
-	0xda, 0xb4, 0xf5, 0x39, 0x18, 0x8d, 0x5a, 0xbe, 0x02, 0xae, 0x64, 0x14, 0xa2, 0x96, 0xbf, 0x69,
-	0xeb, 0xf3, 0x30, 0x96, 0x4e, 0xb1, 0xa3, 0x54, 0xa0, 0xb9, 0x0e, 0x25, 0x3e, 0x40, 0x0f, 0x42,
-	0x91, 0x11, 0xa6, 0x56, 0xcf, 0x67, 0x7a, 0xca, 0x2f, 0x0e, 0xca, 0xc5, 0x9b, 0x07, 0x21, 0x36,
-	0x8a, 0x54, 0xfe, 0xd2, 0x5f, 0x86, 0xd2, 0xae, 0x13, 0x61, 0xb1, 0x2d, 0x46, 0x87, 0xdc, 0x16,
-	0x45, 0x26, 0xc2, 0xf7, 0x45, 0x19, 0xc6, 0xe4, 0x2d, 0xae, 0x3c, 0xc6, 0x8d, 0x53, 0x9f, 0xb5,
-	0xbf, 0x6b, 0x30, 0x6b, 0x60, 0x2f, 0x68, 0x63, 0x0e, 0xec, 0xd1, 0xc1, 0xf5, 0x2a, 0x14, 0x2d,
-	0x44, 0x71, 0x33, 0x88, 0x0e, 0x38, 0x38, 0x53, 0xab, 0x97, 0x8e, 0xf6, 0x66, 0x5d, 0x4a, 0x18,
-	0xb1, 0x6c, 0x12, 0xaf, 0x7c, 0x0a, 0xaf, 0x4d, 0x98, 0x6e, 0xc7, 0x69, 0x4f, 0x38, 0x3c, 0x32,
-	0xa4, 0xc3, 0x53, 0x1d, 0x41, 0x36, 0xc4, 0x0e, 0xfe, 0xa4, 0x6f, 0xf2, 0xe0, 0xff, 0x65, 0x1e,
-	0x9e, 0xde, 0xc0, 0xb4, 0xb7, 0xfa, 0x42, 0x77, 0x65, 0x81, 0x75, 0x6b, 0xf5, 0xf1, 0x96, 0xfc,
-	0xec, 0x70, 0x21, 0x14, 0x45, 0xd4, 0xc4, 0x6d, 0xec, 0xd3, 0x0e, 0x26, 0x13, 0x9c, 0x7a, 0x83,
-	0x11, 0x37, 0x6d, 0xbd, 0x0e, 0x27, 0x93, 0x5c, 0x6a, 0x45, 0x45, 0xb8, 0xcd, 0x76, 0x58, 0x6f,
-	0x89, 0x01, 0x7d, 0x19, 0x26, 0xb0, 0x6f, 0x77, 0x74, 0x16, 0x38, 0x23, 0x60, 0xdf, 0x56, 0x1a,
-	0x2f, 0xc1, 0x6c, 0x87, 0x43, 0xe9, 0x1b, 0xe5, 0x6c, 0xd3, 0x8a, 0x4d, 0x69, 0xbb, 0x04, 0xb3,
-	0x1e, 0xda, 0x77, 0xbc, 0x96, 0x27, 0xf6, 0x1b, 0x4f, 0x0e, 0x63, 0x3c, 0x38, 0xa6, 0xe5, 0x00,
-	0xdb, 0x71, 0xfd, 0x52, 0x44, 0x31, 0x6b, 0x63, 0xfe, 0x4f, 0x83, 0x0b, 0x47, 0x2f, 0x85, 0x4c,
-	0x17, 0x19, 0x4a, 0xb5, 0x0c, 0xa5, 0x2c, 0x80, 0xd4, 0x1d, 0x88, 0x27, 0x2d, 0x2c, 0x4a, 0xde,
-	0xf1, 0xd5, 0xe5, 0x7e, 0x6b, 0x73, 0x1d, 0x51, 0x74, 0xcd, 0x0d, 0x1a, 0xc6, 0x94, 0x14, 0xbc,
-	0x26, 0xe4, 0xf4, 0xdb, 0x30, 0x2d, 0x51, 0x31, 0xe5, 0x88, 0x3c, 0x93, 0xea, 0x99, 0x31, 0x2f,
-	0x79, 0x98, 0x4a, 0x89, 0x9a, 0xf4, 0xc2, 0x98, 0x6a, 0xa7, 0xbe, 0x6b, 0xf7, 0x34, 0x58, 0xdc,
-	0xc0, 0xc9, 0xd4, 0xb8, 0x2d, 0x2e, 0xe8, 0x71, 0x7e, 0xdf, 0x82, 0x51, 0xee, 0xa3, 0xca, 0x8e,
-	0xd9, 0xc5, 0x78, 0xe2, 0x96, 0xcf, 0x66, 0x4d, 0xa6, 0x5a, 0x26, 0x6c, 0x48, 0x1d, 0x2c, 0xf1,
-	0xa9, 0xfb, 0x3c, 0x0b, 0x5f, 0x75, 0x2f, 0x94, 0x34, 0x56, 0xc5, 0xd7, 0x3e, 0xce, 0x41, 0xb5,
-	0x9f, 0x49, 0x72, 0x05, 0xbe, 0x0f, 0x53, 0x22, 0x2d, 0xc8, 0x6e, 0x82, 0xb2, 0xed, 0xd6, 0x50,
-	0x99, 0x7b, 0xb0, 0x72, 0x51, 0x14, 0x2b, 0xea, 0x0d, 0x9f, 0x46, 0x07, 0x86, 0xb8, 0xd9, 0x28,
-	0x5a, 0xe5, 0x00, 0xf4, 0x5e, 0x26, 0x7d, 0x06, 0xf2, 0x77, 0xf0, 0x81, 0x4c, 0x53, 0xec, 0xa7,
-	0xbe, 0x0d, 0x85, 0x36, 0x72, 0x5b, 0xaa, 0xf8, 0x78, 0xe1, 0x98, 0xc8, 0xc5, 0x96, 0x09, 0x2d,
-	0x2f, 0xe5, 0xae, 0x68, 0xb5, 0xbf, 0x68, 0x70, 0x7e, 0x03, 0xd3, 0xf8, 0xba, 0x33, 0x60, 0xe1,
-	0x5e, 0x84, 0x33, 0x2e, 0xe2, 0x5d, 0x47, 0x1a, 0x39, 0xb8, 0x8d, 0x63, 0xb4, 0x54, 0x32, 0xcd,
-	0x1b, 0xa7, 0x19, 0x83, 0xa1, 0xc6, 0xa5, 0x82, 0x4d, 0x3b, 0x16, 0x0d, 0xa3, 0xc0, 0xc2, 0x84,
-	0xa4, 0x45, 0x73, 0x1d, 0xd1, 0x37, 0xd5, 0x78, 0x47, 0xb4, 0x7b, 0x81, 0xf3, 0xbd, 0x0b, 0xfc,
-	0x03, 0x9e, 0xf6, 0x06, 0xbb, 0x20, 0x17, 0x7a, 0x07, 0x8a, 0x89, 0x25, 0x7e, 0x20, 0x10, 0x63,
-	0x45, 0xb5, 0x0f, 0x60, 0x79, 0x03, 0xd3, 0xeb, 0x5b, 0x6f, 0x0d, 0x00, 0xef, 0x16, 0x80, 0x38,
-	0x15, 0xfc, 0xdd, 0x40, 0x45, 0xd7, 0x71, 0xa7, 0xe6, 0x55, 0x0c, 0xbf, 0x5c, 0x51, 0xf9, 0x8b,
-	0xd4, 0x7e, 0xa6, 0xc1, 0x13, 0x03, 0x26, 0x97, 0x6e, 0xbf, 0x07, 0xb3, 0x09, 0xb5, 0x66, 0xb2,
-	0x38, 0x79, 0xee, 0x2b, 0x18, 0x61, 0xcc, 0x44, 0x5d, 0xa5, 0x4f, 0xed, 0x13, 0x0d, 0x4e, 0x19,
-	0x18, 0x85, 0xa1, 0x7b, 0xc0, 0x93, 0x2b, 0x19, 0xee, 0xa0, 0xc9, 0x6e, 0x2f, 0xe4, 0x1e, 0xbc,
-	0xbd, 0xa0, 0x5f, 0x81, 0x51, 0x9e, 0xfd, 0x89, 0x4c, 0x6c, 0x47, 0xe7, 0x48, 0xc9, 0x5f, 0x9b,
-	0x87, 0xb9, 0x2e, 0x4f, 0xe4, 0xf9, 0xfa, 0xcf, 0x1c, 0x54, 0xd6, 0x6c, 0x7b, 0x07, 0xa3, 0xc8,
-	0xda, 0x5b, 0xa3, 0x34, 0x72, 0x1a, 0x2d, 0xda, 0x59, 0xe2, 0x9f, 0x68, 0x30, 0x4b, 0xf8, 0x98,
-	0x89, 0xe2, 0x41, 0x89, 0xf2, 0xdb, 0x43, 0x25, 0x92, 0xfe, 0xca, 0xeb, 0xdd, 0x74, 0x91, 0x47,
-	0x66, 0x48, 0x17, 0x99, 0x95, 0xb8, 0x8e, 0x6f, 0xe3, 0xfd, 0x64, 0x36, 0x2c, 0x71, 0x0a, 0xdb,
-	0x1f, 0xfa, 0x33, 0xa0, 0x93, 0x3b, 0x4e, 0x68, 0x12, 0x6b, 0x0f, 0x7b, 0xc8, 0x6c, 0x85, 0xb6,
-	0x6a, 0x91, 0x15, 0x8d, 0x19, 0x36, 0xb2, 0xc3, 0x07, 0xde, 0xe6, 0xf4, 0x8a, 0x0b, 0x73, 0x99,
-	0xf3, 0x26, 0x53, 0x53, 0x49, 0xa4, 0xa6, 0x97, 0x93, 0xa9, 0x69, 0x6a, 0xf5, 0xe9, 0x34, 0xda,
-	0x71, 0xcd, 0xb4, 0xc9, 0x2c, 0xc1, 0xf6, 0x2d, 0xc6, 0xca, 0x2b, 0xc1, 0x44, 0x2a, 0x5a, 0x84,
-	0x85, 0x4c, 0x00, 0x24, 0xfa, 0x77, 0x60, 0x51, 0xd4, 0x3c, 0xfd, 0xf0, 0xff, 0x46, 0x3f, 0xf8,
-	0x4b, 0xc7, 0xc6, 0xa9, 0xb6, 0x0c, 0xd5, 0x7e, 0x93, 0x49, 0x73, 0xae, 0x42, 0x65, 0x03, 0xd3,
-	0x7e, 0xb6, 0xa4, 0xd5, 0x6b, 0xdd, 0xea, 0x3f, 0x1e, 0x85, 0x85, 0x4c, 0x69, 0xb9, 0x5f, 0x7f,
-	0xaa, 0xc1, 0xac, 0xd5, 0x22, 0x34, 0xf0, 0x7a, 0x43, 0x69, 0xe8, 0x33, 0xa9, 0x9f, 0xf6, 0xfa,
-	0x3a, 0xd7, 0xdc, 0x13, 0x4b, 0x56, 0x17, 0x99, 0x5b, 0x41, 0x0e, 0x08, 0xc5, 0x29, 0x2b, 0x72,
-	0x0f, 0xc9, 0x8a, 0x1d, 0xae, 0xb9, 0x37, 0xa2, 0xbb, 0xc8, 0x7a, 0x13, 0xc6, 0x3c, 0x14, 0x86,
-	0x8e, 0xdf, 0x2c, 0xe7, 0xf9, 0xd4, 0xdb, 0x0f, 0x3c, 0xf5, 0xb6, 0xd0, 0x27, 0x66, 0x54, 0xda,
-	0x75, 0x1f, 0x16, 0x90, 0x6d, 0x9b, 0xbd, 0xf9, 0x48, 0xb4, 0xc1, 0x44, 0xad, 0xbe, 0x92, 0x0e,
-	0x6c, 0xc5, 0x9c, 0x99, 0x96, 0x78, 0xae, 0x2e, 0x23, 0xdb, 0xce, 0x1c, 0x61, 0xbb, 0x2b, 0x73,
-	0x25, 0x1e, 0xc9, 0xee, 0xe2, 0x7b, 0x39, 0x0b, 0xf1, 0x47, 0x33, 0xdb, 0x4b, 0x30, 0x91, 0x04,
-	0x39, 0x63, 0x92, 0x53, 0xc9, 0x49, 0x4a, 0xc9, 0x3c, 0x70, 0x15, 0x4e, 0xab, 0xbe, 0xf0, 0xba,
-	0x38, 0xe5, 0x13, 0x8d, 0xee, 0x54, 0x2d, 0xa0, 0xf5, 0xd6, 0x02, 0xbf, 0x1b, 0x85, 0xf9, 0x1e,
-	0x69, 0xb9, 0xab, 0x7e, 0x08, 0xb3, 0xa4, 0x15, 0x86, 0x41, 0x44, 0xb1, 0x6d, 0x5a, 0xae, 0xc3,
-	0x4f, 0x07, 0xb1, 0xa9, 0x8c, 0xa1, 0x62, 0xaa, 0x8f, 0xe2, 0xfa, 0x8e, 0xd2, 0xba, 0x2e, 0x94,
-	0xaa, 0x50, 0xee, 0x22, 0xeb, 0x4f, 0xc1, 0x94, 0xd0, 0x1e, 0x5f, 0x49, 0x84, 0xf3, 0x93, 0x82,
-	0xaa, 0x2e, 0x24, 0xb7, 0x61, 0xda, 0xc3, 0x5e, 0x03, 0x47, 0x64, 0xcf, 0x09, 0x45, 0xf0, 0x0d,
-	0x2a, 0xce, 0xd5, 0xd3, 0x5d, 0xfb, 0x72, 0x7d, 0x3b, 0x16, 0x13, 0x1d, 0x6b, 0x2f, 0xf5, 0xcd,
-	0xb2, 0x92, 0xc2, 0x4f, 0xde, 0xe6, 0x4b, 0x46, 0x49, 0x52, 0x32, 0x4a, 0xad, 0x42, 0x0f, 0xbc,
-	0xec, 0xa6, 0xa6, 0xae, 0x20, 0xaa, 0xf7, 0xdd, 0xf2, 0x29, 0xbf, 0x59, 0x15, 0x8c, 0x59, 0x39,
-	0xb4, 0x23, 0xda, 0xde, 0x2d, 0x9f, 0xe7, 0xe4, 0x44, 0x8b, 0xd8, 0x64, 0xc3, 0xe2, 0x6e, 0x55,
-	0x32, 0x66, 0x12, 0x03, 0x3b, 0x8c, 0xae, 0x5f, 0x84, 0x99, 0xc4, 0x05, 0x59, 0xf0, 0x16, 0x39,
-	0x6f, 0xe2, 0xe2, 0x2c, 0x58, 0x37, 0x60, 0x42, 0xdd, 0x5f, 0x38, 0x3e, 0x25, 0x8e, 0xcf, 0xb9,
-	0x74, 0xa4, 0x4a, 0x8e, 0xc4, 0xad, 0x85, 0xa3, 0x32, 0xde, 0xee, 0x7c, 0xe8, 0xdf, 0x81, 0xca,
-	0x2e, 0x72, 0xdc, 0x20, 0xb1, 0x28, 0xa6, 0xe3, 0x5b, 0x11, 0xf6, 0xb0, 0x4f, 0xcb, 0xc0, 0x4b,
-	0xd3, 0xb2, 0xe2, 0x88, 0xb5, 0xc8, 0x71, 0xfd, 0x0a, 0x94, 0x1d, 0xdf, 0xa1, 0x0e, 0x72, 0xcd,
-	0x6e, 0x2d, 0xe5, 0x71, 0x51, 0xd6, 0xca, 0xf1, 0x57, 0xd3, 0x2a, 0xf4, 0x97, 0x61, 0xc1, 0x21,
-	0x66, 0xd3, 0x0d, 0x1a, 0xc8, 0x35, 0x3b, 0xad, 0x1b, 0xec, 0xa3, 0x86, 0x8b, 0xed, 0xf2, 0x04,
-	0x3f, 0x91, 0xcb, 0x0e, 0xd9, 0xe0, 0x1c, 0x71, 0x6d, 0x7b, 0x43, 0x8c, 0x57, 0xd6, 0x61, 0x2e,
-	0x33, 0xe8, 0x8e, 0xb5, 0xd1, 0xde, 0x81, 0x93, 0x5b, 0x0e, 0xa1, 0x32, 0x9a, 0xe3, 0xb3, 0x6b,
-	0x01, 0x4a, 0x9d, 0x7b, 0xb0, 0xb8, 0x7d, 0x14, 0xc3, 0x01, 0x17, 0xe0, 0xcc, 0xce, 0xd4, 0xaf,
-	0x34, 0x38, 0x95, 0x56, 0x2e, 0x37, 0xe1, 0x1b, 0x50, 0x94, 0x01, 0x35, 0xb8, 0x02, 0xed, 0x7a,
-	0x59, 0x90, 0x7a, 0xb6, 0xe5, 0x9b, 0xad, 0x11, 0x2b, 0x19, 0xda, 0xa2, 0xdf, 0x68, 0xb0, 0xb4,
-	0x66, 0xdb, 0x6f, 0x44, 0xa2, 0xb8, 0x61, 0xc7, 0x3b, 0xed, 0x4e, 0x30, 0x17, 0x61, 0x66, 0x37,
-	0x0a, 0x7c, 0x8a, 0x7d, 0xbb, 0xeb, 0x35, 0x6d, 0x5a, 0xd1, 0xd5, 0x8b, 0xda, 0x06, 0x2c, 0x8b,
-	0xc5, 0x32, 0x23, 0xae, 0xc9, 0x54, 0x5b, 0xc7, 0x0a, 0x7c, 0x1f, 0x5b, 0x71, 0x1d, 0x5b, 0x34,
-	0x16, 0x05, 0x5f, 0x6a, 0xc2, 0xf5, 0x98, 0xa9, 0x56, 0x83, 0xe5, 0xfe, 0x66, 0xc9, 0x62, 0xe3,
-	0x15, 0xa8, 0x88, 0x72, 0x24, 0xd3, 0xea, 0x21, 0xd2, 0xe2, 0x22, 0x2c, 0x64, 0x2a, 0x90, 0xfa,
-	0x7f, 0x9d, 0x17, 0x6f, 0x1c, 0x31, 0xca, 0x3c, 0x6d, 0x28, 0xfd, 0x3b, 0x30, 0xc7, 0x6f, 0x6f,
-	0x7b, 0x18, 0x45, 0xb4, 0x81, 0x11, 0x35, 0xef, 0x3a, 0x74, 0xcf, 0xf1, 0xe5, 0x0d, 0xea, 0x4c,
-	0x4f, 0xfb, 0xea, 0xba, 0xfc, 0xc7, 0xc8, 0xb5, 0x91, 0x8f, 0x3e, 0x5f, 0xd2, 0x8c, 0x93, 0x4c,
-	0xfa, 0x35, 0x25, 0x7c, 0x9b, 0xcb, 0xea, 0x4b, 0x30, 0x1e, 0x85, 0x56, 0x8c, 0xb2, 0x6c, 0x47,
-	0x46, 0xa1, 0xa5, 0x00, 0x9e, 0x87, 0x31, 0xfe, 0xaa, 0x19, 0xf7, 0x23, 0x47, 0xd9, 0x27, 0xef,
-	0x3b, 0x8e, 0x44, 0x81, 0x2b, 0x9a, 0x67, 0x53, 0xc9, 0x03, 0x39, 0xab, 0x49, 0x97, 0xf2, 0xc8,
-	0x08, 0x5c, 0x6c, 0x70, 0x61, 0xfd, 0x5d, 0xa8, 0x10, 0x4c, 0xf8, 0x76, 0xe7, 0xfd, 0x25, 0x6c,
-	0x9b, 0x68, 0x97, 0x21, 0xc8, 0xfb, 0x72, 0x85, 0x21, 0xfb, 0x72, 0xf3, 0x52, 0xc7, 0x8e, 0x50,
-	0xb1, 0xc6, 0x34, 0xf0, 0xbe, 0x64, 0x6a, 0x0f, 0x8d, 0x1e, 0xbd, 0x87, 0xc6, 0xb2, 0x22, 0xf6,
-	0x63, 0xf9, 0xe4, 0xd3, 0xbd, 0x2a, 0x72, 0x27, 0xdd, 0x84, 0x29, 0x64, 0x51, 0xa7, 0x8d, 0x4d,
-	0x99, 0xe6, 0xe5, 0x7e, 0x7a, 0xf6, 0xa8, 0x53, 0x22, 0x8d, 0xc9, 0xa4, 0x50, 0x22, 0xb5, 0x0f,
-	0xbd, 0x9d, 0x7e, 0x9f, 0x83, 0x39, 0x71, 0xf1, 0xec, 0xbe, 0xea, 0xde, 0x80, 0x11, 0xde, 0x12,
-	0xd6, 0xf8, 0xfa, 0x5c, 0x1e, 0xbc, 0x3e, 0xd7, 0xf9, 0x0b, 0x13, 0xa5, 0x38, 0x7a, 0xab, 0x85,
-	0x65, 0x1d, 0xc1, 0xc5, 0x07, 0x3d, 0x59, 0xb3, 0x73, 0x34, 0x68, 0x45, 0x56, 0xbc, 0xe9, 0x64,
-	0x84, 0x4c, 0x0a, 0xaa, 0xf4, 0x4f, 0x7f, 0x81, 0x65, 0x67, 0xc6, 0xc1, 0x30, 0x62, 0x5b, 0x3a,
-	0xd1, 0x74, 0x10, 0xbd, 0xc5, 0xb9, 0x78, 0xfc, 0x86, 0x9f, 0xe8, 0x39, 0x64, 0x76, 0x04, 0x0b,
-	0x43, 0x77, 0x04, 0x33, 0x5f, 0xbe, 0xfe, 0xa3, 0xc1, 0xe9, 0x6e, 0xbc, 0xe4, 0x42, 0x3e, 0x24,
-	0xc0, 0x32, 0x2f, 0xf9, 0xb9, 0x87, 0x78, 0xc9, 0xcf, 0xf2, 0x35, 0x9f, 0xe5, 0xeb, 0x3f, 0x34,
-	0x98, 0x7f, 0xb3, 0x15, 0x35, 0xf1, 0xd7, 0x31, 0x3a, 0x6a, 0x15, 0x28, 0xf7, 0x3a, 0x27, 0x13,
-	0xe9, 0x1f, 0x72, 0x30, 0xbf, 0x8d, 0xbf, 0xa6, 0x9e, 0x3f, 0x92, 0x7d, 0x71, 0x0d, 0xca, 0xbd,
-	0x80, 0x1d, 0xaf, 0x31, 0xce, 0xff, 0xdf, 0x64, 0xe0, 0xdd, 0x08, 0x93, 0x3d, 0x75, 0xd5, 0x4a,
-	0x3d, 0x29, 0x3e, 0xa6, 0xff, 0x37, 0x55, 0xe1, 0x6c, 0xb6, 0x15, 0x9d, 0xe0, 0x58, 0x34, 0x30,
-	0xc1, 0xbe, 0xdd, 0xef, 0xed, 0xf3, 0x11, 0x3e, 0xe3, 0x3d, 0x05, 0x53, 0xe9, 0x42, 0x45, 0xd6,
-	0xff, 0x93, 0x51, 0xb2, 0x22, 0xc8, 0x78, 0xb0, 0x29, 0x64, 0x3c, 0xd8, 0x3c, 0x09, 0x93, 0x82,
-	0x2b, 0xfd, 0xb4, 0x22, 0x98, 0xfa, 0xbd, 0xd2, 0x8c, 0xf5, 0xbc, 0xd2, 0x2c, 0xc1, 0x38, 0xe3,
-	0x50, 0x4a, 0x8a, 0x31, 0x83, 0x54, 0x21, 0xda, 0x30, 0xd9, 0x80, 0x49, 0x4c, 0x3f, 0xcc, 0x41,
-	0x79, 0x03, 0x53, 0x46, 0x14, 0x1b, 0x65, 0xf8, 0x75, 0x5f, 0x94, 0x2d, 0x59, 0xfe, 0x37, 0x52,
-	0xd5, 0x02, 0xa2, 0x4a, 0x91, 0xbe, 0x05, 0xd3, 0x9d, 0x61, 0xf1, 0xc8, 0x99, 0xe7, 0x3b, 0xf7,
-	0x5c, 0x9f, 0xfb, 0x70, 0xc7, 0x06, 0xb6, 0x59, 0x27, 0x69, 0xf2, 0xb3, 0xfb, 0xe9, 0x7a, 0xe4,
-	0x88, 0xa7, 0xeb, 0xc2, 0xe0, 0xa7, 0xeb, 0xd1, 0xae, 0xa7, 0xeb, 0xda, 0x1e, 0x9c, 0xc9, 0x40,
-	0x41, 0x6e, 0xa3, 0xef, 0xa6, 0x9f, 0xa3, 0xbf, 0x3d, 0x4c, 0xbd, 0xbd, 0xe6, 0xba, 0x81, 0x85,
-	0x28, 0xb6, 0xe3, 0xa6, 0xb3, 0xd0, 0x71, 0xcd, 0xfd, 0xf4, 0x8b, 0xea, 0x89, 0xcf, 0xbe, 0xa8,
-	0x9e, 0xf8, 0xf2, 0x8b, 0xaa, 0xf6, 0xa3, 0xc3, 0xaa, 0xf6, 0xdb, 0xc3, 0xaa, 0xf6, 0xc9, 0x61,
-	0x55, 0xfb, 0xf4, 0xb0, 0xaa, 0xfd, 0xeb, 0xb0, 0xaa, 0xfd, 0xfb, 0xb0, 0x7a, 0xe2, 0xcb, 0xc3,
-	0xaa, 0x76, 0xef, 0x7e, 0xf5, 0xc4, 0xa7, 0xf7, 0xab, 0x27, 0x3e, 0xbb, 0x5f, 0x3d, 0xf1, 0xce,
-	0xf3, 0xcd, 0xa0, 0x33, 0xab, 0x13, 0x0c, 0xf8, 0x73, 0xf3, 0xd5, 0xe4, 0x77, 0x63, 0x94, 0x97,
-	0x5e, 0xcf, 0xfd, 0x3f, 0x00, 0x00, 0xff, 0xff, 0xc8, 0x7a, 0x70, 0xd6, 0x17, 0x2d, 0x00, 0x00,
+	// 2944 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x3a, 0xcd, 0x6f, 0x1b, 0xc7,
+	0xf5, 0x5e, 0x52, 0x94, 0xc8, 0x27, 0x89, 0x92, 0xd6, 0x96, 0x45, 0x53, 0x11, 0xa5, 0x30, 0x8e,
+	0x63, 0xfb, 0x97, 0x50, 0x3f, 0x2b, 0x6d, 0xe2, 0x24, 0x0d, 0x02, 0x59, 0x76, 0x64, 0xa1, 0x52,
+	0x3e, 0x96, 0x8e, 0x5d, 0x04, 0x08, 0x36, 0xcb, 0xdd, 0x11, 0xb5, 0xf0, 0x72, 0x77, 0xb3, 0x33,
+	0xa4, 0xad, 0x00, 0xfd, 0x40, 0xd3, 0x02, 0xbd, 0x14, 0x35, 0x50, 0x14, 0x08, 0xf2, 0x17, 0xb4,
+	0x40, 0x8b, 0xde, 0x7a, 0xef, 0x2d, 0xc7, 0xa0, 0xa7, 0xa0, 0x2d, 0x90, 0x46, 0xb9, 0xb4, 0xb7,
+	0x9c, 0x7a, 0x2e, 0xe6, 0x6b, 0x3f, 0xc8, 0x21, 0x45, 0xd5, 0xb1, 0x0b, 0xe4, 0xc6, 0x7d, 0xf3,
+	0xde, 0x9b, 0x37, 0xef, 0x6b, 0xde, 0x7b, 0x43, 0x78, 0x99, 0xa0, 0x4e, 0x18, 0x44, 0x96, 0xb7,
+	0x8e, 0x51, 0xd4, 0x43, 0xd1, 0xba, 0x15, 0xba, 0xeb, 0x96, 0xd3, 0x71, 0x7d, 0xfa, 0xed, 0xda,
+	0x68, 0xbd, 0x77, 0x65, 0x3d, 0x42, 0x1f, 0x74, 0x11, 0x26, 0x66, 0x84, 0x70, 0x18, 0xf8, 0x18,
+	0x35, 0xc2, 0x28, 0x20, 0x81, 0xfe, 0x94, 0xa4, 0x6d, 0x70, 0xda, 0x86, 0x15, 0xba, 0x8d, 0x34,
+	0x6d, 0xa3, 0x77, 0xa5, 0xba, 0xda, 0x0e, 0x82, 0xb6, 0x87, 0xd6, 0x19, 0x49, 0xab, 0xbb, 0xbf,
+	0x4e, 0xdc, 0x0e, 0xc2, 0xc4, 0xea, 0x84, 0x9c, 0x4b, 0xb5, 0xd6, 0x8f, 0xe0, 0x74, 0x23, 0x8b,
+	0xb8, 0x81, 0x2f, 0xd6, 0x9f, 0x74, 0x50, 0x88, 0x7c, 0x07, 0xf9, 0xb6, 0x8b, 0xf0, 0x7a, 0x3b,
+	0x68, 0x07, 0x0c, 0xce, 0x7e, 0x09, 0x94, 0x7a, 0x7c, 0x08, 0x2a, 0x3d, 0xf2, 0xbb, 0x1d, 0x4c,
+	0xc5, 0xb6, 0x83, 0x4e, 0x27, 0x66, 0xf3, 0xb4, 0x1a, 0xc7, 0xb7, 0x3a, 0x08, 0x87, 0x96, 0x2d,
+	0xce, 0x54, 0xbd, 0xa0, 0x46, 0x23, 0x16, 0xbe, 0x6b, 0x7e, 0xd0, 0x45, 0x5d, 0x89, 0x77, 0x3e,
+	0x83, 0xc7, 0x77, 0xa2, 0x88, 0x1d, 0x84, 0xb1, 0xd5, 0x46, 0xca, 0x4d, 0x7b, 0x28, 0xc2, 0xae,
+	0x0a, 0x2d, 0xbb, 0xe9, 0xbd, 0x20, 0xba, 0xbb, 0xef, 0x05, 0xf7, 0x06, 0xf1, 0x2e, 0x65, 0xf0,
+	0x22, 0x14, 0x7a, 0xae, 0xcd, 0x54, 0x35, 0x88, 0xfa, 0x4c, 0x06, 0x35, 0x3e, 0xe5, 0x20, 0xe2,
+	0xb3, 0x2a, 0x07, 0xb0, 0xbd, 0x2e, 0x26, 0x28, 0x1a, 0x25, 0x41, 0x0a, 0x5b, 0xad, 0xf0, 0xcb,
+	0xa3, 0x51, 0xf9, 0x0e, 0x03, 0xd2, 0xaa, 0x70, 0xa9, 0xf2, 0x47, 0x49, 0x7b, 0xe0, 0x62, 0x12,
+	0x44, 0x87, 0x83, 0xd2, 0x36, 0x54, 0xd8, 0x23, 0x74, 0xf1, 0xff, 0x2a, 0xfc, 0x91, 0x6a, 0x7e,
+	0x49, 0x45, 0x11, 0x52, 0x3b, 0x63, 0x82, 0x7c, 0xbe, 0x87, 0x38, 0xaa, 0xd9, 0x41, 0xc4, 0x72,
+	0x2c, 0x62, 0x09, 0xd2, 0xe7, 0xc7, 0x20, 0x45, 0xf7, 0x91, 0xdd, 0xa5, 0x3b, 0xe3, 0x13, 0x10,
+	0xc5, 0x07, 0x94, 0x44, 0xaf, 0x8d, 0x41, 0x24, 0x9d, 0xce, 0xec, 0x74, 0x89, 0xd5, 0xf2, 0x90,
+	0x89, 0x89, 0x45, 0x46, 0xea, 0xb1, 0x8f, 0x01, 0x35, 0x92, 0xd8, 0xb0, 0xfe, 0x91, 0x06, 0x55,
+	0x03, 0xb5, 0xba, 0xae, 0xe7, 0xec, 0x71, 0x76, 0x4d, 0xca, 0xcd, 0xe0, 0x69, 0x44, 0x7f, 0x02,
+	0x4a, 0xb1, 0x8c, 0x15, 0x6d, 0x4d, 0xbb, 0x58, 0x32, 0x12, 0x80, 0xbe, 0x0d, 0xa5, 0xf8, 0xd8,
+	0x95, 0xdc, 0x9a, 0x76, 0x71, 0x7a, 0xe3, 0x52, 0x2c, 0x00, 0x4b, 0x31, 0xc2, 0xcd, 0x7a, 0x57,
+	0x1a, 0x77, 0x84, 0xd4, 0x37, 0x24, 0x81, 0x91, 0xd0, 0xd6, 0x57, 0x60, 0x59, 0x29, 0x04, 0xcf,
+	0x61, 0xf5, 0x9f, 0x69, 0xb0, 0x7c, 0x1d, 0x61, 0x3b, 0x72, 0x5b, 0xe8, 0x7f, 0x28, 0xe5, 0x9f,
+	0x72, 0xf0, 0x84, 0x5a, 0x0c, 0x2e, 0xa7, 0x7e, 0x0e, 0x8a, 0xf8, 0xc0, 0x8a, 0x1c, 0xd3, 0x75,
+	0x84, 0x18, 0x53, 0xec, 0x7b, 0xc7, 0xd1, 0x9f, 0x84, 0x19, 0xe1, 0xfb, 0xa6, 0xe5, 0x38, 0x11,
+	0x93, 0xa3, 0x64, 0x4c, 0x0b, 0xd8, 0xa6, 0xe3, 0x44, 0xfa, 0x01, 0x9c, 0xb6, 0x2d, 0xfb, 0x00,
+	0x65, 0xed, 0x5a, 0xc9, 0x33, 0x89, 0xaf, 0x36, 0x54, 0x19, 0x3c, 0x65, 0xd8, 0xb4, 0xf4, 0x19,
+	0xe1, 0x16, 0x18, 0xd3, 0x34, 0x48, 0xf7, 0xe1, 0x2c, 0xf5, 0xee, 0x96, 0x85, 0xfb, 0x37, 0x9b,
+	0x78, 0xc8, 0xcd, 0xce, 0x48, 0xbe, 0x69, 0x68, 0xfd, 0x2f, 0x1a, 0x54, 0xa5, 0xe2, 0x6e, 0xf2,
+	0x13, 0xdf, 0x0c, 0x30, 0x91, 0xe6, 0xa3, 0xba, 0x09, 0x30, 0x61, 0x8a, 0x41, 0x18, 0x0b, 0xd5,
+	0x4d, 0x53, 0xd8, 0x26, 0x07, 0x65, 0x34, 0x4b, 0x55, 0x57, 0x48, 0x34, 0x9b, 0x31, 0x7e, 0xbe,
+	0xdf, 0xf8, 0x3f, 0x00, 0x3d, 0x8e, 0x97, 0xc4, 0x0b, 0x26, 0x4e, 0xea, 0x05, 0x0b, 0xf7, 0xfa,
+	0x41, 0xf5, 0x07, 0xb9, 0xc4, 0x29, 0x33, 0x87, 0x12, 0xce, 0xf0, 0x14, 0xcc, 0x32, 0x11, 0xb1,
+	0xe9, 0x77, 0x3b, 0x2d, 0x14, 0xb1, 0x63, 0x15, 0x8c, 0x19, 0x0e, 0x7c, 0x83, 0xc1, 0xf4, 0x65,
+	0x28, 0xc9, 0x73, 0xe1, 0x4a, 0x6e, 0x2d, 0x7f, 0xb1, 0x60, 0x14, 0xc5, 0xc1, 0xb0, 0xfe, 0x1e,
+	0xcc, 0xc5, 0x07, 0x31, 0x99, 0x15, 0x85, 0x33, 0x7c, 0x47, 0x69, 0x9f, 0xe4, 0x7e, 0xec, 0x5d,
+	0x69, 0xbc, 0x21, 0x3f, 0xb6, 0x28, 0xdd, 0x8e, 0xbf, 0x1f, 0x18, 0x65, 0x3f, 0x03, 0xd3, 0x5f,
+	0x80, 0x25, 0xbe, 0xb7, 0x1d, 0xf8, 0x24, 0x0a, 0x3c, 0x0f, 0x45, 0xcc, 0x0b, 0xba, 0x98, 0xe9,
+	0xa7, 0x64, 0x2c, 0xb2, 0xe5, 0xad, 0x78, 0xb5, 0xc9, 0x16, 0xf5, 0x0a, 0x4c, 0x49, 0x4b, 0x15,
+	0xb8, 0x93, 0x8b, 0xcf, 0x7a, 0x03, 0x16, 0xb6, 0xbc, 0x00, 0xa3, 0x26, 0xa5, 0x93, 0xd6, 0xed,
+	0x0f, 0x8a, 0xc4, 0x74, 0xf5, 0x33, 0xa0, 0xa7, 0xf1, 0x45, 0xb4, 0x3f, 0x0b, 0x73, 0xdb, 0x88,
+	0x8c, 0xcb, 0xe3, 0x7d, 0x98, 0x4f, 0xb0, 0x85, 0xea, 0x77, 0x01, 0x04, 0xba, 0xbf, 0x1f, 0x30,
+	0x82, 0xe9, 0x8d, 0xe7, 0xc6, 0xf1, 0x69, 0xc6, 0x86, 0x29, 0x8b, 0x9b, 0x85, 0xfe, 0xac, 0xff,
+	0x32, 0x07, 0x4b, 0xbb, 0x2e, 0x26, 0xc2, 0xc8, 0xb7, 0x68, 0xf6, 0x3c, 0x5e, 0x30, 0xfd, 0x75,
+	0x28, 0xda, 0x16, 0x41, 0xed, 0x20, 0x3a, 0x64, 0x2e, 0x5b, 0xde, 0xb8, 0xac, 0x14, 0x81, 0xdd,
+	0x9d, 0x74, 0x73, 0xca, 0x78, 0x4b, 0x50, 0x18, 0x31, 0xad, 0x7e, 0x13, 0x80, 0x95, 0x34, 0x91,
+	0xe5, 0xb7, 0xa5, 0x03, 0x5c, 0x52, 0x72, 0x12, 0xc9, 0x44, 0xf2, 0x32, 0x28, 0x81, 0x51, 0x22,
+	0xf2, 0xa7, 0xbe, 0x02, 0xd0, 0xb2, 0x88, 0x7d, 0x60, 0x62, 0xf7, 0x43, 0x1e, 0xea, 0x05, 0xa3,
+	0xc4, 0x20, 0x4d, 0xf7, 0x43, 0xa4, 0x5f, 0x80, 0x39, 0x1f, 0xdd, 0x27, 0x66, 0x68, 0xb5, 0x91,
+	0x49, 0x82, 0xbb, 0xc8, 0x67, 0xf6, 0x9d, 0x31, 0x66, 0x29, 0xf8, 0x2d, 0xab, 0x8d, 0x6e, 0x51,
+	0x20, 0xbd, 0x32, 0x2a, 0x83, 0xfa, 0x10, 0xaa, 0x7f, 0x0d, 0x0a, 0xec, 0x7a, 0xa9, 0x68, 0x6b,
+	0xf9, 0xa1, 0x82, 0xf6, 0x15, 0x9e, 0x5c, 0x5a, 0x4e, 0xa7, 0x92, 0x22, 0xa7, 0x92, 0xe2, 0xe3,
+	0x1c, 0x4c, 0x50, 0x3a, 0x9a, 0x3d, 0x92, 0x28, 0x89, 0x13, 0xef, 0x74, 0x0c, 0xdb, 0x71, 0xf4,
+	0x55, 0x98, 0x8e, 0x93, 0x80, 0x48, 0x20, 0x25, 0x03, 0x24, 0x68, 0xc7, 0xd1, 0x17, 0x61, 0x32,
+	0xea, 0xfa, 0x74, 0x8d, 0x27, 0x90, 0x42, 0xd4, 0xf5, 0x77, 0x1c, 0x7d, 0x09, 0xa6, 0x98, 0xea,
+	0x5d, 0x87, 0x69, 0x2b, 0x6f, 0x4c, 0xd2, 0xcf, 0x1d, 0x47, 0xdf, 0x02, 0xa6, 0x56, 0x93, 0x1c,
+	0x86, 0x88, 0x29, 0xa9, 0xbc, 0x71, 0xe1, 0x78, 0xe3, 0xde, 0x3a, 0x0c, 0x91, 0x51, 0x24, 0xe2,
+	0x97, 0xfe, 0x2a, 0x94, 0xf6, 0xdd, 0x08, 0x99, 0xb4, 0xca, 0xae, 0x4c, 0x32, 0xbb, 0x56, 0x1b,
+	0xbc, 0xc2, 0x6e, 0xc8, 0x0a, 0xbb, 0x71, 0x4b, 0x96, 0xe0, 0xd7, 0x26, 0x1e, 0x7c, 0xb1, 0xaa,
+	0x19, 0x45, 0x4a, 0x42, 0x81, 0x34, 0x0c, 0x45, 0x95, 0x5a, 0x99, 0x62, 0xc2, 0xc9, 0xcf, 0xfa,
+	0x5f, 0x35, 0x58, 0x30, 0x50, 0x27, 0xe8, 0x21, 0xa6, 0xd8, 0xc7, 0xe7, 0xaa, 0x29, 0x7d, 0xe5,
+	0x33, 0xfa, 0xda, 0x81, 0xb9, 0x9e, 0x8b, 0xdd, 0x96, 0xeb, 0xb9, 0xe4, 0x90, 0x1f, 0x78, 0x62,
+	0xcc, 0x03, 0x97, 0x13, 0x42, 0xba, 0x44, 0x73, 0x46, 0xfa, 0x6c, 0x22, 0x67, 0xfc, 0x22, 0x0f,
+	0xcf, 0x6c, 0x23, 0x32, 0x98, 0xb8, 0xad, 0x7b, 0xc2, 0x4d, 0x6f, 0x6f, 0x3c, 0xde, 0x6a, 0x41,
+	0x3f, 0x0f, 0x65, 0x4c, 0xac, 0x88, 0x98, 0xa8, 0x87, 0x7c, 0x92, 0xe8, 0x64, 0x86, 0x41, 0x6f,
+	0x50, 0xe0, 0x8e, 0xa3, 0x37, 0xe0, 0x74, 0x1a, 0x4b, 0x5a, 0x94, 0xbb, 0xdb, 0x42, 0x82, 0x7a,
+	0x9b, 0x2f, 0xe8, 0x6b, 0x30, 0x83, 0x7c, 0x27, 0xe1, 0x59, 0x60, 0x88, 0x80, 0x7c, 0x47, 0x72,
+	0xbc, 0x0c, 0x0b, 0x09, 0x86, 0xe4, 0x37, 0xc9, 0xd0, 0xe6, 0x24, 0x9a, 0xe4, 0x76, 0x19, 0x16,
+	0x3a, 0xd6, 0x7d, 0xb7, 0xd3, 0xed, 0xf0, 0x78, 0x63, 0x89, 0x61, 0x8a, 0x39, 0xc7, 0x9c, 0x58,
+	0xa0, 0x11, 0x37, 0x2c, 0x3d, 0x14, 0x55, 0x81, 0xf9, 0x6f, 0x0d, 0x2e, 0x1e, 0x6f, 0x0a, 0x91,
+	0x2e, 0x14, 0x4c, 0x35, 0x05, 0x53, 0xea, 0x40, 0xb2, 0x7c, 0x62, 0x09, 0x0b, 0xf1, 0xdb, 0x72,
+	0x7a, 0x63, 0x6d, 0x98, 0x6d, 0xae, 0x5b, 0xc4, 0xba, 0xe6, 0x05, 0x2d, 0xa3, 0x2c, 0x08, 0xaf,
+	0x71, 0x3a, 0xfd, 0x0e, 0xcc, 0x09, 0xad, 0x98, 0x62, 0x45, 0x24, 0xd5, 0xc6, 0x71, 0x49, 0x55,
+	0x68, 0x4d, 0x9c, 0xc2, 0x28, 0xf7, 0x32, 0xdf, 0xf5, 0x07, 0x1a, 0xac, 0x6c, 0x23, 0x62, 0x24,
+	0x4d, 0xc8, 0x1e, 0x6f, 0x40, 0xe2, 0xdb, 0x62, 0x17, 0x26, 0xd9, 0x19, 0x65, 0x76, 0x54, 0xdf,
+	0xe3, 0xa9, 0x2e, 0x86, 0xee, 0x9a, 0xe2, 0xc7, 0x74, 0x61, 0x08, 0x1e, 0x34, 0xf1, 0xc9, 0x7e,
+	0x85, 0xba, 0xaf, 0x2c, 0x29, 0x05, 0x8c, 0x16, 0x00, 0xf5, 0x4f, 0x72, 0x50, 0x1b, 0x26, 0x92,
+	0xb0, 0xc0, 0x0f, 0xa1, 0xcc, 0xd3, 0x82, 0xe8, 0x96, 0xa4, 0x6c, 0xb7, 0xc7, 0xca, 0xdc, 0xa3,
+	0x99, 0xf3, 0xfb, 0x54, 0x42, 0x6f, 0xf8, 0x24, 0x3a, 0x34, 0x78, 0x51, 0x24, 0x61, 0xd5, 0x43,
+	0xd0, 0x07, 0x91, 0xf4, 0x79, 0xc8, 0xdf, 0x45, 0x87, 0x22, 0x4d, 0xd1, 0x9f, 0xfa, 0x1e, 0x14,
+	0x7a, 0x96, 0xd7, 0x45, 0x22, 0x24, 0x5f, 0x3c, 0xa1, 0xe6, 0x62, 0xc9, 0x38, 0x97, 0x97, 0x73,
+	0x57, 0xb5, 0xfa, 0x9f, 0x35, 0xb8, 0xb0, 0x8d, 0x48, 0x5c, 0x29, 0x8d, 0x30, 0xdc, 0x4b, 0x70,
+	0xce, 0xb3, 0xd8, 0x54, 0x85, 0x44, 0x2e, 0xea, 0xa1, 0x58, 0x5b, 0x32, 0x99, 0xe6, 0x8d, 0xb3,
+	0x14, 0xc1, 0x90, 0xeb, 0x82, 0xc1, 0x8e, 0x13, 0x93, 0x86, 0x51, 0x60, 0x23, 0x8c, 0xb3, 0xa4,
+	0xb9, 0x84, 0xf4, 0x2d, 0xb9, 0x9e, 0x90, 0xf6, 0x1b, 0x38, 0x3f, 0x68, 0xe0, 0x1f, 0xb1, 0xb4,
+	0x37, 0xfa, 0x08, 0xc2, 0xd0, 0x4d, 0x28, 0xa6, 0x4c, 0xfc, 0x50, 0x4a, 0x8c, 0x19, 0xd5, 0x3f,
+	0x84, 0xb5, 0x6d, 0x44, 0xae, 0xef, 0xbe, 0x3d, 0x42, 0x79, 0xb7, 0x45, 0x01, 0x43, 0x8b, 0x31,
+	0xe9, 0x5d, 0x27, 0xdd, 0x9a, 0x26, 0x7b, 0x5e, 0x97, 0x11, 0xf1, 0x0b, 0xd7, 0x7f, 0xae, 0xc1,
+	0x93, 0x23, 0x36, 0x17, 0xc7, 0x7e, 0x1f, 0x16, 0x52, 0x6c, 0xcd, 0x74, 0x71, 0xf2, 0xfc, 0x7f,
+	0x21, 0x84, 0x31, 0x1f, 0x65, 0x01, 0xb8, 0xfe, 0xa9, 0x06, 0x67, 0x0c, 0x64, 0x85, 0xa1, 0x77,
+	0xc8, 0x92, 0x2b, 0x1e, 0xef, 0xa2, 0x51, 0x77, 0x26, 0xb9, 0x87, 0xef, 0x4c, 0xf4, 0xab, 0x30,
+	0xc9, 0xb2, 0x3f, 0x16, 0x89, 0xed, 0xf8, 0x1c, 0x29, 0xf0, 0xeb, 0x4b, 0xb0, 0xd8, 0x77, 0x12,
+	0x71, 0xbf, 0xfe, 0x3d, 0x07, 0xd5, 0x4d, 0xc7, 0x69, 0x22, 0x2b, 0xb2, 0x0f, 0x36, 0x09, 0x89,
+	0xdc, 0x56, 0x97, 0x24, 0x26, 0xfe, 0xa9, 0x06, 0x0b, 0x98, 0xad, 0x99, 0x56, 0xbc, 0x28, 0xb4,
+	0xfc, 0xce, 0x58, 0x89, 0x64, 0x38, 0xf3, 0x46, 0x3f, 0x9c, 0xe7, 0x91, 0x79, 0xdc, 0x07, 0xa6,
+	0xe5, 0xad, 0xeb, 0x3b, 0xe8, 0x7e, 0x3a, 0x1b, 0x96, 0x18, 0x84, 0xc6, 0x87, 0xfe, 0x2c, 0xe8,
+	0xf8, 0xae, 0x1b, 0x9a, 0xd8, 0x3e, 0x40, 0x1d, 0xcb, 0xec, 0x86, 0x8e, 0xec, 0xae, 0x8b, 0xc6,
+	0x3c, 0x5d, 0x69, 0xb2, 0x85, 0x77, 0x18, 0xbc, 0xea, 0xc1, 0xa2, 0x72, 0xdf, 0x74, 0x6a, 0x2a,
+	0xf1, 0xd4, 0xf4, 0x6a, 0x3a, 0x35, 0x95, 0x37, 0x9e, 0xc9, 0x6a, 0x3b, 0xae, 0x99, 0x76, 0xa8,
+	0x24, 0xc8, 0xb9, 0x4d, 0x51, 0x59, 0x25, 0x98, 0x4a, 0x45, 0x2b, 0xb0, 0xac, 0x54, 0x80, 0xd0,
+	0xfe, 0x5d, 0x58, 0xe1, 0x35, 0xcf, 0x30, 0xfd, 0xff, 0xdf, 0x30, 0xf5, 0x97, 0x4e, 0xac, 0xa7,
+	0xfa, 0x1a, 0xd4, 0x86, 0x6d, 0x26, 0xc4, 0x79, 0x05, 0xaa, 0xb4, 0xe5, 0x1a, 0x22, 0x4b, 0x96,
+	0xbd, 0xd6, 0xcf, 0xfe, 0x93, 0x49, 0x58, 0x56, 0x52, 0x8b, 0x78, 0xfd, 0x48, 0x83, 0x05, 0xbb,
+	0x8b, 0x49, 0xd0, 0x19, 0x74, 0xa5, 0xb1, 0xef, 0xa4, 0x61, 0xdc, 0x1b, 0x5b, 0x8c, 0xf3, 0x80,
+	0x2f, 0xd9, 0x7d, 0x60, 0x26, 0x05, 0x3e, 0xc4, 0x04, 0x65, 0xa4, 0xc8, 0x7d, 0x43, 0x52, 0x34,
+	0x19, 0xe7, 0x41, 0x8f, 0xee, 0x03, 0xeb, 0x6d, 0x98, 0xea, 0x58, 0x61, 0xe8, 0xfa, 0xed, 0x4a,
+	0x9e, 0x6d, 0xbd, 0xf7, 0xd0, 0x5b, 0xef, 0x71, 0x7e, 0x7c, 0x47, 0xc9, 0x5d, 0xf7, 0x61, 0xd9,
+	0x72, 0x1c, 0x73, 0x30, 0x1f, 0xf1, 0x0e, 0x9a, 0xd7, 0xea, 0xeb, 0x59, 0xc7, 0x96, 0xc8, 0xca,
+	0xb4, 0xc4, 0x72, 0x75, 0xc5, 0x72, 0x1c, 0xe5, 0x0a, 0x8d, 0x2e, 0xa5, 0x25, 0x1e, 0x49, 0x74,
+	0xb1, 0x58, 0x56, 0x69, 0xfc, 0xd1, 0xec, 0xf6, 0x32, 0xcc, 0xa4, 0x95, 0xac, 0xd8, 0xe4, 0x4c,
+	0x7a, 0x93, 0x52, 0x3a, 0x0f, 0xbc, 0x02, 0x67, 0xe5, 0x48, 0x69, 0x8b, 0xdf, 0xf2, 0xa9, 0x19,
+	0x59, 0xa6, 0x16, 0xd0, 0x06, 0x6b, 0x81, 0xdf, 0x4d, 0xc2, 0xd2, 0x00, 0xb5, 0x88, 0xaa, 0x1f,
+	0xc3, 0x02, 0xee, 0x86, 0x61, 0x10, 0x11, 0xe4, 0x98, 0xb6, 0xe7, 0xb2, 0xdb, 0x81, 0x07, 0x95,
+	0x31, 0x96, 0x4f, 0x0d, 0x61, 0xdc, 0x68, 0x4a, 0xae, 0x5b, 0x9c, 0xa9, 0x74, 0xe5, 0x3e, 0xb0,
+	0xfe, 0x34, 0x94, 0x39, 0xf7, 0xb8, 0x25, 0xe1, 0x87, 0x9f, 0xe5, 0x50, 0xd9, 0x90, 0xdc, 0x81,
+	0xb9, 0x0e, 0xea, 0xb4, 0x50, 0x84, 0x0f, 0xdc, 0x90, 0x3b, 0xdf, 0xa8, 0xe2, 0x5c, 0x3e, 0x4d,
+	0xf4, 0xae, 0x34, 0xf6, 0x62, 0x32, 0x3e, 0xec, 0xea, 0x64, 0xbe, 0x69, 0x56, 0x92, 0xfa, 0x13,
+	0xdd, 0x7c, 0xc9, 0x28, 0x09, 0x88, 0xa2, 0xd4, 0x2a, 0x0c, 0xa8, 0x97, 0x76, 0x6a, 0xb2, 0x05,
+	0x91, 0x63, 0xb3, 0xae, 0x4f, 0x58, 0x67, 0x55, 0x30, 0x16, 0xc4, 0x52, 0x93, 0x4f, 0xcc, 0xba,
+	0x3e, 0xcb, 0xc9, 0xa9, 0xe9, 0x92, 0x49, 0x97, 0x79, 0x6f, 0x55, 0x32, 0xe6, 0x53, 0x0b, 0x4d,
+	0x0a, 0xd7, 0x2f, 0xc1, 0x7c, 0xaa, 0x41, 0xe6, 0xb8, 0x45, 0x86, 0x9b, 0x6a, 0x9c, 0x39, 0xea,
+	0x36, 0xcc, 0xc8, 0xfe, 0x85, 0xe9, 0xa7, 0xc4, 0xf4, 0x73, 0x3e, 0xeb, 0xa9, 0x02, 0x23, 0xd5,
+	0xb5, 0x30, 0xad, 0x4c, 0xf7, 0x92, 0x0f, 0xfd, 0x7b, 0x50, 0xdd, 0xb7, 0x5c, 0x2f, 0x48, 0x19,
+	0xc5, 0x74, 0x7d, 0x3b, 0x42, 0x1d, 0xe4, 0x93, 0x0a, 0xb0, 0xd2, 0xb4, 0x22, 0x31, 0x62, 0x2e,
+	0x62, 0x5d, 0xbf, 0x0a, 0x15, 0xd7, 0x77, 0x89, 0x6b, 0x79, 0x66, 0x3f, 0x97, 0xca, 0x34, 0x2f,
+	0x6b, 0xc5, 0xfa, 0xeb, 0x59, 0x16, 0xfa, 0xab, 0xb0, 0xec, 0x62, 0xb3, 0xed, 0x05, 0x2d, 0xcb,
+	0x33, 0x93, 0xd1, 0x0d, 0xf2, 0xad, 0x96, 0x87, 0x9c, 0xca, 0x0c, 0xbb, 0x91, 0x2b, 0x2e, 0xde,
+	0x66, 0x18, 0x71, 0x6d, 0x7b, 0x83, 0xaf, 0x57, 0xb7, 0x60, 0x51, 0xe9, 0x74, 0x27, 0x0a, 0xb4,
+	0x77, 0xe1, 0xf4, 0xae, 0x8b, 0x89, 0xf0, 0xe6, 0xf8, 0xee, 0x5a, 0x86, 0x52, 0xd2, 0x07, 0xf3,
+	0xee, 0xa3, 0x18, 0x8e, 0x68, 0x80, 0x95, 0x93, 0xa9, 0x5f, 0x69, 0x70, 0x26, 0xcb, 0x5c, 0x04,
+	0xe1, 0x9b, 0x50, 0x14, 0x0e, 0x35, 0xba, 0x02, 0xed, 0x1b, 0x4a, 0x0a, 0x3e, 0x7b, 0xe2, 0x4d,
+	0xca, 0x88, 0x99, 0x8c, 0x2d, 0xd1, 0x6f, 0x34, 0x58, 0xdd, 0x74, 0x9c, 0x37, 0x23, 0x5e, 0xdc,
+	0xd0, 0xeb, 0x9d, 0xf4, 0x27, 0x98, 0x4b, 0x30, 0xbf, 0x1f, 0x05, 0x3e, 0x41, 0xbe, 0xd3, 0x37,
+	0x88, 0x9f, 0x93, 0x70, 0x39, 0x8c, 0xdf, 0x86, 0x35, 0x6e, 0x2c, 0x33, 0x62, 0x9c, 0x4c, 0x19,
+	0x3a, 0x76, 0xe0, 0xfb, 0xc8, 0x8e, 0xeb, 0xd8, 0xa2, 0xb1, 0xc2, 0xf1, 0x32, 0x1b, 0x6e, 0xc5,
+	0x48, 0xf5, 0x3a, 0xac, 0x0d, 0x17, 0x4b, 0x14, 0x1b, 0xaf, 0x41, 0x95, 0x97, 0x23, 0x4a, 0xa9,
+	0xc7, 0x48, 0x8b, 0xec, 0x6d, 0x49, 0xc1, 0x40, 0xf0, 0xff, 0x75, 0x1e, 0xce, 0xa5, 0xac, 0x25,
+	0xd2, 0x88, 0xe4, 0xdf, 0x84, 0x45, 0xd6, 0xbd, 0x1d, 0x20, 0x2b, 0x22, 0x2d, 0x64, 0x11, 0xf3,
+	0x9e, 0x4b, 0x0e, 0x5c, 0x5f, 0x74, 0x50, 0xe7, 0x06, 0xc6, 0x57, 0xd7, 0xc5, 0x8b, 0xf8, 0xb5,
+	0x89, 0x8f, 0xbf, 0x58, 0xd5, 0x8c, 0xd3, 0x94, 0xfa, 0xa6, 0x24, 0xbe, 0xc3, 0x68, 0xf5, 0x55,
+	0x98, 0x8e, 0x42, 0x3b, 0xd6, 0xb2, 0x18, 0x47, 0x46, 0xa1, 0x2d, 0x15, 0xbc, 0x04, 0x53, 0xec,
+	0x41, 0x24, 0x9e, 0x47, 0x4e, 0xd2, 0x4f, 0x36, 0x77, 0x9c, 0x88, 0x02, 0x8f, 0x0f, 0xcf, 0xca,
+	0xe9, 0x0b, 0x59, 0x35, 0xa4, 0xcb, 0x9c, 0xc8, 0x08, 0x3c, 0x64, 0x30, 0x62, 0xfd, 0x3d, 0xa8,
+	0x62, 0x84, 0x59, 0xb8, 0xb3, 0xf9, 0x12, 0x72, 0x4c, 0x6b, 0x9f, 0x6a, 0x90, 0xcd, 0xe5, 0x0a,
+	0x63, 0xce, 0xe5, 0x96, 0x04, 0x8f, 0x26, 0x67, 0xb1, 0x49, 0x39, 0xb0, 0xb9, 0x64, 0x26, 0x86,
+	0x26, 0x8f, 0x8f, 0xa1, 0x29, 0x95, 0xc7, 0x7e, 0xa2, 0x41, 0x55, 0x65, 0x15, 0x11, 0x49, 0xb7,
+	0xa0, 0x6c, 0xd9, 0xc4, 0xed, 0x21, 0x53, 0xa4, 0x79, 0x11, 0x4f, 0xcf, 0x1d, 0x77, 0x4b, 0x64,
+	0x75, 0x32, 0xcb, 0x99, 0x08, 0xee, 0x63, 0x87, 0xd3, 0x1f, 0x72, 0xb0, 0xc8, 0x1b, 0xcf, 0xfe,
+	0x56, 0xf7, 0x06, 0x4c, 0xb0, 0x91, 0xb0, 0xc6, 0xec, 0x73, 0x65, 0xb4, 0x7d, 0xae, 0x23, 0xcb,
+	0xd9, 0x45, 0x84, 0xa0, 0xe8, 0xed, 0x2e, 0x12, 0x75, 0x04, 0x23, 0x1f, 0xf5, 0xda, 0x45, 0xef,
+	0xd1, 0xa0, 0x1b, 0xd9, 0x71, 0xd0, 0x09, 0x0f, 0x99, 0xe5, 0x50, 0x71, 0x3e, 0xfd, 0x45, 0x9a,
+	0x9d, 0x29, 0x06, 0xd5, 0x11, 0x0d, 0xe9, 0xd4, 0xd0, 0x81, 0xcf, 0x16, 0x17, 0xe3, 0xf5, 0x1b,
+	0x7e, 0x6a, 0xe6, 0xa0, 0x9c, 0x08, 0x16, 0xc6, 0x9e, 0x08, 0x4e, 0xaa, 0xf4, 0xf5, 0x2f, 0x0d,
+	0xce, 0xf6, 0xeb, 0x4b, 0x18, 0xf2, 0x1b, 0x52, 0x98, 0xb2, 0xc9, 0xcf, 0x7d, 0x83, 0x4d, 0xbe,
+	0xea, 0xac, 0x79, 0xd5, 0x59, 0xff, 0xa6, 0xc1, 0xd2, 0x5b, 0xdd, 0xa8, 0x8d, 0xbe, 0x8d, 0xde,
+	0x51, 0xaf, 0x42, 0x65, 0xf0, 0x70, 0x22, 0x91, 0xfe, 0x31, 0x07, 0x4b, 0x7b, 0xe8, 0x5b, 0x7a,
+	0xf2, 0x47, 0x12, 0x17, 0xd7, 0xa0, 0x32, 0xa8, 0xb0, 0x93, 0x0d, 0xc6, 0xd9, 0x5f, 0x23, 0x0c,
+	0xb4, 0x1f, 0x21, 0x7c, 0x20, 0x5b, 0xad, 0xcc, 0x03, 0xe5, 0x63, 0xfa, 0x6b, 0x44, 0x0d, 0x9e,
+	0x50, 0x4b, 0x91, 0x38, 0xc7, 0x8a, 0x81, 0x30, 0xf2, 0x9d, 0xbe, 0x50, 0xc3, 0xa9, 0x9b, 0xfc,
+	0x51, 0x3d, 0xe3, 0x3d, 0x0d, 0xe5, 0x6c, 0xa1, 0x22, 0xea, 0xff, 0xd9, 0x28, 0x5d, 0x11, 0x28,
+	0x1e, 0x6c, 0x0a, 0x8a, 0x07, 0x9b, 0xa7, 0x60, 0x96, 0x63, 0x65, 0x9f, 0x56, 0x38, 0xd2, 0xb0,
+	0x57, 0x9a, 0xa9, 0x81, 0x57, 0x9a, 0x55, 0x98, 0xa6, 0x18, 0x92, 0x49, 0x31, 0x46, 0x10, 0x2c,
+	0xf8, 0x18, 0x46, 0xad, 0x30, 0xa1, 0xd3, 0xdf, 0xe7, 0xa0, 0xb2, 0x8d, 0x08, 0x05, 0xf2, 0x40,
+	0x19, 0xdf, 0xee, 0x2b, 0x62, 0x24, 0xcb, 0xfe, 0x26, 0x27, 0x47, 0x40, 0x44, 0x32, 0xd2, 0x77,
+	0x61, 0x2e, 0x59, 0xe6, 0x8f, 0x9c, 0x79, 0x16, 0xb9, 0xe7, 0x87, 0xf4, 0xc3, 0x89, 0x0c, 0x34,
+	0x58, 0x67, 0x49, 0xfa, 0x53, 0xaf, 0xc1, 0x74, 0xc7, 0xe5, 0x49, 0x39, 0x09, 0xb3, 0x52, 0xc7,
+	0xe5, 0x43, 0x5d, 0x87, 0xad, 0x5b, 0xf7, 0xe3, 0xf5, 0x82, 0x58, 0xb7, 0xee, 0x8b, 0xf5, 0xec,
+	0xb3, 0xf5, 0xe4, 0x18, 0xcf, 0xd6, 0xca, 0x92, 0xe2, 0x81, 0x06, 0xe7, 0x14, 0xea, 0x12, 0xf1,
+	0xf6, 0xfd, 0xec, 0xbb, 0xf5, 0x77, 0xc7, 0x29, 0xcc, 0x37, 0x3d, 0x2f, 0xb0, 0x2d, 0x82, 0x9c,
+	0x78, 0x3a, 0x7d, 0xb2, 0x37, 0xec, 0x6b, 0xde, 0x67, 0x5f, 0xd6, 0x4e, 0x7d, 0xfe, 0x65, 0xed,
+	0xd4, 0xd7, 0x5f, 0xd6, 0xb4, 0x9f, 0x1c, 0xd5, 0xb4, 0xdf, 0x1e, 0xd5, 0xb4, 0x4f, 0x8f, 0x6a,
+	0xda, 0x67, 0x47, 0x35, 0xed, 0x1f, 0x47, 0x35, 0xed, 0x9f, 0x47, 0xb5, 0x53, 0x5f, 0x1f, 0xd5,
+	0xb4, 0x07, 0x5f, 0xd5, 0x4e, 0x7d, 0xf6, 0x55, 0xed, 0xd4, 0xe7, 0x5f, 0xd5, 0x4e, 0xbd, 0xfb,
+	0x42, 0x3b, 0x48, 0xa4, 0x73, 0x83, 0x11, 0xff, 0x06, 0x7d, 0x25, 0xfd, 0xdd, 0x9a, 0x64, 0xb5,
+	0xdc, 0xf3, 0xff, 0x09, 0x00, 0x00, 0xff, 0xff, 0x8f, 0x04, 0x5c, 0xcb, 0x48, 0x2a, 0x00, 0x00,
 }
 
+func (this *RebuildMutableStateRequest) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*RebuildMutableStateRequest)
+	if !ok {
+		that2, ok := that.(RebuildMutableStateRequest)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Namespace != that1.Namespace {
+		return false
+	}
+	if !this.Execution.Equal(that1.Execution) {
+		return false
+	}
+	return true
+}
+func (this *RebuildMutableStateResponse) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*RebuildMutableStateResponse)
+	if !ok {
+		that2, ok := that.(RebuildMutableStateResponse)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	return true
+}
 func (this *DescribeMutableStateRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -3825,14 +3587,14 @@ func (this *GetShardResponse) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *ListTransferTasksRequest) Equal(that interface{}) bool {
+func (this *ListHistoryTasksRequest) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*ListTransferTasksRequest)
+	that1, ok := that.(*ListHistoryTasksRequest)
 	if !ok {
-		that2, ok := that.(ListTransferTasksRequest)
+		that2, ok := that.(ListHistoryTasksRequest)
 		if ok {
 			that1 = &that2
 		} else {
@@ -3847,78 +3609,10 @@ func (this *ListTransferTasksRequest) Equal(that interface{}) bool {
 	if this.ShardId != that1.ShardId {
 		return false
 	}
-	if this.MinTaskId != that1.MinTaskId {
+	if this.Category != that1.Category {
 		return false
 	}
-	if this.MaxTaskId != that1.MaxTaskId {
-		return false
-	}
-	if this.BatchSize != that1.BatchSize {
-		return false
-	}
-	if !bytes.Equal(this.NextPageToken, that1.NextPageToken) {
-		return false
-	}
-	return true
-}
-func (this *ListTransferTasksResponse) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ListTransferTasksResponse)
-	if !ok {
-		that2, ok := that.(ListTransferTasksResponse)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if len(this.Tasks) != len(that1.Tasks) {
-		return false
-	}
-	for i := range this.Tasks {
-		if !this.Tasks[i].Equal(that1.Tasks[i]) {
-			return false
-		}
-	}
-	if !bytes.Equal(this.NextPageToken, that1.NextPageToken) {
-		return false
-	}
-	return true
-}
-func (this *ListVisibilityTasksRequest) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ListVisibilityTasksRequest)
-	if !ok {
-		that2, ok := that.(ListVisibilityTasksRequest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.ShardId != that1.ShardId {
-		return false
-	}
-	if this.ReadLevel != that1.ReadLevel {
-		return false
-	}
-	if this.MaxReadLevel != that1.MaxReadLevel {
+	if !this.TaskRange.Equal(that1.TaskRange) {
 		return false
 	}
 	if this.BatchSize != that1.BatchSize {
@@ -3929,158 +3623,14 @@ func (this *ListVisibilityTasksRequest) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *ListVisibilityTasksResponse) Equal(that interface{}) bool {
+func (this *ListHistoryTasksResponse) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*ListVisibilityTasksResponse)
+	that1, ok := that.(*ListHistoryTasksResponse)
 	if !ok {
-		that2, ok := that.(ListVisibilityTasksResponse)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if len(this.Tasks) != len(that1.Tasks) {
-		return false
-	}
-	for i := range this.Tasks {
-		if !this.Tasks[i].Equal(that1.Tasks[i]) {
-			return false
-		}
-	}
-	if !bytes.Equal(this.NextPageToken, that1.NextPageToken) {
-		return false
-	}
-	return true
-}
-func (this *ListTimerTasksRequest) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ListTimerTasksRequest)
-	if !ok {
-		that2, ok := that.(ListTimerTasksRequest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.ShardId != that1.ShardId {
-		return false
-	}
-	if that1.MinTime == nil {
-		if this.MinTime != nil {
-			return false
-		}
-	} else if !this.MinTime.Equal(*that1.MinTime) {
-		return false
-	}
-	if that1.MaxTime == nil {
-		if this.MaxTime != nil {
-			return false
-		}
-	} else if !this.MaxTime.Equal(*that1.MaxTime) {
-		return false
-	}
-	if this.BatchSize != that1.BatchSize {
-		return false
-	}
-	if !bytes.Equal(this.NextPageToken, that1.NextPageToken) {
-		return false
-	}
-	return true
-}
-func (this *ListTimerTasksResponse) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ListTimerTasksResponse)
-	if !ok {
-		that2, ok := that.(ListTimerTasksResponse)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if len(this.Tasks) != len(that1.Tasks) {
-		return false
-	}
-	for i := range this.Tasks {
-		if !this.Tasks[i].Equal(that1.Tasks[i]) {
-			return false
-		}
-	}
-	if !bytes.Equal(this.NextPageToken, that1.NextPageToken) {
-		return false
-	}
-	return true
-}
-func (this *ListReplicationTasksRequest) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ListReplicationTasksRequest)
-	if !ok {
-		that2, ok := that.(ListReplicationTasksRequest)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if this.ShardId != that1.ShardId {
-		return false
-	}
-	if this.MinTaskId != that1.MinTaskId {
-		return false
-	}
-	if this.MaxTaskId != that1.MaxTaskId {
-		return false
-	}
-	if this.BatchSize != that1.BatchSize {
-		return false
-	}
-	if !bytes.Equal(this.NextPageToken, that1.NextPageToken) {
-		return false
-	}
-	return true
-}
-func (this *ListReplicationTasksResponse) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ListReplicationTasksResponse)
-	if !ok {
-		that2, ok := that.(ListReplicationTasksResponse)
+		that2, ok := that.(ListHistoryTasksResponse)
 		if ok {
 			that1 = &that2
 		} else {
@@ -5358,6 +4908,9 @@ func (this *GetTaskQueueTasksRequest) Equal(that interface{}) bool {
 	if this.BatchSize != that1.BatchSize {
 		return false
 	}
+	if !bytes.Equal(this.NextPageToken, that1.NextPageToken) {
+		return false
+	}
 	return true
 }
 func (this *GetTaskQueueTasksResponse) Equal(that interface{}) bool {
@@ -5387,7 +4940,32 @@ func (this *GetTaskQueueTasksResponse) Equal(that interface{}) bool {
 			return false
 		}
 	}
+	if !bytes.Equal(this.NextPageToken, that1.NextPageToken) {
+		return false
+	}
 	return true
+}
+func (this *RebuildMutableStateRequest) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&adminservice.RebuildMutableStateRequest{")
+	s = append(s, "Namespace: "+fmt.Sprintf("%#v", this.Namespace)+",\n")
+	if this.Execution != nil {
+		s = append(s, "Execution: "+fmt.Sprintf("%#v", this.Execution)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *RebuildMutableStateResponse) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 4)
+	s = append(s, "&adminservice.RebuildMutableStateResponse{")
+	s = append(s, "}")
+	return strings.Join(s, "")
 }
 func (this *DescribeMutableStateRequest) GoString() string {
 	if this == nil {
@@ -5491,107 +5069,28 @@ func (this *GetShardResponse) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *ListTransferTasksRequest) GoString() string {
+func (this *ListHistoryTasksRequest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 9)
-	s = append(s, "&adminservice.ListTransferTasksRequest{")
+	s = append(s, "&adminservice.ListHistoryTasksRequest{")
 	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
-	s = append(s, "MinTaskId: "+fmt.Sprintf("%#v", this.MinTaskId)+",\n")
-	s = append(s, "MaxTaskId: "+fmt.Sprintf("%#v", this.MaxTaskId)+",\n")
+	s = append(s, "Category: "+fmt.Sprintf("%#v", this.Category)+",\n")
+	if this.TaskRange != nil {
+		s = append(s, "TaskRange: "+fmt.Sprintf("%#v", this.TaskRange)+",\n")
+	}
 	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
 	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *ListTransferTasksResponse) GoString() string {
+func (this *ListHistoryTasksResponse) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := make([]string, 0, 6)
-	s = append(s, "&adminservice.ListTransferTasksResponse{")
-	if this.Tasks != nil {
-		s = append(s, "Tasks: "+fmt.Sprintf("%#v", this.Tasks)+",\n")
-	}
-	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ListVisibilityTasksRequest) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 9)
-	s = append(s, "&adminservice.ListVisibilityTasksRequest{")
-	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
-	s = append(s, "ReadLevel: "+fmt.Sprintf("%#v", this.ReadLevel)+",\n")
-	s = append(s, "MaxReadLevel: "+fmt.Sprintf("%#v", this.MaxReadLevel)+",\n")
-	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
-	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ListVisibilityTasksResponse) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&adminservice.ListVisibilityTasksResponse{")
-	if this.Tasks != nil {
-		s = append(s, "Tasks: "+fmt.Sprintf("%#v", this.Tasks)+",\n")
-	}
-	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ListTimerTasksRequest) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 9)
-	s = append(s, "&adminservice.ListTimerTasksRequest{")
-	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
-	s = append(s, "MinTime: "+fmt.Sprintf("%#v", this.MinTime)+",\n")
-	s = append(s, "MaxTime: "+fmt.Sprintf("%#v", this.MaxTime)+",\n")
-	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
-	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ListTimerTasksResponse) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&adminservice.ListTimerTasksResponse{")
-	if this.Tasks != nil {
-		s = append(s, "Tasks: "+fmt.Sprintf("%#v", this.Tasks)+",\n")
-	}
-	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ListReplicationTasksRequest) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 9)
-	s = append(s, "&adminservice.ListReplicationTasksRequest{")
-	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
-	s = append(s, "MinTaskId: "+fmt.Sprintf("%#v", this.MinTaskId)+",\n")
-	s = append(s, "MaxTaskId: "+fmt.Sprintf("%#v", this.MaxTaskId)+",\n")
-	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
-	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *ListReplicationTasksResponse) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 6)
-	s = append(s, "&adminservice.ListReplicationTasksResponse{")
+	s = append(s, "&adminservice.ListHistoryTasksResponse{")
 	if this.Tasks != nil {
 		s = append(s, "Tasks: "+fmt.Sprintf("%#v", this.Tasks)+",\n")
 	}
@@ -6161,7 +5660,7 @@ func (this *GetTaskQueueTasksRequest) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 10)
+	s := make([]string, 0, 11)
 	s = append(s, "&adminservice.GetTaskQueueTasksRequest{")
 	s = append(s, "Namespace: "+fmt.Sprintf("%#v", this.Namespace)+",\n")
 	s = append(s, "TaskQueue: "+fmt.Sprintf("%#v", this.TaskQueue)+",\n")
@@ -6169,6 +5668,7 @@ func (this *GetTaskQueueTasksRequest) GoString() string {
 	s = append(s, "MinTaskId: "+fmt.Sprintf("%#v", this.MinTaskId)+",\n")
 	s = append(s, "MaxTaskId: "+fmt.Sprintf("%#v", this.MaxTaskId)+",\n")
 	s = append(s, "BatchSize: "+fmt.Sprintf("%#v", this.BatchSize)+",\n")
+	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -6176,11 +5676,12 @@ func (this *GetTaskQueueTasksResponse) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 5)
+	s := make([]string, 0, 6)
 	s = append(s, "&adminservice.GetTaskQueueTasksResponse{")
 	if this.Tasks != nil {
 		s = append(s, "Tasks: "+fmt.Sprintf("%#v", this.Tasks)+",\n")
 	}
+	s = append(s, "NextPageToken: "+fmt.Sprintf("%#v", this.NextPageToken)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -6192,6 +5693,71 @@ func valueToGoStringRequestResponse(v interface{}, typ string) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
 }
+func (m *RebuildMutableStateRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RebuildMutableStateRequest) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RebuildMutableStateRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Execution != nil {
+		{
+			size, err := m.Execution.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
+	if len(m.Namespace) > 0 {
+		i -= len(m.Namespace)
+		copy(dAtA[i:], m.Namespace)
+		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.Namespace)))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *RebuildMutableStateResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *RebuildMutableStateResponse) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *RebuildMutableStateResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	return len(dAtA) - i, nil
+}
+
 func (m *DescribeMutableStateRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -6396,21 +5962,21 @@ func (m *DescribeHistoryHostResponse) MarshalToSizedBuffer(dAtA []byte) (int, er
 		dAtA[i] = 0x1a
 	}
 	if len(m.ShardIds) > 0 {
-		dAtA7 := make([]byte, len(m.ShardIds)*10)
-		var j6 int
+		dAtA8 := make([]byte, len(m.ShardIds)*10)
+		var j7 int
 		for _, num1 := range m.ShardIds {
 			num := uint64(num1)
 			for num >= 1<<7 {
-				dAtA7[j6] = uint8(uint64(num)&0x7f | 0x80)
+				dAtA8[j7] = uint8(uint64(num)&0x7f | 0x80)
 				num >>= 7
-				j6++
+				j7++
 			}
-			dAtA7[j6] = uint8(num)
-			j6++
+			dAtA8[j7] = uint8(num)
+			j7++
 		}
-		i -= j6
-		copy(dAtA[i:], dAtA7[:j6])
-		i = encodeVarintRequestResponse(dAtA, i, uint64(j6))
+		i -= j7
+		copy(dAtA[i:], dAtA8[:j7])
+		i = encodeVarintRequestResponse(dAtA, i, uint64(j7))
 		i--
 		dAtA[i] = 0x12
 	}
@@ -6536,7 +6102,7 @@ func (m *GetShardResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *ListTransferTasksRequest) Marshal() (dAtA []byte, err error) {
+func (m *ListHistoryTasksRequest) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -6546,200 +6112,12 @@ func (m *ListTransferTasksRequest) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *ListTransferTasksRequest) MarshalTo(dAtA []byte) (int, error) {
+func (m *ListHistoryTasksRequest) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *ListTransferTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.NextPageToken) > 0 {
-		i -= len(m.NextPageToken)
-		copy(dAtA[i:], m.NextPageToken)
-		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.NextPageToken)))
-		i--
-		dAtA[i] = 0x32
-	}
-	if m.BatchSize != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.BatchSize))
-		i--
-		dAtA[i] = 0x28
-	}
-	if m.MaxTaskId != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.MaxTaskId))
-		i--
-		dAtA[i] = 0x20
-	}
-	if m.MinTaskId != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.MinTaskId))
-		i--
-		dAtA[i] = 0x10
-	}
-	if m.ShardId != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ShardId))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ListTransferTasksResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ListTransferTasksResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ListTransferTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.NextPageToken) > 0 {
-		i -= len(m.NextPageToken)
-		copy(dAtA[i:], m.NextPageToken)
-		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.NextPageToken)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Tasks) > 0 {
-		for iNdEx := len(m.Tasks) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Tasks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintRequestResponse(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0xa
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ListVisibilityTasksRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ListVisibilityTasksRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ListVisibilityTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.NextPageToken) > 0 {
-		i -= len(m.NextPageToken)
-		copy(dAtA[i:], m.NextPageToken)
-		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.NextPageToken)))
-		i--
-		dAtA[i] = 0x32
-	}
-	if m.BatchSize != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.BatchSize))
-		i--
-		dAtA[i] = 0x28
-	}
-	if m.MaxReadLevel != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.MaxReadLevel))
-		i--
-		dAtA[i] = 0x20
-	}
-	if m.ReadLevel != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ReadLevel))
-		i--
-		dAtA[i] = 0x10
-	}
-	if m.ShardId != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ShardId))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ListVisibilityTasksResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ListVisibilityTasksResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ListVisibilityTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.NextPageToken) > 0 {
-		i -= len(m.NextPageToken)
-		copy(dAtA[i:], m.NextPageToken)
-		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.NextPageToken)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Tasks) > 0 {
-		for iNdEx := len(m.Tasks) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Tasks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintRequestResponse(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0xa
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ListTimerTasksRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ListTimerTasksRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ListTimerTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ListHistoryTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6756,117 +6134,20 @@ func (m *ListTimerTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x20
 	}
-	if m.MaxTime != nil {
-		n9, err9 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.MaxTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.MaxTime):])
-		if err9 != nil {
-			return 0, err9
+	if m.TaskRange != nil {
+		{
+			size, err := m.TaskRange.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintRequestResponse(dAtA, i, uint64(size))
 		}
-		i -= n9
-		i = encodeVarintRequestResponse(dAtA, i, uint64(n9))
 		i--
 		dAtA[i] = 0x1a
 	}
-	if m.MinTime != nil {
-		n10, err10 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.MinTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.MinTime):])
-		if err10 != nil {
-			return 0, err10
-		}
-		i -= n10
-		i = encodeVarintRequestResponse(dAtA, i, uint64(n10))
-		i--
-		dAtA[i] = 0x12
-	}
-	if m.ShardId != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.ShardId))
-		i--
-		dAtA[i] = 0x8
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ListTimerTasksResponse) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ListTimerTasksResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ListTimerTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.NextPageToken) > 0 {
-		i -= len(m.NextPageToken)
-		copy(dAtA[i:], m.NextPageToken)
-		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.NextPageToken)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.Tasks) > 0 {
-		for iNdEx := len(m.Tasks) - 1; iNdEx >= 0; iNdEx-- {
-			{
-				size, err := m.Tasks[iNdEx].MarshalToSizedBuffer(dAtA[:i])
-				if err != nil {
-					return 0, err
-				}
-				i -= size
-				i = encodeVarintRequestResponse(dAtA, i, uint64(size))
-			}
-			i--
-			dAtA[i] = 0xa
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *ListReplicationTasksRequest) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *ListReplicationTasksRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ListReplicationTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if len(m.NextPageToken) > 0 {
-		i -= len(m.NextPageToken)
-		copy(dAtA[i:], m.NextPageToken)
-		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.NextPageToken)))
-		i--
-		dAtA[i] = 0x2a
-	}
-	if m.BatchSize != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.BatchSize))
-		i--
-		dAtA[i] = 0x20
-	}
-	if m.MaxTaskId != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.MaxTaskId))
-		i--
-		dAtA[i] = 0x18
-	}
-	if m.MinTaskId != 0 {
-		i = encodeVarintRequestResponse(dAtA, i, uint64(m.MinTaskId))
+	if m.Category != 0 {
+		i = encodeVarintRequestResponse(dAtA, i, uint64(m.Category))
 		i--
 		dAtA[i] = 0x10
 	}
@@ -6878,7 +6159,7 @@ func (m *ListReplicationTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, er
 	return len(dAtA) - i, nil
 }
 
-func (m *ListReplicationTasksResponse) Marshal() (dAtA []byte, err error) {
+func (m *ListHistoryTasksResponse) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -6888,12 +6169,12 @@ func (m *ListReplicationTasksResponse) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *ListReplicationTasksResponse) MarshalTo(dAtA []byte) (int, error) {
+func (m *ListHistoryTasksResponse) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *ListReplicationTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *ListHistoryTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8678,6 +7959,13 @@ func (m *GetTaskQueueTasksRequest) MarshalToSizedBuffer(dAtA []byte) (int, error
 	_ = i
 	var l int
 	_ = l
+	if len(m.NextPageToken) > 0 {
+		i -= len(m.NextPageToken)
+		copy(dAtA[i:], m.NextPageToken)
+		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.NextPageToken)))
+		i--
+		dAtA[i] = 0x3a
+	}
 	if m.BatchSize != 0 {
 		i = encodeVarintRequestResponse(dAtA, i, uint64(m.BatchSize))
 		i--
@@ -8735,6 +8023,13 @@ func (m *GetTaskQueueTasksResponse) MarshalToSizedBuffer(dAtA []byte) (int, erro
 	_ = i
 	var l int
 	_ = l
+	if len(m.NextPageToken) > 0 {
+		i -= len(m.NextPageToken)
+		copy(dAtA[i:], m.NextPageToken)
+		i = encodeVarintRequestResponse(dAtA, i, uint64(len(m.NextPageToken)))
+		i--
+		dAtA[i] = 0x12
+	}
 	if len(m.Tasks) > 0 {
 		for iNdEx := len(m.Tasks) - 1; iNdEx >= 0; iNdEx-- {
 			{
@@ -8763,6 +8058,32 @@ func encodeVarintRequestResponse(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
+func (m *RebuildMutableStateRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = len(m.Namespace)
+	if l > 0 {
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	if m.Execution != nil {
+		l = m.Execution.Size()
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
+	return n
+}
+
+func (m *RebuildMutableStateResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
 func (m *DescribeMutableStateRequest) Size() (n int) {
 	if m == nil {
 		return 0
@@ -8906,7 +8227,7 @@ func (m *GetShardResponse) Size() (n int) {
 	return n
 }
 
-func (m *ListTransferTasksRequest) Size() (n int) {
+func (m *ListHistoryTasksRequest) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -8915,100 +8236,11 @@ func (m *ListTransferTasksRequest) Size() (n int) {
 	if m.ShardId != 0 {
 		n += 1 + sovRequestResponse(uint64(m.ShardId))
 	}
-	if m.MinTaskId != 0 {
-		n += 1 + sovRequestResponse(uint64(m.MinTaskId))
+	if m.Category != 0 {
+		n += 1 + sovRequestResponse(uint64(m.Category))
 	}
-	if m.MaxTaskId != 0 {
-		n += 1 + sovRequestResponse(uint64(m.MaxTaskId))
-	}
-	if m.BatchSize != 0 {
-		n += 1 + sovRequestResponse(uint64(m.BatchSize))
-	}
-	l = len(m.NextPageToken)
-	if l > 0 {
-		n += 1 + l + sovRequestResponse(uint64(l))
-	}
-	return n
-}
-
-func (m *ListTransferTasksResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if len(m.Tasks) > 0 {
-		for _, e := range m.Tasks {
-			l = e.Size()
-			n += 1 + l + sovRequestResponse(uint64(l))
-		}
-	}
-	l = len(m.NextPageToken)
-	if l > 0 {
-		n += 1 + l + sovRequestResponse(uint64(l))
-	}
-	return n
-}
-
-func (m *ListVisibilityTasksRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.ShardId != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ShardId))
-	}
-	if m.ReadLevel != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ReadLevel))
-	}
-	if m.MaxReadLevel != 0 {
-		n += 1 + sovRequestResponse(uint64(m.MaxReadLevel))
-	}
-	if m.BatchSize != 0 {
-		n += 1 + sovRequestResponse(uint64(m.BatchSize))
-	}
-	l = len(m.NextPageToken)
-	if l > 0 {
-		n += 1 + l + sovRequestResponse(uint64(l))
-	}
-	return n
-}
-
-func (m *ListVisibilityTasksResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if len(m.Tasks) > 0 {
-		for _, e := range m.Tasks {
-			l = e.Size()
-			n += 1 + l + sovRequestResponse(uint64(l))
-		}
-	}
-	l = len(m.NextPageToken)
-	if l > 0 {
-		n += 1 + l + sovRequestResponse(uint64(l))
-	}
-	return n
-}
-
-func (m *ListTimerTasksRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.ShardId != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ShardId))
-	}
-	if m.MinTime != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.MinTime)
-		n += 1 + l + sovRequestResponse(uint64(l))
-	}
-	if m.MaxTime != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.MaxTime)
+	if m.TaskRange != nil {
+		l = m.TaskRange.Size()
 		n += 1 + l + sovRequestResponse(uint64(l))
 	}
 	if m.BatchSize != 0 {
@@ -9021,51 +8253,7 @@ func (m *ListTimerTasksRequest) Size() (n int) {
 	return n
 }
 
-func (m *ListTimerTasksResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if len(m.Tasks) > 0 {
-		for _, e := range m.Tasks {
-			l = e.Size()
-			n += 1 + l + sovRequestResponse(uint64(l))
-		}
-	}
-	l = len(m.NextPageToken)
-	if l > 0 {
-		n += 1 + l + sovRequestResponse(uint64(l))
-	}
-	return n
-}
-
-func (m *ListReplicationTasksRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.ShardId != 0 {
-		n += 1 + sovRequestResponse(uint64(m.ShardId))
-	}
-	if m.MinTaskId != 0 {
-		n += 1 + sovRequestResponse(uint64(m.MinTaskId))
-	}
-	if m.MaxTaskId != 0 {
-		n += 1 + sovRequestResponse(uint64(m.MaxTaskId))
-	}
-	if m.BatchSize != 0 {
-		n += 1 + sovRequestResponse(uint64(m.BatchSize))
-	}
-	l = len(m.NextPageToken)
-	if l > 0 {
-		n += 1 + l + sovRequestResponse(uint64(l))
-	}
-	return n
-}
-
-func (m *ListReplicationTasksResponse) Size() (n int) {
+func (m *ListHistoryTasksResponse) Size() (n int) {
 	if m == nil {
 		return 0
 	}
@@ -9880,6 +9068,10 @@ func (m *GetTaskQueueTasksRequest) Size() (n int) {
 	if m.BatchSize != 0 {
 		n += 1 + sovRequestResponse(uint64(m.BatchSize))
 	}
+	l = len(m.NextPageToken)
+	if l > 0 {
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
 	return n
 }
 
@@ -9895,6 +9087,10 @@ func (m *GetTaskQueueTasksResponse) Size() (n int) {
 			n += 1 + l + sovRequestResponse(uint64(l))
 		}
 	}
+	l = len(m.NextPageToken)
+	if l > 0 {
+		n += 1 + l + sovRequestResponse(uint64(l))
+	}
 	return n
 }
 
@@ -9903,6 +9099,26 @@ func sovRequestResponse(x uint64) (n int) {
 }
 func sozRequestResponse(x uint64) (n int) {
 	return sovRequestResponse(uint64((x << 1) ^ uint64((int64(x) >> 63))))
+}
+func (this *RebuildMutableStateRequest) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&RebuildMutableStateRequest{`,
+		`Namespace:` + fmt.Sprintf("%v", this.Namespace) + `,`,
+		`Execution:` + strings.Replace(fmt.Sprintf("%v", this.Execution), "WorkflowExecution", "v1.WorkflowExecution", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *RebuildMutableStateResponse) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&RebuildMutableStateResponse{`,
+		`}`,
+	}, "")
+	return s
 }
 func (this *DescribeMutableStateRequest) String() string {
 	if this == nil {
@@ -9994,21 +9210,21 @@ func (this *GetShardResponse) String() string {
 	}, "")
 	return s
 }
-func (this *ListTransferTasksRequest) String() string {
+func (this *ListHistoryTasksRequest) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&ListTransferTasksRequest{`,
+	s := strings.Join([]string{`&ListHistoryTasksRequest{`,
 		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
-		`MinTaskId:` + fmt.Sprintf("%v", this.MinTaskId) + `,`,
-		`MaxTaskId:` + fmt.Sprintf("%v", this.MaxTaskId) + `,`,
+		`Category:` + fmt.Sprintf("%v", this.Category) + `,`,
+		`TaskRange:` + strings.Replace(fmt.Sprintf("%v", this.TaskRange), "TaskRange", "v14.TaskRange", 1) + `,`,
 		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
 		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
 	}, "")
 	return s
 }
-func (this *ListTransferTasksResponse) String() string {
+func (this *ListHistoryTasksResponse) String() string {
 	if this == nil {
 		return "nil"
 	}
@@ -10017,97 +9233,7 @@ func (this *ListTransferTasksResponse) String() string {
 		repeatedStringForTasks += strings.Replace(f.String(), "Task", "Task", 1) + ","
 	}
 	repeatedStringForTasks += "}"
-	s := strings.Join([]string{`&ListTransferTasksResponse{`,
-		`Tasks:` + repeatedStringForTasks + `,`,
-		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ListVisibilityTasksRequest) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&ListVisibilityTasksRequest{`,
-		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
-		`ReadLevel:` + fmt.Sprintf("%v", this.ReadLevel) + `,`,
-		`MaxReadLevel:` + fmt.Sprintf("%v", this.MaxReadLevel) + `,`,
-		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
-		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ListVisibilityTasksResponse) String() string {
-	if this == nil {
-		return "nil"
-	}
-	repeatedStringForTasks := "[]*Task{"
-	for _, f := range this.Tasks {
-		repeatedStringForTasks += strings.Replace(f.String(), "Task", "Task", 1) + ","
-	}
-	repeatedStringForTasks += "}"
-	s := strings.Join([]string{`&ListVisibilityTasksResponse{`,
-		`Tasks:` + repeatedStringForTasks + `,`,
-		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ListTimerTasksRequest) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&ListTimerTasksRequest{`,
-		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
-		`MinTime:` + strings.Replace(fmt.Sprintf("%v", this.MinTime), "Timestamp", "types.Timestamp", 1) + `,`,
-		`MaxTime:` + strings.Replace(fmt.Sprintf("%v", this.MaxTime), "Timestamp", "types.Timestamp", 1) + `,`,
-		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
-		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ListTimerTasksResponse) String() string {
-	if this == nil {
-		return "nil"
-	}
-	repeatedStringForTasks := "[]*Task{"
-	for _, f := range this.Tasks {
-		repeatedStringForTasks += strings.Replace(f.String(), "Task", "Task", 1) + ","
-	}
-	repeatedStringForTasks += "}"
-	s := strings.Join([]string{`&ListTimerTasksResponse{`,
-		`Tasks:` + repeatedStringForTasks + `,`,
-		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ListReplicationTasksRequest) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&ListReplicationTasksRequest{`,
-		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
-		`MinTaskId:` + fmt.Sprintf("%v", this.MinTaskId) + `,`,
-		`MaxTaskId:` + fmt.Sprintf("%v", this.MaxTaskId) + `,`,
-		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
-		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *ListReplicationTasksResponse) String() string {
-	if this == nil {
-		return "nil"
-	}
-	repeatedStringForTasks := "[]*Task{"
-	for _, f := range this.Tasks {
-		repeatedStringForTasks += strings.Replace(f.String(), "Task", "Task", 1) + ","
-	}
-	repeatedStringForTasks += "}"
-	s := strings.Join([]string{`&ListReplicationTasksResponse{`,
+	s := strings.Join([]string{`&ListHistoryTasksResponse{`,
 		`Tasks:` + repeatedStringForTasks + `,`,
 		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
@@ -10674,6 +9800,7 @@ func (this *GetTaskQueueTasksRequest) String() string {
 		`MinTaskId:` + fmt.Sprintf("%v", this.MinTaskId) + `,`,
 		`MaxTaskId:` + fmt.Sprintf("%v", this.MaxTaskId) + `,`,
 		`BatchSize:` + fmt.Sprintf("%v", this.BatchSize) + `,`,
+		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -10689,6 +9816,7 @@ func (this *GetTaskQueueTasksResponse) String() string {
 	repeatedStringForTasks += "}"
 	s := strings.Join([]string{`&GetTaskQueueTasksResponse{`,
 		`Tasks:` + repeatedStringForTasks + `,`,
+		`NextPageToken:` + fmt.Sprintf("%v", this.NextPageToken) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -10700,6 +9828,180 @@ func valueToStringRequestResponse(v interface{}) string {
 	}
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
+}
+func (m *RebuildMutableStateRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRequestResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RebuildMutableStateRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RebuildMutableStateRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Namespace", wireType)
+			}
+			var stringLen uint64
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				stringLen |= uint64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			intStringLen := int(stringLen)
+			if intStringLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + intStringLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Namespace = string(dAtA[iNdEx:postIndex])
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Execution", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Execution == nil {
+				m.Execution = &v1.WorkflowExecution{}
+			}
+			if err := m.Execution.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRequestResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *RebuildMutableStateResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRequestResponse
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: RebuildMutableStateResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: RebuildMutableStateResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRequestResponse(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
 }
 func (m *DescribeMutableStateRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
@@ -11717,7 +11019,7 @@ func (m *GetShardResponse) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *ListTransferTasksRequest) Unmarshal(dAtA []byte) error {
+func (m *ListHistoryTasksRequest) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -11740,10 +11042,10 @@ func (m *ListTransferTasksRequest) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ListTransferTasksRequest: wiretype end group for non-group")
+			return fmt.Errorf("proto: ListHistoryTasksRequest: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListTransferTasksRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ListHistoryTasksRequest: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -11767,9 +11069,9 @@ func (m *ListTransferTasksRequest) Unmarshal(dAtA []byte) error {
 			}
 		case 2:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MinTaskId", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Category", wireType)
 			}
-			m.MinTaskId = 0
+			m.Category = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -11779,902 +11081,16 @@ func (m *ListTransferTasksRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MinTaskId |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxTaskId", wireType)
-			}
-			m.MaxTaskId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.MaxTaskId |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
-			}
-			m.BatchSize = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.BatchSize |= int32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextPageToken", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NextPageToken = append(m.NextPageToken[:0], dAtA[iNdEx:postIndex]...)
-			if m.NextPageToken == nil {
-				m.NextPageToken = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipRequestResponse(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ListTransferTasksResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowRequestResponse
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ListTransferTasksResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListTransferTasksResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Tasks", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Tasks = append(m.Tasks, &Task{})
-			if err := m.Tasks[len(m.Tasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextPageToken", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NextPageToken = append(m.NextPageToken[:0], dAtA[iNdEx:postIndex]...)
-			if m.NextPageToken == nil {
-				m.NextPageToken = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipRequestResponse(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ListVisibilityTasksRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowRequestResponse
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ListVisibilityTasksRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListVisibilityTasksRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ShardId", wireType)
-			}
-			m.ShardId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.ShardId |= int32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ReadLevel", wireType)
-			}
-			m.ReadLevel = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.ReadLevel |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxReadLevel", wireType)
-			}
-			m.MaxReadLevel = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.MaxReadLevel |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
-			}
-			m.BatchSize = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.BatchSize |= int32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 6:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextPageToken", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NextPageToken = append(m.NextPageToken[:0], dAtA[iNdEx:postIndex]...)
-			if m.NextPageToken == nil {
-				m.NextPageToken = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipRequestResponse(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ListVisibilityTasksResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowRequestResponse
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ListVisibilityTasksResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListVisibilityTasksResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Tasks", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Tasks = append(m.Tasks, &Task{})
-			if err := m.Tasks[len(m.Tasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextPageToken", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NextPageToken = append(m.NextPageToken[:0], dAtA[iNdEx:postIndex]...)
-			if m.NextPageToken == nil {
-				m.NextPageToken = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipRequestResponse(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ListTimerTasksRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowRequestResponse
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ListTimerTasksRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListTimerTasksRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ShardId", wireType)
-			}
-			m.ShardId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.ShardId |= int32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MinTime", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.MinTime == nil {
-				m.MinTime = new(time.Time)
-			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.MinTime, dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxTime", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.MaxTime == nil {
-				m.MaxTime = new(time.Time)
-			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.MaxTime, dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
-			}
-			m.BatchSize = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.BatchSize |= int32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextPageToken", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NextPageToken = append(m.NextPageToken[:0], dAtA[iNdEx:postIndex]...)
-			if m.NextPageToken == nil {
-				m.NextPageToken = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipRequestResponse(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ListTimerTasksResponse) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowRequestResponse
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ListTimerTasksResponse: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListTimerTasksResponse: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Tasks", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.Tasks = append(m.Tasks, &Task{})
-			if err := m.Tasks[len(m.Tasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextPageToken", wireType)
-			}
-			var byteLen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				byteLen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if byteLen < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			postIndex := iNdEx + byteLen
-			if postIndex < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NextPageToken = append(m.NextPageToken[:0], dAtA[iNdEx:postIndex]...)
-			if m.NextPageToken == nil {
-				m.NextPageToken = []byte{}
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipRequestResponse(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthRequestResponse
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *ListReplicationTasksRequest) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowRequestResponse
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: ListReplicationTasksRequest: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListReplicationTasksRequest: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ShardId", wireType)
-			}
-			m.ShardId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.ShardId |= int32(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 2:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MinTaskId", wireType)
-			}
-			m.MinTaskId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowRequestResponse
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.MinTaskId |= int64(b&0x7F) << shift
+				m.Category |= v13.TaskCategory(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
 		case 3:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field MaxTaskId", wireType)
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field TaskRange", wireType)
 			}
-			m.MaxTaskId = 0
+			var msglen int
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowRequestResponse
@@ -12684,11 +11100,28 @@ func (m *ListReplicationTasksRequest) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.MaxTaskId |= int64(b&0x7F) << shift
+				msglen |= int(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
 			}
+			if msglen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.TaskRange == nil {
+				m.TaskRange = &v14.TaskRange{}
+			}
+			if err := m.TaskRange.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		case 4:
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field BatchSize", wireType)
@@ -12766,7 +11199,7 @@ func (m *ListReplicationTasksRequest) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *ListReplicationTasksResponse) Unmarshal(dAtA []byte) error {
+func (m *ListHistoryTasksResponse) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -12789,10 +11222,10 @@ func (m *ListReplicationTasksResponse) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ListReplicationTasksResponse: wiretype end group for non-group")
+			return fmt.Errorf("proto: ListHistoryTasksResponse: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ListReplicationTasksResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: ListHistoryTasksResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
@@ -18530,6 +16963,40 @@ func (m *GetTaskQueueTasksRequest) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextPageToken", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.NextPageToken = append(m.NextPageToken[:0], dAtA[iNdEx:postIndex]...)
+			if m.NextPageToken == nil {
+				m.NextPageToken = []byte{}
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipRequestResponse(dAtA[iNdEx:])
@@ -18615,6 +17082,40 @@ func (m *GetTaskQueueTasksResponse) Unmarshal(dAtA []byte) error {
 			m.Tasks = append(m.Tasks, &v11.AllocatedTaskInfo{})
 			if err := m.Tasks[len(m.Tasks)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NextPageToken", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRequestResponse
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthRequestResponse
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.NextPageToken = append(m.NextPageToken[:0], dAtA[iNdEx:postIndex]...)
+			if m.NextPageToken == nil {
+				m.NextPageToken = []byte{}
 			}
 			iNdEx = postIndex
 		default:

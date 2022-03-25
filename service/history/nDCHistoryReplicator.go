@@ -28,10 +28,10 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/serialization"
 
 	"github.com/pborman/uuid"
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -175,9 +175,6 @@ func newNDCHistoryReplicator(
 				shard,
 				logger,
 				state,
-				func(mutableState workflow.MutableState) workflow.TaskGenerator {
-					return workflow.NewTaskGenerator(shard.GetNamespaceRegistry(), mutableState)
-				},
 			)
 		},
 		newMutableState: func(
@@ -250,7 +247,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 	default:
 		// apply events, other than simple start workflow execution
 		// the continue as new + start workflow execution combination will also be processed here
-		mutableState, err := context.LoadWorkflowExecution()
+		mutableState, err := context.LoadWorkflowExecution(ctx)
 		switch err.(type) {
 		case nil:
 			// Sanity check to make only 3DC mutable state here
@@ -441,12 +438,12 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToCurrentBranch(
 		newExecutionInfo := newMutableState.GetExecutionInfo()
 		newExecutionState := newMutableState.GetExecutionState()
 		newContext := workflow.NewContext(
-			namespace.ID(newExecutionInfo.NamespaceId),
-			commonpb.WorkflowExecution{
-				WorkflowId: newExecutionInfo.WorkflowId,
-				RunId:      newExecutionState.RunId,
-			},
 			r.shard,
+			definition.NewWorkflowKey(
+				newExecutionInfo.NamespaceId,
+				newExecutionInfo.WorkflowId,
+				newExecutionState.RunId,
+			),
 			r.logger,
 		)
 
@@ -527,7 +524,7 @@ func (r *nDCHistoryReplicatorImpl) applyNonStartEventsToNoneCurrentBranchWithout
 		return err
 	}
 
-	transactionID, err := r.shard.GenerateTransferTaskID()
+	transactionID, err := r.shard.GenerateTaskID()
 	if err != nil {
 		return err
 	}

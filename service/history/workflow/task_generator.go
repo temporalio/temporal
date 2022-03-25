@@ -70,7 +70,7 @@ type (
 			now time.Time,
 			workflowTaskScheduleID int64,
 		) error
-		GenerateActivityTransferTasks(
+		GenerateActivityTasks(
 			now time.Time,
 			event *historypb.HistoryEvent,
 		) error
@@ -114,7 +114,7 @@ type (
 		) error
 		GenerateLastHistoryReplicationTasks(
 			now time.Time,
-		) (*tasks.HistoryReplicationTask, error)
+		) (tasks.Task, error)
 	}
 
 	TaskGeneratorImpl struct {
@@ -131,13 +131,10 @@ func NewTaskGenerator(
 	namespaceRegistry namespace.Registry,
 	mutableState MutableState,
 ) *TaskGeneratorImpl {
-
-	mstg := &TaskGeneratorImpl{
+	return &TaskGeneratorImpl{
 		namespaceRegistry: namespaceRegistry,
 		mutableState:      mutableState,
 	}
-
-	return mstg
 }
 
 func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
@@ -152,7 +149,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 		return nil
 	}
 
-	r.mutableState.AddTimerTasks(&tasks.WorkflowTimeoutTask{
+	r.mutableState.AddTasks(&tasks.WorkflowTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: workflowRunExpirationTime,
@@ -169,20 +166,6 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	currentVersion := r.mutableState.GetCurrentVersion()
 	executionInfo := r.mutableState.GetExecutionInfo()
 
-	r.mutableState.AddTransferTasks(&tasks.CloseExecutionTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
-		Version:             currentVersion,
-	})
-
-	r.mutableState.AddVisibilityTasks(&tasks.CloseExecutionVisibilityTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now,
-		Version:             currentVersion,
-	})
-
 	retention := defaultWorkflowRetention
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(namespace.ID(executionInfo.NamespaceId))
 	switch err.(type) {
@@ -193,13 +176,31 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	default:
 		return err
 	}
-
-	r.mutableState.AddTimerTasks(&tasks.DeleteHistoryEventTask{
-		// TaskID is set by shard
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		VisibilityTimestamp: now.Add(retention),
-		Version:             currentVersion,
-	})
+	branchToken, err := r.mutableState.GetCurrentBranchToken()
+	if err != nil {
+		return err
+	}
+	r.mutableState.AddTasks(
+		&tasks.CloseExecutionTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: now,
+			Version:             currentVersion,
+		},
+		&tasks.CloseExecutionVisibilityTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: now,
+			Version:             currentVersion,
+		},
+		&tasks.DeleteHistoryEventTask{
+			// TaskID is set by shard
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			VisibilityTimestamp: now.Add(retention),
+			Version:             currentVersion,
+			BranchToken:         branchToken,
+		},
+	)
 
 	return nil
 }
@@ -239,7 +240,7 @@ func (r *TaskGeneratorImpl) GenerateDelayedWorkflowTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("unknown initiator: %v", startAttr.GetInitiator()))
 	}
 
-	r.mutableState.AddTimerTasks(&tasks.WorkflowBackoffTimerTask{
+	r.mutableState.AddTasks(&tasks.WorkflowBackoffTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: executionTimestamp,
@@ -257,7 +258,7 @@ func (r *TaskGeneratorImpl) GenerateRecordWorkflowStartedTasks(
 
 	startVersion := startEvent.GetVersion()
 
-	r.mutableState.AddVisibilityTasks(&tasks.StartExecutionVisibilityTask{
+	r.mutableState.AddTasks(&tasks.StartExecutionVisibilityTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
@@ -278,7 +279,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending workflow task: %v", workflowTaskScheduleID))
 	}
 
-	r.mutableState.AddTransferTasks(&tasks.WorkflowTask{
+	r.mutableState.AddTasks(&tasks.WorkflowTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
@@ -291,7 +292,7 @@ func (r *TaskGeneratorImpl) GenerateScheduleWorkflowTaskTasks(
 		scheduledTime := timestamp.TimeValue(workflowTask.ScheduledTime)
 		scheduleToStartTimeout := timestamp.DurationValue(r.mutableState.GetExecutionInfo().StickyScheduleToStartTimeout)
 
-		r.mutableState.AddTimerTasks(&tasks.WorkflowTaskTimeoutTask{
+		r.mutableState.AddTasks(&tasks.WorkflowTaskTimeoutTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: scheduledTime.Add(scheduleToStartTimeout),
@@ -320,7 +321,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	startedTime := timestamp.TimeValue(workflowTask.StartedTime)
 	workflowTaskTimeout := timestamp.DurationValue(workflowTask.WorkflowTaskTimeout)
 
-	r.mutableState.AddTimerTasks(&tasks.WorkflowTaskTimeoutTask{
+	r.mutableState.AddTasks(&tasks.WorkflowTaskTimeoutTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: startedTime.Add(workflowTaskTimeout),
@@ -333,7 +334,7 @@ func (r *TaskGeneratorImpl) GenerateStartWorkflowTaskTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateActivityTransferTasks(
+func (r *TaskGeneratorImpl) GenerateActivityTasks(
 	now time.Time,
 	event *historypb.HistoryEvent,
 ) error {
@@ -344,7 +345,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTransferTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
 	}
 
-	r.mutableState.AddTransferTasks(&tasks.ActivityTask{
+	r.mutableState.AddTasks(&tasks.ActivityTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
@@ -366,7 +367,7 @@ func (r *TaskGeneratorImpl) GenerateActivityRetryTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending activity: %v", activityScheduleID))
 	}
 
-	r.mutableState.AddTimerTasks(&tasks.ActivityRetryTimerTask{
+	r.mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		Version:             ai.Version,
@@ -396,7 +397,7 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 		return err
 	}
 
-	r.mutableState.AddTransferTasks(&tasks.StartChildExecutionTask{
+	r.mutableState.AddTasks(&tasks.StartChildExecutionTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
@@ -432,7 +433,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 		return err
 	}
 
-	r.mutableState.AddTransferTasks(&tasks.CancelExecutionTask{
+	r.mutableState.AddTasks(&tasks.CancelExecutionTask{
 		// TaskID is set by shard
 		WorkflowKey:             r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp:     now,
@@ -470,7 +471,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 		return err
 	}
 
-	r.mutableState.AddTransferTasks(&tasks.SignalExecutionTask{
+	r.mutableState.AddTasks(&tasks.SignalExecutionTask{
 		// TaskID is set by shard
 		WorkflowKey:             r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp:     now,
@@ -491,7 +492,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowSearchAttrTasks(
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
-	r.mutableState.AddVisibilityTasks(&tasks.UpsertExecutionVisibilityTask{
+	r.mutableState.AddTasks(&tasks.UpsertExecutionVisibilityTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
@@ -506,7 +507,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowResetTasks(
 
 	currentVersion := r.mutableState.GetCurrentVersion()
 
-	r.mutableState.AddTransferTasks(&tasks.ResetWorkflowTask{
+	r.mutableState.AddTasks(&tasks.ResetWorkflowTask{
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
@@ -544,7 +545,7 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	}
 	version := firstEvent.GetVersion()
 
-	r.mutableState.AddReplicationTasks(&tasks.HistoryReplicationTask{
+	r.mutableState.AddTasks(&tasks.HistoryReplicationTask{
 		// TaskID is set by shard
 		VisibilityTimestamp: now,
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
@@ -559,7 +560,7 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 
 func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
 	now time.Time,
-) (*tasks.HistoryReplicationTask, error) {
+) (tasks.Task, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
 	versionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.GetVersionHistories())
 	if err != nil {

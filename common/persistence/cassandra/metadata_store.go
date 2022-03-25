@@ -88,6 +88,10 @@ const (
 		templateNamespaceColumns +
 		` FROM namespaces ` +
 		`WHERE namespaces_partition = ? `
+
+	templateUpdateNamespaceByIdQuery = `UPDATE namespaces_by_id ` +
+		`SET name = ? ` +
+		`WHERE id = ?`
 )
 
 type (
@@ -193,6 +197,56 @@ func (m *MetadataStore) UpdateNamespace(request *p.InternalUpdateNamespaceReques
 
 	if !applied {
 		return serviceerror.NewUnavailable(fmt.Sprintf("UpdateNamespace operation failed because of conditional failure."))
+	}
+
+	return nil
+}
+
+// RenameNamespace should be used with caution.
+// Not every namespace can be renamed because namespace name are stored in the database.
+// It may leave database in inconsistent state and must be retried until success.
+// Step 1. Update row in `namespaces_by_id` table with the new name.
+// Step 2. Batch of:
+//         Insert row into `namespaces` table with new name and new `notification_version`.
+//         Delete row from `namespaces` table with old name.
+//         Update `notification_version` in metadata row.
+//
+// NOTE: `namespaces_by_id` is currently used only for `DescribeNamespace` API and namespace Id collision check.
+func (m *MetadataStore) RenameNamespace(request *p.InternalRenameNamespaceRequest) error {
+	// Step 1.
+	if updateErr := m.session.Query(templateUpdateNamespaceByIdQuery,
+		request.Name,
+		request.Id,
+	).Exec(); updateErr != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed to update 'namespaces_by_id' table. Error: %v", updateErr))
+	}
+
+	// Step 2.
+	batch := m.session.NewBatch(gocql.LoggedBatch)
+	batch.Query(templateCreateNamespaceByNameQueryWithinBatchV2,
+		constNamespacePartition,
+		request.Id,
+		request.Name,
+		request.Namespace.Data,
+		request.Namespace.EncodingType.String(),
+		request.NotificationVersion,
+		request.IsGlobal,
+	)
+	batch.Query(templateDeleteNamespaceByNameQueryV2,
+		constNamespacePartition,
+		request.PreviousName,
+	)
+	m.updateMetadataBatch(batch, request.NotificationVersion)
+
+	previous := make(map[string]interface{})
+	applied, iter, err := m.session.MapExecuteBatchCAS(batch, previous)
+	if err != nil {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed. Error: %v", err))
+	}
+	defer func() { _ = iter.Close() }()
+
+	if !applied {
+		return serviceerror.NewUnavailable(fmt.Sprintf("RenameNamespace operation failed because of conditional failure."))
 	}
 
 	return nil

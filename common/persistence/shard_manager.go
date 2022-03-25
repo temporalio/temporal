@@ -25,6 +25,8 @@
 package persistence
 
 import (
+	"context"
+
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -40,10 +42,11 @@ type shardManagerImpl struct {
 // NewShardManager create a new instance of ShardManager
 func NewShardManager(
 	shardStore ShardStore,
+	serializer serialization.Serializer,
 ) ShardManager {
 	return &shardManagerImpl{
 		shardStore: shardStore,
-		serializer: serialization.NewSerializer(),
+		serializer: serializer,
 	}
 }
 
@@ -55,7 +58,10 @@ func (m *shardManagerImpl) GetName() string {
 	return m.shardStore.GetName()
 }
 
-func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
+func (m *shardManagerImpl) GetOrCreateShard(
+	_ context.Context,
+	request *GetOrCreateShardRequest,
+) (*GetOrCreateShardResponse, error) {
 	var createShardInfo func() (int64, *commonpb.DataBlob, error)
 	createShardInfo = func() (int64, *commonpb.DataBlob, error) {
 		shardInfo := request.InitialShardInfo
@@ -87,7 +93,10 @@ func (m *shardManagerImpl) GetOrCreateShard(request *GetOrCreateShardRequest) (*
 	}, nil
 }
 
-func (m *shardManagerImpl) UpdateShard(request *UpdateShardRequest) error {
+func (m *shardManagerImpl) UpdateShard(
+	_ context.Context,
+	request *UpdateShardRequest,
+) error {
 	shardInfo := request.ShardInfo
 	shardInfo.UpdateTime = timestamp.TimeNowPtrUtc()
 

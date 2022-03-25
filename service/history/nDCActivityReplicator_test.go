@@ -51,7 +51,9 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -63,8 +65,8 @@ type (
 
 		controller          *gomock.Controller
 		mockShard           *shard.ContextTest
-		mockTxProcessor     *MocktransferQueueProcessor
-		mockTimerProcessor  *MocktimerQueueProcessor
+		mockTxProcessor     *queues.MockProcessor
+		mockTimerProcessor  *queues.MockProcessor
 		mockNamespaceCache  *namespace.MockRegistry
 		mockClusterMetadata *cluster.MockMetadata
 		mockMutableState    *workflow.MockMutableState
@@ -96,10 +98,12 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMutableState = workflow.NewMockMutableState(s.controller)
-	s.mockTxProcessor = NewMocktransferQueueProcessor(s.controller)
-	s.mockTimerProcessor = NewMocktimerQueueProcessor(s.controller)
-	s.mockTxProcessor.EXPECT().NotifyNewTask(gomock.Any(), gomock.Any()).AnyTimes()
-	s.mockTimerProcessor.EXPECT().NotifyNewTimers(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTxProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTimerProcessor = queues.NewMockProcessor(s.controller)
+	s.mockTxProcessor.EXPECT().Category().Return(tasks.CategoryTransfer).AnyTimes()
+	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
+	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
+	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -134,11 +138,13 @@ func (s *activityReplicatorSuite) SetupTest() {
 		timeSource:         s.mockShard.GetTimeSource(),
 		eventNotifier: events.NewNotifier(
 			clock.NewRealTimeSource(),
-			metrics.NewNoopMetricsClient(),
+			metrics.NoopClient,
 			func(namespace.ID, string) int32 { return 1 },
 		),
-		txProcessor:    s.mockTxProcessor,
-		timerProcessor: s.mockTimerProcessor,
+		queueProcessors: map[tasks.Category]queues.Processor{
+			s.mockTxProcessor.Category():    s.mockTxProcessor,
+			s.mockTimerProcessor.Category(): s.mockTimerProcessor,
+		},
 	}
 	s.mockShard.SetEngineForTesting(engine)
 
@@ -604,7 +610,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowNotFound() {
 		WorkflowId:  workflowID,
 		RunId:       runID,
 	}
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(&persistence.GetWorkflowExecutionRequest{
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), &persistence.GetWorkflowExecutionRequest{
 		ShardID:     s.mockShard.GetShardID(),
 		NamespaceID: namespaceID.String(),
 		WorkflowID:  workflowID,
@@ -662,7 +668,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
@@ -736,7 +742,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
@@ -811,18 +817,21 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
+
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
+	now := time.Now()
 	request := &historyservice.SyncActivityRequest{
 		NamespaceId:    namespaceID.String(),
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
+		ScheduledTime:  &now,
 		VersionHistory: incomingVersionHistory,
 	}
 
@@ -837,10 +846,10 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	}, true)
 	s.mockMutableState.EXPECT().ReplicateActivityInfo(request, false).Return(nil)
 	s.mockMutableState.EXPECT().GetPendingActivityInfos().Return(map[int64]*persistencespb.ActivityInfo{})
-
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(),
 		gomock.Any(),
 		persistence.UpdateWorkflowModeBypassCurrent,
 		workflow.Context(nil),
@@ -901,18 +910,20 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 
 	key := definition.NewWorkflowKey(namespaceID.String(), workflowID, runID)
 	weContext := workflow.NewMockContext(s.controller)
-	weContext.EXPECT().LoadWorkflowExecution().Return(s.mockMutableState, nil)
+	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 	_, err := s.historyCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
+	now := time.Now()
 	request := &historyservice.SyncActivityRequest{
 		NamespaceId:    namespaceID.String(),
 		WorkflowId:     workflowID,
 		RunId:          runID,
 		Version:        version,
 		ScheduledId:    scheduleID,
+		ScheduledTime:  &now,
 		VersionHistory: incomingVersionHistory,
 	}
 
@@ -931,6 +942,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	s.mockClusterMetadata.EXPECT().IsVersionFromSameCluster(version, version).Return(true)
 
 	weContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(),
 		gomock.Any(),
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		workflow.Context(nil),

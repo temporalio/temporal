@@ -68,7 +68,7 @@ func (h *historyArchiverSuite) SetupTest() {
 	h.controller = gomock.NewController(h.T())
 	h.container = &archiver.HistoryBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NewNoopMetricsClient(),
+		MetricsClient: metrics.NoopClient,
 	}
 	h.testArchivalURI, _ = archiver.NewURI("gs://my-bucket-cad/temporal_archival/development")
 }

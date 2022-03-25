@@ -53,6 +53,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 const (
@@ -364,7 +365,7 @@ func (p *ReplicationTaskProcessorImpl) handleReplicationDLQTask(
 	)
 	// The following is guaranteed to success or retry forever until processor is shutdown.
 	return backoff.Retry(func() error {
-		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(request)
+		err := p.shard.GetExecutionManager().PutReplicationTaskToDLQ(context.TODO(), request)
 		if err != nil {
 			p.logger.Error("failed to enqueue replication task to DLQ", tag.Error(err))
 			p.metricsClient.IncCounter(metrics.ReplicationTaskFetcherScope, metrics.ReplicationDLQFailed)
@@ -483,7 +484,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 			continue
 		}
 
-		ackLevel := p.shard.GetClusterReplicationLevel(clusterName)
+		ackLevel := p.shard.GetQueueClusterAckLevel(tasks.CategoryReplication, clusterName).TaskID
 		if minAckedTaskID == nil || ackLevel < *minAckedTaskID {
 			minAckedTaskID = &ackLevel
 		}
@@ -492,19 +493,23 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 		return nil
 	}
 
-	p.logger.Info("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
+	p.logger.Debug("cleaning up replication task queue", tag.ReadLevel(*minAckedTaskID))
 	p.metricsClient.Scope(metrics.ReplicationTaskCleanupScope).IncCounter(metrics.ReplicationTaskCleanupCount)
 	p.metricsClient.Scope(
 		metrics.ReplicationTaskFetcherScope,
 		metrics.TargetClusterTag(p.currentCluster),
 	).RecordDistribution(
 		metrics.ReplicationTasksLag,
-		int(p.shard.GetTransferMaxReadLevel()-*minAckedTaskID),
+		int(p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, currentCluster).TaskID-*minAckedTaskID),
 	)
-	err := p.shard.GetExecutionManager().RangeCompleteReplicationTask(
-		&persistence.RangeCompleteReplicationTaskRequest{
-			ShardID:            p.shard.GetShardID(),
-			InclusiveEndTaskID: *minAckedTaskID,
+	err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(
+		context.TODO(),
+		&persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:      p.shard.GetShardID(),
+			TaskCategory: tasks.CategoryReplication,
+			ExclusiveMaxTaskKey: tasks.Key{
+				TaskID: *minAckedTaskID + 1,
+			},
 		},
 	)
 	if err == nil {

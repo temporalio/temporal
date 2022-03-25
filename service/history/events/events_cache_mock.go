@@ -29,6 +29,7 @@
 package events
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -71,18 +72,18 @@ func (mr *MockCacheMockRecorder) DeleteEvent(key interface{}) *gomock.Call {
 }
 
 // GetEvent mocks base method.
-func (m *MockCache) GetEvent(key EventKey, firstEventID int64, branchToken []byte) (*v1.HistoryEvent, error) {
+func (m *MockCache) GetEvent(ctx context.Context, key EventKey, firstEventID int64, branchToken []byte) (*v1.HistoryEvent, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetEvent", key, firstEventID, branchToken)
+	ret := m.ctrl.Call(m, "GetEvent", ctx, key, firstEventID, branchToken)
 	ret0, _ := ret[0].(*v1.HistoryEvent)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetEvent indicates an expected call of GetEvent.
-func (mr *MockCacheMockRecorder) GetEvent(key, firstEventID, branchToken interface{}) *gomock.Call {
+func (mr *MockCacheMockRecorder) GetEvent(ctx, key, firstEventID, branchToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockCache)(nil).GetEvent), key, firstEventID, branchToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetEvent", reflect.TypeOf((*MockCache)(nil).GetEvent), ctx, key, firstEventID, branchToken)
 }
 
 // PutEvent mocks base method.

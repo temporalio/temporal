@@ -140,7 +140,7 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 	lastMessageID := int64(1394)
 	pageSize := 1
 	pageToken := []byte("some random token")
-	dbResp := &persistence.GetReplicationTasksFromDLQResponse{
+	dbResp := &persistence.GetHistoryTasksResponse{
 		Tasks: []tasks.Task{&tasks.HistoryReplicationTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				namespaceID,
@@ -172,15 +172,16 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 		},
 	}
 
-	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
-		ShardID:           s.mockShard.GetShardID(),
-		SourceClusterName: s.sourceCluster,
-		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			MinTaskID:     persistence.EmptyQueueMessageID,
-			MaxTaskID:     lastMessageID,
-			BatchSize:     pageSize,
-			NextPageToken: pageToken,
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), &persistence.GetReplicationTasksFromDLQRequest{
+		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
+			ShardID:             s.mockShard.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.Key{TaskID: persistence.EmptyQueueMessageID + 1},
+			ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			BatchSize:           pageSize,
+			NextPageToken:       pageToken,
 		},
+		SourceClusterName: s.sourceCluster,
 	}).Return(dbResp, nil)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
@@ -198,15 +199,19 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 	lastMessageID := int64(1)
 
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(
+		gomock.Any(),
 		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			ShardID:              s.mockShard.GetShardID(),
-			SourceClusterName:    s.sourceCluster,
-			ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
-			InclusiveEndTaskID:   lastMessageID,
+			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
+				ShardID:             s.mockShard.GetShardID(),
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: tasks.Key{TaskID: persistence.EmptyQueueMessageID + 1},
+				ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			},
+			SourceClusterName: s.sourceCluster,
 		}).Return(nil)
 
-	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	err := s.replicationMessageHandler.purgeMessages(s.sourceCluster, lastMessageID)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
+	err := s.replicationMessageHandler.purgeMessages(context.Background(), s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
 func (s *replicationDLQHandlerSuite) TestMergeMessages() {
@@ -224,7 +229,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 	pageSize := 1
 	pageToken := []byte("some random token")
 
-	dbResp := &persistence.GetReplicationTasksFromDLQResponse{
+	dbResp := &persistence.GetHistoryTasksResponse{
 		Tasks: []tasks.Task{&tasks.HistoryReplicationTask{
 			WorkflowKey: definition.NewWorkflowKey(
 				namespaceID,
@@ -256,15 +261,16 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		},
 	}
 
-	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(&persistence.GetReplicationTasksFromDLQRequest{
-		ShardID:           s.mockShard.GetShardID(),
-		SourceClusterName: s.sourceCluster,
-		GetReplicationTasksRequest: persistence.GetReplicationTasksRequest{
-			MinTaskID:     persistence.EmptyQueueMessageID,
-			MaxTaskID:     lastMessageID,
-			BatchSize:     pageSize,
-			NextPageToken: pageToken,
+	s.executionManager.EXPECT().GetReplicationTasksFromDLQ(gomock.Any(), &persistence.GetReplicationTasksFromDLQRequest{
+		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
+			ShardID:             s.mockShard.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.Key{TaskID: persistence.EmptyQueueMessageID + 1},
+			ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			BatchSize:           pageSize,
+			NextPageToken:       pageToken,
 		},
+		SourceClusterName: s.sourceCluster,
 	}).Return(dbResp, nil)
 
 	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
@@ -273,14 +279,17 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
 	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil)
-	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-		ShardID:              s.mockShard.GetShardID(),
-		SourceClusterName:    s.sourceCluster,
-		ExclusiveBeginTaskID: persistence.EmptyQueueMessageID,
-		InclusiveEndTaskID:   lastMessageID,
+	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
+		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:             s.mockShard.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.Key{TaskID: persistence.EmptyQueueMessageID + 1},
+			ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+		},
+		SourceClusterName: s.sourceCluster,
 	}).Return(nil)
 
-	s.shardManager.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 
 	token, err := s.replicationMessageHandler.mergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)

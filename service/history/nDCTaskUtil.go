@@ -25,6 +25,7 @@
 package history
 
 import (
+	"context"
 	"time"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -42,47 +43,44 @@ const (
 	refreshTaskTimeout = 30 * time.Second
 )
 
-// verifyTaskVersion, will return true if failover version check is successful
-func verifyTaskVersion(
+// VerifyTaskVersion, will return true if failover version check is successful
+func VerifyTaskVersion(
 	shard shard.Context,
 	logger log.Logger,
-	namespaceID namespace.ID,
+	namespace *namespace.Namespace,
 	version int64,
 	taskVersion int64,
 	task interface{},
-) (bool, error) {
+) bool {
 
 	if !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-		return true, nil
+		return true
 	}
 
 	// the first return value is whether this task is valid for further processing
-	namespaceEntry, err := shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		logger.Debug("Cannot find namespaceID", tag.WorkflowNamespaceID(namespaceID.String()), tag.Error(err))
-		return false, err
-	}
-	if !namespaceEntry.IsGlobalNamespace() {
-		logger.Debug("NamespaceID is not active, task version check pass", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task))
-		return true, nil
+	if !namespace.IsGlobalNamespace() {
+		logger.Debug("NamespaceID is not global, task version check pass", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task))
+		return true
 	} else if version != taskVersion {
-		logger.Debug("NamespaceID is active, task version != target version", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task), tag.TaskVersion(version))
-		return false, nil
+		logger.Debug("NamespaceID is global, task version != target version", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task), tag.TaskVersion(version))
+		return false
 	}
-	logger.Debug("NamespaceID is active, task version == target version", tag.WorkflowNamespaceID(namespaceID.String()), tag.Task(task), tag.TaskVersion(version))
-	return true, nil
+	logger.Debug("NamespaceID is global, task version == target version", tag.WorkflowNamespaceID(namespace.ID().String()), tag.Task(task), tag.TaskVersion(version))
+	return true
 }
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTransferTask(
-	context workflow.Context,
+	ctx context.Context,
+	wfContext workflow.Context,
 	transferTask tasks.Task,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-	return loadMutableStateForTask(
-		context,
+	return LoadMutableStateForTask(
+		ctx,
+		wfContext,
 		transferTask,
 		getTransferTaskEventIDAndRetryable,
 		metricsClient.Scope(metrics.TransferQueueProcessorScope),
@@ -93,13 +91,15 @@ func loadMutableStateForTransferTask(
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
 // if still mutable state's next event ID <= task ID, will return nil, nil
 func loadMutableStateForTimerTask(
-	context workflow.Context,
+	ctx context.Context,
+	wfContext workflow.Context,
 	timerTask tasks.Task,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-	return loadMutableStateForTask(
-		context,
+	return LoadMutableStateForTask(
+		ctx,
+		wfContext,
 		timerTask,
 		getTimerTaskEventIDAndRetryable,
 		metricsClient.Scope(metrics.TimerQueueProcessorScope),
@@ -107,15 +107,16 @@ func loadMutableStateForTimerTask(
 	)
 }
 
-func loadMutableStateForTask(
-	context workflow.Context,
+func LoadMutableStateForTask(
+	ctx context.Context,
+	wfContext workflow.Context,
 	task tasks.Task,
 	taskEventIDAndRetryable func(task tasks.Task, executionInfo *persistencespb.WorkflowExecutionInfo) (int64, bool),
 	scope metrics.Scope,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
 
-	mutableState, err := context.LoadWorkflowExecution()
+	mutableState, err := wfContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -129,15 +130,19 @@ func loadMutableStateForTask(
 	}
 
 	scope.IncCounter(metrics.StaleMutableStateCounter)
-	context.Clear()
+	wfContext.Clear()
 
-	mutableState, err = context.LoadWorkflowExecution()
+	mutableState, err = wfContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
 	// after refresh, still mutable state's next event ID <= task's event ID
 	if eventID >= mutableState.GetNextEventID() {
-		logger.Info("Timer Task Processor: task event ID >= MS NextEventID, skip.",
+		scope.IncCounter(metrics.TaskSkipped)
+		logger.Info("Task Processor: task event ID >= MS NextEventID, skip.",
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()),
 			tag.WorkflowEventID(eventID),
 			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 		)

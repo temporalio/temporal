@@ -29,8 +29,11 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
+
+var _ Task = (*WorkflowTaskTimeoutTask)(nil)
 
 type (
 	WorkflowTaskTimeoutTask struct {
@@ -73,4 +76,12 @@ func (d *WorkflowTaskTimeoutTask) GetVisibilityTime() time.Time {
 
 func (d *WorkflowTaskTimeoutTask) SetVisibilityTime(t time.Time) {
 	d.VisibilityTimestamp = t
+}
+
+func (d *WorkflowTaskTimeoutTask) GetCategory() Category {
+	return CategoryTimer
+}
+
+func (d *WorkflowTaskTimeoutTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
 }

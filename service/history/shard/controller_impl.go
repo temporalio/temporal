@@ -170,7 +170,7 @@ func (c *ControllerImpl) CloseShardByID(shardID int32) {
 	// Stop the current shard, if it exists.
 	if shard != nil {
 		shard.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shardID))
-		shard.stop()
+		shard.finishStop()
 		c.metricsScope.IncCounter(metrics.ShardContextRemovedCounter)
 		shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
 	}
@@ -186,7 +186,7 @@ func (c *ControllerImpl) shardClosedCallback(shard *ContextImpl) {
 
 	// Whether shard was in the shards map or not, in both cases we should stop it.
 	shard.contextTaggedLogger.Info("", tag.LifeCycleStopping, tag.ComponentShardContext, tag.ShardID(shard.shardID))
-	shard.stop()
+	shard.finishStop()
 	c.metricsScope.IncCounter(metrics.ShardContextRemovedCounter)
 	shard.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardContext, tag.Number(newNumShards))
 }
@@ -374,7 +374,7 @@ func (c *ControllerImpl) doShutdown() {
 	c.Lock()
 	defer c.Unlock()
 	for _, shard := range c.historyShards {
-		shard.stop()
+		shard.finishStop()
 	}
 	c.historyShards = nil
 }

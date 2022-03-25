@@ -30,25 +30,19 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
-	visibilityQueueProcessor interface {
-		common.Daemon
-		NotifyNewTask(visibilityTasks []tasks.Task)
-	}
-
 	updateVisibilityAckLevel func(ackLevel int64) error
 	visibilityQueueShutdown  func() error
 
@@ -79,15 +73,13 @@ type (
 
 func newVisibilityQueueProcessor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
-	matchingClient matchingservice.MatchingServiceClient,
-	historyClient historyservice.HistoryServiceClient,
-	logger log.Logger,
-) *visibilityQueueProcessorImpl {
+) queues.Processor {
 
 	config := shard.GetConfig()
-	logger = log.With(logger, tag.ComponentVisibilityQueue)
+	logger := log.With(shard.GetLogger(), tag.ComponentVisibilityQueue)
+	metricsClient := shard.GetMetricsClient()
 
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.VisibilityTaskBatchSize,
@@ -104,20 +96,24 @@ func newVisibilityQueueProcessor(
 		EnablePriorityTaskProcessor:         config.VisibilityProcessorEnablePriorityTaskProcessor,
 		MetricScope:                         metrics.VisibilityQueueProcessorScope,
 	}
-	visibilityTaskFilter := func(taskInfo tasks.Task) (bool, error) {
-		return true, nil
+	visibilityTaskFilter := func(taskInfo tasks.Task) bool {
+		return true
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetTransferMaxReadLevel()
+		return shard.GetQueueMaxReadLevel(
+			tasks.CategoryVisibility,
+			shard.GetClusterMetadata().GetCurrentClusterName(),
+		).TaskID
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
-		return shard.UpdateVisibilityAckLevel(ackLevel)
+		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: ackLevel})
 	}
 
 	visibilityQueueShutdown := func() error {
 		return nil
 	}
 
+	ackLevel := shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID
 	retProcessor := &visibilityQueueProcessorImpl{
 		shard:                    shard,
 		options:                  options,
@@ -126,19 +122,16 @@ func newVisibilityQueueProcessor(
 		visibilityQueueShutdown:  visibilityQueueShutdown,
 		visibilityTaskFilter:     visibilityTaskFilter,
 		logger:                   logger,
-		metricsClient:            historyEngine.metricsClient,
+		metricsClient:            metricsClient,
 		taskExecutor: newVisibilityQueueTaskExecutor(
 			shard,
-			historyEngine,
+			workflowCache,
 			visibilityMgr,
 			logger,
-			historyEngine.metricsClient,
-			config,
-			matchingClient,
 		),
 
 		config:       config,
-		ackLevel:     shard.GetVisibilityAckLevel(),
+		ackLevel:     ackLevel,
 		shutdownChan: make(chan struct{}),
 
 		queueAckMgr:        nil, // is set bellow
@@ -150,7 +143,7 @@ func newVisibilityQueueProcessor(
 		shard,
 		options,
 		retProcessor,
-		shard.GetVisibilityAckLevel(),
+		ackLevel,
 		logger,
 	)
 
@@ -160,7 +153,7 @@ func newVisibilityQueueProcessor(
 		options,
 		retProcessor,
 		queueAckMgr,
-		historyEngine.historyCache,
+		workflowCache,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.VisibilityQueueProcessorScope),
 	)
@@ -187,14 +180,33 @@ func (t *visibilityQueueProcessorImpl) Stop() {
 	close(t.shutdownChan)
 }
 
-// NotifyNewTask - Notify the processor about the new visibility task arrival.
+// NotifyNewTasks - Notify the processor about the new visibility task arrival.
 // This should be called each time new visibility task arrives, otherwise tasks maybe delayed.
-func (t *visibilityQueueProcessorImpl) NotifyNewTask(
+func (t *visibilityQueueProcessorImpl) NotifyNewTasks(
+	_ string,
 	visibilityTasks []tasks.Task,
 ) {
 	if len(visibilityTasks) != 0 {
 		t.notifyNewTask()
 	}
+}
+
+func (t *visibilityQueueProcessorImpl) FailoverNamespace(
+	namespaceIDs map[string]struct{},
+) {
+	// no-op
+}
+
+func (t *visibilityQueueProcessorImpl) LockTaskProcessing() {
+	// no-op
+}
+
+func (t *visibilityQueueProcessorImpl) UnlockTaskProcessing() {
+	// no-op
+}
+
+func (t *visibilityQueueProcessorImpl) Category() tasks.Category {
+	return tasks.CategoryVisibility
 }
 
 func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
@@ -243,10 +255,15 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 	t.metricsClient.IncCounter(metrics.VisibilityQueueProcessorScope, metrics.TaskBatchCompleteCounter)
 
 	if lowerAckLevel < upperAckLevel {
-		err := t.shard.GetExecutionManager().RangeCompleteVisibilityTask(&persistence.RangeCompleteVisibilityTaskRequest{
-			ShardID:              t.shard.GetShardID(),
-			ExclusiveBeginTaskID: lowerAckLevel,
-			InclusiveEndTaskID:   upperAckLevel,
+		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
+			ShardID:      t.shard.GetShardID(),
+			TaskCategory: tasks.CategoryVisibility,
+			InclusiveMinTaskKey: tasks.Key{
+				TaskID: lowerAckLevel + 1,
+			},
+			ExclusiveMaxTaskKey: tasks.Key{
+				TaskID: upperAckLevel + 1,
+			},
 		})
 		if err != nil {
 			return err
@@ -255,7 +272,7 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateVisibilityAckLevel(upperAckLevel)
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: upperAckLevel})
 }
 
 // queueProcessor interface
@@ -289,11 +306,16 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
 
-	response, err := t.executionManager.GetVisibilityTasks(&persistence.GetVisibilityTasksRequest{
+	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
 		ShardID:      t.shard.GetShardID(),
-		ReadLevel:    readLevel,
-		MaxReadLevel: t.maxReadAckLevel(),
-		BatchSize:    t.options.BatchSize(),
+		TaskCategory: tasks.CategoryVisibility,
+		InclusiveMinTaskKey: tasks.Key{
+			TaskID: readLevel + 1,
+		},
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: t.maxReadAckLevel() + 1,
+		},
+		BatchSize: t.options.BatchSize(),
 	})
 
 	if err != nil {

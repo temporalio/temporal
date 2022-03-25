@@ -31,4 +31,6 @@ const (
 	HistoryService  = "history"
 	MatchingService = "matching"
 	WorkerService   = "worker"
+	ServerService   = "server"
+	UnitTestService = "unittest"
 )

@@ -54,6 +54,8 @@ import (
 )
 
 type (
+	// TODO: define a new interface for replication queue processor in queues/queue.go
+
 	replicatorQueueProcessorImpl struct {
 		currentClusterName string
 		shard              shard.Context
@@ -133,10 +135,10 @@ func (p *replicatorQueueProcessorImpl) GetMaxReplicationTaskID() int64 {
 
 	if p.maxTaskID == nil {
 		// maxTaskID is nil before any replication task is written which happens right after shard reload. In that case,
-		// use TransferMaxReadLevel which is the max task id of any transfer/visibility/replication queues.
-		// TransferMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
-		// a few seconds) ack to the latest TransferMaxReadLevel if there is no replication tasks at all.
-		return p.shard.GetTransferMaxReadLevel()
+		// use ImmediateTaskMaxReadLevel which is the max task id of any immediate task queues.
+		// ImmediateTaskMaxReadLevel will be the lower bound of new range_id if shard reload. Remote cluster will quickly (in
+		// a few seconds) ack to the latest ImmediateTaskMaxReadLevel if there is no replication tasks at all.
+		return p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, p.currentClusterName).TaskID
 	}
 
 	return *p.maxTaskID
@@ -202,12 +204,17 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	}
 
 	var token []byte
-	tasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
+	replicationTasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
 	for {
-		response, err := p.executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
-			ShardID:       p.shard.GetShardID(),
-			MinTaskID:     minTaskID,
-			MaxTaskID:     maxTaskID,
+		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+			ShardID:      p.shard.GetShardID(),
+			TaskCategory: tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.Key{
+				TaskID: minTaskID + 1,
+			},
+			ExclusiveMaxTaskKey: tasks.Key{
+				TaskID: maxTaskID + 1,
+			},
 			BatchSize:     batchSize,
 			NextPageToken: token,
 		})
@@ -223,26 +230,26 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 			); err != nil {
 				return nil, 0, err
 			} else if replicationTask != nil {
-				tasks = append(tasks, replicationTask)
+				replicationTasks = append(replicationTasks, replicationTask)
 			}
 		}
 
 		// break if seen at least one task or no more task
-		if len(token) == 0 || len(tasks) > 0 {
+		if len(token) == 0 || len(replicationTasks) > 0 {
 			break
 		}
 	}
 
 	// sanity check we will finish pagination or return some tasks
-	if len(token) != 0 && len(tasks) == 0 {
+	if len(token) != 0 && len(replicationTasks) == 0 {
 		p.logger.Fatal("replication task reader should finish pagination or return some tasks")
 	}
 
-	if len(tasks) == 0 {
+	if len(replicationTasks) == 0 {
 		// len(token) == 0, no more items from DB
 		return nil, maxTaskID, nil
 	}
-	return tasks, tasks[len(tasks)-1].GetSourceTaskId(), nil
+	return replicationTasks, replicationTasks[len(replicationTasks)-1].GetSourceTaskId(), nil
 }
 
 func (p *replicatorQueueProcessorImpl) getTask(
@@ -302,7 +309,7 @@ func (p *replicatorQueueProcessorImpl) taskIDsRange(
 	lastReadMessageID int64,
 ) (minTaskID int64, maxTaskID int64) {
 	minTaskID = lastReadMessageID
-	maxTaskID = p.shard.GetTransferMaxReadLevel()
+	maxTaskID = p.shard.GetQueueMaxReadLevel(tasks.CategoryReplication, p.currentClusterName).TaskID
 
 	p.Lock()
 	defer p.Unlock()
@@ -375,11 +382,10 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 
 			// Version history uses when replicate the sync activity task
 			versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-			versionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
+			currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 			if err != nil {
 				return nil, err
 			}
-
 			return &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_ACTIVITY_TASK,
 				SourceTaskId: taskID,
@@ -398,7 +404,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 						Attempt:            activityInfo.Attempt,
 						LastFailure:        activityInfo.RetryLastFailure,
 						LastWorkerIdentity: activityInfo.RetryLastWorkerIdentity,
-						VersionHistory:     versionHistory,
+						VersionHistory:     versionhistory.CopyVersionHistory(currentVersionHistory),
 					},
 				},
 				VisibilityTime: &taskInfo.VisibilityTimestamp,
@@ -437,6 +443,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 			}
 
 			eventsBlob, err := p.getEventsBlob(
+				ctx,
 				taskInfo.BranchToken,
 				taskInfo.FirstEventID,
 				taskInfo.NextEventID,
@@ -449,6 +456,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 			if len(taskInfo.NewRunBranchToken) != 0 {
 				// only get the first batch
 				newRunEventsBlob, err = p.getEventsBlob(
+					ctx,
 					taskInfo.NewRunBranchToken,
 					common.FirstEventID,
 					common.FirstEventID+1,
@@ -479,6 +487,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 }
 
 func (p *replicatorQueueProcessorImpl) getEventsBlob(
+	ctx context.Context,
 	branchToken []byte,
 	firstEventID int64,
 	nextEventID int64,
@@ -496,7 +505,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	}
 
 	for {
-		resp, err := p.executionMgr.ReadRawHistoryBranch(req)
+		resp, err := p.executionMgr.ReadRawHistoryBranch(ctx, req)
 		if err != nil {
 			return nil, err
 		}
@@ -534,11 +543,11 @@ func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
 		return nil, nil, err
 	}
 
-	versionHistory, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
+	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
 	if err != nil {
 		return nil, nil, err
 	}
-	return versionHistory.GetItems(), versionHistory.GetBranchToken(), nil
+	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
 }
 
 func (p *replicatorQueueProcessorImpl) processReplication(
@@ -566,7 +575,7 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	}
 	defer func() { release(retError) }()
 
-	msBuilder, err := context.LoadWorkflowExecution()
+	msBuilder, err := context.LoadWorkflowExecution(ctx)
 	switch err.(type) {
 	case nil:
 		if !processTaskIfClosed && !msBuilder.IsWorkflowExecutionRunning() {

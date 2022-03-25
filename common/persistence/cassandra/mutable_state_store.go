@@ -923,8 +923,7 @@ func (d *MutableStateStore) DeleteCurrentWorkflowExecution(
 
 func (d *MutableStateStore) GetCurrentExecution(
 	request *p.GetCurrentExecutionRequest,
-) (*p.InternalGetCurrentExecutionResponse,
-	error) {
+) (*p.InternalGetCurrentExecutionResponse, error) {
 	query := d.Session.Query(templateGetCurrentExecutionQuery,
 		request.ShardID,
 		rowTypeExecution,
@@ -955,6 +954,60 @@ func (d *MutableStateStore) GetCurrentExecution(
 		RunID:          currentRunID,
 		ExecutionState: executionState,
 	}, nil
+}
+
+func (d *MutableStateStore) SetWorkflowExecution(
+	request *p.InternalSetWorkflowExecutionRequest,
+) error {
+	batch := d.Session.NewBatch(gocql.LoggedBatch)
+
+	shardID := request.ShardID
+	setSnapshot := request.SetWorkflowSnapshot
+
+	if err := applyWorkflowSnapshotBatchAsReset(batch, shardID, &setSnapshot); err != nil {
+		return err
+	}
+
+	// Verifies that the RangeID has not changed
+	batch.Query(templateUpdateLeaseQuery,
+		request.RangeID,
+		request.ShardID,
+		rowTypeShard,
+		rowTypeShardNamespaceID,
+		rowTypeShardWorkflowID,
+		rowTypeShardRunID,
+		defaultVisibilityTimestamp,
+		rowTypeShardTaskID,
+		request.RangeID,
+	)
+
+	conflictRecord := make(map[string]interface{})
+	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
+	if err != nil {
+		return gocql.ConvertError("ConflictResolveWorkflowExecution", err)
+	}
+	defer func() {
+		_ = conflictIter.Close()
+	}()
+
+	if !applied {
+		executionCASConditions := []executionCASCondition{{
+			runID: setSnapshot.RunID,
+			// dbVersion is for CAS, so the db record version will be set to `setSnapshot.DBRecordVersion`
+			// while CAS on `setSnapshot.DBRecordVersion - 1`
+			dbVersion:   setSnapshot.DBRecordVersion - 1,
+			nextEventID: setSnapshot.Condition,
+		}}
+		return convertErrors(
+			conflictRecord,
+			conflictIter,
+			request.ShardID,
+			request.RangeID,
+			"",
+			executionCASConditions,
+		)
+	}
+	return nil
 }
 
 func (d *MutableStateStore) ListConcreteExecutions(

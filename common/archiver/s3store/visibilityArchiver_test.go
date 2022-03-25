@@ -137,10 +137,11 @@ func (s *visibilityArchiverSuite) SetupSuite() {
 
 	s.testArchivalURI, err = archiver.NewURI(testBucketURI)
 	s.Require().NoError(err)
-
+	metricsClient, err := metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.History)
+	s.Require().NoError(err, "metrics.NewClient")
 	s.container = &archiver.VisibilityBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.VisibilityArchiverScope),
+		MetricsClient: metricsClient,
 	}
 }
 

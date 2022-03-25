@@ -32,6 +32,7 @@ import (
 
 var Module = fx.Options(
 	fx.Provide(NewCacheFnProvider),
+	fx.Populate(&taskGeneratorProvider),
 )
 
 // NewCacheFnProvider provide a NewCacheFn that can be used to create new workflow cache.

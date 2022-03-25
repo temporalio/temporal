@@ -29,11 +29,12 @@ import (
 	"fmt"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
-
+	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/client"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
@@ -54,33 +55,33 @@ type (
 
 		clusterName        string
 		adminClient        adminservice.AdminServiceClient
+		matchingClient     matchingservice.MatchingServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
 
 func newTimerQueueStandbyTaskExecutor(
 	shard shard.Context,
-	deleteManager workflow.DeleteManager,
-	cache workflow.Cache,
+	workflowCache workflow.Cache,
+	workflowDeleteManager workflow.DeleteManager,
 	nDCHistoryResender xdc.NDCHistoryResender,
+	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
-	metricsClient metrics.Client,
 	clusterName string,
 	config *configs.Config,
-	clientBean client.Bean,
 ) queueTaskExecutor {
 	return &timerQueueStandbyTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
-			deleteManager,
-			cache,
+			workflowCache,
+			workflowDeleteManager,
 			logger,
-			metricsClient,
 			config,
 		),
 		clusterName:        clusterName,
-		adminClient:        clientBean.GetRemoteAdminClient(clusterName),
+		adminClient:        shard.GetRemoteAdminClient(clusterName),
 		nDCHistoryResender: nDCHistoryResender,
+		matchingClient:     matchingClient,
 	}
 }
 
@@ -112,9 +113,10 @@ func (t *timerQueueStandbyTaskExecutor) execute(
 		}
 		return t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		// retry backoff timer should not get created on passive cluster
-		// TODO: add error logs
-		return nil
+		if !shouldProcessTask {
+			return nil
+		}
+		return t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
 		return t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
@@ -209,7 +211,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 				return getHistoryResendInfo(mutableState)
 			}
 			// since the activity timer are already sorted, so if there is one timer which will not expired
-			// all activity timer after this timer will not expired
+			// all activity timer after this timer will not expire
 			break Loop //nolint:staticcheck
 		}
 
@@ -257,7 +259,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			return nil, err
 		}
 
-		err = context.UpdateWorkflowExecutionAsPassive(now)
+		err = context.UpdateWorkflowExecutionAsPassive(ctx, now)
 		return nil, err
 	}
 
@@ -272,6 +274,49 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityTimeoutTask(
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
 			t.fetchHistoryFromRemote,
 			standbyTimerTaskPostActionTaskDiscarded,
+		),
+	)
+}
+
+func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
+	ctx context.Context,
+	task *tasks.ActivityRetryTimerTask,
+) (retError error) {
+
+	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+
+		activityInfo, ok := mutableState.GetActivityInfo(task.EventID) //activity schedule ID
+		if !ok {
+			return nil, nil
+		}
+
+		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
+		if !ok {
+			return nil, nil
+		}
+
+		if activityInfo.Attempt > task.Attempt {
+			return nil, nil
+		}
+
+		if activityInfo.StartedId != common.EmptyEventID {
+			return nil, nil
+		}
+
+		return newActivityRetryTimerToMatchingInfo(activityInfo.TaskQueue, activityInfo.NamespaceId, *activityInfo.ScheduleToStartTimeout), nil
+	}
+
+	return t.processTimer(
+		ctx,
+		task,
+		actionFn,
+		getStandbyPostActionFn(
+			task,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			t.pushActivity,
+			t.pushActivity,
 		),
 	)
 }
@@ -295,9 +340,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTaskTimeoutTask(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(timerTask.NamespaceID), workflowTask.Version, timerTask.Version, timerTask)
-		if err != nil || !ok {
-			return nil, err
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), workflowTask.Version, timerTask.Version, timerTask)
+		if !ok {
+			return nil, nil
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -373,9 +418,9 @@ func (t *timerQueueStandbyTaskExecutor) executeWorkflowTimeoutTask(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(timerTask.NamespaceID), startVersion, timerTask.Version, timerTask)
-		if err != nil || !ok {
-			return nil, err
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, timerTask.Version, timerTask)
+		if !ok {
+			return nil, nil
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -440,7 +485,7 @@ func (t *timerQueueStandbyTaskExecutor) processTimer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTimerTask(executionContext, timerTask, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTimerTask(ctx, executionContext, timerTask, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -520,6 +565,39 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 	// return error so task processing logic will retry
 	return consts.ErrTaskRetry
+}
+
+func (t *timerQueueStandbyTaskExecutor) pushActivity(
+	task tasks.Task,
+	postActionInfo interface{},
+	logger log.Logger,
+) error {
+
+	if postActionInfo == nil {
+		return nil
+	}
+
+	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
+	activityScheduleToStartTimeout := &pushActivityInfo.activityTaskScheduleToStartTimeout
+	activityTask := task.(*tasks.ActivityRetryTimerTask)
+	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
+	defer cancel()
+
+	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
+		NamespaceId:       pushActivityInfo.namespaceID,
+		SourceNamespaceId: activityTask.NamespaceID,
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: activityTask.WorkflowID,
+			RunId:      activityTask.RunID,
+		},
+		TaskQueue: &taskqueuepb.TaskQueue{
+			Name: pushActivityInfo.taskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		},
+		ScheduleId:             activityTask.EventID,
+		ScheduleToStartTimeout: activityScheduleToStartTimeout,
+	})
+	return err
 }
 
 func (t *timerQueueStandbyTaskExecutor) getCurrentTime() time.Time {

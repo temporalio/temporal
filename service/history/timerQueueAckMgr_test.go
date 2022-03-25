@@ -139,13 +139,16 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 	s.timerQueueAckMgr = newTimerQueueAckMgr(
 		0,
 		s.mockShard,
-		s.mockShard.GetMetricsClient(),
-		s.mockShard.GetTimerClusterAckLevel(s.clusterName),
+		s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime,
 		func() time.Time {
 			return s.mockShard.GetCurrentTime(s.clusterName)
 		},
-		func(ackLevel timerKey) error {
-			return s.mockShard.UpdateTimerClusterAckLevel(s.clusterName, ackLevel.VisibilityTimestamp)
+		func(ackLevel tasks.Key) error {
+			return s.mockShard.UpdateQueueClusterAckLevel(
+				tasks.CategoryTimer,
+				s.clusterName,
+				ackLevel,
+			)
 		},
 		s.logger,
 		s.clusterName,
@@ -178,15 +181,20 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	maxTimestamp := time.Now().UTC().Add(10 * time.Second)
 	batchSize := 10
 
-	request := &persistence.GetTimerTasksRequest{
-		ShardID:       s.mockShard.GetShardID(),
-		MinTimestamp:  minTimestamp,
-		MaxTimestamp:  maxTimestamp,
+	request := &persistence.GetHistoryTasksRequest{
+		ShardID:      s.mockShard.GetShardID(),
+		TaskCategory: tasks.CategoryTimer,
+		InclusiveMinTaskKey: tasks.Key{
+			FireTime: minTimestamp,
+		},
+		ExclusiveMaxTaskKey: tasks.Key{
+			FireTime: maxTimestamp,
+		},
 		BatchSize:     batchSize,
 		NextPageToken: []byte("some random input next page token"),
 	}
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks: []tasks.Task{
 			&tasks.ActivityTimeoutTask{
 				WorkflowKey: definition.NewWorkflowKey(
@@ -204,7 +212,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 		NextPageToken: []byte("some random output next page token"),
 	}
 
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(request).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), request).Return(response, nil)
 
 	timers, token, err := s.timerQueueAckMgr.getTimerTasks(minTimestamp, maxTimestamp, batchSize, request.NextPageToken)
 	s.Nil(err)
@@ -217,15 +225,20 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	maxTimestamp := time.Now().UTC().Add(10 * time.Second)
 	batchSize := 10
 
-	request := &persistence.GetTimerTasksRequest{
-		ShardID:       s.mockShard.GetShardID(),
-		MinTimestamp:  minTimestamp,
-		MaxTimestamp:  maxTimestamp,
+	request := &persistence.GetHistoryTasksRequest{
+		ShardID:      s.mockShard.GetShardID(),
+		TaskCategory: tasks.CategoryTimer,
+		InclusiveMinTaskKey: tasks.Key{
+			FireTime: minTimestamp,
+		},
+		ExclusiveMaxTaskKey: tasks.Key{
+			FireTime: maxTimestamp,
+		},
 		BatchSize:     batchSize,
 		NextPageToken: nil,
 	}
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks: []tasks.Task{
 			&tasks.ActivityTimeoutTask{
 				WorkflowKey: definition.NewWorkflowKey(
@@ -243,7 +256,7 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 		NextPageToken: nil,
 	}
 
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(request).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), request).Return(response, nil)
 
 	timers, token, err := s.timerQueueAckMgr.getTimerTasks(minTimestamp, maxTimestamp, batchSize, request.NextPageToken)
 	s.Nil(err)
@@ -258,8 +271,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName), ackLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime, minQueryLevel)
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
@@ -276,21 +289,24 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{timer},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(&persistence.GetTimerTasksResponse{}, nil)
-	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{}, nil)
+	filteredTasks, nextFireTime, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]tasks.Task{timer}, filteredTasks)
-	s.Nil(lookAheadTask)
+	s.Equal(s.timerQueueAckMgr.maxQueryLevel.Add(s.timerQueueAckMgr.config.TimerProcessorMaxPollInterval()), *nextFireTime)
 	s.False(moreTasks)
 
-	timerSequenceID := newTimerKey(timer.VisibilityTimestamp, timer.TaskID)
-	s.Equal(map[timerKey]bool{*timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
+	timerSequenceID := tasks.Key{
+		FireTime: timer.VisibilityTimestamp,
+		TaskID:   timer.TaskID,
+	}
+	s.Equal(map[tasks.Key]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
 	s.Equal(s.timerQueueAckMgr.minQueryLevel, s.timerQueueAckMgr.maxQueryLevel)
@@ -303,8 +319,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName), ackLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime, minQueryLevel)
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
@@ -322,20 +338,23 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
-	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
+	filteredTasks, nextFireTime, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]tasks.Task{timer}, filteredTasks)
-	s.Nil(lookAheadTask)
+	s.Nil(nextFireTime)
 	s.True(moreTasks)
-	timerSequenceID := newTimerKey(timer.VisibilityTimestamp, timer.TaskID)
-	s.Equal(map[timerKey]bool{*timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
+	timerSequenceID := tasks.Key{
+		FireTime: timer.VisibilityTimestamp,
+		TaskID:   timer.TaskID,
+	}
+	s.Equal(map[tasks.Key]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(minQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Equal(response.NextPageToken, s.timerQueueAckMgr.pageToken)
@@ -350,8 +369,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName), ackLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime, minQueryLevel)
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
@@ -368,19 +387,19 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{timer},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
-	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
+	filteredTasks, nextFireTime, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]tasks.Task{}, filteredTasks)
-	s.Equal(timer, lookAheadTask)
+	s.Equal(timer.GetVisibilityTime(), *nextFireTime)
 	s.False(moreTasks)
 
-	s.Equal(map[timerKey]bool{}, s.timerQueueAckMgr.outstandingTasks)
+	s.Equal(map[tasks.Key]bool{}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
@@ -394,8 +413,8 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	maxQueryLevel := s.timerQueueAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), ackLevel.VisibilityTimestamp)
-	s.Equal(s.mockShard.GetTimerClusterAckLevel(s.clusterName), minQueryLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName), ackLevel)
+	s.Equal(s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime, minQueryLevel)
 	s.Empty(token)
 	s.Equal(minQueryLevel, maxQueryLevel)
 
@@ -413,19 +432,19 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
-	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
+	filteredTasks, nextFireTime, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]tasks.Task{}, filteredTasks)
-	s.Equal(timer, lookAheadTask)
+	s.Equal(timer.GetVisibilityTime(), *nextFireTime)
 	s.False(moreTasks)
 
-	s.Equal(map[timerKey]bool{}, s.timerQueueAckMgr.outstandingTasks)
+	s.Equal(map[tasks.Key]bool{}, s.timerQueueAckMgr.outstandingTasks)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
@@ -471,48 +490,57 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		EventID:             int64(30),
 		Attempt:             1,
 	}
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{timer1, timer2, timer3},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(&persistence.GetTimerTasksResponse{}, nil)
-	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{}, nil)
+	filteredTasks, nextFireTime, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]tasks.Task{timer1, timer2, timer3}, filteredTasks)
-	s.Nil(lookAheadTask)
+	s.Equal(s.timerQueueAckMgr.maxQueryLevel.Add(s.timerQueueAckMgr.config.TimerProcessorMaxPollInterval()), *nextFireTime)
 	s.False(moreTasks)
 
 	// we are not testing shard context
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	timerSequenceID1 := newTimerKey(timer1.VisibilityTimestamp, timer1.TaskID)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
+	timerSequenceID1 := tasks.Key{
+		FireTime: timer1.VisibilityTimestamp,
+		TaskID:   timer1.TaskID,
+	}
 	s.timerQueueAckMgr.completeTimerTask(timer1.VisibilityTimestamp, timer1.TaskID)
-	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID1])
+	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID1])
 	_ = s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	timerSequenceID3 := newTimerKey(timer3.VisibilityTimestamp, timer3.TaskID)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
+	timerSequenceID3 := tasks.Key{
+		FireTime: timer3.VisibilityTimestamp,
+		TaskID:   timer3.TaskID,
+	}
 	s.timerQueueAckMgr.completeTimerTask(timer3.VisibilityTimestamp, timer3.TaskID)
-	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID3])
+	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID3])
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	// ack level remains unchanged
-	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 
 	// we are not testing shard context
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
-	timerSequenceID2 := newTimerKey(timer2.VisibilityTimestamp, timer2.TaskID)
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
+	timerSequenceID2 := tasks.Key{
+		FireTime: timer2.VisibilityTimestamp,
+		TaskID:   timer2.TaskID,
+	}
 	s.timerQueueAckMgr.completeTimerTask(timer2.VisibilityTimestamp, timer2.TaskID)
-	s.True(s.timerQueueAckMgr.outstandingTasks[*timerSequenceID2])
+	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID2])
 	_ = s.timerQueueAckMgr.updateAckLevel()
-	s.Equal(timer3.VisibilityTimestamp.UnixNano(), s.mockShard.GetTimerClusterAckLevel(s.clusterName).UnixNano())
+	s.Equal(timer3.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 }
 
 func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(s.clusterName).AnyTimes()
-	level := s.mockShard.UpdateTimerMaxReadLevel(s.clusterName)
+	level := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryTimer, s.clusterName).FireTime
 
 	s.timerQueueAckMgr.minQueryLevel = level
 	s.timerQueueAckMgr.maxQueryLevel = s.timerQueueAckMgr.minQueryLevel
@@ -531,14 +559,14 @@ func (s *timerQueueAckMgrSuite) TestReadLookAheadTask() {
 		Version:             int64(79),
 	}
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{timer},
 		NextPageToken: []byte("some random next page token"),
 	}
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
-	lookAheadTask, err := s.timerQueueAckMgr.readLookAheadTask()
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
+	nextFireTime, err := s.timerQueueAckMgr.readLookAheadTask()
 	s.Nil(err)
-	s.Equal(timer, lookAheadTask)
+	s.Equal(timer.GetVisibilityTime(), *nextFireTime)
 }
 
 // Tests for failover ack manager
@@ -567,7 +595,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtc(),
 					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
 				}},
-			TimerFailoverLevels: make(map[string]persistence.TimerFailoverLevel),
+			FailoverLevels: make(map[tasks.Category]map[string]persistence.FailoverLevel),
 		},
 		config,
 	)
@@ -584,24 +612,24 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 	s.maxLevel = time.Now().UTC().Add(10 * time.Minute)
 	s.timerQueueFailoverAckMgr = newTimerQueueFailoverAckMgr(
 		s.mockShard,
-		s.mockShard.GetMetricsClient(),
 		s.minLevel,
 		s.maxLevel,
 		func() time.Time {
 			return s.mockShard.GetCurrentTime(s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName())
 		},
-		func(ackLevel timerKey) error {
-			return s.mockShard.UpdateTimerFailoverLevel(
+		func(ackLevel tasks.Key) error {
+			return s.mockShard.UpdateFailoverLevel(
+				tasks.CategoryTimer,
 				s.namespaceID,
-				persistence.TimerFailoverLevel{
-					MinLevel:     ackLevel.VisibilityTimestamp,
-					MaxLevel:     ackLevel.VisibilityTimestamp,
+				persistence.FailoverLevel{
+					MinLevel:     ackLevel,
+					MaxLevel:     ackLevel,
 					NamespaceIDs: map[string]struct{}{s.namespaceID: {}},
 				},
 			)
 		},
 		func() error {
-			return s.mockShard.DeleteTimerFailoverLevel(s.namespaceID)
+			return s.mockShard.DeleteFailoverLevel(tasks.CategoryTimer, s.namespaceID)
 		},
 		s.logger,
 	)
@@ -632,7 +660,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 	maxQueryLevel := s.timerQueueFailoverAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.minLevel, ackLevel.VisibilityTimestamp)
+	s.Equal(s.minLevel, ackLevel.FireTime)
 	s.Equal(s.minLevel, minQueryLevel)
 	s.Empty(token)
 	s.Equal(s.maxLevel, maxQueryLevel)
@@ -663,12 +691,12 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_HasNextPage() {
 		Attempt:             1,
 	}
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{timer1, timer2},
 		NextPageToken: []byte("some random next page token"),
 	}
 
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
@@ -689,17 +717,17 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadTimerTasks_NoNextPage() {
 	maxQueryLevel := s.timerQueueFailoverAckMgr.maxQueryLevel
 
 	// test ack && read level is initialized correctly
-	s.Equal(s.minLevel, ackLevel.VisibilityTimestamp)
+	s.Equal(s.minLevel, ackLevel.FireTime)
 	s.Equal(s.minLevel, minQueryLevel)
 	s.Empty(token)
 	s.Equal(s.maxLevel, maxQueryLevel)
 
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
 
 	readTimestamp := time.Now().UTC() // the approximate time of calling readTimerTasks
 	timers, lookAheadTimer, more, err := s.timerQueueFailoverAckMgr.readTimerTasks()
@@ -740,7 +768,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	from := time.Now().UTC().Add(-10 * time.Second)
 	s.timerQueueFailoverAckMgr.minQueryLevel = from
 	s.timerQueueFailoverAckMgr.maxQueryLevel = from
-	s.timerQueueFailoverAckMgr.ackLevel = timerKey{VisibilityTimestamp: from}
+	s.timerQueueFailoverAckMgr.ackLevel = tasks.Key{FireTime: from}
 
 	// create 3 timers, timer1 < timer2 < timer3 < now
 	timer1 := &tasks.ActivityTimeoutTask{
@@ -780,23 +808,26 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		EventID:             int64(30),
 		Attempt:             1,
 	}
-	response := &persistence.GetTimerTasksResponse{
+	response := &persistence.GetHistoryTasksResponse{
 		Tasks:         []tasks.Task{timer1, timer2, timer3},
 		NextPageToken: nil,
 	}
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
-	s.mockExecutionMgr.EXPECT().GetTimerTasks(gomock.Any()).Return(response, nil)
-	filteredTasks, lookAheadTask, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
+	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
+	filteredTasks, nextFireTime, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
 	s.Equal([]tasks.Task{timer1, timer2, timer3}, filteredTasks)
-	s.Nil(lookAheadTask)
+	s.Nil(nextFireTime)
 	s.False(moreTasks)
 
-	timerSequenceID2 := newTimerKey(timer2.VisibilityTimestamp, timer2.TaskID)
+	timerSequenceID2 := tasks.Key{
+		FireTime: timer2.VisibilityTimestamp,
+		TaskID:   timer2.TaskID,
+	}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer2.VisibilityTimestamp, timer2.TaskID)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID2])
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID2])
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
@@ -804,10 +835,13 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID3 := newTimerKey(timer3.VisibilityTimestamp, timer3.TaskID)
+	timerSequenceID3 := tasks.Key{
+		FireTime: timer3.VisibilityTimestamp,
+		TaskID:   timer3.TaskID,
+	}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer3.VisibilityTimestamp, timer3.TaskID)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID3])
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID3])
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():
@@ -815,10 +849,13 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID1 := newTimerKey(timer1.VisibilityTimestamp, timer1.TaskID)
+	timerSequenceID1 := tasks.Key{
+		FireTime: timer1.VisibilityTimestamp,
+		TaskID:   timer1.TaskID,
+	}
 	s.timerQueueFailoverAckMgr.completeTimerTask(timer1.VisibilityTimestamp, timer1.TaskID)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[*timerSequenceID1])
-	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any()).Return(nil)
+	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID1])
+	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
 	case <-s.timerQueueFailoverAckMgr.getFinishedChan():

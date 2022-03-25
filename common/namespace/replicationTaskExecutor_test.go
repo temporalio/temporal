@@ -25,6 +25,7 @@
 package namespace
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -127,18 +128,18 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.namespaceReplicator.Execute(task)
+	err := s.namespaceReplicator.Execute(context.Background(), task)
 	s.Nil(err)
 
 	task.Id = uuid.New()
 	task.Info.Name = name
-	err = s.namespaceReplicator.Execute(task)
+	err = s.namespaceReplicator.Execute(context.Background(), task)
 	s.NotNil(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 
 	task.Id = id
 	task.Info.Name = "other random namespace test name"
-	err = s.namespaceReplicator.Execute(task)
+	err = s.namespaceReplicator.Execute(context.Background(), task)
 	s.NotNil(err)
 	s.IsType(&serviceerror.InvalidArgument{}, err)
 }
@@ -194,13 +195,13 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		FailoverVersion: failoverVersion,
 	}
 
-	metadata, err := s.MetadataManager.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.namespaceReplicator.Execute(task)
+	err = s.namespaceReplicator.Execute(context.Background(), task)
 	s.Nil(err)
 
-	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{ID: id})
+	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{ID: id})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
@@ -222,7 +223,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 	s.Equal(notificationVersion, resp.NotificationVersion)
 
 	// handle duplicated task
-	err = s.namespaceReplicator.Execute(task)
+	err = s.namespaceReplicator.Execute(context.Background(), task)
 	s.Nil(err)
 }
 
@@ -277,13 +278,13 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		FailoverVersion: failoverVersion,
 	}
 
-	metadata, err := s.MetadataManager.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.namespaceReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
 
-	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
@@ -356,7 +357,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.namespaceReplicator.Execute(createTask)
+	err := s.namespaceReplicator.Execute(context.Background(), createTask)
 	s.Nil(err)
 
 	// success update case
@@ -406,12 +407,12 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
 	}
-	metadata, err := s.MetadataManager.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.namespaceReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
@@ -484,7 +485,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.namespaceReplicator.Execute(createTask)
+	err := s.namespaceReplicator.Execute(context.Background(), createTask)
 	s.Nil(err)
 
 	// success update case
@@ -534,12 +535,12 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
 	}
-	metadata, err := s.MetadataManager.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.namespaceReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
@@ -612,7 +613,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		FailoverVersion: failoverVersion,
 	}
 
-	err := s.namespaceReplicator.Execute(createTask)
+	err := s.namespaceReplicator.Execute(context.Background(), createTask)
 	s.Nil(err)
 
 	// success update case
@@ -658,12 +659,12 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
 	}
-	metadata, err := s.MetadataManager.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.namespaceReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)
@@ -735,10 +736,10 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		ConfigVersion:   configVersion,
 		FailoverVersion: failoverVersion,
 	}
-	metadata, err := s.MetadataManager.GetMetadata()
+	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
-	err = s.namespaceReplicator.Execute(createTask)
+	err = s.namespaceReplicator.Execute(context.Background(), createTask)
 	s.Nil(err)
 
 	// success update case
@@ -784,9 +785,9 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
 	}
-	err = s.namespaceReplicator.Execute(updateTask)
+	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
-	resp, err := s.MetadataManager.GetNamespace(&persistence.GetNamespaceRequest{Name: name})
+	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})
 	s.Nil(err)
 	s.NotNil(resp)
 	s.EqualValues(id, resp.Namespace.Info.Id)

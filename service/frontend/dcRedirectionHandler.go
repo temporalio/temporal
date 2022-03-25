@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"go.temporal.io/api/workflowservice/v1"
-	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
@@ -102,21 +101,6 @@ func (handler *DCRedirectionHandlerImpl) Stop() {
 // GetConfig return config
 func (handler *DCRedirectionHandlerImpl) GetConfig() *Config {
 	return handler.frontendHandler.GetConfig()
-}
-
-// UpdateHealthStatus sets the health status for this rpc handler.
-// This health status will be used within the rpc health check handler
-func (handler *DCRedirectionHandlerImpl) UpdateHealthStatus(status HealthStatus) {
-	handler.frontendHandler.UpdateHealthStatus(status)
-}
-
-// Check is for health check
-func (handler *DCRedirectionHandlerImpl) Check(ctx context.Context, request *healthpb.HealthCheckRequest) (*healthpb.HealthCheckResponse, error) {
-	return handler.frontendHandler.Check(ctx, request)
-}
-
-func (handler *DCRedirectionHandlerImpl) Watch(request *healthpb.HealthCheckRequest, server healthpb.Health_WatchServer) error {
-	return handler.frontendHandler.Watch(request, server)
 }
 
 // Namespace APIs, namespace APIs does not require redirection
@@ -286,6 +270,36 @@ func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistory(
 		default:
 			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
 			resp, err = remoteClient.GetWorkflowExecutionHistory(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
+// GetWorkflowExecutionHistoryReverse API call
+func (handler *DCRedirectionHandlerImpl) GetWorkflowExecutionHistoryReverse(
+	ctx context.Context,
+	request *workflowservice.GetWorkflowExecutionHistoryReverseRequest,
+) (resp *workflowservice.GetWorkflowExecutionHistoryReverseResponse, retError error) {
+
+	var apiName = "GetWorkflowExecutionHistoryReverse"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionGetWorkflowExecutionHistoryReverseScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.GetWorkflowExecutionHistoryReverse(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.GetWorkflowExecutionHistoryReverse(ctx, request)
 		}
 		return err
 	})

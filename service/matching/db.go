@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -93,24 +94,28 @@ func (db *taskQueueDB) RangeID() int64 {
 
 // RenewLease renews the lease on a taskqueue. If there is no previous lease,
 // this method will attempt to steal taskqueue from current owner
-func (db *taskQueueDB) RenewLease() (taskQueueState, error) {
+func (db *taskQueueDB) RenewLease(
+	ctx context.Context,
+) (taskQueueState, error) {
 	db.Lock()
 	defer db.Unlock()
 
 	if db.rangeID == 0 {
-		if err := db.takeOverTaskQueueLocked(); err != nil {
+		if err := db.takeOverTaskQueueLocked(ctx); err != nil {
 			return taskQueueState{}, err
 		}
 	} else {
-		if err := db.renewTaskQueueLocked(db.rangeID + 1); err != nil {
+		if err := db.renewTaskQueueLocked(ctx, db.rangeID+1); err != nil {
 			return taskQueueState{}, err
 		}
 	}
 	return taskQueueState{rangeID: db.rangeID, ackLevel: db.ackLevel}, nil
 }
 
-func (db *taskQueueDB) takeOverTaskQueueLocked() error {
-	response, err := db.store.GetTaskQueue(&persistence.GetTaskQueueRequest{
+func (db *taskQueueDB) takeOverTaskQueueLocked(
+	ctx context.Context,
+) error {
+	response, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
 		NamespaceID: db.namespaceID.String(),
 		TaskQueue:   db.taskQueueName,
 		TaskType:    db.taskType,
@@ -120,7 +125,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked() error {
 		response.TaskQueueInfo.Kind = db.taskQueueKind
 		response.TaskQueueInfo.ExpiryTime = db.expiryTime()
 		response.TaskQueueInfo.LastUpdateTime = timestamp.TimeNowPtrUtc()
-		_, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+		_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 			RangeID:       response.RangeID + 1,
 			TaskQueueInfo: response.TaskQueueInfo,
 			PrevRangeID:   response.RangeID,
@@ -133,7 +138,7 @@ func (db *taskQueueDB) takeOverTaskQueueLocked() error {
 		return nil
 
 	case *serviceerror.NotFound:
-		if _, err := db.store.CreateTaskQueue(&persistence.CreateTaskQueueRequest{
+		if _, err := db.store.CreateTaskQueue(ctx, &persistence.CreateTaskQueueRequest{
 			RangeID: initialRangeID,
 			TaskQueueInfo: &persistencespb.TaskQueueInfo{
 				NamespaceId:    db.namespaceID.String(),
@@ -156,9 +161,10 @@ func (db *taskQueueDB) takeOverTaskQueueLocked() error {
 }
 
 func (db *taskQueueDB) renewTaskQueueLocked(
+	ctx context.Context,
 	rangeID int64,
 ) error {
-	if _, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+	if _, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 		RangeID: rangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    db.namespaceID.String(),
@@ -179,10 +185,13 @@ func (db *taskQueueDB) renewTaskQueueLocked(
 }
 
 // UpdateState updates the taskQueue state with the given value
-func (db *taskQueueDB) UpdateState(ackLevel int64) error {
+func (db *taskQueueDB) UpdateState(
+	ctx context.Context,
+	ackLevel int64,
+) error {
 	db.Lock()
 	defer db.Unlock()
-	_, err := db.store.UpdateTaskQueue(&persistence.UpdateTaskQueueRequest{
+	_, err := db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
 		RangeID: db.rangeID,
 		TaskQueueInfo: &persistencespb.TaskQueueInfo{
 			NamespaceId:    db.namespaceID.String(),
@@ -202,10 +211,14 @@ func (db *taskQueueDB) UpdateState(ackLevel int64) error {
 }
 
 // CreateTasks creates a batch of given tasks for this task queue
-func (db *taskQueueDB) CreateTasks(tasks []*persistencespb.AllocatedTaskInfo) (*persistence.CreateTasksResponse, error) {
+func (db *taskQueueDB) CreateTasks(
+	ctx context.Context,
+	tasks []*persistencespb.AllocatedTaskInfo,
+) (*persistence.CreateTasksResponse, error) {
 	db.Lock()
 	defer db.Unlock()
 	return db.store.CreateTasks(
+		ctx,
 		&persistence.CreateTasksRequest{
 			TaskQueueInfo: &persistence.PersistedTaskQueueInfo{
 				Data: &persistencespb.TaskQueueInfo{
@@ -222,20 +235,28 @@ func (db *taskQueueDB) CreateTasks(tasks []*persistencespb.AllocatedTaskInfo) (*
 }
 
 // GetTasks returns a batch of tasks between the given range
-func (db *taskQueueDB) GetTasks(minTaskID int64, maxTaskID int64, batchSize int) (*persistence.GetTasksResponse, error) {
-	return db.store.GetTasks(&persistence.GetTasksRequest{
+func (db *taskQueueDB) GetTasks(
+	ctx context.Context,
+	inclusiveMinTaskID int64,
+	exclusiveMaxTaskID int64,
+	batchSize int,
+) (*persistence.GetTasksResponse, error) {
+	return db.store.GetTasks(ctx, &persistence.GetTasksRequest{
 		NamespaceID:        db.namespaceID.String(),
 		TaskQueue:          db.taskQueueName,
 		TaskType:           db.taskType,
 		PageSize:           batchSize,
-		MinTaskIDExclusive: minTaskID, // exclusive
-		MaxTaskIDInclusive: maxTaskID, // inclusive
+		InclusiveMinTaskID: inclusiveMinTaskID,
+		ExclusiveMaxTaskID: exclusiveMaxTaskID,
 	})
 }
 
 // CompleteTask deletes a single task from this task queue
-func (db *taskQueueDB) CompleteTask(taskID int64) error {
-	err := db.store.CompleteTask(&persistence.CompleteTaskRequest{
+func (db *taskQueueDB) CompleteTask(
+	ctx context.Context,
+	taskID int64,
+) error {
+	err := db.store.CompleteTask(ctx, &persistence.CompleteTaskRequest{
 		TaskQueue: &persistence.TaskQueueKey{
 			NamespaceID:   db.namespaceID.String(),
 			TaskQueueName: db.taskQueueName,
@@ -257,19 +278,23 @@ func (db *taskQueueDB) CompleteTask(taskID int64) error {
 // CompleteTasksLessThan deletes of tasks less than the given taskID. Limit is
 // the upper bound of number of tasks that can be deleted by this method. It may
 // or may not be honored
-func (db *taskQueueDB) CompleteTasksLessThan(taskID int64, limit int) (int, error) {
-	n, err := db.store.CompleteTasksLessThan(&persistence.CompleteTasksLessThanRequest{
-		NamespaceID:   db.namespaceID.String(),
-		TaskQueueName: db.taskQueueName,
-		TaskType:      db.taskType,
-		TaskID:        taskID,
-		Limit:         limit,
+func (db *taskQueueDB) CompleteTasksLessThan(
+	ctx context.Context,
+	exclusiveMaxTaskID int64,
+	limit int,
+) (int, error) {
+	n, err := db.store.CompleteTasksLessThan(ctx, &persistence.CompleteTasksLessThanRequest{
+		NamespaceID:        db.namespaceID.String(),
+		TaskQueueName:      db.taskQueueName,
+		TaskType:           db.taskType,
+		ExclusiveMaxTaskID: exclusiveMaxTaskID,
+		Limit:              limit,
 	})
 	if err != nil {
 		db.logger.Error("Persistent store operation failure",
 			tag.StoreOperationCompleteTasksLessThan,
 			tag.Error(err),
-			tag.TaskID(taskID),
+			tag.TaskID(exclusiveMaxTaskID),
 			tag.WorkflowTaskQueueType(db.taskType),
 			tag.WorkflowTaskQueueName(db.taskQueueName))
 	}

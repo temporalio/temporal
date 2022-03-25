@@ -19,7 +19,7 @@ persistence:
         maxConnLifetime: "1h"
         tls:
           enabled: false
-          сaFile: ""
+          caFile: ""
           certFile: ""
           keyFile: ""
           enableHostVerification: false
@@ -42,7 +42,7 @@ persistence:
         maxConnLifetime: "1h"
         tls:
           enabled: false
-          сaFile: ""
+          caFile: ""
           certFile: ""
           keyFile: ""
           enableHostVerification: false
@@ -125,3 +125,8 @@ namespaceDefaults:
 
 publicClient:
   hostPort: "127.0.0.1:7233"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development_sql.yaml"
+  pollInterval: "10s"
+

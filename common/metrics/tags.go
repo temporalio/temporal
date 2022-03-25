@@ -29,6 +29,7 @@ import (
 	"strconv"
 	"strings"
 
+	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 )
 
@@ -46,6 +47,7 @@ const (
 	workflowType  = "workflowType"
 	activityType  = "activityType"
 	commandType   = "commandType"
+	serviceName   = "service_name"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -132,6 +134,10 @@ func TaskQueueTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: taskQueue, value: sanitizer.Value(value)}
+}
+
+func TaskQueueTypeTag(tqType enums.TaskQueueType) Tag {
+	return &tagImpl{key: TaskTypeTagName, value: tqType.String()}
 }
 
 // WorkflowTypeTag returns a new workflow type tag.
@@ -226,4 +232,8 @@ func HttpStatusTag(value int) Tag {
 
 func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 	return &tagImpl{key: resourceExhaustedTag, value: cause.String()}
+}
+
+func ServiceTypeTag(value string) Tag {
+	return &tagImpl{key: serviceName, value: value}
 }

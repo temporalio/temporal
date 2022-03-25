@@ -25,6 +25,7 @@
 package matching
 
 import (
+	"context"
 	"sync/atomic"
 	"time"
 )
@@ -56,17 +57,17 @@ func newTaskGC(db *taskQueueDB, config *taskQueueConfig) *taskGC {
 
 // Run deletes a batch of completed tasks, if its possible to do so
 // Only attempts deletion if size or time thresholds are met
-func (tgc *taskGC) Run(ackLevel int64) {
-	tgc.tryDeleteNextBatch(ackLevel, false)
+func (tgc *taskGC) Run(ctx context.Context, ackLevel int64) {
+	tgc.tryDeleteNextBatch(ctx, ackLevel, false)
 }
 
 // RunNow deletes a batch of completed tasks if its possible to do so
 // This method attempts deletions without waiting for size/time threshold to be met
-func (tgc *taskGC) RunNow(ackLevel int64) {
-	tgc.tryDeleteNextBatch(ackLevel, true)
+func (tgc *taskGC) RunNow(ctx context.Context, ackLevel int64) {
+	tgc.tryDeleteNextBatch(ctx, ackLevel, true)
 }
 
-func (tgc *taskGC) tryDeleteNextBatch(ackLevel int64, ignoreTimeCond bool) {
+func (tgc *taskGC) tryDeleteNextBatch(ctx context.Context, ackLevel int64, ignoreTimeCond bool) {
 	if !tgc.tryLock() {
 		return
 	}
@@ -76,7 +77,7 @@ func (tgc *taskGC) tryDeleteNextBatch(ackLevel int64, ignoreTimeCond bool) {
 		return
 	}
 	tgc.lastDeleteTime = time.Now().UTC()
-	n, err := tgc.db.CompleteTasksLessThan(ackLevel, batchSize)
+	n, err := tgc.db.CompleteTasksLessThan(ctx, ackLevel+1, batchSize)
 	switch {
 	case err != nil:
 		return

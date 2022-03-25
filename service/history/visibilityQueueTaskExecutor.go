@@ -33,32 +33,21 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/worker/parentclosepolicy"
 )
 
 type (
 	visibilityQueueTaskExecutor struct {
-		shard                   shard.Context
-		historyService          *historyEngineImpl
-		cache                   workflow.Cache
-		logger                  log.Logger
-		metricsClient           metrics.Client
-		matchingClient          matchingservice.MatchingServiceClient
-		visibilityMgr           manager.VisibilityManager
-		config                  *configs.Config
-		historyClient           historyservice.HistoryServiceClient
-		parentClosePolicyClient parentclosepolicy.Client
+		shard         shard.Context
+		cache         workflow.Cache
+		logger        log.Logger
+		visibilityMgr manager.VisibilityManager
 	}
 )
 
@@ -68,29 +57,15 @@ var (
 
 func newVisibilityQueueTaskExecutor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
-	metricsClient metrics.Client,
-	config *configs.Config,
-	matchingClient matchingservice.MatchingServiceClient,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
-		shard:          shard,
-		historyService: historyService,
-		cache:          historyService.historyCache,
-		logger:         logger,
-		metricsClient:  metricsClient,
-		matchingClient: matchingClient,
-		visibilityMgr:  visibilityMgr,
-		config:         config,
-		historyClient:  shard.GetHistoryClient(),
-		parentClosePolicyClient: parentclosepolicy.NewClient(
-			shard.GetMetricsClient(),
-			shard.GetLogger(),
-			historyService.publicClient,
-			config.NumParentClosePolicySystemWorkflows(),
-		),
+		shard:         shard,
+		cache:         workflowCache,
+		logger:        logger,
+		visibilityMgr: visibilityMgr,
 	}
 }
 
@@ -112,7 +87,7 @@ func (t *visibilityQueueTaskExecutor) execute(
 	case *tasks.CloseExecutionVisibilityTask:
 		return t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
-		return t.processDeleteExecution(task)
+		return t.processDeleteExecution(ctx, task)
 	default:
 		return errUnknownVisibilityTask
 	}
@@ -140,7 +115,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution()
+	mutableState, err := weContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
 	}
@@ -154,9 +129,9 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), startVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), startVersion, task.Version, task)
+	if !ok {
+		return nil
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
@@ -177,6 +152,7 @@ func (t *visibilityQueueTaskExecutor) processStartExecution(
 	release(nil)
 
 	return t.recordStartExecution(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
@@ -214,7 +190,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution()
+	mutableState, err := weContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
 	}
@@ -240,6 +216,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 	release(nil)
 
 	return t.upsertExecution(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
@@ -256,6 +233,7 @@ func (t *visibilityQueueTaskExecutor) processUpsertExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) recordStartExecution(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -294,10 +272,11 @@ func (t *visibilityQueueTaskExecutor) recordStartExecution(
 			SearchAttributes: searchAttributes,
 		},
 	}
-	return t.visibilityMgr.RecordWorkflowExecutionStarted(request)
+	return t.visibilityMgr.RecordWorkflowExecutionStarted(ctx, request)
 }
 
 func (t *visibilityQueueTaskExecutor) upsertExecution(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -337,7 +316,7 @@ func (t *visibilityQueueTaskExecutor) upsertExecution(
 		},
 	}
 
-	return t.visibilityMgr.UpsertWorkflowExecution(request)
+	return t.visibilityMgr.UpsertWorkflowExecution(ctx, request)
 }
 
 func (t *visibilityQueueTaskExecutor) processCloseExecution(
@@ -362,7 +341,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := weContext.LoadWorkflowExecution()
+	mutableState, err := weContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		return err
 	}
@@ -374,14 +353,14 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), lastWriteVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	if !ok {
+		return nil
 	}
 
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
-	completionEvent, err := mutableState.GetCompletionEvent()
+	completionEvent, err := mutableState.GetCompletionEvent(ctx)
 	if err != nil {
 		return err
 	}
@@ -404,6 +383,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.recordCloseExecution(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		task.GetWorkflowID(),
 		task.GetRunID(),
@@ -422,6 +402,7 @@ func (t *visibilityQueueTaskExecutor) processCloseExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) recordCloseExecution(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -443,7 +424,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 		return err
 	}
 
-	return t.visibilityMgr.RecordWorkflowExecutionClosed(&manager.RecordWorkflowExecutionClosedRequest{
+	return t.visibilityMgr.RecordWorkflowExecutionClosed(ctx, &manager.RecordWorkflowExecutionClosedRequest{
 		VisibilityRequestBase: &manager.VisibilityRequestBase{
 			NamespaceID: namespaceID,
 			Namespace:   namespaceEntry.Name(),
@@ -467,6 +448,7 @@ func (t *visibilityQueueTaskExecutor) recordCloseExecution(
 }
 
 func (t *visibilityQueueTaskExecutor) processDeleteExecution(
+	ctx context.Context,
 	task *tasks.DeleteExecutionVisibilityTask,
 ) (retError error) {
 	if task.CloseTime == nil {
@@ -480,9 +462,10 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 		WorkflowID:  task.WorkflowID,
 		RunID:       task.RunID,
 		TaskID:      task.TaskID,
-		CloseTime:   *task.CloseTime,
+		StartTime:   task.StartTime,
+		CloseTime:   task.CloseTime,
 	}
-	return t.visibilityMgr.DeleteWorkflowExecution(request)
+	return t.visibilityMgr.DeleteWorkflowExecution(ctx, request)
 }
 
 func getWorkflowMemo(

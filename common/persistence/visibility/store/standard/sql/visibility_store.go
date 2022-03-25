@@ -105,6 +105,7 @@ func (s *visibilityStore) RecordWorkflowExecutionStarted(
 		Status:           int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING), // Underlying value (1) is hardcoded in SQL queries.
 		Memo:             request.Memo.Data,
 		Encoding:         request.Memo.EncodingType.String(),
+		TaskQueue:        request.TaskQueue,
 	})
 
 	return err
@@ -125,6 +126,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *store.InternalR
 		HistoryLength:    &request.HistoryLength,
 		Memo:             request.Memo.Data,
 		Encoding:         request.Memo.EncodingType.String(),
+		TaskQueue:        request.TaskQueue,
 	})
 	if err != nil {
 		return err
@@ -349,6 +351,7 @@ func (s *visibilityStore) rowToInfo(
 		ExecutionTime: row.ExecutionTime,
 		Memo:          persistence.NewDataBlob(row.Memo, row.Encoding),
 		Status:        enumspb.WorkflowExecutionStatus(row.Status),
+		TaskQueue:     row.TaskQueue,
 	}
 	if row.CloseTime != nil {
 		info.CloseTime = *row.CloseTime

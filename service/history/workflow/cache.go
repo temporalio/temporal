@@ -30,6 +30,7 @@ import (
 	"context"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -137,7 +138,7 @@ func (c *CacheImpl) GetOrCreateWorkflowExecution(
 	caller CallerType,
 ) (Context, ReleaseCacheFunc, error) {
 
-	if err := c.validateWorkflowExecutionInfo(namespaceID, &execution); err != nil {
+	if err := c.validateWorkflowExecutionInfo(ctx, namespaceID, &execution); err != nil {
 		return nil, nil, err
 	}
 
@@ -175,7 +176,7 @@ func (c *CacheImpl) getOrCreateWorkflowExecutionInternal(
 	if !cacheHit {
 		c.metricsClient.IncCounter(scope, metrics.CacheMissCounter)
 		// Let's create the workflow execution workflowCtx
-		workflowCtx = NewContext(namespaceID, execution, c.shard, c.logger)
+		workflowCtx = NewContext(c.shard, key, c.logger)
 		elem, err := c.PutIfNotExist(key, workflowCtx)
 		if err != nil {
 			c.metricsClient.IncCounter(scope, metrics.CacheFailures)
@@ -226,6 +227,7 @@ func (c *CacheImpl) makeReleaseFunc(
 }
 
 func (c *CacheImpl) validateWorkflowExecutionInfo(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	execution *commonpb.WorkflowExecution,
 ) error {
@@ -234,9 +236,14 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 		return serviceerror.NewInvalidArgument("Can't load workflow execution.  WorkflowId not set.")
 	}
 
+	if !utf8.ValidString(execution.GetWorkflowId()) {
+		// We know workflow cannot exist with invalid utf8 string as WorkflowID.
+		return serviceerror.NewNotFound("Workflow not exists.")
+	}
+
 	// RunID is not provided, lets try to retrieve the RunID for current active execution
 	if execution.GetRunId() == "" {
-		response, err := c.getCurrentExecutionWithRetry(&persistence.GetCurrentExecutionRequest{
+		response, err := c.getCurrentExecutionWithRetry(ctx, &persistence.GetCurrentExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
 			NamespaceID: namespaceID.String(),
 			WorkflowID:  execution.GetWorkflowId(),
@@ -254,13 +261,14 @@ func (c *CacheImpl) validateWorkflowExecutionInfo(
 }
 
 func (c *CacheImpl) getCurrentExecutionWithRetry(
+	ctx context.Context,
 	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.GetCurrentExecutionResponse, error) {
 
 	var response *persistence.GetCurrentExecutionResponse
 	op := func() error {
 		var err error
-		response, err = c.executionManager.GetCurrentExecution(request)
+		response, err = c.executionManager.GetCurrentExecution(ctx, request)
 
 		return err
 	}

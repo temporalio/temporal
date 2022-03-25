@@ -247,33 +247,3 @@ func TestDynamicConfigFilterTypeIsMapped(t *testing.T) {
 		require.NotEmpty(t, filters[i])
 	}
 }
-
-func BenchmarkLogValue(b *testing.B) {
-	keys := []Key{
-		HistorySizeLimitError,
-		MatchingThrottledLogRPS,
-		MatchingIdleTaskqueueCheckInterval,
-	}
-	values := []interface{}{
-		1024 * 1024,
-		0.1,
-		30 * time.Second,
-	}
-	cmpFuncs := []func(interface{}, interface{}) bool{
-		intCompareEquals,
-		float64CompareEquals,
-		durationCompareEquals,
-	}
-
-	collection := NewCollection(newInMemoryClient(), log.NewNoopLogger())
-	// pre-warm the collection logValue map
-	for i := range keys {
-		collection.logValue(keys[i], values[i], values[i], cmpFuncs[i])
-	}
-
-	for i := 0; i < b.N; i++ {
-		for i := range keys {
-			collection.logValue(keys[i], values[i], values[i], cmpFuncs[i])
-		}
-	}
-}

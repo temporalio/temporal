@@ -62,12 +62,17 @@ func (s *parallelProcessorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
+	metricsClient, err := metrics.NewClient(&metrics.ClientConfig{}, tally.NoopScope, metrics.History)
+	if err != nil {
+		s.NoError(err, "metrics.NewClient")
+	}
+
 	s.processor = NewParallelProcessor(
 		&ParallelProcessorOptions{
 			QueueSize:   1,
 			WorkerCount: 1,
 		},
-		metrics.NewClient(&metrics.ClientConfig{}, tally.NoopScope, metrics.Common),
+		metricsClient,
 		log.NewNoopLogger(),
 	)
 	s.retryPolicy = backoff.NewExponentialRetryPolicy(time.Millisecond)

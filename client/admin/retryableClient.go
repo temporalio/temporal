@@ -162,64 +162,32 @@ func (c *retryableClient) GetShard(
 	return resp, err
 }
 
-func (c *retryableClient) ListTimerTasks(
+func (c *retryableClient) ListHistoryTasks(
 	ctx context.Context,
-	request *adminservice.ListTimerTasksRequest,
+	request *adminservice.ListHistoryTasksRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ListTimerTasksResponse, error) {
+) (*adminservice.ListHistoryTasksResponse, error) {
 
-	var resp *adminservice.ListTimerTasksResponse
+	var resp *adminservice.ListHistoryTasksResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ListTimerTasks(ctx, request, opts...)
+		resp, err = c.client.ListHistoryTasks(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
 
-func (c *retryableClient) ListReplicationTasks(
+func (c *retryableClient) RebuildMutableState(
 	ctx context.Context,
-	request *adminservice.ListReplicationTasksRequest,
+	request *adminservice.RebuildMutableStateRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ListReplicationTasksResponse, error) {
+) (*adminservice.RebuildMutableStateResponse, error) {
 
-	var resp *adminservice.ListReplicationTasksResponse
+	var resp *adminservice.RebuildMutableStateResponse
 	op := func() error {
 		var err error
-		resp, err = c.client.ListReplicationTasks(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) ListTransferTasks(
-	ctx context.Context,
-	request *adminservice.ListTransferTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListTransferTasksResponse, error) {
-
-	var resp *adminservice.ListTransferTasksResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.ListTransferTasks(ctx, request, opts...)
-		return err
-	}
-	err := backoff.Retry(op, c.policy, c.isRetryable)
-	return resp, err
-}
-
-func (c *retryableClient) ListVisibilityTasks(
-	ctx context.Context,
-	request *adminservice.ListVisibilityTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListVisibilityTasksResponse, error) {
-
-	var resp *adminservice.ListVisibilityTasksResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.ListVisibilityTasks(ctx, request, opts...)
+		resp, err = c.client.RebuildMutableState(ctx, request, opts...)
 		return err
 	}
 	err := backoff.Retry(op, c.policy, c.isRetryable)

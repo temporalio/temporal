@@ -25,6 +25,7 @@
 package persistencetests
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strconv"
@@ -52,6 +53,9 @@ type (
 		// override suite.Suite.Assertions with require.Assertions; this means that s.NotNil(nil) will stop the test,
 		// not merely log an error
 		*require.Assertions
+
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 )
 
@@ -63,6 +67,7 @@ func (m *MetadataPersistenceSuiteV2) SetupSuite() {
 func (m *MetadataPersistenceSuiteV2) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	m.Assertions = require.New(m.T())
+	m.ctx, m.cancel = context.WithTimeout(context.Background(), time.Second*30)
 
 	// cleanup the namespace created
 	var token []byte
@@ -83,6 +88,7 @@ ListLoop:
 
 // TearDownTest implementation
 func (m *MetadataPersistenceSuiteV2) TearDownTest() {
+	m.cancel()
 }
 
 // TearDownSuite implementation
@@ -462,7 +468,7 @@ func (m *MetadataPersistenceSuiteV2) TestConcurrentUpdateNamespace() {
 	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
 	m.Equal(badBinaries, resp2.Namespace.Config.BadBinaries)
-	metadata, err := m.MetadataManager.GetMetadata()
+	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
 	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion
 
@@ -603,7 +609,7 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 
 	resp2, err2 := m.GetNamespace(id, "")
 	m.NoError(err2)
-	metadata, err := m.MetadataManager.GetMetadata()
+	metadata, err := m.MetadataManager.GetMetadata(m.ctx)
 	m.NoError(err)
 	notificationVersion := metadata.NotificationVersion
 
@@ -775,6 +781,92 @@ func (m *MetadataPersistenceSuiteV2) TestUpdateNamespace() {
 	m.Equal(updateFailoverNotificationVersion, resp6.Namespace.FailoverNotificationVersion)
 	m.Equal(notificationVersion, resp6.NotificationVersion)
 	m.EqualTimes(time.Unix(0, 0).UTC(), *resp6.Namespace.FailoverEndTime)
+}
+
+func (m *MetadataPersistenceSuiteV2) TestRenameNamespace() {
+	id := uuid.New()
+	name := "rename-namespace-test-name"
+	newName := "rename-namespace-test-new-name"
+	newNewName := "rename-namespace-test-new-new-name"
+	state := enumspb.NAMESPACE_STATE_REGISTERED
+	description := "rename-namespace-test-description"
+	owner := "rename-namespace-test-owner"
+	data := map[string]string{"k1": "v1"}
+	retention := int32(10)
+	historyArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	historyArchivalURI := "test://history/uri"
+	visibilityArchivalState := enumspb.ARCHIVAL_STATE_ENABLED
+	visibilityArchivalURI := "test://visibility/uri"
+
+	clusterActive := "some random active cluster name"
+	clusterStandby := "some random standby cluster name"
+	configVersion := int64(10)
+	failoverVersion := int64(59)
+	isGlobalNamespace := true
+	clusters := []string{clusterActive, clusterStandby}
+
+	resp1, err1 := m.CreateNamespace(
+		&persistencespb.NamespaceInfo{
+			Id:          id,
+			Name:        name,
+			State:       state,
+			Description: description,
+			Owner:       owner,
+			Data:        data,
+		},
+		&persistencespb.NamespaceConfig{
+			Retention:               timestamp.DurationFromDays(retention),
+			HistoryArchivalState:    historyArchivalState,
+			HistoryArchivalUri:      historyArchivalURI,
+			VisibilityArchivalState: visibilityArchivalState,
+			VisibilityArchivalUri:   visibilityArchivalURI,
+		},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: clusterActive,
+			Clusters:          clusters,
+		},
+		isGlobalNamespace,
+		configVersion,
+		failoverVersion,
+	)
+	m.NoError(err1)
+	m.EqualValues(id, resp1.ID)
+
+	_, err2 := m.GetNamespace(id, "")
+	m.NoError(err2)
+
+	err3 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: name,
+		NewName:      newName,
+	})
+	m.NoError(err3)
+
+	resp4, err4 := m.GetNamespace("", newName)
+	m.NoError(err4)
+	m.NotNil(resp4)
+	m.EqualValues(id, resp4.Namespace.Info.Id)
+	m.Equal(newName, resp4.Namespace.Info.Name)
+	m.Equal(isGlobalNamespace, resp4.IsGlobalNamespace)
+
+	resp5, err5 := m.GetNamespace(id, "")
+	m.NoError(err5)
+	m.NotNil(resp5)
+	m.EqualValues(id, resp5.Namespace.Info.Id)
+	m.Equal(newName, resp5.Namespace.Info.Name)
+	m.Equal(isGlobalNamespace, resp5.IsGlobalNamespace)
+
+	err6 := m.MetadataManager.RenameNamespace(m.ctx, &p.RenameNamespaceRequest{
+		PreviousName: newName,
+		NewName:      newNewName,
+	})
+	m.NoError(err6)
+
+	resp6, err6 := m.GetNamespace(id, "")
+	m.NoError(err6)
+	m.NotNil(resp6)
+	m.EqualValues(id, resp6.Namespace.Info.Id)
+	m.Equal(newNewName, resp6.Namespace.Info.Name)
+	m.Equal(isGlobalNamespace, resp6.IsGlobalNamespace)
 }
 
 // TestDeleteNamespace test
@@ -1019,7 +1111,7 @@ ListLoop:
 // CreateNamespace helper method
 func (m *MetadataPersistenceSuiteV2) CreateNamespace(info *persistencespb.NamespaceInfo, config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig, isGlobalnamespace bool, configVersion int64, failoverVersion int64) (*p.CreateNamespaceResponse, error) {
-	return m.MetadataManager.CreateNamespace(&p.CreateNamespaceRequest{
+	return m.MetadataManager.CreateNamespace(m.ctx, &p.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info:              info,
 			Config:            config,
@@ -1033,7 +1125,7 @@ func (m *MetadataPersistenceSuiteV2) CreateNamespace(info *persistencespb.Namesp
 
 // GetNamespace helper method
 func (m *MetadataPersistenceSuiteV2) GetNamespace(id string, name string) (*p.GetNamespaceResponse, error) {
-	return m.MetadataManager.GetNamespace(&p.GetNamespaceRequest{
+	return m.MetadataManager.GetNamespace(m.ctx, &p.GetNamespaceRequest{
 		ID:   id,
 		Name: name,
 	})
@@ -1051,7 +1143,7 @@ func (m *MetadataPersistenceSuiteV2) UpdateNamespace(
 	notificationVersion int64,
 	isGlobalNamespace bool,
 ) error {
-	return m.MetadataManager.UpdateNamespace(&p.UpdateNamespaceRequest{
+	return m.MetadataManager.UpdateNamespace(m.ctx, &p.UpdateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info:                        info,
 			Config:                      config,
@@ -1069,14 +1161,14 @@ func (m *MetadataPersistenceSuiteV2) UpdateNamespace(
 // DeleteNamespace helper method
 func (m *MetadataPersistenceSuiteV2) DeleteNamespace(id string, name string) error {
 	if len(id) > 0 {
-		return m.MetadataManager.DeleteNamespace(&p.DeleteNamespaceRequest{ID: id})
+		return m.MetadataManager.DeleteNamespace(m.ctx, &p.DeleteNamespaceRequest{ID: id})
 	}
-	return m.MetadataManager.DeleteNamespaceByName(&p.DeleteNamespaceByNameRequest{Name: name})
+	return m.MetadataManager.DeleteNamespaceByName(m.ctx, &p.DeleteNamespaceByNameRequest{Name: name})
 }
 
 // ListNamespaces helper method
 func (m *MetadataPersistenceSuiteV2) ListNamespaces(pageSize int, pageToken []byte) (*p.ListNamespacesResponse, error) {
-	return m.MetadataManager.ListNamespaces(&p.ListNamespacesRequest{
+	return m.MetadataManager.ListNamespaces(m.ctx, &p.ListNamespacesRequest{
 		PageSize:      pageSize,
 		NextPageToken: pageToken,
 	})

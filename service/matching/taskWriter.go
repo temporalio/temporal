@@ -149,6 +149,7 @@ func (w *taskWriter) appendTask(
 		// noop
 	}
 
+	startTime := time.Now().UTC()
 	ch := make(chan *writeTaskResponse)
 	req := &writeTaskRequest{
 		execution:  execution,
@@ -160,6 +161,7 @@ func (w *taskWriter) appendTask(
 	case w.appendCh <- req:
 		select {
 		case r := <-ch:
+			w.tlMgr.metricScope.RecordTimer(metrics.TaskWriteLatencyPerTaskQueue, time.Since(startTime))
 			return r.persistenceResponse, r.err
 		case <-w.writeLoop.Done():
 			// if we are shutting down, this request will never make
@@ -167,6 +169,7 @@ func (w *taskWriter) appendTask(
 			return nil, errShutdown
 		}
 	default: // channel is full, throttle
+		w.tlMgr.metricScope.IncCounter(metrics.TaskWriteThrottlePerTaskQueueCounter)
 		return nil, serviceerror.NewResourceExhausted(
 			enumspb.RESOURCE_EXHAUSTED_CAUSE_SYSTEM_OVERLOADED,
 			"Too many outstanding appends to the task queue")
@@ -195,10 +198,11 @@ func (w *taskWriter) allocTaskIDs(ctx context.Context, count int) ([]int64, erro
 }
 
 func (w *taskWriter) appendTasks(
+	ctx context.Context,
 	tasks []*persistencespb.AllocatedTaskInfo,
 ) (*persistence.CreateTasksResponse, error) {
 
-	resp, err := w.tlMgr.db.CreateTasks(tasks)
+	resp, err := w.tlMgr.db.CreateTasks(ctx, tasks)
 	if err != nil {
 		w.tlMgr.signalIfFatal(err)
 		w.logger.Error("Persistent store operation failure",
@@ -243,7 +247,7 @@ writerLoop:
 				maxReadLevel = taskIDs[i]
 			}
 
-			resp, err := w.appendTasks(tasks)
+			resp, err := w.appendTasks(ctx, tasks)
 			w.sendWriteResponse(reqs, resp, err)
 			// Update the maxReadLevel after the writes are completed.
 			if maxReadLevel > 0 {
@@ -291,7 +295,7 @@ func (w *taskWriter) renewLeaseWithRetry(
 ) (taskQueueState, error) {
 	var newState taskQueueState
 	op := func(context.Context) (err error) {
-		newState, err = w.idAlloc.RenewLease()
+		newState, err = w.idAlloc.RenewLease(ctx)
 		return
 	}
 	w.tlMgr.metricScope.IncCounter(metrics.LeaseRequestPerTaskQueueCounter)

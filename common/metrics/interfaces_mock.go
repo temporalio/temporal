@@ -488,3 +488,17 @@ func (mr *MockReporterMockRecorder) Stop(logger interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Stop", reflect.TypeOf((*MockReporter)(nil).Stop), logger)
 }
+
+// UserScope mocks base method.
+func (m *MockReporter) UserScope() UserScope {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UserScope")
+	ret0, _ := ret[0].(UserScope)
+	return ret0
+}
+
+// UserScope indicates an expected call of UserScope.
+func (mr *MockReporterMockRecorder) UserScope() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UserScope", reflect.TypeOf((*MockReporter)(nil).UserScope))
+}

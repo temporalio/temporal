@@ -38,6 +38,8 @@ import (
 	"go.temporal.io/api/serviceerror"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	sdkclient "go.temporal.io/sdk/client"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clusterspb "go.temporal.io/server/api/cluster/v1"
@@ -66,8 +68,10 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
+	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/tasks"
@@ -103,13 +107,14 @@ type (
 		clientFactory               serverClient.Factory
 		clientBean                  serverClient.Bean
 		historyClient               historyservice.HistoryServiceClient
-		sdkClient                   sdkclient.Client
+		sdkClientFactory            sdk.ClientFactory
 		membershipMonitor           membership.Monitor
 		metricsClient               metrics.Client
 		namespaceRegistry           namespace.Registry
 		saProvider                  searchattribute.Provider
 		saManager                   searchattribute.Manager
 		clusterMetadata             cluster.Metadata
+		healthServer                *health.Server
 	}
 
 	NewAdminHandlerArgs struct {
@@ -128,7 +133,7 @@ type (
 		ClientFactory                       serverClient.Factory
 		ClientBean                          serverClient.Bean
 		HistoryClient                       historyservice.HistoryServiceClient
-		SdkSystemClient                     sdkclient.Client
+		sdkClientFactory                    sdk.ClientFactory
 		MembershipMonitor                   membership.Monitor
 		ArchiverProvider                    provider.ArchiverProvider
 		MetricsClient                       metrics.Client
@@ -137,6 +142,7 @@ type (
 		SaManager                           searchattribute.Manager
 		ClusterMetadata                     cluster.Metadata
 		ArchivalMetadata                    archiver.ArchivalMetadata
+		HealthServer                        *health.Server
 	}
 )
 
@@ -188,24 +194,25 @@ func NewAdminHandler(
 		clientFactory:               args.ClientFactory,
 		clientBean:                  args.ClientBean,
 		historyClient:               args.HistoryClient,
-		sdkClient:                   args.SdkSystemClient,
+		sdkClientFactory:            args.sdkClientFactory,
 		membershipMonitor:           args.MembershipMonitor,
 		metricsClient:               args.MetricsClient,
 		namespaceRegistry:           args.NamespaceRegistry,
 		saProvider:                  args.SaProvider,
 		saManager:                   args.SaManager,
 		clusterMetadata:             args.ClusterMetadata,
+		healthServer:                args.HealthServer,
 	}
 }
 
 // Start starts the handler
 func (adh *AdminHandler) Start() {
-	if !atomic.CompareAndSwapInt32(
+	if atomic.CompareAndSwapInt32(
 		&adh.status,
 		common.DaemonStatusInitialized,
 		common.DaemonStatusStarted,
 	) {
-		return
+		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_SERVING)
 	}
 
 	// Start namespace replication queue cleanup
@@ -215,12 +222,12 @@ func (adh *AdminHandler) Start() {
 
 // Stop stops the handler
 func (adh *AdminHandler) Stop() {
-	if !atomic.CompareAndSwapInt32(
+	if atomic.CompareAndSwapInt32(
 		&adh.status,
 		common.DaemonStatusStarted,
 		common.DaemonStatusStopped,
 	) {
-		return
+		adh.healthServer.SetServingStatus(AdminServiceName, healthpb.HealthCheckResponse_NOT_SERVING)
 	}
 
 	// Calling stop if the queue does not start is ok
@@ -272,7 +279,8 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 		SkipSchemaUpdate:      request.GetSkipSchemaUpdate(),
 	}
 
-	run, err := adh.sdkClient.ExecuteWorkflow(
+	sdkClient := adh.sdkClientFactory.GetSystemClient(adh.logger)
+	run, err := sdkClient.ExecuteWorkflow(
 		ctx,
 		sdkclient.StartWorkflowOptions{
 			TaskQueue: worker.DefaultWorkerTaskQueue,
@@ -297,7 +305,7 @@ func (adh *AdminHandler) AddSearchAttributes(ctx context.Context, request *admin
 }
 
 // RemoveSearchAttributes remove search attribute from the cluster.
-func (adh *AdminHandler) RemoveSearchAttributes(_ context.Context, request *adminservice.RemoveSearchAttributesRequest) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
+func (adh *AdminHandler) RemoveSearchAttributes(ctx context.Context, request *adminservice.RemoveSearchAttributesRequest) (_ *adminservice.RemoveSearchAttributesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminRemoveSearchAttributesScope)
@@ -337,7 +345,7 @@ func (adh *AdminHandler) RemoveSearchAttributes(_ context.Context, request *admi
 		delete(newCustomSearchAttributes, saName)
 	}
 
-	err = adh.saManager.SaveSearchAttributes(indexName, newCustomSearchAttributes)
+	err = adh.saManager.SaveSearchAttributes(ctx, indexName, newCustomSearchAttributes)
 	if err != nil {
 		return nil, adh.error(serviceerror.NewUnavailable(fmt.Sprintf(errUnableToSaveSearchAttributesMessage, err)), scope)
 	}
@@ -370,7 +378,9 @@ func (adh *AdminHandler) GetSearchAttributes(ctx context.Context, request *admin
 
 func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName string, runID string) (*adminservice.GetSearchAttributesResponse, error) {
 	var lastErr error
-	descResp, err := adh.sdkClient.DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, runID)
+
+	sdkClient := adh.sdkClientFactory.GetSystemClient(adh.logger)
+	descResp, err := sdkClient.DescribeWorkflowExecution(ctx, addsearchattributes.WorkflowName, runID)
 	var wfInfo *workflowpb.WorkflowExecutionInfo
 	if err != nil {
 		// NotFound can happen when no search attributes were added and the workflow has never been executed.
@@ -405,6 +415,34 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 	}, lastErr
 }
 
+func (adh *AdminHandler) RebuildMutableState(ctx context.Context, request *adminservice.RebuildMutableStateRequest) (_ *adminservice.RebuildMutableStateResponse, retError error) {
+	defer log.CapturePanic(adh.logger, &retError)
+
+	scope, sw := adh.startRequestProfile(metrics.AdminRebuildMutableStateScope)
+	defer sw.Stop()
+
+	if request == nil {
+		return nil, adh.error(errRequestNotSet, scope)
+	}
+
+	if err := validateExecution(request.Execution); err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	if _, err := adh.historyClient.RebuildMutableState(ctx, &historyservice.RebuildMutableStateRequest{
+		NamespaceId: namespaceID.String(),
+		Execution:   request.Execution,
+	}); err != nil {
+		return nil, err
+	}
+	return &adminservice.RebuildMutableStateResponse{}, nil
+}
+
 // DescribeMutableState returns information about the specified workflow execution.
 func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *adminservice.DescribeMutableStateRequest) (_ *adminservice.DescribeMutableStateResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -421,6 +459,9 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 	}
 
 	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
 
 	shardID := common.WorkflowIDToHistoryShard(namespaceID.String(), request.Execution.WorkflowId, adh.numberOfHistoryShards)
 	shardIDStr := convert.Int32ToString(shardID)
@@ -444,7 +485,7 @@ func (adh *AdminHandler) DescribeMutableState(ctx context.Context, request *admi
 		HistoryAddr:          historyAddr,
 		DatabaseMutableState: historyResponse.GetDatabaseMutableState(),
 		CacheMutableState:    historyResponse.GetCacheMutableState(),
-	}, err
+	}, nil
 }
 
 // RemoveTask returns information about the internal states of a history host
@@ -497,188 +538,71 @@ func (adh *AdminHandler) CloseShard(ctx context.Context, request *adminservice.C
 	return &adminservice.CloseShardResponse{}, err
 }
 
-// ListTimerTasks lists timer tasks for a given shard
-func (adh *AdminHandler) ListTimerTasks(ctx context.Context, request *adminservice.ListTimerTasksRequest) (_ *adminservice.ListTimerTasksResponse, retError error) {
+func (adh *AdminHandler) ListHistoryTasks(
+	ctx context.Context,
+	request *adminservice.ListHistoryTasksRequest,
+) (_ *adminservice.ListHistoryTasksResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
-	scope, sw := adh.startRequestProfile(metrics.AdminListTimerTasksScope)
+	scope, sw := adh.startRequestProfile(metrics.AdminListHistoryTasksScope)
 	defer sw.Stop()
 
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-
-	executionMgr := adh.persistenceExecutionManager
-
-	resp, err := executionMgr.GetTimerTasks(&persistence.GetTimerTasksRequest{
-		ShardID:       request.GetShardId(),
-		MinTimestamp:  *request.GetMinTime(),
-		MaxTimestamp:  *request.GetMaxTime(),
-		BatchSize:     int(request.GetBatchSize()),
-		NextPageToken: request.GetNextPageToken(),
-	})
-
-	var timerTasks []*adminservice.Task
-	for _, task := range resp.Tasks {
-		fireTime := task.GetKey().FireTime
-		taskType, err := getTaskType(task)
-		if err != nil {
-			return nil, err
-		}
-
-		timerTasks = append(timerTasks, &adminservice.Task{
-			NamespaceId: task.GetNamespaceID(),
-			WorkflowId:  task.GetWorkflowID(),
-			RunId:       task.GetRunID(),
-			TaskId:      task.GetTaskID(),
-			TaskType:    taskType,
-			FireTime:    &fireTime,
-			Version:     task.GetVersion(),
-		})
+	taskRange := request.GetTaskRange()
+	if taskRange == nil {
+		return nil, adh.error(errTaskRangeNotSet, scope)
 	}
 
-	return &adminservice.ListTimerTasksResponse{
-		Tasks:         timerTasks,
+	taskCategory, ok := tasks.GetCategoryByID(int32(request.Category))
+	if !ok {
+		return nil, adh.error(&serviceerror.InvalidArgument{
+			Message: fmt.Sprintf("unknown task category: %v", request.Category),
+		}, scope)
+	}
+
+	var minTaskKey, maxTaskKey tasks.Key
+	if taskRange.InclusiveMinTaskKey != nil {
+		minTaskKey.FireTime = timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime)
+		minTaskKey.TaskID = taskRange.InclusiveMinTaskKey.TaskId
+	}
+	if taskRange.ExclusiveMaxTaskKey != nil {
+		maxTaskKey.FireTime = timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime)
+		maxTaskKey.TaskID = taskRange.ExclusiveMaxTaskKey.TaskId
+	}
+	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
+		ShardID:             request.ShardId,
+		TaskCategory:        taskCategory,
+		InclusiveMinTaskKey: minTaskKey,
+		ExclusiveMaxTaskKey: maxTaskKey,
+		BatchSize:           int(request.BatchSize),
+		NextPageToken:       request.NextPageToken,
+	})
+	if err != nil {
+		return nil, adh.error(err, scope)
+	}
+
+	return &adminservice.ListHistoryTasksResponse{
+		Tasks:         toAdminTask(resp.Tasks),
 		NextPageToken: resp.NextPageToken,
-	}, err
+	}, nil
 }
 
-// ListReplicationTasks lists replication tasks for a given shard
-func (adh *AdminHandler) ListReplicationTasks(ctx context.Context, request *adminservice.ListReplicationTasksRequest) (_ *adminservice.ListReplicationTasksResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminListReplicationTasksScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-
-	executionMgr := adh.persistenceExecutionManager
-
-	resp, err := executionMgr.GetReplicationTasks(&persistence.GetReplicationTasksRequest{
-		ShardID:       request.GetShardId(),
-		MinTaskID:     request.GetMinTaskId(),
-		MaxTaskID:     request.GetMaxTaskId(),
-		BatchSize:     int(request.GetBatchSize()),
-		NextPageToken: request.GetNextPageToken(),
-	})
-
-	var tasks []*adminservice.Task
-	for _, task := range resp.Tasks {
-		fireTime := time.Unix(0, 0)
-		taskType, err := getTaskType(task)
-		if err != nil {
-			return nil, err
-		}
-
-		tasks = append(tasks, &adminservice.Task{
+func toAdminTask(tasks []tasks.Task) []*adminservice.Task {
+	var adminTasks []*adminservice.Task
+	for _, task := range tasks {
+		adminTasks = append(adminTasks, &adminservice.Task{
 			NamespaceId: task.GetNamespaceID(),
 			WorkflowId:  task.GetWorkflowID(),
 			RunId:       task.GetRunID(),
 			TaskId:      task.GetTaskID(),
-			TaskType:    taskType,
-			FireTime:    &fireTime,
+			TaskType:    task.GetType(),
+			FireTime:    timestamp.TimePtr(task.GetKey().FireTime),
 			Version:     task.GetVersion(),
 		})
 	}
-
-	return &adminservice.ListReplicationTasksResponse{
-		Tasks:         tasks,
-		NextPageToken: resp.NextPageToken,
-	}, err
-}
-
-// ListTransferTasks lists transfer tasks for a given shard
-func (adh *AdminHandler) ListTransferTasks(ctx context.Context, request *adminservice.ListTransferTasksRequest) (_ *adminservice.ListTransferTasksResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminListTransferTasksScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-
-	executionMgr := adh.persistenceExecutionManager
-
-	resp, err := executionMgr.GetTransferTasks(&persistence.GetTransferTasksRequest{
-		ShardID:       request.GetShardId(),
-		ReadLevel:     request.GetMinTaskId(),
-		MaxReadLevel:  request.GetMaxTaskId(),
-		BatchSize:     int(request.GetBatchSize()),
-		NextPageToken: request.GetNextPageToken(),
-	})
-
-	var tasks []*adminservice.Task
-	for _, task := range resp.Tasks {
-		fireTime := time.Unix(0, 0)
-		taskType, err := getTaskType(task)
-		if err != nil {
-			return nil, err
-		}
-
-		tasks = append(tasks, &adminservice.Task{
-			NamespaceId: task.GetNamespaceID(),
-			WorkflowId:  task.GetWorkflowID(),
-			RunId:       task.GetRunID(),
-			TaskId:      task.GetTaskID(),
-			TaskType:    taskType,
-			FireTime:    &fireTime,
-			Version:     task.GetVersion(),
-		})
-	}
-
-	return &adminservice.ListTransferTasksResponse{
-		Tasks:         tasks,
-		NextPageToken: resp.NextPageToken,
-	}, err
-}
-
-// ListVisibilityTasks lists visibility tasks for a given shard
-func (adh *AdminHandler) ListVisibilityTasks(ctx context.Context, request *adminservice.ListVisibilityTasksRequest) (_ *adminservice.ListVisibilityTasksResponse, retError error) {
-	defer log.CapturePanic(adh.logger, &retError)
-
-	scope, sw := adh.startRequestProfile(metrics.AdminListVisibilityTasksScope)
-	defer sw.Stop()
-
-	if request == nil {
-		return nil, adh.error(errRequestNotSet, scope)
-	}
-
-	executionMgr := adh.persistenceExecutionManager
-
-	resp, err := executionMgr.GetVisibilityTasks(&persistence.GetVisibilityTasksRequest{
-		ShardID:       request.GetShardId(),
-		ReadLevel:     resendStartEventID,
-		MaxReadLevel:  request.GetMaxReadLevel(),
-		BatchSize:     int(request.GetBatchSize()),
-		NextPageToken: request.GetNextPageToken(),
-	})
-
-	var tasks []*adminservice.Task
-	for _, task := range resp.Tasks {
-		fireTime := time.Unix(0, 0)
-		taskType, err := getTaskType(task)
-		if err != nil {
-			return nil, err
-		}
-
-		tasks = append(tasks, &adminservice.Task{
-			NamespaceId: task.GetNamespaceID(),
-			WorkflowId:  task.GetWorkflowID(),
-			RunId:       task.GetRunID(),
-			TaskId:      task.GetTaskID(),
-			TaskType:    taskType,
-			FireTime:    &fireTime,
-			Version:     task.GetVersion(),
-		})
-	}
-
-	return &adminservice.ListVisibilityTasksResponse{
-		Tasks:         tasks,
-		NextPageToken: resp.NextPageToken,
-	}, err
+	return adminTasks
 }
 
 // DescribeHistoryHost returns information about the internal states of a history host
@@ -817,7 +741,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)
-	rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(&persistence.ReadHistoryBranchRequest{
+	rawHistoryResponse, err := adh.persistenceExecutionManager.ReadRawHistoryBranch(ctx, &persistence.ReadHistoryBranchRequest{
 		BranchToken: targetVersionHistory.GetBranchToken(),
 		// GetWorkflowExecutionRawHistoryV2 is exclusive exclusive.
 		// ReadRawHistoryBranch is inclusive exclusive.
@@ -868,7 +792,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 
 // DescribeCluster return information about a temporal cluster
 func (adh *AdminHandler) DescribeCluster(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.DescribeClusterRequest,
 ) (_ *adminservice.DescribeClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -921,6 +845,7 @@ func (adh *AdminHandler) DescribeCluster(
 		request.ClusterName = adh.clusterMetadata.GetCurrentClusterName()
 	}
 	metadata, err := adh.clusterMetadataManager.GetClusterMetadata(
+		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	)
 	if err != nil {
@@ -945,7 +870,7 @@ func (adh *AdminHandler) DescribeCluster(
 
 // ListClusters return information about temporal clusters
 func (adh *AdminHandler) ListClusters(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.ListClustersRequest,
 ) (_ *adminservice.ListClustersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -960,7 +885,7 @@ func (adh *AdminHandler) ListClusters(
 		request.PageSize = listClustersPageSize
 	}
 
-	resp, err := adh.clusterMetadataManager.ListClusterMetadata(&persistence.ListClusterMetadataRequest{
+	resp, err := adh.clusterMetadataManager.ListClusterMetadata(ctx, &persistence.ListClusterMetadataRequest{
 		PageSize:      int(request.GetPageSize()),
 		NextPageToken: request.GetNextPageToken(),
 	})
@@ -979,7 +904,7 @@ func (adh *AdminHandler) ListClusters(
 }
 
 func (adh *AdminHandler) ListClusterMembers(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.ListClusterMembersRequest,
 ) (_ *adminservice.ListClusterMembersResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -1004,7 +929,7 @@ func (adh *AdminHandler) ListClusterMembers(
 		startedTime = *startedTimeRef
 	}
 
-	resp, err := metadataMgr.GetClusterMembers(&persistence.GetClusterMembersRequest{
+	resp, err := metadataMgr.GetClusterMembers(ctx, &persistence.GetClusterMembersRequest{
 		LastHeartbeatWithin: heartbit,
 		RPCAddressEquals:    net.ParseIP(request.GetRpcAddress()),
 		HostIDEquals:        uuid.Parse(request.GetHostId()),
@@ -1065,6 +990,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 	var updateRequestVersion int64 = 0
 	clusterMetadataMrg := adh.clusterMetadataManager
 	clusterData, err := clusterMetadataMrg.GetClusterMetadata(
+		ctx,
 		&persistence.GetClusterMetadataRequest{ClusterName: resp.GetClusterName()},
 	)
 	switch err.(type) {
@@ -1076,7 +1002,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 		return nil, adh.error(err, scope)
 	}
 
-	applied, err := clusterMetadataMrg.SaveClusterMetadata(&persistence.SaveClusterMetadataRequest{
+	applied, err := clusterMetadataMrg.SaveClusterMetadata(ctx, &persistence.SaveClusterMetadataRequest{
 		ClusterMetadata: persistencespb.ClusterMetadata{
 			ClusterName:              resp.GetClusterName(),
 			HistoryShardCount:        resp.GetHistoryShardCount(),
@@ -1102,7 +1028,7 @@ func (adh *AdminHandler) AddOrUpdateRemoteCluster(
 }
 
 func (adh *AdminHandler) RemoveRemoteCluster(
-	_ context.Context,
+	ctx context.Context,
 	request *adminservice.RemoveRemoteClusterRequest,
 ) (_ *adminservice.RemoveRemoteClusterResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
@@ -1111,6 +1037,7 @@ func (adh *AdminHandler) RemoveRemoteCluster(
 	defer sw.Stop()
 
 	if err := adh.clusterMetadataManager.DeleteClusterMetadata(
+		ctx,
 		&persistence.DeleteClusterMetadataRequest{ClusterName: request.GetClusterName()},
 	); err != nil {
 		return nil, adh.error(err, scope)
@@ -1143,7 +1070,7 @@ func (adh *AdminHandler) GetReplicationMessages(ctx context.Context, request *ad
 }
 
 // GetNamespaceReplicationMessages returns new namespace replication tasks since last retrieved task ID.
-func (adh *AdminHandler) GetNamespaceReplicationMessages(_ context.Context, request *adminservice.GetNamespaceReplicationMessagesRequest) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
+func (adh *AdminHandler) GetNamespaceReplicationMessages(ctx context.Context, request *adminservice.GetNamespaceReplicationMessagesRequest) (_ *adminservice.GetNamespaceReplicationMessagesResponse, retError error) {
 	defer log.CapturePanic(adh.logger, &retError)
 
 	scope, sw := adh.startRequestProfile(metrics.AdminGetNamespaceReplicationMessagesScope)
@@ -1159,7 +1086,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(_ context.Context, requ
 
 	lastMessageID := request.GetLastRetrievedMessageId()
 	if request.GetLastRetrievedMessageId() == defaultLastMessageID {
-		if clusterAckLevels, err := adh.namespaceReplicationQueue.GetAckLevels(); err == nil {
+		if clusterAckLevels, err := adh.namespaceReplicationQueue.GetAckLevels(ctx); err == nil {
 			if ackLevel, ok := clusterAckLevels[request.GetClusterName()]; ok {
 				lastMessageID = ackLevel
 			}
@@ -1167,6 +1094,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(_ context.Context, requ
 	}
 
 	replicationTasks, lastMessageID, err := adh.namespaceReplicationQueue.GetReplicationMessages(
+		ctx,
 		lastMessageID,
 		getNamespaceReplicationMessageBatchSize,
 	)
@@ -1176,6 +1104,7 @@ func (adh *AdminHandler) GetNamespaceReplicationMessages(_ context.Context, requ
 
 	if request.GetLastProcessedMessageId() != defaultLastMessageID {
 		if err := adh.namespaceReplicationQueue.UpdateAckLevel(
+			ctx,
 			request.GetLastProcessedMessageId(),
 			request.GetClusterName(),
 		); err != nil {
@@ -1303,6 +1232,7 @@ func (adh *AdminHandler) GetDLQMessages(
 			default:
 				var err error
 				tasks, token, err = adh.namespaceDLQHandler.Read(
+					ctx,
 					request.GetInclusiveEndMessageId(),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken())
@@ -1362,7 +1292,7 @@ func (adh *AdminHandler) PurgeDLQMessages(
 			case <-ctx.Done():
 				return ctx.Err()
 			default:
-				return adh.namespaceDLQHandler.Purge(request.GetInclusiveEndMessageId())
+				return adh.namespaceDLQHandler.Purge(ctx, request.GetInclusiveEndMessageId())
 			}
 		}
 	default:
@@ -1422,6 +1352,7 @@ func (adh *AdminHandler) MergeDLQMessages(
 			default:
 				var err error
 				token, err = adh.namespaceDLQHandler.Merge(
+					ctx,
 					request.GetInclusiveEndMessageId(),
 					int(request.GetMaximumPageSize()),
 					request.GetNextPageToken(),
@@ -1528,25 +1459,22 @@ func (adh *AdminHandler) GetTaskQueueTasks(
 		return nil, adh.error(err, scope)
 	}
 
-	taskMgr := adh.taskManager
-
-	maxTaskID := request.GetMaxTaskId()
-	req := &persistence.GetTasksRequest{
+	resp, err := adh.taskManager.GetTasks(ctx, &persistence.GetTasksRequest{
 		NamespaceID:        namespaceID.String(),
 		TaskQueue:          request.GetTaskQueue(),
 		TaskType:           request.GetTaskQueueType(),
-		MinTaskIDExclusive: request.GetMinTaskId(),
-		MaxTaskIDInclusive: maxTaskID,
+		InclusiveMinTaskID: request.GetMinTaskId(),
+		ExclusiveMaxTaskID: request.GetMaxTaskId(),
 		PageSize:           int(request.GetBatchSize()),
-	}
-
-	resp, err := taskMgr.GetTasks(req)
+		NextPageToken:      request.NextPageToken,
+	})
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
 
 	return &adminservice.GetTaskQueueTasksResponse{
-		Tasks: resp.Tasks,
+		Tasks:         resp.Tasks,
+		NextPageToken: resp.NextPageToken,
 	}, nil
 }
 
@@ -1575,11 +1503,6 @@ func (adh *AdminHandler) validateGetWorkflowExecutionRawHistoryV2Request(
 		request.GetEndEventId() == common.EmptyEventID &&
 		request.GetEndEventVersion() == common.EmptyVersion {
 		return errInvalidEventQueryRange
-	}
-
-	if (request.GetStartEventId() != common.EmptyEventID && request.GetStartEventVersion() == common.EmptyVersion) ||
-		(request.GetStartEventId() == common.EmptyEventID && request.GetStartEventVersion() != common.EmptyVersion) {
-		return errInvalidStartEventCombination
 	}
 
 	return nil
@@ -1723,60 +1646,4 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
-}
-
-func getTaskType(task tasks.Task) (enumsspb.TaskType, error) {
-	var taskType enumsspb.TaskType
-	switch task := task.(type) {
-	// Replication
-	case *tasks.HistoryReplicationTask:
-		taskType = enumsspb.TASK_TYPE_REPLICATION_HISTORY
-	case *tasks.SyncActivityTask:
-		taskType = enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY
-	// Transfer
-	case *tasks.WorkflowTask:
-		taskType = enumsspb.TASK_TYPE_TRANSFER_WORKFLOW_TASK
-	case *tasks.ActivityTask:
-		taskType = enumsspb.TASK_TYPE_TRANSFER_ACTIVITY_TASK
-	case *tasks.CloseExecutionTask:
-		taskType = enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION
-	case *tasks.CancelExecutionTask:
-		taskType = enumsspb.TASK_TYPE_TRANSFER_CANCEL_EXECUTION
-	case *tasks.StartChildExecutionTask:
-		taskType = enumsspb.TASK_TYPE_TRANSFER_START_CHILD_EXECUTION
-	case *tasks.SignalExecutionTask:
-		taskType = enumsspb.TASK_TYPE_TRANSFER_SIGNAL_EXECUTION
-	case *tasks.ResetWorkflowTask:
-		taskType = enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW
-	case *tasks.DeleteExecutionTask:
-		taskType = enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION
-	// Timer
-	case *tasks.WorkflowTaskTimeoutTask:
-		taskType = enumsspb.TASK_TYPE_WORKFLOW_TASK_TIMEOUT
-	case *tasks.ActivityTimeoutTask:
-		taskType = enumsspb.TASK_TYPE_ACTIVITY_TIMEOUT
-	case *tasks.UserTimerTask:
-		taskType = enumsspb.TASK_TYPE_USER_TIMER
-	case *tasks.WorkflowTimeoutTask:
-		taskType = enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT
-	case *tasks.DeleteHistoryEventTask:
-		taskType = enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT
-	case *tasks.ActivityRetryTimerTask:
-		taskType = enumsspb.TASK_TYPE_ACTIVITY_RETRY_TIMER
-	case *tasks.WorkflowBackoffTimerTask:
-		taskType = enumsspb.TASK_TYPE_WORKFLOW_BACKOFF_TIMER
-	// Visibility
-	case *tasks.StartExecutionVisibilityTask:
-		taskType = enumsspb.TASK_TYPE_VISIBILITY_START_EXECUTION
-	case *tasks.UpsertExecutionVisibilityTask:
-		taskType = enumsspb.TASK_TYPE_VISIBILITY_UPSERT_EXECUTION
-	case *tasks.CloseExecutionVisibilityTask:
-		taskType = enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION
-	case *tasks.DeleteExecutionVisibilityTask:
-		taskType = enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION
-	default:
-		return 0, serviceerror.NewInternal(fmt.Sprintf("Unknown task type: %v", task))
-	}
-
-	return taskType, nil
 }

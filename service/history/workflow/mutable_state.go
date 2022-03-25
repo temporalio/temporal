@@ -27,6 +27,7 @@
 package workflow
 
 import (
+	"context"
 	"time"
 
 	commandpb "go.temporal.io/api/command/v1"
@@ -87,7 +88,7 @@ type (
 		AddActivityTaskCanceledEvent(int64, int64, int64, *commonpb.Payloads, string) (*historypb.HistoryEvent, error)
 		AddActivityTaskCompletedEvent(int64, int64, *workflowservice.RespondActivityTaskCompletedRequest) (*historypb.HistoryEvent, error)
 		AddActivityTaskFailedEvent(int64, int64, *failurepb.Failure, enumspb.RetryState, string) (*historypb.HistoryEvent, error)
-		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
+		AddActivityTaskScheduledEvent(int64, *commandpb.ScheduleActivityTaskCommandAttributes, bool) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error)
 		AddActivityTaskStartedEvent(*persistencespb.ActivityInfo, int64, string, string) (*historypb.HistoryEvent, error)
 		AddActivityTaskTimedOutEvent(int64, int64, *failurepb.Failure, enumspb.RetryState) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
@@ -140,14 +141,14 @@ type (
 		GetActivityByActivityID(string) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfo(int64) (*persistencespb.ActivityInfo, bool)
 		GetActivityInfoWithTimerHeartbeat(scheduleEventID int64) (*persistencespb.ActivityInfo, time.Time, bool)
-		GetActivityScheduledEvent(int64) (*historypb.HistoryEvent, error)
+		GetActivityScheduledEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetChildExecutionInfo(int64) (*persistencespb.ChildExecutionInfo, bool)
-		GetChildExecutionInitiatedEvent(int64) (*historypb.HistoryEvent, error)
-		GetCompletionEvent() (*historypb.HistoryEvent, error)
+		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
+		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
 		GetWorkflowTaskInfo(int64) (*WorkflowTaskInfo, bool)
 		GetNamespaceEntry() *namespace.Namespace
-		GetStartEvent() (*historypb.HistoryEvent, error)
-		GetSignalExternalInitiatedEvent(int64) (*historypb.HistoryEvent, error)
+		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)
+		GetSignalExternalInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetFirstRunID() (string, error)
 		GetCurrentBranchToken() ([]byte, error)
 		GetCurrentVersion() int64
@@ -238,16 +239,13 @@ type (
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error
 
-		AddTransferTasks(transferTasks ...tasks.Task)
-		AddTimerTasks(timerTasks ...tasks.Task)
-		AddReplicationTasks(replicationTasks ...tasks.Task)
-		AddVisibilityTasks(visibilityTasks ...tasks.Task)
+		AddTasks(tasks ...tasks.Task)
 		SetUpdateCondition(int64, int64)
 		GetUpdateCondition() (int64, int64)
 
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
-		GenerateLastHistoryReplicationTasks(now time.Time) (*tasks.HistoryReplicationTask, error)
+		GenerateLastHistoryReplicationTasks(now time.Time) (tasks.Task, error)
 	}
 )

@@ -174,74 +174,37 @@ func (c *metricClient) GetShard(
 	return resp, err
 }
 
-func (c *metricClient) ListTimerTasks(
+func (c *metricClient) ListHistoryTasks(
 	ctx context.Context,
-	request *adminservice.ListTimerTasksRequest,
+	request *adminservice.ListHistoryTasksRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ListTimerTasksResponse, error) {
+) (*adminservice.ListHistoryTasksResponse, error) {
+	c.metricsClient.IncCounter(metrics.AdminClientListHistoryTasksScope, metrics.ClientRequests)
 
-	c.metricsClient.IncCounter(metrics.AdminClientListTimerTasksScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientListTimerTasksScope, metrics.ClientLatency)
-	resp, err := c.client.ListTimerTasks(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientListHistoryTasksScope, metrics.ClientLatency)
+	resp, err := c.client.ListHistoryTasks(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientListTimerTasksScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientListHistoryTasksScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
 
-func (c *metricClient) ListReplicationTasks(
+func (c *metricClient) RebuildMutableState(
 	ctx context.Context,
-	request *adminservice.ListReplicationTasksRequest,
+	request *adminservice.RebuildMutableStateRequest,
 	opts ...grpc.CallOption,
-) (*adminservice.ListReplicationTasksResponse, error) {
+) (*adminservice.RebuildMutableStateResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientListReplicationTasksScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientRebuildMutableStateScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientListReplicationTasksScope, metrics.ClientLatency)
-	resp, err := c.client.ListReplicationTasks(ctx, request, opts...)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientRebuildMutableStateScope, metrics.ClientLatency)
+	resp, err := c.client.RebuildMutableState(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientListReplicationTasksScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) ListTransferTasks(
-	ctx context.Context,
-	request *adminservice.ListTransferTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListTransferTasksResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientListTransferTasksScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientListTransferTasksScope, metrics.ClientLatency)
-	resp, err := c.client.ListTransferTasks(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientListTransferTasksScope, metrics.ClientFailures)
-	}
-	return resp, err
-}
-
-func (c *metricClient) ListVisibilityTasks(
-	ctx context.Context,
-	request *adminservice.ListVisibilityTasksRequest,
-	opts ...grpc.CallOption,
-) (*adminservice.ListVisibilityTasksResponse, error) {
-
-	c.metricsClient.IncCounter(metrics.AdminClientListVisibilityTasksScope, metrics.ClientRequests)
-
-	sw := c.metricsClient.StartTimer(metrics.AdminClientListVisibilityTasksScope, metrics.ClientLatency)
-	resp, err := c.client.ListVisibilityTasks(ctx, request, opts...)
-	sw.Stop()
-
-	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientListVisibilityTasksScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientRebuildMutableStateScope, metrics.ClientFailures)
 	}
 	return resp, err
 }
@@ -252,14 +215,14 @@ func (c *metricClient) DescribeMutableState(
 	opts ...grpc.CallOption,
 ) (*adminservice.DescribeMutableStateResponse, error) {
 
-	c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientRequests)
+	c.metricsClient.IncCounter(metrics.AdminClientDescribeMutableStateScope, metrics.ClientRequests)
 
-	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientLatency)
+	sw := c.metricsClient.StartTimer(metrics.AdminClientDescribeMutableStateScope, metrics.ClientLatency)
 	resp, err := c.client.DescribeMutableState(ctx, request, opts...)
 	sw.Stop()
 
 	if err != nil {
-		c.metricsClient.IncCounter(metrics.AdminClientDescribeWorkflowMutableStateScope, metrics.ClientFailures)
+		c.metricsClient.IncCounter(metrics.AdminClientDescribeMutableStateScope, metrics.ClientFailures)
 	}
 	return resp, err
 }

@@ -63,13 +63,12 @@ type (
 		logger           log.Logger
 		namespaceLogger  NamespaceLogger
 		serverReporter   metrics.Reporter
-		sdkReporter      metrics.Reporter
 
-		dynamicConfigClient dynamicconfig.Client
-		dcCollection        *dynamicconfig.Collection
+		dcCollection *dynamicconfig.Collection
 
-		persistenceConfig config.Persistence
-		clusterMetadata   *cluster.Config
+		persistenceConfig          config.Persistence
+		clusterMetadata            *cluster.Config
+		persistenceFactoryProvider persistenceClient.FactoryProviderFn
 	}
 )
 
@@ -84,26 +83,24 @@ func NewServerFxImpl(
 	logger log.Logger,
 	namespaceLogger NamespaceLogger,
 	stoppedCh chan interface{},
-	dynamicConfigClient dynamicconfig.Client,
 	dcCollection *dynamicconfig.Collection,
 	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
 	servicesGroup ServicesGroupIn,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
+	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 ) *ServerImpl {
 	s := &ServerImpl{
-		so:                  opts,
-		servicesMetadata:    servicesGroup.Services,
-		stoppedCh:           stoppedCh,
-		logger:              logger,
-		namespaceLogger:     namespaceLogger,
-		serverReporter:      serverReporter,
-		sdkReporter:         sdkReporter,
-		dynamicConfigClient: dynamicConfigClient,
-		dcCollection:        dcCollection,
-		persistenceConfig:   persistenceConfig,
-		clusterMetadata:     clusterMetadata,
+		so:                         opts,
+		servicesMetadata:           servicesGroup.Services,
+		stoppedCh:                  stoppedCh,
+		logger:                     logger,
+		namespaceLogger:            namespaceLogger,
+		serverReporter:             serverReporter,
+		dcCollection:               dcCollection,
+		persistenceConfig:          persistenceConfig,
+		clusterMetadata:            clusterMetadata,
+		persistenceFactoryProvider: persistenceFactoryProvider,
 	}
 	return s
 }
@@ -114,15 +111,15 @@ func (s *ServerImpl) Start() error {
 	s.logger.Info("Starting server for services", tag.Value(s.so.serviceNames))
 	s.logger.Debug(s.so.config.String())
 
-	var err error
-
-	err = initSystemNamespaces(
+	if err := initSystemNamespaces(
+		context.TODO(),
 		&s.persistenceConfig,
 		s.clusterMetadata.CurrentClusterName,
 		s.so.persistenceServiceResolver,
+		s.persistenceFactoryProvider,
 		s.logger,
-		s.so.customDataStoreFactory)
-	if err != nil {
+		s.so.customDataStoreFactory,
+	); err != nil {
 		return fmt.Errorf("unable to initialize system namespace: %w", err)
 	}
 
@@ -157,24 +154,19 @@ func (s *ServerImpl) Stop() {
 
 	wg.Wait()
 
-	if s.sdkReporter != nil {
-		s.sdkReporter.Stop(s.logger)
-	}
-
 	if s.serverReporter != nil {
 		s.serverReporter.Stop(s.logger)
 	}
 }
 
 // Populates parameters for a service
-func newBootstrapParams(
+func NewBootstrapParams(
 	logger log.Logger,
 	namespaceLogger NamespaceLogger,
 	cfg *config.Config,
 	serviceName ServiceName,
 	dc *dynamicconfig.Collection,
 	serverReporter ServerReporter,
-	sdkReporter SdkReporter,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	persistenceConfig config.Persistence,
 	clusterMetadata *cluster.Config,
@@ -191,7 +183,7 @@ func newBootstrapParams(
 	}
 
 	svcCfg := cfg.Services[svcName]
-	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, logger, tlsConfigProvider, dc)
+	rpcFactory := rpc.NewFactory(&svcCfg.RPC, svcName, logger, tlsConfigProvider, dc, clusterMetadata)
 	params.RPCFactory = rpcFactory
 
 	// Ringpop uses a different port to register handlers, this map is needed to resolve
@@ -214,20 +206,6 @@ func newBootstrapParams(
 		}
 
 	params.ServerMetricsReporter = serverReporter
-	params.SDKMetricsReporter = sdkReporter
-
-	// todo: Replace this hack with actually using sdkReporter, Client or Scope.
-	if serverReporter == nil {
-		var err error
-		serverReporter, sdkReporter, err = svcCfg.Metrics.InitMetricReporters(logger, nil)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"unable to initialize per-service metric client. "+
-					"This is deprecated behavior used as fallback, please use global metric config. Error: %w", err)
-		}
-		params.ServerMetricsReporter = serverReporter
-		params.SDKMetricsReporter = sdkReporter
-	}
 
 	serviceIdx := metrics.GetMetricsServiceIdx(svcName, logger)
 	metricsClient, err := serverReporter.NewClient(logger, serviceIdx)
@@ -242,12 +220,7 @@ func newBootstrapParams(
 		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
 	}
 
-	sdkMetricsClient, err := params.SDKMetricsReporter.NewClient(logger, serviceIdx)
-	if err != nil {
-		return nil, fmt.Errorf("unable to init sdk metrics client: %w", err)
-	}
-
-	sdkMetricsHandler := sdk.NewMetricHandler(sdkMetricsClient.UserScope())
+	sdkMetricsHandler := sdk.NewMetricHandler(metricsClient.UserScope())
 	params.SdkClientFactory = sdk.NewClientFactory(
 		cfg.PublicClient.HostPort,
 		tlsFrontendConfig,
@@ -270,21 +243,31 @@ func newBootstrapParams(
 }
 
 func initSystemNamespaces(
+	ctx context.Context,
 	cfg *config.Persistence,
 	currentClusterName string,
 	persistenceServiceResolver resolver.ServiceResolver,
+	persistenceFactoryProvider persistenceClient.FactoryProviderFn,
 	logger log.Logger,
 	customDataStoreFactory persistenceClient.AbstractDataStoreFactory,
 ) error {
-	factory := persistenceClient.NewFactory(
-		cfg,
+	clusterName := persistenceClient.ClusterName(currentClusterName)
+	dataStoreFactory, _ := persistenceClient.DataStoreFactoryProvider(
+		clusterName,
 		persistenceServiceResolver,
-		nil,
+		cfg,
 		customDataStoreFactory,
-		currentClusterName,
-		nil,
 		logger,
+		nil,
 	)
+	factory := persistenceFactoryProvider(persistenceClient.NewFactoryParams{
+		DataStoreFactory:  dataStoreFactory,
+		Cfg:               cfg,
+		PersistenceMaxQPS: nil,
+		ClusterName:       persistenceClient.ClusterName(currentClusterName),
+		MetricsClient:     nil,
+		Logger:            logger,
+	})
 	defer factory.Close()
 
 	metadataManager, err := factory.NewMetadataManager()
@@ -292,7 +275,7 @@ func initSystemNamespaces(
 		return fmt.Errorf("unable to initialize metadata manager: %w", err)
 	}
 	defer metadataManager.Close()
-	if err = metadataManager.InitializeSystemNamespaces(currentClusterName); err != nil {
+	if err = metadataManager.InitializeSystemNamespaces(ctx, currentClusterName); err != nil {
 		return fmt.Errorf("unable to register system namespace: %w", err)
 	}
 	return nil

@@ -37,10 +37,6 @@ import (
 )
 
 type nullStatsReporter struct{}
-type unsupportedNullStatsReporter struct{}
-
-var CachedNullStatsReporter tally.CachedStatsReporter = nullStatsReporter{}
-var UnsupportedNullStatsReporter tally.BaseStatsReporter = unsupportedNullStatsReporter{}
 
 func (r nullStatsReporter) Capabilities() tally.Capabilities {
 	panic("implement me")
@@ -63,14 +59,6 @@ func (r nullStatsReporter) AllocateTimer(name string, tags map[string]string) ta
 }
 
 func (r nullStatsReporter) AllocateHistogram(name string, tags map[string]string, buckets tally.Buckets) tally.CachedHistogram {
-	panic("implement me")
-}
-
-func (u unsupportedNullStatsReporter) Capabilities() tally.Capabilities {
-	panic("implement me")
-}
-
-func (u unsupportedNullStatsReporter) Flush() {
 	panic("implement me")
 }
 
@@ -97,7 +85,7 @@ func (s *MetricsSuite) TestStatsd() {
 
 	config := new(Config)
 	config.Statsd = statsd
-	scope := config.NewScope(log.NewNoopLogger())
+	scope := NewScope(log.NewNoopLogger(), config)
 	s.NotNil(scope)
 }
 
@@ -109,7 +97,7 @@ func (s *MetricsSuite) TestM3() {
 	}
 	config := new(Config)
 	config.M3 = m3
-	scope := config.NewScope(log.NewNoopLogger())
+	scope := NewScope(log.NewNoopLogger(), config)
 	s.NotNil(scope)
 }
 
@@ -121,48 +109,12 @@ func (s *MetricsSuite) TestPrometheus() {
 	}
 	config := new(Config)
 	config.Prometheus = prom
-	scope := config.NewScope(log.NewNoopLogger())
+	scope := NewScope(log.NewNoopLogger(), config)
 	s.NotNil(scope)
 }
 
 func (s *MetricsSuite) TestNoop() {
 	config := &Config{}
-	scope := config.NewScope(log.NewNoopLogger())
+	scope := NewScope(log.NewNoopLogger(), config)
 	s.Equal(tally.NoopScope, scope)
-}
-
-func (s *MetricsSuite) TestCustomReporter() {
-	config := &Config{}
-	scope := config.NewCustomReporterScope(log.NewNoopLogger(), tally.NullStatsReporter)
-	s.NotNil(scope)
-	s.NotEqual(tally.NoopScope, scope)
-}
-
-func (s *MetricsSuite) TestCustomCachedReporter() {
-	config := &Config{}
-	scope := config.NewCustomReporterScope(log.NewNoopLogger(), CachedNullStatsReporter)
-	s.NotNil(scope)
-	s.NotEqual(tally.NoopScope, scope)
-}
-
-func (s *MetricsSuite) TestUnsupportedReporter() {
-	config := &Config{}
-	scope := config.NewCustomReporterScope(log.NewNoopLogger(), UnsupportedNullStatsReporter)
-	s.Equal(tally.NoopScope, scope)
-}
-
-func (s *MetricsSuite) TestOTCustomReporter() {
-	prom := &PrometheusConfig{
-		Framework:     "custom",
-		OnError:       "panic",
-		TimerType:     "histogram",
-		ListenAddress: "127.0.0.1:0",
-	}
-	config := &Config{}
-	config.Prometheus = prom
-	mockReporter := NewMockReporter(s.controller)
-	reporter, sdkReporter, err := config.InitMetricReporters(log.NewNoopLogger(), mockReporter)
-	s.Equal(mockReporter, reporter)
-	s.Equal(mockReporter, sdkReporter)
-	s.Nil(err)
 }

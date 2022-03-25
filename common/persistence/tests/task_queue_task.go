@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -37,6 +38,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -53,6 +55,9 @@ type (
 
 		taskManager p.TaskManager
 		logger      log.Logger
+
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 )
 
@@ -62,9 +67,12 @@ func NewTaskQueueTaskSuite(
 	logger log.Logger,
 ) *TaskQueueTaskSuite {
 	return &TaskQueueTaskSuite{
-		Assertions:  require.New(t),
-		taskManager: p.NewTaskManager(taskManager),
-		logger:      logger,
+		Assertions: require.New(t),
+		taskManager: p.NewTaskManager(
+			taskManager,
+			serialization.NewSerializer(),
+		),
+		logger: logger,
 	}
 }
 
@@ -78,6 +86,7 @@ func (s *TaskQueueTaskSuite) TearDownSuite() {
 
 func (s *TaskQueueTaskSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.ctx, s.cancel = context.WithTimeout(context.Background(), time.Second*30)
 
 	s.stickyTTL = time.Second * 10
 	s.taskTTL = time.Second * 16
@@ -89,7 +98,7 @@ func (s *TaskQueueTaskSuite) SetupTest() {
 }
 
 func (s *TaskQueueTaskSuite) TearDownTest() {
-
+	s.cancel()
 }
 
 func (s *TaskQueueTaskSuite) TestCreateGet_Conflict() {
@@ -98,7 +107,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Conflict() {
 
 	taskID := rand.Int63()
 	task := s.randomTask(taskID)
-	_, err := s.taskManager.CreateTasks(&p.CreateTasksRequest{
+	_, err := s.taskManager.CreateTasks(s.ctx, &p.CreateTasksRequest{
 		TaskQueueInfo: &p.PersistedTaskQueueInfo{
 			RangeID: rand.Int63(),
 			Data:    taskQueue,
@@ -107,12 +116,12 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Conflict() {
 	})
 	s.IsType(&p.ConditionFailedError{}, err)
 
-	resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
+	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		MinTaskIDExclusive: taskID - 1,
-		MaxTaskIDInclusive: taskID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
@@ -127,7 +136,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_One() {
 
 	taskID := rand.Int63()
 	task := s.randomTask(taskID)
-	_, err := s.taskManager.CreateTasks(&p.CreateTasksRequest{
+	_, err := s.taskManager.CreateTasks(s.ctx, &p.CreateTasksRequest{
 		TaskQueueInfo: &p.PersistedTaskQueueInfo{
 			RangeID: rangeID,
 			Data:    taskQueue,
@@ -136,12 +145,12 @@ func (s *TaskQueueTaskSuite) TestCreateGet_One() {
 	})
 	s.NoError(err)
 
-	resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
+	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		MinTaskIDExclusive: taskID - 1,
-		MaxTaskIDInclusive: taskID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
@@ -169,7 +178,7 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
 			tasks = append(tasks, task)
 			expectedTasks = append(expectedTasks, task)
 		}
-		_, err := s.taskManager.CreateTasks(&p.CreateTasksRequest{
+		_, err := s.taskManager.CreateTasks(s.ctx, &p.CreateTasksRequest{
 			TaskQueueInfo: &p.PersistedTaskQueueInfo{
 				RangeID: rangeID,
 				Data:    taskQueue,
@@ -182,12 +191,12 @@ func (s *TaskQueueTaskSuite) TestCreateGet_Multiple() {
 	var token []byte
 	var actualTasks []*persistencespb.AllocatedTaskInfo
 	for doContinue := true; doContinue; doContinue = len(token) > 0 {
-		resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
+		resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 			NamespaceID:        s.namespaceID,
 			TaskQueue:          s.taskQueueName,
 			TaskType:           s.taskQueueType,
-			MinTaskIDExclusive: minTaskID - 1,
-			MaxTaskIDInclusive: maxTaskID,
+			InclusiveMinTaskID: minTaskID,
+			ExclusiveMaxTaskID: maxTaskID + 1,
 			PageSize:           1,
 			NextPageToken:      token,
 		})
@@ -204,7 +213,7 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_One() {
 
 	taskID := rand.Int63()
 	task := s.randomTask(taskID)
-	_, err := s.taskManager.CreateTasks(&p.CreateTasksRequest{
+	_, err := s.taskManager.CreateTasks(s.ctx, &p.CreateTasksRequest{
 		TaskQueueInfo: &p.PersistedTaskQueueInfo{
 			RangeID: rangeID,
 			Data:    taskQueue,
@@ -213,7 +222,7 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_One() {
 	})
 	s.NoError(err)
 
-	err = s.taskManager.CompleteTask(&p.CompleteTaskRequest{
+	err = s.taskManager.CompleteTask(s.ctx, &p.CompleteTaskRequest{
 		TaskQueue: &p.TaskQueueKey{
 			NamespaceID:   s.namespaceID,
 			TaskQueueName: s.taskQueueName,
@@ -223,12 +232,12 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_One() {
 	})
 	s.NoError(err)
 
-	resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
+	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		MinTaskIDExclusive: taskID - 1,
-		MaxTaskIDInclusive: taskID,
+		InclusiveMinTaskID: taskID,
+		ExclusiveMaxTaskID: taskID + 1,
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
@@ -247,16 +256,14 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 	rangeID := rand.Int63()
 	taskQueue := s.createTaskQueue(rangeID)
 
-	var expectedTasks []*persistencespb.AllocatedTaskInfo
 	for i := 0; i < numCreateBatch; i++ {
 		var tasks []*persistencespb.AllocatedTaskInfo
 		for j := 0; j < createBatchSize; j++ {
 			taskID := minTaskID + int64(i*numCreateBatch+j)
 			task := s.randomTask(taskID)
 			tasks = append(tasks, task)
-			expectedTasks = append(expectedTasks, task)
 		}
-		_, err := s.taskManager.CreateTasks(&p.CreateTasksRequest{
+		_, err := s.taskManager.CreateTasks(s.ctx, &p.CreateTasksRequest{
 			TaskQueueInfo: &p.PersistedTaskQueueInfo{
 				RangeID: rangeID,
 				Data:    taskQueue,
@@ -266,21 +273,21 @@ func (s *TaskQueueTaskSuite) TestCreateDelete_Multiple() {
 		s.NoError(err)
 	}
 
-	_, err := s.taskManager.CompleteTasksLessThan(&p.CompleteTasksLessThanRequest{
-		NamespaceID:   s.namespaceID,
-		TaskQueueName: s.taskQueueName,
-		TaskType:      s.taskQueueType,
-		TaskID:        maxTaskID,
-		Limit:         int(numTasks),
+	_, err := s.taskManager.CompleteTasksLessThan(s.ctx, &p.CompleteTasksLessThanRequest{
+		NamespaceID:        s.namespaceID,
+		TaskQueueName:      s.taskQueueName,
+		TaskType:           s.taskQueueType,
+		ExclusiveMaxTaskID: maxTaskID + 1,
+		Limit:              int(numTasks),
 	})
 	s.NoError(err)
 
-	resp, err := s.taskManager.GetTasks(&p.GetTasksRequest{
+	resp, err := s.taskManager.GetTasks(s.ctx, &p.GetTasksRequest{
 		NamespaceID:        s.namespaceID,
 		TaskQueue:          s.taskQueueName,
 		TaskType:           s.taskQueueType,
-		MinTaskIDExclusive: minTaskID - 1,
-		MaxTaskIDInclusive: maxTaskID,
+		InclusiveMinTaskID: minTaskID,
+		ExclusiveMaxTaskID: maxTaskID + 1,
 		PageSize:           100,
 		NextPageToken:      nil,
 	})
@@ -296,7 +303,7 @@ func (s *TaskQueueTaskSuite) createTaskQueue(
 		int32(len(enumspb.TaskQueueKind_name)) + 1),
 	)
 	taskQueue := s.randomTaskQueueInfo(taskQueueKind)
-	_, err := s.taskManager.CreateTaskQueue(&p.CreateTaskQueueRequest{
+	_, err := s.taskManager.CreateTaskQueue(s.ctx, &p.CreateTaskQueueRequest{
 		RangeID:       rangeID,
 		TaskQueueInfo: taskQueue,
 	})

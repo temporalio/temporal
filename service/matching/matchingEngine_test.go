@@ -112,7 +112,7 @@ func (s *matchingEngineSuite) SetupTest() {
 		context.Background(),
 		matchingTestNamespace,
 		&taskqueuepb.TaskQueue{Name: matchingTestTaskQueue, Kind: enumspb.TASK_QUEUE_KIND_NORMAL},
-		metrics.NewNoopMetricsClient(),
+		metrics.NoopClient,
 		metrics.MatchingTaskQueueMgrScope,
 		log.NewNoopLogger(),
 	)
@@ -142,7 +142,7 @@ func newMatchingEngine(
 		taskQueues:        make(map[taskQueueID]taskQueueManager),
 		taskQueueCount:    make(map[taskQueueCounterKey]int),
 		logger:            logger,
-		metricsClient:     metrics.NewNoopMetricsClient(),
+		metricsClient:     metrics.NoopClient,
 		tokenSerializer:   common.NewProtoTaskTokenSerializer(),
 		config:            config,
 		namespaceRegistry: mockNamespaceCache,
@@ -702,7 +702,9 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	s.matchingEngine.config.RangeSize = rangeSize // override to low number for the test
 	// So we can get snapshots
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	var err error
+	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	s.NoError(err)
 
 	s.taskManager.getTaskQueueManager(tlID).rangeID = initialRangeID
 	mgr, err := newTaskQueueManager(s.matchingEngine, tlID, tlKind, s.matchingEngine.config, s.matchingEngine.clusterMeta)
@@ -842,7 +844,7 @@ func (s *matchingEngineSuite) TestSyncMatchActivities() {
 	}
 
 	time.Sleep(20 * time.Millisecond) // So any buffer tasks from 0 rps get picked up
-	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,taskqueue=makeToast"]
+	syncCtr := scope.Snapshot().Counters()["test.sync_throttle_count_per_tl+namespace="+matchingTestNamespace+",operation=TaskQueueMgr,service_name=matching,task_type=Activity,taskqueue=makeToast"]
 	s.Equal(1, int(syncCtr.Value()))                         // Check times zero rps is set = throttle counter
 	s.EqualValues(1, s.taskManager.getCreateTaskCount(tlID)) // Check times zero rps is set = Tasks stored in persistence
 	s.EqualValues(0, s.taskManager.getTaskCount(tlID))
@@ -895,7 +897,9 @@ func (s *matchingEngineSuite) TestConcurrentPublishConsumeActivitiesWithZeroDisp
 	}
 	const workerCount = 20
 	const taskCount = 100
-	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("test", nil), metrics.Matching)
+	var err error
+	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("test", nil), metrics.Matching)
+	s.NoError(err)
 	throttleCt := s.concurrentPublishConsumeActivities(workerCount, taskCount, dispatchLimitFn)
 	s.logger.Info("Number of tasks throttled", tag.Number(throttleCt))
 	// atleast once from 0 dispatch poll, and until TTL is hit at which time throttle limit is reset
@@ -909,7 +913,9 @@ func (s *matchingEngineSuite) concurrentPublishConsumeActivities(
 	dispatchLimitFn func(int, int64) float64,
 ) int64 {
 	scope := tally.NewTestScope("test", nil)
-	s.matchingEngine.metricsClient = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	var err error
+	s.matchingEngine.metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.Matching)
+	s.NoError(err)
 	runID := uuid.NewRandom().String()
 	workflowID := "workflow1"
 	workflowExecution := &commonpb.WorkflowExecution{RunId: runID, WorkflowId: workflowID}
@@ -1945,7 +1951,10 @@ func newTestTaskQueueID(namespaceID namespace.ID, name string, taskType enumspb.
 	return result
 }
 
-func (m *testTaskManager) CreateTaskQueue(request *persistence.CreateTaskQueueRequest) (*persistence.CreateTaskQueueResponse, error) {
+func (m *testTaskManager) CreateTaskQueue(
+	_ context.Context,
+	request *persistence.CreateTaskQueueRequest,
+) (*persistence.CreateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.GetNamespaceId()), tli.Name, tli.TaskType))
 	tlm.Lock()
@@ -1963,7 +1972,10 @@ func (m *testTaskManager) CreateTaskQueue(request *persistence.CreateTaskQueueRe
 }
 
 // UpdateTaskQueue provides a mock function with given fields: request
-func (m *testTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueRequest) (*persistence.UpdateTaskQueueResponse, error) {
+func (m *testTaskManager) UpdateTaskQueue(
+	_ context.Context,
+	request *persistence.UpdateTaskQueueRequest,
+) (*persistence.UpdateTaskQueueResponse, error) {
 	tli := request.TaskQueueInfo
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(tli.GetNamespaceId()), tli.Name, tli.TaskType))
 	tlm.Lock()
@@ -1979,7 +1991,10 @@ func (m *testTaskManager) UpdateTaskQueue(request *persistence.UpdateTaskQueueRe
 	return &persistence.UpdateTaskQueueResponse{}, nil
 }
 
-func (m *testTaskManager) GetTaskQueue(request *persistence.GetTaskQueueRequest) (*persistence.GetTaskQueueResponse, error) {
+func (m *testTaskManager) GetTaskQueue(
+	_ context.Context,
+	request *persistence.GetTaskQueueRequest,
+) (*persistence.GetTaskQueueResponse, error) {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
@@ -2002,7 +2017,10 @@ func (m *testTaskManager) GetTaskQueue(request *persistence.GetTaskQueueRequest)
 }
 
 // CompleteTask provides a mock function with given fields: request
-func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest) error {
+func (m *testTaskManager) CompleteTask(
+	_ context.Context,
+	request *persistence.CompleteTaskRequest,
+) error {
 	m.logger.Debug("CompleteTask", tag.TaskID(request.TaskID), tag.Name(request.TaskQueue.TaskQueueName), tag.WorkflowTaskQueueType(request.TaskQueue.TaskQueueType))
 	if request.TaskID <= 0 {
 		panic(fmt.Errorf("invalid taskID=%v", request.TaskID))
@@ -2018,25 +2036,34 @@ func (m *testTaskManager) CompleteTask(request *persistence.CompleteTaskRequest)
 	return nil
 }
 
-func (m *testTaskManager) CompleteTasksLessThan(request *persistence.CompleteTasksLessThanRequest) (int, error) {
+func (m *testTaskManager) CompleteTasksLessThan(
+	_ context.Context,
+	request *persistence.CompleteTasksLessThanRequest,
+) (int, error) {
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueueName, request.TaskType))
 	tlm.Lock()
 	defer tlm.Unlock()
 	keys := tlm.tasks.Keys()
 	for _, key := range keys {
 		id := key.(int64)
-		if id <= request.TaskID {
+		if id < request.ExclusiveMaxTaskID {
 			tlm.tasks.Remove(id)
 		}
 	}
 	return persistence.UnknownNumRowsAffected, nil
 }
 
-func (m *testTaskManager) ListTaskQueue(_ *persistence.ListTaskQueueRequest) (*persistence.ListTaskQueueResponse, error) {
+func (m *testTaskManager) ListTaskQueue(
+	_ context.Context,
+	_ *persistence.ListTaskQueueRequest,
+) (*persistence.ListTaskQueueResponse, error) {
 	return nil, fmt.Errorf("unsupported operation")
 }
 
-func (m *testTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueRequest) error {
+func (m *testTaskManager) DeleteTaskQueue(
+	_ context.Context,
+	request *persistence.DeleteTaskQueueRequest,
+) error {
 	m.Lock()
 	defer m.Unlock()
 	key := newTestTaskQueueID(namespace.ID(request.TaskQueue.NamespaceID), request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType)
@@ -2045,7 +2072,10 @@ func (m *testTaskManager) DeleteTaskQueue(request *persistence.DeleteTaskQueueRe
 }
 
 // CreateTask provides a mock function with given fields: request
-func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (*persistence.CreateTasksResponse, error) {
+func (m *testTaskManager) CreateTasks(
+	_ context.Context,
+	request *persistence.CreateTasksRequest,
+) (*persistence.CreateTasksResponse, error) {
 	namespaceID := namespace.ID(request.TaskQueueInfo.Data.GetNamespaceId())
 	taskQueue := request.TaskQueueInfo.Data.Name
 	taskType := request.TaskQueueInfo.Data.TaskType
@@ -2090,8 +2120,11 @@ func (m *testTaskManager) CreateTasks(request *persistence.CreateTasksRequest) (
 }
 
 // GetTasks provides a mock function with given fields: request
-func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persistence.GetTasksResponse, error) {
-	m.logger.Debug("testTaskManager.GetTasks", tag.ReadLevel(request.MinTaskIDExclusive), tag.ReadLevel(request.MaxTaskIDInclusive))
+func (m *testTaskManager) GetTasks(
+	_ context.Context,
+	request *persistence.GetTasksRequest,
+) (*persistence.GetTasksResponse, error) {
+	m.logger.Debug("testTaskManager.GetTasks", tag.MinLevel(request.InclusiveMinTaskID), tag.MaxLevel(request.ExclusiveMaxTaskID))
 
 	tlm := m.getTaskQueueManager(newTestTaskQueueID(namespace.ID(request.NamespaceID), request.TaskQueue, request.TaskType))
 	tlm.Lock()
@@ -2101,10 +2134,10 @@ func (m *testTaskManager) GetTasks(request *persistence.GetTasksRequest) (*persi
 	it := tlm.tasks.Iterator()
 	for it.Next() {
 		taskID := it.Key().(int64)
-		if taskID <= request.MinTaskIDExclusive {
+		if taskID < request.InclusiveMinTaskID {
 			continue
 		}
-		if taskID > request.MaxTaskIDInclusive {
+		if taskID >= request.ExclusiveMaxTaskID {
 			break
 		}
 		tasks = append(tasks, it.Value().(*persistencespb.AllocatedTaskInfo))

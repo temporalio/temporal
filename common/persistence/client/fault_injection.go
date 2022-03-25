@@ -390,6 +390,13 @@ func (e *FaultInjectionExecutionStore) GetWorkflowExecution(request *persistence
 	return e.baseExecutionStore.GetWorkflowExecution(request)
 }
 
+func (e *FaultInjectionExecutionStore) SetWorkflowExecution(request *persistence.InternalSetWorkflowExecutionRequest) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.SetWorkflowExecution(request)
+}
+
 func (e *FaultInjectionExecutionStore) UpdateWorkflowExecution(request *persistence.InternalUpdateWorkflowExecutionRequest) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
@@ -448,113 +455,45 @@ func (e *FaultInjectionExecutionStore) ListConcreteExecutions(request *persisten
 	return e.baseExecutionStore.ListConcreteExecutions(request)
 }
 
-func (e *FaultInjectionExecutionStore) AddTasks(request *persistence.InternalAddTasksRequest) error {
+func (e *FaultInjectionExecutionStore) AddHistoryTasks(request *persistence.InternalAddHistoryTasksRequest) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.AddTasks(request)
+	return e.baseExecutionStore.AddHistoryTasks(request)
 }
 
-func (e *FaultInjectionExecutionStore) GetTransferTask(request *persistence.GetTransferTaskRequest) (
-	*persistence.InternalGetTransferTaskResponse,
+func (e *FaultInjectionExecutionStore) GetHistoryTask(request *persistence.GetHistoryTaskRequest) (
+	*persistence.InternalGetHistoryTaskResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetTransferTask(request)
+	return e.baseExecutionStore.GetHistoryTask(request)
 }
 
-func (e *FaultInjectionExecutionStore) GetTransferTasks(request *persistence.GetTransferTasksRequest) (
-	*persistence.InternalGetTransferTasksResponse,
+func (e *FaultInjectionExecutionStore) GetHistoryTasks(request *persistence.GetHistoryTasksRequest) (
+	*persistence.InternalGetHistoryTasksResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetTransferTasks(request)
+	return e.baseExecutionStore.GetHistoryTasks(request)
 }
 
-func (e *FaultInjectionExecutionStore) CompleteTransferTask(request *persistence.CompleteTransferTaskRequest) error {
+func (e *FaultInjectionExecutionStore) CompleteHistoryTask(request *persistence.CompleteHistoryTaskRequest) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.CompleteTransferTask(request)
+	return e.baseExecutionStore.CompleteHistoryTask(request)
 }
 
-func (e *FaultInjectionExecutionStore) RangeCompleteTransferTask(request *persistence.RangeCompleteTransferTaskRequest) error {
+func (e *FaultInjectionExecutionStore) RangeCompleteHistoryTasks(request *persistence.RangeCompleteHistoryTasksRequest) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.RangeCompleteTransferTask(request)
-}
-
-func (e *FaultInjectionExecutionStore) GetTimerTask(request *persistence.GetTimerTaskRequest) (
-	*persistence.InternalGetTimerTaskResponse,
-	error,
-) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetTimerTask(request)
-}
-
-func (e *FaultInjectionExecutionStore) GetTimerTasks(request *persistence.GetTimerTasksRequest) (
-	*persistence.InternalGetTimerTasksResponse,
-	error,
-) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetTimerTasks(request)
-}
-
-func (e *FaultInjectionExecutionStore) CompleteTimerTask(request *persistence.CompleteTimerTaskRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.CompleteTimerTask(request)
-}
-
-func (e *FaultInjectionExecutionStore) RangeCompleteTimerTask(request *persistence.RangeCompleteTimerTaskRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.RangeCompleteTimerTask(request)
-}
-
-func (e *FaultInjectionExecutionStore) GetReplicationTask(request *persistence.GetReplicationTaskRequest) (
-	*persistence.InternalGetReplicationTaskResponse,
-	error,
-) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetReplicationTask(request)
-}
-
-func (e *FaultInjectionExecutionStore) GetReplicationTasks(request *persistence.GetReplicationTasksRequest) (
-	*persistence.InternalGetReplicationTasksResponse,
-	error,
-) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetReplicationTasks(request)
-}
-
-func (e *FaultInjectionExecutionStore) CompleteReplicationTask(request *persistence.CompleteReplicationTaskRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.CompleteReplicationTask(request)
-}
-
-func (e *FaultInjectionExecutionStore) RangeCompleteReplicationTask(request *persistence.RangeCompleteReplicationTaskRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.RangeCompleteReplicationTask(request)
+	return e.baseExecutionStore.RangeCompleteHistoryTasks(request)
 }
 
 func (e *FaultInjectionExecutionStore) PutReplicationTaskToDLQ(request *persistence.PutReplicationTaskToDLQRequest) error {
@@ -565,7 +504,7 @@ func (e *FaultInjectionExecutionStore) PutReplicationTaskToDLQ(request *persiste
 }
 
 func (e *FaultInjectionExecutionStore) GetReplicationTasksFromDLQ(request *persistence.GetReplicationTasksFromDLQRequest) (
-	*persistence.InternalGetReplicationTasksFromDLQResponse,
+	*persistence.InternalGetHistoryTasksResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
@@ -586,40 +525,6 @@ func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(request
 		return err
 	}
 	return e.baseExecutionStore.RangeDeleteReplicationTaskFromDLQ(request)
-}
-
-func (e *FaultInjectionExecutionStore) GetVisibilityTask(request *persistence.GetVisibilityTaskRequest) (
-	*persistence.InternalGetVisibilityTaskResponse,
-	error,
-) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetVisibilityTask(request)
-}
-
-func (e *FaultInjectionExecutionStore) GetVisibilityTasks(request *persistence.GetVisibilityTasksRequest) (
-	*persistence.InternalGetVisibilityTasksResponse,
-	error,
-) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetVisibilityTasks(request)
-}
-
-func (e *FaultInjectionExecutionStore) CompleteVisibilityTask(request *persistence.CompleteVisibilityTaskRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.CompleteVisibilityTask(request)
-}
-
-func (e *FaultInjectionExecutionStore) RangeCompleteVisibilityTask(request *persistence.RangeCompleteVisibilityTaskRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.RangeCompleteVisibilityTask(request)
 }
 
 func (e *FaultInjectionExecutionStore) AppendHistoryNodes(request *persistence.InternalAppendHistoryNodesRequest) error {
@@ -813,6 +718,13 @@ func (m *FaultInjectionMetadataStore) UpdateNamespace(request *persistence.Inter
 		return err
 	}
 	return m.baseMetadataStore.UpdateNamespace(request)
+}
+
+func (m *FaultInjectionMetadataStore) RenameNamespace(request *persistence.InternalRenameNamespaceRequest) error {
+	if err := m.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return m.baseMetadataStore.RenameNamespace(request)
 }
 
 func (m *FaultInjectionMetadataStore) DeleteNamespace(request *persistence.DeleteNamespaceRequest) error {

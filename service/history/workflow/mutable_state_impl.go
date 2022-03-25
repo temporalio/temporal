@@ -25,6 +25,7 @@
 package workflow
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"time"
@@ -156,10 +157,7 @@ type (
 		// TODO: persist this to db
 		appliedEvents map[string]struct{}
 
-		InsertTransferTasks    []tasks.Task
-		InsertTimerTasks       []tasks.Task
-		InsertReplicationTasks []tasks.Task
-		InsertVisibilityTasks  []tasks.Task
+		InsertTasks map[tasks.Category][]tasks.Task
 
 		// do not rely on this, this is only updated on
 		// Load() and closeTransactionXXX methods. So when
@@ -226,6 +224,7 @@ func NewMutableState(
 		dbRecordVersion:  1,
 		namespaceEntry:   namespaceEntry,
 		appliedEvents:    make(map[string]struct{}),
+		InsertTasks:      make(map[tasks.Category][]tasks.Task),
 
 		QueryRegistry: NewQueryRegistry(),
 
@@ -257,18 +256,19 @@ func NewMutableState(
 
 	s.hBuilder = NewMutableHistoryBuilder(
 		s.timeSource,
-		s.shard.GenerateTransferTaskIDs,
+		s.shard.GenerateTaskIDs,
 		s.currentVersion,
 		common.FirstEventID,
 		s.bufferEventsInDB,
 	)
-	s.taskGenerator = NewTaskGenerator(shard.GetNamespaceRegistry(), s)
+	s.taskGenerator = taskGeneratorProvider.NewTaskGenerator(shard, s)
 	s.workflowTaskManager = newWorkflowTaskStateMachine(s)
 
 	return s
 }
 
 func newMutableStateBuilderFromDB(
+	ctx context.Context,
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
@@ -319,7 +319,7 @@ func newMutableStateBuilderFromDB(
 	// Workflows created before 1.11 doesn't have ExecutionTime and it must be computed for backwards compatibility.
 	// Remove this "if" block when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
 	if mutableState.executionInfo.ExecutionTime == nil {
-		startEvent, err := mutableState.GetStartEvent()
+		startEvent, err := mutableState.GetStartEvent(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -329,7 +329,7 @@ func newMutableStateBuilderFromDB(
 
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
-		mutableState.shard.GenerateTransferTaskIDs,
+		mutableState.shard.GenerateTaskIDs,
 		common.EmptyVersion,
 		dbRecord.NextEventId,
 		dbRecord.BufferedEvents,
@@ -485,7 +485,7 @@ func (e *MutableStateImpl) UpdateCurrentVersion(
 
 	e.hBuilder = NewMutableHistoryBuilder(
 		e.timeSource,
-		e.shard.GenerateTransferTaskIDs,
+		e.shard.GenerateTaskIDs,
 		e.currentVersion,
 		e.nextEventIDInDB,
 		e.bufferEventsInDB,
@@ -584,6 +584,7 @@ func (e *MutableStateImpl) GetQueryRegistry() QueryRegistry {
 }
 
 func (e *MutableStateImpl) GetActivityScheduledEvent(
+	ctx context.Context,
 	scheduleEventID int64,
 ) (*historypb.HistoryEvent, error) {
 
@@ -597,6 +598,7 @@ func (e *MutableStateImpl) GetActivityScheduledEvent(
 		return nil, err
 	}
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -659,6 +661,7 @@ func (e *MutableStateImpl) GetChildExecutionInfo(
 // GetChildExecutionInitiatedEvent reads out the ChildExecutionInitiatedEvent from mutable state for in-progress child
 // executions
 func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
+	ctx context.Context,
 	initiatedEventID int64,
 ) (*historypb.HistoryEvent, error) {
 
@@ -672,6 +675,7 @@ func (e *MutableStateImpl) GetChildExecutionInitiatedEvent(
 		return nil, err
 	}
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -741,6 +745,7 @@ func (e *MutableStateImpl) GetSignalInfo(
 
 // GetSignalExternalInitiatedEvent get the details about signal external workflow
 func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
+	ctx context.Context,
 	initiatedEventID int64,
 ) (*historypb.HistoryEvent, error) {
 	si, ok := e.pendingSignalInfoIDs[initiatedEventID]
@@ -753,6 +758,7 @@ func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
 		return nil, err
 	}
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -773,7 +779,9 @@ func (e *MutableStateImpl) GetSignalExternalInitiatedEvent(
 }
 
 // GetCompletionEvent retrieves the workflow completion event from mutable state
-func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error) {
+func (e *MutableStateImpl) GetCompletionEvent(
+	ctx context.Context,
+) (*historypb.HistoryEvent, error) {
 	if e.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return nil, ErrMissingWorkflowCompletionEvent
 	}
@@ -788,6 +796,7 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 	}
 
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -808,7 +817,9 @@ func (e *MutableStateImpl) GetCompletionEvent() (*historypb.HistoryEvent, error)
 }
 
 // GetStartEvent retrieves the workflow start event from mutable state
-func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
+func (e *MutableStateImpl) GetStartEvent(
+	ctx context.Context,
+) (*historypb.HistoryEvent, error) {
 
 	currentBranchToken, err := e.GetCurrentBranchToken()
 	if err != nil {
@@ -820,6 +831,7 @@ func (e *MutableStateImpl) GetStartEvent() (*historypb.HistoryEvent, error) {
 	}
 
 	event, err := e.eventsCache.GetEvent(
+		ctx,
 		events.EventKey{
 			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
 			WorkflowID:  e.executionInfo.WorkflowId,
@@ -847,7 +859,7 @@ func (e *MutableStateImpl) GetFirstRunID() (string, error) {
 	if len(firstRunID) != 0 {
 		return firstRunID, nil
 	}
-	currentStartEvent, err := e.GetStartEvent()
+	currentStartEvent, err := e.GetStartEvent(context.TODO())
 	if err != nil {
 		return "", err
 	}
@@ -1050,6 +1062,7 @@ func (e *MutableStateImpl) DeleteActivity(
 	}
 
 	delete(e.updateActivityInfos, scheduleEventID)
+	delete(e.syncActivityTasks, scheduleEventID)
 	e.deleteActivityInfos[scheduleEventID] = struct{}{}
 	return nil
 }
@@ -1803,6 +1816,7 @@ func (e *MutableStateImpl) ReplicateWorkflowTaskFailedEvent() error {
 func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 	workflowTaskCompletedEventID int64,
 	command *commandpb.ScheduleActivityTaskCommandAttributes,
+	bypassTaskGeneration bool,
 ) (*historypb.HistoryEvent, *persistencespb.ActivityInfo, error) {
 
 	opTag := tag.WorkflowActionActivityTaskScheduled
@@ -1821,12 +1835,15 @@ func (e *MutableStateImpl) AddActivityTaskScheduledEvent(
 	event := e.hBuilder.AddActivityTaskScheduledEvent(workflowTaskCompletedEventID, command)
 	ai, err := e.ReplicateActivityTaskScheduledEvent(workflowTaskCompletedEventID, event)
 	// TODO merge active & passive task generation
-	if err := e.taskGenerator.GenerateActivityTransferTasks(
-		timestamp.TimeValue(event.GetEventTime()),
-		event,
-	); err != nil {
-		return nil, nil, err
+	if !bypassTaskGeneration {
+		if err := e.taskGenerator.GenerateActivityTasks(
+			timestamp.TimeValue(event.GetEventTime()),
+			event,
+		); err != nil {
+			return nil, nil, err
+		}
 	}
+
 	return event, ai, err
 }
 
@@ -3237,7 +3254,15 @@ func (e *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 	attributes := event.GetChildWorkflowExecutionStartedEventAttributes()
 	initiatedID := attributes.GetInitiatedEventId()
 
-	ci, _ := e.GetChildExecutionInfo(initiatedID)
+	ci, ok := e.GetChildExecutionInfo(initiatedID)
+	if !ok {
+		e.logError(
+			fmt.Sprintf("unable to find child workflow event ID: %v in mutable state", initiatedID),
+			tag.ErrorTypeInvalidMutableStateAction,
+		)
+		return ErrMissingChildWorkflowInfo
+	}
+
 	ci.StartedId = event.GetEventId()
 	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
 	e.updateChildExecutionInfos[ci.InitiatedId] = ci
@@ -3596,40 +3621,17 @@ func (e *MutableStateImpl) RetryActivity(
 // TODO mutable state should generate corresponding transfer / timer tasks according to
 //  updates accumulated, while currently all transfer / timer tasks are managed manually
 
-// TODO convert AddTransferTasks to prepareTransferTasks
+// TODO convert AddTasks to prepareTasks
 
-// AddTransferTasks append transfer tasks
-func (e *MutableStateImpl) AddTransferTasks(
-	transferTasks ...tasks.Task,
+// AddTasks append transfer tasks
+func (e *MutableStateImpl) AddTasks(
+	tasks ...tasks.Task,
 ) {
 
-	e.InsertTransferTasks = append(e.InsertTransferTasks, transferTasks...)
-}
-
-// TODO convert AddTransferTasks to prepareTimerTasks
-
-// AddTimerTasks append timer tasks
-func (e *MutableStateImpl) AddTimerTasks(
-	timerTasks ...tasks.Task,
-) {
-
-	e.InsertTimerTasks = append(e.InsertTimerTasks, timerTasks...)
-}
-
-// AddReplicationTasks append visibility tasks
-func (e *MutableStateImpl) AddReplicationTasks(
-	replicationTasks ...tasks.Task,
-) {
-
-	e.InsertReplicationTasks = append(e.InsertReplicationTasks, replicationTasks...)
-}
-
-// AddVisibilityTasks append visibility tasks
-func (e *MutableStateImpl) AddVisibilityTasks(
-	visibilityTasks ...tasks.Task,
-) {
-
-	e.InsertVisibilityTasks = append(e.InsertVisibilityTasks, visibilityTasks...)
+	for _, task := range tasks {
+		category := task.GetCategory()
+		e.InsertTasks[category] = append(e.InsertTasks[category], task)
+	}
 }
 
 func (e *MutableStateImpl) SetUpdateCondition(
@@ -3707,7 +3709,7 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTransferTasks, e.InsertTimerTasks, e.InsertVisibilityTasks)
+	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
@@ -3746,10 +3748,7 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 		NewBufferedEvents:         bufferEvents,
 		ClearBufferedEvents:       clearBuffer,
 
-		TransferTasks:    e.InsertTransferTasks,
-		ReplicationTasks: e.InsertReplicationTasks,
-		TimerTasks:       e.InsertTimerTasks,
-		VisibilityTasks:  e.InsertVisibilityTasks,
+		Tasks: e.InsertTasks,
 
 		Condition:       e.nextEventIDInDB,
 		DBRecordVersion: e.dbRecordVersion,
@@ -3796,7 +3795,7 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTransferTasks, e.InsertTimerTasks, e.InsertVisibilityTasks)
+	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
@@ -3827,10 +3826,7 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 		SignalInfos:         e.pendingSignalInfoIDs,
 		SignalRequestedIDs:  e.pendingSignalRequestedIDs,
 
-		TransferTasks:    e.InsertTransferTasks,
-		ReplicationTasks: e.InsertReplicationTasks,
-		TimerTasks:       e.InsertTimerTasks,
-		VisibilityTasks:  e.InsertVisibilityTasks,
+		Tasks: e.InsertTasks,
 
 		Condition:       e.nextEventIDInDB,
 		DBRecordVersion: e.dbRecordVersion,
@@ -3859,7 +3855,9 @@ func (e *MutableStateImpl) UpdateDuplicatedResource(
 	e.appliedEvents[id] = struct{}{}
 }
 
-func (e *MutableStateImpl) GenerateLastHistoryReplicationTasks(now time.Time) (*tasks.HistoryReplicationTask, error) {
+func (e *MutableStateImpl) GenerateLastHistoryReplicationTasks(
+	now time.Time,
+) (tasks.Task, error) {
 	return e.taskGenerator.GenerateLastHistoryReplicationTasks(now)
 }
 
@@ -3927,16 +3925,13 @@ func (e *MutableStateImpl) cleanupTransaction(
 
 	e.hBuilder = NewMutableHistoryBuilder(
 		e.timeSource,
-		e.shard.GenerateTransferTaskIDs,
+		e.shard.GenerateTaskIDs,
 		e.GetCurrentVersion(),
 		e.nextEventIDInDB,
 		e.bufferEventsInDB,
 	)
 
-	e.InsertTransferTasks = nil
-	e.InsertReplicationTasks = nil
-	e.InsertTimerTasks = nil
-	e.InsertVisibilityTasks = nil
+	e.InsertTasks = make(map[tasks.Category][]tasks.Task)
 
 	return nil
 }
@@ -3964,7 +3959,7 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 	e.updatePendingEventIDs(historyMutation.ScheduleIDToStartID)
 
 	workflowEventsSeq := make([]*persistence.WorkflowEvents, len(newEventsBatches))
-	historyNodeTxnIDs, err := e.shard.GenerateTransferTaskIDs(len(newEventsBatches))
+	historyNodeTxnIDs, err := e.shard.GenerateTaskIDs(len(newEventsBatches))
 	if err != nil {
 		return nil, nil, false, err
 	}
@@ -3995,12 +3990,13 @@ func (e *MutableStateImpl) prepareEventsAndReplicationTasks(
 		}
 	}
 
-	e.InsertReplicationTasks = append(
-		e.InsertReplicationTasks,
+	e.InsertTasks[tasks.CategoryReplication] = append(
+		e.InsertTasks[tasks.CategoryReplication],
 		e.syncActivityToReplicationTask(now, transactionPolicy)...,
 	)
 
-	if transactionPolicy == TransactionPolicyPassive && len(e.InsertReplicationTasks) > 0 {
+	if transactionPolicy == TransactionPolicyPassive &&
+		len(e.InsertTasks[tasks.CategoryReplication]) > 0 {
 		return nil, nil, false, serviceerror.NewInternal("should not generate replication task when close transaction as passive")
 	}
 

@@ -27,6 +27,8 @@
 package namespace
 
 import (
+	"context"
+
 	"go.temporal.io/api/serviceerror"
 
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -38,9 +40,9 @@ import (
 type (
 	// DLQMessageHandler is the interface handles namespace DLQ messages
 	DLQMessageHandler interface {
-		Read(lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
-		Purge(lastMessageID int64) error
-		Merge(lastMessageID int64, pageSize int, pageToken []byte) ([]byte, error)
+		Read(ctx context.Context, lastMessageID int64, pageSize int, pageToken []byte) ([]*replicationspb.ReplicationTask, []byte, error)
+		Purge(ctx context.Context, lastMessageID int64) error
+		Merge(ctx context.Context, lastMessageID int64, pageSize int, pageToken []byte) ([]byte, error)
 	}
 
 	dlqMessageHandlerImpl struct {
@@ -65,17 +67,19 @@ func NewDLQMessageHandler(
 
 // ReadMessages reads namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Read(
+	ctx context.Context,
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]*replicationspb.ReplicationTask, []byte, error) {
 
-	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel(ctx)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	return d.namespaceReplicationQueue.GetMessagesFromDLQ(
+		ctx,
 		ackLevel,
 		lastMessageID,
 		pageSize,
@@ -85,15 +89,17 @@ func (d *dlqMessageHandlerImpl) Read(
 
 // PurgeMessages purges namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Purge(
+	ctx context.Context,
 	lastMessageID int64,
 ) error {
 
-	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel(ctx)
 	if err != nil {
 		return err
 	}
 
 	if err := d.namespaceReplicationQueue.RangeDeleteMessagesFromDLQ(
+		ctx,
 		ackLevel,
 		lastMessageID,
 	); err != nil {
@@ -101,6 +107,7 @@ func (d *dlqMessageHandlerImpl) Purge(
 	}
 
 	if err := d.namespaceReplicationQueue.UpdateDLQAckLevel(
+		ctx,
 		lastMessageID,
 	); err != nil {
 		d.logger.Error("Failed to update DLQ ack level after purging messages", tag.Error(err))
@@ -111,17 +118,19 @@ func (d *dlqMessageHandlerImpl) Purge(
 
 // MergeMessages merges namespace replication DLQ messages
 func (d *dlqMessageHandlerImpl) Merge(
+	ctx context.Context,
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]byte, error) {
 
-	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel()
+	ackLevel, err := d.namespaceReplicationQueue.GetDLQAckLevel(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	messages, token, err := d.namespaceReplicationQueue.GetMessagesFromDLQ(
+		ctx,
 		ackLevel,
 		lastMessageID,
 		pageSize,
@@ -139,6 +148,7 @@ func (d *dlqMessageHandlerImpl) Merge(
 		}
 
 		if err := d.replicationHandler.Execute(
+			ctx,
 			namespaceTask,
 		); err != nil {
 			return nil, err
@@ -147,13 +157,14 @@ func (d *dlqMessageHandlerImpl) Merge(
 	}
 
 	if err := d.namespaceReplicationQueue.RangeDeleteMessagesFromDLQ(
+		ctx,
 		ackLevel,
 		ackedMessageID,
 	); err != nil {
 		d.logger.Error("failed to delete merged tasks on merging namespace DLQ message", tag.Error(err))
 		return nil, err
 	}
-	if err := d.namespaceReplicationQueue.UpdateDLQAckLevel(ackedMessageID); err != nil {
+	if err := d.namespaceReplicationQueue.UpdateDLQAckLevel(ctx, ackedMessageID); err != nil {
 		d.logger.Error("failed to update ack level on merging namespace DLQ message", tag.Error(err))
 	}
 

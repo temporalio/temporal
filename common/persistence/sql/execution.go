@@ -661,6 +661,38 @@ func (m *sqlExecutionStore) GetCurrentExecution(
 	}, nil
 }
 
+func (m *sqlExecutionStore) SetWorkflowExecution(
+	request *p.InternalSetWorkflowExecutionRequest,
+) error {
+	ctx, cancel := newExecutionContext()
+	defer cancel()
+	return m.txExecuteShardLocked(ctx,
+		"SetWorkflowExecution",
+		request.ShardID,
+		request.RangeID,
+		func(tx sqlplugin.Tx) error {
+			return m.setWorkflowExecutionTx(ctx, tx, request)
+		})
+}
+
+func (m *sqlExecutionStore) setWorkflowExecutionTx(
+	ctx context.Context,
+	tx sqlplugin.Tx,
+	request *p.InternalSetWorkflowExecutionRequest,
+) error {
+	shardID := request.ShardID
+	setSnapshot := request.SetWorkflowSnapshot
+
+	if err := applyWorkflowSnapshotTxAsReset(ctx,
+		tx,
+		shardID,
+		&setSnapshot,
+	); err != nil {
+		return err
+	}
+	return nil
+}
+
 func (m *sqlExecutionStore) ListConcreteExecutions(
 	_ *p.ListConcreteExecutionsRequest,
 ) (*p.InternalListConcreteExecutionsResponse, error) {

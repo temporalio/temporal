@@ -30,6 +30,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -43,7 +44,8 @@ type ContextTest struct {
 
 	Resource *resource.Test
 
-	MockEventsCache *events.MockCache
+	MockEventsCache      *events.MockCache
+	MockHostInfoProvider *resource.MockHostInfoProvider
 }
 
 var _ Context = (*ContextTest)(nil)
@@ -65,43 +67,49 @@ func NewTestContext(
 	shardInfo *persistence.ShardInfoWithFailover,
 	config *configs.Config,
 ) *ContextTest {
-	resource := resource.NewTest(ctrl, metrics.History)
+	resourceTest := resource.NewTest(ctrl, metrics.History)
 	eventsCache := events.NewMockCache(ctrl)
+	hostInfoProvider := resource.NewMockHostInfoProvider(ctrl)
 	lifecycleCtx, lifecycleCancel := context.WithCancel(context.Background())
+	if shardInfo.QueueAckLevels == nil {
+		shardInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
+	}
 	shard := &ContextImpl{
 		shardID:             shardInfo.GetShardId(),
-		executionManager:    resource.ExecutionMgr,
-		metricsClient:       resource.MetricsClient,
+		executionManager:    resourceTest.ExecutionMgr,
+		metricsClient:       resourceTest.MetricsClient,
 		eventsCache:         eventsCache,
 		config:              config,
-		contextTaggedLogger: resource.GetLogger(),
-		throttledLogger:     resource.GetThrottledLogger(),
+		contextTaggedLogger: resourceTest.GetLogger(),
+		throttledLogger:     resourceTest.GetThrottledLogger(),
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
 
-		state:                     contextStateAcquired,
-		shardInfo:                 shardInfo,
-		transferSequenceNumber:    1,
-		transferMaxReadLevel:      0,
-		maxTransferSequenceNumber: 100000,
-		timerMaxReadLevelMap:      make(map[string]time.Time),
-		remoteClusterInfos:        make(map[string]*remoteClusterInfo),
-		handoverNamespaces:        make(map[string]*namespaceHandOverInfo),
+		state:                        contextStateAcquired,
+		shardInfo:                    shardInfo,
+		taskSequenceNumber:           1,
+		immediateTaskMaxReadLevel:    0,
+		maxTaskSequenceNumber:        100000,
+		scheduledTaskMaxReadLevelMap: make(map[string]time.Time),
+		remoteClusterInfos:           make(map[string]*remoteClusterInfo),
+		handoverNamespaces:           make(map[string]*namespaceHandOverInfo),
 
-		clusterMetadata:         resource.ClusterMetadata,
-		timeSource:              resource.TimeSource,
-		namespaceRegistry:       resource.GetNamespaceRegistry(),
-		persistenceShardManager: resource.GetShardManager(),
-		clientBean:              resource.GetClientBean(),
-		saProvider:              resource.GetSearchAttributesProvider(),
-		saMapper:                resource.GetSearchAttributesMapper(),
-		historyClient:           resource.GetHistoryClient(),
-		archivalMetadata:        resource.GetArchivalMetadata(),
+		clusterMetadata:         resourceTest.ClusterMetadata,
+		timeSource:              resourceTest.TimeSource,
+		namespaceRegistry:       resourceTest.GetNamespaceRegistry(),
+		persistenceShardManager: resourceTest.GetShardManager(),
+		clientBean:              resourceTest.GetClientBean(),
+		saProvider:              resourceTest.GetSearchAttributesProvider(),
+		saMapper:                resourceTest.GetSearchAttributesMapper(),
+		historyClient:           resourceTest.GetHistoryClient(),
+		archivalMetadata:        resourceTest.GetArchivalMetadata(),
+		hostInfoProvider:        hostInfoProvider,
 	}
 	return &ContextTest{
-		Resource:        resource,
-		ContextImpl:     shard,
-		MockEventsCache: eventsCache,
+		Resource:             resourceTest,
+		ContextImpl:          shard,
+		MockEventsCache:      eventsCache,
+		MockHostInfoProvider: hostInfoProvider,
 	}
 }
 
@@ -116,8 +124,9 @@ func (s *ContextTest) SetEventsCacheForTesting(c events.Cache) {
 	s.eventsCache = c
 }
 
-// StopForTest calls private method stop(). In general only the controller should call stop, but integration
-// tests need to do it also to clean up any background acquireShard goroutines that may exist.
+// StopForTest calls private method finishStop(). In general only the controller
+// should call that, but integration tests need to do it also to clean up any
+// background acquireShard goroutines that may exist.
 func (s *ContextTest) StopForTest() {
-	s.stop()
+	s.finishStop()
 }

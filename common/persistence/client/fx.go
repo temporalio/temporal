@@ -32,47 +32,54 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/resolver"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/quotas"
 )
 
 type (
 	PersistenceMaxQps dynamicconfig.IntPropertyFn
 	ClusterName       string
+
+	NewFactoryParams struct {
+		fx.In
+
+		DataStoreFactory  DataStoreFactory
+		Cfg               *config.Persistence
+		PersistenceMaxQPS PersistenceMaxQps
+		ClusterName       ClusterName
+		MetricsClient     metrics.Client
+		Logger            log.Logger
+	}
+
+	FactoryProviderFn func(NewFactoryParams) Factory
 )
 
 var Module = fx.Options(
-	FactoryModule,
 	BeanModule,
-)
-
-var FactoryModule = fx.Options(
 	fx.Provide(ClusterNameProvider),
-	fx.Provide(NewFactoryImplProvider),
-	fx.Provide(BindFactory),
+	fx.Provide(DataStoreFactoryProvider),
 )
-
-func BindFactory(f *factoryImpl) Factory {
-	return f
-}
 
 func ClusterNameProvider(config *cluster.Config) ClusterName {
 	return ClusterName(config.CurrentClusterName)
 }
 
-func NewFactoryImplProvider(
-	cfg *config.Persistence,
-	r resolver.ServiceResolver,
-	persistenceMaxQPS PersistenceMaxQps,
-	abstractDataStoreFactory AbstractDataStoreFactory,
-	clusterName ClusterName,
-	metricsClient metrics.Client,
-	logger log.Logger,
-) *factoryImpl {
-	return NewFactoryImpl(cfg,
-		r,
-		dynamicconfig.IntPropertyFn(persistenceMaxQPS),
-		abstractDataStoreFactory,
-		string(clusterName),
-		metricsClient,
-		logger)
+func FactoryProvider(
+	params NewFactoryParams,
+) Factory {
+	var ratelimiter quotas.RateLimiter
+	if params.PersistenceMaxQPS != nil && params.PersistenceMaxQPS() > 0 {
+		ratelimiter = quotas.NewDefaultOutgoingRateLimiter(
+			func() float64 { return float64(params.PersistenceMaxQPS()) },
+		)
+	}
+	return NewFactory(
+		params.DataStoreFactory,
+		params.Cfg,
+		ratelimiter,
+		serialization.NewSerializer(),
+		string(params.ClusterName),
+		params.MetricsClient,
+		params.Logger,
+	)
 }

@@ -57,7 +57,7 @@ type (
 			baseWorkflowIdentifier definition.WorkflowKey,
 			baseBranchToken []byte,
 			baseLastEventID int64,
-			baseLastEventVersion int64,
+			baseLastEventVersion *int64,
 			targetWorkflowIdentifier definition.WorkflowKey,
 			targetBranchToken []byte,
 			requestID string,
@@ -96,6 +96,7 @@ func newNDCStateRebuilder(
 		clusterMetadata:   shard.GetClusterMetadata(),
 		executionMgr:      shard.GetExecutionManager(),
 		taskRefresher: workflow.NewTaskRefresher(
+			shard,
 			shard.GetConfig(),
 			shard.GetNamespaceRegistry(),
 			shard.GetEventsCache(),
@@ -112,12 +113,13 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	baseWorkflowIdentifier definition.WorkflowKey,
 	baseBranchToken []byte,
 	baseLastEventID int64,
-	baseLastEventVersion int64,
+	baseLastEventVersion *int64,
 	targetWorkflowIdentifier definition.WorkflowKey,
 	targetBranchToken []byte,
 	requestID string,
 ) (workflow.MutableState, int64, error) {
 	iter := collection.NewPagingIterator(r.getPaginationFn(
+		ctx,
 		common.FirstEventID,
 		baseLastEventID+1,
 		baseBranchToken,
@@ -170,15 +172,18 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	if err != nil {
 		return nil, 0, err
 	}
-	if !lastItem.Equal(versionhistory.NewVersionHistoryItem(
-		baseLastEventID,
-		baseLastEventVersion,
-	)) {
-		return nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
-			"nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v, this event must be at the boundary",
+
+	if baseLastEventVersion != nil {
+		if !lastItem.Equal(versionhistory.NewVersionHistoryItem(
 			baseLastEventID,
-			baseLastEventVersion,
-		))
+			*baseLastEventVersion,
+		)) {
+			return nil, 0, serviceerror.NewInvalidArgument(fmt.Sprintf(
+				"nDCStateRebuilder unable to rebuild mutable state to event ID: %v, version: %v, this event must be at the boundary",
+				baseLastEventID,
+				baseLastEventVersion,
+			))
+		}
 	}
 
 	// close rebuilt mutable state transaction clearing all generated tasks, etc.
@@ -190,7 +195,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 	rebuiltMutableState.GetExecutionInfo().LastFirstEventTxnId = lastTxnId
 
 	// refresh tasks to be generated
-	if err := r.taskRefresher.RefreshTasks(now, rebuiltMutableState); err != nil {
+	if err := r.taskRefresher.RefreshTasks(ctx, now, rebuiltMutableState); err != nil {
 		return nil, 0, err
 	}
 
@@ -212,9 +217,6 @@ func (r *nDCStateRebuilderImpl) initializeBuilders(
 		r.shard,
 		r.logger,
 		resetMutableStateBuilder,
-		func(mutableState workflow.MutableState) workflow.TaskGenerator {
-			return workflow.NewTaskGenerator(r.shard.GetNamespaceRegistry(), mutableState)
-		},
 	)
 	return resetMutableStateBuilder, stateBuilder
 }
@@ -244,12 +246,13 @@ func (r *nDCStateRebuilderImpl) applyEvents(
 }
 
 func (r *nDCStateRebuilderImpl) getPaginationFn(
+	ctx context.Context,
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
 ) collection.PaginationFn {
 	return func(paginationToken []byte) ([]interface{}, []byte, error) {
-		resp, err := r.executionMgr.ReadHistoryBranchByBatch(&persistence.ReadHistoryBranchRequest{
+		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
 			MaxEventID:    nextEventID,

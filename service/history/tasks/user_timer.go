@@ -27,8 +27,11 @@ package tasks
 import (
 	"time"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 )
+
+var _ Task = (*UserTimerTask)(nil)
 
 type (
 	UserTimerTask struct {
@@ -69,4 +72,12 @@ func (u *UserTimerTask) GetVisibilityTime() time.Time {
 
 func (u *UserTimerTask) SetVisibilityTime(t time.Time) {
 	u.VisibilityTimestamp = t
+}
+
+func (u *UserTimerTask) GetCategory() Category {
+	return CategoryTimer
+}
+
+func (u *UserTimerTask) GetType() enumsspb.TaskType {
+	return enumsspb.TASK_TYPE_USER_TIMER
 }

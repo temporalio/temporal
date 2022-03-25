@@ -491,7 +491,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
 
-	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
+	_, err := s.MetadataManager.CreateNamespace(context.Background(), &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),
@@ -519,7 +519,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	})
 	s.NoError(err)
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
 	resp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 	})
@@ -550,7 +550,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
 
-	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
+	_, err := s.MetadataManager.CreateNamespace(context.Background(), &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),
@@ -578,7 +578,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	})
 	s.NoError(err)
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,
 		UpdateInfo: &namespacepb.UpdateNamespaceInfo{
@@ -627,7 +627,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 	data := map[string]string{"some random key": "some random value"}
 	isGlobalNamespace := true
 
-	_, err := s.MetadataManager.CreateNamespace(&persistence.CreateNamespaceRequest{
+	_, err := s.MetadataManager.CreateNamespace(context.Background(), &persistence.CreateNamespaceRequest{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
 				Id:          uuid.New(),
@@ -686,7 +686,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestUpdate
 		s.Equal(isGlobalNamespace, isGlobalNamespace)
 	}
 
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
 
 	updateResp, err := s.handler.UpdateNamespace(context.Background(), &workflowservice.UpdateNamespaceRequest{
 		Namespace: namespace,

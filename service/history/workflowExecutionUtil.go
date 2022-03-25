@@ -25,13 +25,15 @@
 package history
 
 import (
+	"context"
+
 	"go.temporal.io/server/service/history/workflow"
 )
 
 type workflowContext interface {
 	getContext() workflow.Context
 	getMutableState() workflow.MutableState
-	reloadMutableState() (workflow.MutableState, error)
+	reloadMutableState(context.Context) (workflow.MutableState, error)
 	getReleaseFn() workflow.ReleaseCacheFunc
 	getWorkflowID() string
 	getRunID() string
@@ -67,8 +69,10 @@ func (w *workflowContextImpl) getMutableState() workflow.MutableState {
 	return w.mutableState
 }
 
-func (w *workflowContextImpl) reloadMutableState() (workflow.MutableState, error) {
-	mutableState, err := w.getContext().LoadWorkflowExecution()
+func (w *workflowContextImpl) reloadMutableState(
+	ctx context.Context,
+) (workflow.MutableState, error) {
+	mutableState, err := w.getContext().LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -81,11 +85,11 @@ func (w *workflowContextImpl) getReleaseFn() workflow.ReleaseCacheFunc {
 }
 
 func (w *workflowContextImpl) getWorkflowID() string {
-	return w.getContext().GetExecution().GetWorkflowId()
+	return w.getContext().GetWorkflowID()
 }
 
 func (w *workflowContextImpl) getRunID() string {
-	return w.getContext().GetExecution().GetRunId()
+	return w.getContext().GetRunID()
 }
 
 func newWorkflowContext(

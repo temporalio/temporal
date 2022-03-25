@@ -51,11 +51,11 @@ type (
 	// TimerTasksFilter contains the column names within timer_tasks table that
 	// can be used to filter results through a WHERE clause
 	TimerTasksRangeFilter struct {
-		ShardID                int32
-		TaskID                 int64
-		MinVisibilityTimestamp time.Time
-		MaxVisibilityTimestamp time.Time
-		PageSize               int
+		ShardID                         int32
+		InclusiveMinTaskID              int64
+		InclusiveMinVisibilityTimestamp time.Time
+		ExclusiveMaxVisibilityTimestamp time.Time
+		PageSize                        int
 	}
 
 	// HistoryTimerTask is the SQL persistence interface for history timer tasks

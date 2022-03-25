@@ -29,6 +29,7 @@
 package persistence
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -59,53 +60,53 @@ func (m *MockNamespaceReplicationQueue) EXPECT() *MockNamespaceReplicationQueueM
 }
 
 // DeleteMessageFromDLQ mocks base method.
-func (m *MockNamespaceReplicationQueue) DeleteMessageFromDLQ(messageID int64) error {
+func (m *MockNamespaceReplicationQueue) DeleteMessageFromDLQ(ctx context.Context, messageID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteMessageFromDLQ", messageID)
+	ret := m.ctrl.Call(m, "DeleteMessageFromDLQ", ctx, messageID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteMessageFromDLQ indicates an expected call of DeleteMessageFromDLQ.
-func (mr *MockNamespaceReplicationQueueMockRecorder) DeleteMessageFromDLQ(messageID interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) DeleteMessageFromDLQ(ctx, messageID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessageFromDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).DeleteMessageFromDLQ), messageID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteMessageFromDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).DeleteMessageFromDLQ), ctx, messageID)
 }
 
 // GetAckLevels mocks base method.
-func (m *MockNamespaceReplicationQueue) GetAckLevels() (map[string]int64, error) {
+func (m *MockNamespaceReplicationQueue) GetAckLevels(ctx context.Context) (map[string]int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetAckLevels")
+	ret := m.ctrl.Call(m, "GetAckLevels", ctx)
 	ret0, _ := ret[0].(map[string]int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetAckLevels indicates an expected call of GetAckLevels.
-func (mr *MockNamespaceReplicationQueueMockRecorder) GetAckLevels() *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) GetAckLevels(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckLevels", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetAckLevels))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAckLevels", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetAckLevels), ctx)
 }
 
 // GetDLQAckLevel mocks base method.
-func (m *MockNamespaceReplicationQueue) GetDLQAckLevel() (int64, error) {
+func (m *MockNamespaceReplicationQueue) GetDLQAckLevel(ctx context.Context) (int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetDLQAckLevel")
+	ret := m.ctrl.Call(m, "GetDLQAckLevel", ctx)
 	ret0, _ := ret[0].(int64)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetDLQAckLevel indicates an expected call of GetDLQAckLevel.
-func (mr *MockNamespaceReplicationQueueMockRecorder) GetDLQAckLevel() *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) GetDLQAckLevel(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQAckLevel", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetDLQAckLevel))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetDLQAckLevel", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetDLQAckLevel), ctx)
 }
 
 // GetMessagesFromDLQ mocks base method.
-func (m *MockNamespaceReplicationQueue) GetMessagesFromDLQ(firstMessageID, lastMessageID int64, pageSize int, pageToken []byte) ([]*repication.ReplicationTask, []byte, error) {
+func (m *MockNamespaceReplicationQueue) GetMessagesFromDLQ(ctx context.Context, firstMessageID, lastMessageID int64, pageSize int, pageToken []byte) ([]*repication.ReplicationTask, []byte, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetMessagesFromDLQ", firstMessageID, lastMessageID, pageSize, pageToken)
+	ret := m.ctrl.Call(m, "GetMessagesFromDLQ", ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 	ret0, _ := ret[0].([]*repication.ReplicationTask)
 	ret1, _ := ret[1].([]byte)
 	ret2, _ := ret[2].(error)
@@ -113,15 +114,15 @@ func (m *MockNamespaceReplicationQueue) GetMessagesFromDLQ(firstMessageID, lastM
 }
 
 // GetMessagesFromDLQ indicates an expected call of GetMessagesFromDLQ.
-func (mr *MockNamespaceReplicationQueueMockRecorder) GetMessagesFromDLQ(firstMessageID, lastMessageID, pageSize, pageToken interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) GetMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessagesFromDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetMessagesFromDLQ), firstMessageID, lastMessageID, pageSize, pageToken)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMessagesFromDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetMessagesFromDLQ), ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 }
 
 // GetReplicationMessages mocks base method.
-func (m *MockNamespaceReplicationQueue) GetReplicationMessages(lastMessageID int64, maxCount int) ([]*repication.ReplicationTask, int64, error) {
+func (m *MockNamespaceReplicationQueue) GetReplicationMessages(ctx context.Context, lastMessageID int64, maxCount int) ([]*repication.ReplicationTask, int64, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetReplicationMessages", lastMessageID, maxCount)
+	ret := m.ctrl.Call(m, "GetReplicationMessages", ctx, lastMessageID, maxCount)
 	ret0, _ := ret[0].([]*repication.ReplicationTask)
 	ret1, _ := ret[1].(int64)
 	ret2, _ := ret[2].(error)
@@ -129,51 +130,51 @@ func (m *MockNamespaceReplicationQueue) GetReplicationMessages(lastMessageID int
 }
 
 // GetReplicationMessages indicates an expected call of GetReplicationMessages.
-func (mr *MockNamespaceReplicationQueueMockRecorder) GetReplicationMessages(lastMessageID, maxCount interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) GetReplicationMessages(ctx, lastMessageID, maxCount interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetReplicationMessages), lastMessageID, maxCount)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetReplicationMessages", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).GetReplicationMessages), ctx, lastMessageID, maxCount)
 }
 
 // Publish mocks base method.
-func (m *MockNamespaceReplicationQueue) Publish(message interface{}) error {
+func (m *MockNamespaceReplicationQueue) Publish(ctx context.Context, message interface{}) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Publish", message)
+	ret := m.ctrl.Call(m, "Publish", ctx, message)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // Publish indicates an expected call of Publish.
-func (mr *MockNamespaceReplicationQueueMockRecorder) Publish(message interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) Publish(ctx, message interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Publish), message)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Publish", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).Publish), ctx, message)
 }
 
 // PublishToDLQ mocks base method.
-func (m *MockNamespaceReplicationQueue) PublishToDLQ(message interface{}) error {
+func (m *MockNamespaceReplicationQueue) PublishToDLQ(ctx context.Context, message interface{}) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "PublishToDLQ", message)
+	ret := m.ctrl.Call(m, "PublishToDLQ", ctx, message)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // PublishToDLQ indicates an expected call of PublishToDLQ.
-func (mr *MockNamespaceReplicationQueueMockRecorder) PublishToDLQ(message interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) PublishToDLQ(ctx, message interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishToDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).PublishToDLQ), message)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishToDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).PublishToDLQ), ctx, message)
 }
 
 // RangeDeleteMessagesFromDLQ mocks base method.
-func (m *MockNamespaceReplicationQueue) RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID int64) error {
+func (m *MockNamespaceReplicationQueue) RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID, lastMessageID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "RangeDeleteMessagesFromDLQ", firstMessageID, lastMessageID)
+	ret := m.ctrl.Call(m, "RangeDeleteMessagesFromDLQ", ctx, firstMessageID, lastMessageID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // RangeDeleteMessagesFromDLQ indicates an expected call of RangeDeleteMessagesFromDLQ.
-func (mr *MockNamespaceReplicationQueueMockRecorder) RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteMessagesFromDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).RangeDeleteMessagesFromDLQ), firstMessageID, lastMessageID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RangeDeleteMessagesFromDLQ", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).RangeDeleteMessagesFromDLQ), ctx, firstMessageID, lastMessageID)
 }
 
 // Start mocks base method.
@@ -201,29 +202,29 @@ func (mr *MockNamespaceReplicationQueueMockRecorder) Stop() *gomock.Call {
 }
 
 // UpdateAckLevel mocks base method.
-func (m *MockNamespaceReplicationQueue) UpdateAckLevel(lastProcessedMessageID int64, clusterName string) error {
+func (m *MockNamespaceReplicationQueue) UpdateAckLevel(ctx context.Context, lastProcessedMessageID int64, clusterName string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateAckLevel", lastProcessedMessageID, clusterName)
+	ret := m.ctrl.Call(m, "UpdateAckLevel", ctx, lastProcessedMessageID, clusterName)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateAckLevel indicates an expected call of UpdateAckLevel.
-func (mr *MockNamespaceReplicationQueueMockRecorder) UpdateAckLevel(lastProcessedMessageID, clusterName interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) UpdateAckLevel(ctx, lastProcessedMessageID, clusterName interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAckLevel", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).UpdateAckLevel), lastProcessedMessageID, clusterName)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateAckLevel", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).UpdateAckLevel), ctx, lastProcessedMessageID, clusterName)
 }
 
 // UpdateDLQAckLevel mocks base method.
-func (m *MockNamespaceReplicationQueue) UpdateDLQAckLevel(lastProcessedMessageID int64) error {
+func (m *MockNamespaceReplicationQueue) UpdateDLQAckLevel(ctx context.Context, lastProcessedMessageID int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateDLQAckLevel", lastProcessedMessageID)
+	ret := m.ctrl.Call(m, "UpdateDLQAckLevel", ctx, lastProcessedMessageID)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateDLQAckLevel indicates an expected call of UpdateDLQAckLevel.
-func (mr *MockNamespaceReplicationQueueMockRecorder) UpdateDLQAckLevel(lastProcessedMessageID interface{}) *gomock.Call {
+func (mr *MockNamespaceReplicationQueueMockRecorder) UpdateDLQAckLevel(ctx, lastProcessedMessageID interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDLQAckLevel", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).UpdateDLQAckLevel), lastProcessedMessageID)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateDLQAckLevel", reflect.TypeOf((*MockNamespaceReplicationQueue)(nil).UpdateDLQAckLevel), ctx, lastProcessedMessageID)
 }

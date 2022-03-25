@@ -33,7 +33,6 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	m "go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -53,8 +52,8 @@ const (
 type (
 	transferQueueTaskExecutorBase struct {
 		shard                    shard.Context
-		historyService           *historyEngineImpl
 		cache                    workflow.Cache
+		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricsClient            metrics.Client
 		matchingClient           matchingservice.MatchingServiceClient
@@ -66,23 +65,27 @@ type (
 
 func newTransferQueueTaskExecutorBase(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
-	workflowDeleteManager workflow.DeleteManager,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
 	logger log.Logger,
-	metricsClient metrics.Client,
-	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
 		shard:                    shard,
-		historyService:           historyEngine,
-		cache:                    historyEngine.historyCache,
+		cache:                    workflowCache,
+		archivalClient:           archivalClient,
 		logger:                   logger,
-		metricsClient:            metricsClient,
+		metricsClient:            shard.GetMetricsClient(),
 		matchingClient:           matchingClient,
-		config:                   config,
+		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
-		workflowDeleteManager:    workflowDeleteManager,
+		workflowDeleteManager: workflow.NewDeleteManager(
+			shard,
+			workflowCache,
+			shard.GetConfig(),
+			archivalClient,
+			shard.GetTimeSource(),
+		),
 	}
 }
 
@@ -104,7 +107,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	_, err := t.matchingClient.AddActivityTask(ctx, &m.AddActivityTaskRequest{
+	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:       task.TargetNamespaceID,
 		SourceNamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
@@ -131,7 +134,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 
-	_, err := t.matchingClient.AddWorkflowTask(ctx, &m.AddWorkflowTaskRequest{
+	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -183,8 +186,9 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	// and it might not have access to type map (i.e. type needs to be embedded).
 	searchattribute.ApplyTypeMap(searchAttributes, saTypeMap)
 
-	_, err = t.historyService.archivalClient.Archive(ctx, &archiver.ClientRequest{
+	_, err = t.archivalClient.Archive(ctx, &archiver.ClientRequest{
 		ArchiveRequest: &archiver.ArchiveRequest{
+			ShardID:          t.shard.GetShardID(),
 			NamespaceID:      namespaceID.String(),
 			Namespace:        namespaceEntry.Name().String(),
 			WorkflowID:       workflowID,
@@ -232,7 +236,7 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(weCtx, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weCtx, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -241,12 +245,13 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	if err != nil {
 		return err
 	}
-	ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(task.NamespaceID), lastWriteVersion, task.Version, task)
-	if err != nil || !ok {
-		return err
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	if !ok {
+		return nil
 	}
 
 	return t.workflowDeleteManager.DeleteWorkflowExecution(
+		ctx,
 		namespace.ID(task.GetNamespaceID()),
 		workflowExecution,
 		weCtx,

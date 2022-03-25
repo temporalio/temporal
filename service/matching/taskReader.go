@@ -199,7 +199,7 @@ func (tr *taskReader) getTaskBatchWithRange(readLevel int64, maxReadLevel int64)
 	var response *persistence.GetTasksResponse
 	var err error
 	err = executeWithRetry(func() error {
-		response, err = tr.tlMgr.db.GetTasks(readLevel, maxReadLevel, tr.tlMgr.config.GetTasksBatchSize())
+		response, err = tr.tlMgr.db.GetTasks(context.TODO(), readLevel+1, maxReadLevel+1, tr.tlMgr.config.GetTasksBatchSize())
 		return err
 	})
 	if err != nil {
@@ -268,7 +268,9 @@ func (tr *taskReader) addSingleTaskToBuffer(
 }
 
 func (tr *taskReader) persistAckLevel() error {
-	return tr.tlMgr.db.UpdateState(tr.tlMgr.taskAckManager.getAckLevel())
+	ackLevel := tr.tlMgr.taskAckManager.getAckLevel()
+	tr.emitTaskLagMetric(ackLevel)
+	return tr.tlMgr.db.UpdateState(context.TODO(), ackLevel)
 }
 
 func (tr *taskReader) isTaskAddedRecently(lastAddTime time.Time) bool {
@@ -281,4 +283,11 @@ func (tr *taskReader) logger() log.Logger {
 
 func (tr *taskReader) scope() metrics.Scope {
 	return tr.tlMgr.metricScope
+}
+
+func (tr *taskReader) emitTaskLagMetric(ackLevel int64) {
+	// note: this metric is only an estimation for the lag.
+	// taskID in DB may not be continuous, especially when task list ownership changes.
+	maxReadLevel := tr.tlMgr.taskWriter.GetMaxReadLevel()
+	tr.scope().UpdateGauge(metrics.TaskLagPerTaskQueueGauge, float64(maxReadLevel-ackLevel))
 }

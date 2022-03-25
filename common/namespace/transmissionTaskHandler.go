@@ -25,6 +25,8 @@
 package namespace
 
 import (
+	"context"
+
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 
@@ -41,13 +43,14 @@ type (
 	// Replicator is the interface which can replicate the namespace
 	Replicator interface {
 		HandleTransmissionTask(
+			ctx context.Context,
 			namespaceOperation enumsspb.NamespaceOperation,
 			info *persistencespb.NamespaceInfo,
 			config *persistencespb.NamespaceConfig,
 			replicationConfig *persistencespb.NamespaceReplicationConfig,
 			configVersion int64,
 			failoverVersion int64,
-			isGlobalNamespaceEnabled bool,
+			isGlobalNamespace bool,
 		) error
 	}
 
@@ -70,16 +73,20 @@ func NewNamespaceReplicator(
 
 // HandleTransmissionTask handle transmission of the namespace replication task
 func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
+	ctx context.Context,
 	namespaceOperation enumsspb.NamespaceOperation,
 	info *persistencespb.NamespaceInfo,
 	config *persistencespb.NamespaceConfig,
 	replicationConfig *persistencespb.NamespaceReplicationConfig,
 	configVersion int64,
 	failoverVersion int64,
-	isGlobalNamespaceEnabled bool,
+	isGlobalNamespace bool,
 ) error {
 
-	if !isGlobalNamespaceEnabled {
+	if !isGlobalNamespace {
+		return nil
+	}
+	if len(replicationConfig.Clusters) <= 1 {
 		return nil
 	}
 
@@ -113,6 +120,7 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 	}
 
 	return namespaceReplicator.namespaceReplicationQueue.Publish(
+		ctx,
 		&replicationspb.ReplicationTask{
 			TaskType:   taskType,
 			Attributes: task,

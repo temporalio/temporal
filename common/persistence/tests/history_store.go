@@ -25,6 +25,7 @@
 package tests
 
 import (
+	"context"
 	"math/rand"
 	"testing"
 	"time"
@@ -38,6 +39,7 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -60,6 +62,9 @@ type (
 
 		store  p.ExecutionManager
 		logger log.Logger
+
+		Ctx    context.Context
+		Cancel context.CancelFunc
 	}
 )
 
@@ -72,6 +77,7 @@ func NewHistoryEventsSuite(
 		Assertions: require.New(t),
 		store: p.NewExecutionManager(
 			store,
+			serialization.NewSerializer(),
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
@@ -89,10 +95,11 @@ func (s *HistoryEventsSuite) TearDownSuite() {
 
 func (s *HistoryEventsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
+	s.Ctx, s.Cancel = context.WithTimeout(context.Background(), time.Second*30)
 }
 
 func (s *HistoryEventsSuite) TearDownTest() {
-
+	s.Cancel()
 }
 
 func (s *HistoryEventsSuite) TestAppendSelect_First() {
@@ -513,7 +520,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 	s.deleteHistoryBranch(shardID, br2Token)
 
 	// at this point, both branch1 and branch2 are deleted.
-	_, err = s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+	_, err = s.store.ReadHistoryBranch(s.Ctx, &p.ReadHistoryBranchRequest{
 		ShardID:     shardID,
 		BranchToken: br1Token,
 		MinEventID:  common.FirstEventID,
@@ -522,7 +529,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 	})
 	s.Error(err, "Workflow execution history not found.")
 
-	_, err = s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+	_, err = s.store.ReadHistoryBranch(s.Ctx, &p.ReadHistoryBranchRequest{
 		ShardID:     shardID,
 		BranchToken: br2Token,
 		MinEventID:  common.FirstEventID,
@@ -566,7 +573,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 	s.Equal(append(eventsPacket0.events, eventsPacket1.events...), s.listAllHistoryEvents(shardID, br1Token))
 
 	// branch2:[4,5] should be deleted
-	_, err = s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+	_, err = s.store.ReadHistoryBranch(s.Ctx, &p.ReadHistoryBranchRequest{
 		ShardID:     shardID,
 		BranchToken: br2Token,
 		MinEventID:  4,
@@ -579,7 +586,7 @@ func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteForkedBranchFirst() {
 	s.deleteHistoryBranch(shardID, br1Token)
 
 	// branch1 should be deleted
-	_, err = s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+	_, err = s.store.ReadHistoryBranch(s.Ctx, &p.ReadHistoryBranchRequest{
 		ShardID:     shardID,
 		BranchToken: br1Token,
 		MinEventID:  common.FirstEventID,
@@ -594,7 +601,7 @@ func (s *HistoryEventsSuite) appendHistoryEvents(
 	branchToken []byte,
 	packet HistoryEventsPacket,
 ) {
-	_, err := s.store.AppendHistoryNodes(&p.AppendHistoryNodesRequest{
+	_, err := s.store.AppendHistoryNodes(s.Ctx, &p.AppendHistoryNodesRequest{
 		ShardID:           shardID,
 		BranchToken:       branchToken,
 		Events:            packet.events,
@@ -611,7 +618,7 @@ func (s *HistoryEventsSuite) forkHistoryBranch(
 	branchToken []byte,
 	newNodeID int64,
 ) []byte {
-	resp, err := s.store.ForkHistoryBranch(&p.ForkHistoryBranchRequest{
+	resp, err := s.store.ForkHistoryBranch(s.Ctx, &p.ForkHistoryBranchRequest{
 		ShardID:         shardID,
 		ForkBranchToken: branchToken,
 		ForkNodeID:      newNodeID,
@@ -625,7 +632,7 @@ func (s *HistoryEventsSuite) deleteHistoryBranch(
 	shardID int32,
 	branchToken []byte,
 ) {
-	err := s.store.DeleteHistoryBranch(&p.DeleteHistoryBranchRequest{
+	err := s.store.DeleteHistoryBranch(s.Ctx, &p.DeleteHistoryBranchRequest{
 		ShardID:     shardID,
 		BranchToken: branchToken,
 	})
@@ -638,7 +645,7 @@ func (s *HistoryEventsSuite) trimHistoryBranch(
 	nodeID int64,
 	transactionID int64,
 ) {
-	_, err := s.store.TrimHistoryBranch(&p.TrimHistoryBranchRequest{
+	_, err := s.store.TrimHistoryBranch(s.Ctx, &p.TrimHistoryBranchRequest{
 		ShardID:       shardID,
 		BranchToken:   branchToken,
 		NodeID:        nodeID,
@@ -656,7 +663,7 @@ func (s *HistoryEventsSuite) listHistoryEvents(
 	var token []byte
 	var events []*historypb.HistoryEvent
 	for doContinue := true; doContinue; doContinue = len(token) > 0 {
-		resp, err := s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+		resp, err := s.store.ReadHistoryBranch(s.Ctx, &p.ReadHistoryBranchRequest{
 			ShardID:       shardID,
 			BranchToken:   branchToken,
 			MinEventID:    startEventID,
@@ -678,7 +685,7 @@ func (s *HistoryEventsSuite) listAllHistoryEvents(
 	var token []byte
 	var events []*historypb.HistoryEvent
 	for doContinue := true; doContinue; doContinue = len(token) > 0 {
-		resp, err := s.store.ReadHistoryBranch(&p.ReadHistoryBranchRequest{
+		resp, err := s.store.ReadHistoryBranch(s.Ctx, &p.ReadHistoryBranchRequest{
 			ShardID:       shardID,
 			BranchToken:   branchToken,
 			MinEventID:    common.FirstEventID,

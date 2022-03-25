@@ -137,6 +137,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	).Return("", nil)
 
 	weContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
 		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
@@ -191,6 +192,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_BrandN
 	).Return("", nil)
 
 	weContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
 		now,
 		persistence.CreateWorkflowModeBrandNew,
 		"",
@@ -264,6 +266,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
 		now,
 		persistence.CreateWorkflowModeWorkflowIDReuse,
 		currentRunID,
@@ -338,6 +341,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	currentWorkflow.EXPECT().getVectorClock().Return(currentLastWriteVersion, int64(0), nil)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
 		now,
 		persistence.CreateWorkflowModeWorkflowIDReuse,
 		currentRunID,
@@ -406,6 +410,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
 		now,
 		persistence.CreateWorkflowModeZombie,
 		"",
@@ -475,6 +480,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
 		now,
 		persistence.CreateWorkflowModeZombie,
 		"",
@@ -544,6 +550,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
 		now,
 		persistence.CreateWorkflowModeZombie,
 		"",
@@ -613,6 +620,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Create
 	targetWorkflow.EXPECT().suppressBy(currentWorkflow).Return(workflow.TransactionPolicyPassive, nil)
 
 	targetContext.EXPECT().CreateWorkflowExecution(
+		gomock.Any(),
 		now,
 		persistence.CreateWorkflowModeZombie,
 		"",
@@ -675,6 +683,7 @@ func (s *nDCTransactionMgrForNewWorkflowSuite) TestDispatchForNewWorkflow_Suppre
 	targetWorkflow.EXPECT().revive().Return(nil)
 
 	currentContext.EXPECT().UpdateWorkflowExecutionWithNew(
+		gomock.Any(),
 		now,
 		persistence.UpdateWorkflowModeUpdateCurrent,
 		targetContext,

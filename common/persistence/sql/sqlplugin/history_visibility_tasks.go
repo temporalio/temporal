@@ -48,9 +48,10 @@ type (
 	// VisibilityTasksRangeFilter contains the column names within visibility_tasks table that
 	// can be used to filter results through a WHERE clause
 	VisibilityTasksRangeFilter struct {
-		ShardID   int32
-		MinTaskID int64
-		MaxTaskID int64
+		ShardID            int32
+		InclusiveMinTaskID int64
+		ExclusiveMaxTaskID int64
+		PageSize           int
 	}
 
 	// HistoryVisibilityTask is the SQL persistence interface for history visibility tasks
@@ -63,6 +64,7 @@ type (
 		// DeleteFromVisibilityTasks deletes one rows from visibility_tasks table.
 		DeleteFromVisibilityTasks(ctx context.Context, filter VisibilityTasksFilter) (sql.Result, error)
 		// RangeDeleteFromVisibilityTasks deletes one or more rows from visibility_tasks table.
+		//  VisibilityTasksRangeFilter - {PageSize} will be ignored
 		RangeDeleteFromVisibilityTasks(ctx context.Context, filter VisibilityTasksRangeFilter) (sql.Result, error)
 	}
 )

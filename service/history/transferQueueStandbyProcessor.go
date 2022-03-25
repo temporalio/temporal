@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -37,6 +36,8 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -58,11 +59,11 @@ type (
 func newTransferQueueStandbyProcessor(
 	clusterName string,
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
 	taskAllocator taskAllocator,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
-	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -84,14 +85,14 @@ func newTransferQueueStandbyProcessor(
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 
-	transferTaskFilter := func(task tasks.Task) (bool, error) {
+	transferTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
 	}
 	maxReadAckLevel := func() int64 {
-		return shard.GetTransferMaxReadLevel()
+		return shard.GetQueueMaxReadLevel(tasks.CategoryTransfer, clusterName).TaskID
 	}
 	updateClusterAckLevel := func(ackLevel int64) error {
-		return shard.UpdateTransferClusterAckLevel(clusterName, ackLevel)
+		return shard.UpdateQueueClusterAckLevel(tasks.CategoryTransfer, clusterName, tasks.Key{TaskID: ackLevel})
 	}
 	transferQueueShutdown := func() error {
 		return nil
@@ -103,16 +104,14 @@ func newTransferQueueStandbyProcessor(
 		config:             shard.GetConfig(),
 		transferTaskFilter: transferTaskFilter,
 		logger:             logger,
-		metricsClient:      historyEngine.metricsClient,
+		metricsClient:      shard.GetMetricsClient(),
 		taskExecutor: newTransferQueueStandbyTaskExecutor(
 			shard,
-			historyEngine,
+			workflowCache,
+			archivalClient,
 			nDCHistoryResender,
 			logger,
-			historyEngine.metricsClient,
 			clusterName,
-			config,
-			clientBean,
 			matchingClient,
 		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
@@ -129,7 +128,7 @@ func newTransferQueueStandbyProcessor(
 		shard,
 		options,
 		processor,
-		shard.GetTransferClusterAckLevel(clusterName),
+		shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, clusterName).TaskID,
 		logger,
 	)
 
@@ -139,7 +138,7 @@ func newTransferQueueStandbyProcessor(
 		options,
 		processor,
 		queueAckMgr,
-		historyEngine.historyCache,
+		workflowCache,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
 	)

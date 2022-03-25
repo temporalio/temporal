@@ -144,5 +144,6 @@ func NewDynamicConfig() *configs.Config {
 	config := configs.NewConfig(dc, 1, false, "")
 	// reduce the duration of long poll to increase test speed
 	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
+	config.EnableActivityLocalDispatch = dynamicconfig.GetBoolPropertyFnFilteredByNamespace(true)
 	return config
 }

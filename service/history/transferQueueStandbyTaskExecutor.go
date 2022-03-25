@@ -34,7 +34,6 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -42,11 +41,11 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -61,27 +60,23 @@ type (
 
 func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
-	historyEngine *historyEngineImpl,
+	workflowCache workflow.Cache,
+	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
-	metricsClient metrics.Client,
 	clusterName string,
-	config *configs.Config,
-	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queueTaskExecutor {
 	return &transferQueueStandbyTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
-			historyEngine,
-			historyEngine.workflowDeleteManager,
+			workflowCache,
+			archivalClient,
 			logger,
-			metricsClient,
-			config,
 			matchingClient,
 		),
 		clusterName:        clusterName,
-		adminClient:        clientBean.GetRemoteAdminClient(clusterName),
+		adminClient:        shard.GetRemoteAdminClient(clusterName),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }
@@ -143,9 +138,9 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), activityInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		if activityInfo.StartedId == common.EmptyEventID {
@@ -205,9 +200,9 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), wtInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		if wtInfo.StartedID == common.EmptyEventID {
@@ -249,7 +244,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		completionEvent, err := mutableState.GetCompletionEvent()
+		completionEvent, err := mutableState.GetCompletionEvent(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -270,9 +265,9 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		if err != nil {
 			return nil, err
 		}
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), lastWriteVersion, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		// DO NOT REPLY TO PARENT
@@ -314,9 +309,9 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), requestCancelInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), requestCancelInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -351,9 +346,9 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), signalInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), signalInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		return getHistoryResendInfo(mutableState)
@@ -388,9 +383,9 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, nil
 		}
 
-		ok, err := verifyTaskVersion(t.shard, t.logger, namespace.ID(transferTask.NamespaceID), childWorkflowInfo.Version, transferTask.Version, transferTask)
-		if err != nil || !ok {
-			return nil, err
+		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childWorkflowInfo.Version, transferTask.Version, transferTask)
+		if !ok {
+			return nil, nil
 		}
 
 		if childWorkflowInfo.StartedId != common.EmptyEventID {
@@ -444,7 +439,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTransferTask(context, taskInfo, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, context, taskInfo, t.metricsClient, t.logger)
 	if err != nil || mutableState == nil {
 		return err
 	}

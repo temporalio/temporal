@@ -42,7 +42,7 @@ import (
 )
 
 const (
-	// WorkflowName is the workflow name.
+	// WorkflowName is workflowId of the system workflow performing addition of search attributes
 	WorkflowName = "temporal-sys-add-search-attributes-workflow"
 )
 
@@ -166,7 +166,7 @@ func (a *activities) WaitForYellowStatusActivity(ctx context.Context, indexName 
 	return nil
 }
 
-func (a *activities) UpdateClusterMetadataActivity(_ context.Context, params WorkflowParams) error {
+func (a *activities) UpdateClusterMetadataActivity(ctx context.Context, params WorkflowParams) error {
 	oldSearchAttributes, err := a.saManager.GetSearchAttributes(params.IndexName, true)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrUnableToGetSearchAttributes, err)
@@ -179,7 +179,7 @@ func (a *activities) UpdateClusterMetadataActivity(_ context.Context, params Wor
 	for saName, saType := range params.CustomAttributesToAdd {
 		newCustomSearchAttributes[saName] = saType
 	}
-	err = a.saManager.SaveSearchAttributes(params.IndexName, newCustomSearchAttributes)
+	err = a.saManager.SaveSearchAttributes(ctx, params.IndexName, newCustomSearchAttributes)
 	if err != nil {
 		a.logger.Info("Unable to save search attributes to cluster metadata.", tag.ESIndex(params.IndexName), tag.Error(err))
 		a.metricsClient.IncCounter(metrics.AddSearchAttributesWorkflowScope, metrics.AddSearchAttributesFailuresCount)

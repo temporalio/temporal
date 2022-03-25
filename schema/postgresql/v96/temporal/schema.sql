@@ -49,7 +49,7 @@ CREATE TABLE current_executions(
   workflow_id VARCHAR(255) NOT NULL,
   --
   run_id BYTEA NOT NULL,
-  create_request_id VARCHAR(64) NOT NULL,
+  create_request_id VARCHAR(255) NOT NULL,
   state INTEGER NOT NULL,
   status INTEGER NOT NULL,
   start_version BIGINT NOT NULL DEFAULT 0,
@@ -136,15 +136,6 @@ CREATE TABLE visibility_tasks(
   PRIMARY KEY (shard_id, task_id)
 );
 
-CREATE TABLE tiered_storage_tasks(
-    shard_id      INTEGER     NOT NULL,
-    task_id       BIGINT      NOT NULL,
-    --
-    data          BYTEA       NOT NULL,
-    data_encoding VARCHAR(16) NOT NULL,
-    PRIMARY KEY (shard_id, task_id)
-);
-
 CREATE TABLE activity_info_maps (
 -- each row corresponds to one key of one map<string, ActivityInfo>
   shard_id INTEGER NOT NULL,
@@ -211,7 +202,7 @@ CREATE TABLE signals_requested_sets (
   namespace_id BYTEA NOT NULL,
   workflow_id VARCHAR(255) NOT NULL,
   run_id BYTEA NOT NULL,
-  signal_id VARCHAR(64) NOT NULL,
+  signal_id VARCHAR(255) NOT NULL,
   --
   PRIMARY KEY (shard_id, namespace_id, workflow_id, run_id, signal_id)
 );

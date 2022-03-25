@@ -25,82 +25,56 @@
 package history
 
 import (
-	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/api/matchingservice/v1"
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/archiver/provider"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
+	"go.uber.org/fx"
 )
 
 type (
+	HistoryEngineFactoryParams struct {
+		fx.In
+
+		VisibilityMgr           manager.VisibilityManager
+		MatchingClient          resource.MatchingClient
+		HistoryClient           historyservice.HistoryServiceClient
+		SdkClientFactory        sdk.ClientFactory
+		EventNotifier           events.Notifier
+		Config                  *configs.Config
+		ReplicationTaskFetchers ReplicationTaskFetchers
+		RawMatchingClient       resource.MatchingRawClient
+		NewCacheFn              workflow.NewCacheFn
+		ArchivalClient          archiver.Client
+		QueueProcessorFactories []queues.ProcessorFactory `group:"queueProcessorFactory"`
+	}
+
 	historyEngineFactory struct {
-		visibilityMgr           manager.VisibilityManager
-		matchingClient          matchingservice.MatchingServiceClient
-		historyClient           historyservice.HistoryServiceClient
-		publicClient            sdkclient.Client
-		eventNotifier           events.Notifier
-		config                  *configs.Config
-		replicationTaskFetchers ReplicationTaskFetchers
-		rawMatchingClient       matchingservice.MatchingServiceClient
-		newCacheFn              workflow.NewCacheFn
-		clientBean              client.Bean
-		archiverProvider        provider.ArchiverProvider
-		registry                namespace.Registry
+		HistoryEngineFactoryParams
 	}
 )
-
-func NewEngineFactory(
-	visibilityMgr manager.VisibilityManager,
-	matchingClient matchingservice.MatchingServiceClient,
-	historyClient historyservice.HistoryServiceClient,
-	publicClient sdkclient.Client,
-	eventNotifier events.Notifier,
-	config *configs.Config,
-	replicationTaskFetchers ReplicationTaskFetchers,
-	rawMatchingClient matchingservice.MatchingServiceClient,
-	newCacheFn workflow.NewCacheFn,
-	clientBean client.Bean,
-	archiverProvider provider.ArchiverProvider,
-	registry namespace.Registry,
-) shard.EngineFactory {
-	return &historyEngineFactory{
-		visibilityMgr:           visibilityMgr,
-		matchingClient:          matchingClient,
-		historyClient:           historyClient,
-		publicClient:            publicClient,
-		eventNotifier:           eventNotifier,
-		config:                  config,
-		replicationTaskFetchers: replicationTaskFetchers,
-		rawMatchingClient:       rawMatchingClient,
-		newCacheFn:              newCacheFn,
-		clientBean:              clientBean,
-		archiverProvider:        archiverProvider,
-		registry:                registry,
-	}
-}
 
 func (f *historyEngineFactory) CreateEngine(
 	context shard.Context,
 ) shard.Engine {
 	return NewEngineWithShardContext(
 		context,
-		f.visibilityMgr,
-		f.matchingClient,
-		f.historyClient,
-		f.publicClient,
-		f.eventNotifier,
-		f.config,
-		f.replicationTaskFetchers,
-		f.rawMatchingClient,
-		f.newCacheFn,
-		f.clientBean,
-		f.archiverProvider,
-		f.registry,
+		f.VisibilityMgr,
+		f.MatchingClient,
+		f.HistoryClient,
+		f.SdkClientFactory,
+		f.EventNotifier,
+		f.Config,
+		f.ReplicationTaskFetchers,
+		f.RawMatchingClient,
+		f.NewCacheFn,
+		f.ArchivalClient,
+		f.QueueProcessorFactories,
 	)
 }

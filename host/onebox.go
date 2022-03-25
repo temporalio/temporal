@@ -64,6 +64,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/frontend"
 	"go.temporal.io/server/service/history"
+	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/matching"
 	"go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/archiver"
@@ -382,11 +383,14 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	var err error
+	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	if err != nil {
+		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+	}
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
-	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for frontend", tag.Error(err))
@@ -426,6 +430,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		// Comment the line above and uncomment the line bellow to test with search attributes mapper.
 		// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
+		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
 		fx.Provide(func() log.Logger { return c.logger }),
@@ -477,7 +482,11 @@ func (c *temporalImpl) startHistory(
 			return newMembershipFactory(params.Name, hosts), nil
 		}
 		params.ClusterMetadataConfig = c.clusterMetadataConfig
-		params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+		var err error
+		params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+		if err != nil {
+			c.logger.Fatal("metrics.NewClient", tag.Error(err))
+		}
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 
@@ -490,7 +499,6 @@ func (c *temporalImpl) startHistory(
 		params.ArchivalMetadata = c.archiverMetadata
 		params.ArchiverProvider = c.archiverProvider
 
-		var err error
 		params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -521,11 +529,14 @@ func (c *temporalImpl) startHistory(
 			// Comment the line above and uncomment the line bellow to test with search attributes mapper.
 			// fx.Provide(func() searchattribute.Mapper { return NewSearchAttributeTestMapper() }),
 			fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
+			fx.Provide(persistenceClient.FactoryProvider),
 			fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 			fx.Provide(func() dynamicconfig.Client { return integrationClient }),
 			fx.Provide(func() log.Logger { return c.logger }),
 			fx.Provide(func() *esclient.Config { return c.esConfig }),
 			fx.Provide(func() esclient.Client { return c.esClient }),
+			fx.Provide(workflow.NewTaskGeneratorProvider),
+			history.QueueProcessorModule,
 			history.Module,
 			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
 			fx.NopLogger)
@@ -574,11 +585,16 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		return newMembershipFactory(params.Name, hosts), nil
 	}
 	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+
+	var err error
+	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	if err != nil {
+		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+	}
+
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
-	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
@@ -597,6 +613,7 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
+		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
 		fx.Provide(func() log.Logger { return c.logger }),
@@ -651,11 +668,16 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		clusterConfigCopy.EnableGlobalNamespace = true
 	}
 	params.ClusterMetadataConfig = &clusterConfigCopy
-	params.MetricsClient = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+
+	var err error
+	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	if err != nil {
+		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+	}
+
 	params.ArchivalMetadata = c.archiverMetadata
 	params.ArchiverProvider = c.archiverProvider
 
-	var err error
 	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
@@ -681,10 +703,12 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
+		fx.Provide(persistenceClient.FactoryProvider),
 		fx.Provide(func() persistenceClient.AbstractDataStoreFactory { return nil }),
 		fx.Provide(func() dynamicconfig.Client { return newIntegrationConfigClient(dynamicconfig.NewNoopClient()) }),
 		fx.Provide(func() log.Logger { return c.logger }),
 		fx.Provide(func() esclient.Client { return c.esClient }),
+		fx.Provide(func() *esclient.Config { return c.esConfig }),
 
 		worker.Module,
 		fx.Populate(&workerService, &clientBean, &namespaceRegistry),
@@ -706,7 +730,7 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 }
 
 func (c *temporalImpl) createSystemNamespace() error {
-	err := c.metadataMgr.InitializeSystemNamespaces(c.clusterMetadataConfig.CurrentClusterName)
+	err := c.metadataMgr.InitializeSystemNamespaces(context.Background(), c.clusterMetadataConfig.CurrentClusterName)
 	if err != nil {
 		return fmt.Errorf("failed to create temporal-system namespace: %v", err)
 	}

@@ -27,6 +27,8 @@
 package namespace
 
 import (
+	"context"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 	"go.temporal.io/api/serviceerror"
@@ -66,7 +68,7 @@ var (
 type (
 	// ReplicationTaskExecutor is the interface which is to execute namespace replication task
 	ReplicationTaskExecutor interface {
-		Execute(task *replicationspb.NamespaceTaskAttributes) error
+		Execute(ctx context.Context, task *replicationspb.NamespaceTaskAttributes) error
 	}
 
 	namespaceReplicationTaskExecutorImpl struct {
@@ -88,23 +90,29 @@ func NewReplicationTaskExecutor(
 }
 
 // Execute handles receiving of the namespace replication task
-func (h *namespaceReplicationTaskExecutorImpl) Execute(task *replicationspb.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) Execute(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+) error {
 	if err := h.validateNamespaceReplicationTask(task); err != nil {
 		return err
 	}
 
 	switch task.GetNamespaceOperation() {
 	case enumsspb.NAMESPACE_OPERATION_CREATE:
-		return h.handleNamespaceCreationReplicationTask(task)
+		return h.handleNamespaceCreationReplicationTask(ctx, task)
 	case enumsspb.NAMESPACE_OPERATION_UPDATE:
-		return h.handleNamespaceUpdateReplicationTask(task)
+		return h.handleNamespaceUpdateReplicationTask(ctx, task)
 	default:
 		return ErrInvalidNamespaceOperation
 	}
 }
 
 // handleNamespaceCreationReplicationTask handles the namespace creation replication task
-func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicationTask(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+) error {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.State)
 	if err != nil {
@@ -138,14 +146,14 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 		IsGlobalNamespace: true, // local namespace will not be replicated
 	}
 
-	_, err = h.metadataManagerV2.CreateNamespace(request)
+	_, err = h.metadataManagerV2.CreateNamespace(ctx, request)
 	if err != nil {
 		// SQL and Cassandra handle namespace UUID collision differently
 		// here, whenever seeing a error replicating a namespace
 		// do a check if there is a name / UUID collision
 
 		recordExists := true
-		resp, getErr := h.metadataManagerV2.GetNamespace(&persistence.GetNamespaceRequest{
+		resp, getErr := h.metadataManagerV2.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 			Name: task.Info.GetName(),
 		})
 		switch getErr.(type) {
@@ -161,7 +169,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 			return err
 		}
 
-		resp, getErr = h.metadataManagerV2.GetNamespace(&persistence.GetNamespaceRequest{
+		resp, getErr = h.metadataManagerV2.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 			ID: task.GetId(),
 		})
 		switch getErr.(type) {
@@ -188,7 +196,10 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 }
 
 // handleNamespaceUpdateReplicationTask handles the namespace update replication task
-func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {
+func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationTask(
+	ctx context.Context,
+	task *replicationspb.NamespaceTaskAttributes,
+) error {
 	// task already validated
 	err := h.validateNamespaceStatus(task.Info.State)
 	if err != nil {
@@ -196,7 +207,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 	}
 
 	// first we need to get the current notification version since we need to it for conditional update
-	metadata, err := h.metadataManagerV2.GetMetadata()
+	metadata, err := h.metadataManagerV2.GetMetadata(ctx)
 	if err != nil {
 		return err
 	}
@@ -204,14 +215,14 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 
 	// plus, we need to check whether the config version is <= the config version set in the input
 	// plus, we need to check whether the failover version is <= the failover version set in the input
-	resp, err := h.metadataManagerV2.GetNamespace(&persistence.GetNamespaceRequest{
+	resp, err := h.metadataManagerV2.GetNamespace(ctx, &persistence.GetNamespaceRequest{
 		Name: task.Info.GetName(),
 	})
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			// this can happen if the create namespace replication task is to processed.
 			// e.g. new cluster which does not have anything
-			return h.handleNamespaceCreationReplicationTask(task)
+			return h.handleNamespaceCreationReplicationTask(ctx, task)
 		}
 		return err
 	}
@@ -257,7 +268,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		return nil
 	}
 
-	return h.metadataManagerV2.UpdateNamespace(request)
+	return h.metadataManagerV2.UpdateNamespace(ctx, request)
 }
 
 func (h *namespaceReplicationTaskExecutorImpl) validateNamespaceReplicationTask(task *replicationspb.NamespaceTaskAttributes) error {

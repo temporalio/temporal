@@ -29,6 +29,7 @@
 package matching
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -59,9 +60,9 @@ func (m *MockdbTaskQueueOwnership) EXPECT() *MockdbTaskQueueOwnershipMockRecorde
 }
 
 // flushTasks mocks base method.
-func (m *MockdbTaskQueueOwnership) flushTasks(taskInfos ...*persistence.TaskInfo) error {
+func (m *MockdbTaskQueueOwnership) flushTasks(ctx context.Context, taskInfos ...*persistence.TaskInfo) error {
 	m.ctrl.T.Helper()
-	varargs := []interface{}{}
+	varargs := []interface{}{ctx}
 	for _, a := range taskInfos {
 		varargs = append(varargs, a)
 	}
@@ -71,9 +72,10 @@ func (m *MockdbTaskQueueOwnership) flushTasks(taskInfos ...*persistence.TaskInfo
 }
 
 // flushTasks indicates an expected call of flushTasks.
-func (mr *MockdbTaskQueueOwnershipMockRecorder) flushTasks(taskInfos ...interface{}) *gomock.Call {
+func (mr *MockdbTaskQueueOwnershipMockRecorder) flushTasks(ctx interface{}, taskInfos ...interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "flushTasks", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).flushTasks), taskInfos...)
+	varargs := append([]interface{}{ctx}, taskInfos...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "flushTasks", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).flushTasks), varargs...)
 }
 
 // getAckedTaskID mocks base method.
@@ -119,31 +121,31 @@ func (mr *MockdbTaskQueueOwnershipMockRecorder) getShutdownChan() *gomock.Call {
 }
 
 // persistTaskQueue mocks base method.
-func (m *MockdbTaskQueueOwnership) persistTaskQueue() error {
+func (m *MockdbTaskQueueOwnership) persistTaskQueue(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "persistTaskQueue")
+	ret := m.ctrl.Call(m, "persistTaskQueue", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // persistTaskQueue indicates an expected call of persistTaskQueue.
-func (mr *MockdbTaskQueueOwnershipMockRecorder) persistTaskQueue() *gomock.Call {
+func (mr *MockdbTaskQueueOwnershipMockRecorder) persistTaskQueue(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "persistTaskQueue", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).persistTaskQueue))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "persistTaskQueue", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).persistTaskQueue), ctx)
 }
 
 // takeTaskQueueOwnership mocks base method.
-func (m *MockdbTaskQueueOwnership) takeTaskQueueOwnership() error {
+func (m *MockdbTaskQueueOwnership) takeTaskQueueOwnership(ctx context.Context) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "takeTaskQueueOwnership")
+	ret := m.ctrl.Call(m, "takeTaskQueueOwnership", ctx)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // takeTaskQueueOwnership indicates an expected call of takeTaskQueueOwnership.
-func (mr *MockdbTaskQueueOwnershipMockRecorder) takeTaskQueueOwnership() *gomock.Call {
+func (mr *MockdbTaskQueueOwnershipMockRecorder) takeTaskQueueOwnership(ctx interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "takeTaskQueueOwnership", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).takeTaskQueueOwnership))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "takeTaskQueueOwnership", reflect.TypeOf((*MockdbTaskQueueOwnership)(nil).takeTaskQueueOwnership), ctx)
 }
 
 // updateAckedTaskID mocks base method.

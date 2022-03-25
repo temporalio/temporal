@@ -153,7 +153,7 @@ func (a *testIDBlockAlloc) RangeID() int64 {
 	return a.rid
 }
 
-func (a *testIDBlockAlloc) RenewLease() (taskQueueState, error) {
+func (a *testIDBlockAlloc) RenewLease(_ context.Context) (taskQueueState, error) {
 	s, err := a.alloc()
 	if err == nil {
 		a.rid = s.rangeID
@@ -457,6 +457,7 @@ func TestAddTaskStandby(t *testing.T) {
 	// stop taskWriter so that we can check if there's any call to it
 	// otherwise the task persist process is async and hard to test
 	tlm.taskWriter.Stop()
+	<-tlm.taskWriter.writeLoop.Done()
 
 	addTaskParam := addTaskParams{
 		execution: &commonpb.WorkflowExecution{},

@@ -66,10 +66,12 @@ func RandomSnapshot(
 		SignalInfos:         RandomInt64SignalInfoMap(),
 		SignalRequestedIDs:  map[string]struct{}{uuid.New().String(): {}},
 
-		TransferTasks:    []tasks.Task{},
-		ReplicationTasks: []tasks.Task{},
-		TimerTasks:       []tasks.Task{},
-		VisibilityTasks:  []tasks.Task{},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryTransfer:    {},
+			tasks.CategoryTimer:       {},
+			tasks.CategoryReplication: {},
+			tasks.CategoryVisibility:  {},
+		},
 
 		Condition:       rand.Int63(),
 		DBRecordVersion: dbRecordVersion,
@@ -106,10 +108,12 @@ func RandomMutation(
 		//NewBufferedEvents: see below
 		//ClearBufferedEvents: see below
 
-		TransferTasks:    []tasks.Task{},
-		ReplicationTasks: []tasks.Task{},
-		TimerTasks:       []tasks.Task{},
-		VisibilityTasks:  []tasks.Task{},
+		Tasks: map[tasks.Category][]tasks.Task{
+			tasks.CategoryTransfer:    {},
+			tasks.CategoryTimer:       {},
+			tasks.CategoryReplication: {},
+			tasks.CategoryVisibility:  {},
+		},
 
 		Condition:       rand.Int63(),
 		DBRecordVersion: dbRecordVersion,

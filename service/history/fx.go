@@ -28,11 +28,9 @@ import (
 	"context"
 	"net"
 
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
@@ -55,12 +53,14 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
+	warchiver "go.temporal.io/server/service/worker/archiver"
 )
 
 var Module = fx.Options(
@@ -80,6 +80,7 @@ var Module = fx.Options(
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
 	fx.Provide(ReplicationTaskFetchersProvider),
+	fx.Provide(ArchivalClientProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
 	fx.Provide(ServiceProvider),
@@ -158,33 +159,11 @@ func HandlerProvider(
 }
 
 func HistoryEngineFactoryProvider(
-	visibilityMgr manager.VisibilityManager,
-	matchingClient resource.MatchingClient,
-	historyClient historyservice.HistoryServiceClient,
-	publicClient sdkclient.Client,
-	eventNotifier events.Notifier,
-	config *configs.Config,
-	replicationTaskFetchers ReplicationTaskFetchers,
-	rawMatchingClient resource.MatchingRawClient,
-	newCacheFn workflow.NewCacheFn,
-	clientBean client.Bean,
-	archiverProvider provider.ArchiverProvider,
-	registry namespace.Registry,
+	params HistoryEngineFactoryParams,
 ) shard.EngineFactory {
-	return NewEngineFactory(
-		visibilityMgr,
-		matchingClient,
-		historyClient,
-		publicClient,
-		eventNotifier,
-		config,
-		replicationTaskFetchers,
-		rawMatchingClient,
-		newCacheFn,
-		clientBean,
-		archiverProvider,
-		registry,
-	)
+	return &historyEngineFactory{
+		HistoryEngineFactoryParams: params,
+	}
 }
 
 func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
@@ -303,6 +282,23 @@ func ReplicationTaskFetchersProvider(
 		config,
 		clusterMetadata,
 		clientBean,
+	)
+}
+
+func ArchivalClientProvider(
+	archiverProvider provider.ArchiverProvider,
+	sdkClientFactory sdk.ClientFactory,
+	logger log.Logger,
+	metricsClient metrics.Client,
+	config *configs.Config,
+) warchiver.Client {
+	return warchiver.NewClient(
+		metricsClient,
+		logger,
+		sdkClientFactory,
+		config.NumArchiveSystemWorkflows,
+		config.ArchiveRequestRPS,
+		archiverProvider,
 	)
 }
 

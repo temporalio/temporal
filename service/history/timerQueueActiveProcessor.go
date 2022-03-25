@@ -39,6 +39,7 @@ import (
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -56,7 +57,8 @@ type (
 
 func newTimerQueueActiveProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowCache workflow.Cache,
+	workflowDeleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
@@ -66,19 +68,23 @@ func newTimerQueueActiveProcessor(
 	timeNow := func() time.Time {
 		return shard.GetCurrentTime(currentClusterName)
 	}
-	updateShardAckLevel := func(ackLevel timerKey) error {
-		return shard.UpdateTimerClusterAckLevel(currentClusterName, ackLevel.VisibilityTimestamp)
+	updateShardAckLevel := func(ackLevel tasks.Key) error {
+		return shard.UpdateQueueClusterAckLevel(
+			tasks.CategoryTimer,
+			currentClusterName,
+			ackLevel,
+		)
 	}
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	timerTaskFilter := func(task tasks.Task) (bool, error) {
+	metricsClient := shard.GetMetricsClient()
+	timerTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
 	}
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
-		historyService.metricsClient,
-		shard.GetTimerClusterAckLevel(currentClusterName),
+		shard.GetQueueClusterAckLevel(tasks.CategoryTimer, currentClusterName).FireTime,
 		timeNow,
 		updateShardAckLevel,
 		logger,
@@ -92,16 +98,15 @@ func newTimerQueueActiveProcessor(
 		timerTaskFilter:    timerTaskFilter,
 		now:                timeNow,
 		logger:             logger,
-		metricsClient:      historyService.metricsClient,
+		metricsClient:      metricsClient,
 		currentClusterName: currentClusterName,
 	}
 	processor.taskExecutor = newTimerQueueActiveTaskExecutor(
 		shard,
-		historyService.workflowDeleteManager,
-		historyService.historyCache,
+		workflowCache,
+		workflowDeleteManager,
 		processor,
 		logger,
-		historyService.metricsClient,
 		shard.GetConfig(),
 		matchingClient,
 	)
@@ -109,7 +114,7 @@ func newTimerQueueActiveProcessor(
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
-		historyService,
+		workflowCache,
 		processor,
 		timerQueueAckMgr,
 		timerGate,
@@ -123,7 +128,8 @@ func newTimerQueueActiveProcessor(
 
 func newTimerQueueFailoverProcessor(
 	shard shard.Context,
-	historyService *historyEngineImpl,
+	workflowCache workflow.Cache,
+	workflowDeleteManager workflow.DeleteManager,
 	namespaceIDs map[string]struct{},
 	standbyClusterName string,
 	minLevel time.Time,
@@ -131,7 +137,7 @@ func newTimerQueueFailoverProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
-) (func(ackLevel timerKey) error, *timerQueueActiveProcessorImpl) {
+) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	timeNow := func() time.Time {
@@ -141,20 +147,21 @@ func newTimerQueueFailoverProcessor(
 	failoverStartTime := shard.GetTimeSource().Now()
 	failoverUUID := uuid.New()
 
-	updateShardAckLevel := func(ackLevel timerKey) error {
-		return shard.UpdateTimerFailoverLevel(
+	updateShardAckLevel := func(ackLevel tasks.Key) error {
+		return shard.UpdateFailoverLevel(
+			tasks.CategoryTimer,
 			failoverUUID,
-			persistence.TimerFailoverLevel{
+			persistence.FailoverLevel{
 				StartTime:    failoverStartTime,
-				MinLevel:     minLevel,
-				CurrentLevel: ackLevel.VisibilityTimestamp,
-				MaxLevel:     maxLevel,
+				MinLevel:     tasks.Key{FireTime: minLevel},
+				CurrentLevel: ackLevel,
+				MaxLevel:     tasks.Key{FireTime: maxLevel},
 				NamespaceIDs: namespaceIDs,
 			},
 		)
 	}
 	timerAckMgrShutdown := func() error {
-		return shard.DeleteTimerFailoverLevel(failoverUUID)
+		return shard.DeleteFailoverLevel(tasks.CategoryTimer, failoverUUID)
 	}
 
 	logger = log.With(
@@ -163,13 +170,12 @@ func newTimerQueueFailoverProcessor(
 		tag.WorkflowNamespaceIDs(namespaceIDs),
 		tag.FailoverMsg("from: "+standbyClusterName),
 	)
-	timerTaskFilter := func(task tasks.Task) (bool, error) {
+	timerTaskFilter := func(task tasks.Task) bool {
 		return taskAllocator.verifyFailoverActiveTask(namespaceIDs, namespace.ID(task.GetNamespaceID()), task)
 	}
 
 	timerQueueAckMgr := newTimerQueueFailoverAckMgr(
 		shard,
-		historyService.metricsClient,
 		minLevel,
 		maxLevel,
 		timeNow,
@@ -185,16 +191,15 @@ func newTimerQueueFailoverProcessor(
 		timerTaskFilter:    timerTaskFilter,
 		now:                timeNow,
 		logger:             logger,
-		metricsClient:      historyService.metricsClient,
+		metricsClient:      shard.GetMetricsClient(),
 		currentClusterName: currentClusterName,
 	}
 	processor.taskExecutor = newTimerQueueActiveTaskExecutor(
 		shard,
-		historyService.workflowDeleteManager,
-		historyService.historyCache,
+		workflowCache,
+		workflowDeleteManager,
 		processor,
 		logger,
-		historyService.metricsClient,
 		shard.GetConfig(),
 		matchingClient,
 	)
@@ -202,7 +207,7 @@ func newTimerQueueFailoverProcessor(
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
-		historyService,
+		workflowCache,
 		processor,
 		timerQueueAckMgr,
 		timerGate,
@@ -226,11 +231,11 @@ func (t *timerQueueActiveProcessorImpl) getTaskFilter() taskFilter {
 	return t.timerTaskFilter
 }
 
-func (t *timerQueueActiveProcessorImpl) getAckLevel() timerKey {
+func (t *timerQueueActiveProcessorImpl) getAckLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getAckLevel()
 }
 
-func (t *timerQueueActiveProcessorImpl) getReadLevel() timerKey {
+func (t *timerQueueActiveProcessorImpl) getReadLevel() tasks.Key {
 	return t.timerQueueProcessorBase.timerQueueAckMgr.getReadLevel()
 }
 

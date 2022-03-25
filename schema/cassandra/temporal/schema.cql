@@ -1,7 +1,7 @@
 CREATE TYPE serialized_event_batch (
   encoding_type text,
   version       int,
-  data          blob,
+  data          blob
 );
 
 CREATE TABLE executions (
@@ -27,8 +27,8 @@ CREATE TABLE executions (
   timer_encoding                 text,
   visibility_task_data           blob,
   visibility_task_encoding       text,
-  tiered_storage_task_data       blob,
-  tiered_storage_task_encoding   text,
+  task_data                      blob,
+  task_encoding                  text,
   next_event_id                  bigint,  -- This is needed to make conditional updates on session history
   range_id                       bigint,  -- Increasing sequence identifier for transfer queue, checkpointed into shard info
   activity_map                   map<bigint, blob>,
@@ -54,13 +54,13 @@ CREATE TABLE executions (
   };
 
 CREATE TABLE history_node (
-  tree_id           uuid,
-  branch_id         uuid,
-  node_id           bigint, -- node_id: first eventID in a batch of events
-  txn_id            bigint, -- for override the same node_id: bigger txn_id wins
-  prev_txn_id       bigint, -- pointing to the previous node: event chaining
-  data                blob, -- Batch of workflow execution history events as a blob
-  data_encoding       text, -- Protocol used for history serialization
+  tree_id           uuid, -- run_id if no reset, otherwise run_id of first run
+  branch_id         uuid, -- changes in case of reset workflow. Conflict resolution can also change branch id.
+  node_id           bigint, -- == first eventID in a batch of events
+  txn_id            bigint, -- in case of multiple transactions on same node, we utilize highest transaction ID. Unique.
+  prev_txn_id       bigint, -- point to the previous node: event chaining
+  data                blob, -- batch of workflow execution history events as a blob
+  data_encoding       text, -- protocol used for history serialization
   PRIMARY KEY ((tree_id), branch_id, node_id, txn_id )
 ) WITH CLUSTERING ORDER BY (branch_id ASC, node_id ASC, txn_id DESC)
   AND COMPACTION = {

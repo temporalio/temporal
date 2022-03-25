@@ -33,11 +33,11 @@ import (
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	commonpb "go.temporal.io/api/common/v1"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -109,12 +109,12 @@ func (s *nDCWorkflowResetterSuite) SetupTest() {
 	s.workflowID = "some random workflow ID"
 	s.baseRunID = uuid.New()
 	s.newContext = workflow.NewContext(
-		s.namespaceID,
-		commonpb.WorkflowExecution{
-			WorkflowId: s.workflowID,
-			RunId:      s.newRunID,
-		},
 		s.mockShard,
+		definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			s.workflowID,
+			s.newRunID,
+		),
 		s.logger,
 	)
 	s.newRunID = uuid.New()
@@ -178,7 +178,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 		),
 		branchToken,
 		baseEventID,
-		baseVersion,
+		convert.Int64Ptr(baseVersion),
 		definition.NewWorkflowKey(
 			s.namespaceID.String(),
 			s.workflowID,
@@ -189,7 +189,7 @@ func (s *nDCWorkflowResetterSuite) TestResetWorkflow_NoError() {
 	).Return(s.mockRebuiltMutableState, rebuiltHistorySize, nil)
 
 	shardID := s.mockShard.GetShardID()
-	s.mockExecManager.EXPECT().ForkHistoryBranch(&persistence.ForkHistoryBranchRequest{
+	s.mockExecManager.EXPECT().ForkHistoryBranch(gomock.Any(), &persistence.ForkHistoryBranchRequest{
 		ForkBranchToken: branchToken,
 		ForkNodeID:      baseEventID + 1,
 		Info:            persistence.BuildHistoryGarbageCleanupInfo(s.namespaceID.String(), s.workflowID, s.newRunID),

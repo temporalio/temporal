@@ -295,7 +295,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 			ClusterName: clusterName,
 		})
 	}
-	s.mockProducer.EXPECT().Publish(gomock.Any()).Return(nil)
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).Return(nil)
 	registerResp, err = s.handler.RegisterNamespace(context.Background(), &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace2,
 		Description:                      description2,
@@ -448,7 +448,6 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace(
 		Namespace:        namespace,
 		PromoteNamespace: true,
 	}
-	s.mockProducer.EXPECT().Publish(gomock.Any())
 	_, err = s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
 

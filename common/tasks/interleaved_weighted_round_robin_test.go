@@ -76,11 +76,14 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 		3: 1,
 	}
 	logger := log.NewTestLogger()
-	metricsClient := metrics.NewClient(
+	metricsClient, err := metrics.NewClient(
 		&metrics.ClientConfig{},
 		tally.NewTestScope("test", nil),
-		metrics.Common,
+		metrics.History,
 	)
+	if err != nil {
+		s.NoError(err, "metrics.NewClient")
+	}
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions{

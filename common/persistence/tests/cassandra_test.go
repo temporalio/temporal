@@ -31,48 +31,30 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/cassandra"
+	"go.temporal.io/server/common/persistence/serialization"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/shuffle"
-	"go.temporal.io/server/environment"
 )
 
-// TODO merge the initialization with existing persistence setup
-const (
-	testCassandraClusterName = "temporal_cassandra_cluster"
+func setUpCassandraTest(t *testing.T) (CassandraTestData, func()) {
+	var testData CassandraTestData
+	testData.Cfg = NewCassandraConfig()
+	testData.Logger = log.NewZapLogger(zaptest.NewLogger(t))
+	SetUpCassandraDatabase(testData.Cfg, testData.Logger)
+	SetUpCassandraSchema(testData.Cfg, testData.Logger)
 
-	testCassandraUser               = "temporal"
-	testCassandraPassword           = "temporal"
-	testCassandraDatabaseNamePrefix = "test_"
-	testCassandraDatabaseNameSuffix = "temporal_persistence"
-)
-
-type cassandraTestData struct {
-	cfg     *config.Cassandra
-	factory *cassandra.Factory
-	logger  log.Logger
-}
-
-func setUpCassandraTest(t *testing.T) (cassandraTestData, func()) {
-	var testData cassandraTestData
-	testData.cfg = newCassandraConfig()
-	testData.logger = log.NewZapLogger(zaptest.NewLogger(t))
-	SetUpCassandraDatabase(testData.cfg, testData.logger)
-	SetUpCassandraSchema(testData.cfg, testData.logger)
-
-	testData.factory = cassandra.NewFactory(
-		*testData.cfg,
+	testData.Factory = cassandra.NewFactory(
+		*testData.Cfg,
 		resolver.NewNoopResolver(),
 		testCassandraClusterName,
-		testData.logger,
+		testData.Logger,
 	)
 
 	tearDown := func() {
-		testData.factory.Close()
-		TearDownCassandraKeyspace(testData.cfg)
+		testData.Factory.Close()
+		TearDownCassandraKeyspace(testData.Cfg)
 	}
 
 	return testData, tearDown
@@ -82,16 +64,44 @@ func TestCassandraExecutionMutableStateStoreSuite(t *testing.T) {
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
-	shardStore, err := testData.factory.NewShardStore()
+	shardStore, err := testData.Factory.NewShardStore()
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
-	executionStore, err := testData.factory.NewExecutionStore()
+	executionStore, err := testData.Factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
 
-	s := NewExecutionMutableStateSuite(t, shardStore, executionStore, testData.logger)
+	s := NewExecutionMutableStateSuite(
+		t,
+		shardStore,
+		executionStore,
+		serialization.NewSerializer(),
+		testData.Logger)
+	suite.Run(t, s)
+}
+
+func TestCassandraExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	testData, tearDown := setUpCassandraTest(t)
+	defer tearDown()
+
+	shardStore, err := testData.Factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+	executionStore, err := testData.Factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create Cassandra DB: %v", err)
+	}
+
+	s := NewExecutionMutableStateTaskSuite(
+		t,
+		shardStore,
+		executionStore,
+		serialization.NewSerializer(),
+		testData.Logger,
+	)
 	suite.Run(t, s)
 }
 
@@ -99,12 +109,12 @@ func TestCassandraHistoryStoreSuite(t *testing.T) {
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
-	store, err := testData.factory.NewExecutionStore()
+	store, err := testData.Factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
 
-	s := NewHistoryEventsSuite(t, store, testData.logger)
+	s := NewHistoryEventsSuite(t, store, testData.Logger)
 	suite.Run(t, s)
 }
 
@@ -112,12 +122,12 @@ func TestCassandraTaskQueueSuite(t *testing.T) {
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
-	taskQueueStore, err := testData.factory.NewTaskStore()
+	taskQueueStore, err := testData.Factory.NewTaskStore()
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
 
-	s := NewTaskQueueSuite(t, taskQueueStore, testData.logger)
+	s := NewTaskQueueSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
 }
 
@@ -125,22 +135,11 @@ func TestCassandraTaskQueueTaskSuite(t *testing.T) {
 	testData, tearDown := setUpCassandraTest(t)
 	defer tearDown()
 
-	taskQueueStore, err := testData.factory.NewTaskStore()
+	taskQueueStore, err := testData.Factory.NewTaskStore()
 	if err != nil {
 		t.Fatalf("unable to create Cassandra DB: %v", err)
 	}
 
-	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.logger)
+	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
-}
-
-// newCassandraConfig returns a new Cassandra config for test
-func newCassandraConfig() *config.Cassandra {
-	return &config.Cassandra{
-		User:     testCassandraUser,
-		Password: testCassandraPassword,
-		Hosts:    environment.GetCassandraAddress(),
-		Port:     environment.GetCassandraPort(),
-		Keyspace: testCassandraDatabaseNamePrefix + shuffle.String(testCassandraDatabaseNameSuffix),
-	}
 }

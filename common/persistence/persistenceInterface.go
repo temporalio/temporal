@@ -81,6 +81,7 @@ type (
 		CreateNamespace(request *InternalCreateNamespaceRequest) (*CreateNamespaceResponse, error)
 		GetNamespace(request *GetNamespaceRequest) (*InternalGetNamespaceResponse, error)
 		UpdateNamespace(request *InternalUpdateNamespaceRequest) error
+		RenameNamespace(request *InternalRenameNamespaceRequest) error
 		DeleteNamespace(request *DeleteNamespaceRequest) error
 		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
 		ListNamespaces(request *ListNamespacesRequest) (*InternalListNamespacesResponse, error)
@@ -108,48 +109,30 @@ type (
 		Closeable
 		GetName() string
 		// The below three APIs are related to serialization/deserialization
-		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
+		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
 		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
 		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
 
-		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
 		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
 		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
 		GetCurrentExecution(request *GetCurrentExecutionRequest) (*InternalGetCurrentExecutionResponse, error)
+		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
+		SetWorkflowExecution(request *InternalSetWorkflowExecutionRequest) error
 
 		// Scan related methods
 		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
 
 		// Tasks related APIs
-		AddTasks(request *InternalAddTasksRequest) error
+		AddHistoryTasks(request *InternalAddHistoryTasksRequest) error
+		GetHistoryTask(request *GetHistoryTaskRequest) (*InternalGetHistoryTaskResponse, error)
+		GetHistoryTasks(request *GetHistoryTasksRequest) (*InternalGetHistoryTasksResponse, error)
+		CompleteHistoryTask(request *CompleteHistoryTaskRequest) error
+		RangeCompleteHistoryTasks(request *RangeCompleteHistoryTasksRequest) error
 
-		// transfer tasks
-		GetTransferTask(request *GetTransferTaskRequest) (*InternalGetTransferTaskResponse, error)
-		GetTransferTasks(request *GetTransferTasksRequest) (*InternalGetTransferTasksResponse, error)
-		CompleteTransferTask(request *CompleteTransferTaskRequest) error
-		RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error
-
-		// timer tasks
-		GetTimerTask(request *GetTimerTaskRequest) (*InternalGetTimerTaskResponse, error)
-		GetTimerTasks(request *GetTimerTasksRequest) (*InternalGetTimerTasksResponse, error)
-		CompleteTimerTask(request *CompleteTimerTaskRequest) error
-		RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error
-
-		// replication tasks
-		GetReplicationTask(request *GetReplicationTaskRequest) (*InternalGetReplicationTaskResponse, error)
-		GetReplicationTasks(request *GetReplicationTasksRequest) (*InternalGetReplicationTasksResponse, error)
-		CompleteReplicationTask(request *CompleteReplicationTaskRequest) error
-		RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error
 		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
 		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*InternalGetReplicationTasksFromDLQResponse, error)
 		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
 		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
-
-		// visibility tasks
-		GetVisibilityTask(request *GetVisibilityTaskRequest) (*InternalGetVisibilityTaskResponse, error)
-		GetVisibilityTasks(request *GetVisibilityTasksRequest) (*InternalGetVisibilityTasksResponse, error)
-		CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error
-		RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
@@ -310,22 +293,6 @@ type (
 	InternalCreateWorkflowExecutionResponse struct {
 	}
 
-	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
-	InternalWorkflowMutableState struct {
-		ActivityInfos       map[int64]*commonpb.DataBlob  // ActivityInfo
-		TimerInfos          map[string]*commonpb.DataBlob // TimerInfo
-		ChildExecutionInfos map[int64]*commonpb.DataBlob  // ChildExecutionInfo
-		RequestCancelInfos  map[int64]*commonpb.DataBlob  // RequestCancelInfo
-		SignalInfos         map[int64]*commonpb.DataBlob  // SignalInfo
-		SignalRequestedIDs  []string
-		ExecutionInfo       *commonpb.DataBlob // WorkflowExecutionInfo
-		ExecutionState      *commonpb.DataBlob // WorkflowExecutionState
-		NextEventID         int64
-		BufferedEvents      []*commonpb.DataBlob
-		Checksum            *commonpb.DataBlob // persistencespb.Checksum
-		DBRecordVersion     int64
-	}
-
 	// InternalUpdateWorkflowExecutionRequest is used to update a workflow execution for Persistence Interface
 	InternalUpdateWorkflowExecutionRequest struct {
 		ShardID int32
@@ -357,9 +324,36 @@ type (
 		CurrentWorkflowMutation        *InternalWorkflowMutation
 		CurrentWorkflowEventsNewEvents []*InternalAppendHistoryNodesRequest
 	}
+	InternalSetWorkflowExecutionRequest struct {
+		ShardID int32
+		RangeID int64
 
-	// InternalAddTasksRequest is used to write new tasks
-	InternalAddTasksRequest struct {
+		SetWorkflowSnapshot InternalWorkflowSnapshot
+	}
+
+	// InternalWorkflowMutableState indicates workflow related state for Persistence Interface
+	InternalWorkflowMutableState struct {
+		ActivityInfos       map[int64]*commonpb.DataBlob  // ActivityInfo
+		TimerInfos          map[string]*commonpb.DataBlob // TimerInfo
+		ChildExecutionInfos map[int64]*commonpb.DataBlob  // ChildExecutionInfo
+		RequestCancelInfos  map[int64]*commonpb.DataBlob  // RequestCancelInfo
+		SignalInfos         map[int64]*commonpb.DataBlob  // SignalInfo
+		SignalRequestedIDs  []string
+		ExecutionInfo       *commonpb.DataBlob // WorkflowExecutionInfo
+		ExecutionState      *commonpb.DataBlob // WorkflowExecutionState
+		NextEventID         int64
+		BufferedEvents      []*commonpb.DataBlob
+		Checksum            *commonpb.DataBlob // persistencespb.Checksum
+		DBRecordVersion     int64
+	}
+
+	InternalHistoryTask struct {
+		Key  tasks.Key
+		Blob commonpb.DataBlob
+	}
+
+	// InternalAddHistoryTasksRequest is used to write new tasks
+	InternalAddHistoryTasksRequest struct {
 		ShardID int32
 		RangeID int64
 
@@ -367,10 +361,7 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		TransferTasks    map[tasks.Key]commonpb.DataBlob
-		TimerTasks       map[tasks.Key]commonpb.DataBlob
-		ReplicationTasks map[tasks.Key]commonpb.DataBlob
-		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
+		Tasks map[tasks.Category][]InternalHistoryTask
 	}
 
 	// InternalWorkflowMutation is used as generic workflow execution state mutation for Persistence Interface
@@ -380,7 +371,8 @@ type (
 		WorkflowID  string
 		RunID       string
 
-		ExecutionInfo      *commonpb.DataBlob
+		ExecutionInfo      *persistencespb.WorkflowExecutionInfo
+		ExecutionInfoBlob  *commonpb.DataBlob
 		ExecutionState     *persistencespb.WorkflowExecutionState
 		ExecutionStateBlob *commonpb.DataBlob
 		NextEventID        int64
@@ -403,10 +395,7 @@ type (
 		NewBufferedEvents         *commonpb.DataBlob
 		ClearBufferedEvents       bool
 
-		TransferTasks    map[tasks.Key]commonpb.DataBlob
-		TimerTasks       map[tasks.Key]commonpb.DataBlob
-		ReplicationTasks map[tasks.Key]commonpb.DataBlob
-		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
+		Tasks map[tasks.Category][]InternalHistoryTask
 
 		Condition int64
 
@@ -436,10 +425,7 @@ type (
 		SignalInfos         map[int64]*commonpb.DataBlob
 		SignalRequestedIDs  map[string]struct{}
 
-		TransferTasks    map[tasks.Key]commonpb.DataBlob
-		TimerTasks       map[tasks.Key]commonpb.DataBlob
-		ReplicationTasks map[tasks.Key]commonpb.DataBlob
-		VisibilityTasks  map[tasks.Key]commonpb.DataBlob
+		Tasks map[tasks.Category][]InternalHistoryTask
 
 		Condition int64
 
@@ -491,43 +477,16 @@ type (
 		NextPageToken []byte
 	}
 
-	InternalGetTransferTaskResponse struct {
+	InternalGetHistoryTaskResponse struct {
 		Task commonpb.DataBlob
 	}
 
-	InternalGetTransferTasksResponse struct {
+	InternalGetHistoryTasksResponse struct {
 		Tasks         []commonpb.DataBlob
 		NextPageToken []byte
 	}
 
-	InternalGetTimerTaskResponse struct {
-		Task commonpb.DataBlob
-	}
-
-	InternalGetTimerTasksResponse struct {
-		Tasks         []commonpb.DataBlob
-		NextPageToken []byte
-	}
-
-	InternalGetReplicationTaskResponse struct {
-		Task commonpb.DataBlob
-	}
-
-	InternalGetReplicationTasksResponse struct {
-		Tasks         []commonpb.DataBlob
-		NextPageToken []byte
-	}
-
-	InternalGetReplicationTasksFromDLQResponse = InternalGetReplicationTasksResponse
-
-	InternalGetVisibilityTaskResponse struct {
-		Task commonpb.DataBlob
-	}
-
-	InternalGetVisibilityTasksResponse struct {
-		Tasks         []commonpb.DataBlob
-		NextPageToken []byte
-	}
+	InternalGetReplicationTasksFromDLQResponse = InternalGetHistoryTasksResponse
 
 	// InternalForkHistoryBranchRequest is used to fork a history branch
 	InternalForkHistoryBranchRequest struct {
@@ -597,6 +556,8 @@ type (
 		ShardID int32
 		// whether to only return metadata, excluding node content
 		MetadataOnly bool
+		// whether we iterate in reverse order
+		ReverseOrder bool
 	}
 
 	// InternalCompleteForkBranchRequest is used to update some tree/branch meta data for forking
@@ -663,6 +624,11 @@ type (
 		Namespace           *commonpb.DataBlob
 		NotificationVersion int64
 		IsGlobal            bool
+	}
+
+	InternalRenameNamespaceRequest struct {
+		*InternalUpdateNamespaceRequest
+		PreviousName string
 	}
 
 	// InternalListNamespacesResponse is the response for GetNamespace

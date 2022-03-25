@@ -28,9 +28,9 @@ import (
 	"context"
 	"net"
 
-	sdkclient "go.temporal.io/sdk/client"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
 	"google.golang.org/grpc/keepalive"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -59,6 +59,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
@@ -83,9 +84,11 @@ var Module = fx.Options(
 	fx.Provide(ThrottledLoggerRpsFnProvider),
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(FEReplicatorNamespaceReplicationQueueProvider),
-	fx.Provide(HandlerProvider),
 	fx.Provide(func(so []grpc.ServerOption) *grpc.Server { return grpc.NewServer(so...) }),
+	fx.Provide(healthServerProvider),
+	fx.Provide(HandlerProvider),
 	fx.Provide(AdminHandlerProvider),
+	fx.Provide(OperatorHandlerProvider),
 	fx.Provide(NewVersionChecker),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(NewServiceProvider),
@@ -95,8 +98,10 @@ var Module = fx.Options(
 func NewServiceProvider(
 	serviceConfig *Config,
 	server *grpc.Server,
+	healthServer *health.Server,
 	handler Handler,
 	adminHandler *AdminHandler,
+	operatorHandler *OperatorHandlerImpl,
 	versionChecker *VersionChecker,
 	visibilityMgr manager.VisibilityManager,
 	logger resource.SnTaggedLogger,
@@ -107,8 +112,10 @@ func NewServiceProvider(
 	return NewService(
 		serviceConfig,
 		server,
+		healthServer,
 		handler,
 		adminHandler,
+		operatorHandler,
 		versionChecker,
 		visibilityMgr,
 		logger,
@@ -227,11 +234,12 @@ func TelemetryInterceptorProvider(
 func RateLimitInterceptorProvider(
 	serviceConfig *Config,
 ) *interceptor.RateLimitInterceptor {
+	rateFn := func() float64 { return float64(serviceConfig.RPS()) }
 	return interceptor.NewRateLimitInterceptor(
 		configs.NewRequestToRateLimiter(
-			quotas.NewDefaultIncomingRateLimiter(
-				func() float64 { return float64(serviceConfig.RPS()) },
-			),
+			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateLimiter(rateFn),
+			quotas.NewDefaultIncomingRateLimiter(rateFn),
 		),
 		map[string]int{},
 	)
@@ -242,25 +250,33 @@ func NamespaceRateLimitInterceptorProvider(
 	namespaceRegistry namespace.Registry,
 	frontendServiceResolver membership.ServiceResolver,
 ) *interceptor.NamespaceRateLimitInterceptor {
-	return interceptor.NewNamespaceRateLimitInterceptor(
-		namespaceRegistry,
-		quotas.NewNamespaceRateLimiter(
-			func(req quotas.Request) quotas.RequestRateLimiter {
-				return configs.NewRequestToRateLimiter(configs.NewNamespaceRateBurst(
-					req.Caller,
-					func(namespace string) float64 {
-						return namespaceRPS(
-							serviceConfig,
-							frontendServiceResolver,
-							namespace,
-						)
-					},
-					serviceConfig.MaxNamespaceBurstPerInstance,
-				))
-			},
-		),
-		map[string]int{},
+	rateFn := func(namespace string) float64 {
+		return namespaceRPS(
+			serviceConfig.MaxNamespaceRPSPerInstance,
+			serviceConfig.GlobalNamespaceRPS,
+			frontendServiceResolver,
+			namespace,
+		)
+	}
+
+	visibilityRateFn := func(namespace string) float64 {
+		return namespaceRPS(
+			serviceConfig.MaxNamespaceVisibilityRPSPerInstance,
+			serviceConfig.GlobalNamespaceRPS,
+			frontendServiceResolver,
+			namespace,
+		)
+	}
+	namespaceRateLimiter := quotas.NewNamespaceRateLimiter(
+		func(req quotas.Request) quotas.RequestRateLimiter {
+			return configs.NewRequestToRateLimiter(
+				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, visibilityRateFn, serviceConfig.MaxNamespaceVisibilityBurstPerInstance),
+				configs.NewNamespaceRateBurst(req.Caller, rateFn, serviceConfig.MaxNamespaceBurstPerInstance),
+			)
+		},
 	)
+	return interceptor.NewNamespaceRateLimitInterceptor(namespaceRegistry, namespaceRateLimiter, map[string]int{})
 }
 
 func NamespaceCountLimitInterceptorProvider(
@@ -343,6 +359,10 @@ func ServiceResolverProvider(membershipMonitor membership.Monitor) (membership.S
 	return membershipMonitor.GetResolver(common.FrontendServiceName)
 }
 
+func healthServerProvider() *health.Server {
+	return health.NewServer()
+}
+
 func AdminHandlerProvider(
 	params *resource.BootstrapParams,
 	config *Config,
@@ -359,7 +379,7 @@ func AdminHandlerProvider(
 	clientFactory client.Factory,
 	clientBean client.Bean,
 	historyClient historyservice.HistoryServiceClient,
-	sdkSystemClient sdkclient.Client,
+	sdkClientFactory sdk.ClientFactory,
 	membershipMonitor membership.Monitor,
 	archiverProvider provider.ArchiverProvider,
 	metricsClient metrics.Client,
@@ -368,6 +388,7 @@ func AdminHandlerProvider(
 	saManager searchattribute.Manager,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
+	healthServer *health.Server,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		params,
@@ -385,7 +406,7 @@ func AdminHandlerProvider(
 		clientFactory,
 		clientBean,
 		historyClient,
-		sdkSystemClient,
+		sdkClientFactory,
 		membershipMonitor,
 		archiverProvider,
 		metricsClient,
@@ -394,8 +415,32 @@ func AdminHandlerProvider(
 		saManager,
 		clusterMetadata,
 		archivalMetadata,
+		healthServer,
 	}
 	return NewAdminHandler(args)
+}
+
+func OperatorHandlerProvider(
+	esConfig *esclient.Config,
+	esClient esclient.Client,
+	logger resource.SnTaggedLogger,
+	sdkClientFactory sdk.ClientFactory,
+	metricsClient metrics.Client,
+	saProvider searchattribute.Provider,
+	saManager searchattribute.Manager,
+	healthServer *health.Server,
+) *OperatorHandlerImpl {
+	args := NewOperatorHandlerImplArgs{
+		esConfig,
+		esClient,
+		logger,
+		sdkClientFactory,
+		metricsClient,
+		saProvider,
+		saManager,
+		healthServer,
+	}
+	return NewOperatorHandlerImpl(args)
 }
 
 func HandlerProvider(
@@ -421,6 +466,7 @@ func HandlerProvider(
 	saProvider searchattribute.Provider,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
+	healthServer *health.Server,
 ) Handler {
 	wfHandler := NewWorkflowHandler(
 		serviceConfig,
@@ -440,6 +486,7 @@ func HandlerProvider(
 		saProvider,
 		clusterMetadata,
 		archivalMetadata,
+		healthServer,
 	)
 	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler

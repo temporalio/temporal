@@ -168,15 +168,16 @@ func doDropKeyspace(cfg *CQLClientConfig, name string, logger log.Logger) error 
 
 func newCQLClientConfig(cli *cli.Context) (*CQLClientConfig, error) {
 	config := &CQLClientConfig{
-		Hosts:       cli.GlobalString(schema.CLIOptEndpoint),
-		Port:        cli.GlobalInt(schema.CLIOptPort),
-		User:        cli.GlobalString(schema.CLIOptUser),
-		Password:    cli.GlobalString(schema.CLIOptPassword),
-		Timeout:     cli.GlobalInt(schema.CLIOptTimeout),
-		Keyspace:    cli.GlobalString(schema.CLIOptKeyspace),
-		numReplicas: cli.Int(schema.CLIOptReplicationFactor),
-		Datacenter:  cli.String(schema.CLIOptDatacenter),
-		Consistency: cli.String(schema.CLIOptConsistency),
+		Hosts:                    cli.GlobalString(schema.CLIOptEndpoint),
+		Port:                     cli.GlobalInt(schema.CLIOptPort),
+		User:                     cli.GlobalString(schema.CLIOptUser),
+		Password:                 cli.GlobalString(schema.CLIOptPassword),
+		Timeout:                  cli.GlobalInt(schema.CLIOptTimeout),
+		Keyspace:                 cli.GlobalString(schema.CLIOptKeyspace),
+		numReplicas:              cli.Int(schema.CLIOptReplicationFactor),
+		Datacenter:               cli.String(schema.CLIOptDatacenter),
+		Consistency:              cli.String(schema.CLIOptConsistency),
+		DisableInitialHostLookup: cli.GlobalBool(schema.CLIFlagDisableInitialHostLookup),
 	}
 
 	if cli.GlobalBool(schema.CLIFlagEnableTLS) {

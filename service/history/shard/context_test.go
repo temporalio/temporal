@@ -25,7 +25,9 @@
 package shard
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
@@ -33,7 +35,9 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -55,6 +59,7 @@ type (
 		namespaceID        namespace.ID
 		mockNamespaceCache *namespace.MockRegistry
 		namespaceEntry     *namespace.Namespace
+		timeSource         *clock.EventTimeSource
 
 		mockClusterMetadata  *cluster.MockMetadata
 		mockExecutionManager *persistence.MockExecutionManager
@@ -72,7 +77,8 @@ func (s *contextSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	shardContext := NewTestContext(
+	s.timeSource = clock.NewEventTimeSource()
+	shardContext := NewTestContextWithTimeSource(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -81,10 +87,12 @@ func (s *contextSuite) SetupTest() {
 				TransferAckLevel: 0,
 			}},
 		tests.NewDynamicConfig(),
+		s.timeSource,
 	)
 	s.shardContext = shardContext
 
 	s.mockResource = shardContext.Resource
+	shardContext.MockHostInfoProvider.EXPECT().HostInfo().Return(s.mockResource.GetHostInfo()).AnyTimes()
 
 	s.namespaceID = "namespace-Id"
 	s.namespaceEntry = namespace.NewLocalNamespaceForTest(&persistencespb.NamespaceInfo{Id: s.namespaceID.String()}, &persistencespb.NamespaceConfig{}, "")
@@ -116,31 +124,83 @@ func (s *contextSuite) TestAddTasks_Success() {
 		VisibilityTime:  timestamp.TimeNowPtrUtc(),
 	}
 
-	transferTasks := []tasks.Task{&tasks.ActivityTask{}}              // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
-	timerTasks := []tasks.Task{&tasks.ActivityRetryTimerTask{}}       // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
-	replicationTasks := []tasks.Task{&tasks.HistoryReplicationTask{}} // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
-	visibilityTasks := []tasks.Task{&tasks.DeleteExecutionVisibilityTask{}}
+	tasks := map[tasks.Category][]tasks.Task{
+		tasks.CategoryTransfer:    {&tasks.ActivityTask{}},           // Just for testing purpose. In the real code ActivityTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryTimer:       {&tasks.ActivityRetryTimerTask{}}, // Just for testing purpose. In the real code ActivityRetryTimerTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryReplication: {&tasks.HistoryReplicationTask{}}, // Just for testing purpose. In the real code HistoryReplicationTask can't be passed to shardContext.AddTasks.
+		tasks.CategoryVisibility:  {&tasks.DeleteExecutionVisibilityTask{}},
+	}
 
-	addTasksRequest := &persistence.AddTasksRequest{
+	addTasksRequest := &persistence.AddHistoryTasksRequest{
 		ShardID:     s.shardContext.GetShardID(),
 		NamespaceID: task.GetNamespaceId(),
 		WorkflowID:  task.GetWorkflowId(),
 		RunID:       task.GetRunId(),
 
-		TransferTasks:    transferTasks,
-		TimerTasks:       timerTasks,
-		ReplicationTasks: replicationTasks,
-		VisibilityTasks:  visibilityTasks,
+		Tasks: tasks,
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil)
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
-	s.mockExecutionManager.EXPECT().AddTasks(addTasksRequest).Return(nil)
-	s.mockHistoryEngine.EXPECT().NotifyNewTransferTasks(gomock.Any(), transferTasks)
-	s.mockHistoryEngine.EXPECT().NotifyNewTimerTasks(gomock.Any(), timerTasks)
-	s.mockHistoryEngine.EXPECT().NotifyNewVisibilityTasks(visibilityTasks)
-	s.mockHistoryEngine.EXPECT().NotifyNewReplicationTasks(replicationTasks)
+	s.mockExecutionManager.EXPECT().AddHistoryTasks(gomock.Any(), addTasksRequest).Return(nil)
+	s.mockHistoryEngine.EXPECT().NotifyNewTasks(gomock.Any(), tasks)
 
-	err := s.shardContext.AddTasks(addTasksRequest)
+	err := s.shardContext.AddTasks(context.Background(), addTasksRequest)
 	s.NoError(err)
+}
+
+func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
+
+	now := time.Now().Truncate(time.Millisecond)
+	persistenceShardInfo := &persistencespb.ShardInfo{
+		ShardId:           0,
+		TimerAckLevelTime: timestamp.TimePtr(now.Add(-time.Minute)),
+		ClusterTimerAckLevel: map[string]*time.Time{
+			cluster.TestCurrentClusterName: timestamp.TimePtr(now),
+		},
+	}
+	s.mockResource.ShardMgr.EXPECT().GetOrCreateShard(gomock.Any(), gomock.Any()).Return(
+		&persistence.GetOrCreateShardResponse{
+			ShardInfo: persistenceShardInfo,
+		},
+		nil,
+	)
+	s.mockResource.ClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
+	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
+
+	// clear shardInfo and load from persistence
+	shardContextImpl := s.shardContext.(*ContextTest)
+	shardContextImpl.shardInfo = nil
+	err := shardContextImpl.loadShardMetadata(convert.BoolPtr(false))
+	s.NoError(err)
+
+	for clusterName, info := range s.shardContext.GetClusterMetadata().GetAllClusterInfo() {
+		if !info.Enabled {
+			continue
+		}
+
+		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
+		s.False(maxReadLevel.Before(*persistenceShardInfo.TimerAckLevelTime))
+
+		if clusterAckLevel, ok := persistenceShardInfo.ClusterTimerAckLevel[clusterName]; ok {
+			s.False(maxReadLevel.Before(*clusterAckLevel))
+		}
+	}
+}
+
+func (s *contextSuite) TestTimerMaxReadLevelUpdate() {
+	clusterName := cluster.TestCurrentClusterName
+	s.mockResource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(clusterName).AnyTimes()
+
+	now := time.Now()
+	s.timeSource.Update(now)
+	maxReadLevel := s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
+
+	s.timeSource.Update(now.Add(-time.Minute))
+	newMaxReadLevel := s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
+	s.Equal(maxReadLevel, newMaxReadLevel)
+
+	s.timeSource.Update(now.Add(time.Minute))
+	newMaxReadLevel = s.shardContext.GetQueueMaxReadLevel(tasks.CategoryTimer, clusterName)
+	s.True(newMaxReadLevel.FireTime.After(maxReadLevel.FireTime))
 }

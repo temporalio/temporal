@@ -104,3 +104,8 @@ namespaceDefaults:
 
 publicClient:
   hostPort: "127.0.0.1:7233"
+
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development_sql.yaml"
+  pollInterval: "10s"
+

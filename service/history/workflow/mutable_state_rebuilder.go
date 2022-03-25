@@ -45,8 +45,6 @@ import (
 )
 
 type (
-	taskGeneratorProvider func(MutableState) TaskGenerator
-
 	MutableStateRebuilder interface {
 		ApplyEvents(
 			namespaceID namespace.ID,
@@ -63,8 +61,7 @@ type (
 		namespaceRegistry namespace.Registry
 		logger            log.Logger
 
-		mutableState          MutableState
-		taskGeneratorProvider taskGeneratorProvider
+		mutableState MutableState
 	}
 )
 
@@ -79,16 +76,14 @@ func NewMutableStateRebuilder(
 	shard shard.Context,
 	logger log.Logger,
 	mutableState MutableState,
-	taskGeneratorProvider taskGeneratorProvider,
 ) *MutableStateRebuilderImpl {
 
 	return &MutableStateRebuilderImpl{
-		shard:                 shard,
-		clusterMetadata:       shard.GetClusterMetadata(),
-		namespaceRegistry:     shard.GetNamespaceRegistry(),
-		logger:                logger,
-		mutableState:          mutableState,
-		taskGeneratorProvider: taskGeneratorProvider,
+		shard:             shard,
+		clusterMetadata:   shard.GetClusterMetadata(),
+		namespaceRegistry: shard.GetNamespaceRegistry(),
+		logger:            logger,
+		mutableState:      mutableState,
 	}
 }
 
@@ -107,7 +102,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 	lastEvent := history[len(history)-1]
 	var newRunMutableStateBuilder MutableState
 
-	taskGenerator := b.taskGeneratorProvider(b.mutableState)
+	taskGenerator := taskGeneratorProvider.NewTaskGenerator(b.shard, b.mutableState)
 
 	// need to clear the stickiness since workflow turned to passive
 	b.mutableState.ClearStickyness()
@@ -294,7 +289,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 				return nil, err
 			}
 
-			if err := taskGenerator.GenerateActivityTransferTasks(
+			if err := taskGenerator.GenerateActivityTasks(
 				timestamp.TimeValue(event.GetEventTime()),
 				event,
 			); err != nil {
@@ -602,7 +597,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 					timestamp.TimeValue(newRunHistory[0].GetEventTime()),
 				)
 
-				newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableStateBuilder, b.taskGeneratorProvider)
+				newRunStateBuilder := NewMutableStateRebuilder(b.shard, b.logger, newRunMutableStateBuilder)
 
 				newRunID := event.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
 				newExecution := commonpb.WorkflowExecution{

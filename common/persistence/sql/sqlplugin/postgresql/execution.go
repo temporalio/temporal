@@ -89,10 +89,10 @@ workflow_id = :workflow_id
 	getTransferTaskQuery = `SELECT task_id, data, data_encoding 
  FROM transfer_tasks WHERE shard_id = $1 AND task_id = $2`
 	getTransferTasksQuery = `SELECT task_id, data, data_encoding 
- FROM transfer_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3 ORDER BY task_id`
+ FROM transfer_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3 ORDER BY task_id LIMIT $4`
 
 	deleteTransferTaskQuery      = `DELETE FROM transfer_tasks WHERE shard_id = $1 AND task_id = $2`
-	rangeDeleteTransferTaskQuery = `DELETE FROM transfer_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3`
+	rangeDeleteTransferTaskQuery = `DELETE FROM transfer_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3`
 
 	createTimerTasksQuery = `INSERT INTO timer_tasks (shard_id, visibility_timestamp, task_id, data, data_encoding)
   VALUES (:shard_id, :visibility_timestamp, :task_id, :data, :data_encoding)`
@@ -114,10 +114,10 @@ workflow_id = :workflow_id
 	getReplicationTaskQuery = `SELECT task_id, data, data_encoding FROM replication_tasks WHERE 
 shard_id = $1 AND task_id = $2`
 	getReplicationTasksQuery = `SELECT task_id, data, data_encoding FROM replication_tasks WHERE 
-shard_id = $1 AND task_id > $2 AND task_id <= $3 ORDER BY task_id LIMIT $4`
+shard_id = $1 AND task_id >= $2 AND task_id < $3 ORDER BY task_id LIMIT $4`
 
 	deleteReplicationTaskQuery      = `DELETE FROM replication_tasks WHERE shard_id = $1 AND task_id = $2`
-	rangeDeleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3`
+	rangeDeleteReplicationTaskQuery = `DELETE FROM replication_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3`
 
 	getReplicationTaskDLQQuery = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
 source_cluster_name = $1 AND
@@ -126,8 +126,8 @@ task_id <= $3`
 	getReplicationTasksDLQQuery = `SELECT task_id, data, data_encoding FROM replication_tasks_dlq WHERE 
 source_cluster_name = $1 AND
 shard_id = $2 AND
-task_id > $3 AND
-task_id <= $4
+task_id >= $3 AND
+task_id < $4
 ORDER BY task_id LIMIT $5`
 
 	createVisibilityTasksQuery = `INSERT INTO visibility_tasks(shard_id, task_id, data, data_encoding) 
@@ -136,10 +136,10 @@ ORDER BY task_id LIMIT $5`
 	getVisibilityTaskQuery = `SELECT task_id, data, data_encoding 
  FROM visibility_tasks WHERE shard_id = $1 AND task_id = $2`
 	getVisibilityTasksQuery = `SELECT task_id, data, data_encoding 
- FROM visibility_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3 ORDER BY task_id`
+ FROM visibility_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3 ORDER BY task_id LIMIT $4`
 
 	deleteVisibilityTaskQuery      = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id = $2`
-	rangeDeleteVisibilityTaskQuery = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id > $2 AND task_id <= $3`
+	rangeDeleteVisibilityTaskQuery = `DELETE FROM visibility_tasks WHERE shard_id = $1 AND task_id >= $2 AND task_id < $3`
 
 	bufferedEventsColumns     = `shard_id, namespace_id, workflow_id, run_id, data, data_encoding`
 	createBufferedEventsQuery = `INSERT INTO buffered_events(` + bufferedEventsColumns + `)
@@ -171,8 +171,8 @@ VALUES     (:source_cluster_name,
 	DELETE FROM replication_tasks_dlq 
 		WHERE source_cluster_name = $1 
 		AND shard_id = $2 
-		AND task_id > $3
-		AND task_id <= $4`
+		AND task_id >= $3
+		AND task_id < $4`
 )
 
 // InsertIntoExecutions inserts a row into executions table
@@ -389,8 +389,9 @@ func (pdb *db) RangeSelectFromTransferTasks(
 		&rows,
 		getTransferTasksQuery,
 		filter.ShardID,
-		filter.MinTaskID,
-		filter.MaxTaskID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
+		filter.PageSize,
 	)
 	if err != nil {
 		return nil, err
@@ -418,8 +419,8 @@ func (pdb *db) RangeDeleteFromTransferTasks(
 	return pdb.conn.ExecContext(ctx,
 		rangeDeleteTransferTaskQuery,
 		filter.ShardID,
-		filter.MinTaskID,
-		filter.MaxTaskID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
 	)
 }
 
@@ -465,16 +466,16 @@ func (pdb *db) RangeSelectFromTimerTasks(
 	filter sqlplugin.TimerTasksRangeFilter,
 ) ([]sqlplugin.TimerTasksRow, error) {
 	var rows []sqlplugin.TimerTasksRow
-	filter.MinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.MinVisibilityTimestamp)
-	filter.MaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.MaxVisibilityTimestamp)
+	filter.InclusiveMinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.InclusiveMinVisibilityTimestamp)
+	filter.ExclusiveMaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.ExclusiveMaxVisibilityTimestamp)
 	err := pdb.conn.SelectContext(ctx,
 		&rows,
 		getTimerTasksQuery,
 		filter.ShardID,
-		filter.MinVisibilityTimestamp,
-		filter.TaskID,
-		filter.MinVisibilityTimestamp,
-		filter.MaxVisibilityTimestamp,
+		filter.InclusiveMinVisibilityTimestamp,
+		filter.InclusiveMinTaskID,
+		filter.InclusiveMinVisibilityTimestamp,
+		filter.ExclusiveMaxVisibilityTimestamp,
 		filter.PageSize,
 	)
 	if err != nil {
@@ -505,13 +506,13 @@ func (pdb *db) RangeDeleteFromTimerTasks(
 	ctx context.Context,
 	filter sqlplugin.TimerTasksRangeFilter,
 ) (sql.Result, error) {
-	filter.MinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.MinVisibilityTimestamp)
-	filter.MaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.MaxVisibilityTimestamp)
+	filter.InclusiveMinVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.InclusiveMinVisibilityTimestamp)
+	filter.ExclusiveMaxVisibilityTimestamp = pdb.converter.ToPostgreSQLDateTime(filter.ExclusiveMaxVisibilityTimestamp)
 	return pdb.conn.ExecContext(ctx,
 		rangeDeleteTimerTaskQuery,
 		filter.ShardID,
-		filter.MinVisibilityTimestamp,
-		filter.MaxVisibilityTimestamp,
+		filter.InclusiveMinVisibilityTimestamp,
+		filter.ExclusiveMaxVisibilityTimestamp,
 	)
 }
 
@@ -601,8 +602,8 @@ func (pdb *db) RangeSelectFromReplicationTasks(
 		&rows,
 		getReplicationTasksQuery,
 		filter.ShardID,
-		filter.MinTaskID,
-		filter.MaxTaskID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
 		filter.PageSize,
 	)
 	return rows, err
@@ -628,8 +629,8 @@ func (pdb *db) RangeDeleteFromReplicationTasks(
 	return pdb.conn.ExecContext(ctx,
 		rangeDeleteReplicationTaskQuery,
 		filter.ShardID,
-		filter.MinTaskID,
-		filter.MaxTaskID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
 	)
 }
 
@@ -669,8 +670,8 @@ func (pdb *db) RangeSelectFromReplicationDLQTasks(
 		&rows, getReplicationTasksDLQQuery,
 		filter.SourceClusterName,
 		filter.ShardID,
-		filter.MinTaskID,
-		filter.MaxTaskID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
 		filter.PageSize,
 	)
 	return rows, err
@@ -700,8 +701,8 @@ func (pdb *db) RangeDeleteFromReplicationDLQTasks(
 		rangeDeleteReplicationTaskFromDLQQuery,
 		filter.SourceClusterName,
 		filter.ShardID,
-		filter.MinTaskID,
-		filter.MaxTaskID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
 	)
 }
 
@@ -744,8 +745,9 @@ func (pdb *db) RangeSelectFromVisibilityTasks(
 		&rows,
 		getVisibilityTasksQuery,
 		filter.ShardID,
-		filter.MinTaskID,
-		filter.MaxTaskID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
+		filter.PageSize,
 	)
 	if err != nil {
 		return nil, err
@@ -773,7 +775,7 @@ func (pdb *db) RangeDeleteFromVisibilityTasks(
 	return pdb.conn.ExecContext(ctx,
 		rangeDeleteVisibilityTaskQuery,
 		filter.ShardID,
-		filter.MinTaskID,
-		filter.MaxTaskID,
+		filter.InclusiveMinTaskID,
+		filter.ExclusiveMaxTaskID,
 	)
 }

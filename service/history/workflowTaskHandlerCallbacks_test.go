@@ -63,7 +63,7 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.workflowTaskHandlerCallback = &workflowTaskHandlerCallbacksImpl{
-		metricsClient: metrics.NewNoopMetricsClient(),
+		metricsClient: metrics.NoopClient,
 		config:        tests.NewDynamicConfig(),
 		logger:        log.NewNoopLogger(),
 	}

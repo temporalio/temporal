@@ -25,12 +25,16 @@
 package persistence
 
 import (
+	"context"
+	"fmt"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -148,11 +152,13 @@ func (p *shardPersistenceClient) GetName() string {
 }
 
 func (p *shardPersistenceClient) GetOrCreateShard(
-	request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error) {
+	ctx context.Context,
+	request *GetOrCreateShardRequest,
+) (*GetOrCreateShardResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetOrCreateShardScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetOrCreateShardScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetOrCreateShard(request)
+	response, err := p.persistence.GetOrCreateShard(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -162,11 +168,14 @@ func (p *shardPersistenceClient) GetOrCreateShard(
 	return response, err
 }
 
-func (p *shardPersistenceClient) UpdateShard(request *UpdateShardRequest) error {
+func (p *shardPersistenceClient) UpdateShard(
+	ctx context.Context,
+	request *UpdateShardRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceUpdateShardScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateShardScope, metrics.PersistenceLatency)
-	err := p.persistence.UpdateShard(request)
+	err := p.persistence.UpdateShard(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -184,11 +193,14 @@ func (p *executionPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *executionPersistenceClient) CreateWorkflowExecution(request *CreateWorkflowExecutionRequest) (*CreateWorkflowExecutionResponse, error) {
+func (p *executionPersistenceClient) CreateWorkflowExecution(
+	ctx context.Context,
+	request *CreateWorkflowExecutionRequest,
+) (*CreateWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceCreateWorkflowExecutionScope, metrics.PersistenceLatency)
-	response, err := p.persistence.CreateWorkflowExecution(request)
+	response, err := p.persistence.CreateWorkflowExecution(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -198,11 +210,14 @@ func (p *executionPersistenceClient) CreateWorkflowExecution(request *CreateWork
 	return response, err
 }
 
-func (p *executionPersistenceClient) GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*GetWorkflowExecutionResponse, error) {
+func (p *executionPersistenceClient) GetWorkflowExecution(
+	ctx context.Context,
+	request *GetWorkflowExecutionRequest,
+) (*GetWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetWorkflowExecutionScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetWorkflowExecution(request)
+	response, err := p.persistence.GetWorkflowExecution(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -212,11 +227,31 @@ func (p *executionPersistenceClient) GetWorkflowExecution(request *GetWorkflowEx
 	return response, err
 }
 
-func (p *executionPersistenceClient) UpdateWorkflowExecution(request *UpdateWorkflowExecutionRequest) (*UpdateWorkflowExecutionResponse, error) {
+func (p *executionPersistenceClient) SetWorkflowExecution(
+	ctx context.Context,
+	request *SetWorkflowExecutionRequest,
+) (*SetWorkflowExecutionResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceSetWorkflowExecutionScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceSetWorkflowExecutionScope, metrics.PersistenceLatency)
+	response, err := p.persistence.SetWorkflowExecution(ctx, request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceSetWorkflowExecutionScope, err)
+	}
+
+	return response, err
+}
+
+func (p *executionPersistenceClient) UpdateWorkflowExecution(
+	ctx context.Context,
+	request *UpdateWorkflowExecutionRequest,
+) (*UpdateWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceLatency)
-	resp, err := p.persistence.UpdateWorkflowExecution(request)
+	resp, err := p.persistence.UpdateWorkflowExecution(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -226,11 +261,14 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(request *UpdateWork
 	return resp, err
 }
 
-func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(request *ConflictResolveWorkflowExecutionRequest) (*ConflictResolveWorkflowExecutionResponse, error) {
+func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(
+	ctx context.Context,
+	request *ConflictResolveWorkflowExecutionRequest,
+) (*ConflictResolveWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceConflictResolveWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceConflictResolveWorkflowExecutionScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ConflictResolveWorkflowExecution(request)
+	response, err := p.persistence.ConflictResolveWorkflowExecution(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -240,11 +278,14 @@ func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(request *C
 	return response, err
 }
 
-func (p *executionPersistenceClient) DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error {
+func (p *executionPersistenceClient) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *DeleteWorkflowExecutionRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteWorkflowExecutionScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteWorkflowExecution(request)
+	err := p.persistence.DeleteWorkflowExecution(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -254,11 +295,14 @@ func (p *executionPersistenceClient) DeleteWorkflowExecution(request *DeleteWork
 	return err
 }
 
-func (p *executionPersistenceClient) DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error {
+func (p *executionPersistenceClient) DeleteCurrentWorkflowExecution(
+	ctx context.Context,
+	request *DeleteCurrentWorkflowExecutionRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteCurrentWorkflowExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteCurrentWorkflowExecutionScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteCurrentWorkflowExecution(request)
+	err := p.persistence.DeleteCurrentWorkflowExecution(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -268,11 +312,14 @@ func (p *executionPersistenceClient) DeleteCurrentWorkflowExecution(request *Del
 	return err
 }
 
-func (p *executionPersistenceClient) GetCurrentExecution(request *GetCurrentExecutionRequest) (*GetCurrentExecutionResponse, error) {
+func (p *executionPersistenceClient) GetCurrentExecution(
+	ctx context.Context,
+	request *GetCurrentExecutionRequest,
+) (*GetCurrentExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetCurrentExecutionScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetCurrentExecutionScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetCurrentExecution(request)
+	response, err := p.persistence.GetCurrentExecution(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -282,11 +329,14 @@ func (p *executionPersistenceClient) GetCurrentExecution(request *GetCurrentExec
 	return response, err
 }
 
-func (p *executionPersistenceClient) ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*ListConcreteExecutionsResponse, error) {
+func (p *executionPersistenceClient) ListConcreteExecutions(
+	ctx context.Context,
+	request *ListConcreteExecutionsRequest,
+) (*ListConcreteExecutionsResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceListConcreteExecutionsScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceListConcreteExecutionsScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ListConcreteExecutions(request)
+	response, err := p.persistence.ListConcreteExecutions(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -296,195 +346,155 @@ func (p *executionPersistenceClient) ListConcreteExecutions(request *ListConcret
 	return response, err
 }
 
-func (p *executionPersistenceClient) AddTasks(request *AddTasksRequest) error {
+func (p *executionPersistenceClient) AddHistoryTasks(
+	ctx context.Context,
+	request *AddHistoryTasksRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceAddTasksScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceAddTasksScope, metrics.PersistenceLatency)
-	err := p.persistence.AddTasks(request)
+	err := p.persistence.AddHistoryTasks(ctx, request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTransferTaskScope, err)
+		p.updateErrorMetric(metrics.PersistenceAddTasksScope, err)
 	}
 
 	return err
 }
 
-func (p *executionPersistenceClient) GetTransferTask(request *GetTransferTaskRequest) (*GetTransferTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTransferTaskScope, metrics.PersistenceRequests)
+func (p *executionPersistenceClient) GetHistoryTask(
+	ctx context.Context,
+	request *GetHistoryTaskRequest,
+) (*GetHistoryTaskResponse, error) {
+	var scopeIdx int
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
+		scopeIdx = metrics.PersistenceGetTransferTaskScope
+	case tasks.CategoryIDTimer:
+		scopeIdx = metrics.PersistenceGetTimerTaskScope
+	case tasks.CategoryIDVisibility:
+		scopeIdx = metrics.PersistenceGetVisibilityTaskScope
+	case tasks.CategoryIDReplication:
+		scopeIdx = metrics.PersistenceGetReplicationTaskScope
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
+	}
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTransferTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTransferTask(request)
+	p.metricClient.IncCounter(scopeIdx, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(scopeIdx, metrics.PersistenceLatency)
+	response, err := p.persistence.GetHistoryTask(ctx, request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTransferTaskScope, err)
+		p.updateErrorMetric(scopeIdx, err)
 	}
 
 	return response, err
 }
 
-func (p *executionPersistenceClient) GetTransferTasks(request *GetTransferTasksRequest) (*GetTransferTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceRequests)
+func (p *executionPersistenceClient) GetHistoryTasks(
+	ctx context.Context,
+	request *GetHistoryTasksRequest,
+) (*GetHistoryTasksResponse, error) {
+	var scopeIdx int
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
+		scopeIdx = metrics.PersistenceGetTransferTasksScope
+	case tasks.CategoryIDTimer:
+		scopeIdx = metrics.PersistenceGetTimerTasksScope
+	case tasks.CategoryIDVisibility:
+		scopeIdx = metrics.PersistenceGetVisibilityTasksScope
+	case tasks.CategoryIDReplication:
+		scopeIdx = metrics.PersistenceGetReplicationTasksScope
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
+	}
 
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTransferTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTransferTasks(request)
+	p.metricClient.IncCounter(scopeIdx, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(scopeIdx, metrics.PersistenceLatency)
+	response, err := p.persistence.GetHistoryTasks(ctx, request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTransferTasksScope, err)
+		p.updateErrorMetric(scopeIdx, err)
 	}
 
 	return response, err
 }
 
-func (p *executionPersistenceClient) GetVisibilityTask(request *GetVisibilityTaskRequest) (*GetVisibilityTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetVisibilityTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetVisibilityTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetVisibilityTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetVisibilityTaskScope, err)
+func (p *executionPersistenceClient) CompleteHistoryTask(
+	ctx context.Context,
+	request *CompleteHistoryTaskRequest,
+) error {
+	var scopeIdx int
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
+		scopeIdx = metrics.PersistenceCompleteTransferTaskScope
+	case tasks.CategoryIDTimer:
+		scopeIdx = metrics.PersistenceCompleteTimerTaskScope
+	case tasks.CategoryIDVisibility:
+		scopeIdx = metrics.PersistenceCompleteVisibilityTaskScope
+	case tasks.CategoryIDReplication:
+		scopeIdx = metrics.PersistenceCompleteReplicationTaskScope
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
 
-	return response, err
-}
+	p.metricClient.IncCounter(scopeIdx, metrics.PersistenceRequests)
 
-func (p *executionPersistenceClient) GetVisibilityTasks(request *GetVisibilityTasksRequest) (*GetVisibilityTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetVisibilityTasksScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetVisibilityTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetVisibilityTasks(request)
+	sw := p.metricClient.StartTimer(scopeIdx, metrics.PersistenceLatency)
+	err := p.persistence.CompleteHistoryTask(ctx, request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetVisibilityTasksScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) GetReplicationTask(request *GetReplicationTaskRequest) (*GetReplicationTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetReplicationTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetReplicationTaskScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) GetReplicationTasks(request *GetReplicationTasksRequest) (*GetReplicationTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTasksScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetReplicationTasks(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetReplicationTasksScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) CompleteTransferTask(request *CompleteTransferTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteTransferTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTransferTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteTransferTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteTransferTaskScope, err)
+		p.updateErrorMetric(scopeIdx, err)
 	}
 
 	return err
 }
 
-func (p *executionPersistenceClient) RangeCompleteTransferTask(request *RangeCompleteTransferTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteTransferTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteTransferTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteTransferTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteTransferTaskScope, err)
+func (p *executionPersistenceClient) RangeCompleteHistoryTasks(
+	ctx context.Context,
+	request *RangeCompleteHistoryTasksRequest,
+) error {
+	var scopeIdx int
+	switch request.TaskCategory.ID() {
+	case tasks.CategoryIDTransfer:
+		scopeIdx = metrics.PersistenceRangeCompleteTransferTasksScope
+	case tasks.CategoryIDTimer:
+		scopeIdx = metrics.PersistenceRangeCompleteTimerTasksScope
+	case tasks.CategoryIDVisibility:
+		scopeIdx = metrics.PersistenceRangeCompleteVisibilityTasksScope
+	case tasks.CategoryIDReplication:
+		scopeIdx = metrics.PersistenceRangeCompleteReplicationTasksScope
+	default:
+		return serviceerror.NewInternal(fmt.Sprintf("unknown task category type: %v", request.TaskCategory))
 	}
 
-	return err
-}
+	p.metricClient.IncCounter(scopeIdx, metrics.PersistenceRequests)
 
-func (p *executionPersistenceClient) CompleteVisibilityTask(request *CompleteVisibilityTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteVisibilityTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteVisibilityTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteVisibilityTask(request)
+	sw := p.metricClient.StartTimer(scopeIdx, metrics.PersistenceLatency)
+	err := p.persistence.RangeCompleteHistoryTasks(ctx, request)
 	sw.Stop()
 
 	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteVisibilityTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) RangeCompleteVisibilityTask(request *RangeCompleteVisibilityTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteVisibilityTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteVisibilityTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteVisibilityTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteVisibilityTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) CompleteReplicationTask(request *CompleteReplicationTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteReplicationTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteReplicationTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteReplicationTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteReplicationTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) RangeCompleteReplicationTask(request *RangeCompleteReplicationTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteReplicationTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteReplicationTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteReplicationTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteReplicationTaskScope, err)
+		p.updateErrorMetric(scopeIdx, err)
 	}
 
 	return err
 }
 
 func (p *executionPersistenceClient) PutReplicationTaskToDLQ(
+	ctx context.Context,
 	request *PutReplicationTaskToDLQRequest,
 ) error {
 	p.metricClient.IncCounter(metrics.PersistencePutReplicationTaskToDLQScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistencePutReplicationTaskToDLQScope, metrics.PersistenceLatency)
-	err := p.persistence.PutReplicationTaskToDLQ(request)
+	err := p.persistence.PutReplicationTaskToDLQ(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -495,12 +505,13 @@ func (p *executionPersistenceClient) PutReplicationTaskToDLQ(
 }
 
 func (p *executionPersistenceClient) GetReplicationTasksFromDLQ(
+	ctx context.Context,
 	request *GetReplicationTasksFromDLQRequest,
-) (*GetReplicationTasksFromDLQResponse, error) {
+) (*GetHistoryTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetReplicationTasksFromDLQScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetReplicationTasksFromDLQScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetReplicationTasksFromDLQ(request)
+	response, err := p.persistence.GetReplicationTasksFromDLQ(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -511,12 +522,13 @@ func (p *executionPersistenceClient) GetReplicationTasksFromDLQ(
 }
 
 func (p *executionPersistenceClient) DeleteReplicationTaskFromDLQ(
+	ctx context.Context,
 	request *DeleteReplicationTaskFromDLQRequest,
 ) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteReplicationTaskFromDLQScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteReplicationTaskFromDLQScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteReplicationTaskFromDLQ(request)
+	err := p.persistence.DeleteReplicationTaskFromDLQ(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -527,12 +539,13 @@ func (p *executionPersistenceClient) DeleteReplicationTaskFromDLQ(
 }
 
 func (p *executionPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
+	ctx context.Context,
 	request *RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 	p.metricClient.IncCounter(metrics.PersistenceRangeDeleteReplicationTaskFromDLQScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceRangeDeleteReplicationTaskFromDLQScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeDeleteReplicationTaskFromDLQ(request)
+	err := p.persistence.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -540,62 +553,6 @@ func (p *executionPersistenceClient) RangeDeleteReplicationTaskFromDLQ(
 	}
 
 	return nil
-}
-
-func (p *executionPersistenceClient) GetTimerTask(request *GetTimerTaskRequest) (*GetTimerTaskResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTimerTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTimerTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTimerTaskScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) GetTimerTasks(request *GetTimerTasksRequest) (*GetTimerTasksResponse, error) {
-	p.metricClient.IncCounter(metrics.PersistenceGetTimerTasksScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceGetTimerTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTimerTasks(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceGetTimerTasksScope, err)
-	}
-
-	return response, err
-}
-
-func (p *executionPersistenceClient) CompleteTimerTask(request *CompleteTimerTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceCompleteTimerTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTimerTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteTimerTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceCompleteTimerTaskScope, err)
-	}
-
-	return err
-}
-
-func (p *executionPersistenceClient) RangeCompleteTimerTask(request *RangeCompleteTimerTaskRequest) error {
-	p.metricClient.IncCounter(metrics.PersistenceRangeCompleteTimerTaskScope, metrics.PersistenceRequests)
-
-	sw := p.metricClient.StartTimer(metrics.PersistenceRangeCompleteTimerTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.RangeCompleteTimerTask(request)
-	sw.Stop()
-
-	if err != nil {
-		p.updateErrorMetric(metrics.PersistenceRangeCompleteTimerTaskScope, err)
-	}
-
-	return err
 }
 
 func (p *executionPersistenceClient) Close() {
@@ -606,11 +563,14 @@ func (p *taskPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *taskPersistenceClient) CreateTasks(request *CreateTasksRequest) (*CreateTasksResponse, error) {
+func (p *taskPersistenceClient) CreateTasks(
+	ctx context.Context,
+	request *CreateTasksRequest,
+) (*CreateTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateTaskScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceCreateTaskScope, metrics.PersistenceLatency)
-	response, err := p.persistence.CreateTasks(request)
+	response, err := p.persistence.CreateTasks(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -620,11 +580,14 @@ func (p *taskPersistenceClient) CreateTasks(request *CreateTasksRequest) (*Creat
 	return response, err
 }
 
-func (p *taskPersistenceClient) GetTasks(request *GetTasksRequest) (*GetTasksResponse, error) {
+func (p *taskPersistenceClient) GetTasks(
+	ctx context.Context,
+	request *GetTasksRequest,
+) (*GetTasksResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetTasksScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetTasksScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTasks(request)
+	response, err := p.persistence.GetTasks(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -634,11 +597,14 @@ func (p *taskPersistenceClient) GetTasks(request *GetTasksRequest) (*GetTasksRes
 	return response, err
 }
 
-func (p *taskPersistenceClient) CompleteTask(request *CompleteTaskRequest) error {
+func (p *taskPersistenceClient) CompleteTask(
+	ctx context.Context,
+	request *CompleteTaskRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceCompleteTaskScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTaskScope, metrics.PersistenceLatency)
-	err := p.persistence.CompleteTask(request)
+	err := p.persistence.CompleteTask(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -648,10 +614,13 @@ func (p *taskPersistenceClient) CompleteTask(request *CompleteTaskRequest) error
 	return err
 }
 
-func (p *taskPersistenceClient) CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error) {
+func (p *taskPersistenceClient) CompleteTasksLessThan(
+	ctx context.Context,
+	request *CompleteTasksLessThanRequest,
+) (int, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCompleteTasksLessThanScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceCompleteTasksLessThanScope, metrics.PersistenceLatency)
-	result, err := p.persistence.CompleteTasksLessThan(request)
+	result, err := p.persistence.CompleteTasksLessThan(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceCompleteTasksLessThanScope, err)
@@ -659,11 +628,14 @@ func (p *taskPersistenceClient) CompleteTasksLessThan(request *CompleteTasksLess
 	return result, err
 }
 
-func (p *taskPersistenceClient) CreateTaskQueue(request *CreateTaskQueueRequest) (*CreateTaskQueueResponse, error) {
+func (p *taskPersistenceClient) CreateTaskQueue(
+	ctx context.Context,
+	request *CreateTaskQueueRequest,
+) (*CreateTaskQueueResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateTaskQueueScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceCreateTaskQueueScope, metrics.PersistenceLatency)
-	response, err := p.persistence.CreateTaskQueue(request)
+	response, err := p.persistence.CreateTaskQueue(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -673,11 +645,14 @@ func (p *taskPersistenceClient) CreateTaskQueue(request *CreateTaskQueueRequest)
 	return response, err
 }
 
-func (p *taskPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error) {
+func (p *taskPersistenceClient) UpdateTaskQueue(
+	ctx context.Context,
+	request *UpdateTaskQueueRequest,
+) (*UpdateTaskQueueResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceUpdateTaskQueueScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateTaskQueueScope, metrics.PersistenceLatency)
-	response, err := p.persistence.UpdateTaskQueue(request)
+	response, err := p.persistence.UpdateTaskQueue(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -687,10 +662,13 @@ func (p *taskPersistenceClient) UpdateTaskQueue(request *UpdateTaskQueueRequest)
 	return response, err
 }
 
-func (p *taskPersistenceClient) GetTaskQueue(request *GetTaskQueueRequest) (*GetTaskQueueResponse, error) {
+func (p *taskPersistenceClient) GetTaskQueue(
+	ctx context.Context,
+	request *GetTaskQueueRequest,
+) (*GetTaskQueueResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetTaskQueueScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetTaskQueueScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetTaskQueue(request)
+	response, err := p.persistence.GetTaskQueue(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceGetTaskQueueScope, err)
@@ -698,10 +676,13 @@ func (p *taskPersistenceClient) GetTaskQueue(request *GetTaskQueueRequest) (*Get
 	return response, err
 }
 
-func (p *taskPersistenceClient) ListTaskQueue(request *ListTaskQueueRequest) (*ListTaskQueueResponse, error) {
+func (p *taskPersistenceClient) ListTaskQueue(
+	ctx context.Context,
+	request *ListTaskQueueRequest,
+) (*ListTaskQueueResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceListTaskQueueScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceListTaskQueueScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ListTaskQueue(request)
+	response, err := p.persistence.ListTaskQueue(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceListTaskQueueScope, err)
@@ -709,10 +690,13 @@ func (p *taskPersistenceClient) ListTaskQueue(request *ListTaskQueueRequest) (*L
 	return response, err
 }
 
-func (p *taskPersistenceClient) DeleteTaskQueue(request *DeleteTaskQueueRequest) error {
+func (p *taskPersistenceClient) DeleteTaskQueue(
+	ctx context.Context,
+	request *DeleteTaskQueueRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteTaskQueueScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteTaskQueueScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteTaskQueue(request)
+	err := p.persistence.DeleteTaskQueue(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceDeleteTaskQueueScope, err)
@@ -728,11 +712,14 @@ func (p *metadataPersistenceClient) GetName() string {
 	return p.persistence.GetName()
 }
 
-func (p *metadataPersistenceClient) CreateNamespace(request *CreateNamespaceRequest) (*CreateNamespaceResponse, error) {
+func (p *metadataPersistenceClient) CreateNamespace(
+	ctx context.Context,
+	request *CreateNamespaceRequest,
+) (*CreateNamespaceResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceCreateNamespaceScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceCreateNamespaceScope, metrics.PersistenceLatency)
-	response, err := p.persistence.CreateNamespace(request)
+	response, err := p.persistence.CreateNamespace(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -742,11 +729,14 @@ func (p *metadataPersistenceClient) CreateNamespace(request *CreateNamespaceRequ
 	return response, err
 }
 
-func (p *metadataPersistenceClient) GetNamespace(request *GetNamespaceRequest) (*GetNamespaceResponse, error) {
+func (p *metadataPersistenceClient) GetNamespace(
+	ctx context.Context,
+	request *GetNamespaceRequest,
+) (*GetNamespaceResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetNamespaceScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetNamespaceScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetNamespace(request)
+	response, err := p.persistence.GetNamespace(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -756,11 +746,14 @@ func (p *metadataPersistenceClient) GetNamespace(request *GetNamespaceRequest) (
 	return response, err
 }
 
-func (p *metadataPersistenceClient) UpdateNamespace(request *UpdateNamespaceRequest) error {
+func (p *metadataPersistenceClient) UpdateNamespace(
+	ctx context.Context,
+	request *UpdateNamespaceRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceUpdateNamespaceScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateNamespaceScope, metrics.PersistenceLatency)
-	err := p.persistence.UpdateNamespace(request)
+	err := p.persistence.UpdateNamespace(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -770,11 +763,31 @@ func (p *metadataPersistenceClient) UpdateNamespace(request *UpdateNamespaceRequ
 	return err
 }
 
-func (p *metadataPersistenceClient) DeleteNamespace(request *DeleteNamespaceRequest) error {
+func (p *metadataPersistenceClient) RenameNamespace(
+	ctx context.Context,
+	request *RenameNamespaceRequest,
+) error {
+	p.metricClient.IncCounter(metrics.PersistenceRenameNamespaceScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceRenameNamespaceScope, metrics.PersistenceLatency)
+	err := p.persistence.RenameNamespace(ctx, request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceRenameNamespaceScope, err)
+	}
+
+	return err
+}
+
+func (p *metadataPersistenceClient) DeleteNamespace(
+	ctx context.Context,
+	request *DeleteNamespaceRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteNamespaceScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteNamespaceScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteNamespace(request)
+	err := p.persistence.DeleteNamespace(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -784,11 +797,14 @@ func (p *metadataPersistenceClient) DeleteNamespace(request *DeleteNamespaceRequ
 	return err
 }
 
-func (p *metadataPersistenceClient) DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error {
+func (p *metadataPersistenceClient) DeleteNamespaceByName(
+	ctx context.Context,
+	request *DeleteNamespaceByNameRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteNamespaceByNameScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteNamespaceByNameScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteNamespaceByName(request)
+	err := p.persistence.DeleteNamespaceByName(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -798,11 +814,14 @@ func (p *metadataPersistenceClient) DeleteNamespaceByName(request *DeleteNamespa
 	return err
 }
 
-func (p *metadataPersistenceClient) ListNamespaces(request *ListNamespacesRequest) (*ListNamespacesResponse, error) {
+func (p *metadataPersistenceClient) ListNamespaces(
+	ctx context.Context,
+	request *ListNamespacesRequest,
+) (*ListNamespacesResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceListNamespaceScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceListNamespaceScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ListNamespaces(request)
+	response, err := p.persistence.ListNamespaces(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -812,11 +831,13 @@ func (p *metadataPersistenceClient) ListNamespaces(request *ListNamespacesReques
 	return response, err
 }
 
-func (p *metadataPersistenceClient) GetMetadata() (*GetMetadataResponse, error) {
+func (p *metadataPersistenceClient) GetMetadata(
+	ctx context.Context,
+) (*GetMetadataResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetMetadataScope, metrics.PersistenceRequests)
 
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetMetadataScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetMetadata()
+	response, err := p.persistence.GetMetadata(ctx)
 	sw.Stop()
 
 	if err != nil {
@@ -831,10 +852,13 @@ func (p *metadataPersistenceClient) Close() {
 }
 
 // AppendHistoryNodes add a node to history node table
-func (p *executionPersistenceClient) AppendHistoryNodes(request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
+func (p *executionPersistenceClient) AppendHistoryNodes(
+	ctx context.Context,
+	request *AppendHistoryNodesRequest,
+) (*AppendHistoryNodesResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceAppendHistoryNodesScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceAppendHistoryNodesScope, metrics.PersistenceLatency)
-	resp, err := p.persistence.AppendHistoryNodes(request)
+	resp, err := p.persistence.AppendHistoryNodes(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceAppendHistoryNodesScope, err)
@@ -843,10 +867,13 @@ func (p *executionPersistenceClient) AppendHistoryNodes(request *AppendHistoryNo
 }
 
 // ReadHistoryBranch returns history node data for a branch
-func (p *executionPersistenceClient) ReadHistoryBranch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error) {
+func (p *executionPersistenceClient) ReadHistoryBranch(
+	ctx context.Context,
+	request *ReadHistoryBranchRequest,
+) (*ReadHistoryBranchResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ReadHistoryBranch(request)
+	response, err := p.persistence.ReadHistoryBranch(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchScope, err)
@@ -854,11 +881,28 @@ func (p *executionPersistenceClient) ReadHistoryBranch(request *ReadHistoryBranc
 	return response, err
 }
 
+func (p *executionPersistenceClient) ReadHistoryBranchReverse(
+	ctx context.Context,
+	request *ReadHistoryBranchReverseRequest,
+) (*ReadHistoryBranchReverseResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchReverseScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchReverseScope, metrics.PersistenceLatency)
+	response, err := p.persistence.ReadHistoryBranchReverse(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchReverseScope, err)
+	}
+	return response, err
+}
+
 // ReadHistoryBranchByBatch returns history node data for a branch ByBatch
-func (p *executionPersistenceClient) ReadHistoryBranchByBatch(request *ReadHistoryBranchRequest) (*ReadHistoryBranchByBatchResponse, error) {
+func (p *executionPersistenceClient) ReadHistoryBranchByBatch(
+	ctx context.Context,
+	request *ReadHistoryBranchRequest,
+) (*ReadHistoryBranchByBatchResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ReadHistoryBranchByBatch(request)
+	response, err := p.persistence.ReadHistoryBranchByBatch(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchScope, err)
@@ -867,10 +911,13 @@ func (p *executionPersistenceClient) ReadHistoryBranchByBatch(request *ReadHisto
 }
 
 // ReadRawHistoryBranch returns history node raw data for a branch ByBatch
-func (p *executionPersistenceClient) ReadRawHistoryBranch(request *ReadHistoryBranchRequest) (*ReadRawHistoryBranchResponse, error) {
+func (p *executionPersistenceClient) ReadRawHistoryBranch(
+	ctx context.Context,
+	request *ReadHistoryBranchRequest,
+) (*ReadRawHistoryBranchResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceReadHistoryBranchScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ReadRawHistoryBranch(request)
+	response, err := p.persistence.ReadRawHistoryBranch(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceReadHistoryBranchScope, err)
@@ -879,10 +926,13 @@ func (p *executionPersistenceClient) ReadRawHistoryBranch(request *ReadHistoryBr
 }
 
 // ForkHistoryBranch forks a new branch from a old branch
-func (p *executionPersistenceClient) ForkHistoryBranch(request *ForkHistoryBranchRequest) (*ForkHistoryBranchResponse, error) {
+func (p *executionPersistenceClient) ForkHistoryBranch(
+	ctx context.Context,
+	request *ForkHistoryBranchRequest,
+) (*ForkHistoryBranchResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceForkHistoryBranchScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceForkHistoryBranchScope, metrics.PersistenceLatency)
-	response, err := p.persistence.ForkHistoryBranch(request)
+	response, err := p.persistence.ForkHistoryBranch(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceForkHistoryBranchScope, err)
@@ -891,10 +941,13 @@ func (p *executionPersistenceClient) ForkHistoryBranch(request *ForkHistoryBranc
 }
 
 // DeleteHistoryBranch removes a branch
-func (p *executionPersistenceClient) DeleteHistoryBranch(request *DeleteHistoryBranchRequest) error {
+func (p *executionPersistenceClient) DeleteHistoryBranch(
+	ctx context.Context,
+	request *DeleteHistoryBranchRequest,
+) error {
 	p.metricClient.IncCounter(metrics.PersistenceDeleteHistoryBranchScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceDeleteHistoryBranchScope, metrics.PersistenceLatency)
-	err := p.persistence.DeleteHistoryBranch(request)
+	err := p.persistence.DeleteHistoryBranch(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceDeleteHistoryBranchScope, err)
@@ -903,10 +956,13 @@ func (p *executionPersistenceClient) DeleteHistoryBranch(request *DeleteHistoryB
 }
 
 // TrimHistoryBranch trims a branch
-func (p *executionPersistenceClient) TrimHistoryBranch(request *TrimHistoryBranchRequest) (*TrimHistoryBranchResponse, error) {
+func (p *executionPersistenceClient) TrimHistoryBranch(
+	ctx context.Context,
+	request *TrimHistoryBranchRequest,
+) (*TrimHistoryBranchResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceTrimHistoryBranchScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceTrimHistoryBranchScope, metrics.PersistenceLatency)
-	resp, err := p.persistence.TrimHistoryBranch(request)
+	resp, err := p.persistence.TrimHistoryBranch(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceTrimHistoryBranchScope, err)
@@ -914,10 +970,13 @@ func (p *executionPersistenceClient) TrimHistoryBranch(request *TrimHistoryBranc
 	return resp, err
 }
 
-func (p *executionPersistenceClient) GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*GetAllHistoryTreeBranchesResponse, error) {
+func (p *executionPersistenceClient) GetAllHistoryTreeBranches(
+	ctx context.Context,
+	request *GetAllHistoryTreeBranchesRequest,
+) (*GetAllHistoryTreeBranchesResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetAllHistoryTreeBranchesScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetAllHistoryTreeBranchesScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetAllHistoryTreeBranches(request)
+	response, err := p.persistence.GetAllHistoryTreeBranches(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceGetAllHistoryTreeBranchesScope, err)
@@ -926,10 +985,13 @@ func (p *executionPersistenceClient) GetAllHistoryTreeBranches(request *GetAllHi
 }
 
 // GetHistoryTree returns all branch information of a tree
-func (p *executionPersistenceClient) GetHistoryTree(request *GetHistoryTreeRequest) (*GetHistoryTreeResponse, error) {
+func (p *executionPersistenceClient) GetHistoryTree(
+	ctx context.Context,
+	request *GetHistoryTreeRequest,
+) (*GetHistoryTreeResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceGetHistoryTreeScope, metrics.PersistenceRequests)
 	sw := p.metricClient.StartTimer(metrics.PersistenceGetHistoryTreeScope, metrics.PersistenceLatency)
-	response, err := p.persistence.GetHistoryTree(request)
+	response, err := p.persistence.GetHistoryTree(ctx, request)
 	sw.Stop()
 	if err != nil {
 		p.updateErrorMetric(metrics.PersistenceGetHistoryTreeScope, err)
@@ -1103,12 +1165,15 @@ func (c *clusterMetadataPersistenceClient) Close() {
 	c.persistence.Close()
 }
 
-func (c *clusterMetadataPersistenceClient) ListClusterMetadata(request *ListClusterMetadataRequest) (*ListClusterMetadataResponse, error) {
-	//This is a wrapper of GetClusterMetadata API, use the same scope here
+func (c *clusterMetadataPersistenceClient) ListClusterMetadata(
+	ctx context.Context,
+	request *ListClusterMetadataRequest,
+) (*ListClusterMetadataResponse, error) {
+	// This is a wrapper of GetClusterMetadata API, use the same scope here
 	c.metricClient.IncCounter(metrics.PersistenceListClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceListClusterMetadataScope, metrics.PersistenceLatency)
-	result, err := c.persistence.ListClusterMetadata(request)
+	result, err := c.persistence.ListClusterMetadata(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -1118,12 +1183,14 @@ func (c *clusterMetadataPersistenceClient) ListClusterMetadata(request *ListClus
 	return result, err
 }
 
-func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata() (*GetClusterMetadataResponse, error) {
-	//This is a wrapper of GetClusterMetadata API, use the same scope here
+func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata(
+	ctx context.Context,
+) (*GetClusterMetadataResponse, error) {
+	// This is a wrapper of GetClusterMetadata API, use the same scope here
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceLatency)
-	result, err := c.persistence.GetCurrentClusterMetadata()
+	result, err := c.persistence.GetCurrentClusterMetadata(ctx)
 	sw.Stop()
 
 	if err != nil {
@@ -1133,11 +1200,14 @@ func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata() (*GetClus
 	return result, err
 }
 
-func (c *clusterMetadataPersistenceClient) GetClusterMetadata(request *GetClusterMetadataRequest) (*GetClusterMetadataResponse, error) {
+func (c *clusterMetadataPersistenceClient) GetClusterMetadata(
+	ctx context.Context,
+	request *GetClusterMetadataRequest,
+) (*GetClusterMetadataResponse, error) {
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceLatency)
-	result, err := c.persistence.GetClusterMetadata(request)
+	result, err := c.persistence.GetClusterMetadata(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -1147,11 +1217,14 @@ func (c *clusterMetadataPersistenceClient) GetClusterMetadata(request *GetCluste
 	return result, err
 }
 
-func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(request *SaveClusterMetadataRequest) (bool, error) {
+func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(
+	ctx context.Context,
+	request *SaveClusterMetadataRequest,
+) (bool, error) {
 	c.metricClient.IncCounter(metrics.PersistenceSaveClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceSaveClusterMetadataScope, metrics.PersistenceLatency)
-	applied, err := c.persistence.SaveClusterMetadata(request)
+	applied, err := c.persistence.SaveClusterMetadata(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -1161,11 +1234,14 @@ func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(request *SaveClus
 	return applied, err
 }
 
-func (c *clusterMetadataPersistenceClient) DeleteClusterMetadata(request *DeleteClusterMetadataRequest) error {
+func (c *clusterMetadataPersistenceClient) DeleteClusterMetadata(
+	ctx context.Context,
+	request *DeleteClusterMetadataRequest,
+) error {
 	c.metricClient.IncCounter(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceLatency)
-	err := c.persistence.DeleteClusterMetadata(request)
+	err := c.persistence.DeleteClusterMetadata(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -1179,11 +1255,14 @@ func (c *clusterMetadataPersistenceClient) GetName() string {
 	return c.persistence.GetName()
 }
 
-func (c *clusterMetadataPersistenceClient) GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error) {
+func (c *clusterMetadataPersistenceClient) GetClusterMembers(
+	ctx context.Context,
+	request *GetClusterMembersRequest,
+) (*GetClusterMembersResponse, error) {
 	c.metricClient.IncCounter(metrics.PersistenceGetClusterMembersScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceGetClusterMembersScope, metrics.PersistenceLatency)
-	res, err := c.persistence.GetClusterMembers(request)
+	res, err := c.persistence.GetClusterMembers(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -1193,11 +1272,14 @@ func (c *clusterMetadataPersistenceClient) GetClusterMembers(request *GetCluster
 	return res, err
 }
 
-func (c *clusterMetadataPersistenceClient) UpsertClusterMembership(request *UpsertClusterMembershipRequest) error {
+func (c *clusterMetadataPersistenceClient) UpsertClusterMembership(
+	ctx context.Context,
+	request *UpsertClusterMembershipRequest,
+) error {
 	c.metricClient.IncCounter(metrics.PersistenceUpsertClusterMembershipScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceUpsertClusterMembershipScope, metrics.PersistenceLatency)
-	err := c.persistence.UpsertClusterMembership(request)
+	err := c.persistence.UpsertClusterMembership(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -1207,11 +1289,14 @@ func (c *clusterMetadataPersistenceClient) UpsertClusterMembership(request *Upse
 	return err
 }
 
-func (c *clusterMetadataPersistenceClient) PruneClusterMembership(request *PruneClusterMembershipRequest) error {
+func (c *clusterMetadataPersistenceClient) PruneClusterMembership(
+	ctx context.Context,
+	request *PruneClusterMembershipRequest,
+) error {
 	c.metricClient.IncCounter(metrics.PersistencePruneClusterMembershipScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistencePruneClusterMembershipScope, metrics.PersistenceLatency)
-	err := c.persistence.PruneClusterMembership(request)
+	err := c.persistence.PruneClusterMembership(ctx, request)
 	sw.Stop()
 
 	if err != nil {
@@ -1221,11 +1306,14 @@ func (c *clusterMetadataPersistenceClient) PruneClusterMembership(request *Prune
 	return err
 }
 
-func (c *metadataPersistenceClient) InitializeSystemNamespaces(currentClusterName string) error {
+func (c *metadataPersistenceClient) InitializeSystemNamespaces(
+	ctx context.Context,
+	currentClusterName string,
+) error {
 	c.metricClient.IncCounter(metrics.PersistenceInitializeSystemNamespaceScope, metrics.PersistenceRequests)
 
 	sw := c.metricClient.StartTimer(metrics.PersistenceInitializeSystemNamespaceScope, metrics.PersistenceLatency)
-	err := c.persistence.InitializeSystemNamespaces(currentClusterName)
+	err := c.persistence.InitializeSystemNamespaces(ctx, currentClusterName)
 	sw.Stop()
 
 	if err != nil {

@@ -190,6 +190,7 @@ type Config struct {
 	// WorkflowTaskHeartbeatTimeout is to timeout behavior of: RespondWorkflowTaskComplete with ForceCreateNewWorkflowTask == true without any workflow tasks
 	// So that workflow task will be scheduled to another worker(by clear stickyness)
 	WorkflowTaskHeartbeatTimeout dynamicconfig.DurationPropertyFnWithNamespaceFilter
+	WorkflowTaskCriticalAttempts dynamicconfig.IntPropertyFn
 
 	// The following is used by the new RPC replication stack
 	ReplicationTaskFetcherParallelism                    dynamicconfig.IntPropertyFn
@@ -250,6 +251,7 @@ type Config struct {
 	ESProcessorAckTimeout             dynamicconfig.DurationPropertyFn
 
 	EnableCrossNamespaceCommands dynamicconfig.BoolPropertyFn
+	EnableActivityLocalDispatch  dynamicconfig.BoolPropertyFnWithNamespaceFilter
 }
 
 const (
@@ -377,6 +379,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		DefaultWorkflowRetryPolicy:   dc.GetMapPropertyFnWithNamespaceFilter(dynamicconfig.DefaultWorkflowRetryPolicy, common.GetDefaultRetryPolicyConfigOptions()),
 		StickyTTL:                    dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.StickyTTL, time.Hour*24*365),
 		WorkflowTaskHeartbeatTimeout: dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.WorkflowTaskHeartbeatTimeout, time.Minute*30),
+		WorkflowTaskCriticalAttempts: dc.GetIntProperty(dynamicconfig.WorkflowTaskCriticalAttempts, 10),
 
 		ReplicationTaskFetcherParallelism:            dc.GetIntProperty(dynamicconfig.ReplicationTaskFetcherParallelism, 4),
 		ReplicationTaskFetcherAggregationInterval:    dc.GetDurationProperty(dynamicconfig.ReplicationTaskFetcherAggregationInterval, 2*time.Second),
@@ -434,6 +437,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		ESProcessorAckTimeout:    dc.GetDurationProperty(dynamicconfig.WorkerESProcessorAckTimeout, 1*time.Minute),
 
 		EnableCrossNamespaceCommands: dc.GetBoolProperty(dynamicconfig.EnableCrossNamespaceCommands, true),
+		EnableActivityLocalDispatch:  dc.GetBoolPropertyFnWithNamespaceFilter(dynamicconfig.EnableActivityLocalDispatch, false),
 	}
 
 	return cfg
@@ -442,12 +446,4 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 // GetShardID return the corresponding shard ID for a given namespaceID and workflowID pair
 func (config *Config) GetShardID(namespaceID namespace.ID, workflowID string) int32 {
 	return common.WorkflowIDToHistoryShard(namespaceID.String(), workflowID, config.NumberOfShards)
-}
-
-func NewDynamicConfig() *Config {
-	dc := dynamicconfig.NewNoopCollection()
-	config := NewConfig(dc, 1, false, "")
-	// reduce the duration of long poll to increase test speed
-	config.LongPollExpirationInterval = dc.GetDurationPropertyFilteredByNamespace(dynamicconfig.HistoryLongPollExpirationInterval, 10*time.Second)
-	return config
 }

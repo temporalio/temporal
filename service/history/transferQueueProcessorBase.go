@@ -25,6 +25,8 @@
 package history
 
 import (
+	"context"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -73,17 +75,20 @@ func (t *transferQueueProcessorBase) readTasks(
 	readLevel int64,
 ) ([]tasks.Task, bool, error) {
 
-	response, err := t.executionManager.GetTransferTasks(&persistence.GetTransferTasksRequest{
+	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
 		ShardID:      t.shard.GetShardID(),
-		ReadLevel:    readLevel,
-		MaxReadLevel: t.maxReadAckLevel(),
-		BatchSize:    t.options.BatchSize(),
+		TaskCategory: tasks.CategoryTransfer,
+		InclusiveMinTaskKey: tasks.Key{
+			TaskID: readLevel + 1,
+		},
+		ExclusiveMaxTaskKey: tasks.Key{
+			TaskID: t.maxReadAckLevel() + 1,
+		},
+		BatchSize: t.options.BatchSize(),
 	})
-
 	if err != nil {
 		return nil, false, err
 	}
-
 	return response.Tasks, len(response.NextPageToken) != 0, nil
 }
 

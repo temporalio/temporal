@@ -33,13 +33,14 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/mocks"
 
+	"go.temporal.io/sdk/mocks"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/sdk"
 )
 
 type clientSuite struct {
@@ -53,6 +54,7 @@ type clientSuite struct {
 	visibilityArchiver *carchiver.MockVisibilityArchiver
 	metricsClient      *metrics.MockClient
 	metricsScope       *metrics.MockScope
+	sdkClientFactory   *sdk.MockClientFactory
 	sdkClient          *mocks.Client
 	client             *client
 }
@@ -70,17 +72,18 @@ func (s *clientSuite) SetupTest() {
 	s.visibilityArchiver = carchiver.NewMockVisibilityArchiver(s.controller)
 	s.metricsClient = metrics.NewMockClient(s.controller)
 	s.metricsScope = metrics.NewMockScope(s.controller)
-	s.sdkClient = &mocks.Client{}
 	s.metricsClient.EXPECT().Scope(metrics.ArchiverClientScope, gomock.Any()).Return(s.metricsScope)
+	s.sdkClient = &mocks.Client{}
+	s.sdkClientFactory = sdk.NewMockClientFactory(s.controller)
+	s.sdkClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(s.sdkClient).AnyTimes()
 	s.client = NewClient(
 		s.metricsClient,
 		log.NewNoopLogger(),
-		nil,
+		s.sdkClientFactory,
 		dynamicconfig.GetIntPropertyFn(1000),
 		dynamicconfig.GetIntPropertyFn(1000),
 		s.archiverProvider,
 	).(*client)
-	s.client.temporalClient = s.sdkClient
 }
 
 func (s *clientSuite) TearDownTest() {

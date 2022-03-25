@@ -30,13 +30,16 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/service/history/tasks"
+
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -90,10 +93,10 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 ) (retError error) {
 
 	// sync activity info will only be sent from active side, when
-	// 1. activity has retry policy and activity got started
-	// 2. activity heart beat
+	// 1. activity retry
+	// 2. activity start
+	// 3. activity heart beat
 	// no sync activity task will be sent when active side fail / timeout activity,
-	// since standby side does not have activity retry timer
 	namespaceID := namespace.ID(request.GetNamespaceId())
 	execution := commonpb.WorkflowExecution{
 		WorkflowId: request.WorkflowId,
@@ -113,7 +116,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := executionContext.LoadWorkflowExecution()
+	mutableState, err := executionContext.LoadWorkflowExecution(ctx)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); !ok {
 			return err
@@ -154,6 +157,22 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 		return nil
 	}
 
+	// sync activity with empty started ID means activity retry
+	eventTime := timestamp.TimeValue(request.GetScheduledTime())
+	if request.StartedId == common.EmptyEventID && request.Attempt > activityInfo.GetAttempt() {
+		mutableState.AddTasks(&tasks.ActivityRetryTimerTask{
+			WorkflowKey: definition.WorkflowKey{
+				NamespaceID: request.GetNamespaceId(),
+				WorkflowID:  request.GetWorkflowId(),
+				RunID:       request.GetRunId(),
+			},
+			VisibilityTimestamp: eventTime,
+			EventID:             request.GetScheduledId(),
+			Version:             request.GetVersion(),
+			Attempt:             request.GetAttempt(),
+		})
+	}
+
 	refreshTask := r.testRefreshActivityTimerTaskMask(
 		request.GetVersion(),
 		request.GetAttempt(),
@@ -165,7 +184,6 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	// see whether we need to refresh the activity timer
-	eventTime := timestamp.TimeValue(request.GetScheduledTime())
 	startedTime := timestamp.TimeValue(request.GetStartedTime())
 	lastHeartbeatTime := timestamp.TimeValue(request.GetLastHeartbeatTime())
 	if eventTime.Before(startedTime) {
@@ -190,6 +208,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	}
 
 	return executionContext.UpdateWorkflowExecutionWithNew(
+		ctx,
 		now,
 		updateMode,
 		nil, // no new workflow

@@ -58,13 +58,14 @@ var (
 		"RespondWorkflowTaskCompleted":     1,
 
 		// priority 2
-		"ResetWorkflowExecution":    2,
-		"DescribeWorkflowExecution": 2,
-		"RespondWorkflowTaskFailed": 2,
-		"QueryWorkflow":             2,
-		"RespondQueryTaskCompleted": 2,
-		"PollWorkflowTaskQueue":     2,
-		"PollActivityTaskQueue":     2,
+		"ResetWorkflowExecution":             2,
+		"DescribeWorkflowExecution":          2,
+		"RespondWorkflowTaskFailed":          2,
+		"QueryWorkflow":                      2,
+		"RespondQueryTaskCompleted":          2,
+		"PollWorkflowTaskQueue":              2,
+		"PollActivityTaskQueue":              2,
+		"GetWorkflowExecutionHistoryReverse": 2,
 
 		// priority 3
 		"ResetStickyTaskQueue":    3,
@@ -140,13 +141,15 @@ func (c *NamespaceRateBurstImpl) Burst() int {
 }
 
 func NewRequestToRateLimiter(
-	rateBurstFn quotas.RateBurst,
+	executionRateBurstFn quotas.RateBurst,
+	visibilityRateBurstFn quotas.RateBurst,
+	otherRateBurstFn quotas.RateBurst,
 ) quotas.RequestRateLimiter {
 	mapping := make(map[string]quotas.RequestRateLimiter)
 
-	executionRateLimiter := NewExecutionPriorityRateLimiter(rateBurstFn)
-	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(rateBurstFn)
-	otherRateLimiter := NewOtherAPIPriorityRateLimiter(rateBurstFn)
+	executionRateLimiter := NewExecutionPriorityRateLimiter(executionRateBurstFn)
+	visibilityRateLimiter := NewVisibilityPriorityRateLimiter(visibilityRateBurstFn)
+	otherRateLimiter := NewOtherAPIPriorityRateLimiter(otherRateBurstFn)
 
 	for api := range ExecutionAPIToPriority {
 		mapping[api] = executionRateLimiter

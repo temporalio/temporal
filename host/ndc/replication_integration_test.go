@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common/persistence"
 	test "go.temporal.io/server/common/testing"
+	"go.temporal.io/server/host"
 	"go.temporal.io/server/service/history/tasks"
 )
 
@@ -125,13 +126,21 @@ Loop:
 		time.Sleep(time.Second)
 
 		actualDLQMsgs := map[int64]bool{}
-		request := persistence.NewGetReplicationTasksFromDLQRequest(
-			shardID, "standby", -1, math.MaxInt64, math.MaxInt64, nil,
-		)
+		request := &persistence.GetReplicationTasksFromDLQRequest{
+			GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
+				ShardID:             shardID,
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: tasks.Key{TaskID: 0},
+				ExclusiveMaxTaskKey: tasks.Key{TaskID: math.MaxInt64},
+				BatchSize:           math.MaxInt64,
+				NextPageToken:       nil,
+			},
+			SourceClusterName: "standby",
+		}
 		var token []byte
 		for doPaging := true; doPaging; doPaging = len(token) > 0 {
 			request.NextPageToken = token
-			response, err := executionManager.GetReplicationTasksFromDLQ(request)
+			response, err := executionManager.GetReplicationTasksFromDLQ(host.NewContext(), request)
 			if err != nil {
 				continue Loop
 			}
