@@ -295,13 +295,12 @@ func (e *replicationTaskExecutorImpl) cleanupWorkflowExecution(ctx context.Conte
 	if err != nil {
 		return err
 	}
-	return e.deleteManager.DeleteWorkflowExecution(
+	return e.deleteManager.DeleteWorkflowExecutionByReplication(
 		ctx,
 		nsID,
 		ex,
 		wfCtx,
 		mutableState,
 		lastWriteVersion,
-		true,
 	)
 }

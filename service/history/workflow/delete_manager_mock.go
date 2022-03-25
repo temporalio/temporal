@@ -75,17 +75,31 @@ func (mr *MockDeleteManagerMockRecorder) AddDeleteWorkflowExecutionTask(ctx, nsI
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockDeleteManager) DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we v1.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64, forceDelete bool) error {
+func (m *MockDeleteManager) DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we v1.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, nsID, we, weCtx, ms, sourceTaskVersion, forceDelete)
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", ctx, nsID, we, weCtx, ms, sourceTaskVersion)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
-func (mr *MockDeleteManagerMockRecorder) DeleteWorkflowExecution(ctx, nsID, we, weCtx, ms, sourceTaskVersion, forceDelete interface{}) *gomock.Call {
+func (mr *MockDeleteManagerMockRecorder) DeleteWorkflowExecution(ctx, nsID, we, weCtx, ms, sourceTaskVersion interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockDeleteManager)(nil).DeleteWorkflowExecution), ctx, nsID, we, weCtx, ms, sourceTaskVersion, forceDelete)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockDeleteManager)(nil).DeleteWorkflowExecution), ctx, nsID, we, weCtx, ms, sourceTaskVersion)
+}
+
+// DeleteWorkflowExecutionByReplication mocks base method.
+func (m *MockDeleteManager) DeleteWorkflowExecutionByReplication(ctx context.Context, nsID namespace.ID, we v1.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecutionByReplication", ctx, nsID, we, weCtx, ms, sourceTaskVersion)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// DeleteWorkflowExecutionByReplication indicates an expected call of DeleteWorkflowExecutionByReplication.
+func (mr *MockDeleteManagerMockRecorder) DeleteWorkflowExecutionByReplication(ctx, nsID, we, weCtx, ms, sourceTaskVersion interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecutionByReplication", reflect.TypeOf((*MockDeleteManager)(nil).DeleteWorkflowExecutionByReplication), ctx, nsID, we, weCtx, ms, sourceTaskVersion)
 }
 
 // DeleteWorkflowExecutionByRetention mocks base method.
