@@ -36,6 +36,7 @@ import (
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/resource"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -65,8 +66,6 @@ import (
 )
 
 type (
-	ServerReporter metrics.Reporter
-
 	ServiceStopFn func()
 
 	ServicesGroupOut struct {
@@ -99,8 +98,8 @@ type (
 		PProfConfig *config.PProf
 		LogConfig   log.Config
 
-		ServiceNames    ServiceNames
-		NamespaceLogger NamespaceLogger
+		ServiceNames    resource.ServiceNames
+		NamespaceLogger resource.NamespaceLogger
 
 		ServiceResolver        resolver.ServiceResolver
 		CustomDataStoreFactory persistenceClient.AbstractDataStoreFactory
@@ -114,7 +113,7 @@ type (
 		// below are things that could be over write by server options or may have default if not supplied by serverOptions.
 		Logger                  log.Logger
 		ClientFactoryProvider   client.FactoryProvider
-		ServerReporter          ServerReporter
+		ServerReporter          resource.ServerReporter
 		MetricsClient           metrics.Client
 		DynamicConfigClient     dynamicconfig.Client
 		DynamicConfigCollection *dynamicconfig.Collection
@@ -179,7 +178,7 @@ func ServerOptionsProvider(opts []ServerOption) (serverOptionsProvider, error) {
 		clientFactoryProvider = client.NewFactoryProvider()
 	}
 
-	// ServerReporter
+	// resource.ServerReporter
 	serverReporter := so.metricsReporter
 	if serverReporter == nil {
 		if so.config.Global.Metrics == nil {
@@ -312,11 +311,11 @@ type (
 		fx.In
 
 		Cfg                        *config.Config
-		ServiceNames               ServiceNames
+		ServiceNames               resource.ServiceNames
 		Logger                     log.Logger
-		NamespaceLogger            NamespaceLogger
+		NamespaceLogger            resource.NamespaceLogger
 		DynamicConfigClient        dynamicconfig.Client
-		ServerReporter             ServerReporter
+		ServerReporter             resource.ServerReporter
 		EsConfig                   *esclient.Config
 		EsClient                   esclient.Client
 		TlsConfigProvider          encryption.TLSConfigProvider
@@ -370,13 +369,13 @@ func HistoryServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
+		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(NewBootstrapParams),
+		fx.Provide(resource.NewBootstrapParams),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
 		history.QueueProcessorModule,
 		history.Module,
@@ -428,13 +427,13 @@ func MatchingServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
+		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(NewBootstrapParams),
+		fx.Provide(resource.NewBootstrapParams),
 		matching.Module,
 		fx.NopLogger,
 	)
@@ -484,13 +483,13 @@ func FrontendServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
+		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(NewBootstrapParams),
+		fx.Provide(resource.NewBootstrapParams),
 		frontend.Module,
 		fx.NopLogger,
 	)
@@ -540,13 +539,13 @@ func WorkerServiceProvider(
 		fx.Provide(func() authorization.ClaimMapper { return params.ClaimMapper }),
 		fx.Provide(func() encryption.TLSConfigProvider { return params.TlsConfigProvider }),
 		fx.Provide(func() dynamicconfig.Client { return params.DynamicConfigClient }),
-		fx.Provide(func() ServiceName { return ServiceName(serviceName) }),
+		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
-		fx.Provide(func() ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
+		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		fx.Provide(NewBootstrapParams),
+		fx.Provide(resource.NewBootstrapParams),
 		worker.Module,
 		fx.NopLogger,
 	)

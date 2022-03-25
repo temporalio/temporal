@@ -64,9 +64,12 @@ type (
 	SnTaggedLogger       log.Logger
 	ThrottledLogger      log.Logger
 	ThrottledLoggerRpsFn quotas.RateFn
+	NamespaceLogger      log.Logger
+	ServerReporter       metrics.Reporter
 	ServiceName          string
 	HostName             string
 	InstanceID           string
+	ServiceNames         map[string]struct{}
 
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
