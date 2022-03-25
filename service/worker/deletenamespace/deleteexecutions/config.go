@@ -29,34 +29,40 @@ import (
 )
 
 const (
-	deleteActivityRPS                       = 100
-	pageSize                                = 1000
-	pagesPerExecutionCount                  = 256
-	concurrentDeleteExecutionsActivities    = 4
-	maxConcurrentDeleteExecutionsActivities = 256
+	defaultDeleteActivityRPS                    = 100
+	defaultPageSize                             = 1000
+	defaultPagesPerExecutionCount               = 256
+	defaultConcurrentDeleteExecutionsActivities = 4
+	maxConcurrentDeleteExecutionsActivities     = 256
 )
 
 type (
 	DeleteExecutionsConfig struct {
-		DeleteActivityRPS                    int
-		PageSize                             int
-		PagesPerExecutionCount               int // Before doing ContinueAsNew.
-		ConcurrentDeleteExecutionsActivities int // Must be not greater than PagesPerExecutionCount and number of workers in the cluster.
+		// RPS per every parallel delete executions activity.
+		// Total RPS is equal to DeleteActivityRPS * ConcurrentDeleteExecutionsActivities.
+		DeleteActivityRPS int
+		// Page size to read executions from visibility.
+		PageSize int
+		// Number of pages before returning ContinueAsNew.
+		PagesPerExecutionCount int
+		// Number of concurrent delete executions activities.
+		// Must be not greater than PagesPerExecutionCount and number of worker cores in the cluster.
+		ConcurrentDeleteExecutionsActivities int
 	}
 )
 
 func (cfg *DeleteExecutionsConfig) ApplyDefaults() {
 	if cfg.DeleteActivityRPS <= 0 {
-		cfg.DeleteActivityRPS = deleteActivityRPS
+		cfg.DeleteActivityRPS = defaultDeleteActivityRPS
 	}
 	if cfg.PageSize <= 0 {
-		cfg.PageSize = pageSize
+		cfg.PageSize = defaultPageSize
 	}
 	if cfg.PagesPerExecutionCount <= 0 {
-		cfg.PagesPerExecutionCount = pagesPerExecutionCount
+		cfg.PagesPerExecutionCount = defaultPagesPerExecutionCount
 	}
 	if cfg.ConcurrentDeleteExecutionsActivities <= 0 {
-		cfg.ConcurrentDeleteExecutionsActivities = concurrentDeleteExecutionsActivities
+		cfg.ConcurrentDeleteExecutionsActivities = defaultConcurrentDeleteExecutionsActivities
 	}
 	if cfg.ConcurrentDeleteExecutionsActivities > maxConcurrentDeleteExecutionsActivities {
 		cfg.ConcurrentDeleteExecutionsActivities = maxConcurrentDeleteExecutionsActivities
