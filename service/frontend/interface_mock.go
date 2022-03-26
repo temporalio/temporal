@@ -736,6 +736,21 @@ func (mr *MockOperatorHandlerMockRecorder) AddSearchAttributes(arg0, arg1 interf
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddSearchAttributes", reflect.TypeOf((*MockOperatorHandler)(nil).AddSearchAttributes), arg0, arg1)
 }
 
+// DeleteNamespace mocks base method.
+func (m *MockOperatorHandler) DeleteNamespace(arg0 context.Context, arg1 *v1.DeleteNamespaceRequest) (*v1.DeleteNamespaceResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteNamespace", arg0, arg1)
+	ret0, _ := ret[0].(*v1.DeleteNamespaceResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteNamespace indicates an expected call of DeleteNamespace.
+func (mr *MockOperatorHandlerMockRecorder) DeleteNamespace(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteNamespace", reflect.TypeOf((*MockOperatorHandler)(nil).DeleteNamespace), arg0, arg1)
+}
+
 // ListSearchAttributes mocks base method.
 func (m *MockOperatorHandler) ListSearchAttributes(arg0 context.Context, arg1 *v1.ListSearchAttributesRequest) (*v1.ListSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
