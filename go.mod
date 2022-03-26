@@ -56,8 +56,6 @@ require (
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
 
-replace go.temporal.io/api v1.7.1-0.20220324004000-817724af565a => ../temporal-api-go
-
 require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.2.0 // indirect
