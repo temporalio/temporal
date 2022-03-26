@@ -124,8 +124,8 @@ func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 	var result DeleteNamespaceWorkflowResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	require.Equal(t, namespace.Name("namespace-delete-220878"), result.DeletedName)
-	require.Equal(t, namespace.ID("namespace-id"), result.DeletedID)
+	require.Equal(t, namespace.Name("namespace-delete-220878"), result.DeletedNamespace)
+	require.Equal(t, namespace.ID("namespace-id"), result.DeletedNamespaceID)
 }
 
 func Test_DeleteNamespaceWorkflow_ByNameAndID(t *testing.T) {
