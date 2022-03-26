@@ -220,7 +220,7 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
-	historyEngImpl.replicationDLQHandler = newLazyReplicationDLQHandler(shard)
+	historyEngImpl.replicationDLQHandler = newLazyReplicationDLQHandler(shard, workflowDeleteManager, historyCache)
 
 	return historyEngImpl
 }
@@ -438,6 +438,8 @@ func (e *historyEngineImpl) handleClusterMetadataUpdate(
 				e.shard.GetNamespaceRegistry(),
 				nDCHistoryResender,
 				e,
+				e.workflowDeleteManager,
+				e.historyCache,
 				e.shard.GetMetricsClient(),
 				e.shard.GetLogger(),
 			)

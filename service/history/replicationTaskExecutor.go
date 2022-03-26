@@ -30,6 +30,7 @@ import (
 	"context"
 
 	commonpb "go.temporal.io/api/common/v1"
+	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -41,6 +42,7 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -54,9 +56,10 @@ type (
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
 		historyEngine      shard.Engine
-
-		metricsClient metrics.Client
-		logger        log.Logger
+		deleteManager      workflow.DeleteManager
+		workflowCache      workflow.Cache
+		metricsClient      metrics.Client
+		logger             log.Logger
 	}
 )
 
@@ -67,6 +70,8 @@ func newReplicationTaskExecutor(
 	namespaceRegistry namespace.Registry,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyEngine shard.Engine,
+	deleteManager workflow.DeleteManager,
+	workflowCache workflow.Cache,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) replicationTaskExecutor {
@@ -76,6 +81,8 @@ func newReplicationTaskExecutor(
 		namespaceRegistry:  namespaceRegistry,
 		nDCHistoryResender: nDCHistoryResender,
 		historyEngine:      historyEngine,
+		deleteManager:      deleteManager,
+		workflowCache:      workflowCache,
 		metricsClient:      metricsClient,
 		logger:             logger,
 	}
@@ -153,7 +160,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 		stopwatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByActivityReplicationScope, metrics.ClientLatency)
 		defer stopwatch.Stop()
 
-		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
 			retryErr.RunId,
@@ -161,9 +168,15 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 			retryErr.StartEventVersion,
 			retryErr.EndEventId,
 			retryErr.EndEventVersion,
-		); resendErr != nil {
-			e.logger.Error("error resend history for sync activity", tag.Error(resendErr))
-			// should return the replication error, not the resending error
+		)
+		switch resendErr.(type) {
+		case *serviceerror.NotFound:
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
+		case nil:
+			//no-op
+		default:
+			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
 		}
 		return e.historyEngine.SyncActivity(ctx, request)
@@ -211,7 +224,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 		resendStopWatch := e.metricsClient.StartTimer(metrics.HistoryRereplicationByHistoryReplicationScope, metrics.ClientLatency)
 		defer resendStopWatch.Stop()
 
-		if resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
 			retryErr.RunId,
@@ -219,9 +232,15 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 			retryErr.StartEventVersion,
 			retryErr.EndEventId,
 			retryErr.EndEventVersion,
-		); resendErr != nil {
+		)
+		switch resendErr.(type) {
+		case *serviceerror.NotFound:
+			// workflow is not found in source cluster, cleanup workflow in target cluster
+			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
+		case nil:
+			//no-op
+		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
-			// should return the replication error, not the resending error
 			return err
 		}
 
@@ -255,4 +274,33 @@ FilterLoop:
 		}
 	}
 	return shouldProcessTask, nil
+}
+
+func (e *replicationTaskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespaceID string, workflowID string, runID string) (retErr error) {
+	nsID := namespace.ID(namespaceID)
+	ex := commonpb.WorkflowExecution{
+		WorkflowId: workflowID,
+		RunId:      runID,
+	}
+	wfCtx, releaseFn, err := e.workflowCache.GetOrCreateWorkflowExecution(ctx, nsID, ex, workflow.CallerTypeTask)
+	if err != nil {
+		return err
+	}
+	defer func() { releaseFn(retErr) }()
+	mutableState, err := wfCtx.LoadWorkflowExecution(ctx)
+	if err != nil {
+		return err
+	}
+	lastWriteVersion, err := mutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	return e.deleteManager.DeleteWorkflowExecutionByReplication(
+		ctx,
+		nsID,
+		ex,
+		wfCtx,
+		mutableState,
+		lastWriteVersion,
+	)
 }
