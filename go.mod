@@ -39,7 +39,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.4.0
 	go.opentelemetry.io/otel/sdk/export/metric v0.27.0
 	go.opentelemetry.io/otel/sdk/metric v0.27.0
-	go.temporal.io/api v1.7.1-0.20220325233305-d1f0ee499b92
+	go.temporal.io/api v1.7.1-0.20220325235300-690c145d4f09
 	go.temporal.io/sdk v1.14.0
 	go.temporal.io/version v0.3.0
 	go.uber.org/atomic v1.9.0
@@ -55,8 +55,6 @@ require (
 	gopkg.in/validator.v2 v2.0.0-20210331031555-b37d688a7fb0
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
 )
-
-replace go.temporal.io/api v1.7.1-0.20220324004000-817724af565a => ../temporal-api-go
 
 require (
 	cloud.google.com/go v0.100.2 // indirect

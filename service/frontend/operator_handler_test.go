@@ -72,6 +72,7 @@ func (s *operatorHandlerSuite) SetupTest() {
 
 	args := NewOperatorHandlerImplArgs{
 		nil,
+		nil,
 		s.mockResource.ESClient,
 		s.mockResource.Logger,
 		s.mockResource.GetSDKClientFactory(),
