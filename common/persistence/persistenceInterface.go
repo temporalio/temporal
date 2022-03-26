@@ -84,7 +84,7 @@ type (
 		RenameNamespace(request *InternalRenameNamespaceRequest) error
 		DeleteNamespace(request *DeleteNamespaceRequest) error
 		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
-		ListNamespaces(request *ListNamespacesRequest) (*InternalListNamespacesResponse, error)
+		ListNamespaces(request *InternalListNamespacesRequest) (*InternalListNamespacesResponse, error)
 		GetMetadata() (*GetMetadataResponse, error)
 	}
 
@@ -629,6 +629,11 @@ type (
 	InternalRenameNamespaceRequest struct {
 		*InternalUpdateNamespaceRequest
 		PreviousName string
+	}
+
+	InternalListNamespacesRequest struct {
+		PageSize      int
+		NextPageToken []byte
 	}
 
 	// InternalListNamespacesResponse is the response for GetNamespace

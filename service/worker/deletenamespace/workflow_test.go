@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
 	"go.temporal.io/server/common/namespace"
@@ -36,13 +37,17 @@ import (
 	"go.temporal.io/server/service/worker/deletenamespace/reclaimresources"
 )
 
-func Test_DeleteNamespaceWorkflow_Success(t *testing.T) {
+func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestWorkflowEnvironment()
 
 	var a *activities
 
-	env.OnActivity(a.GetNamespaceIDActivity, mock.Anything, namespace.Name("namespace")).Return(namespace.ID("namespace-id"), nil)
+	env.OnActivity(a.GetNamespaceInfoActivity, mock.Anything, namespace.EmptyID, namespace.Name("namespace")).Return(
+		getNamespaceInfoResult{
+			NamespaceID: "namespace-id",
+			Namespace:   "namespace",
+		}, nil)
 	env.OnActivity(a.MarkNamespaceDeletedActivity, mock.Anything, namespace.Name("namespace")).Return(nil)
 	env.OnActivity(a.GenerateDeletedNamespaceNameActivity, mock.Anything, namespace.Name("namespace")).Return(namespace.Name("namespace-delete-220878"), nil)
 	env.OnActivity(a.RenameNamespaceActivity, mock.Anything, namespace.Name("namespace"), namespace.Name("namespace-delete-220878")).Return(nil)
@@ -64,6 +69,7 @@ func Test_DeleteNamespaceWorkflow_Success(t *testing.T) {
 		ErrorCount:   0,
 	}, nil)
 
+	// Delete by name.
 	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
 		Namespace:              "namespace",
 		DeleteExecutionsConfig: deleteexecutions.DeleteExecutionsConfig{},
@@ -73,6 +79,68 @@ func Test_DeleteNamespaceWorkflow_Success(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 	var result DeleteNamespaceWorkflowResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	require.Equal(t, namespace.Name("namespace-delete-220878"), result.DeletedName)
-	require.Equal(t, namespace.ID("namespace-id"), result.DeletedID)
+	require.Equal(t, namespace.Name("namespace-delete-220878"), result.DeletedNamespace)
+	require.Equal(t, namespace.ID("namespace-id"), result.DeletedNamespaceID)
+}
+
+func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	var a *activities
+
+	env.OnActivity(a.GetNamespaceInfoActivity, mock.Anything, namespace.ID("namespace-id"), namespace.EmptyName).Return(
+		getNamespaceInfoResult{
+			NamespaceID: "namespace-id",
+			Namespace:   "namespace",
+		}, nil)
+	env.OnActivity(a.MarkNamespaceDeletedActivity, mock.Anything, namespace.Name("namespace")).Return(nil)
+	env.OnActivity(a.GenerateDeletedNamespaceNameActivity, mock.Anything, namespace.Name("namespace")).Return(namespace.Name("namespace-delete-220878"), nil)
+	env.OnActivity(a.RenameNamespaceActivity, mock.Anything, namespace.Name("namespace"), namespace.Name("namespace-delete-220878")).Return(nil)
+
+	env.RegisterWorkflow(reclaimresources.ReclaimResourcesWorkflow)
+	env.OnWorkflow(reclaimresources.ReclaimResourcesWorkflow, mock.Anything, reclaimresources.ReclaimResourcesParams{DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
+		Namespace:   "namespace-delete-220878",
+		NamespaceID: "namespace-id",
+		Config: deleteexecutions.DeleteExecutionsConfig{
+			DeleteActivityRPS:                    100,
+			PageSize:                             1000,
+			PagesPerExecutionCount:               256,
+			ConcurrentDeleteExecutionsActivities: 4,
+		},
+		PreviousSuccessCount: 0,
+		PreviousErrorCount:   0,
+	}}).Return(reclaimresources.ReclaimResourcesResult{
+		SuccessCount: 10,
+		ErrorCount:   0,
+	}, nil)
+
+	// Delete by name.
+	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
+		NamespaceID: "namespace-id",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	require.NoError(t, env.GetWorkflowError())
+	var result DeleteNamespaceWorkflowResult
+	require.NoError(t, env.GetWorkflowResult(&result))
+	require.Equal(t, namespace.Name("namespace-delete-220878"), result.DeletedNamespace)
+	require.Equal(t, namespace.ID("namespace-id"), result.DeletedNamespaceID)
+}
+
+func Test_DeleteNamespaceWorkflow_ByNameAndID(t *testing.T) {
+	testSuite := &testsuite.WorkflowTestSuite{}
+	env := testSuite.NewTestWorkflowEnvironment()
+
+	// Delete by name and ID.
+	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+	})
+
+	require.True(t, env.IsWorkflowCompleted())
+	wfErr := env.GetWorkflowError()
+	require.Error(t, wfErr)
+	var applicationErr *temporal.ApplicationError
+	require.ErrorAs(t, wfErr, &applicationErr)
 }

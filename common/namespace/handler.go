@@ -301,8 +301,9 @@ func (d *HandlerImpl) ListNamespaces(
 	}
 
 	resp, err := d.metadataMgr.ListNamespaces(ctx, &persistence.ListNamespacesRequest{
-		PageSize:      pageSize,
-		NextPageToken: listRequest.NextPageToken,
+		PageSize:       pageSize,
+		NextPageToken:  listRequest.NextPageToken,
+		IncludeDeleted: listRequest.GetNamespaceFilter().GetIncludeDeleted(),
 	})
 
 	if err != nil {

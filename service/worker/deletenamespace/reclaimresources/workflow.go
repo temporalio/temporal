@@ -73,11 +73,11 @@ var (
 
 func validateParams(params *ReclaimResourcesParams) error {
 	if params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace ID is empty", "", nil)
+		return temporal.NewNonRetryableApplicationError("namespace ID is required", "", nil)
 	}
 
 	if params.Namespace.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("namespace is empty", "", nil)
+		return temporal.NewNonRetryableApplicationError("namespace is required", "", nil)
 	}
 
 	params.Config.ApplyDefaults()

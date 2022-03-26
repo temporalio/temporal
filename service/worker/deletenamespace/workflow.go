@@ -48,6 +48,7 @@ const (
 
 type (
 	DeleteNamespaceWorkflowParams struct {
+		// One of NamespaceID or Namespace must be provided.
 		NamespaceID namespace.ID
 		Namespace   namespace.Name
 
@@ -55,8 +56,8 @@ type (
 	}
 
 	DeleteNamespaceWorkflowResult struct {
-		DeletedID   namespace.ID
-		DeletedName namespace.Name
+		DeletedNamespaceID namespace.ID
+		DeletedNamespace   namespace.Name
 	}
 )
 
@@ -81,7 +82,11 @@ var (
 
 func validateParams(params *DeleteNamespaceWorkflowParams) error {
 	if params.Namespace.IsEmpty() && params.NamespaceID.IsEmpty() {
-		return temporal.NewNonRetryableApplicationError("both namespace name and namespace ID are empty", "", nil)
+		return temporal.NewNonRetryableApplicationError("namespace or namespace ID is required", "", nil)
+	}
+
+	if !params.Namespace.IsEmpty() && !params.NamespaceID.IsEmpty() {
+		return temporal.NewNonRetryableApplicationError("only one of namespace or namespace ID must be set", "", nil)
 	}
 
 	params.DeleteExecutionsConfig.ApplyDefaults()
@@ -101,32 +106,34 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	var a *activities
 
-	// Step 1. Get namespaceID.
-	if params.NamespaceID.IsEmpty() {
-		ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-		err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceIDActivity, params.Namespace).Get(ctx, &params.NamespaceID)
-		if err != nil {
-			return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
-		}
+	// Step 1. Get namespace info.
+	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	var namespaceInfo getNamespaceInfoResult
+	err := workflow.ExecuteLocalActivity(ctx1, a.GetNamespaceInfoActivity, params.NamespaceID, params.Namespace).Get(ctx, &namespaceInfo)
+	if err != nil {
+		return result, temporal.NewNonRetryableApplicationError(fmt.Sprintf("namespace %s is not found", params.Namespace), "", err)
 	}
-	result.DeletedID = params.NamespaceID
+	params.Namespace = namespaceInfo.Namespace
+	params.NamespaceID = namespaceInfo.NamespaceID
 
 	// Step 2. Mark namespace as deleted.
 	ctx2 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err := workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx2, a.MarkNamespaceDeletedActivity, params.Namespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
+	result.DeletedNamespaceID = params.NamespaceID
+
 	// Step 3. Rename namespace.
 	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &result.DeletedName)
+	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &result.DeletedNamespace)
 	if err != nil {
 		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	ctx31 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, result.DeletedName).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
@@ -140,7 +147,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	ctx4 := workflow.WithChildOptions(ctx, reclaimResourcesWorkflowOptions)
 	reclaimResourcesFuture := workflow.ExecuteChildWorkflow(ctx4, reclaimresources.ReclaimResourcesWorkflow, reclaimresources.ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
-			Namespace:   result.DeletedName,
+			Namespace:   result.DeletedNamespace,
 			NamespaceID: params.NamespaceID,
 			Config:      params.DeleteExecutionsConfig,
 		}})

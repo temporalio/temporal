@@ -99,6 +99,8 @@ type (
 	}
 
 	pushActivityTaskToMatchingInfo struct {
+		taskQueue                          string
+		namespaceID                        string
 		activityTaskScheduleToStartTimeout time.Duration
 	}
 
@@ -123,6 +125,19 @@ func newPushActivityToMatchingInfo(
 ) *pushActivityTaskToMatchingInfo {
 
 	return &pushActivityTaskToMatchingInfo{
+		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+	}
+}
+
+func newActivityRetryTimerToMatchingInfo(
+	taskQueue string,
+	namespaceID string,
+	activityScheduleToStartTimeout time.Duration,
+) *pushActivityTaskToMatchingInfo {
+
+	return &pushActivityTaskToMatchingInfo{
+		taskQueue:                          taskQueue,
+		namespaceID:                        namespaceID,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
 	}
 }

@@ -235,7 +235,7 @@ func (m *sqlMetadataManagerV2) GetMetadata() (*persistence.GetMetadataResponse, 
 	return &persistence.GetMetadataResponse{NotificationVersion: row.NotificationVersion}, nil
 }
 
-func (m *sqlMetadataManagerV2) ListNamespaces(request *persistence.ListNamespacesRequest) (*persistence.InternalListNamespacesResponse, error) {
+func (m *sqlMetadataManagerV2) ListNamespaces(request *persistence.InternalListNamespacesRequest) (*persistence.InternalListNamespacesResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	var pageToken *primitives.UUID

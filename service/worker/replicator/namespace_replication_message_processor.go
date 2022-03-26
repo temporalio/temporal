@@ -141,7 +141,7 @@ func (p *namespaceReplicationMessageProcessor) getAndHandleNamespaceReplicationT
 	}
 
 	if info.Identity() != p.hostInfo.Identity() {
-		p.logger.Info("Worker not responsible for source cluster", tag.ClusterName(p.sourceCluster))
+		p.logger.Debug("Worker not responsible for source cluster", tag.ClusterName(p.sourceCluster))
 		return
 	}
 

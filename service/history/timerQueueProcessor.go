@@ -378,6 +378,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.shard,
 				t.workflowCache,
 				t.workflowDeleteManager,
+				t.matchingClient,
 				clusterName,
 				t.taskAllocator,
 				nDCHistoryResender,
