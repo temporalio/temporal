@@ -195,21 +195,45 @@ func (m *metadataManagerImpl) ListNamespaces(
 	_ context.Context,
 	request *ListNamespacesRequest,
 ) (*ListNamespacesResponse, error) {
-	resp, err := m.persistence.ListNamespaces(request)
-	if err != nil {
-		return nil, err
-	}
-	namespaces := make([]*GetNamespaceResponse, 0, len(resp.Namespaces))
-	for _, d := range resp.Namespaces {
-		ret, err := m.ConvertInternalGetResponse(d)
+	var namespaces []*GetNamespaceResponse
+	nextPageToken := request.NextPageToken
+	pageSize := request.PageSize
+
+	for {
+		resp, err := m.persistence.ListNamespaces(&InternalListNamespacesRequest{
+			PageSize:      pageSize,
+			NextPageToken: nextPageToken,
+		})
 		if err != nil {
 			return nil, err
 		}
-		namespaces = append(namespaces, ret)
+		deletedNamespacesCount := 0
+		for _, d := range resp.Namespaces {
+			ret, err := m.ConvertInternalGetResponse(d)
+			if err != nil {
+				return nil, err
+			}
+			if ret.Namespace.Info.State == enumspb.NAMESPACE_STATE_DELETED && !request.IncludeDeleted {
+				deletedNamespacesCount++
+				continue
+			}
+			namespaces = append(namespaces, ret)
+		}
+		nextPageToken = resp.NextPageToken
+		if len(nextPageToken) == 0 {
+			// Page wasn't full, no more namespaces in DB.
+			break
+		}
+		if deletedNamespacesCount == 0 {
+			break
+		}
+		// Page was full but few namespaces weren't added. Read number of deleted namespaces for DB again.
+		pageSize = deletedNamespacesCount
 	}
+
 	return &ListNamespacesResponse{
 		Namespaces:    namespaces,
-		NextPageToken: resp.NextPageToken,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 

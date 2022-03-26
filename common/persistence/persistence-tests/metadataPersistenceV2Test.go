@@ -1084,27 +1084,135 @@ func (m *MetadataPersistenceSuiteV2) TestListNamespaces() {
 	}
 
 	var token []byte
-	pageSize := 1
+	const pageSize = 1
+	pageCount := 0
 	outputNamespaces := make(map[string]*p.GetNamespaceResponse)
-ListLoop:
 	for {
 		resp, err := m.ListNamespaces(pageSize, token)
 		m.NoError(err)
 		token = resp.NextPageToken
 		for _, namespace := range resp.Namespaces {
-			outputNamespaces[string(namespace.Namespace.Info.Id)] = namespace
+			outputNamespaces[namespace.Namespace.Info.Id] = namespace
 			// global notification version is already tested, so here we make it 0
 			// so we can test == easily
 			namespace.NotificationVersion = 0
 		}
+		pageCount++
 		if len(token) == 0 {
-			break ListLoop
+			break
 		}
 	}
 
+	// 2 pages with data and 1 empty page which is unavoidable.
+	m.Equal(pageCount, 3)
 	m.Equal(len(inputNamespaces), len(outputNamespaces))
 	for _, namespace := range inputNamespaces {
-		m.Equal(namespace, outputNamespaces[string(namespace.Namespace.Info.Id)])
+		m.Equal(namespace, outputNamespaces[namespace.Namespace.Info.Id])
+	}
+}
+
+func (m *MetadataPersistenceSuiteV2) TestListNamespaces_DeletedNamespace() {
+	inputNamespaces := []*p.GetNamespaceResponse{
+		{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:    uuid.New(),
+					Name:  "list-namespace-test-name-1",
+					State: enumspb.NAMESPACE_STATE_REGISTERED,
+				},
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			},
+		},
+		{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:    uuid.New(),
+					Name:  "list-namespace-test-name-2",
+					State: enumspb.NAMESPACE_STATE_DELETED,
+				},
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			},
+		},
+		{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:    uuid.New(),
+					Name:  "list-namespace-test-name-3",
+					State: enumspb.NAMESPACE_STATE_REGISTERED,
+				},
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			},
+		},
+		{
+			Namespace: &persistencespb.NamespaceDetail{
+				Info: &persistencespb.NamespaceInfo{
+					Id:    uuid.New(),
+					Name:  "list-namespace-test-name-4",
+					State: enumspb.NAMESPACE_STATE_DELETED,
+				},
+				Config:            &persistencespb.NamespaceConfig{},
+				ReplicationConfig: &persistencespb.NamespaceReplicationConfig{},
+			},
+		},
+	}
+	for _, namespace := range inputNamespaces {
+		_, err := m.CreateNamespace(
+			namespace.Namespace.Info,
+			namespace.Namespace.Config,
+			namespace.Namespace.ReplicationConfig,
+			namespace.IsGlobalNamespace,
+			namespace.Namespace.ConfigVersion,
+			namespace.Namespace.FailoverVersion,
+		)
+		m.NoError(err)
+	}
+
+	var token []byte
+	var listNamespacesPageSize2 []*p.GetNamespaceResponse
+	pageCount := 0
+	for {
+		resp, err := m.ListNamespaces(2, token)
+		m.NoError(err)
+		token = resp.NextPageToken
+		for _, namespace := range resp.Namespaces {
+			listNamespacesPageSize2 = append(listNamespacesPageSize2, namespace)
+		}
+		pageCount++
+		if len(token) == 0 {
+			break
+		}
+	}
+
+	// 1 page with data and 1 empty page which is unavoidable.
+	m.Equal(2, pageCount)
+	m.Len(listNamespacesPageSize2, 2)
+	for _, namespace := range listNamespacesPageSize2 {
+		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
+	}
+
+	pageCount = 0
+	var listNamespacesPageSize1 []*p.GetNamespaceResponse
+	for {
+		resp, err := m.ListNamespaces(1, token)
+		m.NoError(err)
+		token = resp.NextPageToken
+		for _, namespace := range resp.Namespaces {
+			listNamespacesPageSize1 = append(listNamespacesPageSize1, namespace)
+		}
+		pageCount++
+		if len(token) == 0 {
+			break
+		}
+	}
+
+	// 2 pages with data and 1 empty page which is unavoidable.
+	m.Equal(3, pageCount)
+	m.Len(listNamespacesPageSize1, 2)
+	for _, namespace := range listNamespacesPageSize1 {
+		m.NotEqual(namespace.Namespace.Info.State, enumspb.NAMESPACE_STATE_DELETED)
 	}
 }
 
