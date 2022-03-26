@@ -27,11 +27,12 @@ package workflow
 import (
 	"context"
 	"errors"
+	"testing"
+	"time"
+
 	"github.com/pborman/uuid"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/cluster"
-	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
