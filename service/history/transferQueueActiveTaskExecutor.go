@@ -406,6 +406,12 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		return nil
 	}
 
+	initiatedEvent, err := mutableState.GetRequesteCancelExternalInitiatedEvent(ctx, task.InitiatedID)
+	if err != nil {
+		return err
+	}
+	attributes := initiatedEvent.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
+
 	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
 	if err != nil {
 		return err
@@ -427,6 +433,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		task,
 		targetNamespace,
 		requestCancelInfo,
+		attributes,
 	); err != nil {
 		t.logger.Debug(fmt.Sprintf("Failed to cancel external workflow execution. Error: %v", err))
 
@@ -1101,6 +1108,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 	task *tasks.CancelExecutionTask,
 	targetNamespace namespace.Name,
 	requestCancelInfo *persistencespb.RequestCancelInfo,
+	attributes *historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes,
 ) error {
 
 	request := &historyservice.RequestCancelWorkflowExecutionRequest{
@@ -1114,6 +1122,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 			Identity: consts.IdentityHistoryService,
 			// Use the same request ID to dedupe RequestCancelWorkflowExecution calls
 			RequestId: requestCancelInfo.GetCancelRequestId(),
+			Reason:    attributes.Reason,
 		},
 		ExternalInitiatedEventId: task.InitiatedID,
 		ExternalWorkflowExecution: &commonpb.WorkflowExecution{

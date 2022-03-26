@@ -1160,6 +1160,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 
 	taskID := int64(59)
 	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
+	attributes := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
 	transferTask := &tasks.CancelExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1178,7 +1179,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Succes
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), s.createRequestCancelWorkflowExecutionRequest(s.targetNamespace, transferTask, rci)).Return(nil, nil)
+	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), s.createRequestCancelWorkflowExecutionRequest(s.targetNamespace, transferTask, rci, attributes)).Return(nil, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -1223,6 +1224,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 
 	taskID := int64(59)
 	event, rci := addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
+	attributes := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 
 	transferTask := &tasks.CancelExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1241,7 +1243,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
-	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), s.createRequestCancelWorkflowExecutionRequest(s.targetNamespace, transferTask, rci)).Return(nil, serviceerror.NewNotFound(""))
+	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), s.createRequestCancelWorkflowExecutionRequest(s.targetNamespace, transferTask, rci, attributes)).Return(nil, serviceerror.NewNotFound(""))
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(gomock.Any(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -1961,6 +1963,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createRequestCancelWorkflowExecut
 	targetNamespace namespace.Name,
 	task *tasks.CancelExecutionTask,
 	rci *persistencespb.RequestCancelInfo,
+	attributes *historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes,
 ) *historyservice.RequestCancelWorkflowExecutionRequest {
 
 	sourceExecution := commonpb.WorkflowExecution{
@@ -1980,6 +1983,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createRequestCancelWorkflowExecut
 			Identity:          consts.IdentityHistoryService,
 			// Use the same request ID to dedupe RequestCancelWorkflowExecution calls
 			RequestId: rci.GetCancelRequestId(),
+			Reason:    attributes.Reason,
 		},
 		ExternalInitiatedEventId:  task.InitiatedID,
 		ExternalWorkflowExecution: &sourceExecution,
