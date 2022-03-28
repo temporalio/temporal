@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -72,7 +73,10 @@ func NewQueueStore(
 	}, nil
 }
 
-func (q *QueueStore) Init(blob *commonpb.DataBlob) error {
+func (q *QueueStore) Init(
+	_ context.Context,
+	blob *commonpb.DataBlob,
+) error {
 	if err := q.initializeQueueMetadata(blob); err != nil {
 		return err
 	}
@@ -84,6 +88,7 @@ func (q *QueueStore) Init(blob *commonpb.DataBlob) error {
 }
 
 func (q *QueueStore) EnqueueMessage(
+	_ context.Context,
 	blob commonpb.DataBlob,
 ) error {
 	lastMessageID, err := q.getLastMessageID(q.queueType)
@@ -96,6 +101,7 @@ func (q *QueueStore) EnqueueMessage(
 }
 
 func (q *QueueStore) EnqueueMessageToDLQ(
+	_ context.Context,
 	blob commonpb.DataBlob,
 ) (int64, error) {
 	// Use negative queue type as the dlq type
@@ -144,6 +150,7 @@ func (q *QueueStore) getLastMessageID(
 }
 
 func (q *QueueStore) ReadMessages(
+	_ context.Context,
 	lastMessageID int64,
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
@@ -172,6 +179,7 @@ func (q *QueueStore) ReadMessages(
 }
 
 func (q *QueueStore) ReadMessagesFromDLQ(
+	_ context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 	pageSize int,
@@ -206,6 +214,7 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 }
 
 func (q *QueueStore) DeleteMessagesBefore(
+	_ context.Context,
 	messageID int64,
 ) error {
 
@@ -217,6 +226,7 @@ func (q *QueueStore) DeleteMessagesBefore(
 }
 
 func (q *QueueStore) DeleteMessageFromDLQ(
+	_ context.Context,
 	messageID int64,
 ) error {
 
@@ -230,6 +240,7 @@ func (q *QueueStore) DeleteMessageFromDLQ(
 }
 
 func (q *QueueStore) RangeDeleteMessagesFromDLQ(
+	_ context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
@@ -243,11 +254,16 @@ func (q *QueueStore) RangeDeleteMessagesFromDLQ(
 	return nil
 }
 
-func (q *QueueStore) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) error {
+func (q *QueueStore) UpdateAckLevel(
+	_ context.Context,
+	metadata *persistence.InternalQueueMetadata,
+) error {
 	return q.updateAckLevel(metadata, q.queueType)
 }
 
-func (q *QueueStore) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
+func (q *QueueStore) GetAckLevels(
+	_ context.Context,
+) (*persistence.InternalQueueMetadata, error) {
 	queueMetadata, err := q.getQueueMetadata(q.queueType)
 	if err != nil {
 		return nil, gocql.ConvertError("GetAckLevels", err)
@@ -256,11 +272,16 @@ func (q *QueueStore) GetAckLevels() (*persistence.InternalQueueMetadata, error) 
 	return queueMetadata, nil
 }
 
-func (q *QueueStore) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata) error {
+func (q *QueueStore) UpdateDLQAckLevel(
+	_ context.Context,
+	metadata *persistence.InternalQueueMetadata,
+) error {
 	return q.updateAckLevel(metadata, q.getDLQTypeFromQueueType())
 }
 
-func (q *QueueStore) GetDLQAckLevels() (*persistence.InternalQueueMetadata, error) {
+func (q *QueueStore) GetDLQAckLevels(
+	_ context.Context,
+) (*persistence.InternalQueueMetadata, error) {
 	// Use negative queue type as the dlq type
 	queueMetadata, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
 	if err != nil {

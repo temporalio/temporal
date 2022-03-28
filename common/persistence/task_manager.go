@@ -61,7 +61,7 @@ func (m *taskManagerImpl) GetName() string {
 }
 
 func (m *taskManagerImpl) CreateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *CreateTaskQueueRequest,
 ) (*CreateTaskQueueResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo
@@ -85,14 +85,14 @@ func (m *taskManagerImpl) CreateTaskQueue(
 		ExpiryTime:    taskQueueInfo.ExpiryTime,
 		TaskQueueInfo: taskQueueInfoBlob,
 	}
-	if err := m.taskStore.CreateTaskQueue(internalRequest); err != nil {
+	if err := m.taskStore.CreateTaskQueue(ctx, internalRequest); err != nil {
 		return nil, err
 	}
 	return &CreateTaskQueueResponse{}, nil
 }
 
 func (m *taskManagerImpl) UpdateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *UpdateTaskQueueRequest,
 ) (*UpdateTaskQueueResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo
@@ -119,14 +119,14 @@ func (m *taskManagerImpl) UpdateTaskQueue(
 
 		PrevRangeID: request.PrevRangeID,
 	}
-	return m.taskStore.UpdateTaskQueue(internalRequest)
+	return m.taskStore.UpdateTaskQueue(ctx, internalRequest)
 }
 
 func (m *taskManagerImpl) GetTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *GetTaskQueueRequest,
 ) (*GetTaskQueueResponse, error) {
-	response, err := m.taskStore.GetTaskQueue(&InternalGetTaskQueueRequest{
+	response, err := m.taskStore.GetTaskQueue(ctx, &InternalGetTaskQueueRequest{
 		NamespaceID: request.NamespaceID,
 		TaskQueue:   request.TaskQueue,
 		TaskType:    request.TaskType,
@@ -146,10 +146,10 @@ func (m *taskManagerImpl) GetTaskQueue(
 }
 
 func (m *taskManagerImpl) ListTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *ListTaskQueueRequest,
 ) (*ListTaskQueueResponse, error) {
-	internalResp, err := m.taskStore.ListTaskQueue(request)
+	internalResp, err := m.taskStore.ListTaskQueue(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -172,14 +172,14 @@ func (m *taskManagerImpl) ListTaskQueue(
 }
 
 func (m *taskManagerImpl) DeleteTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *DeleteTaskQueueRequest,
 ) error {
-	return m.taskStore.DeleteTaskQueue(request)
+	return m.taskStore.DeleteTaskQueue(ctx, request)
 }
 
 func (m *taskManagerImpl) CreateTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *CreateTasksRequest,
 ) (*CreateTasksResponse, error) {
 	taskQueueInfo := request.TaskQueueInfo.Data
@@ -209,18 +209,18 @@ func (m *taskManagerImpl) CreateTasks(
 		TaskQueueInfo: taskQueueInfoBlob,
 		Tasks:         tasks,
 	}
-	return m.taskStore.CreateTasks(internalRequest)
+	return m.taskStore.CreateTasks(ctx, internalRequest)
 }
 
 func (m *taskManagerImpl) GetTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *GetTasksRequest,
 ) (*GetTasksResponse, error) {
 	if request.InclusiveMinTaskID >= request.ExclusiveMaxTaskID {
 		return &GetTasksResponse{}, nil
 	}
 
-	internalResp, err := m.taskStore.GetTasks(request)
+	internalResp, err := m.taskStore.GetTasks(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -236,15 +236,15 @@ func (m *taskManagerImpl) GetTasks(
 }
 
 func (m *taskManagerImpl) CompleteTask(
-	_ context.Context,
+	ctx context.Context,
 	request *CompleteTaskRequest,
 ) error {
-	return m.taskStore.CompleteTask(request)
+	return m.taskStore.CompleteTask(ctx, request)
 }
 
 func (m *taskManagerImpl) CompleteTasksLessThan(
-	_ context.Context,
+	ctx context.Context,
 	request *CompleteTasksLessThanRequest,
 ) (int, error) {
-	return m.taskStore.CompleteTasksLessThan(request)
+	return m.taskStore.CompleteTasksLessThan(ctx, request)
 }

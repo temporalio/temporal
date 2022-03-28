@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"fmt"
 	"sort"
 
@@ -89,6 +90,7 @@ func NewHistoryStore(
 // AppendHistoryNodes upsert a batch of events as a single node to a history branch
 // Note that it's not allowed to append above the branch's ancestors' nodes, which means nodeID >= ForkNodeID
 func (h *HistoryStore) AppendHistoryNodes(
+	_ context.Context,
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
@@ -135,6 +137,7 @@ func (h *HistoryStore) AppendHistoryNodes(
 
 // DeleteHistoryNodes delete a history node
 func (h *HistoryStore) DeleteHistoryNodes(
+	_ context.Context,
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	branchInfo := request.BranchInfo
@@ -164,6 +167,7 @@ func (h *HistoryStore) DeleteHistoryNodes(
 // ReadHistoryBranch returns history node data for a branch
 // NOTE: For branch that has ancestors, we need to query Cassandra multiple times, because it doesn't support OR/UNION operator
 func (h *HistoryStore) ReadHistoryBranch(
+	_ context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 	treeID, err := primitives.ValidateUUID(request.TreeID)
@@ -255,6 +259,7 @@ func (h *HistoryStore) ReadHistoryBranch(
 //       8[8,9]
 //
 func (h *HistoryStore) ForkHistoryBranch(
+	_ context.Context,
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
 
@@ -281,6 +286,7 @@ func (h *HistoryStore) ForkHistoryBranch(
 
 // DeleteHistoryBranch removes a branch
 func (h *HistoryStore) DeleteHistoryBranch(
+	_ context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 	batch := h.Session.NewBatch(gocql.LoggedBatch)
@@ -312,6 +318,7 @@ func (h *HistoryStore) deleteBranchRangeNodes(
 }
 
 func (h *HistoryStore) GetAllHistoryTreeBranches(
+	_ context.Context,
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
@@ -359,6 +366,7 @@ func (h *HistoryStore) GetAllHistoryTreeBranches(
 
 // GetHistoryTree returns all branch information of a tree
 func (h *HistoryStore) GetHistoryTree(
+	_ context.Context,
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 

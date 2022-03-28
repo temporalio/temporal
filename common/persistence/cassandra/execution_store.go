@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"time"
 
 	"go.temporal.io/server/common/log"
@@ -130,54 +131,57 @@ func NewExecutionStore(
 }
 
 func (d *ExecutionStore) CreateWorkflowExecution(
+	ctx context.Context,
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (*p.InternalCreateWorkflowExecutionResponse, error) {
 	for _, req := range request.NewWorkflowNewEvents {
-		if err := d.AppendHistoryNodes(req); err != nil {
+		if err := d.AppendHistoryNodes(ctx, req); err != nil {
 			return nil, err
 		}
 	}
 
-	return d.MutableStateStore.CreateWorkflowExecution(request)
+	return d.MutableStateStore.CreateWorkflowExecution(ctx, request)
 }
 
 func (d *ExecutionStore) UpdateWorkflowExecution(
+	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
 	for _, req := range request.UpdateWorkflowNewEvents {
-		if err := d.AppendHistoryNodes(req); err != nil {
+		if err := d.AppendHistoryNodes(ctx, req); err != nil {
 			return err
 		}
 	}
 	for _, req := range request.NewWorkflowNewEvents {
-		if err := d.AppendHistoryNodes(req); err != nil {
+		if err := d.AppendHistoryNodes(ctx, req); err != nil {
 			return err
 		}
 	}
 
-	return d.MutableStateStore.UpdateWorkflowExecution(request)
+	return d.MutableStateStore.UpdateWorkflowExecution(ctx, request)
 }
 
 func (d *ExecutionStore) ConflictResolveWorkflowExecution(
+	ctx context.Context,
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
 	for _, req := range request.CurrentWorkflowEventsNewEvents {
-		if err := d.AppendHistoryNodes(req); err != nil {
+		if err := d.AppendHistoryNodes(ctx, req); err != nil {
 			return err
 		}
 	}
 	for _, req := range request.ResetWorkflowEventsNewEvents {
-		if err := d.AppendHistoryNodes(req); err != nil {
+		if err := d.AppendHistoryNodes(ctx, req); err != nil {
 			return err
 		}
 	}
 	for _, req := range request.NewWorkflowEventsNewEvents {
-		if err := d.AppendHistoryNodes(req); err != nil {
+		if err := d.AppendHistoryNodes(ctx, req); err != nil {
 			return err
 		}
 	}
 
-	return d.MutableStateStore.ConflictResolveWorkflowExecution(request)
+	return d.MutableStateStore.ConflictResolveWorkflowExecution(ctx, request)
 }
 
 func (d *ExecutionStore) GetName() string {

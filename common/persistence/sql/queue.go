@@ -58,7 +58,10 @@ func newQueue(
 	return queue, nil
 }
 
-func (q *sqlQueue) Init(blob *commonpb.DataBlob) error {
+func (q *sqlQueue) Init(
+	_ context.Context,
+	blob *commonpb.DataBlob,
+) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	if err := q.initializeQueueMetadata(ctx, blob); err != nil {
@@ -71,6 +74,7 @@ func (q *sqlQueue) Init(blob *commonpb.DataBlob) error {
 }
 
 func (q *sqlQueue) EnqueueMessage(
+	_ context.Context,
 	blob commonpb.DataBlob,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -99,6 +103,7 @@ func (q *sqlQueue) EnqueueMessage(
 }
 
 func (q *sqlQueue) ReadMessages(
+	_ context.Context,
 	lastMessageID int64,
 	pageSize int,
 ) ([]*persistence.QueueMessage, error) {
@@ -127,6 +132,7 @@ func (q *sqlQueue) ReadMessages(
 }
 
 func (q *sqlQueue) DeleteMessagesBefore(
+	_ context.Context,
 	messageID int64,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -142,7 +148,10 @@ func (q *sqlQueue) DeleteMessagesBefore(
 	return nil
 }
 
-func (q *sqlQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) error {
+func (q *sqlQueue) UpdateAckLevel(
+	_ context.Context,
+	metadata *persistence.InternalQueueMetadata,
+) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	err := q.txExecute(ctx, "UpdateAckLevel", func(tx sqlplugin.Tx) error {
@@ -171,7 +180,9 @@ func (q *sqlQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) e
 	return nil
 }
 
-func (q *sqlQueue) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
+func (q *sqlQueue) GetAckLevels(
+	_ context.Context,
+) (*persistence.InternalQueueMetadata, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	row, err := q.Db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{
@@ -188,6 +199,7 @@ func (q *sqlQueue) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
 }
 
 func (q *sqlQueue) EnqueueMessageToDLQ(
+	_ context.Context,
 	blob commonpb.DataBlob,
 ) (int64, error) {
 	ctx, cancel := newExecutionContext()
@@ -218,6 +230,7 @@ func (q *sqlQueue) EnqueueMessageToDLQ(
 }
 
 func (q *sqlQueue) ReadMessagesFromDLQ(
+	_ context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 	pageSize int,
@@ -262,6 +275,7 @@ func (q *sqlQueue) ReadMessagesFromDLQ(
 }
 
 func (q *sqlQueue) DeleteMessageFromDLQ(
+	_ context.Context,
 	messageID int64,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -277,6 +291,7 @@ func (q *sqlQueue) DeleteMessageFromDLQ(
 }
 
 func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
+	_ context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
@@ -293,7 +308,10 @@ func (q *sqlQueue) RangeDeleteMessagesFromDLQ(
 	return nil
 }
 
-func (q *sqlQueue) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata) error {
+func (q *sqlQueue) UpdateDLQAckLevel(
+	_ context.Context,
+	metadata *persistence.InternalQueueMetadata,
+) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	err := q.txExecute(ctx, "UpdateDLQAckLevel", func(tx sqlplugin.Tx) error {
@@ -322,7 +340,9 @@ func (q *sqlQueue) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata
 	return nil
 }
 
-func (q *sqlQueue) GetDLQAckLevels() (*persistence.InternalQueueMetadata, error) {
+func (q *sqlQueue) GetDLQAckLevels(
+	_ context.Context,
+) (*persistence.InternalQueueMetadata, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	row, err := q.Db.SelectFromQueueMetadata(ctx, sqlplugin.QueueMetadataFilter{

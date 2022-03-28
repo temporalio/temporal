@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"math"
@@ -45,6 +46,7 @@ const (
 
 // AppendHistoryNodes add(or override) a node to a history branch
 func (m *sqlExecutionStore) AppendHistoryNodes(
+	_ context.Context,
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -121,6 +123,7 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 }
 
 func (m *sqlExecutionStore) DeleteHistoryNodes(
+	_ context.Context,
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -162,6 +165,7 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 
 // ReadHistoryBranch returns history node data for a branch
 func (m *sqlExecutionStore) ReadHistoryBranch(
+	_ context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -294,6 +298,7 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 //       8[8,9]
 //
 func (m *sqlExecutionStore) ForkHistoryBranch(
+	_ context.Context,
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -334,6 +339,7 @@ func (m *sqlExecutionStore) ForkHistoryBranch(
 
 // DeleteHistoryBranch removes a branch
 func (m *sqlExecutionStore) DeleteHistoryBranch(
+	_ context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -381,6 +387,7 @@ func (m *sqlExecutionStore) DeleteHistoryBranch(
 }
 
 func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
+	_ context.Context,
 	request *p.GetAllHistoryTreeBranchesRequest,
 ) (*p.InternalGetAllHistoryTreeBranchesResponse, error) {
 
@@ -391,6 +398,7 @@ func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 
 // GetHistoryTree returns all branch information of a tree
 func (m *sqlExecutionStore) GetHistoryTree(
+	_ context.Context,
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
 	ctx, cancel := newExecutionContext()

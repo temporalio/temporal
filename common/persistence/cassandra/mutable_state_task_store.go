@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"fmt"
 
 	"go.temporal.io/api/serviceerror"
@@ -241,6 +242,7 @@ func NewMutableStateTaskStore(
 }
 
 func (d *MutableStateTaskStore) AddHistoryTasks(
+	_ context.Context,
 	request *p.InternalAddHistoryTasksRequest,
 ) error {
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
@@ -289,6 +291,7 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 }
 
 func (d *MutableStateTaskStore) GetHistoryTask(
+	_ context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	switch request.TaskCategory.ID() {
@@ -306,6 +309,7 @@ func (d *MutableStateTaskStore) GetHistoryTask(
 }
 
 func (d *MutableStateTaskStore) GetHistoryTasks(
+	_ context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	switch request.TaskCategory.ID() {
@@ -323,6 +327,7 @@ func (d *MutableStateTaskStore) GetHistoryTasks(
 }
 
 func (d *MutableStateTaskStore) CompleteHistoryTask(
+	_ context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	switch request.TaskCategory.ID() {
@@ -340,6 +345,7 @@ func (d *MutableStateTaskStore) CompleteHistoryTask(
 }
 
 func (d *MutableStateTaskStore) RangeCompleteHistoryTasks(
+	_ context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	switch request.TaskCategory.ID() {
@@ -628,6 +634,7 @@ func (d *MutableStateTaskStore) rangeCompleteReplicationTasks(
 }
 
 func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
+	_ context.Context,
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	task := request.TaskInfo
@@ -657,6 +664,7 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 }
 
 func (d *MutableStateTaskStore) GetReplicationTasksFromDLQ(
+	_ context.Context,
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -675,6 +683,7 @@ func (d *MutableStateTaskStore) GetReplicationTasksFromDLQ(
 }
 
 func (d *MutableStateTaskStore) DeleteReplicationTaskFromDLQ(
+	_ context.Context,
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
 
@@ -693,6 +702,7 @@ func (d *MutableStateTaskStore) DeleteReplicationTaskFromDLQ(
 }
 
 func (d *MutableStateTaskStore) RangeDeleteReplicationTaskFromDLQ(
+	_ context.Context,
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 
