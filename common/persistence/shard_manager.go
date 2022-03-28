@@ -59,7 +59,7 @@ func (m *shardManagerImpl) GetName() string {
 }
 
 func (m *shardManagerImpl) GetOrCreateShard(
-	_ context.Context,
+	ctx context.Context,
 	request *GetOrCreateShardRequest,
 ) (*GetOrCreateShardResponse, error) {
 	var createShardInfo func() (int64, *commonpb.DataBlob, error)
@@ -76,7 +76,7 @@ func (m *shardManagerImpl) GetOrCreateShard(
 		}
 		return shardInfo.GetRangeId(), data, nil
 	}
-	internalResp, err := m.shardStore.GetOrCreateShard(&InternalGetOrCreateShardRequest{
+	internalResp, err := m.shardStore.GetOrCreateShard(ctx, &InternalGetOrCreateShardRequest{
 		ShardID:          request.ShardID,
 		CreateShardInfo:  createShardInfo,
 		LifecycleContext: request.LifecycleContext,
@@ -94,7 +94,7 @@ func (m *shardManagerImpl) GetOrCreateShard(
 }
 
 func (m *shardManagerImpl) UpdateShard(
-	_ context.Context,
+	ctx context.Context,
 	request *UpdateShardRequest,
 ) error {
 	shardInfo := request.ShardInfo
@@ -110,5 +110,5 @@ func (m *shardManagerImpl) UpdateShard(
 		ShardInfo:       shardInfoBlob,
 		PreviousRangeID: request.PreviousRangeID,
 	}
-	return m.shardStore.UpdateShard(internalRequest)
+	return m.shardStore.UpdateShard(ctx, internalRequest)
 }

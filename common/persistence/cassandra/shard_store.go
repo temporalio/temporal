@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -81,6 +82,7 @@ func NewShardStore(
 }
 
 func (d *ShardStore) GetOrCreateShard(
+	_ context.Context,
 	request *p.InternalGetOrCreateShardRequest,
 ) (*p.InternalGetOrCreateShardResponse, error) {
 	query := d.Session.Query(templateGetShardQuery,
@@ -129,7 +131,7 @@ func (d *ShardStore) GetOrCreateShard(
 	if !applied {
 		// conflict, try again
 		request.CreateShardInfo = nil // prevent loop
-		return d.GetOrCreateShard(request)
+		return d.GetOrCreateShard(context.TODO(), request)
 	}
 	return &p.InternalGetOrCreateShardResponse{
 		ShardInfo: shardInfo,
@@ -137,6 +139,7 @@ func (d *ShardStore) GetOrCreateShard(
 }
 
 func (d *ShardStore) UpdateShard(
+	_ context.Context,
 	request *p.InternalUpdateShardRequest,
 ) error {
 	query := d.Session.Query(templateUpdateShardQuery,

@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -150,6 +151,7 @@ func NewMatchingTaskStore(
 }
 
 func (d *MatchingTaskStore) CreateTaskQueue(
+	_ context.Context,
 	request *p.InternalCreateTaskQueueRequest,
 ) error {
 	query := d.Session.Query(templateInsertTaskQueueQuery,
@@ -181,6 +183,7 @@ func (d *MatchingTaskStore) CreateTaskQueue(
 }
 
 func (d *MatchingTaskStore) GetTaskQueue(
+	_ context.Context,
 	request *p.InternalGetTaskQueueRequest,
 ) (*p.InternalGetTaskQueueResponse, error) {
 	query := d.Session.Query(templateGetTaskQueueQuery,
@@ -206,6 +209,7 @@ func (d *MatchingTaskStore) GetTaskQueue(
 
 // UpdateTaskQueue update task queue
 func (d *MatchingTaskStore) UpdateTaskQueue(
+	_ context.Context,
 	request *p.InternalUpdateTaskQueueRequest,
 ) (*p.UpdateTaskQueueResponse, error) {
 	var err error
@@ -276,12 +280,14 @@ func (d *MatchingTaskStore) UpdateTaskQueue(
 }
 
 func (d *MatchingTaskStore) ListTaskQueue(
+	_ context.Context,
 	_ *p.ListTaskQueueRequest,
 ) (*p.InternalListTaskQueueResponse, error) {
 	return nil, serviceerror.NewUnavailable(fmt.Sprintf("unsupported operation"))
 }
 
 func (d *MatchingTaskStore) DeleteTaskQueue(
+	_ context.Context,
 	request *p.DeleteTaskQueueRequest,
 ) error {
 	query := d.Session.Query(templateDeleteTaskQueueQuery,
@@ -301,6 +307,7 @@ func (d *MatchingTaskStore) DeleteTaskQueue(
 
 // CreateTasks add tasks
 func (d *MatchingTaskStore) CreateTasks(
+	_ context.Context,
 	request *p.InternalCreateTasksRequest,
 ) (*p.CreateTasksResponse, error) {
 	batch := d.Session.NewBatch(gocql.LoggedBatch)
@@ -380,6 +387,7 @@ func GetTaskTTL(expireTime *time.Time) int64 {
 
 // GetTasks get a task
 func (d *MatchingTaskStore) GetTasks(
+	_ context.Context,
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -437,6 +445,7 @@ func (d *MatchingTaskStore) GetTasks(
 
 // CompleteTask delete a task
 func (d *MatchingTaskStore) CompleteTask(
+	_ context.Context,
 	request *p.CompleteTaskRequest,
 ) error {
 	tli := request.TaskQueue
@@ -459,6 +468,7 @@ func (d *MatchingTaskStore) CompleteTask(
 // Limit request parameter i.e. either all tasks leq the task_id will be deleted or an error will
 // be returned to the caller
 func (d *MatchingTaskStore) CompleteTasksLessThan(
+	_ context.Context,
 	request *p.CompleteTasksLessThanRequest,
 ) (int, error) {
 	query := d.Session.Query(templateCompleteTasksLessThanQuery,

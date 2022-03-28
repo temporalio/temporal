@@ -72,7 +72,10 @@ func newTaskPersistence(
 	}, nil
 }
 
-func (m *sqlTaskManager) CreateTaskQueue(request *persistence.InternalCreateTaskQueueRequest) error {
+func (m *sqlTaskManager) CreateTaskQueue(
+	_ context.Context,
+	request *persistence.InternalCreateTaskQueueRequest,
+) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
@@ -98,7 +101,10 @@ func (m *sqlTaskManager) CreateTaskQueue(request *persistence.InternalCreateTask
 	return nil
 }
 
-func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueRequest) (*persistence.InternalGetTaskQueueResponse, error) {
+func (m *sqlTaskManager) GetTaskQueue(
+	_ context.Context,
+	request *persistence.InternalGetTaskQueueRequest,
+) (*persistence.InternalGetTaskQueueResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
@@ -135,6 +141,7 @@ func (m *sqlTaskManager) GetTaskQueue(request *persistence.InternalGetTaskQueueR
 }
 
 func (m *sqlTaskManager) UpdateTaskQueue(
+	_ context.Context,
 	request *persistence.InternalUpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -178,7 +185,10 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 	return resp, err
 }
 
-func (m *sqlTaskManager) ListTaskQueue(request *persistence.ListTaskQueueRequest) (*persistence.InternalListTaskQueueResponse, error) {
+func (m *sqlTaskManager) ListTaskQueue(
+	_ context.Context,
+	request *persistence.ListTaskQueueRequest,
+) (*persistence.InternalListTaskQueueResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	pageToken := taskQueuePageToken{MinTaskQueueId: minTaskQueueId}
@@ -309,6 +319,7 @@ func getBoundariesForPartition(partition uint32, totalPartitions uint32) (uint32
 }
 
 func (m *sqlTaskManager) DeleteTaskQueue(
+	_ context.Context,
 	request *persistence.DeleteTaskQueueRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -338,6 +349,7 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 	return nil
 }
 func (m *sqlTaskManager) CreateTasks(
+	_ context.Context,
 	request *persistence.InternalCreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -380,6 +392,7 @@ func (m *sqlTaskManager) CreateTasks(
 }
 
 func (m *sqlTaskManager) GetTasks(
+	_ context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.InternalGetTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -434,6 +447,7 @@ func (m *sqlTaskManager) GetTasks(
 }
 
 func (m *sqlTaskManager) CompleteTask(
+	_ context.Context,
 	request *persistence.CompleteTaskRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -456,6 +470,7 @@ func (m *sqlTaskManager) CompleteTask(
 }
 
 func (m *sqlTaskManager) CompleteTasksLessThan(
+	_ context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
 	ctx, cancel := newExecutionContext()
