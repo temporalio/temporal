@@ -42,8 +42,6 @@ import (
 const (
 	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-delete-namespace-workflow"
-
-	namespaceCacheRefreshDelay = 11 * time.Second
 )
 
 type (
@@ -136,11 +134,6 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
-	}
-
-	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
-	if err != nil {
-		return result, err
 	}
 
 	// Step 4. Reclaim workflow resources asynchronously.
