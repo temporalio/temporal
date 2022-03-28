@@ -424,7 +424,7 @@ func (r *nDCTransactionMgrImpl) getCurrentWorkflowRunID(
 	workflowID string,
 ) (string, error) {
 
-	resp, err := r.shard.GetExecutionManager().GetCurrentExecution(
+	resp, err := r.shard.GetCurrentExecution(
 		ctx,
 		&persistence.GetCurrentExecutionRequest{
 			ShardID:     r.shard.GetShardID(),
