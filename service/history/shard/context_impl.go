@@ -162,6 +162,7 @@ const (
 	logWarnTransferLevelDiff = 3000000 // 3 million
 	logWarnTimerLevelDiff    = time.Duration(30 * time.Minute)
 	historySizeLogThreshold  = 10 * 1024 * 1024
+	minContextTimeout        = 2 * time.Second
 )
 
 func (s *ContextImpl) GetShardID() int32 {
@@ -550,6 +551,12 @@ func (s *ContextImpl) AddTasks(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NamespaceID)
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -571,6 +578,12 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -609,6 +622,12 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
 	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
@@ -657,6 +676,12 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -715,6 +740,12 @@ func (s *ContextImpl) SetWorkflowExecution(
 	ctx context.Context,
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.SetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -836,6 +867,12 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	// After step 3 task can't be retried because mutable state is gone and this might leave history branch in DB.
 	// The history branch won't be accessible (because mutable state is deleted) and special garbage collection workflow will delete it eventually.
 	// Step 4 shouldn't be done earlier because if this func fails after it, workflow execution will be accessible but won't have history (inconsistent state).
+
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
 
 	// Do not get namespace cache within shard lock.
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
@@ -1867,6 +1904,22 @@ func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
 
 func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
+}
+
+func (s *ContextImpl) ensureMinContextTimeout(
+	ctx context.Context,
+) (context.Context, context.CancelFunc, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	deadline, ok := ctx.Deadline()
+	if !ok || deadline.Sub(s.GetTimeSource().Now()) >= minContextTimeout {
+		return ctx, func() {}, nil
+	}
+
+	newContext, cancel := context.WithTimeout(context.Background(), minContextTimeout)
+	return newContext, cancel, nil
 }
 
 func convertAckLevelToTaskKey(
