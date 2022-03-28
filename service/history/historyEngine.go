@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/queues"
@@ -119,6 +120,7 @@ type (
 		replicationDLQHandler         replicationDLQHandler
 		searchAttributesValidator     *searchattribute.Validator
 		workflowDeleteManager         workflow.DeleteManager
+		eventSerializer               serialization.Serializer
 	}
 )
 
@@ -135,6 +137,7 @@ func NewEngineWithShardContext(
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
 	archivalClient archiver.Client,
+	eventSerializer serialization.Serializer,
 	queueProcessorFactories []queues.ProcessorFactory,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -171,6 +174,7 @@ func NewEngineWithShardContext(
 		replicationTaskProcessors: make(map[string]ReplicationTaskProcessor),
 		replicationTaskFetchers:   replicationTaskFetchers,
 		workflowDeleteManager:     workflowDeleteManager,
+		eventSerializer:           eventSerializer,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)
@@ -193,6 +197,7 @@ func NewEngineWithShardContext(
 			historyCache,
 			historyEngImpl.eventsReapplier,
 			logger,
+			eventSerializer,
 		)
 		historyEngImpl.nDCActivityReplicator = newNDCActivityReplicator(
 			shard,
@@ -450,6 +455,7 @@ func (e *historyEngineImpl) handleClusterMetadataUpdate(
 				e.shard.GetMetricsClient(),
 				fetcher,
 				replicationTaskExecutor,
+				e.eventSerializer,
 			)
 			replicationTaskProcessor.Start()
 			e.replicationTaskProcessors[clusterName] = replicationTaskProcessor

@@ -411,22 +411,18 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() resource.InstanceID { return resource.InstanceID(serviceName) }),
+		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
-		fx.Provide(func() metrics.Client { return metricsClient }),
-		fx.Provide(func() membership.MembershipFactoryInitializerFunc {
-			return func(x persistenceClient.Bean, y log.Logger) (membership.MembershipMonitorFactory, error) {
-				return newMembershipFactory(serviceName, hosts), nil
-			}
+		fx.Provide(func() membership.MembershipMonitorFactory {
+			return newMembershipFactory(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-		fx.Provide(func() *config.Persistence { return &persistenceConfig }),
 		fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return nil }),
@@ -523,21 +519,17 @@ func (c *temporalImpl) startHistory(
 				integrationClient,
 				persistenceConfig,
 			),
-			fx.Provide(func() resource.InstanceID { return resource.InstanceID(serviceName) }),
+			fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
 			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 			fx.Provide(func() common.RPCFactory { return rpcFactory }),
-			fx.Provide(func() metrics.Client { return metricsClient }),
-			fx.Provide(func() membership.MembershipFactoryInitializerFunc {
-				return func(x persistenceClient.Bean, y log.Logger) (membership.MembershipMonitorFactory, error) {
-					return newMembershipFactory(serviceName, hosts), nil
-				}
+			fx.Provide(func() membership.MembershipMonitorFactory {
+				return newMembershipFactory(serviceName, hosts)
 			}),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-			fx.Provide(func() *config.Persistence { return &persistenceConfig }),
 			fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
@@ -594,15 +586,6 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	serviceName := common.MatchingServiceName
 	rpcFactory := newRPCFactoryImpl(serviceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
 
-	metricsClient, err := metrics.NewClient(
-		&metrics.ClientConfig{},
-		tally.NewTestScope(serviceName, make(map[string]string)),
-		metrics.GetMetricsServiceIdx(serviceName, c.logger),
-	)
-	if err != nil {
-		c.logger.Fatal("metrics.NewClient", tag.Error(err))
-	}
-
 	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
 		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
@@ -617,20 +600,16 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() resource.InstanceID { return resource.InstanceID(serviceName) }),
+		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
-		fx.Provide(func() metrics.Client { return metricsClient }),
-		fx.Provide(func() membership.MembershipFactoryInitializerFunc {
-			return func(x persistenceClient.Bean, y log.Logger) (membership.MembershipMonitorFactory, error) {
-				return newMembershipFactory(serviceName, hosts), nil
-			}
+		fx.Provide(func() membership.MembershipMonitorFactory {
+			return newMembershipFactory(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-		fx.Provide(func() *config.Persistence { return &persistenceConfig }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
@@ -719,21 +698,17 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 			stoppedCh,
 			persistenceConfig,
 		),
-		fx.Provide(func() resource.InstanceID { return resource.InstanceID(serviceName) }),
+		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
-		fx.Provide(func() metrics.Client { return metricsClient }),
-		fx.Provide(func() membership.MembershipFactoryInitializerFunc {
-			return func(x persistenceClient.Bean, y log.Logger) (membership.MembershipMonitorFactory, error) {
-				return newMembershipFactory(serviceName, hosts), nil
-			}
+		fx.Provide(func() membership.MembershipMonitorFactory {
+			return newMembershipFactory(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
 		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
-		fx.Provide(func() *config.Persistence { return &persistenceConfig }),
 		fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),

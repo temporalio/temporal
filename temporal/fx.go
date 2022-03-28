@@ -372,11 +372,10 @@ func HistoryServiceProvider(
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		// fx.Provide(resource.NewBootstrapParams),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
+		resource.DefaultOptions,
 		history.QueueProcessorModule,
 		history.Module,
 		fx.NopLogger,
@@ -430,10 +429,9 @@ func MatchingServiceProvider(
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		// fx.Provide(resource.NewBootstrapParams),
+		resource.DefaultOptions,
 		matching.Module,
 		fx.NopLogger,
 	)
@@ -486,10 +484,10 @@ func FrontendServiceProvider(
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
+		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		// fx.Provide(resource.NewBootstrapParams),
+		resource.DefaultOptions,
 		frontend.Module,
 		fx.NopLogger,
 	)
@@ -542,10 +540,9 @@ func WorkerServiceProvider(
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() log.Logger { return params.Logger }),
 		fx.Provide(func() resource.ServerReporter { return params.ServerReporter }),
-		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }), // resolves untyped nil error
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
-		// fx.Provide(resource.NewBootstrapParams),
+		resource.DefaultOptions,
 		worker.Module,
 		fx.NopLogger,
 	)

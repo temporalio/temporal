@@ -57,6 +57,7 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/ringpop"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
@@ -76,6 +77,14 @@ type (
 
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
+
+	RuntimeMetricsReporterParams struct {
+		fx.In
+
+		MetricsScope metrics.UserScope
+		Logger       SnTaggedLogger
+		InstanceID   InstanceID `optional:"true"`
+	}
 )
 
 // Module
@@ -87,6 +96,7 @@ var Module = fx.Options(
 	fx.Provide(HostNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
+	fx.Provide(MetricsClientProvider),
 	fx.Provide(MetricsUserScopeProvider),
 	fx.Provide(SearchAttributeProviderProvider),
 	fx.Provide(SearchAttributeManagerProvider),
@@ -95,7 +105,6 @@ var Module = fx.Options(
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
-	fx.Provide(MembershipFactoryProvider),
 	fx.Provide(MembershipMonitorProvider),
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
@@ -111,6 +120,17 @@ var Module = fx.Options(
 	fx.Provide(MatchingClientProvider),
 	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
+	fx.Provide(PersistenceConfigProvider),
+)
+
+var DefaultOptions = fx.Options(
+	fx.Provide(MembershipMonitorFactoryProvider),
+	fx.Provide(RPCFactoryProvider),
+	fx.Provide(ArchivalMetadataProvider),
+	fx.Provide(ArchiverProviderProvider),
+	fx.Provide(ThrottledLoggerProvider),
+	fx.Provide(SdkClientFactoryProvider),
+	fx.Provide(DCRedirectionPolicyProvider),
 )
 
 func SnTaggedLoggerProvider(logger log.Logger, sn ServiceName) SnTaggedLogger {
@@ -207,17 +227,31 @@ func ClientBeanProvider(
 	)
 }
 
-func MembershipFactoryProvider(
-	init membership.MembershipFactoryInitializerFunc,
-	bean persistenceClient.Bean,
+func MembershipMonitorFactoryProvider(
+	persistenceBean persistenceClient.Bean,
 	logger SnTaggedLogger,
+	cfg *config.Config,
+	rChannel *tchannel.Channel,
+	svcName ServiceName,
 ) (membership.MembershipMonitorFactory, error) {
-	return init(bean, logger)
+	servicePortMap := make(map[string]int)
+	for sn, sc := range cfg.Services {
+		servicePortMap[sn] = sc.RPC.GRPCPort
+	}
+	return ringpop.NewRingpopFactory(
+		&cfg.Global.Membership,
+		rChannel,
+		string(svcName),
+		servicePortMap,
+		logger,
+		persistenceBean.GetClusterMetadataManager(),
+	)
 }
 
-// TODO: Seems that this factory mostly handles singleton logic. We should be able to handle it via IOC.
-func MembershipMonitorProvider(membershipFactory membership.MembershipMonitorFactory) (membership.Monitor, error) {
-	return membershipFactory.GetMembershipMonitor()
+func MembershipMonitorProvider(
+	factory membership.MembershipMonitorFactory,
+) (membership.Monitor, error) {
+	return factory.GetMembershipMonitor()
 }
 
 func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
@@ -252,15 +286,13 @@ func MetricsUserScopeProvider(serverMetricsClient metrics.Client) metrics.UserSc
 }
 
 func RuntimeMetricsReporterProvider(
-	metricsScope metrics.UserScope,
-	logger SnTaggedLogger,
-	instanceID InstanceID,
+	params RuntimeMetricsReporterParams,
 ) *metrics.RuntimeMetricsReporter {
 	return metrics.NewRuntimeMetricsReporter(
-		metricsScope,
+		params.MetricsScope,
 		time.Minute,
-		logger,
-		string(instanceID),
+		params.Logger,
+		string(params.InstanceID),
 	)
 }
 
@@ -333,7 +365,8 @@ func MetricsClientProvider(logger log.Logger, serviceName ServiceName, serverRep
 	return serverReporter.NewClient(logger, serviceIdx)
 }
 
-func PersistenceConfigProvider(persistenceConfig config.Persistence) *config.Persistence {
+func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
+	persistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
 	return &persistenceConfig
 }
 

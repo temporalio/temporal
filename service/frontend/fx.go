@@ -384,6 +384,7 @@ func AdminHandlerProvider(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
+	eventSerializer serialization.Serializer,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -411,6 +412,7 @@ func AdminHandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
+		eventSerializer,
 	}
 	return NewAdminHandler(args)
 }

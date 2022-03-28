@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -144,6 +145,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockMetadata,
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
+		serialization.NewSerializer(),
 	}
 	s.handler = NewAdminHandler(args)
 	s.handler.Start()

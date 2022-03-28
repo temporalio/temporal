@@ -143,6 +143,7 @@ type (
 		ClusterMetadata                     cluster.Metadata
 		ArchivalMetadata                    archiver.ArchivalMetadata
 		HealthServer                        *health.Server
+		EventSerializer                     serialization.Serializer
 	}
 )
 
@@ -182,7 +183,7 @@ func NewAdminHandler(
 			args.NamespaceReplicationQueue,
 			args.Logger,
 		),
-		eventSerializer:             serialization.NewSerializer(),
+		eventSerializer:             args.EventSerializer,
 		visibilityMgr:               args.VisibilityMrg,
 		ESConfig:                    args.EsConfig,
 		ESClient:                    args.EsClient,
