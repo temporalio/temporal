@@ -313,7 +313,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		ctx,
 		sdkclient.StartWorkflowOptions{
 			TaskQueue: worker.DefaultWorkerTaskQueue,
-			ID:        deleteexecutions.WorkflowName,
+			ID:        deletenamespace.WorkflowName,
 		},
 		deletenamespace.WorkflowName,
 		wfParams,
