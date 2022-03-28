@@ -1,8 +1,0 @@
-{
-    "CurrVersion": "1.9",
-    "MinCompatibleVersion": "1.0",
-    "Description": "Expand VARCHAR columns governed by maxIDLength to VARCHAR(255)",
-    "SchemaUpdateCqlFiles": [
-        "alter_columns.sql"
-    ]
-}
