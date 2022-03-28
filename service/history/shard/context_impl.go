@@ -34,14 +34,14 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -599,7 +599,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.CreateWorkflowExecution(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -647,7 +647,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.UpdateWorkflowExecution(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -705,7 +705,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.ConflictResolveWorkflowExecution(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -743,7 +743,29 @@ func (s *ContextImpl) SetWorkflowExecution(
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.SetWorkflowExecution(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *ContextImpl) GetCurrentExecution(
+	ctx context.Context,
+	request *persistence.GetCurrentExecutionRequest,
+) (*persistence.GetCurrentExecutionResponse, error) {
+	resp, err := s.executionManager.GetCurrentExecution(ctx, request)
+	if err = s.handleReadError(err); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *ContextImpl) GetWorkflowExecution(
+	ctx context.Context,
+	request *persistence.GetWorkflowExecutionRequest,
+) (*persistence.GetWorkflowExecutionResponse, error) {
+	resp, err := s.executionManager.GetWorkflowExecution(ctx, request)
+	if err = s.handleReadError(err); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -766,7 +788,7 @@ func (s *ContextImpl) addTasksLocked(
 
 	request.RangeID = s.getRangeIDLocked()
 	err := s.executionManager.AddHistoryTasks(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
 	s.engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
@@ -1006,7 +1028,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 			tag.ShardRangeID(updatedShardInfo.GetRangeId()),
 			tag.PreviousShardRangeID(s.shardInfo.GetRangeId()),
 		)
-		return s.handleErrorLocked(err)
+		return s.handleWriteErrorLocked(err)
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
@@ -1050,7 +1072,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
 	if err != nil {
-		return s.handleErrorLocked(err)
+		return s.handleWriteErrorLocked(err)
 	}
 
 	s.lastUpdated = now
@@ -1212,12 +1234,28 @@ func (s *ContextImpl) GetLastUpdatedTime() time.Time {
 	return s.lastUpdated
 }
 
-func (s *ContextImpl) handleErrorLocked(err error) error {
-	// We can use 0 here since updateMaxReadLevelLocked ensures that the read level never goes backwards.
-	return s.handleErrorAndUpdateMaxReadLevelLocked(err, 0)
+func (s *ContextImpl) handleReadError(err error) error {
+	switch err.(type) {
+	case nil:
+		return nil
+
+	case *persistence.ShardOwnershipLostError:
+		// Shard is stolen, trigger shutdown of history engine.
+		// Handling of max read level doesn't matter here.
+		s.Unload()
+		return err
+
+	default:
+		return err
+	}
 }
 
-func (s *ContextImpl) handleErrorAndUpdateMaxReadLevelLocked(err error, newMaxReadLevel int64) error {
+func (s *ContextImpl) handleWriteErrorLocked(err error) error {
+	// We can use 0 here since updateMaxReadLevelLocked ensures that the read level never goes backwards.
+	return s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, 0)
+}
+
+func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, newMaxReadLevel int64) error {
 	switch err.(type) {
 	case nil:
 		// Persistence success: update max read level

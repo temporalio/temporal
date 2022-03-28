@@ -248,6 +248,21 @@ func (mr *MockContextMockRecorder) GetConfig() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MockContext)(nil).GetConfig))
 }
 
+// GetCurrentExecution mocks base method.
+func (m *MockContext) GetCurrentExecution(ctx context.Context, request *persistence.GetCurrentExecutionRequest) (*persistence.GetCurrentExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetCurrentExecution", ctx, request)
+	ret0, _ := ret[0].(*persistence.GetCurrentExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetCurrentExecution indicates an expected call of GetCurrentExecution.
+func (mr *MockContextMockRecorder) GetCurrentExecution(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetCurrentExecution", reflect.TypeOf((*MockContext)(nil).GetCurrentExecution), ctx, request)
+}
+
 // GetCurrentTime mocks base method.
 func (m *MockContext) GetCurrentTime(cluster string) time.Time {
 	m.ctrl.T.Helper()
@@ -571,6 +586,21 @@ func (m *MockContext) GetTimeSource() clock.TimeSource {
 func (mr *MockContextMockRecorder) GetTimeSource() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeSource", reflect.TypeOf((*MockContext)(nil).GetTimeSource))
+}
+
+// GetWorkflowExecution mocks base method.
+func (m *MockContext) GetWorkflowExecution(ctx context.Context, request *persistence.GetWorkflowExecutionRequest) (*persistence.GetWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetWorkflowExecution", ctx, request)
+	ret0, _ := ret[0].(*persistence.GetWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetWorkflowExecution indicates an expected call of GetWorkflowExecution.
+func (mr *MockContextMockRecorder) GetWorkflowExecution(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).GetWorkflowExecution), ctx, request)
 }
 
 // SetCurrentTime mocks base method.
