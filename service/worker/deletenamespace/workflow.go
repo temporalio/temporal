@@ -138,6 +138,7 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 
 	// Step 4. Reclaim workflow resources asynchronously.
 	ctx4 := workflow.WithChildOptions(ctx, reclaimResourcesWorkflowOptions)
+	ctx4 = workflow.WithWorkflowID(ctx4, fmt.Sprintf("%s/%s", reclaimresources.WorkflowName, result.DeletedNamespace))
 	reclaimResourcesFuture := workflow.ExecuteChildWorkflow(ctx4, reclaimresources.ReclaimResourcesWorkflow, reclaimresources.ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
 			Namespace:   result.DeletedNamespace,

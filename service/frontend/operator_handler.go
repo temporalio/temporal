@@ -313,7 +313,7 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 		ctx,
 		sdkclient.StartWorkflowOptions{
 			TaskQueue: worker.DefaultWorkerTaskQueue,
-			ID:        deletenamespace.WorkflowName,
+			ID:        fmt.Sprintf("%s/%s", deletenamespace.WorkflowName, request.GetNamespace()),
 		},
 		deletenamespace.WorkflowName,
 		wfParams,
@@ -326,11 +326,11 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 	var wfResult deletenamespace.DeleteNamespaceWorkflowResult
 	err = run.Get(ctx, &wfResult)
 	if err != nil {
-		scope.IncCounter(metrics.DeleteNamespaceFailuresCount)
+		scope.IncCounter(metrics.DeleteNamespaceWorkflowFailuresCount)
 		execution := &commonpb.WorkflowExecution{WorkflowId: deletenamespace.WorkflowName, RunId: run.GetRunID()}
 		return nil, h.error(serviceerror.NewSystemWorkflow(execution, err), scope, endpointName)
 	}
-	scope.IncCounter(metrics.DeleteNamespaceSuccessCount)
+	scope.IncCounter(metrics.DeleteNamespaceWorkflowSuccessCount)
 
 	return &operatorservice.DeleteNamespaceResponse{
 		DeletedNamespace: wfResult.DeletedNamespace.String(),
