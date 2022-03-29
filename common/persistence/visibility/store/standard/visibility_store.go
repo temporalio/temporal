@@ -25,6 +25,7 @@
 package standard
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -71,59 +72,101 @@ func (s *standardStore) GetName() string {
 	return s.store.GetName()
 }
 
-func (s *standardStore) RecordWorkflowExecutionStarted(request *store.InternalRecordWorkflowExecutionStartedRequest) error {
-	return s.store.RecordWorkflowExecutionStarted(request)
+func (s *standardStore) RecordWorkflowExecutionStarted(
+	ctx context.Context,
+	request *store.InternalRecordWorkflowExecutionStartedRequest,
+) error {
+	return s.store.RecordWorkflowExecutionStarted(ctx, request)
 }
 
-func (s *standardStore) RecordWorkflowExecutionClosed(request *store.InternalRecordWorkflowExecutionClosedRequest) error {
-	return s.store.RecordWorkflowExecutionClosed(request)
+func (s *standardStore) RecordWorkflowExecutionClosed(
+	ctx context.Context,
+	request *store.InternalRecordWorkflowExecutionClosedRequest,
+) error {
+	return s.store.RecordWorkflowExecutionClosed(ctx, request)
 }
 
-func (s *standardStore) UpsertWorkflowExecution(request *store.InternalUpsertWorkflowExecutionRequest) error {
-	return s.store.UpsertWorkflowExecution(request)
+func (s *standardStore) UpsertWorkflowExecution(
+	ctx context.Context,
+	request *store.InternalUpsertWorkflowExecutionRequest,
+) error {
+	return s.store.UpsertWorkflowExecution(ctx, request)
 }
 
-func (s *standardStore) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
-	return s.store.DeleteWorkflowExecution(request)
+func (s *standardStore) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *manager.VisibilityDeleteWorkflowExecutionRequest,
+) error {
+	return s.store.DeleteWorkflowExecution(ctx, request)
 }
 
-func (s *standardStore) ListOpenWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.store.ListOpenWorkflowExecutions(request)
+func (s *standardStore) ListOpenWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	return s.store.ListOpenWorkflowExecutions(ctx, request)
 }
 
-func (s *standardStore) ListClosedWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.store.ListClosedWorkflowExecutions(request)
+func (s *standardStore) ListClosedWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	return s.store.ListClosedWorkflowExecutions(ctx, request)
 }
 
-func (s *standardStore) ListOpenWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.store.ListOpenWorkflowExecutionsByType(request)
+func (s *standardStore) ListOpenWorkflowExecutionsByType(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	return s.store.ListOpenWorkflowExecutionsByType(ctx, request)
 }
 
-func (s *standardStore) ListClosedWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.store.ListClosedWorkflowExecutionsByType(request)
+func (s *standardStore) ListClosedWorkflowExecutionsByType(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	return s.store.ListClosedWorkflowExecutionsByType(ctx, request)
 }
 
-func (s *standardStore) ListOpenWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.store.ListOpenWorkflowExecutionsByWorkflowID(request)
+func (s *standardStore) ListOpenWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	return s.store.ListOpenWorkflowExecutionsByWorkflowID(ctx, request)
 }
 
-func (s *standardStore) ListClosedWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.store.ListClosedWorkflowExecutionsByWorkflowID(request)
+func (s *standardStore) ListClosedWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	return s.store.ListClosedWorkflowExecutionsByWorkflowID(ctx, request)
 }
 
-func (s *standardStore) ListClosedWorkflowExecutionsByStatus(request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.store.ListClosedWorkflowExecutionsByStatus(request)
+func (s *standardStore) ListClosedWorkflowExecutionsByStatus(
+	ctx context.Context,
+	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	return s.store.ListClosedWorkflowExecutionsByStatus(ctx, request)
 }
 
-func (s *standardStore) ScanWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {
-	return s.store.ScanWorkflowExecutions(request)
+func (s *standardStore) ScanWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
+	return s.store.ScanWorkflowExecutions(ctx, request)
 }
 
-func (s *standardStore) CountWorkflowExecutions(request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
-	return s.store.CountWorkflowExecutions(request)
+func (s *standardStore) CountWorkflowExecutions(
+	ctx context.Context,
+	request *manager.CountWorkflowExecutionsRequest,
+) (*manager.CountWorkflowExecutionsResponse, error) {
+	return s.store.CountWorkflowExecutions(ctx, request)
 }
 
-func (s *standardStore) ListWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *standardStore) ListWorkflowExecutions(
+	ctx context.Context,
+	request *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	converter := newQueryConverter()
 	filter, err := converter.GetFilter(request.Query)
 	if err != nil {
@@ -148,6 +191,7 @@ func (s *standardStore) ListWorkflowExecutions(request *manager.ListWorkflowExec
 			WorkflowID:                    *filter.WorkflowID,
 		}
 		return s.listWorkflowExecutionsHelper(
+			ctx,
 			request,
 			s.listOpenWorkflowExecutionsByWorkflowID,
 			s.listClosedWorkflowExecutionsByWorkflowID)
@@ -157,21 +201,23 @@ func (s *standardStore) ListWorkflowExecutions(request *manager.ListWorkflowExec
 			WorkflowTypeName:              *filter.WorkflowTypeName,
 		}
 		return s.listWorkflowExecutionsHelper(
+			ctx,
 			request,
 			s.listOpenWorkflowExecutionsByType,
 			s.listClosedWorkflowExecutionsByType)
 	} else if filter.Status != int32(enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED) {
 		if filter.Status == int32(enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING) {
-			return s.ListOpenWorkflowExecutions(baseReq)
+			return s.ListOpenWorkflowExecutions(ctx, baseReq)
 		} else {
 			request := &manager.ListClosedWorkflowExecutionsByStatusRequest{
 				ListWorkflowExecutionsRequest: baseReq,
 				Status:                        enumspb.WorkflowExecutionStatus(filter.Status),
 			}
-			return s.ListClosedWorkflowExecutionsByStatus(request)
+			return s.ListClosedWorkflowExecutionsByStatus(ctx, request)
 		}
 	} else {
 		return s.listWorkflowExecutionsHelper(
+			ctx,
 			baseReq,
 			s.listOpenWorkflowExecutions,
 			s.listClosedWorkflowExecutions)
@@ -179,9 +225,10 @@ func (s *standardStore) ListWorkflowExecutions(request *manager.ListWorkflowExec
 }
 
 func (s *standardStore) listWorkflowExecutionsHelper(
+	ctx context.Context,
 	request listRequest,
-	listOpenFunc func(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error),
-	listCloseFunc func(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error),
+	listOpenFunc func(ctx context.Context, request listRequest) (*store.InternalListWorkflowExecutionsResponse, error),
+	listCloseFunc func(ctx context.Context, request listRequest) (*store.InternalListWorkflowExecutionsResponse, error),
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 
 	var token nextPageToken
@@ -200,7 +247,7 @@ func (s *standardStore) listWorkflowExecutionsHelper(
 	resp := &store.InternalListWorkflowExecutionsResponse{}
 
 	if token.ForOpenWorkflows {
-		listOpenResp, err := listOpenFunc(request)
+		listOpenResp, err := listOpenFunc(ctx, request)
 		if err != nil {
 			return nil, err
 		}
@@ -226,7 +273,7 @@ func (s *standardStore) listWorkflowExecutionsHelper(
 		}
 	}
 
-	listCloseResp, err := listCloseFunc(request)
+	listCloseResp, err := listCloseFunc(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -247,56 +294,74 @@ func (s *standardStore) listWorkflowExecutionsHelper(
 	return resp, nil
 }
 
-func (s *standardStore) listOpenWorkflowExecutionsByWorkflowID(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *standardStore) listOpenWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request listRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByWorkflowIDRequest)
 	if !ok {
 		panic(fmt.Errorf("wrong request type %v for listOpenWorkflowExecutionsByWorkflowID", reflect.TypeOf(request)))
 	}
 
-	return s.ListOpenWorkflowExecutionsByWorkflowID(actualRequest)
+	return s.ListOpenWorkflowExecutionsByWorkflowID(ctx, actualRequest)
 }
 
-func (s *standardStore) listOpenWorkflowExecutionsByType(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *standardStore) listOpenWorkflowExecutionsByType(
+	ctx context.Context,
+	request listRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByTypeRequest)
 	if !ok {
 		panic(fmt.Errorf("wrong request type %v for listOpenWorkflowExecutionsByType", reflect.TypeOf(request)))
 	}
 
-	return s.ListOpenWorkflowExecutionsByType(actualRequest)
+	return s.ListOpenWorkflowExecutionsByType(ctx, actualRequest)
 }
 
-func (s *standardStore) listOpenWorkflowExecutions(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *standardStore) listOpenWorkflowExecutions(
+	ctx context.Context,
+	request listRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsRequest)
 	if !ok {
 		panic(fmt.Errorf("wrong request type %v for listOpenWorkflowExecutions", reflect.TypeOf(request)))
 	}
 
-	return s.ListOpenWorkflowExecutions(actualRequest)
+	return s.ListOpenWorkflowExecutions(ctx, actualRequest)
 }
 
-func (s *standardStore) listClosedWorkflowExecutionsByWorkflowID(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *standardStore) listClosedWorkflowExecutionsByWorkflowID(
+	ctx context.Context,
+	request listRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByWorkflowIDRequest)
 	if !ok {
 		panic(fmt.Errorf("wrong request type %v for listClosedWorkflowExecutionsByWorkflowID", reflect.TypeOf(request)))
 	}
 
-	return s.ListClosedWorkflowExecutionsByWorkflowID(actualRequest)
+	return s.ListClosedWorkflowExecutionsByWorkflowID(ctx, actualRequest)
 }
 
-func (s *standardStore) listClosedWorkflowExecutionsByType(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *standardStore) listClosedWorkflowExecutionsByType(
+	ctx context.Context,
+	request listRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsByTypeRequest)
 	if !ok {
 		panic(fmt.Errorf("wrong request type %v for listClosedWorkflowExecutionsByType", reflect.TypeOf(request)))
 	}
 
-	return s.ListClosedWorkflowExecutionsByType(actualRequest)
+	return s.ListClosedWorkflowExecutionsByType(ctx, actualRequest)
 }
 
-func (s *standardStore) listClosedWorkflowExecutions(request listRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (s *standardStore) listClosedWorkflowExecutions(
+	ctx context.Context,
+	request listRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	actualRequest, ok := request.(*manager.ListWorkflowExecutionsRequest)
 	if !ok {
 		panic(fmt.Errorf("wrong request type %v for listClosedWorkflowExecutions", reflect.TypeOf(request)))
 	}
 
-	return s.ListClosedWorkflowExecutions(actualRequest)
+	return s.ListClosedWorkflowExecutions(ctx, actualRequest)
 }
