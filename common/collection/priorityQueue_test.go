@@ -26,10 +26,15 @@ package collection
 
 import (
 	"math/rand"
+	"runtime"
 	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
+)
+
+const (
+	numPriorities = 16
 )
 
 type (
@@ -109,5 +114,27 @@ func (s *PriorityQueueSuite) TestRandomNumber() {
 			result = append(result, s.pq.Remove().(*testPriorityQueueItem).value)
 		}
 		s.Equal(expected, result)
+	}
+}
+
+type testTask struct {
+	id       string
+	priority int
+}
+
+func remove(queue Queue) interface{} {
+	for queue.IsEmpty() {
+		runtime.Gosched()
+	}
+	return queue.Remove()
+}
+
+func send(queue Queue) {
+	for {
+		t := &testTask{
+			id:       "abc",
+			priority: rand.Int() % numPriorities,
+		}
+		queue.Add(t)
 	}
 }
