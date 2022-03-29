@@ -707,7 +707,7 @@ func (r *workflowResetterImpl) reapplyWorkflowEvents(
 		if err != nil {
 			return "", err
 		}
-		lastEvents = batch.(*historypb.History).Events
+		lastEvents = batch.Events
 		if err := r.reapplyEvents(mutableState, lastEvents); err != nil {
 			return "", err
 		}
@@ -751,9 +751,9 @@ func (r *workflowResetterImpl) getPaginationFn(
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
-) collection.PaginationFn {
+) collection.PaginationFn[*historypb.History] {
 
-	return func(paginationToken []byte) ([]interface{}, []byte, error) {
+	return func(paginationToken []byte) ([]*historypb.History, []byte, error) {
 
 		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
@@ -766,11 +766,6 @@ func (r *workflowResetterImpl) getPaginationFn(
 		if err != nil {
 			return nil, nil, err
 		}
-
-		var paginateItems []interface{}
-		for _, history := range resp.History {
-			paginateItems = append(paginateItems, history)
-		}
-		return paginateItems, resp.NextPageToken, nil
+		return resp.History, resp.NextPageToken, nil
 	}
 }

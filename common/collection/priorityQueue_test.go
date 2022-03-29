@@ -33,6 +33,10 @@ import (
 	"github.com/stretchr/testify/suite"
 )
 
+const (
+	numPriorities = 16
+)
+
 type (
 	PriorityQueueSuite struct {
 		suite.Suite
@@ -116,20 +120,6 @@ func (s *PriorityQueueSuite) TestRandomNumber() {
 type testTask struct {
 	id       string
 	priority int
-}
-
-func BenchmarkConcurrentPriorityQueue(b *testing.B) {
-	queue := NewConcurrentPriorityQueue(func(this interface{}, other interface{}) bool {
-		return this.(*testTask).priority < other.(*testTask).priority
-	})
-
-	for i := 0; i < 100; i++ {
-		go send(queue)
-	}
-
-	for n := 0; n < b.N; n++ {
-		remove(queue)
-	}
 }
 
 func remove(queue Queue) interface{} {

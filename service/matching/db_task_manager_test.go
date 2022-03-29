@@ -158,7 +158,7 @@ func (s *dbTaskManagerSuite) TestStart_Success() {
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getShutdownChan().Return(nil).AnyTimes()
 	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
-		func(paginationToken []byte) ([]interface{}, []byte, error) {
+		func(paginationToken []byte) ([]*persistencespb.AllocatedTaskInfo, []byte, error) {
 			return nil, nil, nil
 		},
 	)).AnyTimes()
@@ -178,7 +178,7 @@ func (s *dbTaskManagerSuite) TestStart_ErrorThenSuccess() {
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getShutdownChan().Return(nil).AnyTimes()
 	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
-		func(paginationToken []byte) ([]interface{}, []byte, error) {
+		func(paginationToken []byte) ([]*persistencespb.AllocatedTaskInfo, []byte, error) {
 			return nil, nil, nil
 		},
 	)).AnyTimes()
@@ -213,7 +213,7 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID).AnyTimes()
 	s.taskQueueOwnership.EXPECT().getShutdownChan().Return(nil).AnyTimes()
 	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
-		func(paginationToken []byte) ([]interface{}, []byte, error) {
+		func(paginationToken []byte) ([]*persistencespb.AllocatedTaskInfo, []byte, error) {
 			return nil, nil, nil
 		},
 	)).AnyTimes()
@@ -256,8 +256,8 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Expired() {
 	}
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
 	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
-		func(paginationToken []byte) ([]interface{}, []byte, error) {
-			return []interface{}{allocatedTaskInfo}, nil, nil
+		func(paginationToken []byte) ([]*persistencespb.AllocatedTaskInfo, []byte, error) {
+			return []*persistencespb.AllocatedTaskInfo{allocatedTaskInfo}, nil, nil
 		},
 	))
 	s.taskReader.EXPECT().ackTask(allocatedTaskInfo.TaskId)
@@ -295,8 +295,8 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadSuccess_Dispatch() {
 	}
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
 	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
-		func(paginationToken []byte) ([]interface{}, []byte, error) {
-			return []interface{}{allocatedTaskInfo}, nil, nil
+		func(paginationToken []byte) ([]*persistencespb.AllocatedTaskInfo, []byte, error) {
+			return []*persistencespb.AllocatedTaskInfo{allocatedTaskInfo}, nil, nil
 		},
 	))
 
@@ -318,7 +318,7 @@ func (s *dbTaskManagerSuite) TestReadAndDispatchTasks_ReadFailure() {
 
 	s.taskQueueOwnership.EXPECT().getLastAllocatedTaskID().Return(s.lastAllocatedTaskID)
 	s.taskReader.EXPECT().taskIterator(gomock.Any(), s.lastAllocatedTaskID).Return(collection.NewPagingIterator(
-		func(paginationToken []byte) ([]interface{}, []byte, error) {
+		func(paginationToken []byte) ([]*persistencespb.AllocatedTaskInfo, []byte, error) {
 			return nil, nil, serviceerror.NewUnavailable("random error")
 		},
 	))

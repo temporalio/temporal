@@ -140,7 +140,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		endEventVersion))
 
 	for historyIterator.HasNext() {
-		result, err := historyIterator.Next()
+		batch, err := historyIterator.Next()
 		if err != nil {
 			n.logger.Error("failed to get history events",
 				tag.WorkflowNamespaceID(namespaceID.String()),
@@ -149,14 +149,13 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 				tag.Error(err))
 			return err
 		}
-		historyBatch := result.(*historyBatch)
 
 		replicationRequest := n.createReplicationRawRequest(
 			namespaceID,
 			workflowID,
 			runID,
-			historyBatch.rawEventBatch,
-			historyBatch.versionHistory.GetItems())
+			batch.rawEventBatch,
+			batch.versionHistory.GetItems())
 
 		err = n.sendReplicationRawRequest(ctx, replicationRequest)
 		if err != nil {
@@ -180,9 +179,9 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 	startEventVersion int64,
 	endEventID int64,
 	endEventVersion int64,
-) collection.PaginationFn {
+) collection.PaginationFn[historyBatch] {
 
-	return func(paginationToken []byte) ([]interface{}, []byte, error) {
+	return func(paginationToken []byte) ([]historyBatch, []byte, error) {
 
 		response, err := n.getHistory(
 			ctx,
@@ -200,16 +199,16 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 			return nil, nil, err
 		}
 
-		var paginateItems []interface{}
+		batches := make([]historyBatch, 0, len(response.GetHistoryBatches()))
 		versionHistory := response.GetVersionHistory()
 		for _, history := range response.GetHistoryBatches() {
-			batch := &historyBatch{
+			batch := historyBatch{
 				versionHistory: versionHistory,
 				rawEventBatch:  history,
 			}
-			paginateItems = append(paginateItems, batch)
+			batches = append(batches, batch)
 		}
-		return paginateItems, response.NextPageToken, nil
+		return batches, response.NextPageToken, nil
 	}
 }
 

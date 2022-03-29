@@ -33,6 +33,8 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	collection "go.temporal.io/server/common/collection"
 )
 
@@ -86,10 +88,10 @@ func (mr *MockdbTaskReaderMockRecorder) moveAckedTaskID() *gomock.Call {
 }
 
 // taskIterator mocks base method.
-func (m *MockdbTaskReader) taskIterator(ctx context.Context, maxTaskID int64) collection.Iterator {
+func (m *MockdbTaskReader) taskIterator(ctx context.Context, maxTaskID int64) collection.Iterator[*persistencespb.AllocatedTaskInfo] {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "taskIterator", ctx, maxTaskID)
-	ret0, _ := ret[0].(collection.Iterator)
+	ret0, _ := ret[0].(collection.Iterator[*persistencespb.AllocatedTaskInfo])
 	return ret0
 }
 
