@@ -214,7 +214,8 @@ goimports:
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
-	@staticcheck -fail none ./...
+	# disable staticcheck until staticcheck support generics
+	#@staticcheck -fail none ./...
 
 errcheck:
 	@printf $(COLOR) "Run errcheck..."
