@@ -32,6 +32,7 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -85,9 +86,10 @@ func (s *registrySuite) TestListNamespace() {
 	namespaceRecord1 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   namespace.NewID().String(),
-				Name: "some random namespace name",
-				Data: make(map[string]string)},
+				Id:    namespace.NewID().String(),
+				Name:  "some random namespace name",
+				State: enumspb.NAMESPACE_STATE_REGISTERED,
+				Data:  make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(1),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -110,9 +112,10 @@ func (s *registrySuite) TestListNamespace() {
 	namespaceRecord2 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   namespace.NewID().String(),
-				Name: "another random namespace name",
-				Data: make(map[string]string)},
+				Id:    namespace.NewID().String(),
+				Name:  "another random namespace name",
+				State: enumspb.NAMESPACE_STATE_DELETED, // Still must be included.
+				Data:  make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(2),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -135,9 +138,10 @@ func (s *registrySuite) TestListNamespace() {
 	namespaceRecord3 := &persistence.GetNamespaceResponse{
 		Namespace: &persistencespb.NamespaceDetail{
 			Info: &persistencespb.NamespaceInfo{
-				Id:   namespace.NewID().String(),
-				Name: "yet another random namespace name",
-				Data: make(map[string]string)},
+				Id:    namespace.NewID().String(),
+				Name:  "yet another random namespace name",
+				State: enumspb.NAMESPACE_STATE_DEPRECATED, // Still must be included.
+				Data:  make(map[string]string)},
 			Config: &persistencespb.NamespaceConfig{
 				Retention: timestamp.DurationFromDays(3),
 				BadBinaries: &namespacepb.BadBinaries{
@@ -165,16 +169,18 @@ func (s *registrySuite) TestListNamespace() {
 			NotificationVersion: namespaceNotificationVersion,
 		}, nil)
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:      namespace.CacheRefreshPageSize,
-		NextPageToken: nil,
+		PageSize:       namespace.CacheRefreshPageSize,
+		IncludeDeleted: true,
+		NextPageToken:  nil,
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces:    []*persistence.GetNamespaceResponse{namespaceRecord1},
 		NextPageToken: pageToken,
 	}, nil)
 
 	s.regPersistence.EXPECT().ListNamespaces(gomock.Any(), &persistence.ListNamespacesRequest{
-		PageSize:      namespace.CacheRefreshPageSize,
-		NextPageToken: pageToken,
+		PageSize:       namespace.CacheRefreshPageSize,
+		IncludeDeleted: true,
+		NextPageToken:  pageToken,
 	}).Return(&persistence.ListNamespacesResponse{
 		Namespaces: []*persistence.GetNamespaceResponse{
 			namespaceRecord2,
