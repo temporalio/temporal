@@ -2214,7 +2214,9 @@ const (
 	ReadNamespaceFailuresCount
 	ListExecutionsFailuresCount
 	TerminateExecutionFailuresCount
+	TerminateExecutionNotFoundCount
 	DeleteExecutionFailuresCount
+	DeleteExecutionNotFoundCount
 	RateLimiterFailuresCount
 
 	NumWorkerMetrics
@@ -2683,7 +2685,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReadNamespaceFailuresCount:      NewCounterDef("read_namespace_failures"),
 		ListExecutionsFailuresCount:     NewCounterDef("list_executions_failures"),
 		TerminateExecutionFailuresCount: NewCounterDef("terminate_executions_failures"),
+		TerminateExecutionNotFoundCount: NewCounterDef("terminate_executions_not_found"),
 		DeleteExecutionFailuresCount:    NewCounterDef("delete_execution_failures"),
+		DeleteExecutionNotFoundCount:    NewCounterDef("delete_execution_not_found"),
 		RateLimiterFailuresCount:        NewCounterDef("rate_limiter_failures"),
 	},
 	Server: {
