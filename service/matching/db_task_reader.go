@@ -39,7 +39,8 @@ const (
 	dbTaskReaderPageSize = 100
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination db_task_reader_mock.go
+// temporarily disable mock gen until mock gen support go generics
+// //go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination db_task_reader_mock.go
 
 type (
 	dbTaskReader interface {
