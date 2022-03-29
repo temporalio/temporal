@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package encryption
+package testhelper
 
 import (
 	"crypto/rand"
@@ -38,12 +38,12 @@ import (
 )
 
 // GenerateSelfSignedUseEverywhereX509 generates a TLS serverCert that is self-signed
-func GenerateSelfSignedUseEverywhereX509(commonName string, keyLengthBits int) (*tls.Certificate, error) {
-	return GenerateSelfSignedX509CA(commonName, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}, keyLengthBits)
+func generateSelfSignedUseEverywhereX509(commonName string, keyLengthBits int) (*tls.Certificate, error) {
+	return generateSelfSignedX509CA(commonName, []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth, x509.ExtKeyUsageClientAuth}, keyLengthBits)
 }
 
 // GenerateSelfSignedX509CA generates a TLS serverCert that is self-signed
-func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, keyLengthBits int) (*tls.Certificate, error) {
+func generateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, keyLengthBits int) (*tls.Certificate, error) {
 	now := time.Now().UTC()
 
 	template := &x509.Certificate{
@@ -93,7 +93,7 @@ func GenerateSelfSignedX509CA(commonName string, extUsage []x509.ExtKeyUsage, ke
 }
 
 // GenerateServerX509UsingCA generates a TLS serverCert that is self-signed
-func GenerateServerX509UsingCAAndSerialNumber(commonName string, serialNumber int64, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
+func generateServerX509UsingCAAndSerialNumber(commonName string, serialNumber int64, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
 	now := time.Now().UTC()
 
 	i := serialNumber
@@ -151,6 +151,6 @@ func GenerateServerX509UsingCAAndSerialNumber(commonName string, serialNumber in
 }
 
 // GenerateServerX509UsingCA generates a TLS serverCert that is self-signed
-func GenerateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
-	return GenerateServerX509UsingCAAndSerialNumber(commonName, 0, ca)
+func generateServerX509UsingCA(commonName string, ca *tls.Certificate) (*tls.Certificate, *rsa.PrivateKey, error) {
+	return generateServerX509UsingCAAndSerialNumber(commonName, 0, ca)
 }

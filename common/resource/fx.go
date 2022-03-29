@@ -31,7 +31,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 
@@ -111,8 +110,6 @@ var Module = fx.Options(
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontedClientProvider),
 	fx.Provide(GrpcListenerProvider),
-	fx.Provide(RingpopChannelProvider),
-	fx.Invoke(RingpopChannelLifetimeHooks),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
 	fx.Provide(HistoryClientProvider),
@@ -228,24 +225,46 @@ func ClientBeanProvider(
 }
 
 func MembershipMonitorFactoryProvider(
-	persistenceBean persistenceClient.Bean,
+	lc fx.Lifecycle,
+	clusterMetadataManager persistence.ClusterMetadataManager,
 	logger SnTaggedLogger,
 	cfg *config.Config,
-	rChannel *tchannel.Channel,
 	svcName ServiceName,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	dc *dynamicconfig.Collection,
 ) (membership.MembershipMonitorFactory, error) {
 	servicePortMap := make(map[string]int)
 	for sn, sc := range cfg.Services {
 		servicePortMap[sn] = sc.RPC.GRPCPort
 	}
-	return ringpop.NewRingpopFactory(
+
+	rpcConfig := cfg.Services[string(svcName)].RPC
+
+	factory, err := ringpop.NewRingpopFactory(
 		&cfg.Global.Membership,
-		rChannel,
 		string(svcName),
 		servicePortMap,
 		logger,
-		persistenceBean.GetClusterMetadataManager(),
+		clusterMetadataManager,
+		&rpcConfig,
+		tlsConfigProvider,
+		dc,
 	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(
+		fx.Hook{
+			OnStop: func(context.Context) error {
+				factory.CloseTChannel()
+				return nil
+			},
+		},
+	)
+
+	return factory, nil
 }
 
 func MembershipMonitorProvider(
@@ -260,24 +279,6 @@ func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServi
 		frontendRawClient,
 		common.CreateFrontendServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
-	)
-}
-
-func RingpopChannelProvider(rpcFactory common.RPCFactory) *tchannel.Channel {
-	return rpcFactory.GetRingpopChannel()
-}
-
-func RingpopChannelLifetimeHooks(
-	lc fx.Lifecycle,
-	ch *tchannel.Channel,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStop: func(context.Context) error {
-				ch.Close()
-				return nil
-			},
-		},
 	)
 }
 
