@@ -41,10 +41,12 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkmocks "go.temporal.io/sdk/mocks"
 
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/worker/deletenamespace"
 )
 
 type (
@@ -373,4 +375,83 @@ func (s *operatorHandlerSuite) Test_RemoveSearchAttributes() {
 	})
 	s.NoError(err)
 	s.NotNil(resp)
+}
+
+func (s *operatorHandlerSuite) Test_DeleteNamespace() {
+	handler := s.handler
+	ctx := context.Background()
+
+	type test struct {
+		Name     string
+		Request  *operatorservice.DeleteNamespaceRequest
+		Expected error
+	}
+	// request validation tests
+	testCases1 := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &operatorservice.DeleteNamespaceRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Namespace is not set on request."},
+		},
+	}
+	for _, testCase := range testCases1 {
+		s.T().Run(testCase.Name, func(t *testing.T) {
+			resp, err := handler.DeleteNamespace(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	mockSdkClient := &sdkmocks.Client{}
+	s.mockResource.SDKClientFactory.EXPECT().GetSystemClient(gomock.Any()).Return(mockSdkClient).AnyTimes()
+
+	handler.config = &Config{
+		DeleteNamespaceDeleteActivityRPS:                    dynamicconfig.GetIntPropertyFn(22),
+		DeleteNamespaceConcurrentDeleteExecutionsActivities: dynamicconfig.GetIntPropertyFn(8),
+	}
+
+	// Start workflow failed.
+	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-delete-namespace-workflow", mock.Anything).Return(nil, errors.New("start failed")).Once()
+	resp, err := handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace: "test-namespace",
+	})
+	s.Error(err)
+	s.Equal("Unable to start temporal-sys-delete-namespace-workflow workflow: start failed.", err.Error())
+	s.Nil(resp)
+
+	// Workflow failed.
+	mockRun := &sdkmocks.WorkflowRun{}
+	mockRun.On("Get", mock.Anything, mock.Anything).Return(errors.New("workflow failed")).Once()
+	const RunId = "9a9f668a-58b1-427e-bed6-bf1401049f7d"
+	mockRun.On("GetRunID").Return(RunId).Once()
+	mockSdkClient.On("ExecuteWorkflow", mock.Anything, mock.Anything, "temporal-sys-delete-namespace-workflow", mock.Anything).Return(mockRun, nil)
+	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace: "test-namespace",
+	})
+	s.Error(err)
+	s.Equal(RunId, err.(*serviceerror.SystemWorkflow).WorkflowExecution.RunId)
+	s.Equal(fmt.Sprintf("System Workflow with WorkflowId temporal-sys-delete-namespace-workflow and RunId %s returned an error: workflow failed", RunId), err.Error())
+	s.Nil(resp)
+
+	// Success case.
+	mockRun.On("Get", mock.Anything, mock.Anything).Return(func(ctx context.Context, valuePtr interface{}) error {
+		wfResult := valuePtr.(*deletenamespace.DeleteNamespaceWorkflowResult)
+		wfResult.DeletedNamespace = "test-namespace-deleted-ka2te"
+		wfResult.DeletedNamespaceID = "c13c01a7-3887-4eda-ba4b-9a07a6359e7e"
+		return nil
+	})
+
+	resp, err = handler.DeleteNamespace(ctx, &operatorservice.DeleteNamespaceRequest{
+		Namespace: "test-namespace",
+	})
+	s.NoError(err)
+	s.NotNil(resp)
+	s.Equal("test-namespace-deleted-ka2te", resp.DeletedNamespace)
+	mockRun.AssertExpectations(s.T())
+	mockSdkClient.AssertExpectations(s.T())
 }
