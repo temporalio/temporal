@@ -159,7 +159,7 @@ func (s *Scavenger) loadTasks(
 			return err
 		}
 
-		task := s.filterTask(item.(persistence.HistoryBranchDetail))
+		task := s.filterTask(item)
 		if task == nil {
 			continue
 		}
@@ -303,8 +303,8 @@ func (s *Scavenger) handleErr(
 
 func (s *Scavenger) getPaginationFn(
 	ctx context.Context,
-) collection.PaginationFn {
-	return func(paginationToken []byte) ([]interface{}, []byte, error) {
+) collection.PaginationFn[persistence.HistoryBranchDetail] {
+	return func(paginationToken []byte) ([]persistence.HistoryBranchDetail, []byte, error) {
 		req := &persistence.GetAllHistoryTreeBranchesRequest{
 			PageSize:      pageSize,
 			NextPageToken: paginationToken,
@@ -313,10 +313,7 @@ func (s *Scavenger) getPaginationFn(
 		if err != nil {
 			return nil, nil, err
 		}
-		var paginateItems []interface{}
-		for _, branch := range resp.Branches {
-			paginateItems = append(paginateItems, branch)
-		}
+		paginateItems := resp.Branches
 
 		s.Lock()
 		s.hbd.CurrentPage++
