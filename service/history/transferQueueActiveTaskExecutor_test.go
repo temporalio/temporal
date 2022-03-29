@@ -1123,6 +1123,118 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 	s.Nil(err)
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParent_ChildInDeletedNamespace() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	s.mockNamespaceCache.EXPECT().GetNamespace(namespace.Name("child namespace1")).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	wt := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, wt.ScheduleID, taskQueueName, uuid.New())
+	wt.StartedID = event.GetEventId()
+
+	event, _ = mutableState.AddWorkflowTaskCompletedEvent(wt.ScheduleID, wt.StartedID, &workflowservice.RespondWorkflowTaskCompletedRequest{
+		Identity: "some random identity",
+		Commands: []*commandpb.Command{
+			{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+					Namespace:  "child namespace1",
+					WorkflowId: "child workflow1",
+					WorkflowType: &commonpb.WorkflowType{
+						Name: "child workflow type",
+					},
+					TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
+					Input:             payloads.EncodeString("random input"),
+					ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+				}},
+			},
+			{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+					Namespace:  "child namespace1",
+					WorkflowId: "child workflow2",
+					WorkflowType: &commonpb.WorkflowType{
+						Name: "child workflow type",
+					},
+					TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
+					Input:             payloads.EncodeString("random input"),
+					ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
+				}},
+			},
+		},
+	}, configs.DefaultHistoryMaxAutoResetPoints)
+
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		Namespace:  "child namespace1",
+		WorkflowId: "child workflow1",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "child workflow type",
+		},
+		TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
+		Input:             payloads.EncodeString("random input"),
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	})
+	s.NoError(err)
+
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		Namespace:  "child namespace1",
+		WorkflowId: "child workflow2",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "child workflow type",
+		},
+		TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
+		Input:             payloads.EncodeString("random input"),
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
+	})
+	s.NoError(err)
+
+	mutableState.FlushBufferedEvents()
+
+	taskID := int64(22)
+	event = addCompleteWorkflowEvent(mutableState, event.GetEventId(), nil)
+
+	transferTask := &tasks.CloseExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TaskID:              taskID,
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
+
+	s.mockNamespaceCache.EXPECT().GetNamespaceID(namespace.Name("child namespace1")).Return(namespace.EmptyID, serviceerror.NewNotFound("namespace not found")).AnyTimes()
+
+	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
+	s.NoError(err)
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Success() {
 
 	execution := commonpb.WorkflowExecution{
