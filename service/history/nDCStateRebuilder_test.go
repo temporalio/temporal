@@ -236,7 +236,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	paginationFn := s.nDCStateRebuilder.getPaginationFn(context.Background(), firstEventID, nextEventID, branchToken)
 	iter := collection.NewPagingIterator(paginationFn)
 
-	var result []*HistoryBlobsPaginationItem
+	var result []HistoryBlobsPaginationItem
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
