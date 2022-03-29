@@ -740,7 +740,7 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 	if !currentMutableState.IsWorkflowExecutionRunning() {
 		// it means this this might not be current anymore, we need to check
 		var resp *persistence.GetCurrentExecutionResponse
-		resp, err = t.shard.GetExecutionManager().GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
+		resp, err = t.shard.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
 			ShardID:     t.shard.GetShardID(),
 			NamespaceID: task.NamespaceID,
 			WorkflowID:  task.WorkflowID,

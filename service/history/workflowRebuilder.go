@@ -56,7 +56,6 @@ type (
 	workflowRebuilderImpl struct {
 		shard             shard.Context
 		workflowCache     workflow.Cache
-		executionMgr      persistence.ExecutionManager
 		newStateRebuilder nDCStateRebuilderProvider
 		transaction       workflow.Transaction
 		logger            log.Logger
@@ -73,7 +72,6 @@ func NewWorkflowRebuilder(
 	return &workflowRebuilderImpl{
 		shard:         shard,
 		workflowCache: workflowCache,
-		executionMgr:  shard.GetExecutionManager(),
 		newStateRebuilder: func() nDCStateRebuilder {
 			return newNDCStateRebuilder(shard, logger)
 		},
@@ -195,7 +193,7 @@ func (r *workflowRebuilderImpl) getMutableState(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 ) (*persistencespb.WorkflowMutableState, int64, error) {
-	record, err := r.executionMgr.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
+	record, err := r.shard.GetWorkflowExecution(ctx, &persistence.GetWorkflowExecutionRequest{
 		ShardID:     r.shard.GetShardID(),
 		NamespaceID: workflowKey.NamespaceID,
 		WorkflowID:  workflowKey.WorkflowID,
