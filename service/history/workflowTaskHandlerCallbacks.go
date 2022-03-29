@@ -128,7 +128,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 		ctx,
 		namespaceID,
 		execution,
-		func(context workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
+		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
+			mutableState := workflowContext.getMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -177,7 +178,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 		ctx,
 		namespaceID,
 		execution,
-		func(context workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
+		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
+			mutableState := workflowContext.getMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -281,7 +283,8 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 		ctx,
 		namespaceID,
 		workflowExecution,
-		func(context workflow.Context, mutableState workflow.MutableState) (*updateWorkflowAction, error) {
+		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
+			mutableState := workflowContext.getMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
