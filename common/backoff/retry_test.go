@@ -138,8 +138,8 @@ func (s *RetrySuite) TestIsRetryableFailure() {
 	policy.SetMaximumAttempts(10)
 
 	err := Retry(op, policy, IgnoreErrors([]error{&someError{}}))
-	s.Error(err)
-	s.Equal(1, i)
+	s.NoError(err)
+	s.Equal(5, i)
 }
 
 func (s *RetrySuite) TestConcurrentRetrier() {
