@@ -2406,7 +2406,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				// will have the child information and its next eventID will larger than the initiatedID
 				// in the request after forced failover.
 				// If ErrStaleState is returned, the logic for this handler and processing of CloseWorkflowExecution
-				// task will keep retrying infinitly.
+				// task will keep retrying infinitely.
 				workflowContext.getContext().Clear()
 				mutableState, err = workflowContext.reloadMutableState(ctx)
 				if err != nil {
