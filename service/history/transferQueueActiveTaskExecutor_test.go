@@ -1169,6 +1169,19 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 					ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 				}},
 			},
+			{
+				CommandType: enumspb.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION,
+				Attributes: &commandpb.Command_StartChildWorkflowExecutionCommandAttributes{StartChildWorkflowExecutionCommandAttributes: &commandpb.StartChildWorkflowExecutionCommandAttributes{
+					Namespace:  "child namespace1",
+					WorkflowId: "child workflow2",
+					WorkflowType: &commonpb.WorkflowType{
+						Name: "child workflow type",
+					},
+					TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
+					Input:             payloads.EncodeString("random input"),
+					ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
+				}},
+			},
 		},
 	}, configs.DefaultHistoryMaxAutoResetPoints)
 
@@ -1181,6 +1194,18 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_NoParen
 		TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
 		Input:             payloads.EncodeString("random input"),
 		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	})
+	s.NoError(err)
+
+	_, _, err = mutableState.AddStartChildWorkflowExecutionInitiatedEvent(event.GetEventId(), uuid.New(), &commandpb.StartChildWorkflowExecutionCommandAttributes{
+		Namespace:  "child namespace1",
+		WorkflowId: "child workflow2",
+		WorkflowType: &commonpb.WorkflowType{
+			Name: "child workflow type",
+		},
+		TaskQueue:         &taskqueuepb.TaskQueue{Name: taskQueueName},
+		Input:             payloads.EncodeString("random input"),
+		ParentClosePolicy: enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL,
 	})
 	s.NoError(err)
 
