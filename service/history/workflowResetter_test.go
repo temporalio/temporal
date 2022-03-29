@@ -892,7 +892,7 @@ func (s *workflowResetterSuite) TestPagination() {
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		result = append(result, item.(*historypb.History))
+		result = append(result, item)
 	}
 
 	s.Equal(history, result)

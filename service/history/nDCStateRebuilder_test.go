@@ -240,7 +240,7 @@ func (s *nDCStateRebuilderSuite) TestPagination() {
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		result = append(result, item.(*HistoryBlobsPaginationItem))
+		result = append(result, item)
 	}
 	var historyResult []*historypb.History
 	var transactionIDsResult []int64
