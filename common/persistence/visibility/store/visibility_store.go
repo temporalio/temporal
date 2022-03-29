@@ -28,6 +28,7 @@ package store
 //go:generate mockgen -copyright_file ../../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination visibility_store_mock.go -aux_files go.temporal.io/server/common/persistence=../../dataInterfaces.go
 
 import (
+	"context"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -44,22 +45,22 @@ type (
 		GetName() string
 
 		// Write APIs.
-		RecordWorkflowExecutionStarted(request *InternalRecordWorkflowExecutionStartedRequest) error
-		RecordWorkflowExecutionClosed(request *InternalRecordWorkflowExecutionClosedRequest) error
-		UpsertWorkflowExecution(request *InternalUpsertWorkflowExecutionRequest) error
-		DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error
+		RecordWorkflowExecutionStarted(ctx context.Context, request *InternalRecordWorkflowExecutionStartedRequest) error
+		RecordWorkflowExecutionClosed(ctx context.Context, request *InternalRecordWorkflowExecutionClosedRequest) error
+		UpsertWorkflowExecution(ctx context.Context, request *InternalUpsertWorkflowExecutionRequest) error
+		DeleteWorkflowExecution(ctx context.Context, request *manager.VisibilityDeleteWorkflowExecutionRequest) error
 
 		// Read APIs.
-		ListOpenWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutions(request *manager.ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByType(request *manager.ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListOpenWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByWorkflowID(request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListClosedWorkflowExecutionsByStatus(request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
-		ListWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
-		ScanWorkflowExecutions(request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
-		CountWorkflowExecutions(request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
+		ListOpenWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListOpenWorkflowExecutionsByType(ctx context.Context, request *manager.ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByType(ctx context.Context, request *manager.ListWorkflowExecutionsByTypeRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListOpenWorkflowExecutionsByWorkflowID(ctx context.Context, request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByWorkflowID(ctx context.Context, request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListClosedWorkflowExecutionsByStatus(ctx context.Context, request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*InternalListWorkflowExecutionsResponse, error)
+		ListWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
+		ScanWorkflowExecutions(ctx context.Context, request *manager.ListWorkflowExecutionsRequestV2) (*InternalListWorkflowExecutionsResponse, error)
+		CountWorkflowExecutions(ctx context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error)
 	}
 
 	// InternalWorkflowExecutionInfo is visibility info for internal response

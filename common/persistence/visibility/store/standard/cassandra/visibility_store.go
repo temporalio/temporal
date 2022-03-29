@@ -25,6 +25,7 @@
 package cassandra
 
 import (
+	"context"
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -156,7 +157,9 @@ func (v *visibilityStore) Close() {
 }
 
 func (v *visibilityStore) RecordWorkflowExecutionStarted(
-	request *store.InternalRecordWorkflowExecutionStartedRequest) error {
+	_ context.Context,
+	request *store.InternalRecordWorkflowExecutionStartedRequest,
+) error {
 
 	query := v.session.Query(templateCreateWorkflowExecutionStarted,
 		request.NamespaceID,
@@ -178,7 +181,10 @@ func (v *visibilityStore) RecordWorkflowExecutionStarted(
 	return gocql.ConvertError("RecordWorkflowExecutionStarted", err)
 }
 
-func (v *visibilityStore) RecordWorkflowExecutionClosed(request *store.InternalRecordWorkflowExecutionClosedRequest) error {
+func (v *visibilityStore) RecordWorkflowExecutionClosed(
+	_ context.Context,
+	request *store.InternalRecordWorkflowExecutionClosedRequest,
+) error {
 	batch := v.session.NewBatch(gocql.LoggedBatch)
 
 	// First, remove execution from the open table
@@ -225,12 +231,16 @@ func (v *visibilityStore) RecordWorkflowExecutionClosed(request *store.InternalR
 	return gocql.ConvertError("RecordWorkflowExecutionClosed", err)
 }
 
-func (v *visibilityStore) UpsertWorkflowExecution(_ *store.InternalUpsertWorkflowExecutionRequest) error {
+func (v *visibilityStore) UpsertWorkflowExecution(
+	_ context.Context,
+	_ *store.InternalUpsertWorkflowExecutionRequest,
+) error {
 	// Not OperationNotSupportedErr!
 	return nil
 }
 
 func (v *visibilityStore) ListOpenWorkflowExecutions(
+	_ context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
@@ -260,7 +270,9 @@ func (v *visibilityStore) ListOpenWorkflowExecutions(
 }
 
 func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
-	request *manager.ListWorkflowExecutionsByTypeRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+	_ context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetOpenWorkflowExecutionsByType,
 			request.NamespaceID.String(),
@@ -289,7 +301,9 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByType(
 }
 
 func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+	_ context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetOpenWorkflowExecutionsByID,
 			request.NamespaceID.String(),
@@ -318,7 +332,9 @@ func (v *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 }
 
 func (v *visibilityStore) ListClosedWorkflowExecutions(
-	request *manager.ListWorkflowExecutionsRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+	_ context.Context,
+	request *manager.ListWorkflowExecutionsRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutions,
 			request.NamespaceID.String(),
@@ -346,7 +362,9 @@ func (v *visibilityStore) ListClosedWorkflowExecutions(
 }
 
 func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
-	request *manager.ListWorkflowExecutionsByTypeRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+	_ context.Context,
+	request *manager.ListWorkflowExecutionsByTypeRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByType,
 			request.NamespaceID.String(),
@@ -375,7 +393,9 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByType(
 }
 
 func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
-	request *manager.ListWorkflowExecutionsByWorkflowIDRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+	_ context.Context,
+	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByID,
 			request.NamespaceID.String(),
@@ -404,7 +424,9 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 }
 
 func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
-	request *manager.ListClosedWorkflowExecutionsByStatusRequest) (*store.InternalListWorkflowExecutionsResponse, error) {
+	_ context.Context,
+	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	query := v.session.
 		Query(templateGetClosedWorkflowExecutionsByStatus,
 			request.NamespaceID.String(),
@@ -432,7 +454,10 @@ func (v *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 	return response, nil
 }
 
-func (v *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDeleteWorkflowExecutionRequest) error {
+func (v *visibilityStore) DeleteWorkflowExecution(
+	_ context.Context,
+	request *manager.VisibilityDeleteWorkflowExecutionRequest,
+) error {
 	var query gocql.Query
 	if request.StartTime != nil {
 		query = v.session.Query(templateDeleteWorkflowExecutionStarted,
@@ -456,15 +481,24 @@ func (v *visibilityStore) DeleteWorkflowExecution(request *manager.VisibilityDel
 	return nil
 }
 
-func (v *visibilityStore) ListWorkflowExecutions(_ *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (v *visibilityStore) ListWorkflowExecutions(
+	_ context.Context,
+	_ *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	return nil, store.OperationNotSupportedErr
 }
 
-func (v *visibilityStore) ScanWorkflowExecutions(_ *manager.ListWorkflowExecutionsRequestV2) (*store.InternalListWorkflowExecutionsResponse, error) {
+func (v *visibilityStore) ScanWorkflowExecutions(
+	_ context.Context,
+	_ *manager.ListWorkflowExecutionsRequestV2,
+) (*store.InternalListWorkflowExecutionsResponse, error) {
 	return nil, store.OperationNotSupportedErr
 }
 
-func (v *visibilityStore) CountWorkflowExecutions(_ *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
+func (v *visibilityStore) CountWorkflowExecutions(
+	_ context.Context,
+	_ *manager.CountWorkflowExecutionsRequest,
+) (*manager.CountWorkflowExecutionsResponse, error) {
 	return nil, store.OperationNotSupportedErr
 }
 

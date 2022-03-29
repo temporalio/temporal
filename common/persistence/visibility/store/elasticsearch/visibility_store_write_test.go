@@ -25,6 +25,7 @@
 package elasticsearch
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -96,7 +97,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted() {
 			return ackCh
 		})
 
-	err := s.visibilityStore.RecordWorkflowExecutionStarted(request)
+	err := s.visibilityStore.RecordWorkflowExecutionStarted(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -129,7 +130,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionStarted_EmptyRequest() {
 			return ackCh
 		})
 
-	err := s.visibilityStore.RecordWorkflowExecutionStarted(request)
+	err := s.visibilityStore.RecordWorkflowExecutionStarted(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -186,7 +187,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed() {
 			return ackCh
 		})
 
-	err := s.visibilityStore.RecordWorkflowExecutionClosed(request)
+	err := s.visibilityStore.RecordWorkflowExecutionClosed(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -219,7 +220,7 @@ func (s *ESVisibilitySuite) TestRecordWorkflowExecutionClosed_EmptyRequest() {
 			return ackCh
 		})
 
-	err := s.visibilityStore.RecordWorkflowExecutionClosed(request)
+	err := s.visibilityStore.RecordWorkflowExecutionClosed(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -246,7 +247,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution() {
 			return ackCh
 		})
 
-	err := s.visibilityStore.DeleteWorkflowExecution(request)
+	err := s.visibilityStore.DeleteWorkflowExecution(context.Background(), request)
 	s.NoError(err)
 }
 
@@ -267,7 +268,7 @@ func (s *ESVisibilitySuite) TestDeleteExecution_EmptyRequest() {
 			return ackCh
 		})
 
-	err := s.visibilityStore.DeleteWorkflowExecution(request)
+	err := s.visibilityStore.DeleteWorkflowExecution(context.Background(), request)
 	s.NoError(err)
 }
 

@@ -91,6 +91,7 @@ func (s *visibilityStore) GetName() string {
 }
 
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
+	_ context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,
 ) error {
 	ctx, cancel := newVisibilityContext()
@@ -111,7 +112,10 @@ func (s *visibilityStore) RecordWorkflowExecutionStarted(
 	return err
 }
 
-func (s *visibilityStore) RecordWorkflowExecutionClosed(request *store.InternalRecordWorkflowExecutionClosedRequest) error {
+func (s *visibilityStore) RecordWorkflowExecutionClosed(
+	_ context.Context,
+	request *store.InternalRecordWorkflowExecutionClosedRequest,
+) error {
 	ctx, cancel := newVisibilityContext()
 	defer cancel()
 	result, err := s.sqlStore.Db.ReplaceIntoVisibility(ctx, &sqlplugin.VisibilityRow{
@@ -142,6 +146,7 @@ func (s *visibilityStore) RecordWorkflowExecutionClosed(request *store.InternalR
 }
 
 func (s *visibilityStore) UpsertWorkflowExecution(
+	_ context.Context,
 	_ *store.InternalUpsertWorkflowExecutionRequest,
 ) error {
 	// Not OperationNotSupportedErr!
@@ -149,6 +154,7 @@ func (s *visibilityStore) UpsertWorkflowExecution(
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutions(
+	_ context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	ctx, cancel := newVisibilityContext()
@@ -172,6 +178,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutions(
+	_ context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	ctx, cancel := newVisibilityContext()
@@ -193,6 +200,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
+	_ context.Context,
 	request *manager.ListWorkflowExecutionsByTypeRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	ctx, cancel := newVisibilityContext()
@@ -216,6 +224,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
+	_ context.Context,
 	request *manager.ListWorkflowExecutionsByTypeRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	ctx, cancel := newVisibilityContext()
@@ -238,6 +247,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
+	_ context.Context,
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	ctx, cancel := newVisibilityContext()
@@ -261,6 +271,7 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
+	_ context.Context,
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	ctx, cancel := newVisibilityContext()
@@ -283,6 +294,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
+	_ context.Context,
 	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	ctx, cancel := newVisibilityContext()
@@ -305,6 +317,7 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 }
 
 func (s *visibilityStore) DeleteWorkflowExecution(
+	_ context.Context,
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
 	ctx, cancel := newVisibilityContext()
@@ -320,18 +333,21 @@ func (s *visibilityStore) DeleteWorkflowExecution(
 }
 
 func (s *visibilityStore) ListWorkflowExecutions(
+	_ context.Context,
 	_ *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	return nil, store.OperationNotSupportedErr
 }
 
 func (s *visibilityStore) ScanWorkflowExecutions(
+	_ context.Context,
 	_ *manager.ListWorkflowExecutionsRequestV2,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
 	return nil, store.OperationNotSupportedErr
 }
 
 func (s *visibilityStore) CountWorkflowExecutions(
+	_ context.Context,
 	_ *manager.CountWorkflowExecutionsRequest,
 ) (*manager.CountWorkflowExecutionsResponse, error) {
 	return nil, store.OperationNotSupportedErr
