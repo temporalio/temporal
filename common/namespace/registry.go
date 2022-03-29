@@ -387,7 +387,10 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	}
 	namespaceNotificationVersion := metadata.NotificationVersion
 
-	request := &persistence.ListNamespacesRequest{PageSize: CacheRefreshPageSize}
+	request := &persistence.ListNamespacesRequest{
+		PageSize:       CacheRefreshPageSize,
+		IncludeDeleted: true,
+	}
 	var namespacesDb Namespaces
 	namespaceIDsDb := make(map[ID]struct{})
 
