@@ -59,7 +59,7 @@ var (
 	}
 )
 
-type updateWorkflowActionFunc func(workflow.Context, workflow.MutableState) (*updateWorkflowAction, error)
+type updateWorkflowActionFunc func(workflowContext) (*updateWorkflowAction, error)
 
 func (w *workflowContextImpl) getContext() workflow.Context {
 	return w.context
