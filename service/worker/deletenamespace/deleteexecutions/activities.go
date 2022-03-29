@@ -116,7 +116,7 @@ func (a *Activities) DeleteExecutionsActivity(ctx context.Context, params Delete
 	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.DeleteExecutionsWorkflowScope, metrics.ListExecutionsFailuresCount)
-		a.logger.Error("Unable to list all workflows.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
+		a.logger.Error("Unable to list all workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Error(err))
 		return result, err
 	}
 	for _, execution := range resp.Executions {
