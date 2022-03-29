@@ -45,11 +45,9 @@ type sqlClusterMetadataManager struct {
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
 func (s *sqlClusterMetadataManager) ListClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalListClusterMetadataRequest,
 ) (*p.InternalListClusterMetadataResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	var clusterName string
 	if request.NextPageToken != nil {
 		err := gobDeserialize(request.NextPageToken, &clusterName)
@@ -90,11 +88,9 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalGetClusterMetadataRequest,
 ) (*p.InternalGetClusterMetadataResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	row, err := s.Db.GetClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
 
 	if err != nil {
@@ -108,11 +104,9 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata(
 }
 
 func (s *sqlClusterMetadataManager) SaveClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalSaveClusterMetadataRequest,
 ) (bool, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	err := s.txExecute(ctx, "SaveClusterMetadata", func(tx sqlplugin.Tx) error {
 		oldClusterMetadata, err := tx.WriteLockGetClusterMetadata(
 			ctx,
@@ -148,11 +142,9 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(
 }
 
 func (s *sqlClusterMetadataManager) DeleteClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalDeleteClusterMetadataRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	_, err := s.Db.DeleteClusterMetadata(ctx, &sqlplugin.ClusterMetadataFilter{ClusterName: request.ClusterName})
 
 	if err != nil {
@@ -162,11 +154,9 @@ func (s *sqlClusterMetadataManager) DeleteClusterMetadata(
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMembers(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetClusterMembersRequest,
 ) (*p.GetClusterMembersResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	var lastSeenHostId []byte
 	if len(request.NextPageToken) == 16 {
 		lastSeenHostId = request.NextPageToken
@@ -224,11 +214,9 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(
 }
 
 func (s *sqlClusterMetadataManager) UpsertClusterMembership(
-	_ context.Context,
+	ctx context.Context,
 	request *p.UpsertClusterMembershipRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	now := time.Now().UTC()
 	recordExpiry := now.Add(request.RecordExpiry)
 	_, err := s.Db.UpsertClusterMembership(ctx, &sqlplugin.ClusterMembershipRow{
@@ -248,16 +236,15 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(
 }
 
 func (s *sqlClusterMetadataManager) PruneClusterMembership(
-	_ context.Context,
+	ctx context.Context,
 	request *p.PruneClusterMembershipRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	_, err := s.Db.PruneClusterMembership(
 		ctx,
 		&sqlplugin.PruneClusterMembershipFilter{
 			PruneRecordsBefore: time.Now().UTC(),
-		})
+		},
+	)
 
 	if err != nil {
 		return convertCommonErrors("PruneClusterMembership", err)
