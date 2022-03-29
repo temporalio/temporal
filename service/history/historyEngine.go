@@ -2399,7 +2399,14 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 			ci, isRunning := mutableState.GetChildExecutionInfo(initiatedID)
 			if !isRunning && initiatedID >= mutableState.GetNextEventID() {
 				// possible stale mutable state, try reload mutable state
+				//
 				// TODO: use initiate event ID and version to verify if the child exists or not
+				//
+				// NOTE: do not return ErrStaleState here, as in xdc there's no guarantee that parent
+				// will have the child information and its next eventID will larger than the initiatedID
+				// in the request after forced failover.
+				// If ErrStaleState is returned, the logic for this handler and processing of CloseWorkflowExecution
+				// task will keep retrying infinitly.
 				workflowContext.getContext().Clear()
 				mutableState, err = workflowContext.reloadMutableState(ctx)
 				if err != nil {
