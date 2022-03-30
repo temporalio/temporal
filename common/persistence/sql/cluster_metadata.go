@@ -253,9 +253,11 @@ func (s *sqlClusterMetadataManager) PruneClusterMembership(
 ) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
-	_, err := s.Db.PruneClusterMembership(ctx, &sqlplugin.PruneClusterMembershipFilter{
-		PruneRecordsBefore: time.Now().UTC(),
-		MaxRecordsAffected: request.MaxRecordsPruned})
+	_, err := s.Db.PruneClusterMembership(
+		ctx,
+		&sqlplugin.PruneClusterMembershipFilter{
+			PruneRecordsBefore: time.Now().UTC(),
+		})
 
 	if err != nil {
 		return convertCommonErrors("PruneClusterMembership", err)
