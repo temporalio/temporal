@@ -123,6 +123,7 @@ func (s *RetrySuite) TestIsRetryableSuccess() {
 
 func (s *RetrySuite) TestIsRetryableFailure() {
 	i := 0
+	theErr := someError{}
 	op := func() error {
 		i++
 
@@ -130,14 +131,14 @@ func (s *RetrySuite) TestIsRetryableFailure() {
 			return nil
 		}
 
-		return &someError{}
+		return &theErr
 	}
 
 	policy := NewExponentialRetryPolicy(1 * time.Millisecond)
 	policy.SetMaximumInterval(5 * time.Millisecond)
 	policy.SetMaximumAttempts(10)
 
-	err := Retry(op, policy, IgnoreErrors([]error{&someError{}}))
+	err := Retry(op, policy, IgnoreErrors([]error{&theErr}))
 	s.Error(err)
 	s.Equal(1, i)
 }

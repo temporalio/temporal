@@ -73,7 +73,6 @@ type (
 	// PruneClusterMembershipFilter is used for PruneClusterMembership queries
 	PruneClusterMembershipFilter struct {
 		PruneRecordsBefore time.Time
-		MaxRecordsAffected int
 	}
 
 	// ClusterMetadata is the SQL persistence interface for cluster metadata
