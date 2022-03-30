@@ -177,7 +177,7 @@ func (s *dbTaskReaderSuite) TestIteration_ErrorRetry() {
 		if err != nil {
 			break
 		}
-		actualTasks = append(actualTasks, item.(*persistencespb.AllocatedTaskInfo))
+		actualTasks = append(actualTasks, item)
 	}
 	s.Equal(tasks1, actualTasks)
 	s.Equal(s.ackedTaskID, s.taskTracker.ackedTaskID)
@@ -191,7 +191,7 @@ func (s *dbTaskReaderSuite) TestIteration_ErrorRetry() {
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		actualTasks = append(actualTasks, item.(*persistencespb.AllocatedTaskInfo))
+		actualTasks = append(actualTasks, item)
 	}
 	s.Equal(tasks2, actualTasks)
 	s.Equal(s.ackedTaskID, s.taskTracker.ackedTaskID)
@@ -237,7 +237,7 @@ func (s *dbTaskReaderSuite) TestIteration_TwoIter() {
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		actualTasks = append(actualTasks, item.(*persistencespb.AllocatedTaskInfo))
+		actualTasks = append(actualTasks, item)
 	}
 	s.Equal(tasks1, actualTasks)
 
@@ -267,7 +267,7 @@ func (s *dbTaskReaderSuite) TestIteration_TwoIter() {
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		actualTasks = append(actualTasks, item.(*persistencespb.AllocatedTaskInfo))
+		actualTasks = append(actualTasks, item)
 	}
 	s.Equal(tasks2, actualTasks)
 
@@ -330,7 +330,7 @@ func (s *dbTaskReaderSuite) TestIteration_Pagination() {
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		actualTasks = append(actualTasks, item.(*persistencespb.AllocatedTaskInfo))
+		actualTasks = append(actualTasks, item)
 	}
 	s.Equal(append(tasks1, tasks2...), actualTasks)
 
@@ -373,7 +373,7 @@ func (s *dbTaskReaderSuite) TestIteration_MaxTaskID_Exists() {
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		actualTasks = append(actualTasks, item.(*persistencespb.AllocatedTaskInfo))
+		actualTasks = append(actualTasks, item)
 	}
 	s.Equal(tasks, actualTasks)
 
@@ -412,7 +412,7 @@ func (s *dbTaskReaderSuite) TestIteration_MaxTaskID_Missing() {
 	for iter.HasNext() {
 		item, err := iter.Next()
 		s.NoError(err)
-		actualTasks = append(actualTasks, item.(*persistencespb.AllocatedTaskInfo))
+		actualTasks = append(actualTasks, item)
 	}
 	s.Equal(tasks, actualTasks)
 

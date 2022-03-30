@@ -1300,6 +1300,21 @@ func (mr *MockMutableStateMockRecorder) GetRequestCancelInfo(arg0 interface{}) *
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRequestCancelInfo", reflect.TypeOf((*MockMutableState)(nil).GetRequestCancelInfo), arg0)
 }
 
+// GetRequesteCancelExternalInitiatedEvent mocks base method.
+func (m *MockMutableState) GetRequesteCancelExternalInitiatedEvent(arg0 context.Context, arg1 int64) (*v13.HistoryEvent, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetRequesteCancelExternalInitiatedEvent", arg0, arg1)
+	ret0, _ := ret[0].(*v13.HistoryEvent)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetRequesteCancelExternalInitiatedEvent indicates an expected call of GetRequesteCancelExternalInitiatedEvent.
+func (mr *MockMutableStateMockRecorder) GetRequesteCancelExternalInitiatedEvent(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetRequesteCancelExternalInitiatedEvent", reflect.TypeOf((*MockMutableState)(nil).GetRequesteCancelExternalInitiatedEvent), arg0, arg1)
+}
+
 // GetRetryBackoffDuration mocks base method.
 func (m *MockMutableState) GetRetryBackoffDuration(failure *v12.Failure) (time.Duration, v11.RetryState) {
 	m.ctrl.T.Helper()

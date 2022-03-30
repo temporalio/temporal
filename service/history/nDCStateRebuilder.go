@@ -137,7 +137,7 @@ func (r *nDCStateRebuilderImpl) rebuild(
 
 	var lastTxnId int64
 	for iter.HasNext() {
-		batch, err := iter.Next()
+		history, err := iter.Next()
 		switch err.(type) {
 		case nil:
 			// noop
@@ -148,7 +148,6 @@ func (r *nDCStateRebuilderImpl) rebuild(
 			return nil, 0, err
 		}
 
-		history := batch.(*HistoryBlobsPaginationItem)
 		if err := r.applyEvents(
 			targetWorkflowIdentifier,
 			stateBuilder,
@@ -250,8 +249,8 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 	firstEventID int64,
 	nextEventID int64,
 	branchToken []byte,
-) collection.PaginationFn {
-	return func(paginationToken []byte) ([]interface{}, []byte, error) {
+) collection.PaginationFn[HistoryBlobsPaginationItem] {
+	return func(paginationToken []byte) ([]HistoryBlobsPaginationItem, []byte, error) {
 		resp, err := r.executionMgr.ReadHistoryBranchByBatch(ctx, &persistence.ReadHistoryBranchRequest{
 			BranchToken:   branchToken,
 			MinEventID:    firstEventID,
@@ -265,9 +264,9 @@ func (r *nDCStateRebuilderImpl) getPaginationFn(
 		}
 
 		r.rebuiltHistorySize += int64(resp.Size)
-		var paginateItems []interface{}
+		paginateItems := make([]HistoryBlobsPaginationItem, 0, len(resp.History))
 		for i, history := range resp.History {
-			nextBatch := &HistoryBlobsPaginationItem{
+			nextBatch := HistoryBlobsPaginationItem{
 				History:       history,
 				TransactionID: resp.TransactionIDs[i],
 			}

@@ -83,14 +83,14 @@ func (m *clusterMetadataManagerImpl) Close() {
 }
 
 func (m *clusterMetadataManagerImpl) GetClusterMembers(
-	_ context.Context,
+	ctx context.Context,
 	request *GetClusterMembersRequest,
 ) (*GetClusterMembersResponse, error) {
-	return m.persistence.GetClusterMembers(request)
+	return m.persistence.GetClusterMembers(ctx, request)
 }
 
 func (m *clusterMetadataManagerImpl) UpsertClusterMembership(
-	_ context.Context,
+	ctx context.Context,
 	request *UpsertClusterMembershipRequest,
 ) error {
 	if request.RecordExpiry.Seconds() < 1 {
@@ -109,21 +109,21 @@ func (m *clusterMetadataManagerImpl) UpsertClusterMembership(
 		return ErrIncompleteMembershipUpsert
 	}
 
-	return m.persistence.UpsertClusterMembership(request)
+	return m.persistence.UpsertClusterMembership(ctx, request)
 }
 
 func (m *clusterMetadataManagerImpl) PruneClusterMembership(
-	_ context.Context,
+	ctx context.Context,
 	request *PruneClusterMembershipRequest,
 ) error {
-	return m.persistence.PruneClusterMembership(request)
+	return m.persistence.PruneClusterMembership(ctx, request)
 }
 
 func (m *clusterMetadataManagerImpl) ListClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *ListClusterMetadataRequest,
 ) (*ListClusterMetadataResponse, error) {
-	resp, err := m.persistence.ListClusterMetadata(&InternalListClusterMetadataRequest{
+	resp, err := m.persistence.ListClusterMetadata(ctx, &InternalListClusterMetadataRequest{
 		PageSize:      request.PageSize,
 		NextPageToken: request.NextPageToken,
 	})
@@ -143,9 +143,9 @@ func (m *clusterMetadataManagerImpl) ListClusterMetadata(
 }
 
 func (m *clusterMetadataManagerImpl) GetCurrentClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 ) (*GetClusterMetadataResponse, error) {
-	resp, err := m.persistence.GetClusterMetadata(&InternalGetClusterMetadataRequest{ClusterName: m.currentClusterName})
+	resp, err := m.persistence.GetClusterMetadata(ctx, &InternalGetClusterMetadataRequest{ClusterName: m.currentClusterName})
 	if err != nil {
 		return nil, err
 	}
@@ -158,10 +158,10 @@ func (m *clusterMetadataManagerImpl) GetCurrentClusterMetadata(
 }
 
 func (m *clusterMetadataManagerImpl) GetClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *GetClusterMetadataRequest,
 ) (*GetClusterMetadataResponse, error) {
-	resp, err := m.persistence.GetClusterMetadata(&InternalGetClusterMetadataRequest{ClusterName: request.ClusterName})
+	resp, err := m.persistence.GetClusterMetadata(ctx, &InternalGetClusterMetadataRequest{ClusterName: request.ClusterName})
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +184,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(
 
 	oldClusterMetadata, err := m.GetClusterMetadata(ctx, &GetClusterMetadataRequest{ClusterName: request.GetClusterName()})
 	if _, notFound := err.(*serviceerror.NotFound); notFound {
-		return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{
+		return m.persistence.SaveClusterMetadata(ctx, &InternalSaveClusterMetadataRequest{
 			ClusterName:     request.ClusterName,
 			ClusterMetadata: mcm,
 			Version:         request.Version,
@@ -197,7 +197,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(
 		return false, nil
 	}
 
-	return m.persistence.SaveClusterMetadata(&InternalSaveClusterMetadataRequest{
+	return m.persistence.SaveClusterMetadata(ctx, &InternalSaveClusterMetadataRequest{
 		ClusterName:     request.ClusterName,
 		ClusterMetadata: mcm,
 		Version:         request.Version,
@@ -205,14 +205,14 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(
 }
 
 func (m *clusterMetadataManagerImpl) DeleteClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *DeleteClusterMetadataRequest,
 ) error {
 	if request.ClusterName == m.currentClusterName {
 		return serviceerror.NewInvalidArgument("Cannot delete current cluster metadata")
 	}
 
-	return m.persistence.DeleteClusterMetadata(&InternalDeleteClusterMetadataRequest{ClusterName: request.ClusterName})
+	return m.persistence.DeleteClusterMetadata(ctx, &InternalDeleteClusterMetadataRequest{ClusterName: request.ClusterName})
 }
 
 func (m *clusterMetadataManagerImpl) convertInternalGetClusterMetadataResponse(

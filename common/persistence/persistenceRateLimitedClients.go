@@ -716,99 +716,138 @@ func (p *executionRateLimitedPersistenceClient) GetAllHistoryTreeBranches(
 	return response, err
 }
 
-func (p *queueRateLimitedPersistenceClient) EnqueueMessage(blob commonpb.DataBlob) error {
+func (p *queueRateLimitedPersistenceClient) EnqueueMessage(
+	ctx context.Context,
+	blob commonpb.DataBlob,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.EnqueueMessage(blob)
+	return p.persistence.EnqueueMessage(ctx, blob)
 }
 
-func (p *queueRateLimitedPersistenceClient) ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error) {
+func (p *queueRateLimitedPersistenceClient) ReadMessages(
+	ctx context.Context,
+	lastMessageID int64,
+	maxCount int,
+) ([]*QueueMessage, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.ReadMessages(lastMessageID, maxCount)
+	return p.persistence.ReadMessages(ctx, lastMessageID, maxCount)
 }
 
-func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(metadata *InternalQueueMetadata) error {
+func (p *queueRateLimitedPersistenceClient) UpdateAckLevel(
+	ctx context.Context,
+	metadata *InternalQueueMetadata,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.UpdateAckLevel(metadata)
+	return p.persistence.UpdateAckLevel(ctx, metadata)
 }
 
-func (p *queueRateLimitedPersistenceClient) GetAckLevels() (*InternalQueueMetadata, error) {
+func (p *queueRateLimitedPersistenceClient) GetAckLevels(
+	ctx context.Context,
+) (*InternalQueueMetadata, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.GetAckLevels()
+	return p.persistence.GetAckLevels(ctx)
 }
 
-func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(messageID int64) error {
+func (p *queueRateLimitedPersistenceClient) DeleteMessagesBefore(
+	ctx context.Context,
+	messageID int64,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.DeleteMessagesBefore(messageID)
+	return p.persistence.DeleteMessagesBefore(ctx, messageID)
 }
 
-func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error) {
+func (p *queueRateLimitedPersistenceClient) EnqueueMessageToDLQ(
+	ctx context.Context,
+	blob commonpb.DataBlob,
+) (int64, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return EmptyQueueMessageID, ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.EnqueueMessageToDLQ(blob)
+	return p.persistence.EnqueueMessageToDLQ(ctx, blob)
 }
 
-func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error) {
+func (p *queueRateLimitedPersistenceClient) ReadMessagesFromDLQ(
+	ctx context.Context,
+	firstMessageID int64,
+	lastMessageID int64,
+	pageSize int,
+	pageToken []byte,
+) ([]*QueueMessage, []byte, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, nil, ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.ReadMessagesFromDLQ(firstMessageID, lastMessageID, pageSize, pageToken)
+	return p.persistence.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 }
 
-func (p *queueRateLimitedPersistenceClient) RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error {
+func (p *queueRateLimitedPersistenceClient) RangeDeleteMessagesFromDLQ(
+	ctx context.Context,
+	firstMessageID int64,
+	lastMessageID int64,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
+	return p.persistence.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 }
-func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(metadata *InternalQueueMetadata) error {
+func (p *queueRateLimitedPersistenceClient) UpdateDLQAckLevel(
+	ctx context.Context,
+	metadata *InternalQueueMetadata,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.UpdateDLQAckLevel(metadata)
+	return p.persistence.UpdateDLQAckLevel(ctx, metadata)
 }
 
-func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels() (*InternalQueueMetadata, error) {
+func (p *queueRateLimitedPersistenceClient) GetDLQAckLevels(
+	ctx context.Context,
+) (*InternalQueueMetadata, error) {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return nil, ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.GetDLQAckLevels()
+	return p.persistence.GetDLQAckLevels(ctx)
 }
 
-func (p *queueRateLimitedPersistenceClient) DeleteMessageFromDLQ(messageID int64) error {
+func (p *queueRateLimitedPersistenceClient) DeleteMessageFromDLQ(
+	ctx context.Context,
+	messageID int64,
+) error {
 	if ok := p.rateLimiter.Allow(); !ok {
 		return ErrPersistenceLimitExceeded
 	}
 
-	return p.persistence.DeleteMessageFromDLQ(messageID)
+	return p.persistence.DeleteMessageFromDLQ(ctx, messageID)
 }
 
 func (p *queueRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }
 
-func (p *queueRateLimitedPersistenceClient) Init(blob *commonpb.DataBlob) error {
-	return p.persistence.Init(blob)
+func (p *queueRateLimitedPersistenceClient) Init(
+	ctx context.Context,
+	blob *commonpb.DataBlob,
+) error {
+	return p.persistence.Init(ctx, blob)
 }
 
 func (c *clusterMetadataRateLimitedPersistenceClient) Close() {

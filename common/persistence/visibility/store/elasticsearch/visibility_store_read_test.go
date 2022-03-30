@@ -128,11 +128,11 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutions() {
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterOpen))
 			return testSearchResult, nil
 		})
-	_, err := s.visibilityStore.ListOpenWorkflowExecutions(createTestRequest())
+	_, err := s.visibilityStore.ListOpenWorkflowExecutions(context.Background(), createTestRequest())
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListOpenWorkflowExecutions(createTestRequest())
+	_, err = s.visibilityStore.ListOpenWorkflowExecutions(context.Background(), createTestRequest())
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -146,11 +146,11 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutions() {
 			s.True(strings.Contains(fmt.Sprintf("%v", source), filterClose))
 			return testSearchResult, nil
 		})
-	_, err := s.visibilityStore.ListClosedWorkflowExecutions(createTestRequest())
+	_, err := s.visibilityStore.ListClosedWorkflowExecutions(context.Background(), createTestRequest())
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutions(createTestRequest())
+	_, err = s.visibilityStore.ListClosedWorkflowExecutions(context.Background(), createTestRequest())
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -171,11 +171,11 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByType() {
 		ListWorkflowExecutionsRequest: testRequest,
 		WorkflowTypeName:              testWorkflowType,
 	}
-	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByType(request)
+	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByType(context.Background(), request)
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByType(request)
+	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByType(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -196,11 +196,11 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByType() {
 		ListWorkflowExecutionsRequest: testRequest,
 		WorkflowTypeName:              testWorkflowType,
 	}
-	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
+	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByType(context.Background(), request)
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByType(request)
+	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByType(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -221,11 +221,11 @@ func (s *ESVisibilitySuite) TestListOpenWorkflowExecutionsByWorkflowID() {
 		ListWorkflowExecutionsRequest: testRequest,
 		WorkflowID:                    testWorkflowID,
 	}
-	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(request)
+	_, err := s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(context.Background(), request)
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(request)
+	_, err = s.visibilityStore.ListOpenWorkflowExecutionsByWorkflowID(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -246,11 +246,11 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByWorkflowID() {
 		ListWorkflowExecutionsRequest: testRequest,
 		WorkflowID:                    testWorkflowID,
 	}
-	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(request)
+	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(context.Background(), request)
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(request)
+	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByWorkflowID(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -270,11 +270,11 @@ func (s *ESVisibilitySuite) TestListClosedWorkflowExecutionsByStatus() {
 		ListWorkflowExecutionsRequest: testRequest,
 		Status:                        testStatus,
 	}
-	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
+	_, err := s.visibilityStore.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByStatus(request)
+	_, err = s.visibilityStore.ListClosedWorkflowExecutionsByStatus(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -937,18 +937,18 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions() {
 		PageSize:    10,
 		Query:       `ExecutionStatus = "Terminated"`,
 	}
-	_, err := s.visibilityStore.ListWorkflowExecutions(request)
+	_, err := s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ListWorkflowExecutions(request)
+	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
 	s.True(strings.Contains(err.Error(), "ListWorkflowExecutions failed"))
 
 	request.Query = `invalid query`
-	_, err = s.visibilityStore.ListWorkflowExecutions(request)
+	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)
@@ -972,7 +972,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 		PageSize:    10,
 		Query:       `ExecutionStatus = "Terminated"`,
 	}
-	_, err := s.visibilityStore.ListWorkflowExecutions(request)
+	_, err := s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	var internalErr *serviceerror.Internal
 	s.ErrorAs(err, &internalErr)
@@ -987,7 +987,7 @@ func (s *ESVisibilitySuite) TestListWorkflowExecutions_Error() {
 				},
 			}
 		})
-	_, err = s.visibilityStore.ListWorkflowExecutions(request)
+	_, err = s.visibilityStore.ListWorkflowExecutions(context.Background(), request)
 	var unavailableErr *serviceerror.Unavailable
 	s.ErrorAs(err, &unavailableErr)
 	s.Equal("ListWorkflowExecutions failed: elastic: Error 500 (Internal Server Error): error reason [type=]", unavailableErr.Message)
@@ -1018,12 +1018,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 		PageSize:    10,
 		Query:       `ExecutionStatus = "Terminated"`,
 	}
-	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	// test bad request
 	request.Query = `invalid query`
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
@@ -1039,18 +1039,18 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV6() {
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	// test io.EOF error
 	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, io.EOF)
 	mockESClientV6.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	// test unavailable error
 	mockESClientV6.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok = err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -1083,12 +1083,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 		PageSize:    10,
 		Query:       `ExecutionStatus = "Terminated"`,
 	}
-	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	// test bad request
 	request.Query = `invalid query`
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
@@ -1104,18 +1104,18 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_Scroll() {
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	// test io.EOF error
 	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(testSearchResult, io.EOF)
 	s.mockESClient.EXPECT().CloseScroll(gomock.Any(), gomock.Any()).Return(nil)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	// test unavailable error
 	s.mockESClient.EXPECT().Scroll(gomock.Any(), scrollID, "1m").Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok = err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -1158,12 +1158,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_PIT() {
 	s.mockESClient.EXPECT().IsPointInTimeSupported(gomock.Any()).Return(true).AnyTimes()
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
 	s.mockESClient.EXPECT().OpenPointInTime(gomock.Any(), testIndex, gomock.Any()).Return(pitID, nil)
-	_, err := s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	// test bad request
 	request.Query = `invalid query`
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.InvalidArgument)
 	s.True(ok)
@@ -1178,7 +1178,7 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_PIT() {
 	tokenBytes, err := s.visibilityStore.serializePageToken(token)
 	s.NoError(err)
 	request.NextPageToken = tokenBytes
-	result, err := s.visibilityStore.ScanWorkflowExecutions(request)
+	result, err := s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 	responseToken, err := s.visibilityStore.deserializePageToken(result.NextPageToken)
 	s.NoError(err)
@@ -1195,12 +1195,12 @@ func (s *ESVisibilitySuite) TestScanWorkflowExecutionsV7_PIT() {
 	}
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(searchResult, nil)
 	s.mockESClient.EXPECT().ClosePointInTime(gomock.Any(), pitID).Return(true, nil)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 
 	// test unavailable error
 	s.mockESClient.EXPECT().Search(gomock.Any(), gomock.Any()).Return(nil, errTestESSearch)
-	_, err = s.visibilityStore.ScanWorkflowExecutions(request)
+	_, err = s.visibilityStore.ScanWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok = err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -1224,7 +1224,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 		Namespace:   testNamespace,
 		Query:       `ExecutionStatus = "Terminated"`,
 	}
-	resp, err := s.visibilityStore.CountWorkflowExecutions(request)
+	resp, err := s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.NoError(err)
 	s.Equal(int64(1), resp.Count)
 
@@ -1240,7 +1240,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 			return int64(0), errTestESSearch
 		})
 
-	_, err = s.visibilityStore.CountWorkflowExecutions(request)
+	_, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok := err.(*serviceerror.Unavailable)
 	s.True(ok)
@@ -1248,7 +1248,7 @@ func (s *ESVisibilitySuite) TestCountWorkflowExecutions() {
 
 	// test bad request
 	request.Query = `invalid query`
-	_, err = s.visibilityStore.CountWorkflowExecutions(request)
+	_, err = s.visibilityStore.CountWorkflowExecutions(context.Background(), request)
 	s.Error(err)
 	_, ok = err.(*serviceerror.InvalidArgument)
 	s.True(ok)

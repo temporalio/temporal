@@ -164,7 +164,7 @@ func (ti *TelemetryInterceptor) handleError(
 	case *serviceerror.InvalidArgument:
 		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.NamespaceNotActive:
-		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
+		scope.IncCounter(metrics.ServiceErrNamespaceNotActiveCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
 	case *serviceerror.NotFound:

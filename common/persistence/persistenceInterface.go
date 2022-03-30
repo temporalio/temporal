@@ -56,36 +56,36 @@ type (
 		Closeable
 		GetName() string
 		GetClusterName() string
-		GetOrCreateShard(request *InternalGetOrCreateShardRequest) (*InternalGetOrCreateShardResponse, error)
-		UpdateShard(request *InternalUpdateShardRequest) error
+		GetOrCreateShard(ctx context.Context, request *InternalGetOrCreateShardRequest) (*InternalGetOrCreateShardResponse, error)
+		UpdateShard(ctx context.Context, request *InternalUpdateShardRequest) error
 	}
 
 	// TaskStore is a lower level of TaskManager
 	TaskStore interface {
 		Closeable
 		GetName() string
-		CreateTaskQueue(request *InternalCreateTaskQueueRequest) error
-		GetTaskQueue(request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
-		UpdateTaskQueue(request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
-		ListTaskQueue(request *ListTaskQueueRequest) (*InternalListTaskQueueResponse, error)
-		DeleteTaskQueue(request *DeleteTaskQueueRequest) error
-		CreateTasks(request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
-		GetTasks(request *GetTasksRequest) (*InternalGetTasksResponse, error)
-		CompleteTask(request *CompleteTaskRequest) error
-		CompleteTasksLessThan(request *CompleteTasksLessThanRequest) (int, error)
+		CreateTaskQueue(ctx context.Context, request *InternalCreateTaskQueueRequest) error
+		GetTaskQueue(ctx context.Context, request *InternalGetTaskQueueRequest) (*InternalGetTaskQueueResponse, error)
+		UpdateTaskQueue(ctx context.Context, request *InternalUpdateTaskQueueRequest) (*UpdateTaskQueueResponse, error)
+		ListTaskQueue(ctx context.Context, request *ListTaskQueueRequest) (*InternalListTaskQueueResponse, error)
+		DeleteTaskQueue(ctx context.Context, request *DeleteTaskQueueRequest) error
+		CreateTasks(ctx context.Context, request *InternalCreateTasksRequest) (*CreateTasksResponse, error)
+		GetTasks(ctx context.Context, request *GetTasksRequest) (*InternalGetTasksResponse, error)
+		CompleteTask(ctx context.Context, request *CompleteTaskRequest) error
+		CompleteTasksLessThan(ctx context.Context, request *CompleteTasksLessThanRequest) (int, error)
 	}
 	// MetadataStore is a lower level of MetadataManager
 	MetadataStore interface {
 		Closeable
 		GetName() string
-		CreateNamespace(request *InternalCreateNamespaceRequest) (*CreateNamespaceResponse, error)
-		GetNamespace(request *GetNamespaceRequest) (*InternalGetNamespaceResponse, error)
-		UpdateNamespace(request *InternalUpdateNamespaceRequest) error
-		RenameNamespace(request *InternalRenameNamespaceRequest) error
-		DeleteNamespace(request *DeleteNamespaceRequest) error
-		DeleteNamespaceByName(request *DeleteNamespaceByNameRequest) error
-		ListNamespaces(request *ListNamespacesRequest) (*InternalListNamespacesResponse, error)
-		GetMetadata() (*GetMetadataResponse, error)
+		CreateNamespace(ctx context.Context, request *InternalCreateNamespaceRequest) (*CreateNamespaceResponse, error)
+		GetNamespace(ctx context.Context, request *GetNamespaceRequest) (*InternalGetNamespaceResponse, error)
+		UpdateNamespace(ctx context.Context, request *InternalUpdateNamespaceRequest) error
+		RenameNamespace(ctx context.Context, request *InternalRenameNamespaceRequest) error
+		DeleteNamespace(ctx context.Context, request *DeleteNamespaceRequest) error
+		DeleteNamespaceByName(ctx context.Context, request *DeleteNamespaceByNameRequest) error
+		ListNamespaces(ctx context.Context, request *InternalListNamespacesRequest) (*InternalListNamespacesResponse, error)
+		GetMetadata(ctx context.Context) (*GetMetadataResponse, error)
 	}
 
 	// ClusterMetadataStore is a lower level of ClusterMetadataManager.
@@ -94,14 +94,14 @@ type (
 	ClusterMetadataStore interface {
 		Closeable
 		GetName() string
-		ListClusterMetadata(request *InternalListClusterMetadataRequest) (*InternalListClusterMetadataResponse, error)
-		GetClusterMetadata(request *InternalGetClusterMetadataRequest) (*InternalGetClusterMetadataResponse, error)
-		SaveClusterMetadata(request *InternalSaveClusterMetadataRequest) (bool, error)
-		DeleteClusterMetadata(request *InternalDeleteClusterMetadataRequest) error
+		ListClusterMetadata(ctx context.Context, request *InternalListClusterMetadataRequest) (*InternalListClusterMetadataResponse, error)
+		GetClusterMetadata(ctx context.Context, request *InternalGetClusterMetadataRequest) (*InternalGetClusterMetadataResponse, error)
+		SaveClusterMetadata(ctx context.Context, request *InternalSaveClusterMetadataRequest) (bool, error)
+		DeleteClusterMetadata(ctx context.Context, request *InternalDeleteClusterMetadataRequest) error
 		// Membership APIs
-		GetClusterMembers(request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
-		UpsertClusterMembership(request *UpsertClusterMembershipRequest) error
-		PruneClusterMembership(request *PruneClusterMembershipRequest) error
+		GetClusterMembers(ctx context.Context, request *GetClusterMembersRequest) (*GetClusterMembersResponse, error)
+		UpsertClusterMembership(ctx context.Context, request *UpsertClusterMembershipRequest) error
+		PruneClusterMembership(ctx context.Context, request *PruneClusterMembershipRequest) error
 	}
 
 	// ExecutionStore is used to manage workflow execution including mutable states / history / tasks.
@@ -109,66 +109,66 @@ type (
 		Closeable
 		GetName() string
 		// The below three APIs are related to serialization/deserialization
-		CreateWorkflowExecution(request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
-		UpdateWorkflowExecution(request *InternalUpdateWorkflowExecutionRequest) error
-		ConflictResolveWorkflowExecution(request *InternalConflictResolveWorkflowExecutionRequest) error
+		CreateWorkflowExecution(ctx context.Context, request *InternalCreateWorkflowExecutionRequest) (*InternalCreateWorkflowExecutionResponse, error)
+		UpdateWorkflowExecution(ctx context.Context, request *InternalUpdateWorkflowExecutionRequest) error
+		ConflictResolveWorkflowExecution(ctx context.Context, request *InternalConflictResolveWorkflowExecutionRequest) error
 
-		DeleteWorkflowExecution(request *DeleteWorkflowExecutionRequest) error
-		DeleteCurrentWorkflowExecution(request *DeleteCurrentWorkflowExecutionRequest) error
-		GetCurrentExecution(request *GetCurrentExecutionRequest) (*InternalGetCurrentExecutionResponse, error)
-		GetWorkflowExecution(request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
-		SetWorkflowExecution(request *InternalSetWorkflowExecutionRequest) error
+		DeleteWorkflowExecution(ctx context.Context, request *DeleteWorkflowExecutionRequest) error
+		DeleteCurrentWorkflowExecution(ctx context.Context, request *DeleteCurrentWorkflowExecutionRequest) error
+		GetCurrentExecution(ctx context.Context, request *GetCurrentExecutionRequest) (*InternalGetCurrentExecutionResponse, error)
+		GetWorkflowExecution(ctx context.Context, request *GetWorkflowExecutionRequest) (*InternalGetWorkflowExecutionResponse, error)
+		SetWorkflowExecution(ctx context.Context, request *InternalSetWorkflowExecutionRequest) error
 
 		// Scan related methods
-		ListConcreteExecutions(request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
+		ListConcreteExecutions(ctx context.Context, request *ListConcreteExecutionsRequest) (*InternalListConcreteExecutionsResponse, error)
 
 		// Tasks related APIs
-		AddHistoryTasks(request *InternalAddHistoryTasksRequest) error
-		GetHistoryTask(request *GetHistoryTaskRequest) (*InternalGetHistoryTaskResponse, error)
-		GetHistoryTasks(request *GetHistoryTasksRequest) (*InternalGetHistoryTasksResponse, error)
-		CompleteHistoryTask(request *CompleteHistoryTaskRequest) error
-		RangeCompleteHistoryTasks(request *RangeCompleteHistoryTasksRequest) error
+		AddHistoryTasks(ctx context.Context, request *InternalAddHistoryTasksRequest) error
+		GetHistoryTask(ctx context.Context, request *GetHistoryTaskRequest) (*InternalGetHistoryTaskResponse, error)
+		GetHistoryTasks(ctx context.Context, request *GetHistoryTasksRequest) (*InternalGetHistoryTasksResponse, error)
+		CompleteHistoryTask(ctx context.Context, request *CompleteHistoryTaskRequest) error
+		RangeCompleteHistoryTasks(ctx context.Context, request *RangeCompleteHistoryTasksRequest) error
 
-		PutReplicationTaskToDLQ(request *PutReplicationTaskToDLQRequest) error
-		GetReplicationTasksFromDLQ(request *GetReplicationTasksFromDLQRequest) (*InternalGetReplicationTasksFromDLQResponse, error)
-		DeleteReplicationTaskFromDLQ(request *DeleteReplicationTaskFromDLQRequest) error
-		RangeDeleteReplicationTaskFromDLQ(request *RangeDeleteReplicationTaskFromDLQRequest) error
+		PutReplicationTaskToDLQ(ctx context.Context, request *PutReplicationTaskToDLQRequest) error
+		GetReplicationTasksFromDLQ(ctx context.Context, request *GetReplicationTasksFromDLQRequest) (*InternalGetReplicationTasksFromDLQResponse, error)
+		DeleteReplicationTaskFromDLQ(ctx context.Context, request *DeleteReplicationTaskFromDLQRequest) error
+		RangeDeleteReplicationTaskFromDLQ(ctx context.Context, request *RangeDeleteReplicationTaskFromDLQRequest) error
 
 		// The below are history V2 APIs
 		// V2 regards history events growing as a tree, decoupled from workflow concepts
 
 		// AppendHistoryNodes add a node to history node table
-		AppendHistoryNodes(request *InternalAppendHistoryNodesRequest) error
+		AppendHistoryNodes(ctx context.Context, request *InternalAppendHistoryNodesRequest) error
 		// DeleteHistoryNodes delete a node from history node table
-		DeleteHistoryNodes(request *InternalDeleteHistoryNodesRequest) error
+		DeleteHistoryNodes(ctx context.Context, request *InternalDeleteHistoryNodesRequest) error
 		// ReadHistoryBranch returns history node data for a branch
-		ReadHistoryBranch(request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
+		ReadHistoryBranch(ctx context.Context, request *InternalReadHistoryBranchRequest) (*InternalReadHistoryBranchResponse, error)
 		// ForkHistoryBranch forks a new branch from a old branch
-		ForkHistoryBranch(request *InternalForkHistoryBranchRequest) error
+		ForkHistoryBranch(ctx context.Context, request *InternalForkHistoryBranchRequest) error
 		// DeleteHistoryBranch removes a branch
-		DeleteHistoryBranch(request *InternalDeleteHistoryBranchRequest) error
+		DeleteHistoryBranch(ctx context.Context, request *InternalDeleteHistoryBranchRequest) error
 		// GetHistoryTree returns all branch information of a tree
-		GetHistoryTree(request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
+		GetHistoryTree(ctx context.Context, request *GetHistoryTreeRequest) (*InternalGetHistoryTreeResponse, error)
 		// GetAllHistoryTreeBranches returns all branches of all trees
-		GetAllHistoryTreeBranches(request *GetAllHistoryTreeBranchesRequest) (*InternalGetAllHistoryTreeBranchesResponse, error)
+		GetAllHistoryTreeBranches(ctx context.Context, request *GetAllHistoryTreeBranchesRequest) (*InternalGetAllHistoryTreeBranchesResponse, error)
 	}
 
 	// Queue is a store to enqueue and get messages
 	Queue interface {
 		Closeable
-		Init(blob *commonpb.DataBlob) error
-		EnqueueMessage(blob commonpb.DataBlob) error
-		ReadMessages(lastMessageID int64, maxCount int) ([]*QueueMessage, error)
-		DeleteMessagesBefore(messageID int64) error
-		UpdateAckLevel(metadata *InternalQueueMetadata) error
-		GetAckLevels() (*InternalQueueMetadata, error)
+		Init(ctx context.Context, blob *commonpb.DataBlob) error
+		EnqueueMessage(ctx context.Context, blob commonpb.DataBlob) error
+		ReadMessages(ctx context.Context, lastMessageID int64, maxCount int) ([]*QueueMessage, error)
+		DeleteMessagesBefore(ctx context.Context, messageID int64) error
+		UpdateAckLevel(ctx context.Context, metadata *InternalQueueMetadata) error
+		GetAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 
-		EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error)
-		ReadMessagesFromDLQ(firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
-		DeleteMessageFromDLQ(messageID int64) error
-		RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error
-		UpdateDLQAckLevel(metadata *InternalQueueMetadata) error
-		GetDLQAckLevels() (*InternalQueueMetadata, error)
+		EnqueueMessageToDLQ(ctx context.Context, blob commonpb.DataBlob) (int64, error)
+		ReadMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64, pageSize int, pageToken []byte) ([]*QueueMessage, []byte, error)
+		DeleteMessageFromDLQ(ctx context.Context, messageID int64) error
+		RangeDeleteMessagesFromDLQ(ctx context.Context, firstMessageID int64, lastMessageID int64) error
+		UpdateDLQAckLevel(ctx context.Context, metadata *InternalQueueMetadata) error
+		GetDLQAckLevels(ctx context.Context) (*InternalQueueMetadata, error)
 	}
 
 	// QueueMessage is the message that stores in the queue
@@ -629,6 +629,11 @@ type (
 	InternalRenameNamespaceRequest struct {
 		*InternalUpdateNamespaceRequest
 		PreviousName string
+	}
+
+	InternalListNamespacesRequest struct {
+		PageSize      int
+		NextPageToken []byte
 	}
 
 	// InternalListNamespacesResponse is the response for GetNamespace

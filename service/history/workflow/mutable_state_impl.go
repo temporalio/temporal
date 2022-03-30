@@ -704,6 +704,40 @@ func (e *MutableStateImpl) GetRequestCancelInfo(
 	return ri, ok
 }
 
+func (e *MutableStateImpl) GetRequesteCancelExternalInitiatedEvent(
+	ctx context.Context,
+	initiatedEventID int64,
+) (*historypb.HistoryEvent, error) {
+	ri, ok := e.pendingRequestCancelInfoIDs[initiatedEventID]
+	if !ok {
+		return nil, ErrMissingRequestCancelInfo
+	}
+
+	currentBranchToken, version, err := e.getCurrentBranchTokenAndEventVersion(ri.InitiatedId)
+	if err != nil {
+		return nil, err
+	}
+	event, err := e.eventsCache.GetEvent(
+		ctx,
+		events.EventKey{
+			NamespaceID: namespace.ID(e.executionInfo.NamespaceId),
+			WorkflowID:  e.executionInfo.WorkflowId,
+			RunID:       e.executionState.RunId,
+			EventID:     ri.InitiatedId,
+			Version:     version,
+		},
+		ri.InitiatedEventBatchId,
+		currentBranchToken,
+	)
+	if err != nil {
+		// do not return the original error
+		// since original error can be of type entity not exists
+		// which can cause task processing side to fail silently
+		return nil, ErrMissingRequestCancelInfo
+	}
+	return event, nil
+}
+
 func (e *MutableStateImpl) GetRetryBackoffDuration(
 	failure *failurepb.Failure,
 ) (time.Duration, enumspb.RetryState) {
@@ -2531,6 +2565,7 @@ func (e *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionInitia
 	e.pendingRequestCancelInfoIDs[rci.InitiatedId] = rci
 	e.updateRequestCancelInfos[rci.InitiatedId] = rci
 
+	e.writeEventToCache(event)
 	return rci, nil
 }
 

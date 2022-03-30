@@ -42,8 +42,6 @@ import (
 const (
 	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-delete-namespace-workflow"
-
-	namespaceCacheRefreshDelay = 11 * time.Second
 )
 
 type (
@@ -56,8 +54,8 @@ type (
 	}
 
 	DeleteNamespaceWorkflowResult struct {
-		DeletedID   namespace.ID
-		DeletedName namespace.Name
+		DeletedNamespaceID namespace.ID
+		DeletedNamespace   namespace.Name
 	}
 )
 
@@ -123,31 +121,27 @@ func DeleteNamespaceWorkflow(ctx workflow.Context, params DeleteNamespaceWorkflo
 		return result, fmt.Errorf("%w: MarkNamespaceDeletedActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
-	result.DeletedID = params.NamespaceID
+	result.DeletedNamespaceID = params.NamespaceID
 
 	// Step 3. Rename namespace.
 	ctx3 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &result.DeletedName)
+	err = workflow.ExecuteLocalActivity(ctx3, a.GenerateDeletedNamespaceNameActivity, params.Namespace).Get(ctx, &result.DeletedNamespace)
 	if err != nil {
 		return result, fmt.Errorf("%w: GenerateDeletedNamespaceNameActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
 	ctx31 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
-	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, result.DeletedName).Get(ctx, nil)
+	err = workflow.ExecuteLocalActivity(ctx31, a.RenameNamespaceActivity, params.Namespace, result.DeletedNamespace).Get(ctx, nil)
 	if err != nil {
 		return result, fmt.Errorf("%w: RenameNamespaceActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
-	err = workflow.Sleep(ctx, namespaceCacheRefreshDelay)
-	if err != nil {
-		return result, err
-	}
-
 	// Step 4. Reclaim workflow resources asynchronously.
 	ctx4 := workflow.WithChildOptions(ctx, reclaimResourcesWorkflowOptions)
+	ctx4 = workflow.WithWorkflowID(ctx4, fmt.Sprintf("%s/%s", reclaimresources.WorkflowName, result.DeletedNamespace))
 	reclaimResourcesFuture := workflow.ExecuteChildWorkflow(ctx4, reclaimresources.ReclaimResourcesWorkflow, reclaimresources.ReclaimResourcesParams{
 		DeleteExecutionsParams: deleteexecutions.DeleteExecutionsParams{
-			Namespace:   result.DeletedName,
+			Namespace:   result.DeletedNamespace,
 			NamespaceID: params.NamespaceID,
 			Config:      params.DeleteExecutionsConfig,
 		}})

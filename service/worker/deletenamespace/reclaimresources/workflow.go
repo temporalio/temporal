@@ -40,6 +40,8 @@ import (
 const (
 	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-reclaim-namespace-resources-workflow"
+
+	namespaceCacheRefreshDelay = 11 * time.Second
 )
 
 type (
@@ -95,6 +97,13 @@ func ReclaimResourcesWorkflow(ctx workflow.Context, params ReclaimResourcesParam
 
 	var a *Activities
 
+	// Step 0. This workflow is started right after namespace is marked as DELETED and renamed.
+	// Wait for namespace cache refresh to make sure no new executions are created.
+	err := workflow.Sleep(ctx, namespaceCacheRefreshDelay)
+	if err != nil {
+		return ReclaimResourcesResult{}, err
+	}
+
 	// Step 1. Delete workflow executions.
 	result, err := deleteWorkflowExecutions(ctx, params)
 	if err != nil {
@@ -120,6 +129,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 
 	for {
 		ctx1 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
+		ctx1 = workflow.WithWorkflowID(ctx1, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
 		var der deleteexecutions.DeleteExecutionsResult
 		err := workflow.ExecuteChildWorkflow(ctx1, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 		if err != nil {

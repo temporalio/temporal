@@ -25,6 +25,7 @@
 package client
 
 import (
+	"context"
 	"fmt"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -253,57 +254,79 @@ func (q *FaultInjectionQueue) Close() {
 	q.baseQueue.Close()
 }
 
-func (q *FaultInjectionQueue) Init(blob *commonpb.DataBlob) error {
+func (q *FaultInjectionQueue) Init(
+	ctx context.Context,
+	blob *commonpb.DataBlob,
+) error {
 	// potentially Init can return golang errors from blob.go encode/decode.
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return q.baseQueue.Init(blob)
+	return q.baseQueue.Init(ctx, blob)
 }
 
-func (q *FaultInjectionQueue) EnqueueMessage(blob commonpb.DataBlob) error {
+func (q *FaultInjectionQueue) EnqueueMessage(
+	ctx context.Context,
+	blob commonpb.DataBlob,
+) error {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return q.baseQueue.EnqueueMessage(blob)
+	return q.baseQueue.EnqueueMessage(ctx, blob)
 }
 
-func (q *FaultInjectionQueue) ReadMessages(lastMessageID int64, maxCount int) ([]*persistence.QueueMessage, error) {
+func (q *FaultInjectionQueue) ReadMessages(
+	ctx context.Context,
+	lastMessageID int64,
+	maxCount int,
+) ([]*persistence.QueueMessage, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return q.baseQueue.ReadMessages(lastMessageID, maxCount)
+	return q.baseQueue.ReadMessages(ctx, lastMessageID, maxCount)
 }
 
-func (q *FaultInjectionQueue) DeleteMessagesBefore(messageID int64) error {
+func (q *FaultInjectionQueue) DeleteMessagesBefore(
+	ctx context.Context,
+	messageID int64,
+) error {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return q.baseQueue.DeleteMessagesBefore(messageID)
+	return q.baseQueue.DeleteMessagesBefore(ctx, messageID)
 }
 
-func (q *FaultInjectionQueue) UpdateAckLevel(metadata *persistence.InternalQueueMetadata) error {
+func (q *FaultInjectionQueue) UpdateAckLevel(
+	ctx context.Context,
+	metadata *persistence.InternalQueueMetadata,
+) error {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return q.baseQueue.UpdateAckLevel(metadata)
+	return q.baseQueue.UpdateAckLevel(ctx, metadata)
 }
 
-func (q *FaultInjectionQueue) GetAckLevels() (*persistence.InternalQueueMetadata, error) {
+func (q *FaultInjectionQueue) GetAckLevels(
+	ctx context.Context,
+) (*persistence.InternalQueueMetadata, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return q.baseQueue.GetAckLevels()
+	return q.baseQueue.GetAckLevels(ctx)
 }
 
-func (q *FaultInjectionQueue) EnqueueMessageToDLQ(blob commonpb.DataBlob) (int64, error) {
+func (q *FaultInjectionQueue) EnqueueMessageToDLQ(
+	ctx context.Context,
+	blob commonpb.DataBlob,
+) (int64, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return 0, err
 	}
-	return q.baseQueue.EnqueueMessageToDLQ(blob)
+	return q.baseQueue.EnqueueMessageToDLQ(ctx, blob)
 }
 
 func (q *FaultInjectionQueue) ReadMessagesFromDLQ(
+	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 	pageSize int,
@@ -312,45 +335,57 @@ func (q *FaultInjectionQueue) ReadMessagesFromDLQ(
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return nil, nil, err
 	}
-	return q.baseQueue.ReadMessagesFromDLQ(firstMessageID, lastMessageID, pageSize, pageToken)
+	return q.baseQueue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 }
 
-func (q *FaultInjectionQueue) DeleteMessageFromDLQ(messageID int64) error {
+func (q *FaultInjectionQueue) DeleteMessageFromDLQ(
+	ctx context.Context,
+	messageID int64,
+) error {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return q.baseQueue.DeleteMessageFromDLQ(messageID)
+	return q.baseQueue.DeleteMessageFromDLQ(ctx, messageID)
 }
 
-func (q *FaultInjectionQueue) RangeDeleteMessagesFromDLQ(firstMessageID int64, lastMessageID int64) error {
+func (q *FaultInjectionQueue) RangeDeleteMessagesFromDLQ(
+	ctx context.Context,
+	firstMessageID int64,
+	lastMessageID int64,
+) error {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return q.baseQueue.RangeDeleteMessagesFromDLQ(firstMessageID, lastMessageID)
+	return q.baseQueue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 }
 
-func (q *FaultInjectionQueue) UpdateDLQAckLevel(metadata *persistence.InternalQueueMetadata) error {
+func (q *FaultInjectionQueue) UpdateDLQAckLevel(
+	ctx context.Context,
+	metadata *persistence.InternalQueueMetadata,
+) error {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return q.baseQueue.UpdateDLQAckLevel(metadata)
+	return q.baseQueue.UpdateDLQAckLevel(ctx, metadata)
 }
 
-func (q *FaultInjectionQueue) GetDLQAckLevels() (*persistence.InternalQueueMetadata, error) {
+func (q *FaultInjectionQueue) GetDLQAckLevels(
+	ctx context.Context,
+) (*persistence.InternalQueueMetadata, error) {
 	if err := q.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return q.baseQueue.GetDLQAckLevels()
+	return q.baseQueue.GetDLQAckLevels(ctx)
 }
 
 func (q *FaultInjectionQueue) UpdateRate(rate float64) {
 	q.ErrorGenerator.UpdateRate(rate)
 }
 
-func NewFaultInjectionExecutionStore(rate float64, executionStore persistence.ExecutionStore) (
-	*FaultInjectionExecutionStore,
-	error,
-) {
+func NewFaultInjectionExecutionStore(
+	rate float64,
+	executionStore persistence.ExecutionStore,
+) (*FaultInjectionExecutionStore, error) {
 	errorGenerator := newErrorGenerator(
 		rate,
 		append(
@@ -380,219 +415,267 @@ func (e *FaultInjectionExecutionStore) GetName() string {
 	return e.baseExecutionStore.GetName()
 }
 
-func (e *FaultInjectionExecutionStore) GetWorkflowExecution(request *persistence.GetWorkflowExecutionRequest) (
-	*persistence.InternalGetWorkflowExecutionResponse,
-	error,
-) {
+func (e *FaultInjectionExecutionStore) GetWorkflowExecution(
+	ctx context.Context,
+	request *persistence.GetWorkflowExecutionRequest,
+) (*persistence.InternalGetWorkflowExecutionResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetWorkflowExecution(request)
+	return e.baseExecutionStore.GetWorkflowExecution(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) SetWorkflowExecution(request *persistence.InternalSetWorkflowExecutionRequest) error {
+func (e *FaultInjectionExecutionStore) SetWorkflowExecution(
+	ctx context.Context,
+	request *persistence.InternalSetWorkflowExecutionRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.SetWorkflowExecution(request)
+	return e.baseExecutionStore.SetWorkflowExecution(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) UpdateWorkflowExecution(request *persistence.InternalUpdateWorkflowExecutionRequest) error {
+func (e *FaultInjectionExecutionStore) UpdateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.InternalUpdateWorkflowExecutionRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.UpdateWorkflowExecution(request)
+	return e.baseExecutionStore.UpdateWorkflowExecution(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) ConflictResolveWorkflowExecution(request *persistence.InternalConflictResolveWorkflowExecutionRequest) error {
+func (e *FaultInjectionExecutionStore) ConflictResolveWorkflowExecution(
+	ctx context.Context,
+	request *persistence.InternalConflictResolveWorkflowExecutionRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.ConflictResolveWorkflowExecution(request)
+	return e.baseExecutionStore.ConflictResolveWorkflowExecution(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) CreateWorkflowExecution(request *persistence.InternalCreateWorkflowExecutionRequest) (
-	*persistence.InternalCreateWorkflowExecutionResponse,
-	error,
-) {
+func (e *FaultInjectionExecutionStore) CreateWorkflowExecution(
+	ctx context.Context,
+	request *persistence.InternalCreateWorkflowExecutionRequest,
+) (*persistence.InternalCreateWorkflowExecutionResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.CreateWorkflowExecution(request)
+	return e.baseExecutionStore.CreateWorkflowExecution(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) DeleteWorkflowExecution(request *persistence.DeleteWorkflowExecutionRequest) error {
+func (e *FaultInjectionExecutionStore) DeleteWorkflowExecution(
+	ctx context.Context,
+	request *persistence.DeleteWorkflowExecutionRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.DeleteWorkflowExecution(request)
+	return e.baseExecutionStore.DeleteWorkflowExecution(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) DeleteCurrentWorkflowExecution(request *persistence.DeleteCurrentWorkflowExecutionRequest) error {
+func (e *FaultInjectionExecutionStore) DeleteCurrentWorkflowExecution(
+	ctx context.Context,
+	request *persistence.DeleteCurrentWorkflowExecutionRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.DeleteCurrentWorkflowExecution(request)
+	return e.baseExecutionStore.DeleteCurrentWorkflowExecution(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) GetCurrentExecution(request *persistence.GetCurrentExecutionRequest) (
-	*persistence.InternalGetCurrentExecutionResponse,
-	error,
-) {
+func (e *FaultInjectionExecutionStore) GetCurrentExecution(
+	ctx context.Context,
+	request *persistence.GetCurrentExecutionRequest,
+) (*persistence.InternalGetCurrentExecutionResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetCurrentExecution(request)
+	return e.baseExecutionStore.GetCurrentExecution(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) ListConcreteExecutions(request *persistence.ListConcreteExecutionsRequest) (
-	*persistence.InternalListConcreteExecutionsResponse,
-	error,
-) {
+func (e *FaultInjectionExecutionStore) ListConcreteExecutions(
+	ctx context.Context,
+	request *persistence.ListConcreteExecutionsRequest,
+) (*persistence.InternalListConcreteExecutionsResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.ListConcreteExecutions(request)
+	return e.baseExecutionStore.ListConcreteExecutions(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) AddHistoryTasks(request *persistence.InternalAddHistoryTasksRequest) error {
+func (e *FaultInjectionExecutionStore) AddHistoryTasks(
+	ctx context.Context,
+	request *persistence.InternalAddHistoryTasksRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.AddHistoryTasks(request)
+	return e.baseExecutionStore.AddHistoryTasks(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) GetHistoryTask(request *persistence.GetHistoryTaskRequest) (
-	*persistence.InternalGetHistoryTaskResponse,
-	error,
-) {
+func (e *FaultInjectionExecutionStore) GetHistoryTask(
+	ctx context.Context,
+	request *persistence.GetHistoryTaskRequest,
+) (*persistence.InternalGetHistoryTaskResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetHistoryTask(request)
+	return e.baseExecutionStore.GetHistoryTask(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) GetHistoryTasks(request *persistence.GetHistoryTasksRequest) (
+func (e *FaultInjectionExecutionStore) GetHistoryTasks(
+	ctx context.Context,
+	request *persistence.GetHistoryTasksRequest,
+) (*persistence.InternalGetHistoryTasksResponse, error) {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return nil, err
+	}
+	return e.baseExecutionStore.GetHistoryTasks(ctx, request)
+}
+
+func (e *FaultInjectionExecutionStore) CompleteHistoryTask(
+	ctx context.Context,
+	request *persistence.CompleteHistoryTaskRequest,
+) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.CompleteHistoryTask(ctx, request)
+}
+
+func (e *FaultInjectionExecutionStore) RangeCompleteHistoryTasks(
+	ctx context.Context,
+	request *persistence.RangeCompleteHistoryTasksRequest,
+) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.RangeCompleteHistoryTasks(ctx, request)
+}
+
+func (e *FaultInjectionExecutionStore) PutReplicationTaskToDLQ(
+	ctx context.Context,
+	request *persistence.PutReplicationTaskToDLQRequest,
+) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.PutReplicationTaskToDLQ(ctx, request)
+}
+
+func (e *FaultInjectionExecutionStore) GetReplicationTasksFromDLQ(
+	ctx context.Context,
+	request *persistence.GetReplicationTasksFromDLQRequest,
+) (
 	*persistence.InternalGetHistoryTasksResponse,
 	error,
 ) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetHistoryTasks(request)
+	return e.baseExecutionStore.GetReplicationTasksFromDLQ(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) CompleteHistoryTask(request *persistence.CompleteHistoryTaskRequest) error {
+func (e *FaultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(
+	ctx context.Context,
+	request *persistence.DeleteReplicationTaskFromDLQRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.CompleteHistoryTask(request)
+	return e.baseExecutionStore.DeleteReplicationTaskFromDLQ(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) RangeCompleteHistoryTasks(request *persistence.RangeCompleteHistoryTasksRequest) error {
+func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(
+	ctx context.Context,
+	request *persistence.RangeDeleteReplicationTaskFromDLQRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.RangeCompleteHistoryTasks(request)
+	return e.baseExecutionStore.RangeDeleteReplicationTaskFromDLQ(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) PutReplicationTaskToDLQ(request *persistence.PutReplicationTaskToDLQRequest) error {
+func (e *FaultInjectionExecutionStore) AppendHistoryNodes(
+	ctx context.Context,
+	request *persistence.InternalAppendHistoryNodesRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.PutReplicationTaskToDLQ(request)
+	return e.baseExecutionStore.AppendHistoryNodes(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) GetReplicationTasksFromDLQ(request *persistence.GetReplicationTasksFromDLQRequest) (
-	*persistence.InternalGetHistoryTasksResponse,
-	error,
-) {
+func (e *FaultInjectionExecutionStore) DeleteHistoryNodes(
+	ctx context.Context,
+	request *persistence.InternalDeleteHistoryNodesRequest,
+) error {
+	if err := e.ErrorGenerator.Generate(); err != nil {
+		return err
+	}
+	return e.baseExecutionStore.DeleteHistoryNodes(ctx, request)
+}
+
+func (e *FaultInjectionExecutionStore) ReadHistoryBranch(
+	ctx context.Context,
+	request *persistence.InternalReadHistoryBranchRequest,
+) (*persistence.InternalReadHistoryBranchResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetReplicationTasksFromDLQ(request)
+	return e.baseExecutionStore.ReadHistoryBranch(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) DeleteReplicationTaskFromDLQ(request *persistence.DeleteReplicationTaskFromDLQRequest) error {
+func (e *FaultInjectionExecutionStore) ForkHistoryBranch(
+	ctx context.Context,
+	request *persistence.InternalForkHistoryBranchRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.DeleteReplicationTaskFromDLQ(request)
+	return e.baseExecutionStore.ForkHistoryBranch(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) RangeDeleteReplicationTaskFromDLQ(request *persistence.RangeDeleteReplicationTaskFromDLQRequest) error {
+func (e *FaultInjectionExecutionStore) DeleteHistoryBranch(
+	ctx context.Context,
+	request *persistence.InternalDeleteHistoryBranchRequest,
+) error {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return e.baseExecutionStore.RangeDeleteReplicationTaskFromDLQ(request)
+	return e.baseExecutionStore.DeleteHistoryBranch(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) AppendHistoryNodes(request *persistence.InternalAppendHistoryNodesRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.AppendHistoryNodes(request)
-}
-
-func (e *FaultInjectionExecutionStore) DeleteHistoryNodes(request *persistence.InternalDeleteHistoryNodesRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.DeleteHistoryNodes(request)
-}
-
-func (e *FaultInjectionExecutionStore) ReadHistoryBranch(request *persistence.InternalReadHistoryBranchRequest) (
-	*persistence.InternalReadHistoryBranchResponse,
-	error,
-) {
+func (e *FaultInjectionExecutionStore) GetHistoryTree(
+	ctx context.Context,
+	request *persistence.GetHistoryTreeRequest,
+) (*persistence.InternalGetHistoryTreeResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.ReadHistoryBranch(request)
+	return e.baseExecutionStore.GetHistoryTree(ctx, request)
 }
 
-func (e *FaultInjectionExecutionStore) ForkHistoryBranch(request *persistence.InternalForkHistoryBranchRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.ForkHistoryBranch(request)
-}
-
-func (e *FaultInjectionExecutionStore) DeleteHistoryBranch(request *persistence.InternalDeleteHistoryBranchRequest) error {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return err
-	}
-	return e.baseExecutionStore.DeleteHistoryBranch(request)
-}
-
-func (e *FaultInjectionExecutionStore) GetHistoryTree(request *persistence.GetHistoryTreeRequest) (
-	*persistence.InternalGetHistoryTreeResponse,
-	error,
-) {
+func (e *FaultInjectionExecutionStore) GetAllHistoryTreeBranches(
+	ctx context.Context,
+	request *persistence.GetAllHistoryTreeBranchesRequest,
+) (*persistence.InternalGetAllHistoryTreeBranchesResponse, error) {
 	if err := e.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return e.baseExecutionStore.GetHistoryTree(request)
-}
-
-func (e *FaultInjectionExecutionStore) GetAllHistoryTreeBranches(request *persistence.GetAllHistoryTreeBranchesRequest) (
-	*persistence.InternalGetAllHistoryTreeBranchesResponse,
-	error,
-) {
-	if err := e.ErrorGenerator.Generate(); err != nil {
-		return nil, err
-	}
-	return e.baseExecutionStore.GetAllHistoryTreeBranches(request)
+	return e.baseExecutionStore.GetAllHistoryTreeBranches(ctx, request)
 }
 
 func (e *FaultInjectionExecutionStore) UpdateRate(rate float64) {
 	e.ErrorGenerator.UpdateRate(rate)
 }
 
-func NewFaultInjectionClusterMetadataStore(rate float64, baseStore persistence.ClusterMetadataStore) (
-	*FaultInjectionClusterMetadataStore,
-	error,
-) {
+func NewFaultInjectionClusterMetadataStore(
+	rate float64,
+	baseStore persistence.ClusterMetadataStore,
+) (*FaultInjectionClusterMetadataStore, error) {
 	errorGenerator := newErrorGenerator(rate, defaultErrors)
 	return &FaultInjectionClusterMetadataStore{
 		baseCMStore:    baseStore,
@@ -608,66 +691,74 @@ func (c *FaultInjectionClusterMetadataStore) GetName() string {
 	return c.baseCMStore.GetName()
 }
 
-func (c *FaultInjectionClusterMetadataStore) ListClusterMetadata(request *persistence.InternalListClusterMetadataRequest) (
-	*persistence.InternalListClusterMetadataResponse,
-	error,
-) {
+func (c *FaultInjectionClusterMetadataStore) ListClusterMetadata(
+	ctx context.Context,
+	request *persistence.InternalListClusterMetadataRequest,
+) (*persistence.InternalListClusterMetadataResponse, error) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return c.baseCMStore.ListClusterMetadata(request)
+	return c.baseCMStore.ListClusterMetadata(ctx, request)
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(request *persistence.InternalGetClusterMetadataRequest) (
-	*persistence.InternalGetClusterMetadataResponse,
-	error,
-) {
+func (c *FaultInjectionClusterMetadataStore) GetClusterMetadata(
+	ctx context.Context,
+	request *persistence.InternalGetClusterMetadataRequest,
+) (*persistence.InternalGetClusterMetadataResponse, error) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return c.baseCMStore.GetClusterMetadata(request)
+	return c.baseCMStore.GetClusterMetadata(ctx, request)
 }
 
 func (c *FaultInjectionClusterMetadataStore) SaveClusterMetadata(
+	ctx context.Context,
 	request *persistence.InternalSaveClusterMetadataRequest,
 ) (bool, error) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return false, err
 	}
-	return c.baseCMStore.SaveClusterMetadata(request)
+	return c.baseCMStore.SaveClusterMetadata(ctx, request)
 }
 
 func (c *FaultInjectionClusterMetadataStore) DeleteClusterMetadata(
+	ctx context.Context,
 	request *persistence.InternalDeleteClusterMetadataRequest,
 ) error {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return c.baseCMStore.DeleteClusterMetadata(request)
+	return c.baseCMStore.DeleteClusterMetadata(ctx, request)
 }
 
-func (c *FaultInjectionClusterMetadataStore) GetClusterMembers(request *persistence.GetClusterMembersRequest) (
-	*persistence.GetClusterMembersResponse,
-	error,
-) {
+func (c *FaultInjectionClusterMetadataStore) GetClusterMembers(
+	ctx context.Context,
+	request *persistence.GetClusterMembersRequest,
+) (*persistence.GetClusterMembersResponse, error) {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return c.baseCMStore.GetClusterMembers(request)
+	return c.baseCMStore.GetClusterMembers(ctx, request)
 }
 
-func (c *FaultInjectionClusterMetadataStore) UpsertClusterMembership(request *persistence.UpsertClusterMembershipRequest) error {
+func (c *FaultInjectionClusterMetadataStore) UpsertClusterMembership(
+	ctx context.Context,
+	request *persistence.UpsertClusterMembershipRequest,
+) error {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return c.baseCMStore.UpsertClusterMembership(request)
+	return c.baseCMStore.UpsertClusterMembership(ctx, request)
 }
 
-func (c *FaultInjectionClusterMetadataStore) PruneClusterMembership(request *persistence.PruneClusterMembershipRequest) error {
+func (c *FaultInjectionClusterMetadataStore) PruneClusterMembership(
+	ctx context.Context,
+	request *persistence.PruneClusterMembershipRequest,
+) error {
 	if err := c.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return c.baseCMStore.PruneClusterMembership(request)
+	return c.baseCMStore.PruneClusterMembership(ctx, request)
 }
 
 func (c *FaultInjectionClusterMetadataStore) UpdateRate(rate float64) {
@@ -693,69 +784,83 @@ func (m *FaultInjectionMetadataStore) GetName() string {
 	return m.baseMetadataStore.GetName()
 }
 
-func (m *FaultInjectionMetadataStore) CreateNamespace(request *persistence.InternalCreateNamespaceRequest) (
-	*persistence.CreateNamespaceResponse,
-	error,
-) {
+func (m *FaultInjectionMetadataStore) CreateNamespace(
+	ctx context.Context,
+	request *persistence.InternalCreateNamespaceRequest,
+) (*persistence.CreateNamespaceResponse, error) {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return m.baseMetadataStore.CreateNamespace(request)
+	return m.baseMetadataStore.CreateNamespace(ctx, request)
 }
 
-func (m *FaultInjectionMetadataStore) GetNamespace(request *persistence.GetNamespaceRequest) (
-	*persistence.InternalGetNamespaceResponse,
-	error,
-) {
+func (m *FaultInjectionMetadataStore) GetNamespace(
+	ctx context.Context,
+	request *persistence.GetNamespaceRequest,
+) (*persistence.InternalGetNamespaceResponse, error) {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return m.baseMetadataStore.GetNamespace(request)
+	return m.baseMetadataStore.GetNamespace(ctx, request)
 }
 
-func (m *FaultInjectionMetadataStore) UpdateNamespace(request *persistence.InternalUpdateNamespaceRequest) error {
+func (m *FaultInjectionMetadataStore) UpdateNamespace(
+	ctx context.Context,
+	request *persistence.InternalUpdateNamespaceRequest,
+) error {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return m.baseMetadataStore.UpdateNamespace(request)
+	return m.baseMetadataStore.UpdateNamespace(ctx, request)
 }
 
-func (m *FaultInjectionMetadataStore) RenameNamespace(request *persistence.InternalRenameNamespaceRequest) error {
+func (m *FaultInjectionMetadataStore) RenameNamespace(
+	ctx context.Context,
+	request *persistence.InternalRenameNamespaceRequest,
+) error {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return m.baseMetadataStore.RenameNamespace(request)
+	return m.baseMetadataStore.RenameNamespace(ctx, request)
 }
 
-func (m *FaultInjectionMetadataStore) DeleteNamespace(request *persistence.DeleteNamespaceRequest) error {
+func (m *FaultInjectionMetadataStore) DeleteNamespace(
+	ctx context.Context,
+	request *persistence.DeleteNamespaceRequest,
+) error {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return m.baseMetadataStore.DeleteNamespace(request)
+	return m.baseMetadataStore.DeleteNamespace(ctx, request)
 }
 
-func (m *FaultInjectionMetadataStore) DeleteNamespaceByName(request *persistence.DeleteNamespaceByNameRequest) error {
+func (m *FaultInjectionMetadataStore) DeleteNamespaceByName(
+	ctx context.Context,
+	request *persistence.DeleteNamespaceByNameRequest,
+) error {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return m.baseMetadataStore.DeleteNamespaceByName(request)
+	return m.baseMetadataStore.DeleteNamespaceByName(ctx, request)
 }
 
-func (m *FaultInjectionMetadataStore) ListNamespaces(request *persistence.ListNamespacesRequest) (
-	*persistence.InternalListNamespacesResponse,
-	error,
-) {
+func (m *FaultInjectionMetadataStore) ListNamespaces(
+	ctx context.Context,
+	request *persistence.InternalListNamespacesRequest,
+) (*persistence.InternalListNamespacesResponse, error) {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return m.baseMetadataStore.ListNamespaces(request)
+	return m.baseMetadataStore.ListNamespaces(ctx, request)
 }
 
-func (m *FaultInjectionMetadataStore) GetMetadata() (*persistence.GetMetadataResponse, error) {
+func (m *FaultInjectionMetadataStore) GetMetadata(
+	ctx context.Context,
+) (*persistence.GetMetadataResponse, error) {
 	if err := m.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return m.baseMetadataStore.GetMetadata()
+	return m.baseMetadataStore.GetMetadata(ctx)
 }
 
 func (m *FaultInjectionMetadataStore) UpdateRate(rate float64) {
@@ -782,85 +887,94 @@ func (t *FaultInjectionTaskStore) GetName() string {
 	return t.baseTaskStore.GetName()
 }
 
-func (t *FaultInjectionTaskStore) CreateTaskQueue(request *persistence.InternalCreateTaskQueueRequest) error {
+func (t *FaultInjectionTaskStore) CreateTaskQueue(
+	ctx context.Context,
+	request *persistence.InternalCreateTaskQueueRequest,
+) error {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return t.baseTaskStore.CreateTaskQueue(request)
+	return t.baseTaskStore.CreateTaskQueue(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) GetTaskQueue(request *persistence.InternalGetTaskQueueRequest) (
-	*persistence.InternalGetTaskQueueResponse,
-	error,
-) {
+func (t *FaultInjectionTaskStore) GetTaskQueue(
+	ctx context.Context,
+	request *persistence.InternalGetTaskQueueRequest,
+) (*persistence.InternalGetTaskQueueResponse, error) {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return t.baseTaskStore.GetTaskQueue(request)
+	return t.baseTaskStore.GetTaskQueue(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) UpdateTaskQueue(request *persistence.InternalUpdateTaskQueueRequest) (
-	*persistence.UpdateTaskQueueResponse,
-	error,
-) {
+func (t *FaultInjectionTaskStore) UpdateTaskQueue(
+	ctx context.Context,
+	request *persistence.InternalUpdateTaskQueueRequest,
+) (*persistence.UpdateTaskQueueResponse, error) {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return t.baseTaskStore.UpdateTaskQueue(request)
+	return t.baseTaskStore.UpdateTaskQueue(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) ListTaskQueue(request *persistence.ListTaskQueueRequest) (
-	*persistence.InternalListTaskQueueResponse,
-	error,
-) {
+func (t *FaultInjectionTaskStore) ListTaskQueue(
+	ctx context.Context,
+	request *persistence.ListTaskQueueRequest,
+) (*persistence.InternalListTaskQueueResponse, error) {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return t.baseTaskStore.ListTaskQueue(request)
+	return t.baseTaskStore.ListTaskQueue(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) DeleteTaskQueue(request *persistence.DeleteTaskQueueRequest) error {
+func (t *FaultInjectionTaskStore) DeleteTaskQueue(
+	ctx context.Context,
+	request *persistence.DeleteTaskQueueRequest,
+) error {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return t.baseTaskStore.DeleteTaskQueue(request)
+	return t.baseTaskStore.DeleteTaskQueue(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) CreateTasks(request *persistence.InternalCreateTasksRequest) (
-	*persistence.CreateTasksResponse,
-	error,
-) {
+func (t *FaultInjectionTaskStore) CreateTasks(
+	ctx context.Context,
+	request *persistence.InternalCreateTasksRequest,
+) (*persistence.CreateTasksResponse, error) {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return t.baseTaskStore.CreateTasks(request)
+	return t.baseTaskStore.CreateTasks(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) GetTasks(request *persistence.GetTasksRequest) (
-	*persistence.InternalGetTasksResponse,
-	error,
-) {
+func (t *FaultInjectionTaskStore) GetTasks(
+	ctx context.Context,
+	request *persistence.GetTasksRequest,
+) (*persistence.InternalGetTasksResponse, error) {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return t.baseTaskStore.GetTasks(request)
+	return t.baseTaskStore.GetTasks(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) CompleteTask(request *persistence.CompleteTaskRequest) error {
+func (t *FaultInjectionTaskStore) CompleteTask(
+	ctx context.Context,
+	request *persistence.CompleteTaskRequest,
+) error {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return t.baseTaskStore.CompleteTask(request)
+	return t.baseTaskStore.CompleteTask(ctx, request)
 }
 
-func (t *FaultInjectionTaskStore) CompleteTasksLessThan(request *persistence.CompleteTasksLessThanRequest) (
-	int,
-	error,
-) {
+func (t *FaultInjectionTaskStore) CompleteTasksLessThan(
+	ctx context.Context,
+	request *persistence.CompleteTasksLessThanRequest,
+) (int, error) {
 	if err := t.ErrorGenerator.Generate(); err != nil {
 		return 0, err
 	}
-	return t.baseTaskStore.CompleteTasksLessThan(request)
+	return t.baseTaskStore.CompleteTasksLessThan(ctx, request)
 }
 
 func (t *FaultInjectionTaskStore) UpdateRate(rate float64) {
@@ -902,21 +1016,24 @@ func (s *FaultInjectionShardStore) GetClusterName() string {
 	return s.baseShardStore.GetClusterName()
 }
 
-func (s *FaultInjectionShardStore) GetOrCreateShard(request *persistence.InternalGetOrCreateShardRequest) (
-	*persistence.InternalGetOrCreateShardResponse,
-	error,
-) {
+func (s *FaultInjectionShardStore) GetOrCreateShard(
+	ctx context.Context,
+	request *persistence.InternalGetOrCreateShardRequest,
+) (*persistence.InternalGetOrCreateShardResponse, error) {
 	if err := s.ErrorGenerator.Generate(); err != nil {
 		return nil, err
 	}
-	return s.baseShardStore.GetOrCreateShard(request)
+	return s.baseShardStore.GetOrCreateShard(ctx, request)
 }
 
-func (s *FaultInjectionShardStore) UpdateShard(request *persistence.InternalUpdateShardRequest) error {
+func (s *FaultInjectionShardStore) UpdateShard(
+	ctx context.Context,
+	request *persistence.InternalUpdateShardRequest,
+) error {
 	if err := s.ErrorGenerator.Generate(); err != nil {
 		return err
 	}
-	return s.baseShardStore.UpdateShard(request)
+	return s.baseShardStore.UpdateShard(ctx, request)
 }
 
 func (s *FaultInjectionShardStore) UpdateRate(rate float64) {

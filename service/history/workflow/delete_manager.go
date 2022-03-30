@@ -28,9 +28,12 @@ package workflow
 
 import (
 	"context"
+	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/serviceerror"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -51,6 +54,7 @@ type (
 		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState) error
 		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		DeleteWorkflowExecutionByReplication(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 	}
 
 	DeleteManagerImpl struct {
@@ -136,8 +140,12 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		// workflow should not be deleted. NotFound errors are ignored by task processor.
 		return consts.ErrWorkflowNotCompleted
 	}
+	completionEvent, err := ms.GetCompletionEvent(ctx)
+	if err != nil {
+		return err
+	}
 
-	err := m.deleteWorkflowExecutionInternal(
+	return m.deleteWorkflowExecutionInternal(
 		ctx,
 		nsID,
 		we,
@@ -145,10 +153,10 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		ms,
 		sourceTaskVersion,
 		false,
+		nil,
+		completionEvent.GetEventTime(),
 		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
 	)
-
-	return err
 }
 
 func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
@@ -166,8 +174,12 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
 		return nil
 	}
+	completionEvent, err := ms.GetCompletionEvent(ctx)
+	if err != nil {
+		return err
+	}
 
-	err := m.deleteWorkflowExecutionInternal(
+	return m.deleteWorkflowExecutionInternal(
 		ctx,
 		nsID,
 		we,
@@ -175,10 +187,49 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		ms,
 		sourceTaskVersion,
 		true,
+		nil,
+		completionEvent.GetEventTime(),
 		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)
+}
 
-	return err
+func (m *DeleteManagerImpl) DeleteWorkflowExecutionByReplication(
+	ctx context.Context,
+	nsID namespace.ID,
+	we commonpb.WorkflowExecution,
+	weCtx Context,
+	ms MutableState,
+	sourceTaskVersion int64,
+) error {
+
+	namespaceEntry := ms.GetNamespaceEntry()
+	if namespaceEntry.ActiveClusterName() == m.shard.GetClusterMetadata().GetCurrentClusterName() {
+		return serviceerror.NewInvalidArgument("Cannot cleanup workflows in active cluster by replication")
+	}
+
+	var startTime *time.Time
+	var closedTime *time.Time
+	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		completionEvent, err := ms.GetCompletionEvent(ctx)
+		if err != nil {
+			return err
+		}
+		closedTime = completionEvent.GetEventTime()
+	} else {
+		startTime = ms.GetExecutionInfo().GetStartTime()
+	}
+	return m.deleteWorkflowExecutionInternal(
+		ctx,
+		nsID,
+		we,
+		weCtx,
+		ms,
+		sourceTaskVersion,
+		false,
+		startTime,
+		closedTime,
+		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
+	)
 }
 
 func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
@@ -189,6 +240,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ms MutableState,
 	newTaskVersion int64,
 	archiveIfEnabled bool,
+	startTime *time.Time,
+	closedTime *time.Time,
 	scope metrics.Scope,
 ) error {
 
@@ -210,11 +263,6 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		currentBranchToken = nil
 	}
 
-	completionEvent, err := ms.GetCompletionEvent(ctx)
-	if err != nil {
-		return err
-	}
-
 	if err := m.shard.DeleteWorkflowExecution(
 		ctx,
 		definition.WorkflowKey{
@@ -224,8 +272,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 		},
 		currentBranchToken,
 		newTaskVersion,
-		nil,
-		completionEvent.GetEventTime(),
+		startTime,
+		closedTime,
 	); err != nil {
 		return err
 	}

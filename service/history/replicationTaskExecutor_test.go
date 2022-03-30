@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/workflow"
 )
 
 type (
@@ -125,6 +126,8 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 		s.mockNamespaceCache,
 		s.nDCHistoryResender,
 		s.mockEngine,
+		workflow.NewMockDeleteManager(s.controller),
+		workflow.NewMockCache(s.controller),
 		metricsClient,
 		s.mockShard.GetLogger(),
 	).(*replicationTaskExecutorImpl)

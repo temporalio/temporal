@@ -104,7 +104,7 @@ func (t *task) Run() executor.TaskStatus {
 			return executor.TaskStatusDefer
 		}
 
-		mutableState := &MutableState{WorkflowMutableState: record.(*persistencespb.WorkflowMutableState)}
+		mutableState := &MutableState{WorkflowMutableState: record}
 		printValidationResult(
 			mutableState,
 			t.validate(mutableState),
@@ -160,8 +160,8 @@ func (t *task) validate(
 	return results
 }
 
-func (t *task) getPaginationFn() collection.PaginationFn {
-	return func(paginationToken []byte) ([]interface{}, []byte, error) {
+func (t *task) getPaginationFn() collection.PaginationFn[*persistencespb.WorkflowMutableState] {
+	return func(paginationToken []byte) ([]*persistencespb.WorkflowMutableState, []byte, error) {
 		req := &persistence.ListConcreteExecutionsRequest{
 			ShardID:   t.shardID,
 			PageSize:  executionsPageSize,
@@ -171,11 +171,7 @@ func (t *task) getPaginationFn() collection.PaginationFn {
 		if err != nil {
 			return nil, nil, err
 		}
-		var paginateItems []interface{}
-		for _, state := range resp.States {
-			paginateItems = append(paginateItems, state)
-		}
-
+		paginateItems := resp.States
 		t.paginationToken = resp.PageToken
 		return paginateItems, resp.PageToken, nil
 	}

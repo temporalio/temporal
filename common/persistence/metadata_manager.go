@@ -71,7 +71,7 @@ func (m *metadataManagerImpl) GetName() string {
 }
 
 func (m *metadataManagerImpl) CreateNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *CreateNamespaceRequest,
 ) (*CreateNamespaceResponse, error) {
 	datablob, err := m.serializer.NamespaceDetailToBlob(request.Namespace, enumspb.ENCODING_TYPE_PROTO3)
@@ -79,7 +79,7 @@ func (m *metadataManagerImpl) CreateNamespace(
 		return nil, err
 	}
 
-	return m.persistence.CreateNamespace(&InternalCreateNamespaceRequest{
+	return m.persistence.CreateNamespace(ctx, &InternalCreateNamespaceRequest{
 		ID:        request.Namespace.Info.Id,
 		Name:      request.Namespace.Info.Name,
 		IsGlobal:  request.IsGlobalNamespace,
@@ -88,10 +88,10 @@ func (m *metadataManagerImpl) CreateNamespace(
 }
 
 func (m *metadataManagerImpl) GetNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *GetNamespaceRequest,
 ) (*GetNamespaceResponse, error) {
-	resp, err := m.persistence.GetNamespace(request)
+	resp, err := m.persistence.GetNamespace(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -99,7 +99,7 @@ func (m *metadataManagerImpl) GetNamespace(
 }
 
 func (m *metadataManagerImpl) UpdateNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *UpdateNamespaceRequest,
 ) error {
 	datablob, err := m.serializer.NamespaceDetailToBlob(request.Namespace, enumspb.ENCODING_TYPE_PROTO3)
@@ -107,7 +107,7 @@ func (m *metadataManagerImpl) UpdateNamespace(
 		return err
 	}
 
-	return m.persistence.UpdateNamespace(&InternalUpdateNamespaceRequest{
+	return m.persistence.UpdateNamespace(ctx, &InternalUpdateNamespaceRequest{
 		Id:                  request.Namespace.Info.Id,
 		Name:                request.Namespace.Info.Name,
 		Namespace:           datablob,
@@ -151,21 +151,21 @@ func (m *metadataManagerImpl) RenameNamespace(
 		PreviousName: previousName,
 	}
 
-	return m.persistence.RenameNamespace(renameRequest)
+	return m.persistence.RenameNamespace(ctx, renameRequest)
 }
 
 func (m *metadataManagerImpl) DeleteNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *DeleteNamespaceRequest,
 ) error {
-	return m.persistence.DeleteNamespace(request)
+	return m.persistence.DeleteNamespace(ctx, request)
 }
 
 func (m *metadataManagerImpl) DeleteNamespaceByName(
-	_ context.Context,
+	ctx context.Context,
 	request *DeleteNamespaceByNameRequest,
 ) error {
-	return m.persistence.DeleteNamespaceByName(request)
+	return m.persistence.DeleteNamespaceByName(ctx, request)
 }
 
 func (m *metadataManagerImpl) ConvertInternalGetResponse(d *InternalGetNamespaceResponse) (*GetNamespaceResponse, error) {
@@ -192,24 +192,48 @@ func (m *metadataManagerImpl) ConvertInternalGetResponse(d *InternalGetNamespace
 }
 
 func (m *metadataManagerImpl) ListNamespaces(
-	_ context.Context,
+	ctx context.Context,
 	request *ListNamespacesRequest,
 ) (*ListNamespacesResponse, error) {
-	resp, err := m.persistence.ListNamespaces(request)
-	if err != nil {
-		return nil, err
-	}
-	namespaces := make([]*GetNamespaceResponse, 0, len(resp.Namespaces))
-	for _, d := range resp.Namespaces {
-		ret, err := m.ConvertInternalGetResponse(d)
+	var namespaces []*GetNamespaceResponse
+	nextPageToken := request.NextPageToken
+	pageSize := request.PageSize
+
+	for {
+		resp, err := m.persistence.ListNamespaces(ctx, &InternalListNamespacesRequest{
+			PageSize:      pageSize,
+			NextPageToken: nextPageToken,
+		})
 		if err != nil {
 			return nil, err
 		}
-		namespaces = append(namespaces, ret)
+		deletedNamespacesCount := 0
+		for _, d := range resp.Namespaces {
+			ret, err := m.ConvertInternalGetResponse(d)
+			if err != nil {
+				return nil, err
+			}
+			if ret.Namespace.Info.State == enumspb.NAMESPACE_STATE_DELETED && !request.IncludeDeleted {
+				deletedNamespacesCount++
+				continue
+			}
+			namespaces = append(namespaces, ret)
+		}
+		nextPageToken = resp.NextPageToken
+		if len(nextPageToken) == 0 {
+			// Page wasn't full, no more namespaces in DB.
+			break
+		}
+		if deletedNamespacesCount == 0 {
+			break
+		}
+		// Page was full but few namespaces weren't added. Read number of deleted namespaces for DB again.
+		pageSize = deletedNamespacesCount
 	}
+
 	return &ListNamespacesResponse{
 		Namespaces:    namespaces,
-		NextPageToken: resp.NextPageToken,
+		NextPageToken: nextPageToken,
 	}, nil
 }
 
@@ -250,9 +274,9 @@ func (m *metadataManagerImpl) InitializeSystemNamespaces(
 }
 
 func (m *metadataManagerImpl) GetMetadata(
-	_ context.Context,
+	ctx context.Context,
 ) (*GetMetadataResponse, error) {
-	return m.persistence.GetMetadata()
+	return m.persistence.GetMetadata(ctx)
 }
 
 func (m *metadataManagerImpl) Close() {

@@ -455,7 +455,7 @@ func getWorkflowExecutionWithRetry(
 	var resp *persistence.GetWorkflowExecutionResponse
 	op := func() error {
 		var err error
-		resp, err = shard.GetExecutionManager().GetWorkflowExecution(context.TODO(), request)
+		resp, err = shard.GetWorkflowExecution(context.TODO(), request)
 
 		return err
 	}

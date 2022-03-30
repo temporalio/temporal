@@ -69,7 +69,7 @@ func NewNamespaceReplicationQueue(
 	if err != nil {
 		return nil, err
 	}
-	err = queue.Init(blob)
+	err = queue.Init(context.TODO(), blob)
 	if err != nil {
 		return nil, err
 	}
@@ -132,7 +132,7 @@ func (q *namespaceReplicationQueueImpl) Stop() {
 }
 
 func (q *namespaceReplicationQueueImpl) Publish(
-	_ context.Context,
+	ctx context.Context,
 	message interface{},
 ) error {
 	task, ok := message.(*replicationspb.ReplicationTask)
@@ -144,11 +144,11 @@ func (q *namespaceReplicationQueueImpl) Publish(
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	return q.queue.EnqueueMessage(*blob)
+	return q.queue.EnqueueMessage(ctx, *blob)
 }
 
 func (q *namespaceReplicationQueueImpl) PublishToDLQ(
-	_ context.Context,
+	ctx context.Context,
 	message interface{},
 ) error {
 	task, ok := message.(*replicationspb.ReplicationTask)
@@ -160,7 +160,7 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(
 	if err != nil {
 		return fmt.Errorf("failed to encode message: %v", err)
 	}
-	messageID, err := q.queue.EnqueueMessageToDLQ(*blob)
+	messageID, err := q.queue.EnqueueMessageToDLQ(ctx, *blob)
 	if err != nil {
 		return err
 	}
@@ -175,12 +175,12 @@ func (q *namespaceReplicationQueueImpl) PublishToDLQ(
 }
 
 func (q *namespaceReplicationQueueImpl) GetReplicationMessages(
-	_ context.Context,
+	ctx context.Context,
 	lastMessageID int64,
 	pageSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
 
-	messages, err := q.queue.ReadMessages(lastMessageID, pageSize)
+	messages, err := q.queue.ReadMessages(ctx, lastMessageID, pageSize)
 	if err != nil {
 		return nil, lastMessageID, err
 	}
@@ -226,7 +226,7 @@ conditionFailedRetry:
 }
 
 func (q *namespaceReplicationQueueImpl) updateAckLevel(
-	_ context.Context,
+	ctx context.Context,
 	lastProcessedMessageID int64,
 	clusterName string,
 	isDLQ bool,
@@ -234,9 +234,9 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 	var err error
 	var internalMetadata *InternalQueueMetadata
 	if isDLQ {
-		internalMetadata, err = q.queue.GetDLQAckLevels()
+		internalMetadata, err = q.queue.GetDLQAckLevels(ctx)
 	} else {
-		internalMetadata, err = q.queue.GetAckLevels()
+		internalMetadata, err = q.queue.GetAckLevels(ctx)
 	}
 
 	if err != nil {
@@ -265,9 +265,9 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 
 	internalMetadata.Blob = blob
 	if isDLQ {
-		err = q.queue.UpdateDLQAckLevel(internalMetadata)
+		err = q.queue.UpdateDLQAckLevel(ctx, internalMetadata)
 	} else {
-		err = q.queue.UpdateAckLevel(internalMetadata)
+		err = q.queue.UpdateAckLevel(ctx, internalMetadata)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to update ack level: %v", err)
@@ -282,9 +282,9 @@ func (q *namespaceReplicationQueueImpl) updateAckLevel(
 }
 
 func (q *namespaceReplicationQueueImpl) GetAckLevels(
-	_ context.Context,
+	ctx context.Context,
 ) (map[string]int64, error) {
-	metadata, err := q.queue.GetAckLevels()
+	metadata, err := q.queue.GetAckLevels(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -308,14 +308,14 @@ func (q *namespaceReplicationQueueImpl) ackLevelsFromBlob(blob *commonpb.DataBlo
 }
 
 func (q *namespaceReplicationQueueImpl) GetMessagesFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 	pageSize int,
 	pageToken []byte,
 ) ([]*replicationspb.ReplicationTask, []byte, error) {
 
-	messages, token, err := q.queue.ReadMessagesFromDLQ(firstMessageID, lastMessageID, pageSize, pageToken)
+	messages, token, err := q.queue.ReadMessagesFromDLQ(ctx, firstMessageID, lastMessageID, pageSize, pageToken)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -343,9 +343,9 @@ func (q *namespaceReplicationQueueImpl) UpdateDLQAckLevel(
 }
 
 func (q *namespaceReplicationQueueImpl) GetDLQAckLevel(
-	_ context.Context,
+	ctx context.Context,
 ) (int64, error) {
-	metadata, err := q.queue.GetDLQAckLevels()
+	metadata, err := q.queue.GetDLQAckLevels(ctx)
 	if err != nil {
 		return EmptyQueueMessageID, err
 	}
@@ -362,12 +362,13 @@ func (q *namespaceReplicationQueueImpl) GetDLQAckLevel(
 }
 
 func (q *namespaceReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
 
 	if err := q.queue.RangeDeleteMessagesFromDLQ(
+		ctx,
 		firstMessageID,
 		lastMessageID,
 	); err != nil {
@@ -378,11 +379,11 @@ func (q *namespaceReplicationQueueImpl) RangeDeleteMessagesFromDLQ(
 }
 
 func (q *namespaceReplicationQueueImpl) DeleteMessageFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	messageID int64,
 ) error {
 
-	return q.queue.DeleteMessageFromDLQ(messageID)
+	return q.queue.DeleteMessageFromDLQ(ctx, messageID)
 }
 
 func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
@@ -407,7 +408,7 @@ func (q *namespaceReplicationQueueImpl) purgeAckedMessages(
 		return nil
 	}
 
-	err = q.queue.DeleteMessagesBefore(*minAckLevel)
+	err = q.queue.DeleteMessagesBefore(ctx, *minAckLevel)
 	if err != nil {
 		return fmt.Errorf("failed to purge messages: %v", err)
 	}

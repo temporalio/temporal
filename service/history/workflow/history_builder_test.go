@@ -120,7 +120,8 @@ var (
 			"random header key": testPayload,
 		},
 	}
-	testFailure = &failurepb.Failure{}
+	testFailure       = &failurepb.Failure{}
+	testRequestReason = "test request reason"
 )
 
 func TestHistoryBuilderSuite(t *testing.T) {
@@ -274,6 +275,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelRequested() {
 			// FirstExecutionRunId: not used for test
 			Identity:  testIdentity,
 			RequestId: testRequestID,
+			Reason:    testRequestReason,
 		},
 		ExternalInitiatedEventId: initiatedEventID,
 		ExternalWorkflowExecution: &commonpb.WorkflowExecution{
@@ -295,6 +297,7 @@ func (s *historyBuilderSuite) TestWorkflowExecutionCancelRequested() {
 		Version:   s.version,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionCancelRequestedEventAttributes{
 			WorkflowExecutionCancelRequestedEventAttributes: &historypb.WorkflowExecutionCancelRequestedEventAttributes{
+				Cause:                    testRequestReason,
 				Identity:                 testIdentity,
 				ExternalInitiatedEventId: initiatedEventID,
 				ExternalWorkflowExecution: &commonpb.WorkflowExecution{

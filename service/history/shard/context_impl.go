@@ -34,14 +34,14 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/adminservice/v1"
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
 
+	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -162,6 +162,7 @@ const (
 	logWarnTransferLevelDiff = 3000000 // 3 million
 	logWarnTimerLevelDiff    = time.Duration(30 * time.Minute)
 	historySizeLogThreshold  = 10 * 1024 * 1024
+	minContextTimeout        = 2 * time.Second
 )
 
 func (s *ContextImpl) GetShardID() int32 {
@@ -550,6 +551,12 @@ func (s *ContextImpl) AddTasks(
 	ctx context.Context,
 	request *persistence.AddHistoryTasksRequest,
 ) error {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NamespaceID)
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
@@ -571,6 +578,12 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.CreateWorkflowExecutionRequest,
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.NewWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.NewWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -599,7 +612,7 @@ func (s *ContextImpl) CreateWorkflowExecution(
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.CreateWorkflowExecution(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -609,6 +622,12 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	ctx context.Context,
 	request *persistence.UpdateWorkflowExecutionRequest,
 ) (*persistence.UpdateWorkflowExecutionResponse, error) {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.UpdateWorkflowMutation.ExecutionInfo.NamespaceId)
 	workflowID := request.UpdateWorkflowMutation.ExecutionInfo.WorkflowId
@@ -647,7 +666,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.UpdateWorkflowExecution(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -657,6 +676,12 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	ctx context.Context,
 	request *persistence.ConflictResolveWorkflowExecutionRequest,
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.ResetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.ResetWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -705,7 +730,7 @@ func (s *ContextImpl) ConflictResolveWorkflowExecution(
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.ConflictResolveWorkflowExecution(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -715,6 +740,12 @@ func (s *ContextImpl) SetWorkflowExecution(
 	ctx context.Context,
 	request *persistence.SetWorkflowExecutionRequest,
 ) (*persistence.SetWorkflowExecutionResponse, error) {
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	// do not try to get namespace cache within shard lock
 	namespaceID := namespace.ID(request.SetWorkflowSnapshot.ExecutionInfo.NamespaceId)
 	workflowID := request.SetWorkflowSnapshot.ExecutionInfo.WorkflowId
@@ -743,7 +774,29 @@ func (s *ContextImpl) SetWorkflowExecution(
 	currentRangeID := s.getRangeIDLocked()
 	request.RangeID = currentRangeID
 	resp, err := s.executionManager.SetWorkflowExecution(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *ContextImpl) GetCurrentExecution(
+	ctx context.Context,
+	request *persistence.GetCurrentExecutionRequest,
+) (*persistence.GetCurrentExecutionResponse, error) {
+	resp, err := s.executionManager.GetCurrentExecution(ctx, request)
+	if err = s.handleReadError(err); err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
+func (s *ContextImpl) GetWorkflowExecution(
+	ctx context.Context,
+	request *persistence.GetWorkflowExecutionRequest,
+) (*persistence.GetWorkflowExecutionResponse, error) {
+	resp, err := s.executionManager.GetWorkflowExecution(ctx, request)
+	if err = s.handleReadError(err); err != nil {
 		return nil, err
 	}
 	return resp, nil
@@ -766,7 +819,7 @@ func (s *ContextImpl) addTasksLocked(
 
 	request.RangeID = s.getRangeIDLocked()
 	err := s.executionManager.AddHistoryTasks(ctx, request)
-	if err = s.handleErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
 	s.engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
@@ -836,6 +889,12 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	// After step 3 task can't be retried because mutable state is gone and this might leave history branch in DB.
 	// The history branch won't be accessible (because mutable state is deleted) and special garbage collection workflow will delete it eventually.
 	// Step 4 shouldn't be done earlier because if this func fails after it, workflow execution will be accessible but won't have history (inconsistent state).
+
+	ctx, cancel, err := s.ensureMinContextTimeout(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
 
 	// Do not get namespace cache within shard lock.
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
@@ -1006,7 +1065,7 @@ func (s *ContextImpl) renewRangeLocked(isStealing bool) error {
 			tag.ShardRangeID(updatedShardInfo.GetRangeId()),
 			tag.PreviousShardRangeID(s.shardInfo.GetRangeId()),
 		)
-		return s.handleErrorLocked(err)
+		return s.handleWriteErrorLocked(err)
 	}
 
 	// Range is successfully updated in cassandra now update shard context to reflect new range
@@ -1050,7 +1109,7 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 		PreviousRangeID: s.shardInfo.GetRangeId(),
 	})
 	if err != nil {
-		return s.handleErrorLocked(err)
+		return s.handleWriteErrorLocked(err)
 	}
 
 	s.lastUpdated = now
@@ -1212,12 +1271,28 @@ func (s *ContextImpl) GetLastUpdatedTime() time.Time {
 	return s.lastUpdated
 }
 
-func (s *ContextImpl) handleErrorLocked(err error) error {
-	// We can use 0 here since updateMaxReadLevelLocked ensures that the read level never goes backwards.
-	return s.handleErrorAndUpdateMaxReadLevelLocked(err, 0)
+func (s *ContextImpl) handleReadError(err error) error {
+	switch err.(type) {
+	case nil:
+		return nil
+
+	case *persistence.ShardOwnershipLostError:
+		// Shard is stolen, trigger shutdown of history engine.
+		// Handling of max read level doesn't matter here.
+		s.Unload()
+		return err
+
+	default:
+		return err
+	}
 }
 
-func (s *ContextImpl) handleErrorAndUpdateMaxReadLevelLocked(err error, newMaxReadLevel int64) error {
+func (s *ContextImpl) handleWriteErrorLocked(err error) error {
+	// We can use 0 here since updateMaxReadLevelLocked ensures that the read level never goes backwards.
+	return s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, 0)
+}
+
+func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, newMaxReadLevel int64) error {
 	switch err.(type) {
 	case nil:
 		// Persistence success: update max read level
@@ -1867,6 +1942,22 @@ func (s *ContextImpl) GetClusterMetadata() cluster.Metadata {
 
 func (s *ContextImpl) GetArchivalMetadata() archiver.ArchivalMetadata {
 	return s.archivalMetadata
+}
+
+func (s *ContextImpl) ensureMinContextTimeout(
+	ctx context.Context,
+) (context.Context, context.CancelFunc, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
+
+	deadline, ok := ctx.Deadline()
+	if !ok || deadline.Sub(s.GetTimeSource().Now()) >= minContextTimeout {
+		return ctx, func() {}, nil
+	}
+
+	newContext, cancel := context.WithTimeout(context.Background(), minContextTimeout)
+	return newContext, cancel, nil
 }
 
 func convertAckLevelToTaskKey(

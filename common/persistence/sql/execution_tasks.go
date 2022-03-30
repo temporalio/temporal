@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -41,6 +42,7 @@ import (
 )
 
 func (m *sqlExecutionStore) AddHistoryTasks(
+	_ context.Context,
 	request *p.InternalAddHistoryTasksRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -59,6 +61,7 @@ func (m *sqlExecutionStore) AddHistoryTasks(
 }
 
 func (m *sqlExecutionStore) GetHistoryTask(
+	_ context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	switch request.TaskCategory.ID() {
@@ -76,6 +79,7 @@ func (m *sqlExecutionStore) GetHistoryTask(
 }
 
 func (m *sqlExecutionStore) GetHistoryTasks(
+	_ context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	switch request.TaskCategory.ID() {
@@ -93,6 +97,7 @@ func (m *sqlExecutionStore) GetHistoryTasks(
 }
 
 func (m *sqlExecutionStore) CompleteHistoryTask(
+	_ context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	switch request.TaskCategory.ID() {
@@ -110,6 +115,7 @@ func (m *sqlExecutionStore) CompleteHistoryTask(
 }
 
 func (m *sqlExecutionStore) RangeCompleteHistoryTasks(
+	_ context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	switch request.TaskCategory.ID() {
@@ -486,6 +492,7 @@ func (m *sqlExecutionStore) rangeCompleteReplicationTasks(
 }
 
 func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
+	_ context.Context,
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -515,6 +522,7 @@ func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
 }
 
 func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
+	_ context.Context,
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -543,6 +551,7 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 }
 
 func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
+	_ context.Context,
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -558,6 +567,7 @@ func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
 }
 
 func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
+	_ context.Context,
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 	ctx, cancel := newExecutionContext()

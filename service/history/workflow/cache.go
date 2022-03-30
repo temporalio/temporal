@@ -69,11 +69,10 @@ type (
 
 	CacheImpl struct {
 		cache.Cache
-		shard            shard.Context
-		executionManager persistence.ExecutionManager
-		logger           log.Logger
-		metricsClient    metrics.Client
-		config           *configs.Config
+		shard         shard.Context
+		logger        log.Logger
+		metricsClient metrics.Client
+		config        *configs.Config
 	}
 
 	NewCacheFn func(shard shard.Context) Cache
@@ -94,12 +93,11 @@ func NewCache(shard shard.Context) Cache {
 	opts.Pin = true
 
 	return &CacheImpl{
-		Cache:            cache.New(config.HistoryCacheMaxSize(), opts),
-		shard:            shard,
-		executionManager: shard.GetExecutionManager(),
-		logger:           log.With(shard.GetLogger(), tag.ComponentHistoryCache),
-		metricsClient:    shard.GetMetricsClient(),
-		config:           config,
+		Cache:         cache.New(config.HistoryCacheMaxSize(), opts),
+		shard:         shard,
+		logger:        log.With(shard.GetLogger(), tag.ComponentHistoryCache),
+		metricsClient: shard.GetMetricsClient(),
+		config:        config,
 	}
 }
 
@@ -268,7 +266,7 @@ func (c *CacheImpl) getCurrentExecutionWithRetry(
 	var response *persistence.GetCurrentExecutionResponse
 	op := func() error {
 		var err error
-		response, err = c.executionManager.GetCurrentExecution(ctx, request)
+		response, err = c.shard.GetCurrentExecution(ctx, request)
 
 		return err
 	}

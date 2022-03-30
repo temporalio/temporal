@@ -59,11 +59,11 @@ func (s *pagingIteratorSuite) TearDownTest() {
 
 func (s *pagingIteratorSuite) TestIteration_NoErr() {
 	phase := 0
-	outputs := [][]interface{}{
-		[]interface{}{1, 2, 3, 4, 5},
-		[]interface{}{},
-		[]interface{}{6},
-		[]interface{}{},
+	outputs := [][]int{
+		{1, 2, 3, 4, 5},
+		{},
+		{6},
+		{},
 	}
 	tokens := [][]byte{
 		[]byte("some random token 1"),
@@ -71,7 +71,7 @@ func (s *pagingIteratorSuite) TestIteration_NoErr() {
 		[]byte("some random token 3"),
 		[]byte(nil),
 	}
-	pagingFn := func(token []byte) ([]interface{}, []byte, error) {
+	pagingFn := func(token []byte) ([]int, []byte, error) {
 		switch phase {
 		case 0:
 			s.Equal(0, len(token))
@@ -97,10 +97,8 @@ func (s *pagingIteratorSuite) TestIteration_NoErr() {
 	result := []int{}
 	ite := NewPagingIterator(pagingFn)
 	for ite.HasNext() {
-		item, err := ite.Next()
+		num, err := ite.Next()
 		s.Nil(err)
-		num, ok := item.(int)
-		s.True(ok)
 		result = append(result, num)
 	}
 	s.Equal([]int{1, 2, 3, 4, 5, 6}, result)

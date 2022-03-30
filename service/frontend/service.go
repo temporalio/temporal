@@ -131,6 +131,13 @@ type Config struct {
 	KeepAliveTime dynamicconfig.DurationPropertyFn
 	// Wait for the ping ack before assuming the connection is dead.
 	KeepAliveTimeout dynamicconfig.DurationPropertyFn
+
+	// RPS per every parallel delete executions activity.
+	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.
+	DeleteNamespaceDeleteActivityRPS dynamicconfig.IntPropertyFn
+	// Number of concurrent delete executions activities.
+	// Must be not greater than 256 and number of worker cores in the cluster.
+	DeleteNamespaceConcurrentDeleteExecutionsActivities dynamicconfig.IntPropertyFn
 }
 
 // NewConfig returns new service config with default values
@@ -184,6 +191,9 @@ func NewConfig(dc *dynamicconfig.Collection, numHistoryShards int32, esIndexName
 		KeepAliveMaxConnectionAgeGrace:         dc.GetDurationProperty(dynamicconfig.KeepAliveMaxConnectionAgeGrace, 70*time.Second),
 		KeepAliveTime:                          dc.GetDurationProperty(dynamicconfig.KeepAliveTime, 1*time.Minute),
 		KeepAliveTimeout:                       dc.GetDurationProperty(dynamicconfig.KeepAliveTimeout, 10*time.Second),
+
+		DeleteNamespaceDeleteActivityRPS:                    dc.GetIntProperty(dynamicconfig.DeleteNamespaceDeleteActivityRPS, 100),
+		DeleteNamespaceConcurrentDeleteExecutionsActivities: dc.GetIntProperty(dynamicconfig.DeleteNamespaceConcurrentDeleteExecutionsActivities, 4),
 	}
 }
 

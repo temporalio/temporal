@@ -794,8 +794,9 @@ const (
 	OperatorAddSearchAttributesScope = iota + NumAdminScopes
 	// OperatorRemoveSearchAttributesScope is the metric scope for operator.RemoveSearchAttributes
 	OperatorRemoveSearchAttributesScope
-	// OperatorListSearchAttributesScope is the metric scope for operator.GetSearchAttributes
+	// OperatorListSearchAttributesScope is the metric scope for operator.ListSearchAttributes
 	OperatorListSearchAttributesScope
+	OperatorDeleteNamespaceScope
 
 	NumOperatorScopes
 )
@@ -1536,6 +1537,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		OperatorAddSearchAttributesScope:                {operation: "OperatorAddSearchAttributes"},
 		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
 		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
+		OperatorDeleteNamespaceScope:                    {operation: "OperatorDeleteNamespace"},
 		FrontendStartWorkflowExecutionScope:             {operation: "StartWorkflowExecution"},
 		FrontendPollWorkflowTaskQueueScope:              {operation: "PollWorkflowTaskQueue"},
 		FrontendPollActivityTaskQueueScope:              {operation: "PollActivityTaskQueue"},
@@ -1905,6 +1907,9 @@ const (
 	ElasticsearchDocumentParseFailuresCount
 	ElasticsearchDocumentGenerateFailuresCount
 
+	DeleteNamespaceWorkflowSuccessCount
+	DeleteNamespaceWorkflowFailuresCount
+
 	NoopImplementationIsUsed
 
 	NumCommonMetrics // Needs to be last on this list for iota numbering
@@ -2211,7 +2216,9 @@ const (
 	ReadNamespaceFailuresCount
 	ListExecutionsFailuresCount
 	TerminateExecutionFailuresCount
+	TerminateExecutionNotFoundCount
 	DeleteExecutionFailuresCount
+	DeleteExecutionNotFoundCount
 	RateLimiterFailuresCount
 
 	NumWorkerMetrics
@@ -2351,6 +2358,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 
 		AddSearchAttributesWorkflowSuccessCount:  NewCounterDef("add_search_attributes_workflow_success"),
 		AddSearchAttributesWorkflowFailuresCount: NewCounterDef("add_search_attributes_workflow_failure"),
+
+		DeleteNamespaceWorkflowSuccessCount:  NewCounterDef("delete_namespace_workflow_success"),
+		DeleteNamespaceWorkflowFailuresCount: NewCounterDef("delete_namespace_workflow_failure"),
 
 		MatchingClientForwardedCounter:     NewCounterDef("forwarded"),
 		MatchingClientInvalidTaskQueueName: NewCounterDef("invalid_task_queue_name"),
@@ -2677,7 +2687,9 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ReadNamespaceFailuresCount:      NewCounterDef("read_namespace_failures"),
 		ListExecutionsFailuresCount:     NewCounterDef("list_executions_failures"),
 		TerminateExecutionFailuresCount: NewCounterDef("terminate_executions_failures"),
+		TerminateExecutionNotFoundCount: NewCounterDef("terminate_executions_not_found"),
 		DeleteExecutionFailuresCount:    NewCounterDef("delete_execution_failures"),
+		DeleteExecutionNotFoundCount:    NewCounterDef("delete_execution_not_found"),
 		RateLimiterFailuresCount:        NewCounterDef("rate_limiter_failures"),
 	},
 	Server: {

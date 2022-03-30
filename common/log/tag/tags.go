@@ -892,3 +892,7 @@ func DeletedExecutionsCount(count int) ZapTag {
 func DeletedExecutionsErrorCount(count int) ZapTag {
 	return NewInt("delete-executions-error-count", count)
 }
+
+func Endpoint(endpoint string) ZapTag {
+	return NewStringTag("endpoint", endpoint)
+}

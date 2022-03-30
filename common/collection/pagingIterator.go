@@ -26,23 +26,23 @@ package collection
 
 type (
 	// PaginationFn is the function which get a page of results
-	PaginationFn func(paginationToken []byte) ([]interface{}, []byte, error)
+	PaginationFn[V any] func(paginationToken []byte) ([]V, []byte, error)
 
 	// PagingIteratorImpl is the implementation of PagingIterator
-	PagingIteratorImpl struct {
-		paginationFn      PaginationFn
+	PagingIteratorImpl[V any] struct {
+		paginationFn      PaginationFn[V]
 		pageToken         []byte
 		pageErr           error
-		pageItems         []interface{}
+		pageItems         []V
 		nextPageItemIndex int
 	}
 )
 
 // NewPagingIterator create a new paging iterator
-func NewPagingIterator(
-	paginationFn PaginationFn,
-) Iterator {
-	iter := &PagingIteratorImpl{
+func NewPagingIterator[V any](
+	paginationFn PaginationFn[V],
+) Iterator[V] {
+	iter := &PagingIteratorImpl[V]{
 		paginationFn:      paginationFn,
 		pageToken:         nil,
 		pageErr:           nil,
@@ -54,11 +54,11 @@ func NewPagingIterator(
 }
 
 // NewPagingIteratorWithToken create a new paging iterator with initial token
-func NewPagingIteratorWithToken(
-	paginationFn PaginationFn,
+func NewPagingIteratorWithToken[V any](
+	paginationFn PaginationFn[V],
 	pageToken []byte,
-) Iterator {
-	iter := &PagingIteratorImpl{
+) Iterator[V] {
+	iter := &PagingIteratorImpl[V]{
 		paginationFn:      paginationFn,
 		pageToken:         pageToken,
 		pageErr:           nil,
@@ -70,7 +70,7 @@ func NewPagingIteratorWithToken(
 }
 
 // HasNext return whether has next item or err
-func (iter *PagingIteratorImpl) HasNext() bool {
+func (iter *PagingIteratorImpl[V]) HasNext() bool {
 	// pagination encounters error
 	if iter.pageErr != nil {
 		return true
@@ -90,7 +90,7 @@ func (iter *PagingIteratorImpl) HasNext() bool {
 }
 
 // Next return next item or err
-func (iter *PagingIteratorImpl) Next() (interface{}, error) {
+func (iter *PagingIteratorImpl[V]) Next() (V, error) {
 	if !iter.HasNext() {
 		panic("HistoryEventIterator Next() called without checking HasNext()")
 	}
@@ -98,7 +98,8 @@ func (iter *PagingIteratorImpl) Next() (interface{}, error) {
 	if iter.pageErr != nil {
 		err := iter.pageErr
 		iter.pageErr = nil
-		return nil, err
+		var v V
+		return v, err
 	}
 
 	// we have cached events
@@ -111,7 +112,7 @@ func (iter *PagingIteratorImpl) Next() (interface{}, error) {
 	panic("HistoryEventIterator Next() should return either a history event or a err")
 }
 
-func (iter *PagingIteratorImpl) getNextPage() {
+func (iter *PagingIteratorImpl[V]) getNextPage() {
 	items, token, err := iter.paginationFn(iter.pageToken)
 	if err == nil {
 		iter.pageItems = items

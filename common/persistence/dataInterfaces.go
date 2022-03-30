@@ -641,8 +641,9 @@ type (
 
 	// ListNamespacesRequest is used to list namespaces
 	ListNamespacesRequest struct {
-		PageSize      int
-		NextPageToken []byte
+		PageSize       int
+		NextPageToken  []byte
+		IncludeDeleted bool
 	}
 
 	// ListNamespacesResponse is the response for GetNamespace

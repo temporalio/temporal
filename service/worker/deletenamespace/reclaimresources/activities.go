@@ -27,6 +27,8 @@ package reclaimresources
 import (
 	"context"
 
+	"go.temporal.io/sdk/activity"
+
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -61,6 +63,7 @@ func NewActivities(
 
 func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
 	// TODO: remove this check after CountWorkflowExecutions is implemented in standard visibility.
+	count := int64(0)
 	if a.visibilityManager.GetName() == "elasticsearch" {
 		req := &manager.CountWorkflowExecutionsRequest{
 			NamespaceID: nsID,
@@ -69,29 +72,30 @@ func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namesp
 		resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
 		if err != nil {
 			a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
-			a.logger.Error("Unable to count workflows.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+			a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 			return err
 		}
 
-		if resp.Count > 0 {
-			return errors.ErrExecutionsStillExist
+		count = resp.Count
+	} else {
+		req := &manager.ListWorkflowExecutionsRequestV2{
+			NamespaceID: nsID,
+			Namespace:   nsName,
+			PageSize:    1,
 		}
-		return nil
+		resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
+		if err != nil {
+			a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+			a.logger.Error("Unable to count workflow executions using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+			return err
+		}
+		// If not 0, it will always be 1 due to PageSize set to 1.
+		count = int64(len(resp.Executions))
 	}
 
-	req := &manager.ListWorkflowExecutionsRequestV2{
-		NamespaceID: nsID,
-		Namespace:   nsName,
-		PageSize:    1,
-	}
-	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
-	if err != nil {
-		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
-		a.logger.Error("Unable to count workflows using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
-		return err
-	}
-
-	if len(resp.Executions) > 0 {
+	if count > 0 {
+		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(int(count)))
+		activity.RecordHeartbeat(ctx, count)
 		return errors.ErrExecutionsStillExist
 	}
 	return nil
@@ -105,7 +109,7 @@ func (a *Activities) DeleteNamespaceActivity(ctx context.Context, nsID namespace
 	err := a.metadataManager.DeleteNamespaceByName(ctx, deleteNamespaceRequest)
 	if err != nil {
 		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.DeleteNamespaceFailuresCount)
-		a.logger.Error("Unable delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		a.logger.Error("Unable to delete namespace from persistence.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 		return err
 	}
 

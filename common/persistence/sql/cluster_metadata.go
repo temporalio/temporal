@@ -25,6 +25,7 @@
 package sql
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"net"
@@ -44,6 +45,7 @@ type sqlClusterMetadataManager struct {
 var _ p.ClusterMetadataStore = (*sqlClusterMetadataManager)(nil)
 
 func (s *sqlClusterMetadataManager) ListClusterMetadata(
+	_ context.Context,
 	request *p.InternalListClusterMetadataRequest,
 ) (*p.InternalListClusterMetadataResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -88,6 +90,7 @@ func (s *sqlClusterMetadataManager) ListClusterMetadata(
 }
 
 func (s *sqlClusterMetadataManager) GetClusterMetadata(
+	_ context.Context,
 	request *p.InternalGetClusterMetadataRequest,
 ) (*p.InternalGetClusterMetadataResponse, error) {
 	ctx, cancel := newExecutionContext()
@@ -104,7 +107,10 @@ func (s *sqlClusterMetadataManager) GetClusterMetadata(
 	}, nil
 }
 
-func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveClusterMetadataRequest) (bool, error) {
+func (s *sqlClusterMetadataManager) SaveClusterMetadata(
+	_ context.Context,
+	request *p.InternalSaveClusterMetadataRequest,
+) (bool, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	err := s.txExecute(ctx, "SaveClusterMetadata", func(tx sqlplugin.Tx) error {
@@ -142,6 +148,7 @@ func (s *sqlClusterMetadataManager) SaveClusterMetadata(request *p.InternalSaveC
 }
 
 func (s *sqlClusterMetadataManager) DeleteClusterMetadata(
+	_ context.Context,
 	request *p.InternalDeleteClusterMetadataRequest,
 ) error {
 	ctx, cancel := newExecutionContext()
@@ -154,7 +161,10 @@ func (s *sqlClusterMetadataManager) DeleteClusterMetadata(
 	return nil
 }
 
-func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembersRequest) (*p.GetClusterMembersResponse, error) {
+func (s *sqlClusterMetadataManager) GetClusterMembers(
+	_ context.Context,
+	request *p.GetClusterMembersRequest,
+) (*p.GetClusterMembersResponse, error) {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	var lastSeenHostId []byte
@@ -213,7 +223,10 @@ func (s *sqlClusterMetadataManager) GetClusterMembers(request *p.GetClusterMembe
 	return &p.GetClusterMembersResponse{ActiveMembers: convertedRows, NextPageToken: nextPageToken}, nil
 }
 
-func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClusterMembershipRequest) error {
+func (s *sqlClusterMetadataManager) UpsertClusterMembership(
+	_ context.Context,
+	request *p.UpsertClusterMembershipRequest,
+) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	now := time.Now().UTC()
@@ -234,7 +247,10 @@ func (s *sqlClusterMetadataManager) UpsertClusterMembership(request *p.UpsertClu
 	return nil
 }
 
-func (s *sqlClusterMetadataManager) PruneClusterMembership(request *p.PruneClusterMembershipRequest) error {
+func (s *sqlClusterMetadataManager) PruneClusterMembership(
+	_ context.Context,
+	request *p.PruneClusterMembershipRequest,
+) error {
 	ctx, cancel := newExecutionContext()
 	defer cancel()
 	_, err := s.Db.PruneClusterMembership(ctx, &sqlplugin.PruneClusterMembershipFilter{

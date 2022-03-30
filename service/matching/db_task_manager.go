@@ -296,14 +296,13 @@ func (d *dbTaskManager) readAndDispatchTasks(
 ) {
 	iter := d.taskReader.taskIterator(ctx, d.taskQueueOwnership.getLastAllocatedTaskID())
 	for iter.HasNext() {
-		item, err := iter.Next()
+		task, err := iter.Next()
 		if err != nil {
 			d.logger.Error("dbTaskManager encountered error when fetching tasks", tag.Error(err))
 			d.signalDispatch()
 			return
 		}
 
-		task := item.(*persistencespb.AllocatedTaskInfo)
 		d.mustDispatch(task)
 	}
 }
