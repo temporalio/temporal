@@ -180,14 +180,23 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
-	visibilityManager.EXPECT().GetName().Return("elasticsearch")
+	visibilityManager.EXPECT().GetName().Return("elasticsearch").Times(3)
 
+	countWorkflowExecutionsCallTimes := 1
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
 		Namespace:   "namespace",
-	}).Return(&manager.CountWorkflowExecutionsResponse{
-		Count: 0,
-	}, nil)
+	}).DoAndReturn(func(_ context.Context, request *manager.CountWorkflowExecutionsRequest) (*manager.CountWorkflowExecutionsResponse, error) {
+		if countWorkflowExecutionsCallTimes == 3 {
+			return &manager.CountWorkflowExecutionsResponse{
+				Count: 0,
+			}, nil
+		}
+		countWorkflowExecutionsCallTimes++
+		return &manager.CountWorkflowExecutionsResponse{
+			Count: 1,
+		}, nil
+	}).Times(3)
 
 	metadataManager := persistence.NewMockMetadataManager(ctrl)
 	metadataManager.EXPECT().DeleteNamespaceByName(gomock.Any(), &persistence.DeleteNamespaceByNameRequest{
