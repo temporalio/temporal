@@ -49,6 +49,7 @@ type (
 		// To carry over progress results with ContinueAsNew.
 		PreviousSuccessCount int
 		PreviousErrorCount   int
+		ContinueAsNewCount   int
 	}
 
 	DeleteExecutionsResult struct {
@@ -167,11 +168,13 @@ func DeleteExecutionsWorkflow(ctx workflow.Context, params DeleteExecutionsParam
 		return result, nil
 	}
 
-	params.PreviousSuccessCount = result.SuccessCount
-	params.PreviousErrorCount = result.ErrorCount
-
-	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
 	// Too many workflow executions, and ConcurrentDeleteExecutionsActivities activities has been started already.
 	// Continue as new to prevent workflow history size explosion.
+
+	params.PreviousSuccessCount = result.SuccessCount
+	params.PreviousErrorCount = result.ErrorCount
+	params.ContinueAsNewCount++
+
+	logger.Info("There are more workflows to delete. Continuing workflow as new.", tag.WorkflowType(WorkflowName), tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount), tag.Counter(params.ContinueAsNewCount))
 	return result, workflow.NewContinueAsNewError(ctx, DeleteExecutionsWorkflow, params)
 }

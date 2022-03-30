@@ -129,6 +129,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 
 	for {
 		ctx1 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
+		ctx1 = workflow.WithWorkflowID(ctx1, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
 		var der deleteexecutions.DeleteExecutionsResult
 		err := workflow.ExecuteChildWorkflow(ctx1, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 		if err != nil {
