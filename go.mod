@@ -20,7 +20,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/jonboulle/clockwork v0.2.2
 	github.com/lib/pq v1.10.4
-	github.com/mattn/go-sqlite3 v1.14.11
+	github.com/mattn/go-sqlite3 v1.14.12
 	github.com/olivere/elastic v6.2.37+incompatible
 	github.com/olivere/elastic/v7 v7.0.31
 	github.com/pborman/uuid v1.2.1
