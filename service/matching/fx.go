@@ -46,7 +46,6 @@ import (
 )
 
 var Module = fx.Options(
-	fx.Provide(ParamsExpandProvider), // BootstrapParams should be deprecated
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(NewConfig),
 	fx.Provide(PersistenceMaxQpsProvider),
@@ -60,10 +59,6 @@ var Module = fx.Options(
 	fx.Provide(NewService),
 	fx.Invoke(ServiceLifetimeHooks),
 )
-
-func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
-	return params.RPCFactory
-}
 
 func TelemetryInterceptorProvider(
 	logger log.Logger,

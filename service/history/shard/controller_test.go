@@ -77,7 +77,7 @@ type (
 		config               *configs.Config
 		logger               log.Logger
 		shardController      *ControllerImpl
-		mockHostInfoProvider *resource.MockHostInfoProvider
+		mockHostInfoProvider *membership.MockHostInfoProvider
 	}
 )
 
@@ -85,7 +85,7 @@ func NewTestController(
 	engineFactory *MockEngineFactory,
 	config *configs.Config,
 	resource *resource.Test,
-	hostInfoProvider *resource.MockHostInfoProvider,
+	hostInfoProvider *membership.MockHostInfoProvider,
 ) *ControllerImpl {
 	return &ControllerImpl{
 		config:                      config,
@@ -133,7 +133,7 @@ func (s *controllerSuite) SetupTest() {
 	s.mockServiceResolver = s.mockResource.HistoryServiceResolver
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.hostInfo = s.mockResource.GetHostInfo()
-	s.mockHostInfoProvider = resource.NewMockHostInfoProvider(s.controller)
+	s.mockHostInfoProvider = membership.NewMockHostInfoProvider(s.controller)
 	s.mockHostInfoProvider.EXPECT().HostInfo().Return(s.hostInfo).AnyTimes()
 
 	s.logger = s.mockResource.Logger

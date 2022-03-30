@@ -41,6 +41,7 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
@@ -149,6 +150,7 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		metricsClient,
 		s.mockReplicationTaskFetcher,
 		s.mockReplicationTaskExecutor,
+		serialization.NewSerializer(),
 	)
 }
 

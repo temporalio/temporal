@@ -99,4 +99,15 @@ type (
 		// Members returns all host addresses in hashring for any particular role
 		Members() []*HostInfo
 	}
+
+	HostInfoProvider interface {
+		Start() error
+		HostInfo() *HostInfo
+	}
+
+	// MembershipMonitorFactory provides a bootstrapped membership monitor
+	MembershipMonitorFactory interface {
+		// GetMembershipMonitor return a membership monitor
+		GetMembershipMonitor() (Monitor, error)
+	}
 )

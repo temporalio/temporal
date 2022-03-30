@@ -26,6 +26,7 @@ package resource
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"os"
 	"time"
@@ -56,6 +57,9 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/common/ringpop"
+	"go.temporal.io/server/common/rpc"
+	"go.temporal.io/server/common/rpc/encryption"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 )
@@ -64,12 +68,23 @@ type (
 	SnTaggedLogger       log.Logger
 	ThrottledLogger      log.Logger
 	ThrottledLoggerRpsFn quotas.RateFn
+	NamespaceLogger      log.Logger
+	ServerReporter       metrics.Reporter
 	ServiceName          string
 	HostName             string
 	InstanceID           string
+	ServiceNames         map[string]struct{}
 
 	MatchingRawClient matchingservice.MatchingServiceClient
 	MatchingClient    matchingservice.MatchingServiceClient
+
+	RuntimeMetricsReporterParams struct {
+		fx.In
+
+		MetricsScope metrics.UserScope
+		Logger       SnTaggedLogger
+		InstanceID   InstanceID `optional:"true"`
+	}
 )
 
 // Module
@@ -78,10 +93,7 @@ type (
 var Module = fx.Options(
 	persistenceClient.Module,
 	fx.Provide(SnTaggedLoggerProvider),
-	fx.Provide(ThrottledLoggerProvider),
-	fx.Provide(PersistenceConfigProvider),
 	fx.Provide(HostNameProvider),
-	fx.Provide(ServiceNameProvider),
 	fx.Provide(TimeSourceProvider),
 	cluster.MetadataLifetimeHooksModule,
 	fx.Provide(MetricsClientProvider),
@@ -91,19 +103,14 @@ var Module = fx.Options(
 	fx.Provide(NamespaceRegistryProvider),
 	namespace.RegistryLifetimeHooksModule,
 	fx.Provide(serialization.NewSerializer),
-	fx.Provide(ArchivalMetadataProvider),
-	fx.Provide(ArchiverProviderProvider),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
-	fx.Provide(MembershipFactoryProvider),
 	fx.Provide(MembershipMonitorProvider),
 	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
-	fx.Provide(SdkClientFactoryProvider),
 	fx.Provide(FrontedClientProvider),
 	fx.Provide(GrpcListenerProvider),
-	fx.Provide(InstanceIDProvider),
 	fx.Provide(RingpopChannelProvider),
 	fx.Invoke(RingpopChannelLifetimeHooks),
 	fx.Provide(RuntimeMetricsReporterProvider),
@@ -111,8 +118,19 @@ var Module = fx.Options(
 	fx.Provide(HistoryClientProvider),
 	fx.Provide(MatchingRawClientProvider),
 	fx.Provide(MatchingClientProvider),
-	HostInfoProviderModule,
+	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
+	fx.Provide(PersistenceConfigProvider),
+)
+
+var DefaultOptions = fx.Options(
+	fx.Provide(MembershipMonitorFactoryProvider),
+	fx.Provide(RPCFactoryProvider),
+	fx.Provide(ArchivalMetadataProvider),
+	fx.Provide(ArchiverProviderProvider),
+	fx.Provide(ThrottledLoggerProvider),
+	fx.Provide(SdkClientFactoryProvider),
+	fx.Provide(DCRedirectionPolicyProvider),
 )
 
 func SnTaggedLoggerProvider(logger log.Logger, sn ServiceName) SnTaggedLogger {
@@ -131,18 +149,6 @@ func ThrottledLoggerProvider(
 
 func GrpcListenerProvider(factory common.RPCFactory) net.Listener {
 	return factory.GetGRPCListener()
-}
-
-func MetricsClientProvider(params *BootstrapParams) metrics.Client {
-	return params.MetricsClient
-}
-
-func PersistenceConfigProvider(params *BootstrapParams) *config.Persistence {
-	return &params.PersistenceConfig
-}
-
-func ServiceNameProvider(params *BootstrapParams) ServiceName {
-	return ServiceName(params.Name)
 }
 
 func HostNameProvider() (HostName, error) {
@@ -190,14 +196,6 @@ func NamespaceRegistryProvider(
 	)
 }
 
-func ArchivalMetadataProvider(params *BootstrapParams) archiver.ArchivalMetadata {
-	return params.ArchivalMetadata
-}
-
-func ArchiverProviderProvider(params *BootstrapParams) provider.ArchiverProvider {
-	return params.ArchiverProvider
-}
-
 func ClientFactoryProvider(
 	factoryProvider client.FactoryProvider,
 	rpcFactory common.RPCFactory,
@@ -229,22 +227,31 @@ func ClientBeanProvider(
 	)
 }
 
-func MembershipFactoryProvider(
-	params *BootstrapParams,
+func MembershipMonitorFactoryProvider(
 	persistenceBean persistenceClient.Bean,
 	logger SnTaggedLogger,
-) (MembershipMonitorFactory, error) {
-	return params.MembershipFactoryInitializer(persistenceBean, logger)
+	cfg *config.Config,
+	rChannel *tchannel.Channel,
+	svcName ServiceName,
+) (membership.MembershipMonitorFactory, error) {
+	servicePortMap := make(map[string]int)
+	for sn, sc := range cfg.Services {
+		servicePortMap[sn] = sc.RPC.GRPCPort
+	}
+	return ringpop.NewRingpopFactory(
+		&cfg.Global.Membership,
+		rChannel,
+		string(svcName),
+		servicePortMap,
+		logger,
+		persistenceBean.GetClusterMetadataManager(),
+	)
 }
 
-// TODO: Seems that this factory mostly handles singleton logic. We should be able to handle it via IOC.
-func MembershipMonitorProvider(membershipFactory MembershipMonitorFactory) (membership.Monitor, error) {
-	return membershipFactory.GetMembershipMonitor()
-}
-
-// TODO (alex): move this to `sdk` package after BootstrapParams removal.
-func SdkClientFactoryProvider(params *BootstrapParams) sdk.ClientFactory {
-	return params.SdkClientFactory
+func MembershipMonitorProvider(
+	factory membership.MembershipMonitorFactory,
+) (membership.Monitor, error) {
+	return factory.GetMembershipMonitor()
 }
 
 func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
@@ -274,24 +281,18 @@ func RingpopChannelLifetimeHooks(
 	)
 }
 
-func InstanceIDProvider(params *BootstrapParams) InstanceID {
-	return InstanceID(params.InstanceID)
-}
-
 func MetricsUserScopeProvider(serverMetricsClient metrics.Client) metrics.UserScope {
 	return serverMetricsClient.UserScope()
 }
 
 func RuntimeMetricsReporterProvider(
-	metricsScope metrics.UserScope,
-	logger SnTaggedLogger,
-	instanceID InstanceID,
+	params RuntimeMetricsReporterParams,
 ) *metrics.RuntimeMetricsReporter {
 	return metrics.NewRuntimeMetricsReporter(
-		metricsScope,
+		params.MetricsScope,
 		time.Minute,
-		logger,
-		string(instanceID),
+		params.Logger,
+		string(params.InstanceID),
 	)
 }
 
@@ -357,4 +358,58 @@ func MatchingClientProvider(matchingRawClient MatchingRawClient) MatchingClient 
 		common.CreateMatchingServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
 	)
+}
+
+func MetricsClientProvider(logger log.Logger, serviceName ServiceName, serverReporter ServerReporter) (metrics.Client, error) {
+	serviceIdx := metrics.GetMetricsServiceIdx(string(serviceName), logger)
+	return serverReporter.NewClient(logger, serviceIdx)
+}
+
+func PersistenceConfigProvider(persistenceConfig config.Persistence, dc *dynamicconfig.Collection) *config.Persistence {
+	persistenceConfig.TransactionSizeLimit = dc.GetIntProperty(dynamicconfig.TransactionSizeLimit, common.DefaultTransactionSizeLimit)
+	return &persistenceConfig
+}
+
+func ArchivalMetadataProvider(dc *dynamicconfig.Collection, cfg *config.Config) archiver.ArchivalMetadata {
+	return archiver.NewArchivalMetadata(
+		dc,
+		cfg.Archival.History.State,
+		cfg.Archival.History.EnableRead,
+		cfg.Archival.Visibility.State,
+		cfg.Archival.Visibility.EnableRead,
+		&cfg.NamespaceDefaults.Archival,
+	)
+}
+
+func ArchiverProviderProvider(cfg *config.Config) provider.ArchiverProvider {
+	return provider.NewArchiverProvider(cfg.Archival.History.Provider, cfg.Archival.Visibility.Provider)
+}
+
+func SdkClientFactoryProvider(cfg *config.Config, tlsConfigProvider encryption.TLSConfigProvider, metricsClient metrics.Client) (sdk.ClientFactory, error) {
+	tlsFrontendConfig, err := tlsConfigProvider.GetFrontendClientConfig()
+	if err != nil {
+		return nil, fmt.Errorf("unable to load frontend TLS configuration: %w", err)
+	}
+
+	return sdk.NewClientFactory(
+		cfg.PublicClient.HostPort,
+		tlsFrontendConfig,
+		sdk.NewMetricHandler(metricsClient.UserScope()),
+	), nil
+}
+
+func DCRedirectionPolicyProvider(cfg *config.Config) config.DCRedirectionPolicy {
+	return cfg.DCRedirectionPolicy
+}
+
+func RPCFactoryProvider(
+	cfg *config.Config,
+	svcName ServiceName,
+	logger log.Logger,
+	tlsConfigProvider encryption.TLSConfigProvider,
+	dc *dynamicconfig.Collection,
+	clusterMetadata *cluster.Config,
+) common.RPCFactory {
+	svcCfg := cfg.Services[string(svcName)]
+	return rpc.NewFactory(&svcCfg.RPC, string(svcName), logger, tlsConfigProvider, dc, clusterMetadata)
 }

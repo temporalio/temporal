@@ -117,6 +117,7 @@ func NewReplicationTaskProcessor(
 	metricsClient metrics.Client,
 	replicationTaskFetcher ReplicationTaskFetcher,
 	replicationTaskExecutor replicationTaskExecutor,
+	eventSerializer serialization.Serializer,
 ) *ReplicationTaskProcessorImpl {
 	shardID := shard.GetShardID()
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
@@ -137,7 +138,7 @@ func NewReplicationTaskProcessor(
 		status:                  common.DaemonStatusInitialized,
 		shard:                   shard,
 		historyEngine:           historyEngine,
-		historySerializer:       serialization.NewSerializer(),
+		historySerializer:       eventSerializer,
 		config:                  config,
 		metricsClient:           metricsClient,
 		logger:                  shard.GetLogger(),

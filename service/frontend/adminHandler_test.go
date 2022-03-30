@@ -58,6 +58,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -113,15 +114,14 @@ func (s *adminHandlerSuite) SetupTest() {
 	s.mockVisibilityMgr = manager.NewMockVisibilityManager(s.controller)
 	s.mockProducer = persistence.NewMockNamespaceReplicationQueue(s.controller)
 
-	params := &resource.BootstrapParams{
-		PersistenceConfig: config.Persistence{
-			NumHistoryShards: 1,
-		},
+	persistenceConfig := &config.Persistence{
+		NumHistoryShards: 1,
 	}
-	config := &Config{}
+
+	cfg := &Config{}
 	args := NewAdminHandlerArgs{
-		params,
-		config,
+		persistenceConfig,
+		cfg,
 		s.mockResource.GetNamespaceReplicationQueue(),
 		s.mockProducer,
 		nil,
@@ -145,6 +145,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockMetadata,
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
+		serialization.NewSerializer(),
 	}
 	s.handler = NewAdminHandler(args)
 	s.handler.Start()

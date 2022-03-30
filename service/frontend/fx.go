@@ -69,7 +69,6 @@ type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 var Module = fx.Options(
 	resource.Module,
-	fx.Provide(ParamsExpandProvider), // BootstrapParams should be deprecated
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),
@@ -123,10 +122,6 @@ func NewServiceProvider(
 		metricsScope,
 		faultInjectionDataStoreFactory,
 	)
-}
-
-func ParamsExpandProvider(params *resource.BootstrapParams) common.RPCFactory {
-	return params.RPCFactory
 }
 
 func GrpcServerOptionsProvider(
@@ -209,10 +204,9 @@ func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLogge
 }
 
 func NamespaceLogInterceptorProvider(
-	params *resource.BootstrapParams,
+	namespaceLogger resource.NamespaceLogger,
 	namespaceRegistry namespace.Registry,
 ) *interceptor.NamespaceLogInterceptor {
-	namespaceLogger := params.NamespaceLogger
 	return interceptor.NewNamespaceLogInterceptor(
 		namespaceRegistry,
 		namespaceLogger)
@@ -314,7 +308,8 @@ func PersistenceMaxQpsProvider(
 
 func VisibilityManagerProvider(
 	logger log.Logger,
-	params *resource.BootstrapParams,
+	persistenceConfig *config.Persistence,
+	metricsClient metrics.Client,
 	serviceConfig *Config,
 	esConfig *esclient.Config,
 	esClient esclient.Client,
@@ -323,7 +318,7 @@ func VisibilityManagerProvider(
 	saProvider searchattribute.Provider,
 ) (manager.VisibilityManager, error) {
 	return visibility.NewManager(
-		params.PersistenceConfig,
+		*persistenceConfig,
 		persistenceServiceResolver,
 		esConfig.GetVisibilityIndex(),
 		esConfig.GetSecondaryVisibilityIndex(),
@@ -339,7 +334,7 @@ func VisibilityManagerProvider(
 		dynamicconfig.GetStringPropertyFn(visibility.AdvancedVisibilityWritingModeOff), // frontend visibility never write
 		serviceConfig.EnableReadFromSecondaryAdvancedVisibility,
 		dynamicconfig.GetBoolPropertyFn(false), // frontend visibility never write
-		params.MetricsClient,
+		metricsClient,
 		logger,
 	)
 }
@@ -364,7 +359,7 @@ func healthServerProvider() *health.Server {
 }
 
 func AdminHandlerProvider(
-	params *resource.BootstrapParams,
+	persistenceConfig *config.Persistence,
 	config *Config,
 	replicatorNamespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
 	esConfig *esclient.Config,
@@ -389,9 +384,10 @@ func AdminHandlerProvider(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
+	eventSerializer serialization.Serializer,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
-		params,
+		persistenceConfig,
 		config,
 		namespaceReplicationQueue,
 		replicatorNamespaceReplicationQueue,
@@ -416,6 +412,7 @@ func AdminHandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
+		eventSerializer,
 	}
 	return NewAdminHandler(args)
 }
@@ -446,7 +443,7 @@ func OperatorHandlerProvider(
 }
 
 func HandlerProvider(
-	params *resource.BootstrapParams,
+	dcRedirectionPolicy config.DCRedirectionPolicy,
 	serviceConfig *Config,
 	versionChecker *VersionChecker,
 	namespaceReplicationQueue FEReplicatorNamespaceReplicationQueue,
@@ -490,7 +487,7 @@ func HandlerProvider(
 		archivalMetadata,
 		healthServer,
 	)
-	handler := NewDCRedirectionHandler(wfHandler, params.DCRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
+	handler := NewDCRedirectionHandler(wfHandler, dcRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler
 }
 

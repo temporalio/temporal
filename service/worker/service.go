@@ -38,6 +38,7 @@ import (
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -175,7 +176,7 @@ func NewService(
 }
 
 // NewConfig builds the new Config for worker service
-func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams, enableReadFromES bool) *Config {
+func NewConfig(dc *dynamicconfig.Collection, persistenceConfig *config.Persistence, enableReadFromES bool) *Config {
 	config := &Config{
 		ArchiverConfig: &archiver.Config{
 			MaxConcurrentActivityExecutionSize: dc.GetIntProperty(
@@ -270,7 +271,7 @@ func NewConfig(dc *dynamicconfig.Collection, params *resource.BootstrapParams, e
 				dynamicconfig.ScannerPersistenceMaxQPS,
 				100,
 			),
-			Persistence: &params.PersistenceConfig,
+			Persistence: persistenceConfig,
 			TaskQueueScannerEnabled: dc.GetBoolProperty(
 				dynamicconfig.TaskQueueScannerEnabled,
 				true,

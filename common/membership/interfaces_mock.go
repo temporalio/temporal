@@ -291,3 +291,92 @@ func (mr *MockServiceResolverMockRecorder) RemoveListener(name interface{}) *gom
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RemoveListener", reflect.TypeOf((*MockServiceResolver)(nil).RemoveListener), name)
 }
+
+// MockHostInfoProvider is a mock of HostInfoProvider interface.
+type MockHostInfoProvider struct {
+	ctrl     *gomock.Controller
+	recorder *MockHostInfoProviderMockRecorder
+}
+
+// MockHostInfoProviderMockRecorder is the mock recorder for MockHostInfoProvider.
+type MockHostInfoProviderMockRecorder struct {
+	mock *MockHostInfoProvider
+}
+
+// NewMockHostInfoProvider creates a new mock instance.
+func NewMockHostInfoProvider(ctrl *gomock.Controller) *MockHostInfoProvider {
+	mock := &MockHostInfoProvider{ctrl: ctrl}
+	mock.recorder = &MockHostInfoProviderMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockHostInfoProvider) EXPECT() *MockHostInfoProviderMockRecorder {
+	return m.recorder
+}
+
+// HostInfo mocks base method.
+func (m *MockHostInfoProvider) HostInfo() *HostInfo {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HostInfo")
+	ret0, _ := ret[0].(*HostInfo)
+	return ret0
+}
+
+// HostInfo indicates an expected call of HostInfo.
+func (mr *MockHostInfoProviderMockRecorder) HostInfo() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HostInfo", reflect.TypeOf((*MockHostInfoProvider)(nil).HostInfo))
+}
+
+// Start mocks base method.
+func (m *MockHostInfoProvider) Start() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Start")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Start indicates an expected call of Start.
+func (mr *MockHostInfoProviderMockRecorder) Start() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Start", reflect.TypeOf((*MockHostInfoProvider)(nil).Start))
+}
+
+// MockMembershipMonitorFactory is a mock of MembershipMonitorFactory interface.
+type MockMembershipMonitorFactory struct {
+	ctrl     *gomock.Controller
+	recorder *MockMembershipMonitorFactoryMockRecorder
+}
+
+// MockMembershipMonitorFactoryMockRecorder is the mock recorder for MockMembershipMonitorFactory.
+type MockMembershipMonitorFactoryMockRecorder struct {
+	mock *MockMembershipMonitorFactory
+}
+
+// NewMockMembershipMonitorFactory creates a new mock instance.
+func NewMockMembershipMonitorFactory(ctrl *gomock.Controller) *MockMembershipMonitorFactory {
+	mock := &MockMembershipMonitorFactory{ctrl: ctrl}
+	mock.recorder = &MockMembershipMonitorFactoryMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMembershipMonitorFactory) EXPECT() *MockMembershipMonitorFactoryMockRecorder {
+	return m.recorder
+}
+
+// GetMembershipMonitor mocks base method.
+func (m *MockMembershipMonitorFactory) GetMembershipMonitor() (Monitor, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetMembershipMonitor")
+	ret0, _ := ret[0].(Monitor)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetMembershipMonitor indicates an expected call of GetMembershipMonitor.
+func (mr *MockMembershipMonitorFactoryMockRecorder) GetMembershipMonitor() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetMembershipMonitor", reflect.TypeOf((*MockMembershipMonitorFactory)(nil).GetMembershipMonitor))
+}

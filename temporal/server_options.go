@@ -84,7 +84,7 @@ func newServerOptions(opts []ServerOption) *serverOptions {
 }
 
 func (so *serverOptions) loadAndValidate() error {
-	for serviceName, _ := range so.serviceNames {
+	for serviceName := range so.serviceNames {
 		if !isValidService(serviceName) {
 			return fmt.Errorf("invalid service %q in service list %v", serviceName, so.serviceNames)
 		}
@@ -120,7 +120,7 @@ func (so *serverOptions) validateConfig() error {
 		return err
 	}
 
-	for name, _ := range so.serviceNames {
+	for name := range so.serviceNames {
 		if _, ok := so.config.Services[name]; !ok {
 			return fmt.Errorf("%q service is missing in config", name)
 		}
