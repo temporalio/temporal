@@ -52,6 +52,19 @@
 			]
 		},
 		{
+			"name": "Debug Server with SQLite",
+			"type": "go",
+			"request": "launch",
+			"mode": "debug",
+			"program": "${workspaceFolder}/cmd/server",
+			"cwd": "${workspaceFolder}",
+			"args": [
+				"--env",
+				"development_sqlite",
+				"start",
+			]
+		},
+		{
 			"name": "Debug CLI Namespace Describe",
 			"type": "go",
 			"request": "launch",
