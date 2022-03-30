@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/service/worker/deletenamespace/errors"
 )
 
 type (
@@ -95,6 +96,7 @@ func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namesp
 	if count > 0 {
 		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(int(count)))
 		activity.RecordHeartbeat(ctx, count)
+		return errors.ErrExecutionsStillExist
 	}
 	return nil
 }
