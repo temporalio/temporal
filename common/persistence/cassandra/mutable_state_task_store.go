@@ -242,10 +242,10 @@ func NewMutableStateTaskStore(
 }
 
 func (d *MutableStateTaskStore) AddHistoryTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalAddHistoryTasksRequest,
 ) error {
-	batch := d.Session.NewBatch(gocql.LoggedBatch)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	if err := applyTasks(
 		batch,
@@ -291,78 +291,79 @@ func (d *MutableStateTaskStore) AddHistoryTasks(
 }
 
 func (d *MutableStateTaskStore) GetHistoryTask(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return d.getTransferTask(request)
+		return d.getTransferTask(ctx, request)
 	case tasks.CategoryIDTimer:
-		return d.getTimerTask(request)
+		return d.getTimerTask(ctx, request)
 	case tasks.CategoryIDVisibility:
-		return d.getVisibilityTask(request)
+		return d.getVisibilityTask(ctx, request)
 	case tasks.CategoryIDReplication:
-		return d.getReplicationTask(request)
+		return d.getReplicationTask(ctx, request)
 	default:
-		return d.getHistoryTask(request)
+		return d.getHistoryTask(ctx, request)
 	}
 }
 
 func (d *MutableStateTaskStore) GetHistoryTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return d.getTransferTasks(request)
+		return d.getTransferTasks(ctx, request)
 	case tasks.CategoryIDTimer:
-		return d.getTimerTasks(request)
+		return d.getTimerTasks(ctx, request)
 	case tasks.CategoryIDVisibility:
-		return d.getVisibilityTasks(request)
+		return d.getVisibilityTasks(ctx, request)
 	case tasks.CategoryIDReplication:
-		return d.getReplicationTasks(request)
+		return d.getReplicationTasks(ctx, request)
 	default:
-		return d.getHistoryTasks(request)
+		return d.getHistoryTasks(ctx, request)
 	}
 }
 
 func (d *MutableStateTaskStore) CompleteHistoryTask(
-	_ context.Context,
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return d.completeTransferTask(request)
+		return d.completeTransferTask(ctx, request)
 	case tasks.CategoryIDTimer:
-		return d.completeTimerTask(request)
+		return d.completeTimerTask(ctx, request)
 	case tasks.CategoryIDVisibility:
-		return d.completeVisibilityTask(request)
+		return d.completeVisibilityTask(ctx, request)
 	case tasks.CategoryIDReplication:
-		return d.completeReplicationTask(request)
+		return d.completeReplicationTask(ctx, request)
 	default:
-		return d.completeHistoryTask(request)
+		return d.completeHistoryTask(ctx, request)
 	}
 }
 
 func (d *MutableStateTaskStore) RangeCompleteHistoryTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return d.rangeCompleteTransferTasks(request)
+		return d.rangeCompleteTransferTasks(ctx, request)
 	case tasks.CategoryIDTimer:
-		return d.rangeCompleteTimerTasks(request)
+		return d.rangeCompleteTimerTasks(ctx, request)
 	case tasks.CategoryIDVisibility:
-		return d.rangeCompleteVisibilityTasks(request)
+		return d.rangeCompleteVisibilityTasks(ctx, request)
 	case tasks.CategoryIDReplication:
-		return d.rangeCompleteReplicationTasks(request)
+		return d.rangeCompleteReplicationTasks(ctx, request)
 	default:
-		return d.rangeCompleteHistoryTasks(request)
+		return d.rangeCompleteHistoryTasks(ctx, request)
 	}
 }
 
 func (d *MutableStateTaskStore) getTransferTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	shardID := request.ShardID
@@ -374,7 +375,8 @@ func (d *MutableStateTaskStore) getTransferTask(
 		rowTypeTransferWorkflowID,
 		rowTypeTransferRunID,
 		defaultVisibilityTimestamp,
-		taskID)
+		taskID,
+	).WithContext(ctx)
 
 	var data []byte
 	var encoding string
@@ -385,6 +387,7 @@ func (d *MutableStateTaskStore) getTransferTask(
 }
 
 func (d *MutableStateTaskStore) getTransferTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 
@@ -398,7 +401,7 @@ func (d *MutableStateTaskStore) getTransferTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	)
+	).WithContext(ctx)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
@@ -423,6 +426,7 @@ func (d *MutableStateTaskStore) getTransferTasks(
 }
 
 func (d *MutableStateTaskStore) completeTransferTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	query := d.Session.Query(templateCompleteTransferTaskQuery,
@@ -433,13 +437,14 @@ func (d *MutableStateTaskStore) completeTransferTask(
 		rowTypeTransferRunID,
 		defaultVisibilityTimestamp,
 		request.TaskKey.TaskID,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("CompleteTransferTask", err)
 }
 
 func (d *MutableStateTaskStore) rangeCompleteTransferTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	query := d.Session.Query(templateRangeCompleteTransferTaskQuery,
@@ -451,13 +456,14 @@ func (d *MutableStateTaskStore) rangeCompleteTransferTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeCompleteTransferTask", err)
 }
 
 func (d *MutableStateTaskStore) getTimerTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	shardID := request.ShardID
@@ -471,7 +477,7 @@ func (d *MutableStateTaskStore) getTimerTask(
 		rowTypeTimerRunID,
 		visibilityTs,
 		taskID,
-	)
+	).WithContext(ctx)
 
 	var data []byte
 	var encoding string
@@ -483,6 +489,7 @@ func (d *MutableStateTaskStore) getTimerTask(
 }
 
 func (d *MutableStateTaskStore) getTimerTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	// Reading timer tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -496,7 +503,7 @@ func (d *MutableStateTaskStore) getTimerTasks(
 		rowTypeTimerRunID,
 		minTimestamp,
 		maxTimestamp,
-	)
+	).WithContext(ctx)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
@@ -521,6 +528,7 @@ func (d *MutableStateTaskStore) getTimerTasks(
 }
 
 func (d *MutableStateTaskStore) completeTimerTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	ts := p.UnixMilliseconds(request.TaskKey.FireTime)
@@ -532,13 +540,14 @@ func (d *MutableStateTaskStore) completeTimerTask(
 		rowTypeTimerRunID,
 		ts,
 		request.TaskKey.TaskID,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("CompleteTimerTask", err)
 }
 
 func (d *MutableStateTaskStore) rangeCompleteTimerTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	start := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
@@ -551,13 +560,14 @@ func (d *MutableStateTaskStore) rangeCompleteTimerTasks(
 		rowTypeTimerRunID,
 		start,
 		end,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeCompleteTimerTask", err)
 }
 
 func (d *MutableStateTaskStore) getReplicationTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	shardID := request.ShardID
@@ -569,7 +579,8 @@ func (d *MutableStateTaskStore) getReplicationTask(
 		rowTypeReplicationWorkflowID,
 		rowTypeReplicationRunID,
 		defaultVisibilityTimestamp,
-		taskID)
+		taskID,
+	).WithContext(ctx)
 
 	var data []byte
 	var encoding string
@@ -581,6 +592,7 @@ func (d *MutableStateTaskStore) getReplicationTask(
 }
 
 func (d *MutableStateTaskStore) getReplicationTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 
@@ -594,12 +606,13 @@ func (d *MutableStateTaskStore) getReplicationTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	).PageSize(request.BatchSize).PageState(request.NextPageToken)
+	).WithContext(ctx).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasks")
 }
 
 func (d *MutableStateTaskStore) completeReplicationTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	query := d.Session.Query(templateCompleteReplicationTaskQuery,
@@ -609,13 +622,15 @@ func (d *MutableStateTaskStore) completeReplicationTask(
 		rowTypeReplicationWorkflowID,
 		rowTypeReplicationRunID,
 		defaultVisibilityTimestamp,
-		request.TaskKey.TaskID)
+		request.TaskKey.TaskID,
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("CompleteReplicationTask", err)
 }
 
 func (d *MutableStateTaskStore) rangeCompleteReplicationTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	query := d.Session.Query(templateRangeCompleteReplicationTaskQuery,
@@ -627,14 +642,14 @@ func (d *MutableStateTaskStore) rangeCompleteReplicationTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeCompleteReplicationTask", err)
 }
 
 func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
-	_ context.Context,
+	ctx context.Context,
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
 	task := request.TaskInfo
@@ -653,7 +668,8 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 		datablob.Data,
 		datablob.EncodingType.String(),
 		defaultVisibilityTimestamp,
-		task.GetTaskId())
+		task.GetTaskId(),
+	).WithContext(ctx)
 
 	err = query.Exec()
 	if err != nil {
@@ -664,7 +680,7 @@ func (d *MutableStateTaskStore) PutReplicationTaskToDLQ(
 }
 
 func (d *MutableStateTaskStore) GetReplicationTasksFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	// Reading replication tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -677,13 +693,13 @@ func (d *MutableStateTaskStore) GetReplicationTasksFromDLQ(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	).PageSize(request.BatchSize).PageState(request.NextPageToken)
+	).WithContext(ctx).PageSize(request.BatchSize).PageState(request.NextPageToken)
 
 	return d.populateGetReplicationTasksResponse(query, "GetReplicationTasksFromDLQ")
 }
 
 func (d *MutableStateTaskStore) DeleteReplicationTaskFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
 
@@ -695,14 +711,14 @@ func (d *MutableStateTaskStore) DeleteReplicationTaskFromDLQ(
 		rowTypeDLQRunID,
 		defaultVisibilityTimestamp,
 		request.TaskKey.TaskID,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("DeleteReplicationTaskFromDLQ", err)
 }
 
 func (d *MutableStateTaskStore) RangeDeleteReplicationTaskFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
 
@@ -715,13 +731,14 @@ func (d *MutableStateTaskStore) RangeDeleteReplicationTaskFromDLQ(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeDeleteReplicationTaskFromDLQ", err)
 }
 
 func (d *MutableStateTaskStore) getVisibilityTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	shardID := request.ShardID
@@ -733,7 +750,8 @@ func (d *MutableStateTaskStore) getVisibilityTask(
 		rowTypeVisibilityTaskWorkflowID,
 		rowTypeVisibilityTaskRunID,
 		defaultVisibilityTimestamp,
-		taskID)
+		taskID,
+	).WithContext(ctx)
 
 	var data []byte
 	var encoding string
@@ -744,6 +762,7 @@ func (d *MutableStateTaskStore) getVisibilityTask(
 }
 
 func (d *MutableStateTaskStore) getVisibilityTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 
@@ -757,7 +776,7 @@ func (d *MutableStateTaskStore) getVisibilityTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	)
+	).WithContext(ctx)
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetHistoryTasksResponse{}
@@ -782,6 +801,7 @@ func (d *MutableStateTaskStore) getVisibilityTasks(
 }
 
 func (d *MutableStateTaskStore) completeVisibilityTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	query := d.Session.Query(templateCompleteVisibilityTaskQuery,
@@ -791,13 +811,15 @@ func (d *MutableStateTaskStore) completeVisibilityTask(
 		rowTypeVisibilityTaskWorkflowID,
 		rowTypeVisibilityTaskRunID,
 		defaultVisibilityTimestamp,
-		request.TaskKey.TaskID)
+		request.TaskKey.TaskID,
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("CompleteVisibilityTask", err)
 }
 
 func (d *MutableStateTaskStore) rangeCompleteVisibilityTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	query := d.Session.Query(templateRangeCompleteVisibilityTaskQuery,
@@ -809,7 +831,7 @@ func (d *MutableStateTaskStore) rangeCompleteVisibilityTasks(
 		defaultVisibilityTimestamp,
 		request.InclusiveMinTaskKey.TaskID,
 		request.ExclusiveMaxTaskKey.TaskID,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("RangeCompleteVisibilityTask", err)
@@ -843,6 +865,7 @@ func (d *MutableStateTaskStore) populateGetReplicationTasksResponse(
 }
 
 func (d *MutableStateTaskStore) getHistoryTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	shardID := request.ShardID
@@ -859,7 +882,7 @@ func (d *MutableStateTaskStore) getHistoryTask(
 		rowTypeHistoryTaskRunID,
 		ts,
 		taskID,
-	)
+	).WithContext(ctx)
 
 	var data []byte
 	var encoding string
@@ -870,6 +893,7 @@ func (d *MutableStateTaskStore) getHistoryTask(
 }
 
 func (d *MutableStateTaskStore) getHistoryTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	// execution manager should already validated the request
@@ -886,7 +910,7 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 			defaultVisibilityTimestamp,
 			request.InclusiveMinTaskKey.TaskID,
 			request.ExclusiveMaxTaskKey.TaskID,
-		)
+		).WithContext(ctx)
 	} else {
 		minTimestamp := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
 		maxTimestamp := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
@@ -898,7 +922,7 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 			rowTypeHistoryTaskRunID,
 			minTimestamp,
 			maxTimestamp,
-		)
+		).WithContext(ctx)
 	}
 
 	iter := query.PageSize(request.BatchSize).PageState(request.NextPageToken).Iter()
@@ -925,6 +949,7 @@ func (d *MutableStateTaskStore) getHistoryTasks(
 }
 
 func (d *MutableStateTaskStore) completeHistoryTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	ts := defaultVisibilityTimestamp
@@ -939,13 +964,14 @@ func (d *MutableStateTaskStore) completeHistoryTask(
 		rowTypeHistoryTaskRunID,
 		ts,
 		request.TaskKey.TaskID,
-	)
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("CompleteHistoryTask", err)
 }
 
 func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	// execution manager should already validated the request
@@ -960,7 +986,7 @@ func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
 			defaultVisibilityTimestamp,
 			request.InclusiveMinTaskKey.TaskID,
 			request.ExclusiveMaxTaskKey.TaskID,
-		)
+		).WithContext(ctx)
 	} else {
 		minTimestamp := p.UnixMilliseconds(request.InclusiveMinTaskKey.FireTime)
 		maxTimestamp := p.UnixMilliseconds(request.ExclusiveMaxTaskKey.FireTime)
@@ -972,7 +998,7 @@ func (d *MutableStateTaskStore) rangeCompleteHistoryTasks(
 			rowTypeHistoryTaskRunID,
 			minTimestamp,
 			maxTimestamp,
-		)
+		).WithContext(ctx)
 	}
 
 	err := query.Exec()

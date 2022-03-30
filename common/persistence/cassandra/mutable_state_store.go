@@ -373,10 +373,10 @@ func NewMutableStateStore(
 }
 
 func (d *MutableStateStore) CreateWorkflowExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalCreateWorkflowExecutionRequest,
 ) (*p.InternalCreateWorkflowExecutionResponse, error) {
-	batch := d.Session.NewBatch(gocql.LoggedBatch)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	shardID := request.ShardID
 	newWorkflow := request.NewWorkflowSnapshot
@@ -483,7 +483,7 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 }
 
 func (d *MutableStateStore) GetWorkflowExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetWorkflowExecutionRequest,
 ) (*p.InternalGetWorkflowExecutionResponse, error) {
 	query := d.Session.Query(templateGetWorkflowExecutionQuery,
@@ -493,7 +493,8 @@ func (d *MutableStateStore) GetWorkflowExecution(
 		request.WorkflowID,
 		request.RunID,
 		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
+		rowTypeExecutionTaskID,
+	).WithContext(ctx)
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
@@ -570,10 +571,10 @@ func (d *MutableStateStore) GetWorkflowExecution(
 }
 
 func (d *MutableStateStore) UpdateWorkflowExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalUpdateWorkflowExecutionRequest,
 ) error {
-	batch := d.Session.NewBatch(gocql.LoggedBatch)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	updateWorkflow := request.UpdateWorkflowMutation
 	newWorkflow := request.NewWorkflowSnapshot
@@ -586,10 +587,12 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 	switch request.Mode {
 	case p.UpdateWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
+			ctx,
 			request.ShardID,
 			namespaceID,
 			workflowID,
-			runID); err != nil {
+			runID,
+		); err != nil {
 			return err
 		}
 
@@ -703,10 +706,10 @@ func (d *MutableStateStore) UpdateWorkflowExecution(
 }
 
 func (d *MutableStateStore) ConflictResolveWorkflowExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalConflictResolveWorkflowExecutionRequest,
 ) error {
-	batch := d.Session.NewBatch(gocql.LoggedBatch)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	currentWorkflow := request.CurrentWorkflowMutation
 	resetWorkflow := request.ResetWorkflowSnapshot
@@ -722,6 +725,7 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 	switch request.Mode {
 	case p.ConflictResolveWorkflowModeBypassCurrent:
 		if err := d.assertNotCurrentExecution(
+			ctx,
 			shardID,
 			namespaceID,
 			workflowID,
@@ -863,13 +867,14 @@ func (d *MutableStateStore) ConflictResolveWorkflowExecution(
 }
 
 func (d *MutableStateStore) assertNotCurrentExecution(
+	ctx context.Context,
 	shardID int32,
 	namespaceID string,
 	workflowID string,
 	runID string,
 ) error {
 
-	if resp, err := d.GetCurrentExecution(context.TODO(), &p.GetCurrentExecutionRequest{
+	if resp, err := d.GetCurrentExecution(ctx, &p.GetCurrentExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
@@ -894,7 +899,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 }
 
 func (d *MutableStateStore) DeleteWorkflowExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *p.DeleteWorkflowExecutionRequest,
 ) error {
 	query := d.Session.Query(templateDeleteWorkflowExecutionMutableStateQuery,
@@ -904,14 +909,15 @@ func (d *MutableStateStore) DeleteWorkflowExecution(
 		request.WorkflowID,
 		request.RunID,
 		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
+		rowTypeExecutionTaskID,
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("DeleteWorkflowExecution", err)
 }
 
 func (d *MutableStateStore) DeleteCurrentWorkflowExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *p.DeleteCurrentWorkflowExecutionRequest,
 ) error {
 	query := d.Session.Query(templateDeleteWorkflowExecutionCurrentRowQuery,
@@ -922,14 +928,15 @@ func (d *MutableStateStore) DeleteCurrentWorkflowExecution(
 		permanentRunID,
 		defaultVisibilityTimestamp,
 		rowTypeExecutionTaskID,
-		request.RunID)
+		request.RunID,
+	).WithContext(ctx)
 
 	err := query.Exec()
 	return gocql.ConvertError("DeleteWorkflowCurrentRow", err)
 }
 
 func (d *MutableStateStore) GetCurrentExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetCurrentExecutionRequest,
 ) (*p.InternalGetCurrentExecutionResponse, error) {
 	query := d.Session.Query(templateGetCurrentExecutionQuery,
@@ -939,7 +946,8 @@ func (d *MutableStateStore) GetCurrentExecution(
 		request.WorkflowID,
 		permanentRunID,
 		defaultVisibilityTimestamp,
-		rowTypeExecutionTaskID)
+		rowTypeExecutionTaskID,
+	).WithContext(ctx)
 
 	result := make(map[string]interface{})
 	if err := query.MapScan(result); err != nil {
@@ -965,10 +973,10 @@ func (d *MutableStateStore) GetCurrentExecution(
 }
 
 func (d *MutableStateStore) SetWorkflowExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalSetWorkflowExecutionRequest,
 ) error {
-	batch := d.Session.NewBatch(gocql.LoggedBatch)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 
 	shardID := request.ShardID
 	setSnapshot := request.SetWorkflowSnapshot
@@ -1020,14 +1028,14 @@ func (d *MutableStateStore) SetWorkflowExecution(
 }
 
 func (d *MutableStateStore) ListConcreteExecutions(
-	_ context.Context,
+	ctx context.Context,
 	request *p.ListConcreteExecutionsRequest,
 ) (*p.InternalListConcreteExecutionsResponse, error) {
 	query := d.Session.Query(
 		templateListWorkflowExecutionQuery,
 		request.ShardID,
 		rowTypeExecution,
-	)
+	).WithContext(ctx)
 	iter := query.PageSize(request.PageSize).PageState(request.PageToken).Iter()
 
 	response := &p.InternalListConcreteExecutionsResponse{}

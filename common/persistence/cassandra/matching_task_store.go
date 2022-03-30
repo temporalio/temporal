@@ -151,7 +151,7 @@ func NewMatchingTaskStore(
 }
 
 func (d *MatchingTaskStore) CreateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalCreateTaskQueueRequest,
 ) error {
 	query := d.Session.Query(templateInsertTaskQueueQuery,
@@ -163,7 +163,7 @@ func (d *MatchingTaskStore) CreateTaskQueue(
 		request.RangeID,
 		request.TaskQueueInfo.Data,
 		request.TaskQueueInfo.EncodingType.String(),
-	)
+	).WithContext(ctx)
 
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
@@ -183,7 +183,7 @@ func (d *MatchingTaskStore) CreateTaskQueue(
 }
 
 func (d *MatchingTaskStore) GetTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalGetTaskQueueRequest,
 ) (*p.InternalGetTaskQueueResponse, error) {
 	query := d.Session.Query(templateGetTaskQueueQuery,
@@ -192,7 +192,7 @@ func (d *MatchingTaskStore) GetTaskQueue(
 		request.TaskType,
 		rowTypeTaskQueue,
 		taskQueueTaskID,
-	)
+	).WithContext(ctx)
 
 	var rangeID int64
 	var tlBytes []byte
@@ -209,7 +209,7 @@ func (d *MatchingTaskStore) GetTaskQueue(
 
 // UpdateTaskQueue update task queue
 func (d *MatchingTaskStore) UpdateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalUpdateTaskQueueRequest,
 ) (*p.UpdateTaskQueueResponse, error) {
 	var err error
@@ -223,7 +223,7 @@ func (d *MatchingTaskStore) UpdateTaskQueue(
 		if expiryTTL >= maxCassandraTTL {
 			expiryTTL = maxCassandraTTL
 		}
-		batch := d.Session.NewBatch(gocql.LoggedBatch)
+		batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 		batch.Query(templateUpdateTaskQueueQueryWithTTLPart1,
 			request.NamespaceID,
 			request.TaskQueue,
@@ -256,7 +256,7 @@ func (d *MatchingTaskStore) UpdateTaskQueue(
 			rowTypeTaskQueue,
 			taskQueueTaskID,
 			request.PrevRangeID,
-		)
+		).WithContext(ctx)
 		applied, err = query.MapScanCAS(previous)
 	}
 
@@ -287,11 +287,18 @@ func (d *MatchingTaskStore) ListTaskQueue(
 }
 
 func (d *MatchingTaskStore) DeleteTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *p.DeleteTaskQueueRequest,
 ) error {
-	query := d.Session.Query(templateDeleteTaskQueueQuery,
-		request.TaskQueue.NamespaceID, request.TaskQueue.TaskQueueName, request.TaskQueue.TaskQueueType, rowTypeTaskQueue, taskQueueTaskID, request.RangeID)
+	query := d.Session.Query(
+		templateDeleteTaskQueueQuery,
+		request.TaskQueue.NamespaceID,
+		request.TaskQueue.TaskQueueName,
+		request.TaskQueue.TaskQueueType,
+		rowTypeTaskQueue,
+		taskQueueTaskID,
+		request.RangeID,
+	).WithContext(ctx)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -307,10 +314,10 @@ func (d *MatchingTaskStore) DeleteTaskQueue(
 
 // CreateTasks add tasks
 func (d *MatchingTaskStore) CreateTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalCreateTasksRequest,
 ) (*p.CreateTasksResponse, error) {
-	batch := d.Session.NewBatch(gocql.LoggedBatch)
+	batch := d.Session.NewBatch(gocql.LoggedBatch).WithContext(ctx)
 	namespaceID := request.NamespaceID
 	taskQueue := request.TaskQueue
 	taskQueueType := request.TaskType
@@ -387,7 +394,7 @@ func GetTaskTTL(expireTime *time.Time) int64 {
 
 // GetTasks get a task
 func (d *MatchingTaskStore) GetTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetTasksRequest,
 ) (*p.InternalGetTasksResponse, error) {
 	// Reading taskqueue tasks need to be quorum level consistent, otherwise we could lose tasks
@@ -398,7 +405,7 @@ func (d *MatchingTaskStore) GetTasks(
 		rowTypeTask,
 		request.InclusiveMinTaskID,
 		request.ExclusiveMaxTaskID,
-	)
+	).WithContext(ctx)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalGetTasksResponse{}
@@ -445,7 +452,7 @@ func (d *MatchingTaskStore) GetTasks(
 
 // CompleteTask delete a task
 func (d *MatchingTaskStore) CompleteTask(
-	_ context.Context,
+	ctx context.Context,
 	request *p.CompleteTaskRequest,
 ) error {
 	tli := request.TaskQueue
@@ -454,7 +461,8 @@ func (d *MatchingTaskStore) CompleteTask(
 		tli.TaskQueueName,
 		tli.TaskQueueType,
 		rowTypeTask,
-		request.TaskID)
+		request.TaskID,
+	).WithContext(ctx)
 
 	err := query.Exec()
 	if err != nil {
@@ -468,11 +476,17 @@ func (d *MatchingTaskStore) CompleteTask(
 // Limit request parameter i.e. either all tasks leq the task_id will be deleted or an error will
 // be returned to the caller
 func (d *MatchingTaskStore) CompleteTasksLessThan(
-	_ context.Context,
+	ctx context.Context,
 	request *p.CompleteTasksLessThanRequest,
 ) (int, error) {
-	query := d.Session.Query(templateCompleteTasksLessThanQuery,
-		request.NamespaceID, request.TaskQueueName, request.TaskType, rowTypeTask, request.ExclusiveMaxTaskID)
+	query := d.Session.Query(
+		templateCompleteTasksLessThanQuery,
+		request.NamespaceID,
+		request.TaskQueueName,
+		request.TaskType,
+		rowTypeTask,
+		request.ExclusiveMaxTaskID,
+	).WithContext(ctx)
 	err := query.Exec()
 	if err != nil {
 		return 0, gocql.ConvertError("CompleteTasksLessThan", err)
