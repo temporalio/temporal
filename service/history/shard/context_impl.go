@@ -384,7 +384,7 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 	case tasks.CategoryTransfer:
 		s.shardInfo.ClusterTransferAckLevel[cluster] = ackLevel.TaskID
 	case tasks.CategoryTimer:
-		s.shardInfo.TimerAckLevelTime = timestamp.TimePtr(ackLevel.FireTime)
+		s.shardInfo.ClusterTimerAckLevel[cluster] = timestamp.TimePtr(ackLevel.FireTime)
 	case tasks.CategoryReplication:
 		s.shardInfo.ClusterReplicationLevel[cluster] = ackLevel.TaskID
 	case tasks.CategoryVisibility:
