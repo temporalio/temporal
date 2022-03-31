@@ -2165,8 +2165,8 @@ func (s *integrationClustersTestSuite) TestLocalNamespaceMigration() {
 		TaskQueue:          sw.DefaultWorkerTaskQueue,
 		WorkflowRunTimeout: time.Second * 30,
 	}, "force-replication", migration.ForceReplicationParams{
-		Namespace:      namespace,
-		RpsPerActivity: 10,
+		Namespace:  namespace,
+		OverallRps: 10,
 	})
 
 	s.NoError(err)
