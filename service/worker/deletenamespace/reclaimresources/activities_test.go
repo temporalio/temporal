@@ -42,7 +42,6 @@ import (
 func Test_EnsureNoExecutionsActivity_NoExecutions(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
-	visibilityManager.EXPECT().GetName().Return("elasticsearch")
 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
@@ -58,7 +57,7 @@ func Test_EnsureNoExecutionsActivity_NoExecutions(t *testing.T) {
 		logger:            log.NewNoopLogger(),
 	}
 
-	err := a.EnsureNoExecutionsActivity(context.Background(), "namespace-id", "namespace")
+	err := a.EnsureNoExecutionsAdvVisibilityActivity(context.Background(), "namespace-id", "namespace")
 	require.NoError(t, err)
 
 	ctrl.Finish()
@@ -70,7 +69,6 @@ func Test_EnsureNoExecutionsActivity_ExecutionsExist(t *testing.T) {
 
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
-	visibilityManager.EXPECT().GetName().Return("elasticsearch")
 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
@@ -85,9 +83,9 @@ func Test_EnsureNoExecutionsActivity_ExecutionsExist(t *testing.T) {
 		metricsClient:     metrics.NoopClient,
 		logger:            log.NewNoopLogger(),
 	}
-	env.RegisterActivity(a.EnsureNoExecutionsActivity)
+	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 
-	_, err := env.ExecuteActivity(a.EnsureNoExecutionsActivity, namespace.ID("namespace-id"), namespace.Name("namespace"))
+	_, err := env.ExecuteActivity(a.EnsureNoExecutionsAdvVisibilityActivity, namespace.ID("namespace-id"), namespace.Name("namespace"))
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)
