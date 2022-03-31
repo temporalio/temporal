@@ -613,26 +613,24 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return nil
 	}
 
-	// Get parent namespace name
 	var parentNamespaceName namespace.Name
 	if namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.NamespaceID)); err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
+		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
 			return err
 		}
-		// it is possible that the namespace got deleted. Use namespaceID instead as this is only needed for the history event
+		// It is possible that the parent namespace got deleted. Use namespaceID instead as this is only needed for the history event.
 		parentNamespaceName = namespace.Name(task.NamespaceID)
 	} else {
 		parentNamespaceName = namespaceEntry.Name()
 	}
 
-	// Get target namespace name
 	var targetNamespaceName namespace.Name
 	if namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID)); err != nil {
-		if _, ok := err.(*serviceerror.NotFound); !ok {
+		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
 			return err
 		}
-		// it is possible that the namespace got deleted. Use namespaceID instead as this is only needed for the history event
-		targetNamespaceName = namespace.Name(task.TargetNamespaceID)
+		// It is possible that target namespace got deleted. Record failure.
+		t.recordStartChildExecutionFailed()
 	} else {
 		targetNamespaceName = namespaceEntry.Name()
 	}
@@ -676,8 +674,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
 
 		// Check to see if the error is non-transient, in which case add StartChildWorkflowExecutionFailed
-		// event and complete transfer task by setting the err = nil
-		if _, ok := err.(*serviceerror.WorkflowExecutionAlreadyStarted); ok {
+		// event and complete transfer task by setting err = nil
+		if _, isWorkflowExecutionAlreadyStarted := err.(*serviceerror.WorkflowExecutionAlreadyStarted); isWorkflowExecutionAlreadyStarted {
 			err = t.recordStartChildExecutionFailed(ctx, task, context, attributes)
 		}
 
