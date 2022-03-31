@@ -62,7 +62,6 @@ func NewActivities(
 	}
 }
 func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, error) {
-	// TODO: remove this check after CountWorkflowExecutions is implemented in standard visibility.
 	return strings.Contains(a.visibilityManager.GetName(), "elasticsearch"), nil
 }
 
@@ -105,6 +104,11 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 }
 
 func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+	// Standard visibility does not support CountWorkflowExecutions but only supports ListWorkflowExecutions.
+	// To prevent read of many records from DB, set PageSize to 1 and use this single record as indicator of workflow executions existence.
+	// Unfortunately, this doesn't allow to report progress and retry is limited only by timeout.
+	// TODO: remove this activity after CountWorkflowExecutions is implemented in standard visibility.
+
 	req := &manager.ListWorkflowExecutionsRequestV2{
 		NamespaceID: nsID,
 		Namespace:   nsName,
