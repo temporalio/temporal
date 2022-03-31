@@ -116,6 +116,14 @@ update-proto-plugins:
 	@GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
 
+update-tctl:
+	@printf $(COLOR) "Install/update tctl..."
+	@go install github.com/temporalio/tctl/cmd/tctl@latest
+
+update-new-ui:
+	@printf $(COLOR) "Install/update temporal ui-server..."
+	@go install github.com/temporalio/ui-server/cmd/server@latest
+
 update-tools: update-checkers update-mockgen update-proto-plugins
 
 ##### Proto #####

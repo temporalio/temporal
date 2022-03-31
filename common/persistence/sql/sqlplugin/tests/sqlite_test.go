@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build cgo
-
 package tests
 
 import (
@@ -424,7 +422,7 @@ func newSQLiteConfig() *config.SQL {
 		ConnectProtocol: "",
 		ConnectAttributes: map[string]string{
 			"mode":  "memory",
-			"cache": "shared",
+			"cache": "private",
 		},
 		PluginName:   "sqlite",
 		DatabaseName: testSQLiteDatabaseNamePrefix + shuffle.String(testSQLiteDatabaseNameSuffix),
