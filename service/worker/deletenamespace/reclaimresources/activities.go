@@ -81,16 +81,17 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	count := resp.Count
 	if count > 0 {
 		activityInfo := activity.GetInfo(ctx)
-		if activity.HasHeartbeatDetails(ctx) {
+		// Starting from 8th attempt, workflow executions deletion must show some progress.
+		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
 			var previousAttemptCount int64
 			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
 				a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 				a.logger.Error("Unable to get previous heartbeat details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
 				return err
 			}
-			// Starting from 8th attempt, workflow executions deletion must show some progress.
-			if count == previousAttemptCount && activityInfo.Attempt > 7 {
-				// No progress were made.
+			if count == previousAttemptCount {
+				// No progress were made. Something bad happened on task processor side or new executions were created during deletion.
+				// Return non-retryable error and workflow will try to delete executions again.
 				a.logger.Warn("No progress were made.", tag.WorkflowNamespace(nsName.String()), tag.Attempt(activityInfo.Attempt), tag.Counter(int(count)))
 				return errors.ErrNoProgress
 			}
