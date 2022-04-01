@@ -50,12 +50,7 @@ func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload
 // 2. type from MetadataType field, if t is not specified.
 func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface{}, error) {
 	if t == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
-		if valueTypeMetadata, metadataHasValueType := value.Metadata[MetadataType]; metadataHasValueType {
-			if ivt, ok := enumspb.IndexedValueType_value[string(valueTypeMetadata)]; ok {
-				// MetadataType field has priority over passed type.
-				t = enumspb.IndexedValueType(ivt)
-			}
-		}
+		t = enumspb.IndexedValueType(enumspb.IndexedValueType_value[string(value.Metadata[MetadataType])])
 	}
 
 	switch t {
