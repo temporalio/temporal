@@ -27,6 +27,7 @@ package searchattribute
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/payload"
 )
 
@@ -63,8 +64,8 @@ func Encode(searchAttributes map[string]interface{}, typeMap *NameTypeMap) (*com
 }
 
 // Decode decodes search attributes to the map of search attribute values using (in order):
-// 1. type from MetadataType field,
-// 2. type from typeMap (can be nil).
+// 1. type from typeMap,
+// 2. if typeMap is nil, type from MetadataType field is used.
 // In case of error, it will continue to next search attribute and return last error.
 func Decode(searchAttributes *commonpb.SearchAttributes, typeMap *NameTypeMap) (map[string]interface{}, error) {
 	if len(searchAttributes.GetIndexedFields()) == 0 {
