@@ -25,7 +25,6 @@
 package searchattribute
 
 import (
-	"errors"
 	"testing"
 	"time"
 
@@ -94,7 +93,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 	payloadStr := payload.EncodeString("qwe")
 	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidType))
+	assert.ErrorIs(err, ErrInvalidType)
 	assert.Nil(decodedStr)
 
 	payloadInt, err := payload.Encode(123)
@@ -102,7 +101,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 	payloadInt.Metadata["type"] = []byte("UnknownType")
 	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 	assert.Error(err)
-	assert.True(errors.Is(err, ErrInvalidType))
+	assert.ErrorIs(err, ErrInvalidType)
 	assert.Nil(decodedInt)
 
 	payloadInt, err = payload.Encode(123)
@@ -110,7 +109,7 @@ func Test_DecodeValue_Error(t *testing.T) {
 	payloadInt.Metadata["type"] = []byte("Text")
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
 	assert.Error(err)
-	assert.True(errors.Is(err, converter.ErrUnableToDecode), err.Error())
+	assert.ErrorIs(err, converter.ErrUnableToDecode, err.Error())
 	assert.Nil(decodedInt)
 }
 
