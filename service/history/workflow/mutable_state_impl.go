@@ -4258,11 +4258,11 @@ func (e *MutableStateImpl) startTransactionHandleWorkflowTaskFailover() (bool, e
 		return false, nil
 	}
 
-	// handle case 1 & 2
+	// handle case 1 & 2 & namespace migration
 	var flushBufferVersion = lastWriteVersion
 
-	// handle case 3
-	if lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
+	// handle case 3 expect for namespace migration
+	if lastWriteVersion != common.EmptyVersion && lastWriteSourceCluster != currentCluster && currentVersionCluster == currentCluster {
 		// do a sanity check on buffered events
 		if e.HasBufferedEvents() {
 			return false, serviceerror.NewInternal("MutableStateImpl encountered previous passive workflow with buffered events")
