@@ -4198,8 +4198,8 @@ func (e *MutableStateImpl) startTransactionHandleNamespaceMigration(
 		return nil, err
 	}
 
-	// local namespace -> global namespace && with buffered events
-	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && e.HasBufferedEvents() {
+	// local namespace -> global namespace && with inflight workflow task
+	if lastWriteVersion == common.EmptyVersion && namespaceEntry.FailoverVersion() > common.EmptyVersion && e.HasInFlightWorkflowTask() {
 		localNamespaceMutation := namespace.NewPretendAsLocalNamespace(
 			e.clusterMetadata.GetCurrentClusterName(),
 		)
