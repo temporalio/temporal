@@ -41,21 +41,14 @@ func Test_DecodeValue_FromMetadata_Success(t *testing.T) {
 
 	payloadStr := payload.EncodeString("qwe")
 	payloadStr.Metadata["type"] = []byte("Text")
-	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+	decodedStr, err := DecodeValue(payloadStr, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED) // MetadataType is used.
 	assert.NoError(err)
 	assert.Equal("qwe", decodedStr)
-
-	payloadInt, err := payload.Encode(123)
-	assert.NoError(err)
-	payloadInt.Metadata["type"] = []byte("Int")
-	decodedInt, err := DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_TEXT) // MetadataType should be used anyway
-	assert.NoError(err)
-	assert.Equal(int64(123), decodedInt)
 
 	payloadBool, err := payload.Encode(true)
 	assert.NoError(err)
 	payloadBool.Metadata["type"] = []byte("Bool")
-	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED)
+	decodedBool, err := DecodeValue(payloadBool, enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED) // MetadataType is used.
 	assert.NoError(err)
 	assert.Equal(true, decodedBool)
 }
@@ -76,7 +69,14 @@ func Test_DecodeValue_FromParameter_Success(t *testing.T) {
 
 	payloadInt, err = payload.Encode(123)
 	assert.NoError(err)
-	payloadInt.Metadata["type"] = []byte("UnknownType") // should not be used because incorrect
+	payloadInt.Metadata["type"] = []byte("String") // MetadataType is not used.
+	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT)
+	assert.NoError(err)
+	assert.Equal(int64(123), decodedInt)
+
+	payloadInt, err = payload.Encode(123)
+	assert.NoError(err)
+	payloadInt.Metadata["type"] = []byte("UnknownType") // MetadataType is not used.
 	decodedInt, err = DecodeValue(payloadInt, enumspb.INDEXED_VALUE_TYPE_INT)
 	assert.NoError(err)
 	assert.Equal(int64(123), decodedInt)

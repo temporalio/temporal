@@ -46,14 +46,15 @@ func EncodeValue(val interface{}, t enumspb.IndexedValueType) (*commonpb.Payload
 }
 
 // DecodeValue decodes search attribute value from Payload using (in order):
-// 1. type from MetadataType field,
-// 2. passed type t.
+// 1. passed type t.
+// 2. type from MetadataType field, if t is not specified.
 func DecodeValue(value *commonpb.Payload, t enumspb.IndexedValueType) (interface{}, error) {
-	valueTypeMetadata, metadataHasValueType := value.Metadata[MetadataType]
-	if metadataHasValueType {
-		if ivt, ok := enumspb.IndexedValueType_value[string(valueTypeMetadata)]; ok {
-			// MetadataType field has priority over passed type.
-			t = enumspb.IndexedValueType(ivt)
+	if t == enumspb.INDEXED_VALUE_TYPE_UNSPECIFIED {
+		if valueTypeMetadata, metadataHasValueType := value.Metadata[MetadataType]; metadataHasValueType {
+			if ivt, ok := enumspb.IndexedValueType_value[string(valueTypeMetadata)]; ok {
+				// MetadataType field has priority over passed type.
+				t = enumspb.IndexedValueType(ivt)
+			}
 		}
 	}
 
