@@ -38,7 +38,7 @@ type TallyClient struct {
 	// This is the scope provided by user to the client. It contains no client-specific tags.
 	globalRootScope tally.Scope
 	childScopes     map[int]tally.Scope
-	metricDefs      map[int]metricDefinition
+	metricDefs      map[int]MetricDefinition
 	serviceIdx      ServiceIdx
 	scopeWrapper    func(impl internalScope) internalScope
 	perUnitBuckets  map[MetricUnit]tally.Buckets
@@ -103,21 +103,21 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 // IncCounter increments one for a counter and emits
 // to metrics backend
 func (m *TallyClient) IncCounter(scopeIdx int, counterIdx int) {
-	name := string(m.metricDefs[counterIdx].metricName)
+	name := string(m.metricDefs[counterIdx].MetricName)
 	m.childScopes[scopeIdx].Counter(name).Inc(1)
 }
 
 // AddCounter adds delta to the counter and
 // emits to the metrics backend
 func (m *TallyClient) AddCounter(scopeIdx int, counterIdx int, delta int64) {
-	name := string(m.metricDefs[counterIdx].metricName)
+	name := string(m.metricDefs[counterIdx].MetricName)
 	m.childScopes[scopeIdx].Counter(name).Inc(delta)
 }
 
 // StartTimer starts a timer for the given
 // metric name
 func (m *TallyClient) StartTimer(scopeIdx int, timerIdx int) Stopwatch {
-	name := string(m.metricDefs[timerIdx].metricName)
+	name := string(m.metricDefs[timerIdx].MetricName)
 	timer := m.childScopes[scopeIdx].Timer(name)
 	return NewStopwatch(timer)
 }
@@ -125,7 +125,7 @@ func (m *TallyClient) StartTimer(scopeIdx int, timerIdx int) Stopwatch {
 // RecordTimer record and emit a timer for the given
 // metric name
 func (m *TallyClient) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
-	name := string(m.metricDefs[timerIdx].metricName)
+	name := string(m.metricDefs[timerIdx].MetricName)
 	m.childScopes[scopeIdx].Timer(name).Record(d)
 }
 
@@ -133,14 +133,14 @@ func (m *TallyClient) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 // metric name
 func (m *TallyClient) RecordDistribution(scopeIdx int, timerIdx int, d int) {
 	def := m.metricDefs[timerIdx]
-	name := string(def.metricName)
+	name := string(def.MetricName)
 	buckets, _ := m.perUnitBuckets[def.unit]
 	m.childScopes[scopeIdx].Histogram(name, buckets).RecordValue(float64(d))
 }
 
 // UpdateGauge reports Gauge type metric
 func (m *TallyClient) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
-	name := string(m.metricDefs[gaugeIdx].metricName)
+	name := string(m.metricDefs[gaugeIdx].MetricName)
 	m.childScopes[scopeIdx].Gauge(name).Update(value)
 }
 

@@ -43,8 +43,8 @@ func mergeMapToRight(src map[string]string, dest map[string]string) {
 	}
 }
 
-func getMetricDefs(serviceIdx ServiceIdx) map[int]metricDefinition {
-	defs := make(map[int]metricDefinition)
+func getMetricDefs(serviceIdx ServiceIdx) map[int]MetricDefinition {
+	defs := make(map[int]MetricDefinition)
 	for idx, def := range MetricDefs[Common] {
 		defs[idx] = def
 	}

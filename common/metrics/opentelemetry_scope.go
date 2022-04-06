@@ -40,7 +40,7 @@ type (
 		labels            []attribute.KeyValue
 		tags              map[string]string
 		rootScope         *opentelemetryScope
-		defs              map[int]metricDefinition
+		defs              map[int]MetricDefinition
 		isNamespaceTagged bool
 
 		gaugeCache OtelGaugeCache
@@ -52,7 +52,7 @@ func newOpentelemetryScope(
 	meterMust metric.MeterMust,
 	rootScope *opentelemetryScope,
 	tags map[string]string,
-	defs map[int]metricDefinition,
+	defs map[int]MetricDefinition,
 	isNamespace bool,
 	gaugeCache OtelGaugeCache,
 	selfAsRoot bool,
@@ -80,10 +80,10 @@ func (m *opentelemetryScope) IncCounter(id int) {
 func (m *opentelemetryScope) AddCounter(id int, delta int64) {
 	def := m.defs[id]
 	ctx := context.Background()
-	m.meterMust.NewInt64Counter(def.metricName.String()).Add(ctx, delta, m.labels...)
+	m.meterMust.NewInt64Counter(def.MetricName.String()).Add(ctx, delta, m.labels...)
 
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.meterMust.NewInt64Counter(def.metricRollupName.String()).Add(
+	if !def.MetricRollupName.Empty() && (m.rootScope != nil) {
+		m.rootScope.meterMust.NewInt64Counter(def.MetricRollupName.String()).Add(
 			ctx, delta, m.rootScope.labels...,
 		)
 	}
@@ -91,9 +91,9 @@ func (m *opentelemetryScope) AddCounter(id int, delta int64) {
 
 func (m *opentelemetryScope) UpdateGauge(id int, value float64) {
 	def := m.defs[id]
-	m.gaugeCache.Set(def.metricName.String(), m.tags, value)
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.gaugeCache.Set(def.metricRollupName.String(), m.rootScope.tags, value)
+	m.gaugeCache.Set(def.MetricName.String(), m.tags, value)
+	if !def.MetricRollupName.Empty() && (m.rootScope != nil) {
+		m.gaugeCache.Set(def.MetricRollupName.String(), m.rootScope.tags, value)
 	}
 }
 
@@ -105,18 +105,18 @@ func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
 	}
 
 	timer := newOpenTelemetryStopwatchMetric(
-		m.meterMust.NewInt64Histogram(def.metricName.String(), opt...),
+		m.meterMust.NewInt64Histogram(def.MetricName.String(), opt...),
 		m.labels)
 	switch {
-	case !def.metricRollupName.Empty():
+	case !def.MetricRollupName.Empty():
 		timerRollup := newOpenTelemetryStopwatchMetric(
-			m.rootScope.meterMust.NewInt64Histogram(def.metricName.String(), opt...),
+			m.rootScope.meterMust.NewInt64Histogram(def.MetricName.String(), opt...),
 			m.rootScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerRollup})
 	case m.isNamespaceTagged:
 		allScope := m.taggedString(map[string]string{namespace: namespaceAllValue}, false)
 		timerAll := newOpenTelemetryStopwatchMetric(
-			allScope.meterMust.NewInt64Histogram(def.metricName.String(), opt...),
+			allScope.meterMust.NewInt64Histogram(def.MetricName.String(), opt...),
 			allScope.labels)
 		return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{timer, timerAll})
 	default:
@@ -133,21 +133,21 @@ func (m *opentelemetryScope) RecordTimer(id int, d time.Duration) {
 		opt = append(opt, unitToOptions(def.unit))
 	}
 
-	m.meterMust.NewInt64Histogram(def.metricName.String(), opt...).Record(ctx, d.Nanoseconds(), m.labels...)
+	m.meterMust.NewInt64Histogram(def.MetricName.String(), opt...).Record(ctx, d.Nanoseconds(), m.labels...)
 
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.meterMust.NewInt64Histogram(def.metricRollupName.String(), opt...).Record(
+	if !def.MetricRollupName.Empty() && (m.rootScope != nil) {
+		m.rootScope.meterMust.NewInt64Histogram(def.MetricRollupName.String(), opt...).Record(
 			ctx, d.Nanoseconds(), m.rootScope.labels...,
 		)
 	}
 
 	switch {
-	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		m.rootScope.meterMust.NewInt64Histogram(def.metricRollupName.String(), opt...).Record(
+	case !def.MetricRollupName.Empty() && (m.rootScope != nil):
+		m.rootScope.meterMust.NewInt64Histogram(def.MetricRollupName.String(), opt...).Record(
 			ctx, d.Nanoseconds(), m.rootScope.labels...,
 		)
 	case m.isNamespaceTagged:
-		m.meterMust.NewInt64Histogram(def.metricName.String(), opt...).Record(
+		m.meterMust.NewInt64Histogram(def.MetricName.String(), opt...).Record(
 			ctx,
 			d.Nanoseconds(),
 			m.taggedString(map[string]string{namespace: namespaceAllValue}, false).labels...,
@@ -164,21 +164,21 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	}
 
 	ctx := context.Background()
-	m.meterMust.NewInt64Histogram(def.metricName.String(), opt...).Record(ctx, value, m.labels...)
+	m.meterMust.NewInt64Histogram(def.MetricName.String(), opt...).Record(ctx, value, m.labels...)
 
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		m.rootScope.meterMust.NewInt64Histogram(def.metricRollupName.String(), opt...).Record(
+	if !def.MetricRollupName.Empty() && (m.rootScope != nil) {
+		m.rootScope.meterMust.NewInt64Histogram(def.MetricRollupName.String(), opt...).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	}
 
 	switch {
-	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		m.rootScope.meterMust.NewInt64Histogram(def.metricRollupName.String(), opt...).Record(
+	case !def.MetricRollupName.Empty() && (m.rootScope != nil):
+		m.rootScope.meterMust.NewInt64Histogram(def.MetricRollupName.String(), opt...).Record(
 			ctx, value, m.rootScope.labels...,
 		)
 	case m.isNamespaceTagged:
-		m.meterMust.NewInt64Histogram(def.metricName.String(), opt...).Record(
+		m.meterMust.NewInt64Histogram(def.MetricName.String(), opt...).Record(
 			ctx,
 			value,
 			m.taggedString(map[string]string{namespace: namespaceAllValue}, false).labels...,
