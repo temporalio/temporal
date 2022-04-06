@@ -111,7 +111,7 @@ func (v *Validator) Validate(searchAttributes *commonpb.SearchAttributes, namesp
 			if err = payload.Decode(saPayload, &invalidValue); err != nil {
 				invalidValue = fmt.Sprintf("value from <%s>", saPayload.String())
 			}
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%v is not a valid value for search attribute %s of type %s", invalidValue, saName, saType))
+			return serviceerror.NewInvalidArgument(fmt.Sprintf("invalid value for search attribute %s of type %s: %v", saName, saType, invalidValue))
 		}
 	}
 	return nil

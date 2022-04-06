@@ -97,7 +97,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate() {
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
 	s.Error(err)
-	s.Equal("123 is not a valid value for search attribute CustomBoolField of type Bool", err.Error())
+	s.Equal("invalid value for search attribute CustomBoolField of type Bool: 123", err.Error())
 
 	intArrayPayload, err := payload.Encode([]int{1, 2})
 	s.NoError(err)
@@ -174,7 +174,7 @@ func (s *searchAttributesValidatorSuite) TestSearchAttributesValidate_Mapper() {
 	attr.IndexedFields = fields
 	err = saValidator.Validate(attr, namespace, "")
 	s.Error(err)
-	s.Equal("123 is not a valid value for search attribute alias_of_CustomBoolField of type Bool", err.Error())
+	s.Equal("invalid value for search attribute alias_of_CustomBoolField of type Bool: 123", err.Error())
 }
 
 func (s *searchAttributesValidatorSuite) TestSearchAttributesValidateSize() {
