@@ -220,6 +220,7 @@ func (c *ContextImpl) Unlock(
 func (c *ContextImpl) Clear() {
 	c.metricsClient.IncCounter(metrics.WorkflowContextScope, metrics.WorkflowContextCleared)
 	if c.MutableState != nil {
+		fmt.Println(c.MutableState.(*MutableStateImpl) == nil)
 		c.MutableState.GetQueryRegistry().Clear()
 	}
 	c.MutableState = nil
@@ -281,7 +282,7 @@ func (c *ContextImpl) LoadWorkflowExecution(ctx context.Context) (MutableState, 
 			return nil, err
 		}
 
-		c.MutableState, err = newMutableStateBuilderFromDB(
+		mutableState, err := newMutableStateBuilderFromDB(
 			ctx,
 			c.shard,
 			c.shard.GetEventsCache(),
@@ -293,6 +294,7 @@ func (c *ContextImpl) LoadWorkflowExecution(ctx context.Context) (MutableState, 
 		if err != nil {
 			return nil, err
 		}
+		c.MutableState = mutableState
 
 		c.stats = response.State.ExecutionInfo.ExecutionStats
 	}
