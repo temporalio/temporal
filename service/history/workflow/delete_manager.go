@@ -140,7 +140,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		// workflow should not be deleted. NotFound errors are ignored by task processor.
 		return consts.ErrWorkflowNotCompleted
 	}
-	completionEvent, err := ms.GetCompletionEvent(ctx)
+	wfCloseTime, err := ms.GetWorkflowCloseTime()
 	if err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		sourceTaskVersion,
 		false,
 		nil,
-		completionEvent.GetEventTime(),
+		wfCloseTime,
 		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
 	)
 }
@@ -174,7 +174,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
 		return nil
 	}
-	completionEvent, err := ms.GetCompletionEvent(ctx)
+	wfCloseTime, err := ms.GetWorkflowCloseTime()
 	if err != nil {
 		return err
 	}
@@ -188,7 +188,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		sourceTaskVersion,
 		true,
 		nil,
-		completionEvent.GetEventTime(),
+		wfCloseTime,
 		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)
 }
@@ -209,12 +209,13 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByReplication(
 
 	var startTime *time.Time
 	var closedTime *time.Time
+
 	if ms.GetExecutionState().State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		completionEvent, err := ms.GetCompletionEvent(ctx)
+		var err error
+		closedTime, err = ms.GetWorkflowCloseTime()
 		if err != nil {
 			return err
 		}
-		closedTime = completionEvent.GetEventTime()
 	} else {
 		startTime = ms.GetExecutionInfo().GetStartTime()
 	}

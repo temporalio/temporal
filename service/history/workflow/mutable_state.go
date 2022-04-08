@@ -146,6 +146,7 @@ type (
 		GetChildExecutionInfo(int64) (*persistencespb.ChildExecutionInfo, bool)
 		GetChildExecutionInitiatedEvent(context.Context, int64) (*historypb.HistoryEvent, error)
 		GetCompletionEvent(context.Context) (*historypb.HistoryEvent, error)
+		GetWorkflowCloseTime() (*time.Time, error)
 		GetWorkflowTaskInfo(int64) (*WorkflowTaskInfo, bool)
 		GetNamespaceEntry() *namespace.Namespace
 		GetStartEvent(context.Context) (*historypb.HistoryEvent, error)

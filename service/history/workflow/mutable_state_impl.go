@@ -358,6 +358,16 @@ func newMutableStateBuilderFromDB(
 		}
 	}
 
+	// Workflow created before 1.15 does not have close time.
+	// This if is for backward compatibility.
+	if mutableState.executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && mutableState.executionInfo.CloseTime == nil {
+		completionEvent, err := mutableState.GetCompletionEvent(ctx)
+		if err != nil {
+			return nil, err
+		}
+		mutableState.executionInfo.CloseTime = completionEvent.GetEventTime()
+	}
+
 	return mutableState, nil
 }
 
@@ -2353,6 +2363,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionCompletedEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId()
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2396,6 +2407,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionFailedEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId()
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2438,6 +2450,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionTimedoutEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2516,6 +2529,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionCanceledEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = ""
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -3037,6 +3051,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionTerminatedEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = ""
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -3188,6 +3203,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionContinuedAsNewEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
+	e.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(continueAsNewEvent)
 	return nil
@@ -3684,6 +3700,14 @@ func (e *MutableStateImpl) GetUpdateCondition() (int64, int64) {
 
 func (e *MutableStateImpl) GetWorkflowStateStatus() (enumsspb.WorkflowExecutionState, enumspb.WorkflowExecutionStatus) {
 	return e.executionState.State, e.executionState.Status
+}
+
+func (e *MutableStateImpl) GetWorkflowCloseTime() (*time.Time, error) {
+	if e.executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return nil, ErrMissingWorkflowCompletionEvent
+	}
+
+	return e.executionInfo.CloseTime, nil
 }
 
 func (e *MutableStateImpl) UpdateWorkflowStateStatus(

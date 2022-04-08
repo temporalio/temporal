@@ -39,8 +39,6 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -120,12 +118,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	completionEvent := &historypb.HistoryEvent{
-		EventId:   int64(1),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		EventTime: &closeTime,
-	}
-	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetWorkflowCloseTime().Return(&closeTime, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -163,12 +156,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	completionEvent := &historypb.HistoryEvent{
-		EventId:   int64(1),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		EventTime: &closeTime,
-	}
-	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetWorkflowCloseTime().Return(&closeTime, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -249,12 +237,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	completionEvent := &historypb.HistoryEvent{
-		EventId:   int64(1),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		EventTime: &closeTime,
-	}
-	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetWorkflowCloseTime().Return(&closeTime, nil)
 
 	// ====================== Archival mocks =======================================
 	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
@@ -325,12 +308,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	completionEvent := &historypb.HistoryEvent{
-		EventId:   int64(1),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		EventTime: &closeTime,
-	}
-	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
+	mockMutableState.EXPECT().GetWorkflowCloseTime().Return(&closeTime, nil)
 
 	// ====================== Archival mocks =======================================
 	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
