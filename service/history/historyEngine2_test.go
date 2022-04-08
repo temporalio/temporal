@@ -751,9 +751,10 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_Finished() {
 
 	identity := "testIdentity"
 	tl := "testTaskQueue"
-
+	now := time.Now().UTC()
 	msBuilder := s.createExecutionStartedState(workflowExecution, tl, identity, false)
 	msBuilder.GetExecutionState().State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	msBuilder.GetExecutionInfo().CloseTime = &now
 	ms1 := workflow.TestCloneToProto(msBuilder)
 	gwmsResponse1 := &persistence.GetWorkflowExecutionResponse{State: ms1}
 
@@ -1442,6 +1443,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
 	requestID := uuid.New()
+	now := time.Now()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1471,6 +1473,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_WorkflowNotRunning()
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := workflow.TestCloneToProto(msBuilder)
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.CloseTime = &now
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 
@@ -1499,6 +1502,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
+	now := time.Now()
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1528,6 +1532,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_DuplicateReque
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := workflow.TestCloneToProto(msBuilder)
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.CloseTime = &now
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
@@ -1574,6 +1579,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 		RunId:      tests.RunID,
 	}
 	tl := "testTaskQueue"
+	now := time.Now()
 	sRequest := &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
@@ -1603,6 +1609,7 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	addWorkflowExecutionStartedEvent(msBuilder, we, "wType", tl, payloads.EncodeString("input"), 100*time.Second, 50*time.Second, 200*time.Second, identity)
 	ms := workflow.TestCloneToProto(msBuilder)
 	ms.ExecutionState.State = enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED
+	ms.ExecutionInfo.CloseTime = &now
 	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
 	gceResponse := &persistence.GetCurrentExecutionResponse{RunID: runID}
 	workflowAlreadyStartedErr := &persistence.CurrentWorkflowConditionFailedError{
