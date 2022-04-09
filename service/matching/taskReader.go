@@ -171,6 +171,8 @@ Loop:
 				if !isReadBatchDone {
 					tr.Signal()
 				}
+				// sleep for a while when no tasks is available, otherwise too many queries
+				time.Sleep(time.Second)
 				continue Loop
 			}
 
