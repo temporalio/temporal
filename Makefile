@@ -78,7 +78,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 PINNED_DEPENDENCIES := \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
 	github.com/go-sql-driver/mysql@v1.5.0 \
-	go.opentelemetry.io/otel/metric@v0.27.0 # There's breaking change of metrics API in v0.28.0
+	go.opentelemetry.io/otel/metric@v0.27.0 # There are breaking changes in v0.28.0
 
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
