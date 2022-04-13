@@ -54,7 +54,7 @@ func NewOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
-	globalRootScope := newOpentelemetryScope(serviceIdx, reporter.GetMeterMust(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
+	globalRootScope := newOpentelemetryScope(serviceIdx, reporter.GetMeter(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
 
 	serviceTypeTagValue, err := MetricsServiceIdxToServiceName(serviceIdx)
 	if err != nil {

@@ -4,7 +4,7 @@ go 1.18
 
 require (
 	cloud.google.com/go/storage v1.22.0
-	github.com/aws/aws-sdk-go v1.43.37
+	github.com/aws/aws-sdk-go v1.43.38
 	github.com/blang/semver/v4 v4.0.0
 	github.com/brianvoe/gofakeit/v6 v6.15.0
 	github.com/cactus/go-statsd-client/statsd v0.0.0-20200423205355-cb0885a1018c
@@ -34,11 +34,10 @@ require (
 	github.com/urfave/cli/v2 v2.4.0
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
 	go.opentelemetry.io/otel v1.6.3
-	go.opentelemetry.io/otel/exporters/prometheus v0.27.0
-	go.opentelemetry.io/otel/metric v0.27.0
+	go.opentelemetry.io/otel/exporters/prometheus v0.29.0
+	go.opentelemetry.io/otel/metric v0.29.0
 	go.opentelemetry.io/otel/sdk v1.6.3
-	go.opentelemetry.io/otel/sdk/export/metric v0.27.0
-	go.opentelemetry.io/otel/sdk/metric v0.27.0
+	go.opentelemetry.io/otel/sdk/metric v0.29.0
 	go.temporal.io/api v1.7.1-0.20220326004856-88a7c92fb8b4
 	go.temporal.io/sdk v1.14.0
 	go.temporal.io/version v0.3.0
@@ -50,7 +49,7 @@ require (
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306
 	google.golang.org/api v0.74.0
 	google.golang.org/grpc v1.45.0
-	google.golang.org/grpc/examples v0.0.0-20220408224156-ebd098392a8b
+	google.golang.org/grpc/examples v0.0.0-20220412212246-3bf6719fc8ab
 	gopkg.in/square/go-jose.v2 v2.6.0
 	gopkg.in/validator.v2 v2.0.1
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b
@@ -98,12 +97,11 @@ require (
 	github.com/twmb/murmur3 v1.1.6 // indirect
 	github.com/uber-common/bark v1.3.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	go.opentelemetry.io/otel/internal/metric v0.27.0 // indirect
 	go.opentelemetry.io/otel/trace v1.6.3 // indirect
 	go.uber.org/dig v1.14.1 // indirect
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
 	golang.org/x/net v0.0.0-20220412020605-290c469a71a5 // indirect
-	golang.org/x/sys v0.0.0-20220412071739-889880a91fd5 // indirect
+	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/appengine v1.6.7 // indirect

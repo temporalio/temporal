@@ -32,6 +32,7 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/instrument"
 	"go.uber.org/atomic"
 )
 
@@ -41,9 +42,9 @@ type (
 	}
 
 	otelGaugeCache struct {
-		lock      sync.RWMutex
-		gauges    map[string]*gaugeValues
-		meterMust metric.MeterMust
+		lock   sync.RWMutex
+		gauges map[string]*gaugeValues
+		meter  metric.Meter
 	}
 
 	gaugeValues struct {
@@ -94,11 +95,11 @@ func (o *gaugeValues) Update(tags map[string]string, value float64) {
 	gaugeValue.value.Store(value)
 }
 
-func NewOtelGaugeCache(meterMust metric.MeterMust) OtelGaugeCache {
+func NewOtelGaugeCache(meter metric.Meter) OtelGaugeCache {
 	return &otelGaugeCache{
-		lock:      sync.RWMutex{},
-		gauges:    make(map[string]*gaugeValues),
-		meterMust: meterMust,
+		lock:   sync.RWMutex{},
+		gauges: make(map[string]*gaugeValues),
+		meter:  meter,
 	}
 }
 
@@ -120,16 +121,24 @@ func (o *otelGaugeCache) getGaugeValues(name string) *gaugeValues {
 	}
 
 	o.gauges[name] = values
-	o.meterMust.NewFloat64GaugeObserver(name,
-		func(ctx context.Context, result metric.Float64ObserverResult) {
+	g, err := o.meter.AsyncFloat64().Gauge(name)
+	if err != nil {
+		panic(err)
+	}
+	err = o.meter.RegisterCallback(
+		[]instrument.Asynchronous{g},
+		func(ctx context.Context) {
 			values.lock.RLock()
 			defer values.lock.RUnlock()
 
 			for _, v := range values.values {
-				result.Observe(v.value.Load(), v.tags...)
+				g.Observe(ctx, v.value.Load(), v.tags...)
 			}
 		},
 	)
+	if err != nil {
+		panic(err)
+	}
 
 	return values
 }

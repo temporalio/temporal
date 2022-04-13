@@ -31,8 +31,8 @@ import (
 
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/sdk/export/metric/aggregation"
 	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
 	"go.opentelemetry.io/otel/sdk/resource"
 
@@ -40,20 +40,19 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-var _ OpentelemetryMustProvider = (*opentelemetryMustProviderImpl)(nil)
+var _ OpentelemetryProvider = (*opentelemetryProviderImpl)(nil)
 
 type (
-	OpentelemetryMustProvider interface {
+	OpentelemetryProvider interface {
 		Stop(logger log.Logger)
-		GetMeterMust() metric.MeterMust
+		GetMeter() metric.Meter
 	}
 
-	opentelemetryMustProviderImpl struct {
-		exporter  *prometheus.Exporter
-		meter     metric.Meter
-		meterMust metric.MeterMust
-		config    *PrometheusConfig
-		server    *http.Server
+	opentelemetryProviderImpl struct {
+		exporter *prometheus.Exporter
+		meter    metric.Meter
+		config   *PrometheusConfig
+		server   *http.Server
 	}
 )
 
@@ -61,7 +60,7 @@ func NewOpentelemetryMustProvider(
 	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
-) (*opentelemetryMustProviderImpl, error) {
+) (*opentelemetryProviderImpl, error) {
 	histogramBoundaries := prometheusConfig.DefaultHistogramBoundaries
 	if len(histogramBoundaries) == 0 {
 		histogramBoundaries = defaultHistogramBoundaries
@@ -88,13 +87,11 @@ func NewOpentelemetryMustProvider(
 	metricServer := initPrometheusListener(prometheusConfig, logger, exporter)
 
 	meter := c.Meter("temporal")
-	meterMust := metric.Must(meter)
-	reporter := &opentelemetryMustProviderImpl{
-		exporter:  exporter,
-		meter:     meter,
-		meterMust: meterMust,
-		config:    prometheusConfig,
-		server:    metricServer,
+	reporter := &opentelemetryProviderImpl{
+		exporter: exporter,
+		meter:    meter,
+		config:   prometheusConfig,
+		server:   metricServer,
 	}
 
 	return reporter, nil
@@ -124,11 +121,11 @@ func initPrometheusListener(config *PrometheusConfig, logger log.Logger, exporte
 	return server
 }
 
-func (r *opentelemetryMustProviderImpl) GetMeterMust() metric.MeterMust {
-	return r.meterMust
+func (r *opentelemetryProviderImpl) GetMeter() metric.Meter {
+	return r.meter
 }
 
-func (r *opentelemetryMustProviderImpl) Stop(logger log.Logger) {
+func (r *opentelemetryProviderImpl) Stop(logger log.Logger) {
 	ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
 	defer closeCtx()
 	if err := r.server.Shutdown(ctx); !(err == nil || err == http.ErrServerClosed) {

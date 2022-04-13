@@ -33,13 +33,13 @@ import (
 
 var _ Reporter = (OpentelemetryReporter)(nil)
 var _ OpentelemetryReporter = (*opentelemetryReporterImpl)(nil)
-var _ OpentelemetryMustProvider = (*opentelemetryMustProviderImpl)(nil)
+var _ OpentelemetryProvider = (*opentelemetryProviderImpl)(nil)
 
 type (
 	OpentelemetryReporter interface {
 		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
 		Stop(logger log.Logger)
-		GetMeterMust() metric.MeterMust
+		GetMeter() metric.Meter
 		UserScope() UserScope
 	}
 
@@ -47,11 +47,10 @@ type (
 	opentelemetryReporterImpl struct {
 		exporter     *prometheus.Exporter
 		meter        metric.Meter
-		meterMust    metric.MeterMust
 		clientConfig *ClientConfig
 		gaugeCache   OtelGaugeCache
 		userScope    UserScope
-		mustProvider OpentelemetryMustProvider
+		mustProvider OpentelemetryProvider
 	}
 
 	OpentelemetryListener struct {
@@ -73,11 +72,11 @@ func NewOpentelemeteryReporterWithMust(
 func NewOpentelemeteryReporter(
 	logger log.Logger, // keeping this to maintain API in case of adding more logging later
 	clientConfig *ClientConfig,
-	mustProvider OpentelemetryMustProvider,
+	mustProvider OpentelemetryProvider,
 ) (*opentelemetryReporterImpl, error) {
-	meterMust := mustProvider.GetMeterMust()
-	gaugeCache := NewOtelGaugeCache(meterMust)
-	userScope := NewOpentelemetryUserScope(meterMust, clientConfig.Tags, gaugeCache)
+	meter := mustProvider.GetMeter()
+	gaugeCache := NewOtelGaugeCache(meter)
+	userScope := NewOpentelemetryUserScope(meter, clientConfig.Tags, gaugeCache)
 	reporter := &opentelemetryReporterImpl{
 		clientConfig: clientConfig,
 		gaugeCache:   gaugeCache,
@@ -88,8 +87,8 @@ func NewOpentelemeteryReporter(
 	return reporter, nil
 }
 
-func (r *opentelemetryReporterImpl) GetMeterMust() metric.MeterMust {
-	return r.mustProvider.GetMeterMust()
+func (r *opentelemetryReporterImpl) GetMeter() metric.Meter {
+	return r.mustProvider.GetMeter()
 }
 
 func (r *opentelemetryReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
