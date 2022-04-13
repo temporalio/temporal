@@ -132,7 +132,8 @@ func runHelloWorldMultipleDials(
 	serverFactory *TestFactory,
 	clientFactory *TestFactory,
 	nDials int,
-	validator func(*credentials.TLSInfo, error)) {
+	validator func(*credentials.TLSInfo, error),
+) {
 
 	server, port := startHelloWorldServer(s, serverFactory)
 	defer server.Stop()
@@ -148,7 +149,8 @@ func runHelloWorldWithRefresh(
 	host string,
 	serverFactory *TestFactory,
 	clientFactory *TestFactory,
-	validator func(*credentials.TLSInfo, error)) {
+	validator func(*credentials.TLSInfo, error),
+) {
 
 	server, port := startHelloWorldServer(s, serverFactory)
 	defer server.Stop()
@@ -166,7 +168,8 @@ func dialHelloAndGetTLSInfo(
 	s suite.Suite,
 	hostport string,
 	clientFactory *TestFactory,
-	serverType ServerUsageType) (*credentials.TLSInfo, error) {
+	serverType ServerUsageType,
+) (*credentials.TLSInfo, error) {
 
 	logger := log.NewNoopLogger()
 	var cfg *tls.Config
@@ -201,16 +204,4 @@ func dialHelloAndGetTLSInfo(
 
 	_ = clientConn.Close()
 	return &tlsInfo, err
-}
-
-func certFilePath(dir string) string {
-	return dir + "/cert_pub.pem"
-}
-
-func keyFilePath(dir string) string {
-	return dir + "/cert_priv.pem"
-}
-
-func caFilePath(dir string) string {
-	return dir + "/ca_pub.pem"
 }

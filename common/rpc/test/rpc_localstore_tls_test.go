@@ -25,13 +25,8 @@
 package rpc
 
 import (
-	"bytes"
-	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"encoding/base64"
-	"encoding/pem"
-	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -46,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
 	"go.temporal.io/server/common/rpc/encryption"
+	"go.temporal.io/server/tests/testhelper"
 )
 
 const (
@@ -64,10 +60,6 @@ type localStoreRPCSuite struct {
 	insecureRPCFactory                      *TestFactory
 	internodeMutualTLSRPCFactory            *TestFactory
 	internodeServerTLSRPCFactory            *TestFactory
-	ringpopMutualTLSRPCFactoryA             *TestFactory
-	ringpopMutualTLSRPCFactoryB             *TestFactory
-	ringpopServerTLSRPCFactoryA             *TestFactory
-	ringpopServerTLSRPCFactoryB             *TestFactory
 	internodeAltMutualTLSRPCFactory         *TestFactory
 	frontendMutualTLSRPCFactory             *TestFactory
 	frontendServerTLSRPCFactory             *TestFactory
@@ -86,17 +78,17 @@ type localStoreRPCSuite struct {
 	internodeRefreshCertDir string
 	frontendRefreshCertDir  string
 
-	internodeChain        CertChain
-	frontendChain         CertChain
-	frontendAltChain      CertChain
+	internodeChain        testhelper.CertChain
+	frontendChain         testhelper.CertChain
+	frontendAltChain      testhelper.CertChain
 	frontendRollingCerts  []*tls.Certificate
-	internodeRefreshChain CertChain
+	internodeRefreshChain testhelper.CertChain
 	internodeRefreshCA    *tls.Certificate
-	frontendRefreshChain  CertChain
+	frontendRefreshChain  testhelper.CertChain
 	frontendRefreshCA     *tls.Certificate
 
 	frontendClientCertDir string
-	frontendClientChain   CertChain
+	frontendClientChain   testhelper.CertChain
 
 	membershipConfig               config.Membership
 	frontendConfigServerTLS        config.GroupTLS
@@ -120,12 +112,6 @@ type localStoreRPCSuite struct {
 	dynamicConfigProvider *encryption.TestDynamicTLSConfigProvider
 }
 
-type CertChain struct {
-	CertPubFile string
-	CertKeyFile string
-	CaPubFile   string
-}
-
 func TestLocalStoreTLSSuite(t *testing.T) {
 	suite.Run(t, &localStoreRPCSuite{})
 }
@@ -134,6 +120,7 @@ func (s *localStoreRPCSuite) TearDownSuite() {
 	_ = os.RemoveAll(s.internodeCertDir)
 	_ = os.RemoveAll(s.frontendCertDir)
 }
+
 func (s *localStoreRPCSuite) SetupSuite() {
 	s.Assertions = require.New(s.T())
 	s.logger = log.NewTestLogger()
@@ -146,31 +133,38 @@ func (s *localStoreRPCSuite) SetupSuite() {
 
 	s.frontendCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontend")
 	s.NoError(err)
-	s.frontendChain = s.GenerateTestChain(s.frontendCertDir, localhostIPv4)
+	s.frontendChain, err = testhelper.GenerateTestChain(s.frontendCertDir, localhostIPv4)
+	s.NoError(err)
 
 	s.internodeCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteInternode")
 	s.NoError(err)
-	s.internodeChain = s.GenerateTestChain(s.internodeCertDir, localhostIPv4)
+	s.internodeChain, err = testhelper.GenerateTestChain(s.internodeCertDir, localhostIPv4)
+	s.NoError(err)
 
 	s.frontendAltCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendAlt")
 	s.NoError(err)
-	s.frontendAltChain = s.GenerateTestChain(s.frontendAltCertDir, localhost)
+	s.frontendAltChain, err = testhelper.GenerateTestChain(s.frontendAltCertDir, localhost)
+	s.NoError(err)
 
 	s.frontendClientCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendClient")
 	s.NoError(err)
-	s.frontendClientChain = s.GenerateTestChain(s.frontendClientCertDir, localhostIPv4)
+	s.frontendClientChain, err = testhelper.GenerateTestChain(s.frontendClientCertDir, localhostIPv4)
+	s.NoError(err)
 
 	s.frontendRollingCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendRolling")
 	s.NoError(err)
-	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool = s.GenerateTestCerts(s.frontendRollingCertDir, localhostIPv4, 2)
+	s.frontendRollingCerts, s.dynamicCACertPool, s.wrongCACertPool, err = testhelper.GenerateTestCerts(s.frontendRollingCertDir, localhostIPv4, 2)
+	s.NoError(err)
 
 	s.internodeRefreshCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteInternodeRefresh")
 	s.NoError(err)
-	s.internodeRefreshChain, s.internodeRefreshCA = s.GenerateTestChainWithSN(s.internodeRefreshCertDir, localhostIPv4, internodeServerCertSerialNumber)
+	s.internodeRefreshChain, s.internodeRefreshCA, err = testhelper.GenerateTestChainWithSN(s.internodeRefreshCertDir, localhostIPv4, internodeServerCertSerialNumber)
+	s.NoError(err)
 
 	s.frontendRefreshCertDir, err = os.MkdirTemp("", "localStoreRPCSuiteFrontendRefresh")
 	s.NoError(err)
-	s.frontendRefreshChain, s.frontendRefreshCA = s.GenerateTestChainWithSN(s.frontendRefreshCertDir, localhostIPv4, frontendServerCertSerialNumber)
+	s.frontendRefreshChain, s.frontendRefreshCA, err = testhelper.GenerateTestChainWithSN(s.frontendRefreshCertDir, localhostIPv4, frontendServerCertSerialNumber)
+	s.NoError(err)
 
 	s.membershipConfig = config.Membership{
 		MaxJoinDuration:  5,
@@ -202,7 +196,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	}
 	s.frontendConfigRootCAOnly = config.GroupTLS{
 		Client: config.ClientTLS{
-			RootCAData: []string{convertFileToBase64(s.frontendChain.CaPubFile)},
+			RootCAData: []string{testhelper.ConvertFileToBase64(s.frontendChain.CaPubFile)},
 		},
 	}
 	s.frontendConfigRootCAForceTLS = s.frontendConfigRootCAOnly
@@ -213,7 +207,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 			RequireClientAuth: true,
 		},
 		Client: config.ClientTLS{
-			RootCAData: []string{convertFileToBase64(s.frontendAltChain.CaPubFile)},
+			RootCAData: []string{testhelper.ConvertFileToBase64(s.frontendAltChain.CaPubFile)},
 		},
 	}
 	s.systemWorkerOnly = config.WorkerTLS{
@@ -238,11 +232,11 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	}
 	s.internodeConfigServerTLS = config.GroupTLS{
 		Server: config.ServerTLS{
-			CertData: convertFileToBase64(s.internodeChain.CertPubFile),
-			KeyData:  convertFileToBase64(s.internodeChain.CertKeyFile),
+			CertData: testhelper.ConvertFileToBase64(s.internodeChain.CertPubFile),
+			KeyData:  testhelper.ConvertFileToBase64(s.internodeChain.CertKeyFile),
 		},
 		Client: config.ClientTLS{
-			RootCAData: []string{convertFileToBase64(s.internodeChain.CaPubFile)},
+			RootCAData: []string{testhelper.ConvertFileToBase64(s.internodeChain.CaPubFile)},
 		},
 	}
 	s.internodeConfigAltMutualTLS = config.GroupTLS{
@@ -261,7 +255,7 @@ func (s *localStoreRPCSuite) SetupSuite() {
 	s.frontendConfigMutualTLSRefresh = mutualGroupTLSFromChain(s.frontendRefreshChain)
 }
 
-func mutualGroupTLSFromChain(chain CertChain) config.GroupTLS {
+func mutualGroupTLSFromChain(chain testhelper.CertChain) config.GroupTLS {
 
 	return config.GroupTLS{
 		Server: config.ServerTLS{
@@ -280,7 +274,6 @@ func (s *localStoreRPCSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 
 	s.setupInternode()
-	s.setupInternodeRingpop()
 	s.setupFrontend()
 }
 
@@ -447,148 +440,6 @@ func (s *localStoreRPCSuite) setupInternode() {
 	s.internodeMutualTLSRPCRefreshFactory = i(internodeMutualTLSRefreshFactory)
 }
 
-func (s *localStoreRPCSuite) setupInternodeRingpop() {
-	ringpopServerTLS := &config.Global{
-		Membership: s.membershipConfig,
-		TLS: config.RootTLS{
-			Internode: s.internodeConfigServerTLS,
-		},
-	}
-
-	ringpopMutualTLS := &config.Global{
-		Membership: s.membershipConfig,
-		TLS: config.RootTLS{
-			Internode: s.internodeConfigMutualTLS,
-		},
-	}
-
-	rpcCfgA := &config.RPC{GRPCPort: 0, MembershipPort: 7600, BindOnIP: localhostIPv4}
-	rpcCfgB := &config.RPC{GRPCPort: 0, MembershipPort: 7601, BindOnIP: localhostIPv4}
-
-	dcClient := dynamicconfig.NewMockClient(s.controller)
-	dcClient.EXPECT().GetBoolValue(dynamicconfig.Key(dynamicconfig.EnableRingpopTLS), gomock.Any(), false).Return(true, nil).AnyTimes()
-	dc := dynamicconfig.NewCollection(dcClient, s.logger)
-
-	provider, err := encryption.NewTLSConfigProviderFromConfig(ringpopMutualTLS.TLS, nil, s.logger, nil)
-	s.NoError(err)
-	ringpopMutualTLSFactoryA := rpc.NewFactory(rpcCfgA, "tester-A", s.logger, provider, dc, clusterMetadata)
-	s.NotNil(ringpopMutualTLSFactoryA)
-	ringpopMutualTLSFactoryB := rpc.NewFactory(rpcCfgB, "tester-B", s.logger, provider, dc, clusterMetadata)
-	s.NotNil(ringpopMutualTLSFactoryB)
-
-	provider, err = encryption.NewTLSConfigProviderFromConfig(ringpopServerTLS.TLS, nil, s.logger, nil)
-	s.NoError(err)
-	ringpopServerTLSFactoryA := rpc.NewFactory(rpcCfgA, "tester-A", s.logger, provider, dc, clusterMetadata)
-	s.NotNil(ringpopServerTLSFactoryA)
-	ringpopServerTLSFactoryB := rpc.NewFactory(rpcCfgB, "tester-B", s.logger, provider, dc, clusterMetadata)
-	s.NotNil(ringpopServerTLSFactoryB)
-
-	s.ringpopMutualTLSRPCFactoryA = i(ringpopMutualTLSFactoryA)
-	s.ringpopMutualTLSRPCFactoryB = i(ringpopMutualTLSFactoryB)
-	s.ringpopServerTLSRPCFactoryA = i(ringpopServerTLSFactoryA)
-	s.ringpopServerTLSRPCFactoryB = i(ringpopServerTLSFactoryB)
-}
-
-func (s *localStoreRPCSuite) GenerateTestChain(tempDir string, commonName string) CertChain {
-
-	chain, _ := s.GenerateTestChainWithSN(tempDir, commonName, 0)
-	return chain
-}
-
-func (s *localStoreRPCSuite) GenerateTestChainWithSN(tempDir string, commonName string, serialNumber int64,
-) (CertChain, *tls.Certificate) {
-
-	caPubFile := caFilePath(tempDir)
-	certPubFile := certFilePath(tempDir)
-	certPrivFile := keyFilePath(tempDir)
-
-	caCert := s.GenerateSelfSignedCA(caPubFile)
-	s.GenerateServerCert(caCert, commonName, serialNumber, certPubFile, certPrivFile)
-
-	return CertChain{CaPubFile: caPubFile, CertPubFile: certPubFile, CertKeyFile: certPrivFile}, caCert
-}
-
-func (s *localStoreRPCSuite) GenerateTestCerts(tempDir string, commonName string, num int,
-) (certs []*tls.Certificate, caPool *x509.CertPool, wrongCAPool *x509.CertPool) {
-
-	caCert := s.GenerateSelfSignedCA(caFilePath(tempDir))
-	caPool = s.GenerateSelfSignedCAPool(caCert)
-
-	chains := make([]*tls.Certificate, num)
-	for i := 0; i < num; i++ {
-		certPubFile := tempDir + fmt.Sprintf("/cert_pub_%d.pem", i)
-		certPrivFile := tempDir + fmt.Sprintf("/cert_priv_%d.pem", i)
-		cert := s.GenerateServerCert(caCert, commonName, int64(i+100), certPubFile, certPrivFile)
-		chains[i] = cert
-	}
-
-	wrongCACert := s.GenerateSelfSignedCA(caFilePath(tempDir))
-	wrongCAPool = s.GenerateSelfSignedCAPool(wrongCACert)
-
-	return chains, caPool, wrongCAPool
-}
-
-func (s *localStoreRPCSuite) GenerateSelfSignedCAPool(caCert *tls.Certificate) *x509.CertPool {
-	caPEM := &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caCert.Certificate[0],
-	}
-	caPool := x509.NewCertPool()
-	caPool.AppendCertsFromPEM(s.pemEncodeToBytes(caPEM))
-	return caPool
-}
-
-func (s *localStoreRPCSuite) GenerateSelfSignedCA(filePath string) *tls.Certificate {
-	caCert, err := encryption.GenerateSelfSignedX509CA("undefined", nil, 512)
-	s.NoError(err)
-
-	s.pemEncodeToFile(filePath, &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: caCert.Certificate[0],
-	})
-	return caCert
-}
-
-func (s *localStoreRPCSuite) GenerateServerCert(
-	caCert *tls.Certificate,
-	commonName string,
-	serialNumber int64,
-	certPubFile string,
-	certPrivFile string) *tls.Certificate {
-
-	serverCert, privKey, err := encryption.GenerateServerX509UsingCAAndSerialNumber(commonName, serialNumber, caCert)
-	s.NoError(err)
-
-	certPEM := &pem.Block{
-		Type:  "CERTIFICATE",
-		Bytes: serverCert.Certificate[0],
-	}
-	s.pemEncodeToFile(certPubFile, certPEM)
-
-	keyPEM := &pem.Block{
-		Type:  "RSA PRIVATE KEY",
-		Bytes: x509.MarshalPKCS1PrivateKey(privKey),
-	}
-	s.pemEncodeToFile(certPrivFile, keyPEM)
-
-	cert, err := tls.X509KeyPair(s.pemEncodeToBytes(certPEM), s.pemEncodeToBytes(keyPEM))
-	s.NoError(err)
-	return &cert
-}
-
-func (s *localStoreRPCSuite) pemEncodeToFile(file string, block *pem.Block) {
-	bytes := s.pemEncodeToBytes(block)
-	err := os.WriteFile(file, bytes, os.FileMode(0644))
-	s.NoError(err)
-}
-
-func (s *localStoreRPCSuite) pemEncodeToBytes(block *pem.Block) []byte {
-	pemBuffer := new(bytes.Buffer)
-	err := pem.Encode(pemBuffer, block)
-	s.NoError(err)
-	return pemBuffer.Bytes()
-}
-
 func f(r *rpc.RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: Frontend, RPCFactory: r}
 }
@@ -599,15 +450,6 @@ func i(r *rpc.RPCFactory) *TestFactory {
 
 func r(r *rpc.RPCFactory) *TestFactory {
 	return &TestFactory{serverUsage: RemoteCluster, RPCFactory: r}
-}
-
-func convertFileToBase64(file string) string {
-	fileBytes, err := os.ReadFile(file)
-	if err != nil {
-		panic(err)
-	}
-
-	return base64.StdEncoding.EncodeToString(fileBytes)
 }
 
 func (s *localStoreRPCSuite) TestServerTLS() {
@@ -773,7 +615,9 @@ func (s *localStoreRPCSuite) testServerTLSRefresh(factory *TestFactory, ca *tls.
 	tlsInfo, err := dialHelloAndGetTLSInfo(s.Suite, host, factory, factory.serverUsage)
 	s.validateTLSInfo(tlsInfo, err, serialNumber) // serial number of server cert before refresh
 
-	s.GenerateServerCert(ca, localhostIPv4, serialNumber+100, certFilePath(certDir), keyFilePath(certDir))
+	srvrCert, err := testhelper.GenerateServerCert(ca, localhostIPv4, serialNumber+100, testhelper.CertFilePath(certDir), testhelper.KeyFilePath(certDir))
+	s.NoError(err)
+	s.NotNil(srvrCert)
 
 	time.Sleep(time.Second * 2) // let server refresh certs
 
@@ -788,49 +632,6 @@ func (s *localStoreRPCSuite) validateTLSInfo(tlsInfo *credentials.TLSInfo, err e
 	s.NotNil(tlsInfo.State.PeerCertificates)
 	sn := (*tlsInfo.State.PeerCertificates[0].SerialNumber).Int64()
 	s.Equal(serialNumber, sn)
-}
-
-func (s *localStoreRPCSuite) TestRingpopMutualTLS() {
-	runRingpopTLSTest(s.Suite, s.logger, s.ringpopMutualTLSRPCFactoryA, s.ringpopMutualTLSRPCFactoryB, false)
-}
-
-func (s *localStoreRPCSuite) TestRingpopServerTLS() {
-	runRingpopTLSTest(s.Suite, s.logger, s.ringpopServerTLSRPCFactoryA, s.ringpopServerTLSRPCFactoryB, false)
-}
-
-func (s *localStoreRPCSuite) TestRingpopInvalidTLS() {
-	runRingpopTLSTest(s.Suite, s.logger, s.insecureRPCFactory, s.ringpopServerTLSRPCFactoryB, true)
-}
-
-func runRingpopTLSTest(s suite.Suite, logger log.Logger, serverA *TestFactory, serverB *TestFactory, expectError bool) {
-	// Start two ringpop nodes
-	chA := serverA.GetRingpopChannel()
-	chB := serverB.GetRingpopChannel()
-	defer chA.Close()
-	defer chB.Close()
-
-	// Ping A through B to make sure B's dialer uses TLS to communicate with A
-	hostPortA := chA.PeerInfo().HostPort
-	err := chB.Ping(context.Background(), hostPortA)
-	if expectError {
-		s.Error(err)
-	} else {
-		s.NoError(err)
-	}
-
-	// Confirm that A's listener is actually using TLS
-	clientTLSConfig, err := serverB.GetInternodeClientTlsConfig()
-	s.NoError(err)
-
-	conn, err := tls.Dial("tcp", hostPortA, clientTLSConfig)
-	if conn != nil {
-		_ = conn.Close()
-	}
-	if expectError {
-		s.Error(err)
-	} else {
-		s.NoError(err)
-	}
 }
 
 func (s *localStoreRPCSuite) TestClientForceTLS() {

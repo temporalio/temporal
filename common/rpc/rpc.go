@@ -26,11 +26,9 @@ package rpc
 
 import (
 	"crypto/tls"
-	"fmt"
 	"net"
 	"sync"
 
-	"github.com/uber/tchannel-go"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
@@ -51,9 +49,8 @@ type RPCFactory struct {
 	clusterMetadata *cluster.Config
 
 	sync.Mutex
-	grpcListener   net.Listener
-	ringpopChannel *tchannel.Channel
-	tlsFactory     encryption.TLSConfigProvider
+	grpcListener net.Listener
+	tlsFactory   encryption.TLSConfigProvider
 }
 
 // NewFactory builds a new RPCFactory
@@ -157,74 +154,6 @@ func (d *RPCFactory) GetGRPCListener() net.Listener {
 	}
 
 	return d.grpcListener
-}
-
-// GetRingpopChannel return a cached ringpop dispatcher
-func (d *RPCFactory) GetRingpopChannel() *tchannel.Channel {
-	if d.ringpopChannel != nil {
-		return d.ringpopChannel
-	}
-
-	d.Lock()
-	defer d.Unlock()
-
-	if d.ringpopChannel == nil {
-		ringpopServiceName := fmt.Sprintf("%v-ringpop", d.serviceName)
-		ringpopHostAddress := net.JoinHostPort(getListenIP(d.config, d.logger).String(), convert.IntToString(d.config.MembershipPort))
-		enableTLS := d.dc.GetBoolProperty(dynamicconfig.EnableRingpopTLS, false)()
-
-		opts := &tchannel.ChannelOptions{}
-		if enableTLS {
-			clientTLSConfig, err := d.GetInternodeClientTlsConfig()
-			if err != nil {
-				d.logger.Fatal("Failed to get internode TLS client config", tag.Error(err))
-				return nil
-			}
-			if clientTLSConfig != nil {
-				opts.Dialer = (&tls.Dialer{Config: clientTLSConfig}).DialContext
-			}
-		}
-		var err error
-
-		d.ringpopChannel, err = tchannel.NewChannel(ringpopServiceName, opts)
-		if err != nil {
-			d.logger.Fatal("Failed to create ringpop TChannel", tag.Error(err))
-			return nil
-		}
-
-		var listener net.Listener
-		if enableTLS {
-			serverTLSConfig, err := d.tlsFactory.GetInternodeServerConfig()
-			if err != nil {
-				d.logger.Fatal("Failed to get internode TLS server config", tag.Error(err))
-				return nil
-			}
-			if serverTLSConfig != nil {
-				listener, err = tls.Listen("tcp", ringpopHostAddress, serverTLSConfig)
-				if err != nil {
-					d.logger.Fatal("Failed to start ringpop TLS listener", tag.Error(err), tag.Address(ringpopHostAddress))
-					return nil
-				}
-			}
-		}
-		if listener == nil {
-			if listener, err = net.Listen("tcp", ringpopHostAddress); err != nil {
-				d.logger.Fatal("Failed to start ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
-				return nil
-			}
-		}
-
-		if err := d.ringpopChannel.Serve(listener); err != nil {
-			d.logger.Fatal("Failed to serve ringpop listener", tag.Error(err), tag.Address(ringpopHostAddress))
-			return nil
-		}
-	}
-
-	return d.ringpopChannel
-}
-
-func (d *RPCFactory) getTLSFactory() encryption.TLSConfigProvider {
-	return d.tlsFactory
 }
 
 func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {

@@ -31,7 +31,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/uber/tchannel-go"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 
@@ -105,14 +104,10 @@ var Module = fx.Options(
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
-	fx.Provide(MembershipMonitorProvider),
-	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
-	fx.Provide(FrontedClientProvider),
+	fx.Provide(FrontendClientProvider),
 	fx.Provide(GrpcListenerProvider),
-	fx.Provide(RingpopChannelProvider),
-	fx.Invoke(RingpopChannelLifetimeHooks),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
 	fx.Provide(HistoryClientProvider),
@@ -124,7 +119,7 @@ var Module = fx.Options(
 )
 
 var DefaultOptions = fx.Options(
-	fx.Provide(MembershipMonitorFactoryProvider),
+	fx.Provide(MembershipMonitorProvider),
 	fx.Provide(RPCFactoryProvider),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
@@ -227,57 +222,66 @@ func ClientBeanProvider(
 	)
 }
 
-func MembershipMonitorFactoryProvider(
-	persistenceBean persistenceClient.Bean,
+func MembershipMonitorProvider(
+	lc fx.Lifecycle,
+	clusterMetadataManager persistence.ClusterMetadataManager,
 	logger SnTaggedLogger,
 	cfg *config.Config,
-	rChannel *tchannel.Channel,
 	svcName ServiceName,
-) (membership.MembershipMonitorFactory, error) {
+	tlsConfigProvider encryption.TLSConfigProvider,
+	dc *dynamicconfig.Collection,
+) (membership.Monitor, error) {
 	servicePortMap := make(map[string]int)
 	for sn, sc := range cfg.Services {
 		servicePortMap[sn] = sc.RPC.GRPCPort
 	}
-	return ringpop.NewRingpopFactory(
+
+	rpcConfig := cfg.Services[string(svcName)].RPC
+
+	factory, err := ringpop.NewRingpopFactory(
 		&cfg.Global.Membership,
-		rChannel,
 		string(svcName),
 		servicePortMap,
 		logger,
-		persistenceBean.GetClusterMetadataManager(),
+		clusterMetadataManager,
+		&rpcConfig,
+		tlsConfigProvider,
+		dc,
 	)
+
+	if err != nil {
+		return nil, err
+	}
+
+	monitor, err := factory.GetMembershipMonitor()
+
+	if err != nil {
+		return nil, err
+	}
+
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				monitor.Start()
+				return nil
+			},
+			OnStop: func(context.Context) error {
+				monitor.Stop()
+				factory.CloseTChannel()
+				return nil
+			},
+		},
+	)
+
+	return monitor, nil
 }
 
-func MembershipMonitorProvider(
-	factory membership.MembershipMonitorFactory,
-) (membership.Monitor, error) {
-	return factory.GetMembershipMonitor()
-}
-
-func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
+func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
 	frontendRawClient := clientBean.GetFrontendClient()
 	return frontend.NewRetryableClient(
 		frontendRawClient,
 		common.CreateFrontendServiceRetryPolicy(),
 		common.IsWhitelistServiceTransientError,
-	)
-}
-
-func RingpopChannelProvider(rpcFactory common.RPCFactory) *tchannel.Channel {
-	return rpcFactory.GetRingpopChannel()
-}
-
-func RingpopChannelLifetimeHooks(
-	lc fx.Lifecycle,
-	ch *tchannel.Channel,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStop: func(context.Context) error {
-				ch.Close()
-				return nil
-			},
-		},
 	)
 }
 
