@@ -125,7 +125,7 @@ func NewCluster(options *TestClusterConfig, logger log.Logger) (*TestCluster, er
 		case postgresql.PluginName:
 			ops = persistencetests.GetPostgreSQLTestClusterOption()
 		case sqlite.PluginName:
-			ops = persistencetests.GetSQLiteTestClusterOption()
+			ops = persistencetests.GetSQLiteMemoryTestClusterOption()
 		default:
 			panic(fmt.Sprintf("unknown sql store drier: %v", TestFlags.PersistenceDriver))
 		}
