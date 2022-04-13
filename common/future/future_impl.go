@@ -40,30 +40,29 @@ const (
 )
 
 type (
-	FutureImpl struct {
+	FutureImpl[T any] struct {
 		status  int32
 		readyCh chan struct{}
 
-		value interface{}
+		value T
 		err   error
 	}
 )
 
-var _ Future = (*FutureImpl)(nil)
-
-func NewFuture() *FutureImpl {
-	return &FutureImpl{
+func NewFuture[T any]() *FutureImpl[T] {
+	var value T
+	return &FutureImpl[T]{
 		status:  pending,
 		readyCh: make(chan struct{}),
 
-		value: nil,
+		value: value,
 		err:   nil,
 	}
 }
 
-func (f *FutureImpl) Get(
+func (f *FutureImpl[T]) Get(
 	ctx context.Context,
-) (interface{}, error) {
+) (T, error) {
 	if f.Ready() {
 		return f.value, f.err
 	}
@@ -72,12 +71,13 @@ func (f *FutureImpl) Get(
 	case <-f.readyCh:
 		return f.value, f.err
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		var value T
+		return value, ctx.Err()
 	}
 }
 
-func (f *FutureImpl) Set(
-	value interface{},
+func (f *FutureImpl[T]) Set(
+	value T,
 	err error,
 ) {
 	// cannot directly set status to `ready`, to prevent data race in case multiple `Get` occurs
@@ -96,6 +96,6 @@ func (f *FutureImpl) Set(
 	close(f.readyCh)
 }
 
-func (f *FutureImpl) Ready() bool {
+func (f *FutureImpl[T]) Ready() bool {
 	return atomic.LoadInt32(&f.status) == ready
 }

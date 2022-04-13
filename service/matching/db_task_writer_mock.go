@@ -34,7 +34,6 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	persistence "go.temporal.io/server/api/persistence/v1"
-	future "go.temporal.io/server/common/future"
 )
 
 // MockdbTaskWriter is a mock of dbTaskWriter interface.
@@ -61,10 +60,10 @@ func (m *MockdbTaskWriter) EXPECT() *MockdbTaskWriterMockRecorder {
 }
 
 // appendTask mocks base method.
-func (m *MockdbTaskWriter) appendTask(task *persistence.TaskInfo) future.Future {
+func (m *MockdbTaskWriter) appendTask(task *persistence.TaskInfo) dbTaskWriterFuture {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "appendTask", task)
-	ret0, _ := ret[0].(future.Future)
+	ret0, _ := ret[0].(dbTaskWriterFuture)
 	return ret0
 }
 
