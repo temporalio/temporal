@@ -218,6 +218,9 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	if shard, ok := c.historyShards[shardID]; ok {
 		if shard.isValid() {
 			return shard, nil
+		} else {
+			delete(c.historyShards, shardID)
+			shard.Unload()
 		}
 	}
 
