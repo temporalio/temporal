@@ -104,10 +104,4 @@ type (
 		Start() error
 		HostInfo() *HostInfo
 	}
-
-	// MembershipMonitorFactory provides a bootstrapped membership monitor
-	MembershipMonitorFactory interface {
-		// GetMembershipMonitor return a membership monitor
-		GetMembershipMonitor() (Monitor, error)
-	}
 )

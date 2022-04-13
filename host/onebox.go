@@ -156,11 +156,6 @@ type (
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 	}
-
-	membershipFactoryImpl struct {
-		serviceName string
-		hosts       map[string][]string
-	}
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
@@ -417,8 +412,8 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
-		fx.Provide(func() membership.MembershipMonitorFactory {
-			return newMembershipFactory(serviceName, hosts)
+		fx.Provide(func() membership.Monitor {
+			return newSimpleMonitor(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -524,8 +519,8 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 			fx.Provide(func() common.RPCFactory { return rpcFactory }),
-			fx.Provide(func() membership.MembershipMonitorFactory {
-				return newMembershipFactory(serviceName, hosts)
+			fx.Provide(func() membership.Monitor {
+				return newSimpleMonitor(serviceName, hosts)
 			}),
 			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -604,8 +599,8 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
-		fx.Provide(func() membership.MembershipMonitorFactory {
-			return newMembershipFactory(serviceName, hosts)
+		fx.Provide(func() membership.Monitor {
+			return newSimpleMonitor(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -703,8 +698,8 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
 		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
 		fx.Provide(func() common.RPCFactory { return rpcFactory }),
-		fx.Provide(func() membership.MembershipMonitorFactory {
-			return newMembershipFactory(serviceName, hosts)
+		fx.Provide(func() membership.Monitor {
+			return newSimpleMonitor(serviceName, hosts)
 		}),
 		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
 		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
@@ -796,17 +791,6 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 	}
 	pConfig.DataStores = copiedDataStores
 	return pConfig, nil
-}
-
-func newMembershipFactory(serviceName string, hosts map[string][]string) membership.MembershipMonitorFactory {
-	return &membershipFactoryImpl{
-		serviceName: serviceName,
-		hosts:       hosts,
-	}
-}
-
-func (p *membershipFactoryImpl) GetMembershipMonitor() (membership.Monitor, error) {
-	return newSimpleMonitor(p.serviceName, p.hosts), nil
 }
 
 type rpcFactoryImpl struct {

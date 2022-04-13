@@ -104,8 +104,6 @@ var Module = fx.Options(
 	fx.Provide(serialization.NewSerializer),
 	fx.Provide(HistoryBootstrapContainerProvider),
 	fx.Provide(VisibilityBootstrapContainerProvider),
-	fx.Provide(MembershipMonitorProvider),
-	membership.MonitorLifetimeHooksModule,
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
 	fx.Provide(FrontedClientProvider),
@@ -121,7 +119,7 @@ var Module = fx.Options(
 )
 
 var DefaultOptions = fx.Options(
-	fx.Provide(MembershipMonitorFactoryProvider),
+	fx.Provide(MembershipMonitorProvider),
 	fx.Provide(RPCFactoryProvider),
 	fx.Provide(ArchivalMetadataProvider),
 	fx.Provide(ArchiverProviderProvider),
@@ -224,7 +222,7 @@ func ClientBeanProvider(
 	)
 }
 
-func MembershipMonitorFactoryProvider(
+func MembershipMonitorProvider(
 	lc fx.Lifecycle,
 	clusterMetadataManager persistence.ClusterMetadataManager,
 	logger SnTaggedLogger,
@@ -232,7 +230,7 @@ func MembershipMonitorFactoryProvider(
 	svcName ServiceName,
 	tlsConfigProvider encryption.TLSConfigProvider,
 	dc *dynamicconfig.Collection,
-) (membership.MembershipMonitorFactory, error) {
+) (membership.Monitor, error) {
 	servicePortMap := make(map[string]int)
 	for sn, sc := range cfg.Services {
 		servicePortMap[sn] = sc.RPC.GRPCPort
@@ -255,22 +253,27 @@ func MembershipMonitorFactoryProvider(
 		return nil, err
 	}
 
+	monitor, err := factory.GetMembershipMonitor()
+
+	if err != nil {
+		return nil, err
+	}
+
 	lc.Append(
 		fx.Hook{
+			OnStart: func(context.Context) error {
+				monitor.Start()
+				return nil
+			},
 			OnStop: func(context.Context) error {
+				monitor.Stop()
 				factory.CloseTChannel()
 				return nil
 			},
 		},
 	)
 
-	return factory, nil
-}
-
-func MembershipMonitorProvider(
-	factory membership.MembershipMonitorFactory,
-) (membership.Monitor, error) {
-	return factory.GetMembershipMonitor()
+	return monitor, nil
 }
 
 func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
