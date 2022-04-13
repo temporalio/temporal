@@ -469,24 +469,29 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		WorkflowID:  input.ExecutionInfo.GetWorkflowId(),
 		RunID:       input.ExecutionState.GetRunId(),
 
-		UpsertActivityInfos:       make(map[int64]*commonpb.DataBlob),
-		UpsertTimerInfos:          make(map[string]*commonpb.DataBlob),
-		UpsertChildExecutionInfos: make(map[int64]*commonpb.DataBlob),
-		UpsertRequestCancelInfos:  make(map[int64]*commonpb.DataBlob),
-		UpsertSignalInfos:         make(map[int64]*commonpb.DataBlob),
+		UpsertActivityInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertActivityInfos)),
+		DeleteActivityInfos: input.DeleteActivityInfos,
+
+		UpsertTimerInfos: make(map[string]*commonpb.DataBlob, len(input.UpsertTimerInfos)),
+		DeleteTimerInfos: input.DeleteTimerInfos,
+
+		UpsertChildExecutionInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertChildExecutionInfos)),
+		DeleteChildExecutionInfos: input.DeleteChildExecutionInfos,
+
+		UpsertRequestCancelInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertRequestCancelInfos)),
+		DeleteRequestCancelInfos: input.DeleteRequestCancelInfos,
+
+		UpsertSignalInfos: make(map[int64]*commonpb.DataBlob, len(input.UpsertSignalInfos)),
+		DeleteSignalInfos: input.DeleteSignalInfos,
+
+		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
+		DeleteSignalRequestedIDs: input.DeleteSignalRequestedIDs,
+
+		NewBufferedEvents:   nil,
+		ClearBufferedEvents: input.ClearBufferedEvents,
 
 		ExecutionInfo:  input.ExecutionInfo,
 		ExecutionState: input.ExecutionState,
-
-		DeleteActivityInfos:       input.DeleteActivityInfos,
-		DeleteTimerInfos:          input.DeleteTimerInfos,
-		DeleteChildExecutionInfos: input.DeleteChildExecutionInfos,
-		DeleteRequestCancelInfos:  input.DeleteRequestCancelInfos,
-		DeleteSignalInfos:         input.DeleteSignalInfos,
-		DeleteSignalRequestedIDs:  input.DeleteSignalRequestedIDs,
-
-		UpsertSignalRequestedIDs: input.UpsertSignalRequestedIDs,
-		ClearBufferedEvents:      input.ClearBufferedEvents,
 
 		Tasks: tasks,
 
@@ -511,6 +516,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		}
 		result.UpsertActivityInfos[key] = blob
 	}
+
 	for key, info := range input.UpsertTimerInfos {
 		blob, err := m.serializer.TimerInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -518,6 +524,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		}
 		result.UpsertTimerInfos[key] = blob
 	}
+
 	for key, info := range input.UpsertChildExecutionInfos {
 		blob, err := m.serializer.ChildExecutionInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -525,6 +532,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		}
 		result.UpsertChildExecutionInfos[key] = blob
 	}
+
 	for key, info := range input.UpsertRequestCancelInfos {
 		blob, err := m.serializer.RequestCancelInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -532,6 +540,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 		}
 		result.UpsertRequestCancelInfos[key] = blob
 	}
+
 	for key, info := range input.UpsertSignalInfos {
 		blob, err := m.serializer.SignalInfoToBlob(info, enumspb.ENCODING_TYPE_PROTO3)
 		if err != nil {
@@ -546,6 +555,7 @@ func (m *executionManagerImpl) SerializeWorkflowMutation( // unexport
 			return nil, err
 		}
 	}
+
 	result.LastWriteVersion, err = getCurrentBranchLastWriteVersion(input.ExecutionInfo.VersionHistories)
 	if err != nil {
 		return nil, err
@@ -572,11 +582,11 @@ func (m *executionManagerImpl) SerializeWorkflowSnapshot( // unexport
 		WorkflowID:  input.ExecutionInfo.GetWorkflowId(),
 		RunID:       input.ExecutionState.GetRunId(),
 
-		ActivityInfos:       make(map[int64]*commonpb.DataBlob),
-		TimerInfos:          make(map[string]*commonpb.DataBlob),
-		ChildExecutionInfos: make(map[int64]*commonpb.DataBlob),
-		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob),
-		SignalInfos:         make(map[int64]*commonpb.DataBlob),
+		ActivityInfos:       make(map[int64]*commonpb.DataBlob, len(input.ActivityInfos)),
+		TimerInfos:          make(map[string]*commonpb.DataBlob, len(input.TimerInfos)),
+		ChildExecutionInfos: make(map[int64]*commonpb.DataBlob, len(input.ChildExecutionInfos)),
+		RequestCancelInfos:  make(map[int64]*commonpb.DataBlob, len(input.RequestCancelInfos)),
+		SignalInfos:         make(map[int64]*commonpb.DataBlob, len(input.SignalInfos)),
 
 		ExecutionInfo:      input.ExecutionInfo,
 		ExecutionState:     input.ExecutionState,
