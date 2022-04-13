@@ -75,7 +75,21 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 }
 
 // GetSQLiteTestClusterOption return test options
-func GetSQLiteTestClusterOption() *TestBaseOptions {
+func GetSQLiteFileTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName:   sqlite.PluginName,
+		DBUsername:        testSQLiteUser,
+		DBPassword:        testSQLitePassword,
+		DBHost:            environment.Localhost,
+		DBPort:            0,
+		SchemaDir:         testSQLiteSchemaDir,
+		StoreType:         config.StoreTypeSQL,
+		ConnectAttributes: map[string]string{"cache": testSQLiteCache},
+	}
+}
+
+// GetSQLiteTestClusterOption return test options
+func GetSQLiteMemoryTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName:   sqlite.PluginName,
 		DBUsername:        testSQLiteUser,

@@ -130,7 +130,10 @@ func (s *TestCluster) TearDownTestDatabase() {
 func (s *TestCluster) CreateDatabase() {
 	cfg2 := s.cfg
 	// NOTE need to connect with empty name to create new database
-	cfg2.DatabaseName = ""
+	if cfg2.PluginName != "sqlite" {
+		cfg2.DatabaseName = ""
+	}
+
 	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver())
 	if err != nil {
 		panic(err)
@@ -150,6 +153,17 @@ func (s *TestCluster) CreateDatabase() {
 // DropDatabase from PersistenceTestCluster interface
 func (s *TestCluster) DropDatabase() {
 	cfg2 := s.cfg
+
+	if cfg2.PluginName == "sqlite" {
+		if len(cfg2.DatabaseName) > 3 { // 3 should mean not ., .., empty, or /
+			err := os.Remove(cfg2.DatabaseName)
+			if err != nil {
+				panic(err)
+			}
+		}
+		return
+	}
+
 	// NOTE need to connect with empty name to drop the database
 	cfg2.DatabaseName = ""
 	db, err := NewSQLAdminDB(sqlplugin.DbKindUnknown, &cfg2, resolver.NewNoopResolver())

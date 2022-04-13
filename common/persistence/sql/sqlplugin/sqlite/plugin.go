@@ -24,8 +24,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build cgo
-
 package sqlite
 
 import (
@@ -160,7 +158,7 @@ func buildDSN(cfg *config.SQL) (string, error) {
 		return "", err
 	}
 	dsn := fmt.Sprintf(
-		"file:%s?%v",
+		"%s?%v",
 		cfg.DatabaseName,
 		vals.Encode(),
 	)

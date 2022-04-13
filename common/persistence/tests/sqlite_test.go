@@ -26,12 +26,17 @@ package tests
 
 import (
 	"fmt"
+	"os"
+	"path"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/persistence"
+	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/sql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
@@ -43,11 +48,11 @@ import (
 // TODO merge the initialization with existing persistence setup
 const (
 	testSQLiteClusterName = "temporal_sqlite_cluster"
+	testSQLiteSchemaDir   = "../../../schema/sqlite/v3" // specify if mode is not "memory"
 )
 
 func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
-	cfg := NewSQLiteConfig()
-	SetupSQLiteDatabase(cfg)
+	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -78,8 +83,7 @@ func TestSQLiteExecutionMutableStateStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
-	cfg := NewSQLiteConfig()
-	SetupSQLiteDatabase(cfg)
+	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -110,8 +114,7 @@ func TestSQLiteExecutionMutableStateTaskStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteHistoryStoreSuite(t *testing.T) {
-	cfg := NewSQLiteConfig()
-	SetupSQLiteDatabase(cfg)
+	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -132,8 +135,7 @@ func TestSQLiteHistoryStoreSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueSuite(t *testing.T) {
-	cfg := NewSQLiteConfig()
-	SetupSQLiteDatabase(cfg)
+	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -154,8 +156,7 @@ func TestSQLiteTaskQueueSuite(t *testing.T) {
 }
 
 func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
-	cfg := NewSQLiteConfig()
-	SetupSQLiteDatabase(cfg)
+	cfg := NewSQLiteMemoryConfig()
 	logger := log.NewNoopLogger()
 	factory := sql.NewFactory(
 		*cfg,
@@ -175,25 +176,169 @@ func TestSQLiteTaskQueueTaskSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-// NewSQLiteConfig returns a new MySQL config for test
-func NewSQLiteConfig() *config.SQL {
+func TestSQLiteFileExecutionMutableStateStoreSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	defer os.Remove(cfg.DatabaseName)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	shardStore, err := factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	executionStore, err := factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewExecutionMutableStateSuite(
+		t,
+		shardStore,
+		executionStore,
+		serialization.NewSerializer(),
+		logger,
+	)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileExecutionMutableStateTaskStoreSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	defer os.Remove(cfg.DatabaseName)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	shardStore, err := factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	executionStore, err := factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewExecutionMutableStateTaskSuite(
+		t,
+		shardStore,
+		executionStore,
+		serialization.NewSerializer(),
+		logger,
+	)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileHistoryStoreSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	defer os.Remove(cfg.DatabaseName)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	store, err := factory.NewExecutionStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewHistoryEventsSuite(t, store, logger)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileTaskQueueSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	defer os.Remove(cfg.DatabaseName)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileTaskQueueTaskSuite(t *testing.T) {
+	cfg := NewSQLiteFileConfig()
+	SetupSQLiteDatabase(cfg)
+	defer os.Remove(cfg.DatabaseName)
+	logger := log.NewNoopLogger()
+	factory := sql.NewFactory(
+		*cfg,
+		resolver.NewNoopResolver(),
+		testSQLiteClusterName,
+		logger,
+	)
+	taskQueueStore, err := factory.NewTaskStore()
+	if err != nil {
+		t.Fatalf("unable to create SQLite DB: %v", err)
+	}
+	defer func() {
+		factory.Close()
+	}()
+
+	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	suite.Run(t, s)
+}
+
+// NewSQLiteMemoryConfig returns a new SQLite config for test
+func NewSQLiteMemoryConfig() *config.SQL {
 	return &config.SQL{
 		User:              "",
 		Password:          "",
 		ConnectAddr:       environment.Localhost,
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      "default",
+		DatabaseName:      ":memory:",
 		ConnectAttributes: map[string]string{"mode": "memory", "cache": "private"},
 	}
 }
 
-func SetupSQLiteDatabase(cfg *config.SQL) {
-	adminCfg := *cfg
-	// NOTE need to connect with empty name to create new database
-	adminCfg.DatabaseName = ""
+// NewSQLiteMemoryConfig returns a new SQLite config for test
+func NewSQLiteFileConfig() *config.SQL {
+	return &config.SQL{
+		User:              "",
+		Password:          "",
+		ConnectAddr:       environment.Localhost,
+		ConnectProtocol:   "tcp",
+		PluginName:        "sqlite",
+		DatabaseName:      "test_" + persistencetests.GenerateRandomDBName(3),
+		ConnectAttributes: map[string]string{"cache": "private"},
+	}
+}
 
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
+func SetupSQLiteDatabase(cfg *config.SQL) {
+	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
 	if err != nil {
 		panic(fmt.Sprintf("unable to create SQLite admin DB: %v", err))
 	}
@@ -202,5 +347,21 @@ func SetupSQLiteDatabase(cfg *config.SQL) {
 	err = db.CreateDatabase(cfg.DatabaseName)
 	if err != nil {
 		panic(fmt.Sprintf("unable to create SQLite database: %v", err))
+	}
+
+	LoadSchema(db, path.Join(testSQLiteSchemaDir, "temporal", "schema.sql"))
+	LoadSchema(db, path.Join(testSQLiteSchemaDir, "visibility", "schema.sql"))
+}
+
+func LoadSchema(db sqlplugin.AdminDB, schemaFile string) {
+	statements, err := persistence.LoadAndSplitQuery([]string{schemaFile})
+	if err != nil {
+		panic(fmt.Sprintf("LoadSchema %+v", tag.Error(err)))
+	}
+
+	for _, stmt := range statements {
+		if err = db.Exec(stmt); err != nil {
+			panic(fmt.Sprintf("LoadSchema %+v", tag.Error(err)))
+		}
 	}
 }

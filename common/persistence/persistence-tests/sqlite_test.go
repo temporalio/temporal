@@ -32,49 +32,98 @@ import (
 
 func TestSQLiteHistoryV2PersistenceSuite(t *testing.T) {
 	s := new(HistoryV2PersistenceSuite)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteTestClusterOption())
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteMetadataPersistenceSuiteV2(t *testing.T) {
 	s := new(MetadataPersistenceSuiteV2)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteTestClusterOption())
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteShardPersistenceSuite(t *testing.T) {
 	s := new(ShardPersistenceSuite)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteTestClusterOption())
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteExecutionManagerSuite(t *testing.T) {
 	s := new(ExecutionManagerSuite)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteTestClusterOption())
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteExecutionManagerWithEventsV2(t *testing.T) {
 	s := new(ExecutionManagerSuiteForEventsV2)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteTestClusterOption())
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteClusterMetadataPersistence(t *testing.T) {
 	s := new(ClusterMetadataManagerSuite)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteTestClusterOption())
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
 
 func TestSQLiteQueuePersistence(t *testing.T) {
 	s := new(QueuePersistenceSuite)
-	s.TestBase = NewTestBaseWithSQL(GetSQLiteTestClusterOption())
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteMemoryTestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileHistoryV2PersistenceSuite(t *testing.T) {
+	s := new(HistoryV2PersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileMetadataPersistenceSuiteV2(t *testing.T) {
+	s := new(MetadataPersistenceSuiteV2)
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileShardPersistenceSuite(t *testing.T) {
+	s := new(ShardPersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileExecutionManagerSuite(t *testing.T) {
+	s := new(ExecutionManagerSuite)
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileExecutionManagerWithEventsV2(t *testing.T) {
+	s := new(ExecutionManagerSuiteForEventsV2)
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileClusterMetadataPersistence(t *testing.T) {
+	s := new(ClusterMetadataManagerSuite)
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
+	s.TestBase.Setup(nil)
+	suite.Run(t, s)
+}
+
+func TestSQLiteFileQueuePersistence(t *testing.T) {
+	s := new(QueuePersistenceSuite)
+	s.TestBase = NewTestBaseWithSQL(GetSQLiteFileTestClusterOption())
 	s.TestBase.Setup(nil)
 	suite.Run(t, s)
 }
