@@ -87,10 +87,10 @@ func NewClusterMetadataStore(
 }
 
 func (m *ClusterMetadataStore) ListClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalListClusterMetadataRequest,
 ) (*p.InternalListClusterMetadataResponse, error) {
-	query := m.session.Query(templateListClusterMetadata, constMetadataPartition)
+	query := m.session.Query(templateListClusterMetadata, constMetadataPartition).WithContext(ctx)
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
 	response := &p.InternalListClusterMetadataResponse{}
@@ -124,7 +124,7 @@ func (m *ClusterMetadataStore) ListClusterMetadata(
 }
 
 func (m *ClusterMetadataStore) GetClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalGetClusterMetadataRequest,
 ) (*p.InternalGetClusterMetadataResponse, error) {
 
@@ -132,7 +132,7 @@ func (m *ClusterMetadataStore) GetClusterMetadata(
 	var encoding string
 	var version int64
 
-	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition, request.ClusterName)
+	query := m.session.Query(templateGetClusterMetadata, constMetadataPartition, request.ClusterName).WithContext(ctx)
 	err := query.Scan(&clusterMetadata, &encoding, &version)
 	if err != nil {
 		return nil, gocql.ConvertError("GetClusterMetadata", err)
@@ -145,7 +145,7 @@ func (m *ClusterMetadataStore) GetClusterMetadata(
 }
 
 func (m *ClusterMetadataStore) SaveClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalSaveClusterMetadataRequest,
 ) (bool, error) {
 	var query gocql.Query
@@ -157,7 +157,7 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(
 			request.ClusterMetadata.Data,
 			request.ClusterMetadata.EncodingType.String(),
 			1,
-		)
+		).WithContext(ctx)
 	} else {
 		query = m.session.Query(
 			templateUpdateClusterMetadata,
@@ -167,7 +167,7 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(
 			constMetadataPartition,
 			request.ClusterName,
 			request.Version,
-		)
+		).WithContext(ctx)
 	}
 
 	previous := make(map[string]interface{})
@@ -182,10 +182,10 @@ func (m *ClusterMetadataStore) SaveClusterMetadata(
 }
 
 func (m *ClusterMetadataStore) DeleteClusterMetadata(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalDeleteClusterMetadataRequest,
 ) error {
-	query := m.session.Query(templateDeleteClusterMetadata, constMetadataPartition, request.ClusterName)
+	query := m.session.Query(templateDeleteClusterMetadata, constMetadataPartition, request.ClusterName).WithContext(ctx)
 	if err := query.Exec(); err != nil {
 		return gocql.ConvertError("DeleteClusterMetadata", err)
 	}
@@ -193,7 +193,7 @@ func (m *ClusterMetadataStore) DeleteClusterMetadata(
 }
 
 func (m *ClusterMetadataStore) GetClusterMembers(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetClusterMembersRequest,
 ) (*p.GetClusterMembersResponse, error) {
 	var queryString strings.Builder
@@ -228,7 +228,7 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 	}
 
 	queryString.WriteString(templateAllowFiltering)
-	query := m.session.Query(queryString.String(), operands...)
+	query := m.session.Query(queryString.String(), operands...).WithContext(ctx)
 
 	iter := query.PageSize(request.PageSize).PageState(request.NextPageToken).Iter()
 
@@ -270,11 +270,20 @@ func (m *ClusterMetadataStore) GetClusterMembers(
 }
 
 func (m *ClusterMetadataStore) UpsertClusterMembership(
-	_ context.Context,
+	ctx context.Context,
 	request *p.UpsertClusterMembershipRequest,
 ) error {
-	query := m.session.Query(templateUpsertActiveClusterMembership, constMembershipPartition, []byte(request.HostID),
-		request.RPCAddress, request.RPCPort, request.Role, request.SessionStart, time.Now().UTC(), int64(request.RecordExpiry.Seconds()))
+	query := m.session.Query(
+		templateUpsertActiveClusterMembership,
+		constMembershipPartition,
+		[]byte(request.HostID),
+		request.RPCAddress,
+		request.RPCPort,
+		request.Role,
+		request.SessionStart,
+		time.Now().UTC(),
+		int64(request.RecordExpiry.Seconds()),
+	).WithContext(ctx)
 	err := query.Exec()
 
 	if err != nil {
