@@ -38,8 +38,8 @@ type (
 		*require.Assertions
 		suite.Suite
 
-		future *FutureImpl
-		value  int32
+		future *FutureImpl[int]
+		value  int
 		err    error
 	}
 )
@@ -48,9 +48,9 @@ func BenchmarkFutureAvailable(b *testing.B) {
 	b.ReportAllocs()
 
 	ctx := context.Background()
-	futures := make([]*FutureImpl, b.N)
+	futures := make([]*FutureImpl[interface{}], b.N)
 	for n := 0; n < b.N; n++ {
-		futures[n] = NewFuture()
+		futures[n] = NewFuture[interface{}]()
 	}
 
 	b.ResetTimer()
@@ -64,7 +64,7 @@ func BenchmarkFutureAvailable(b *testing.B) {
 func BenchmarkFutureGet(b *testing.B) {
 	b.ReportAllocs()
 
-	future := NewFuture()
+	future := NewFuture[interface{}]()
 	future.Set(nil, nil)
 	ctx := context.Background()
 	for n := 0; n < b.N; n++ {
@@ -75,7 +75,7 @@ func BenchmarkFutureGet(b *testing.B) {
 func BenchmarkFutureReady(b *testing.B) {
 	b.ReportAllocs()
 
-	future := NewFuture()
+	future := NewFuture[interface{}]()
 	future.Set(nil, nil)
 	for n := 0; n < b.N; n++ {
 		_ = future.Ready() //nolint:errcheck
@@ -96,7 +96,7 @@ func (s *futureSuite) TearDownSuite() {
 }
 
 func (s *futureSuite) SetupTest() {
-	s.future = NewFuture()
+	s.future = NewFuture[int]()
 	s.value = 123
 	s.err = nil
 }

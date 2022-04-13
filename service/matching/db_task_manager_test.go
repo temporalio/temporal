@@ -224,7 +224,7 @@ func (s *dbTaskManagerSuite) TestBufferAndWriteTask_Ready() {
 	taskInfo := &persistencespb.TaskInfo{}
 	taskWriterErr := serviceerror.NewInternal("random error")
 	s.taskWriter.EXPECT().appendTask(taskInfo).Return(
-		future.NewReadyFuture(nil, taskWriterErr),
+		future.NewReadyFuture[struct{}](struct{}{}, taskWriterErr),
 	)
 	fut := s.dbTaskManager.BufferAndWriteTask(taskInfo)
 	_, err := fut.Get(context.Background())

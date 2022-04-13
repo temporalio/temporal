@@ -27,8 +27,8 @@ package future
 import "context"
 
 type (
-	Future interface {
-		Get(ctx context.Context) (interface{}, error)
+	Future[T any] interface {
+		Get(ctx context.Context) (T, error)
 		Ready() bool
 	}
 )

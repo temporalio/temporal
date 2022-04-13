@@ -141,7 +141,7 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_OnePage_Success() {
 	numTasks := dbTaskFlusherBatchSize - 1
 	ctx := context.Background()
 
-	var futures []future.Future
+	var futures []future.Future[struct{}]
 	var tasks []interface{}
 	for i := 0; i < numTasks; i++ {
 		task := s.randomTask()
@@ -171,7 +171,7 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_OnePage_Failed() {
 	ctx := context.Background()
 	randomErr := serviceerror.NewUnavailable("random error")
 
-	var futures []future.Future
+	var futures []future.Future[struct{}]
 	var tasks []interface{}
 	for i := 0; i < numTasks; i++ {
 		task := s.randomTask()
@@ -200,7 +200,7 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_MultiPage_Success() {
 	numTasks := 2*dbTaskFlusherBatchSize - 2
 	ctx := context.Background()
 
-	var futures []future.Future
+	var futures []future.Future[struct{}]
 	var taskBatch [][]interface{}
 	var tasks []interface{}
 	for i := 0; i < numTasks; i++ {
@@ -235,7 +235,7 @@ func (s *dbTaskWriterSuite) TestAppendFlushTask_Multiple_MultiPage_Failed() {
 	ctx := context.Background()
 	randomErr := serviceerror.NewUnavailable("random error")
 
-	var futures []future.Future
+	var futures []future.Future[struct{}]
 	var taskBatch [][]interface{}
 	var tasks []interface{}
 	for i := 0; i < numTasks; i++ {
