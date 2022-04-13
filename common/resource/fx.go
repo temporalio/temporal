@@ -106,7 +106,7 @@ var Module = fx.Options(
 	fx.Provide(VisibilityBootstrapContainerProvider),
 	fx.Provide(ClientFactoryProvider),
 	fx.Provide(ClientBeanProvider),
-	fx.Provide(FrontedClientProvider),
+	fx.Provide(FrontendClientProvider),
 	fx.Provide(GrpcListenerProvider),
 	fx.Provide(RuntimeMetricsReporterProvider),
 	metrics.RuntimeMetricsReporterLifetimeHooksModule,
@@ -276,7 +276,7 @@ func MembershipMonitorProvider(
 	return monitor, nil
 }
 
-func FrontedClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
+func FrontendClientProvider(clientBean client.Bean) workflowservice.WorkflowServiceClient {
 	frontendRawClient := clientBean.GetFrontendClient()
 	return frontend.NewRetryableClient(
 		frontendRawClient,
