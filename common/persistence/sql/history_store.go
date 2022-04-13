@@ -46,11 +46,9 @@ const (
 
 // AppendHistoryNodes add(or override) a node to a history branch
 func (m *sqlExecutionStore) AppendHistoryNodes(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalAppendHistoryNodesRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	branchInfo := request.BranchInfo
 	node := request.Node
 
@@ -123,11 +121,9 @@ func (m *sqlExecutionStore) AppendHistoryNodes(
 }
 
 func (m *sqlExecutionStore) DeleteHistoryNodes(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalDeleteHistoryNodesRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	branchInfo := request.BranchInfo
 	nodeID := request.NodeID
 	txnID := request.TransactionID
@@ -165,11 +161,9 @@ func (m *sqlExecutionStore) DeleteHistoryNodes(
 
 // ReadHistoryBranch returns history node data for a branch
 func (m *sqlExecutionStore) ReadHistoryBranch(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalReadHistoryBranchRequest,
 ) (*p.InternalReadHistoryBranchResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	branchIDBytes, err := primitives.ParseUUID(request.BranchID)
 	if err != nil {
 		return nil, err
@@ -298,11 +292,9 @@ func (m *sqlExecutionStore) ReadHistoryBranch(
 //       8[8,9]
 //
 func (m *sqlExecutionStore) ForkHistoryBranch(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalForkHistoryBranchRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	forkB := request.ForkBranchInfo
 	treeInfoBlob := request.TreeInfo
 	newBranchIdBytes, err := primitives.ParseUUID(request.NewBranchID)
@@ -339,12 +331,9 @@ func (m *sqlExecutionStore) ForkHistoryBranch(
 
 // DeleteHistoryBranch removes a branch
 func (m *sqlExecutionStore) DeleteHistoryBranch(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalDeleteHistoryBranchRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
-
 	branchIDBytes, err := primitives.ParseUUID(request.BranchId)
 	if err != nil {
 		return err
@@ -398,11 +387,9 @@ func (m *sqlExecutionStore) GetAllHistoryTreeBranches(
 
 // GetHistoryTree returns all branch information of a tree
 func (m *sqlExecutionStore) GetHistoryTree(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetHistoryTreeRequest,
 ) (*p.InternalGetHistoryTreeResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	treeID, err := primitives.ParseUUID(request.TreeID)
 	if err != nil {
 		return nil, err

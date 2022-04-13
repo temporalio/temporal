@@ -73,11 +73,9 @@ func newTaskPersistence(
 }
 
 func (m *sqlTaskManager) CreateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalCreateTaskQueueRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return serviceerror.NewInternal(err.Error())
@@ -102,11 +100,9 @@ func (m *sqlTaskManager) CreateTaskQueue(
 }
 
 func (m *sqlTaskManager) GetTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalGetTaskQueueRequest,
 ) (*persistence.InternalGetTaskQueueResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
@@ -141,11 +137,9 @@ func (m *sqlTaskManager) GetTaskQueue(
 }
 
 func (m *sqlTaskManager) UpdateTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalUpdateTaskQueueRequest,
 ) (*persistence.UpdateTaskQueueResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return nil, serviceerror.NewInternal(err.Error())
@@ -186,11 +180,9 @@ func (m *sqlTaskManager) UpdateTaskQueue(
 }
 
 func (m *sqlTaskManager) ListTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.ListTaskQueueRequest,
 ) (*persistence.InternalListTaskQueueResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	pageToken := taskQueuePageToken{MinTaskQueueId: minTaskQueueId}
 	if request.PageToken != nil {
 		if err := gobDeserialize(request.PageToken, &pageToken); err != nil {
@@ -319,11 +311,9 @@ func getBoundariesForPartition(partition uint32, totalPartitions uint32) (uint32
 }
 
 func (m *sqlTaskManager) DeleteTaskQueue(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.DeleteTaskQueueRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.TaskQueue.NamespaceID)
 	if err != nil {
 		return serviceerror.NewUnavailable(err.Error())
@@ -349,12 +339,9 @@ func (m *sqlTaskManager) DeleteTaskQueue(
 	return nil
 }
 func (m *sqlTaskManager) CreateTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalCreateTasksRequest,
 ) (*persistence.CreateTasksResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
-
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(err.Error())
@@ -392,11 +379,9 @@ func (m *sqlTaskManager) CreateTasks(
 }
 
 func (m *sqlTaskManager) GetTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetTasksRequest,
 ) (*persistence.InternalGetTasksResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(err.Error())
@@ -447,11 +432,9 @@ func (m *sqlTaskManager) GetTasks(
 }
 
 func (m *sqlTaskManager) CompleteTask(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CompleteTaskRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.TaskQueue.NamespaceID)
 	if err != nil {
 		return serviceerror.NewUnavailable(err.Error())
@@ -470,11 +453,9 @@ func (m *sqlTaskManager) CompleteTask(
 }
 
 func (m *sqlTaskManager) CompleteTasksLessThan(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.CompleteTasksLessThanRequest,
 ) (int, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	nidBytes, err := primitives.ParseUUID(request.NamespaceID)
 	if err != nil {
 		return 0, serviceerror.NewUnavailable(err.Error())

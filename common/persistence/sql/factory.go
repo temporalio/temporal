@@ -25,7 +25,6 @@
 package sql
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -198,10 +197,4 @@ func (c *DbConn) Close() error {
 		return err
 	}
 	return nil
-}
-
-// TODO remove this function when NoSQL & SQL layer all support context timeout
-func newExecutionContext() (context.Context, context.CancelFunc) {
-	ctx := context.Background()
-	return context.WithTimeout(ctx, executionTimeout)
 }
