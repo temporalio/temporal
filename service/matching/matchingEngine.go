@@ -413,9 +413,21 @@ pollLoop:
 		resp, err := e.recordWorkflowTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
-				e.logger.Debug(fmt.Sprintf("Duplicated workflow task taskQueue=%v, taskID=%v",
-					taskQueueName, task.event.GetTaskId()))
+			case *serviceerror.NotFound: // mutable state not found, workflow not running or workflow task not found
+				e.logger.Info("Workflow task not found",
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.WorkflowEventID(task.event.Data.GetScheduleId()),
+					tag.Error(err),
+				)
+				task.finish(nil)
+			case *serviceerrors.TaskAlreadyStarted:
+				e.logger.Debug("Duplicated workflow task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil)
 			default:
 				task.finish(err)
@@ -480,8 +492,20 @@ pollLoop:
 		resp, err := e.recordActivityTaskStarted(hCtx.Context, request, task)
 		if err != nil {
 			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
-				e.logger.Debug("Duplicated activity task", tag.Name(taskQueueName), tag.TaskID(task.event.GetTaskId()))
+			case *serviceerror.NotFound: // mutable state not found, workflow not running or activity info not found
+				e.logger.Info("Activity task not found",
+					tag.WorkflowNamespaceID(task.event.Data.GetNamespaceId()),
+					tag.WorkflowID(task.event.Data.GetWorkflowId()),
+					tag.WorkflowRunID(task.event.Data.GetRunId()),
+					tag.WorkflowTaskQueueName(taskQueueName),
+					tag.TaskID(task.event.GetTaskId()),
+					tag.TaskVisibilityTimestamp(timestamp.TimeValue(task.event.Data.GetCreateTime())),
+					tag.WorkflowEventID(task.event.Data.GetScheduleId()),
+					tag.Error(err),
+				)
+				task.finish(nil)
+			case *serviceerrors.TaskAlreadyStarted:
+				e.logger.Debug("Duplicated activity task", tag.WorkflowTaskQueueName(taskQueueName), tag.TaskID(task.event.GetTaskId()))
 				task.finish(nil)
 			default:
 				task.finish(err)
