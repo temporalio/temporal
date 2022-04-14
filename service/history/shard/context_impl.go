@@ -1377,6 +1377,8 @@ func (s *ContextImpl) finishStop() {
 
 	s.wLock()
 	s.transitionLocked(contextRequestFinishStop{})
+
+	// use a context that we know is cancelled so that this doesn't block
 	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 	s.wUnlock()
 
