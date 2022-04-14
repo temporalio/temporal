@@ -27,6 +27,7 @@ package statsd
 import (
 	"bytes"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cactus/go-statsd-client/statsd"
@@ -37,6 +38,7 @@ import (
 type temporalTallyStatsdReporter struct {
 	//Wrapper on top of "github.com/uber-go/tally/statsd"
 	tallystatsd tally.StatsReporter
+	separator   string
 }
 
 func (r *temporalTallyStatsdReporter) metricNameWithTags(originalName string, tags map[string]string) string {
@@ -63,22 +65,23 @@ func (r *temporalTallyStatsdReporter) metricNameWithTags(originalName string, ta
 func NewReporter(statsd statsd.Statter, opts tallystatsdreporter.Options) tally.StatsReporter {
 	return &temporalTallyStatsdReporter{
 		tallystatsd: tallystatsdreporter.NewReporter(statsd, opts),
+		separator:   ".__",
 	}
 }
 
 func (r *temporalTallyStatsdReporter) ReportCounter(name string, tags map[string]string, value int64) {
-	newName := r.metricNameWithTags(name, tags)
-	r.tallystatsd.ReportCounter(newName, map[string]string{}, value)
+	// newName := r.metricNameWithTags(name, tags)
+	r.tallystatsd.ReportCounter(r.taggedName(name, tags), map[string]string{}, value)
 }
 
 func (r *temporalTallyStatsdReporter) ReportGauge(name string, tags map[string]string, value float64) {
-	newName := r.metricNameWithTags(name, tags)
-	r.tallystatsd.ReportGauge(newName, map[string]string{}, value)
+	// newName := r.metricNameWithTags(name, tags)
+	r.tallystatsd.ReportGauge(r.taggedName(name, tags), map[string]string{}, value)
 }
 
 func (r *temporalTallyStatsdReporter) ReportTimer(name string, tags map[string]string, interval time.Duration) {
-	newName := r.metricNameWithTags(name, tags)
-	r.tallystatsd.ReportTimer(newName, map[string]string{}, interval)
+	// newName := r.metricNameWithTags(name, tags)
+	r.tallystatsd.ReportTimer(r.taggedName(name, tags), map[string]string{}, interval)
 }
 
 func (r *temporalTallyStatsdReporter) ReportHistogramValueSamples(
@@ -111,4 +114,32 @@ func (r *temporalTallyStatsdReporter) Capabilities() tally.Capabilities {
 
 func (r *temporalTallyStatsdReporter) Flush() {
 	r.tallystatsd.Flush()
+}
+
+// https://github.com/influxdata/telegraf/blob/master/plugins/inputs/statsd/README.md#influx-statsd
+func (r *temporalTallyStatsdReporter) taggedName(name string, tags map[string]string) string {
+	var b strings.Builder
+	b.WriteString(name)
+	for k, v := range tags {
+		b.WriteString(r.separator)
+		b.WriteString(replaceChars(k))
+		b.WriteByte('=')
+		b.WriteString(replaceChars(v))
+	}
+	return b.String()
+}
+
+// Replace problematic characters in tags.
+func replaceChars(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); i++ {
+		switch s[i] {
+		case '.', ':', '|', '-', '=':
+			b.WriteByte('_')
+		default:
+			b.WriteByte(s[i])
+		}
+	}
+	return b.String()
 }
