@@ -1384,6 +1384,10 @@ func (s *ContextImpl) Unload() {
 
 // finishStop should only be called by the controller.
 func (s *ContextImpl) finishStop() {
+	// Do this again in case we skipped the stopping state, which could happen
+	// when calling CloseShardByID or the controller is shutting down.
+	s.lifecycleCancel()
+
 	s.wLock()
 	s.transitionLocked(contextRequestFinishStop{})
 	engine := s.engine
@@ -1396,9 +1400,6 @@ func (s *ContextImpl) finishStop() {
 		engine.Stop()
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
 	}
-
-	// Cancel lifecycle context after engine is stopped
-	s.lifecycleCancel()
 }
 
 func (s *ContextImpl) isValid() bool {
@@ -1495,6 +1496,8 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 		if s.shardInfo != nil {
 			s.shardInfo.RangeId = -1
 		}
+		// Cancel lifecycle context as soon as we know we're shutting down
+		s.lifecycleCancel()
 		// This will cause the controller to remove this shard from the map and then call s.finishStop()
 		go s.closeCallback(s)
 	}
