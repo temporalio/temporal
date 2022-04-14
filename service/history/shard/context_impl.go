@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
@@ -110,7 +111,7 @@ type (
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                       sync.RWMutex
 		state                        contextState
-		engine                       Engine
+		engineFuture                 *future.FutureImpl[Engine]
 		lastUpdated                  time.Time
 		shardInfo                    *persistence.ShardInfoWithFailover
 		taskSequenceNumber           int64
@@ -176,14 +177,13 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 }
 
 func (s *ContextImpl) GetEngine() (Engine, error) {
-	s.rLock()
-	defer s.rUnlock()
+	return s.engineFuture.Get(context.Background())
+}
 
-	if err := s.errorByStateLocked(); err != nil {
-		return nil, err
-	}
-
-	return s.engine, nil
+func (s *ContextImpl) GetEngineWithContext(
+	ctx context.Context,
+) (Engine, error) {
+	return s.engineFuture.Get(ctx)
 }
 
 func (s *ContextImpl) GetMaxTaskIDForCurrentRangeID() int64 {
@@ -784,6 +784,10 @@ func (s *ContextImpl) GetCurrentExecution(
 	ctx context.Context,
 	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.GetCurrentExecutionResponse, error) {
+	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
 	resp, err := s.executionManager.GetCurrentExecution(ctx, request)
 	if err = s.handleReadError(err); err != nil {
 		return nil, err
@@ -795,6 +799,10 @@ func (s *ContextImpl) GetWorkflowExecution(
 	ctx context.Context,
 	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.GetWorkflowExecutionResponse, error) {
+	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
 	resp, err := s.executionManager.GetWorkflowExecution(ctx, request)
 	if err = s.handleReadError(err); err != nil {
 		return nil, err
@@ -822,7 +830,11 @@ func (s *ContextImpl) addTasksLocked(
 	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
-	s.engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
+	engine, err := s.GetEngineWithContext(ctx)
+	if err != nil {
+		return err
+	}
+	engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
 	return nil
 }
 
@@ -832,12 +844,9 @@ func (s *ContextImpl) AppendHistoryEvents(
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 ) (int, error) {
-	s.rLock()
-	if err := s.errorByStateLocked(); err != nil {
-		s.rUnlock()
+	if err := s.errorByState(); err != nil {
 		return 0, err
 	}
-	s.rUnlock()
 
 	request.ShardID = s.shardID
 
@@ -1013,6 +1022,13 @@ func (s *ContextImpl) GetThrottledLogger() log.Logger {
 
 func (s *ContextImpl) getRangeIDLocked() int64 {
 	return s.shardInfo.GetRangeId()
+}
+
+func (s *ContextImpl) errorByState() error {
+	s.rLock()
+	defer s.rUnlock()
+
+	return s.errorByStateLocked()
 }
 
 func (s *ContextImpl) errorByStateLocked() error {
@@ -1340,32 +1356,6 @@ func (s *ContextImpl) createEngine() Engine {
 	return engine
 }
 
-func (s *ContextImpl) getOrCreateEngine(ctx context.Context) (engine Engine, retErr error) {
-	// Block on shard acquisition for the lifetime of this context. Note that this retry is just
-	// polling a value in memory. Another goroutine is doing the actual work.
-	policy := backoff.NewExponentialRetryPolicy(5 * time.Millisecond)
-	policy.SetMaximumInterval(1 * time.Second)
-
-	isRetryable := func(err error) bool { return err == ErrShardStatusUnknown }
-
-	op := func(context.Context) error {
-		s.rLock()
-		defer s.rUnlock()
-		err := s.errorByStateLocked()
-		if err == nil {
-			engine = s.engine
-		}
-		return err
-	}
-
-	retErr = backoff.RetryContext(ctx, op, policy, isRetryable)
-	if retErr == nil && engine == nil {
-		// This shouldn't ever happen, but don't let it return nil error.
-		retErr = ErrShardStatusUnknown
-	}
-	return
-}
-
 // start should only be called by the controller.
 func (s *ContextImpl) start() {
 	s.wLock()
@@ -1387,8 +1377,9 @@ func (s *ContextImpl) finishStop() {
 
 	s.wLock()
 	s.transitionLocked(contextRequestFinishStop{})
-	engine := s.engine
-	s.engine = nil
+
+	// use a context that we know is cancelled so that this doesn't block
+	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 	s.wUnlock()
 
 	// Stop the engine if it was running (outside the lock but before returning)
@@ -1738,16 +1729,17 @@ func (s *ContextImpl) acquireShard() {
 		//    doing it ourselves) is Stopped. In that case, we'll have to stop the engine that we just
 		//    created, since the stop transition didn't do it.
 		// 2. We don't have an engine yet, so no one should be calling any of our methods that mutate things.
-		if s.engine == nil {
+		if !s.engineFuture.Ready() {
 			s.wUnlock()
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
 			engine := s.createEngine()
 			s.wLock()
 			if s.state >= contextStateStopping {
 				engine.Stop()
+				s.engineFuture.Set(nil, errStoppingContext)
 				return errStoppingContext
 			}
-			s.engine = engine
+			s.engineFuture.Set(engine, nil)
 		}
 
 		s.transitionLocked(contextRequestAcquired{})
@@ -1823,6 +1815,7 @@ func newContext(
 		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
+		engineFuture:            future.NewFuture[Engine](),
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),
