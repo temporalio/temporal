@@ -560,6 +560,10 @@ func TaskVersion(taskVersion int64) ZapTag {
 	return NewInt64("queue-task-version", taskVersion)
 }
 
+func TaskType(taskType enumsspb.TaskType) ZapTag {
+	return NewStringTag("queue-task-type", taskType.String())
+}
+
 // TaskVisibilityTimestamp returns tag for task visibilityTimestamp
 func TaskVisibilityTimestamp(timestamp time.Time) ZapTag {
 	return NewTimeTag("queue-task-visibility-timestamp", timestamp)
