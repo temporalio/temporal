@@ -53,14 +53,6 @@ var (
 		SupportedServerVersionsHeaderName: SupportedServerVersions,
 		SupportedFeaturesHeaderName:       AllFeatures,
 	})
-
-	cliVersionHeaders = metadata.New(map[string]string{
-		ClientNameHeaderName:              ClientNameCLI,
-		ClientVersionHeaderName:           CLIVersion,
-		SupportedServerVersionsHeaderName: SupportedServerVersions,
-		// TODO: This should include SupportedFeaturesHeaderName with a value that's taken
-		// from the Go SDK (since the cli uses the Go SDK for most operations).
-	})
 )
 
 // GetValues returns header values for passed header names.
@@ -108,11 +100,6 @@ func Propagate(ctx context.Context) context.Context {
 // SetVersions sets headers for internal communications.
 func SetVersions(ctx context.Context) context.Context {
 	return metadata.NewOutgoingContext(ctx, internalVersionHeaders)
-}
-
-// SetCLIVersions sets headers for CLI requests.
-func SetCLIVersions(ctx context.Context) context.Context {
-	return metadata.NewOutgoingContext(ctx, cliVersionHeaders)
 }
 
 // SetVersionsForTests sets headers as they would be received from the client.
