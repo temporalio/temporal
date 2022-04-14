@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -471,6 +472,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.EventID,
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
+		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
 
 	return retError

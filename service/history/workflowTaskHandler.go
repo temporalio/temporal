@@ -292,6 +292,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 			ScheduleAttempt: ai.Attempt,
 			ActivityId:      attr.ActivityId,
 			ActivityType:    attr.ActivityType.GetName(),
+			Clock:           handler.shard.GetVClock(),
 		}
 		serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 		if err != nil {

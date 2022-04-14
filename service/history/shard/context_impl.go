@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/vclock"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -191,6 +193,14 @@ func (s *ContextImpl) GetMaxTaskIDForCurrentRangeID() int64 {
 	defer s.rUnlock()
 	// maxTaskSequenceNumber is the exclusive upper bound of task ID for current range.
 	return s.maxTaskSequenceNumber - 1
+}
+
+func (s *ContextImpl) GetVClock() *clockpb.ShardClock {
+	s.rLock()
+	clock := s.taskSequenceNumber
+	s.rUnlock()
+
+	return vclock.NewShardClock(s.shardID, clock)
 }
 
 func (s *ContextImpl) GenerateTaskID() (int64, error) {

@@ -36,7 +36,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
 	v10 "go.temporal.io/server/api/adminservice/v1"
-	v11 "go.temporal.io/server/api/historyservice/v1"
+	v11 "go.temporal.io/server/api/clock/v1"
+	v12 "go.temporal.io/server/api/historyservice/v1"
 	archiver "go.temporal.io/server/common/archiver"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
@@ -336,10 +337,10 @@ func (mr *MockContextMockRecorder) GetExecutionManager() *gomock.Call {
 }
 
 // GetHistoryClient mocks base method.
-func (m *MockContext) GetHistoryClient() v11.HistoryServiceClient {
+func (m *MockContext) GetHistoryClient() v12.HistoryServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHistoryClient")
-	ret0, _ := ret[0].(v11.HistoryServiceClient)
+	ret0, _ := ret[0].(v12.HistoryServiceClient)
 	return ret0
 }
 
@@ -504,11 +505,11 @@ func (mr *MockContextMockRecorder) GetRemoteAdminClient(cluster interface{}) *go
 }
 
 // GetReplicationStatus mocks base method.
-func (m *MockContext) GetReplicationStatus(cluster []string) (map[string]*v11.ShardReplicationStatusPerCluster, map[string]*v11.HandoverNamespaceInfo, error) {
+func (m *MockContext) GetReplicationStatus(cluster []string) (map[string]*v12.ShardReplicationStatusPerCluster, map[string]*v12.HandoverNamespaceInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationStatus", cluster)
-	ret0, _ := ret[0].(map[string]*v11.ShardReplicationStatusPerCluster)
-	ret1, _ := ret[1].(map[string]*v11.HandoverNamespaceInfo)
+	ret0, _ := ret[0].(map[string]*v12.ShardReplicationStatusPerCluster)
+	ret1, _ := ret[1].(map[string]*v12.HandoverNamespaceInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -601,6 +602,20 @@ func (m *MockContext) GetTimeSource() clock.TimeSource {
 func (mr *MockContextMockRecorder) GetTimeSource() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetTimeSource", reflect.TypeOf((*MockContext)(nil).GetTimeSource))
+}
+
+// GetVClock mocks base method.
+func (m *MockContext) GetVClock() *v11.ShardClock {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetVClock")
+	ret0, _ := ret[0].(*v11.ShardClock)
+	return ret0
+}
+
+// GetVClock indicates an expected call of GetVClock.
+func (mr *MockContextMockRecorder) GetVClock() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetVClock", reflect.TypeOf((*MockContext)(nil).GetVClock))
 }
 
 // GetWorkflowExecution mocks base method.

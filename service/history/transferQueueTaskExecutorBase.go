@@ -43,6 +43,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -122,6 +123,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		},
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
+		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
 	if _, ok := err.(*serviceerror.NotFound); ok {
 		// NotFound error is not expected for AddTasks calls
@@ -150,6 +152,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		TaskQueue:              taskqueue,
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
+		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
 	if _, ok := err.(*serviceerror.NotFound); ok {
 		// NotFound error is not expected for AddTasks calls
