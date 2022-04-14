@@ -36,6 +36,7 @@ import "temporal/api/workflow/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
 import "temporal/api/failure/v1/message.proto";
 
+import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
@@ -64,6 +65,7 @@ message StartWorkflowExecutionRequest {
 
 message StartWorkflowExecutionResponse {
     string run_id = 1;
+    temporal.server.api.clock.v1.ShardClock clock = 2;
 }
 
 message GetMutableStateRequest {
@@ -142,6 +144,7 @@ message RecordWorkflowTaskStartedRequest {
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
     temporal.api.workflowservice.v1.PollWorkflowTaskQueueRequest poll_request = 6;
+    temporal.server.api.clock.v1.ShardClock clock = 7;
 }
 
 message RecordWorkflowTaskStartedResponse {
@@ -159,6 +162,7 @@ message RecordWorkflowTaskStartedResponse {
     google.protobuf.Timestamp scheduled_time = 12 [(gogoproto.stdtime) = true];
     google.protobuf.Timestamp started_time = 13 [(gogoproto.stdtime) = true];
     map<string, temporal.api.query.v1.WorkflowQuery> queries = 14;
+    temporal.server.api.clock.v1.ShardClock clock = 15;
 }
 
 message RecordActivityTaskStartedRequest {
@@ -169,6 +173,7 @@ message RecordActivityTaskStartedRequest {
     // Unique id of each poll request. Used to ensure at most once delivery of tasks.
     string request_id = 5;
     temporal.api.workflowservice.v1.PollActivityTaskQueueRequest poll_request = 6;
+    temporal.server.api.clock.v1.ShardClock clock = 7;
 }
 
 message RecordActivityTaskStartedResponse {
@@ -179,6 +184,7 @@ message RecordActivityTaskStartedResponse {
     temporal.api.common.v1.Payloads heartbeat_details = 5;
     temporal.api.common.v1.WorkflowType workflow_type = 6;
     string workflow_namespace = 7;
+    temporal.server.api.clock.v1.ShardClock clock = 8;
 }
 
 message RespondWorkflowTaskCompletedRequest {
@@ -304,6 +310,7 @@ message ScheduleWorkflowTaskRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     bool is_first_workflow_task = 3;
+    temporal.server.api.clock.v1.ShardClock clock = 4;
 }
 
 message ScheduleWorkflowTaskResponse {
@@ -322,6 +329,7 @@ message RecordChildExecutionCompletedRequest {
     int64 initiated_id = 3;
     temporal.api.common.v1.WorkflowExecution completed_execution = 4;
     temporal.api.history.v1.HistoryEvent completion_event = 5;
+    temporal.server.api.clock.v1.ShardClock clock = 6;
 }
 
 message RecordChildExecutionCompletedResponse {
