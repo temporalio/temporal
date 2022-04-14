@@ -32,6 +32,7 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
@@ -87,6 +88,7 @@ func NewTestContext(
 		lifecycleCancel:     lifecycleCancel,
 
 		state:                        contextStateAcquired,
+		engineFuture:                 future.NewFuture[Engine](),
 		shardInfo:                    shardInfo,
 		taskSequenceNumber:           1,
 		immediateTaskMaxReadLevel:    0,
@@ -116,7 +118,7 @@ func NewTestContext(
 
 // SetEngineForTest sets s.engine. Only used by tests.
 func (s *ContextTest) SetEngineForTesting(engine Engine) {
-	s.engine = engine
+	s.engineFuture.Set(engine, nil)
 }
 
 // SetEventsCacheForTesting sets s.eventsCache. Only used by tests.

@@ -64,6 +64,7 @@ type (
 		GetTimeSource() clock.TimeSource
 
 		GetEngine() (Engine, error)
+		GetEngineWithContext(ctx context.Context) (Engine, error)
 
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)

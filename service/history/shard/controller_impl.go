@@ -158,7 +158,7 @@ func (c *ControllerImpl) GetEngineForShard(ctx context.Context, shardID int32) (
 	if err != nil {
 		return nil, err
 	}
-	return shard.getOrCreateEngine(ctx)
+	return shard.GetEngineWithContext(ctx)
 }
 
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
