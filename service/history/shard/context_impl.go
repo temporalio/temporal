@@ -1318,8 +1318,8 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		// the shard in the background. If successful, we'll get a new RangeID, to guarantee that subsequent
 		// reads will either see that write, or know for certain that it failed. This allows the callers to
 		// reliably check the outcome by performing a read. If we fail, we'll shut down the shard.
-		// We only want to update the max read level _after_ the re-acquire succeeds, not right now, otherwise
-		// a write that gets applied after we see a timeout could cause us to lose tasks.
+		// Note that reacquiring the shard will cause the max read level to be updated
+		// to the new range (i.e. past newMaxReadLevel).
 		s.transitionLocked(contextRequestLost{})
 		return err
 	}
