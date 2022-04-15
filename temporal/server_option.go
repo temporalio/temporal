@@ -126,8 +126,8 @@ func WithAudienceGetter(audienceGetter func(cfg *config.Config) authorization.JW
 //
 // Sample usage:
 // logger := log.NewCLILogger()
-// mustProvider, err := NewCustomMustProviderImplementation(logger)
-// reporter, err2 := metrics.NewOpentelemeteryReporter(logger, &metrics.ClientConfig{}, mustProvider)
+// provider, err := NewCustomProviderImplementation(logger)
+// reporter, err2 := metrics.NewOpentelemeteryReporter(logger, &metrics.ClientConfig{}, provider)
 // server := temporal.NewServer(temporal.WithCustomMetricsReporter(repoter))
 func WithCustomMetricsReporter(reporter metrics.Reporter) ServerOption {
 	return newApplyFuncContainer(func(s *serverOptions) {

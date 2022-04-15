@@ -56,7 +56,7 @@ type (
 	}
 )
 
-func NewOpentelemetryMustProvider(
+func NewOpentelemetryProvider(
 	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
