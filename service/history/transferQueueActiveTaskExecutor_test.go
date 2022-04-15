@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/queues"
@@ -667,6 +669,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		WorkflowId: "some random parent workflow ID",
 		RunId:      uuid.New(),
 	}
+	parentClock := vclock.NewShardClock(rand.Int31(), rand.Int63())
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -685,6 +688,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 				Namespace:   parentNamespace,
 				Execution:   parentExecution,
 				InitiatedId: parentInitiatedID,
+				Clock:       parentClock,
 			},
 		},
 	)
@@ -715,6 +719,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		NamespaceId:        parentNamespaceID,
 		WorkflowExecution:  parentExecution,
 		InitiatedId:        parentInitiatedID,
+		Clock:              parentClock,
 		CompletedExecution: &execution,
 		CompletionEvent:    event,
 	}).Return(nil, nil)
@@ -1876,8 +1881,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-
-	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childWorkflowID, childRunID, childWorkflowType)
+	childClock := &clockpb.ShardClock{
+		Id:    rand.Int31(),
+		Clock: rand.Int63(),
+	}
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childWorkflowID, childRunID, childWorkflowType, childClock)
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
 	ci.StartedId = event.GetEventId()
@@ -1891,6 +1899,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 			RunId:      childRunID,
 		},
 		IsFirstWorkflowTask: true,
+		Clock:               childClock,
 	}).Return(nil, nil)
 
 	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
@@ -1963,8 +1972,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-
-	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType)
+	childClock := &clockpb.ShardClock{
+		Id:    rand.Int31(),
+		Clock: rand.Int63(),
+	}
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType, childClock)
 	ci.StartedId = event.GetEventId()
 	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedId, &childExecution, &historypb.WorkflowExecutionCompletedEventAttributes{
 		Result:                       payloads.EncodeString("some random child workflow execution result"),
@@ -2176,6 +2188,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			Namespace:   tests.Namespace.String(),
 			Execution:   &execution,
 			InitiatedId: task.InitiatedID,
+			Clock:       vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
 		},
 		FirstWorkflowTaskBackoff:        backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
 		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
