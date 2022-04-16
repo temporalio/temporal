@@ -119,6 +119,7 @@ func (s *engine3Suite) SetupTest() {
 		}},
 		s.config,
 	)
+	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -151,6 +152,7 @@ func (s *engine3Suite) SetupTest() {
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
 		},
+		workflowConsistencyChecker: newWorkflowConsistencyChecker(s.mockShard, historyCache),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)

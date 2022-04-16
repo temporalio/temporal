@@ -67,6 +67,7 @@ type (
 		GetEngine() (Engine, error)
 		GetEngineWithContext(ctx context.Context) (Engine, error)
 
+		AssertOwnership(ctx context.Context) error
 		NewVectorClock() (*clockpb.ShardClock, error)
 		CurrentVectorClock() *clockpb.ShardClock
 
