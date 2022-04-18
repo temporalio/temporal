@@ -34,6 +34,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
@@ -80,7 +81,7 @@ type (
 		notifyCh   chan struct{}
 		status     int32
 		shutdownWG sync.WaitGroup
-		shutdownCh chan struct{}
+		shutdownCh channel.ShutdownOnce
 	}
 )
 
@@ -121,7 +122,7 @@ func newQueueProcessorBase(
 		),
 		status:        common.DaemonStatusInitialized,
 		notifyCh:      make(chan struct{}, 1),
-		shutdownCh:    make(chan struct{}),
+		shutdownCh:    shard.GetShutdownChan(),
 		logger:        logger,
 		metricsScope:  metricsScope,
 		ackMgr:        queueAckMgr,
@@ -156,7 +157,7 @@ func (p *queueProcessorBase) Stop() {
 	p.logger.Info("", tag.LifeCycleStopping, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStopped, tag.ComponentTransferQueue)
 
-	close(p.shutdownCh)
+	p.shutdownCh.Shutdown()
 	p.retryTasks()
 
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
@@ -200,7 +201,8 @@ func (p *queueProcessorBase) processorPump() {
 processorPumpLoop:
 	for {
 		select {
-		case <-p.shutdownCh:
+		case <-p.shutdownCh.Channel():
+			go p.Stop()
 			break processorPumpLoop
 		case <-p.ackMgr.getFinishedChan():
 			// use a separate gorouting since the caller hold the shutdownWG
@@ -260,7 +262,8 @@ func (p *queueProcessorBase) processBatch() {
 			return
 		}
 		select {
-		case <-p.shutdownCh:
+		case <-p.shutdownCh.Channel():
+			go p.Stop()
 			return
 		default:
 		}

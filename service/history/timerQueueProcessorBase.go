@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
@@ -61,7 +62,7 @@ type (
 		executionManager persistence.ExecutionManager
 		status           int32
 		shutdownWG       sync.WaitGroup
-		shutdownCh       chan struct{}
+		shutdownCh       channel.ShutdownOnce
 		config           *configs.Config
 		logger           log.Logger
 		metricsClient    metrics.Client
@@ -114,7 +115,7 @@ func newTimerQueueProcessorBase(
 		cache:            workflowCache,
 		executionManager: shard.GetExecutionManager(),
 		status:           common.DaemonStatusInitialized,
-		shutdownCh:       make(chan struct{}),
+		shutdownCh:       shard.GetShutdownChan(),
 		config:           config,
 		logger:           logger,
 		metricsClient:    shard.GetMetricsClient(),
@@ -156,7 +157,7 @@ func (t *timerQueueProcessorBase) Stop() {
 	}
 
 	t.timerGate.Close()
-	close(t.shutdownCh)
+	t.shutdownCh.Shutdown()
 	t.retryTasks()
 
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
@@ -175,7 +176,8 @@ func (t *timerQueueProcessorBase) processorPump() {
 RetryProcessor:
 	for {
 		select {
-		case <-t.shutdownCh:
+		case <-t.shutdownCh.Channel():
+			go t.Stop()
 			break RetryProcessor
 		default:
 			err := t.internalProcessor()
@@ -248,8 +250,9 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 		// 4. updating ack level
 		//
 		select {
-		case <-t.shutdownCh:
+		case <-t.shutdownCh.Channel():
 			t.logger.Debug("Timer queue processor pump shutting down.")
+			go t.Stop()
 			return nil
 		case <-t.timerQueueAckMgr.getFinishedChan():
 			// timer queue ack manager indicate that all task scanned
@@ -323,7 +326,8 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 			return nil, nil
 		}
 		select {
-		case <-t.shutdownCh:
+		case <-t.shutdownCh.Channel():
+			go t.Stop()
 			return nil, nil
 		default:
 		}

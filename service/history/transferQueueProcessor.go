@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -77,7 +78,7 @@ type (
 		logger                    log.Logger
 		isStarted                 int32
 		isStopped                 int32
-		shutdownChan              chan struct{}
+		shutdownChan              channel.ShutdownOnce
 		activeTaskProcessor       *transferQueueActiveProcessorImpl
 		standbyTaskProcessorsLock sync.RWMutex
 		standbyTaskProcessors     map[string]*transferQueueStandbyProcessorImpl
@@ -114,7 +115,7 @@ func newTransferQueueProcessor(
 		historyClient:            historyClient,
 		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
 		logger:                   logger,
-		shutdownChan:             make(chan struct{}),
+		shutdownChan:             shard.GetShutdownChan(),
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			workflowCache,
@@ -155,7 +156,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 		}
 		t.standbyTaskProcessorsLock.RUnlock()
 	}
-	close(t.shutdownChan)
+	t.shutdownChan.Shutdown()
 }
 
 // NotifyNewTasks - Notify the processor about the new active / standby transfer task arrival.
@@ -254,12 +255,13 @@ func (t *transferQueueProcessorImpl) completeTransferLoop() {
 
 	for {
 		select {
-		case <-t.shutdownChan:
+		case <-t.shutdownChan.Channel():
 			// before shutdown, make sure the ack level is up to date
 			err := t.completeTransfer()
 			if err != nil {
 				t.logger.Error("Error complete transfer task", tag.Error(err))
 			}
+			go t.Stop()
 			return
 		case <-timer.C:
 		CompleteLoop:

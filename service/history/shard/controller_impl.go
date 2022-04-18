@@ -219,6 +219,9 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 		if shard.isValid() {
 			return shard, nil
 		}
+
+		shard.Unload()
+		delete(c.historyShards, shardID)
 	}
 
 	if atomic.LoadInt32(&c.status) == common.DaemonStatusStopped {

@@ -33,6 +33,7 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -76,7 +77,7 @@ type (
 	taskProcessor struct {
 		shard         shard.Context
 		cache         workflow.Cache
-		shutdownCh    chan struct{}
+		shutdownCh    channel.ShutdownOnce
 		tasksCh       chan *taskInfo
 		config        *configs.Config
 		logger        log.Logger
@@ -124,7 +125,7 @@ func NewTaskProcessor(
 	base := &taskProcessor{
 		shard:                   shard,
 		cache:                   historyCache,
-		shutdownCh:              make(chan struct{}),
+		shutdownCh:              shard.GetShutdownChan(),
 		tasksCh:                 make(chan *taskInfo, options.QueueSize),
 		config:                  shard.GetConfig(),
 		logger:                  logger,
@@ -148,7 +149,7 @@ func (t *taskProcessor) Start() {
 }
 
 func (t *taskProcessor) Stop() {
-	close(t.shutdownCh)
+	t.shutdownCh.Shutdown()
 	if success := common.AwaitWaitGroup(&t.workerWG, time.Minute); !success {
 		t.logger.Warn("Task processor timed out on shutdown.")
 	}
@@ -162,7 +163,8 @@ func (t *taskProcessor) taskWorker(
 
 	for {
 		select {
-		case <-t.shutdownCh:
+		case <-t.shutdownCh.Channel():
+			go t.Stop()
 			return
 		case task, ok := <-t.tasksCh:
 			if !ok {
@@ -194,7 +196,8 @@ func (t *taskProcessor) addTask(
 	// We have a timer to fire.
 	select {
 	case t.tasksCh <- task:
-	case <-t.shutdownCh:
+	case <-t.shutdownCh.Channel():
+		go t.Stop()
 		return false
 	}
 	return true
@@ -209,7 +212,8 @@ func (t *taskProcessor) processTaskAndAck(
 	var err error
 
 	select {
-	case <-t.shutdownCh:
+	case <-t.shutdownCh.Channel():
+		go t.Stop()
 		// this must return without ack
 		return
 	default:
@@ -231,7 +235,8 @@ func (t *taskProcessor) processTaskAndAck(
 	}
 	retryCondition := func(err error) bool {
 		select {
-		case <-t.shutdownCh:
+		case <-t.shutdownCh.Channel():
+			go t.Stop()
 			return false
 		default:
 			return true
@@ -240,7 +245,8 @@ func (t *taskProcessor) processTaskAndAck(
 
 	for {
 		select {
-		case <-t.shutdownCh:
+		case <-t.shutdownCh.Channel():
+			go t.Stop()
 			// this must return without ack
 			return
 		default:
@@ -301,7 +307,8 @@ func (t *taskProcessor) handleTaskError(
 		scope.IncCounter(metrics.TaskStandbyRetryCounter)
 		select {
 		case <-notificationChan:
-		case <-t.shutdownCh:
+		case <-t.shutdownCh.Channel():
+			go t.Stop()
 		}
 		return err
 	}

@@ -127,7 +127,7 @@ func (s *taskProcessorSuite) TearDownTest() {
 }
 
 func (s *taskProcessorSuite) TestProcessTaskAndAck_ShutDown() {
-	close(s.taskProcessor.shutdownCh)
+	s.taskProcessor.shutdownCh.Shutdown()
 	s.taskProcessor.processTaskAndAck(
 		s.notificationChan,
 		&taskInfo{

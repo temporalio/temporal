@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
@@ -62,6 +63,7 @@ type (
 		GetThrottledLogger() log.Logger
 		GetMetricsClient() metrics.Client
 		GetTimeSource() clock.TimeSource
+		GetShutdownChan() channel.ShutdownOnce
 
 		GetEngine() (Engine, error)
 		GetEngineWithContext(ctx context.Context) (Engine, error)

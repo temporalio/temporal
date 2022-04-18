@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -75,7 +76,7 @@ type (
 		logger                     log.Logger
 		matchingClient             matchingservice.MatchingServiceClient
 		status                     int32
-		shutdownChan               chan struct{}
+		shutdownChan               channel.ShutdownOnce
 		shutdownWG                 sync.WaitGroup
 		activeTimerProcessor       *timerQueueActiveProcessorImpl
 		standbyTimerProcessorsLock sync.RWMutex
@@ -117,7 +118,7 @@ func newTimerQueueProcessor(
 		logger:                   logger,
 		matchingClient:           matchingClient,
 		status:                   common.DaemonStatusInitialized,
-		shutdownChan:             make(chan struct{}),
+		shutdownChan:             shard.GetShutdownChan(),
 		activeTimerProcessor: newTimerQueueActiveProcessor(
 			shard,
 			workflowCache,
@@ -157,7 +158,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 		}
 		t.standbyTimerProcessorsLock.RUnlock()
 	}
-	close(t.shutdownChan)
+	t.shutdownChan.Shutdown()
 	common.AwaitWaitGroup(&t.shutdownWG, time.Minute)
 }
 
@@ -261,9 +262,10 @@ func (t *timerQueueProcessorImpl) completeTimersLoop() {
 	defer timer.Stop()
 	for {
 		select {
-		case <-t.shutdownChan:
+		case <-t.shutdownChan.Channel():
 			// before shutdown, make sure the ack level is up to date
 			t.completeTimers() //nolint:errcheck
+			go t.Stop()
 			return
 		case <-timer.C:
 		CompleteLoop:

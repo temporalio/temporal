@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -67,7 +68,7 @@ type (
 
 		isStarted    int32
 		isStopped    int32
-		shutdownChan chan struct{}
+		shutdownChan channel.ShutdownOnce
 	}
 )
 
@@ -132,7 +133,7 @@ func newVisibilityQueueProcessor(
 
 		config:       config,
 		ackLevel:     ackLevel,
-		shutdownChan: make(chan struct{}),
+		shutdownChan: shard.GetShutdownChan(),
 
 		queueAckMgr:        nil, // is set bellow
 		queueProcessorBase: nil, // is set bellow
@@ -177,7 +178,7 @@ func (t *visibilityQueueProcessorImpl) Stop() {
 		return
 	}
 	t.queueProcessorBase.Stop()
-	close(t.shutdownChan)
+	t.shutdownChan.Shutdown()
 }
 
 // NotifyNewTasks - Notify the processor about the new visibility task arrival.
@@ -215,12 +216,13 @@ func (t *visibilityQueueProcessorImpl) completeTaskLoop() {
 
 	for {
 		select {
-		case <-t.shutdownChan:
+		case <-t.shutdownChan.Channel():
 			// before shutdown, make sure the ack level is up to date
 			err := t.completeTask()
 			if err != nil {
 				t.logger.Error("Error complete visibility task", tag.Error(err))
 			}
+			go t.Stop()
 			return
 		case <-timer.C:
 			for attempt := 1; attempt <= t.config.VisibilityProcessorCompleteTaskFailureRetryCount(); attempt++ {

@@ -31,6 +31,7 @@ import (
 	"github.com/golang/mock/gomock"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/membership"
@@ -86,6 +87,7 @@ func NewTestContext(
 		throttledLogger:     resourceTest.GetThrottledLogger(),
 		lifecycleCtx:        lifecycleCtx,
 		lifecycleCancel:     lifecycleCancel,
+		shutdownChan:        channel.NewShutdownOnce(),
 
 		state:                        contextStateAcquired,
 		engineFuture:                 future.NewFuture[Engine](),

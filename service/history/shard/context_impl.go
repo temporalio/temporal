@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
+	"go.temporal.io/server/common/channel"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/membership"
@@ -107,6 +108,7 @@ type (
 		// Context that lives for the lifetime of the shard context
 		lifecycleCtx    context.Context
 		lifecycleCancel context.CancelFunc
+		shutdownChan    channel.ShutdownOnce
 
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                       sync.RWMutex
@@ -1374,6 +1376,7 @@ func (s *ContextImpl) finishStop() {
 	// Do this again in case we skipped the stopping state, which could happen
 	// when calling CloseShardByID or the controller is shutting down.
 	s.lifecycleCancel()
+	s.shutdownChan.Shutdown()
 
 	s.wLock()
 	s.transitionLocked(contextRequestFinishStop{})
@@ -1393,7 +1396,7 @@ func (s *ContextImpl) finishStop() {
 func (s *ContextImpl) isValid() bool {
 	s.rLock()
 	defer s.rUnlock()
-	return s.state < contextStateStopping
+	return s.state < contextStateStopping && !s.shutdownChan.IsShutdown()
 }
 
 func (s *ContextImpl) wLock() {
@@ -1486,6 +1489,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 		}
 		// Cancel lifecycle context as soon as we know we're shutting down
 		s.lifecycleCancel()
+		s.shutdownChan.Shutdown()
 		// This will cause the controller to remove this shard from the map and then call s.finishStop()
 		go s.closeCallback(s)
 	}
@@ -1815,6 +1819,7 @@ func newContext(
 		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
+		shutdownChan:            channel.NewShutdownOnce(),
 		engineFuture:            future.NewFuture[Engine](),
 	}
 	shardContext.eventsCache = events.NewEventsCache(
@@ -1913,6 +1918,10 @@ func (s *ContextImpl) GetMetricsClient() metrics.Client {
 
 func (s *ContextImpl) GetTimeSource() clock.TimeSource {
 	return s.timeSource
+}
+
+func (s *ContextImpl) GetShutdownChan() channel.ShutdownOnce {
+	return s.shutdownChan
 }
 
 func (s *ContextImpl) GetNamespaceRegistry() namespace.Registry {

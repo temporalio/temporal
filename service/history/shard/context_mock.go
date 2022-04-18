@@ -38,6 +38,7 @@ import (
 	v10 "go.temporal.io/server/api/adminservice/v1"
 	v11 "go.temporal.io/server/api/historyservice/v1"
 	archiver "go.temporal.io/server/common/archiver"
+	channel "go.temporal.io/server/common/channel"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
 	definition "go.temporal.io/server/common/definition"
@@ -573,6 +574,20 @@ func (m *MockContext) GetShardID() int32 {
 func (mr *MockContextMockRecorder) GetShardID() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShardID", reflect.TypeOf((*MockContext)(nil).GetShardID))
+}
+
+// GetShutdownChan mocks base method.
+func (m *MockContext) GetShutdownChan() channel.ShutdownOnce {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetShutdownChan")
+	ret0, _ := ret[0].(channel.ShutdownOnce)
+	return ret0
+}
+
+// GetShutdownChan indicates an expected call of GetShutdownChan.
+func (mr *MockContextMockRecorder) GetShutdownChan() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetShutdownChan", reflect.TypeOf((*MockContext)(nil).GetShutdownChan))
 }
 
 // GetThrottledLogger mocks base method.
