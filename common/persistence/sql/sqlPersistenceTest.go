@@ -154,7 +154,7 @@ func (s *TestCluster) CreateDatabase() {
 func (s *TestCluster) DropDatabase() {
 	cfg2 := s.cfg
 
-	if cfg2.PluginName == "sqlite" {
+	if cfg2.PluginName == "sqlite" && cfg2.DatabaseName != ":memory:" && cfg2.ConnectAttributes["mode"] != "memory" {
 		if len(cfg2.DatabaseName) > 3 { // 3 should mean not ., .., empty, or /
 			err := os.Remove(cfg2.DatabaseName)
 			if err != nil {
