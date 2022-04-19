@@ -129,8 +129,8 @@ type (
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
 		common.Daemon
-		RegisterNamespaceChangeCallback(listenerID string, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
-		UnregisterNamespaceChangeCallback(listenerID string)
+		RegisterNamespaceChangeCallback(listenerID any, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn)
+		UnregisterNamespaceChangeCallback(listenerID any)
 		GetNamespace(name Name) (*Namespace, error)
 		GetNamespaceByID(id ID) (*Namespace, error)
 		GetNamespaceID(name Name) (ID, error)
@@ -162,8 +162,8 @@ type (
 		// cacheLock.Lock() (the other lock in this struct, above) while holding
 		// this lock or you risk a deadlock.
 		callbackLock     sync.Mutex
-		prepareCallbacks map[string]PrepareCallbackFn
-		callbacks        map[string]CallbackFn
+		prepareCallbacks map[any]PrepareCallbackFn
+		callbacks        map[any]CallbackFn
 	}
 )
 
@@ -184,8 +184,8 @@ func NewRegistry(
 		logger:                  logger,
 		cacheNameToID:           cache.New(cacheMaxSize, &cacheOpts),
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
-		prepareCallbacks:        make(map[string]PrepareCallbackFn),
-		callbacks:               make(map[string]CallbackFn),
+		prepareCallbacks:        make(map[any]PrepareCallbackFn),
+		callbacks:               make(map[any]CallbackFn),
 	}
 	reg.lastRefreshTime.Store(time.Time{})
 	return reg
@@ -244,7 +244,7 @@ func (r *registry) getAllNamespace() map[ID]*Namespace {
 // callback functions MUST NOT call back into this registry instance, either to
 // unregister themselves or to look up Namespaces.
 func (r *registry) RegisterNamespaceChangeCallback(
-	listenerID string,
+	listenerID any,
 	initialNotificationVersion int64,
 	prepareCallback PrepareCallbackFn,
 	callback CallbackFn,
@@ -281,7 +281,7 @@ func (r *registry) RegisterNamespaceChangeCallback(
 
 // UnregisterNamespaceChangeCallback delete a namespace failover callback
 func (r *registry) UnregisterNamespaceChangeCallback(
-	listenerID string,
+	listenerID any,
 ) {
 	r.callbackLock.Lock()
 	defer r.callbackLock.Unlock()

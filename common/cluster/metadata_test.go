@@ -131,14 +131,13 @@ func (s *metadataSuite) Test_ClusterNameForFailoverVersion() {
 }
 
 func (s *metadataSuite) Test_RegisterMetadataChangeCallback() {
-	id := uuid.New()
 	s.metadata.RegisterMetadataChangeCallback(
-		id,
+		s,
 		func(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation) {
 			s.Equal(2, len(newClusterMetadata))
 		})
 
-	s.metadata.UnRegisterMetadataChangeCallback(id)
+	s.metadata.UnRegisterMetadataChangeCallback(s)
 	s.Equal(0, len(s.metadata.clusterChangeCallback))
 }
 

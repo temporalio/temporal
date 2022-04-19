@@ -117,7 +117,7 @@ func NewClientBean(factory Factory, clusterMetadata cluster.Metadata) (Bean, err
 func (h *clientBeanImpl) registerClientEviction() {
 	currentCluster := h.clusterMetadata.GetCurrentClusterName()
 	h.clusterMetadata.RegisterMetadataChangeCallback(
-		clientBeanCallbackID,
+		h,
 		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
 			for clusterName := range newClusterMetadata {
 				if clusterName == currentCluster {

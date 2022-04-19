@@ -253,7 +253,7 @@ func (mr *MockRegistryMockRecorder) Refresh() *gomock.Call {
 }
 
 // RegisterNamespaceChangeCallback mocks base method.
-func (m *MockRegistry) RegisterNamespaceChangeCallback(listenerID string, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn) {
+func (m *MockRegistry) RegisterNamespaceChangeCallback(listenerID any, initialNotificationVersion int64, prepareCallback PrepareCallbackFn, callback CallbackFn) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RegisterNamespaceChangeCallback", listenerID, initialNotificationVersion, prepareCallback, callback)
 }
@@ -289,7 +289,7 @@ func (mr *MockRegistryMockRecorder) Stop() *gomock.Call {
 }
 
 // UnregisterNamespaceChangeCallback mocks base method.
-func (m *MockRegistry) UnregisterNamespaceChangeCallback(listenerID string) {
+func (m *MockRegistry) UnregisterNamespaceChangeCallback(listenerID any) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UnregisterNamespaceChangeCallback", listenerID)
 }
