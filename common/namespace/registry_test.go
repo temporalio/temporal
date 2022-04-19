@@ -287,7 +287,7 @@ func (s *registrySuite) TestRegisterCallback_CatchUp() {
 	// we are not testing catching up, so make this really large
 	currentNamespaceNotificationVersion := int64(0)
 	s.registry.RegisterNamespaceChangeCallback(
-		0,
+		"0",
 		currentNamespaceNotificationVersion,
 		func() {
 			prepareCallbackInvoked = true
@@ -428,7 +428,7 @@ func (s *registrySuite) TestUpdateCache_TriggerCallBack() {
 	// we are not testing catching up, so make this really large
 	currentNamespaceNotificationVersion := int64(9999999)
 	s.registry.RegisterNamespaceChangeCallback(
-		0,
+		"0",
 		currentNamespaceNotificationVersion,
 		func() {
 			prepareCallbackInvoked = true
