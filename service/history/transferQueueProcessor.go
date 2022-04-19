@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -63,6 +64,7 @@ type (
 	transferQueueProcessorImpl struct {
 		isGlobalNamespaceEnabled  bool
 		currentClusterName        string
+		callbackID                string
 		shard                     shard.Context
 		historyEngine             shard.Engine
 		workflowCache             workflow.Cache
@@ -102,6 +104,7 @@ func newTransferQueueProcessor(
 	return &transferQueueProcessorImpl{
 		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
+		callbackID:               uuid.New(),
 		shard:                    shard,
 		historyEngine:            historyEngine,
 		workflowCache:            workflowCache,
@@ -147,8 +150,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 	}
 	t.activeTaskProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
-		callbackID := getMetadataChangeCallbackID(transferComponentName, t.shard.GetShardID())
-		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
+		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t.callbackID)
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			standbyTaskProcessor.Stop()
@@ -333,9 +335,8 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 }
 
 func (t *transferQueueProcessorImpl) listenToClusterMetadataChange() {
-	callbackID := getMetadataChangeCallbackID(transferComponentName, t.shard.GetShardID())
 	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
-		callbackID,
+		t.callbackID,
 		t.handleClusterMetadataUpdate,
 	)
 }

@@ -31,6 +31,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pborman/uuid"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
@@ -69,11 +71,12 @@ type (
 
 	// ReplicationTaskFetchersImpl is a group of fetchers, one per source DC.
 	ReplicationTaskFetchersImpl struct {
-		status          int32
-		config          *configs.Config
-		clientBean      client.Bean
-		clusterMetadata cluster.Metadata
-		logger          log.Logger
+		status             int32
+		callbackListenerID string
+		config             *configs.Config
+		clientBean         client.Bean
+		clusterMetadata    cluster.Metadata
+		logger             log.Logger
 
 		fetchersLock sync.Mutex
 		fetchers     map[string]ReplicationTaskFetcher
@@ -118,12 +121,13 @@ func NewReplicationTaskFetchers(
 ) ReplicationTaskFetchers {
 
 	return &ReplicationTaskFetchersImpl{
-		clusterMetadata: clusterMetadata,
-		clientBean:      clientBean,
-		config:          config,
-		fetchers:        make(map[string]ReplicationTaskFetcher),
-		status:          common.DaemonStatusInitialized,
-		logger:          logger,
+		clusterMetadata:    clusterMetadata,
+		clientBean:         clientBean,
+		config:             config,
+		fetchers:           make(map[string]ReplicationTaskFetcher),
+		status:             common.DaemonStatusInitialized,
+		callbackListenerID: uuid.New(),
+		logger:             logger,
 	}
 }
 
@@ -151,8 +155,7 @@ func (f *ReplicationTaskFetchersImpl) Stop() {
 		return
 	}
 
-	currentCluster := f.clusterMetadata.GetCurrentClusterName()
-	f.clusterMetadata.UnRegisterMetadataChangeCallback(currentCluster)
+	f.clusterMetadata.UnRegisterMetadataChangeCallback(f.callbackListenerID)
 	f.fetchersLock.Lock()
 	defer f.fetchersLock.Unlock()
 	for _, fetcher := range f.fetchers {
@@ -187,13 +190,13 @@ func (f *ReplicationTaskFetchersImpl) createReplicationFetcherLocked(clusterName
 }
 
 func (f *ReplicationTaskFetchersImpl) listenClusterMetadataChange() {
-	currentCluster := f.clusterMetadata.GetCurrentClusterName()
 	f.clusterMetadata.RegisterMetadataChangeCallback(
-		currentCluster,
+		f.callbackListenerID,
 		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
 			f.fetchersLock.Lock()
 			defer f.fetchersLock.Unlock()
 
+			currentCluster := f.clusterMetadata.GetCurrentClusterName()
 			// Fetcher is lazy init. The callback only need to handle remove case.
 			for clusterName, newClusterInfo := range newClusterMetadata {
 				if clusterName == currentCluster {

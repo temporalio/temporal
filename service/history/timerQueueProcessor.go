@@ -33,6 +33,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/pborman/uuid"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -64,6 +65,7 @@ type (
 	timerQueueProcessorImpl struct {
 		isGlobalNamespaceEnabled   bool
 		currentClusterName         string
+		callbackID                 string
 		shard                      shard.Context
 		historyEngine              shard.Engine
 		taskAllocator              taskAllocator
@@ -106,6 +108,7 @@ func newTimerQueueProcessor(
 	return &timerQueueProcessorImpl{
 		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
+		callbackID:               uuid.New(),
 		shard:                    shard,
 		historyEngine:            historyEngine,
 		taskAllocator:            taskAllocator,
@@ -149,8 +152,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 	}
 	t.activeTimerProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
-		callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
-		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
+		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t.callbackID)
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			standbyTimerProcessor.Stop()
@@ -337,9 +339,8 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 }
 
 func (t *timerQueueProcessorImpl) listenToClusterMetadataChange() {
-	callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
 	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
-		callbackID,
+		t.callbackID,
 		t.handleClusterMetadataUpdate,
 	)
 }
