@@ -22,18 +22,22 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
+
+package queues
 
 import (
 	"go.temporal.io/server/common"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
 type (
-	// Scheduler is the generic interface for scheduling & processing tasks with priority
+	// Scheduler is the component for scheduling and processing
+	// task executables. Ack(), Nack() or Reschedule() will always
+	// be called on all executables that have been successfully submited
 	Scheduler interface {
 		common.Daemon
-		Submit(task PriorityTask)
-		TrySubmit(task PriorityTask) bool
+
+		Submit(Executable) error
+		TrySubmit(Executable) (bool, error)
 	}
 )

@@ -108,7 +108,7 @@ func (s *parallelProcessorSuite) TestSubmitProcess_Running_FailExecution() {
 	mockTask.EXPECT().Execute().Return(executionErr).Times(1)
 	mockTask.EXPECT().HandleErr(executionErr).Return(executionErr).Times(1)
 	mockTask.EXPECT().IsRetryableError(executionErr).Return(false).MaxTimes(1)
-	mockTask.EXPECT().Nack().Do(func() { testWaitGroup.Done() }).Times(1)
+	mockTask.EXPECT().Nack(executionErr).Do(func(_ error) { testWaitGroup.Done() }).Times(1)
 
 	s.processor.Submit(mockTask)
 
@@ -179,7 +179,7 @@ func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
 				mockTask.EXPECT().Execute().Return(executionErr).Times(1)
 				mockTask.EXPECT().HandleErr(executionErr).Return(executionErr).Times(1)
 				mockTask.EXPECT().IsRetryableError(executionErr).Return(false).Times(1)
-				mockTask.EXPECT().Nack().Do(func() { testWaitGroup.Done() }).Times(1)
+				mockTask.EXPECT().Nack(executionErr).Do(func(_ error) { testWaitGroup.Done() }).Times(1)
 
 			default:
 				s.Fail("case not expected")

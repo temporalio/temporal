@@ -22,18 +22,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+package queues
 
-import (
-	"go.temporal.io/server/common"
-)
-
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
 type (
-	// Scheduler is the generic interface for scheduling & processing tasks with priority
-	Scheduler interface {
-		common.Daemon
-		Submit(task PriorityTask)
-		TrySubmit(task PriorityTask) bool
+	// PriorityAssigner assigns priority to task executables
+	PriorityAssigner interface {
+		Assign(Executable) error
 	}
 )

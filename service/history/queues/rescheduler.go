@@ -22,18 +22,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package tasks
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination rescheduler_mock.go
+
+package queues
 
 import (
-	"go.temporal.io/server/common"
+	"time"
 )
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination scheduler_mock.go
 type (
-	// Scheduler is the generic interface for scheduling & processing tasks with priority
-	Scheduler interface {
-		common.Daemon
-		Submit(task PriorityTask)
-		TrySubmit(task PriorityTask) bool
+	// Rescheduler buffers task executables that are failed to process and
+	// resubmit them to the task scheduler when the Reschedule method is called.
+	// TODO: remove this component when implementing multi-cursor queue processor.
+	// Failed task executables can be tracke by task reader/queue range
+	Rescheduler interface {
+		// Add task executable to the rescheudler.
+		// The backoff duration is just a hint for how long the executable
+		// should be bufferred before rescheduling.
+		Add(task Executable, backoff time.Duration)
+
+		// Reschedule re-submit buffered executables to the scheduler and stops when
+		// targetRescheduleSize number of executables are successfully submitted.
+		// If targetRescheduleSize is 0, then there's no limit for the number of reschduled
+		// executables.
+		Reschedule(targetRescheduleSize int)
+
+		// Len returns the total number of task executables waiting to be rescheduled.
+		Len() int
 	}
 )
