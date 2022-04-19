@@ -1754,6 +1754,7 @@ const (
 	ServiceRequests = iota
 	ServicePendingRequests
 	ServiceFailures
+	ServiceFailuresWithType
 	ServiceCriticalFailures
 	ServiceLatency
 	ServiceLatencyNoUserLatency
@@ -2253,6 +2254,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceRequests:                                     NewCounterDef("service_requests"),
 		ServicePendingRequests:                              NewGaugeDef("service_pending_requests"),
 		ServiceFailures:                                     NewCounterDef("service_errors"),
+		ServiceFailuresWithType:                             NewCounterDef("service_errors_with_type"),
 		ServiceCriticalFailures:                             NewCounterDef("service_errors_critical"),
 		ServiceLatency:                                      NewTimerDef("service_latency"),
 		ServiceLatencyNoUserLatency:                         NewTimerDef("service_latency_nouserlatency"),
