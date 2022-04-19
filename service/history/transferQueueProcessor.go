@@ -147,7 +147,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 	}
 	t.activeTaskProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
-		callbackID := getMetadataChangeCallbackID(transferComponentName, t.shard.GetShardID())
+		callbackID := t.historyEngine.GetMetadataChangeCallbackID(transferComponentName)
 		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
@@ -333,7 +333,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 }
 
 func (t *transferQueueProcessorImpl) listenToClusterMetadataChange() {
-	callbackID := getMetadataChangeCallbackID(transferComponentName, t.shard.GetShardID())
+	callbackID := t.historyEngine.GetMetadataChangeCallbackID(transferComponentName)
 	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
 		callbackID,
 		t.handleClusterMetadataUpdate,

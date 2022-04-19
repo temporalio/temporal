@@ -149,7 +149,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 	}
 	t.activeTimerProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
-		callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
+		callbackID := t.historyEngine.GetMetadataChangeCallbackID(timerComponentName)
 		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
@@ -337,7 +337,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 }
 
 func (t *timerQueueProcessorImpl) listenToClusterMetadataChange() {
-	callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
+	callbackID := t.historyEngine.GetMetadataChangeCallbackID(timerComponentName)
 	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
 		callbackID,
 		t.handleClusterMetadataUpdate,

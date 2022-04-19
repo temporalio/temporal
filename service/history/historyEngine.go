@@ -92,7 +92,7 @@ type (
 	historyEngineImpl struct {
 		status                        int32
 		currentClusterName            string
-		namespaceChangeListenerID     string
+		changeListenerID              string // unique ID for namespace/cluster metadata change listener registration
 		shard                         shard.Context
 		timeSource                    clock.TimeSource
 		workflowTaskHandler           workflowTaskHandlerCallbacks
@@ -158,7 +158,7 @@ func NewEngineWithShardContext(
 	historyEngImpl := &historyEngineImpl{
 		status:                    common.DaemonStatusInitialized,
 		currentClusterName:        currentClusterName,
-		namespaceChangeListenerID: uuid.New(),
+		changeListenerID:          uuid.New(),
 		shard:                     shard,
 		clusterMetadata:           shard.GetClusterMetadata(),
 		timeSource:                shard.GetTimeSource(),
@@ -279,7 +279,7 @@ func (e *historyEngineImpl) Stop() {
 		queueProcessor.Stop()
 	}
 
-	callbackID := getMetadataChangeCallbackID(common.HistoryServiceName, e.shard.GetShardID())
+	callbackID := e.GetMetadataChangeCallbackID(common.HistoryServiceName)
 	e.clusterMetadata.UnRegisterMetadataChangeCallback(callbackID)
 	e.replicationTaskProcessorsLock.Lock()
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
@@ -288,7 +288,7 @@ func (e *historyEngineImpl) Stop() {
 	e.replicationTaskProcessorsLock.Unlock()
 
 	// unset the failover callback
-	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e.namespaceChangeListenerID)
+	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e.changeListenerID)
 }
 
 func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
@@ -325,7 +325,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 	// first set the failover callback
 	e.shard.GetNamespaceRegistry().RegisterNamespaceChangeCallback(
-		e.namespaceChangeListenerID,
+		e.changeListenerID,
 		0, /* always want callback so UpdateHandoverNamespaces() can be called after shard reload */
 		func() {
 			for _, queueProcessor := range e.queueProcessors {
@@ -386,7 +386,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 }
 
 func (e *historyEngineImpl) listenToClusterMetadataChange() {
-	callbackID := getMetadataChangeCallbackID(common.HistoryServiceName, e.shard.GetShardID())
+	callbackID := e.GetMetadataChangeCallbackID(common.HistoryServiceName)
 	e.clusterMetadata.RegisterMetadataChangeCallback(
 		callbackID,
 		e.handleClusterMetadataUpdate,
@@ -3671,6 +3671,6 @@ func (e *historyEngineImpl) containsHistoryEvent(
 	return err == nil
 }
 
-func getMetadataChangeCallbackID(componentName string, shardId int32) string {
-	return fmt.Sprintf("%s-%d", componentName, shardId)
+func (e *historyEngineImpl) GetMetadataChangeCallbackID(componentName string) string {
+	return fmt.Sprintf("%s-%d-%v", componentName, e.shard.GetShardID(), e.changeListenerID)
 }

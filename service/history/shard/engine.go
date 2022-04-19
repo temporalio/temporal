@@ -86,5 +86,6 @@ type (
 
 		NotifyNewHistoryEvent(event *events.Notification)
 		NotifyNewTasks(clusterName string, tasks map[tasks.Category][]tasks.Task)
+		GetMetadataChangeCallbackID(componentName string) string
 	}
 )
