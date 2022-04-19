@@ -73,8 +73,8 @@ type (
 		ClusterNameForFailoverVersion(isGlobalNamespace bool, failoverVersion int64) string
 		// GetFailoverVersionIncrement return the Failover version increment value
 		GetFailoverVersionIncrement() int64
-		RegisterMetadataChangeCallback(callbackId string, cb CallbackFn)
-		UnRegisterMetadataChangeCallback(callbackId string)
+		RegisterMetadataChangeCallback(callbackId any, cb CallbackFn)
+		UnRegisterMetadataChangeCallback(callbackId any)
 	}
 
 	CallbackFn func(oldClusterMetadata map[string]*ClusterInformation, newClusterMetadata map[string]*ClusterInformation)
@@ -130,7 +130,7 @@ type (
 		versionToClusterName map[int64]string
 
 		clusterCallbackLock   sync.RWMutex
-		clusterChangeCallback map[string]CallbackFn
+		clusterChangeCallback map[any]CallbackFn
 	}
 )
 
@@ -180,7 +180,7 @@ func NewMetadata(
 		currentClusterName:       currentClusterName,
 		clusterInfo:              copyClusterInfo,
 		versionToClusterName:     versionToClusterName,
-		clusterChangeCallback:    make(map[string]CallbackFn),
+		clusterChangeCallback:    make(map[any]CallbackFn),
 		clusterMetadataStore:     clusterMetadataStore,
 		logger:                   logger,
 		refreshDuration:          refreshDuration,
@@ -333,7 +333,7 @@ func (m *metadataImpl) GetFailoverVersionIncrement() int64 {
 	return m.failoverVersionIncrement
 }
 
-func (m *metadataImpl) RegisterMetadataChangeCallback(callbackId string, cb CallbackFn) {
+func (m *metadataImpl) RegisterMetadataChangeCallback(callbackId any, cb CallbackFn) {
 	m.clusterCallbackLock.Lock()
 	m.clusterChangeCallback[callbackId] = cb
 	m.clusterCallbackLock.Unlock()
@@ -354,7 +354,7 @@ func (m *metadataImpl) RegisterMetadataChangeCallback(callbackId string, cb Call
 	cb(oldEntries, newEntries)
 }
 
-func (m *metadataImpl) UnRegisterMetadataChangeCallback(callbackId string) {
+func (m *metadataImpl) UnRegisterMetadataChangeCallback(callbackId any) {
 	m.clusterCallbackLock.Lock()
 	delete(m.clusterChangeCallback, callbackId)
 	m.clusterCallbackLock.Unlock()

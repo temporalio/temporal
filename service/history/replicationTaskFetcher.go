@@ -31,8 +31,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/pborman/uuid"
-
 	"go.temporal.io/server/api/adminservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client"
@@ -71,12 +69,11 @@ type (
 
 	// ReplicationTaskFetchersImpl is a group of fetchers, one per source DC.
 	ReplicationTaskFetchersImpl struct {
-		status             int32
-		callbackListenerID string
-		config             *configs.Config
-		clientBean         client.Bean
-		clusterMetadata    cluster.Metadata
-		logger             log.Logger
+		status          int32
+		config          *configs.Config
+		clientBean      client.Bean
+		clusterMetadata cluster.Metadata
+		logger          log.Logger
 
 		fetchersLock sync.Mutex
 		fetchers     map[string]ReplicationTaskFetcher
@@ -121,13 +118,12 @@ func NewReplicationTaskFetchers(
 ) ReplicationTaskFetchers {
 
 	return &ReplicationTaskFetchersImpl{
-		clusterMetadata:    clusterMetadata,
-		clientBean:         clientBean,
-		config:             config,
-		fetchers:           make(map[string]ReplicationTaskFetcher),
-		status:             common.DaemonStatusInitialized,
-		callbackListenerID: uuid.New(),
-		logger:             logger,
+		clusterMetadata: clusterMetadata,
+		clientBean:      clientBean,
+		config:          config,
+		fetchers:        make(map[string]ReplicationTaskFetcher),
+		status:          common.DaemonStatusInitialized,
+		logger:          logger,
 	}
 }
 
@@ -155,7 +151,7 @@ func (f *ReplicationTaskFetchersImpl) Stop() {
 		return
 	}
 
-	f.clusterMetadata.UnRegisterMetadataChangeCallback(f.callbackListenerID)
+	f.clusterMetadata.UnRegisterMetadataChangeCallback(f)
 	f.fetchersLock.Lock()
 	defer f.fetchersLock.Unlock()
 	for _, fetcher := range f.fetchers {
@@ -191,7 +187,7 @@ func (f *ReplicationTaskFetchersImpl) createReplicationFetcherLocked(clusterName
 
 func (f *ReplicationTaskFetchersImpl) listenClusterMetadataChange() {
 	f.clusterMetadata.RegisterMetadataChangeCallback(
-		f.callbackListenerID,
+		f,
 		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
 			f.fetchersLock.Lock()
 			defer f.fetchersLock.Unlock()
