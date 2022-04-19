@@ -26,21 +26,16 @@ package collection
 
 import (
 	"math/rand"
-	"runtime"
 	"sort"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 )
 
-const (
-	numPriorities = 16
-)
-
 type (
 	PriorityQueueSuite struct {
 		suite.Suite
-		pq Queue
+		pq Queue[*testPriorityQueueItem]
 	}
 
 	testPriorityQueueItem struct {
@@ -48,8 +43,8 @@ type (
 	}
 )
 
-func testPriorityQueueItemCompareLess(this interface{}, that interface{}) bool {
-	return this.(*testPriorityQueueItem).value < that.(*testPriorityQueueItem).value
+func testPriorityQueueItemCompareLess(this *testPriorityQueueItem, that *testPriorityQueueItem) bool {
+	return this.value < that.value
 }
 
 func TestPriorityQueueSuite(t *testing.T) {
@@ -73,7 +68,7 @@ func (s *PriorityQueueSuite) TestInsertAndPop() {
 	result := []int{}
 
 	for !s.pq.IsEmpty() {
-		result = append(result, s.pq.Remove().(*testPriorityQueueItem).value)
+		result = append(result, s.pq.Remove().value)
 	}
 	s.Equal(expected, result)
 
@@ -93,7 +88,7 @@ func (s *PriorityQueueSuite) TestInsertAndPop() {
 	result = []int{}
 
 	for !s.pq.IsEmpty() {
-		result = append(result, s.pq.Remove().(*testPriorityQueueItem).value)
+		result = append(result, s.pq.Remove().value)
 	}
 	s.Equal(expected, result)
 }
@@ -111,30 +106,8 @@ func (s *PriorityQueueSuite) TestRandomNumber() {
 		sort.Ints(expected)
 
 		for !s.pq.IsEmpty() {
-			result = append(result, s.pq.Remove().(*testPriorityQueueItem).value)
+			result = append(result, s.pq.Remove().value)
 		}
 		s.Equal(expected, result)
-	}
-}
-
-type testTask struct {
-	id       string
-	priority int
-}
-
-func remove(queue Queue) interface{} {
-	for queue.IsEmpty() {
-		runtime.Gosched()
-	}
-	return queue.Remove()
-}
-
-func send(queue Queue) {
-	for {
-		t := &testTask{
-			id:       "abc",
-			priority: rand.Int() % numPriorities,
-		}
-		queue.Add(t)
 	}
 }

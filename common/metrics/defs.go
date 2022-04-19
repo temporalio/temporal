@@ -1931,7 +1931,7 @@ const (
 	TaskUserLatency
 	TaskNoUserLatency
 	TaskNoUserQueueLatency
-	TaskRedispatchQueuePendingTasksTimer
+	TaskReschedulerPendingTasks
 	TaskScheduleToStartLatency
 
 	TransferTaskMissingEventCounter
@@ -2418,7 +2418,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 
 		TransferTaskMissingEventCounter:                   NewCounterDef("transfer_task_missing_event_counter"),
 		TaskBatchCompleteCounter:                          NewCounterDef("task_batch_complete_counter"),
-		TaskRedispatchQueuePendingTasksTimer:              NewTimerDef("task_redispatch_queue_pending_tasks"),
+		TaskReschedulerPendingTasks:                       NewDimensionlessHistogramDef("task_rescheduler_pending_tasks"),
 		TransferTaskThrottledCounter:                      NewCounterDef("transfer_task_throttled_counter"),
 		TimerTaskThrottledCounter:                         NewCounterDef("timer_task_throttled_counter"),
 		ActivityE2ELatency:                                NewTimerDef("activity_end_to_end_latency"),

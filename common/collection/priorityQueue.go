@@ -29,21 +29,21 @@ import (
 )
 
 type (
-	priorityQueueImpl struct {
-		compareLess func(this interface{}, other interface{}) bool
-		items       []interface{}
+	priorityQueueImpl[T any] struct {
+		compareLess func(this T, other T) bool
+		items       []T
 	}
 )
 
 // NewPriorityQueue create a new priority queue
-func NewPriorityQueue(compareLess func(this interface{}, other interface{}) bool) Queue {
-	return &priorityQueueImpl{
+func NewPriorityQueue[T any](compareLess func(this T, other T) bool) Queue[T] {
+	return &priorityQueueImpl[T]{
 		compareLess: compareLess,
 	}
 }
 
 // Peek returns the top item of the priority queue
-func (pq *priorityQueueImpl) Peek() interface{} {
+func (pq *priorityQueueImpl[T]) Peek() T {
 	if pq.IsEmpty() {
 		panic("Cannot peek item because priority queue is empty")
 	}
@@ -51,44 +51,44 @@ func (pq *priorityQueueImpl) Peek() interface{} {
 }
 
 // Add push an item to priority queue
-func (pq *priorityQueueImpl) Add(item interface{}) {
+func (pq *priorityQueueImpl[T]) Add(item T) {
 	heap.Push(pq, item)
 }
 
 // Remove pop an item from priority queue
-func (pq *priorityQueueImpl) Remove() interface{} {
-	return heap.Pop(pq)
+func (pq *priorityQueueImpl[T]) Remove() T {
+	return heap.Pop(pq).(T)
 }
 
 // IsEmpty indicate if the priority queue is empty
-func (pq *priorityQueueImpl) IsEmpty() bool {
+func (pq *priorityQueueImpl[T]) IsEmpty() bool {
 	return pq.Len() == 0
 }
 
 // below are the functions used by heap.Interface and go internal heap implementation
 
 // Len implements sort.Interface
-func (pq *priorityQueueImpl) Len() int {
+func (pq *priorityQueueImpl[T]) Len() int {
 	return len(pq.items)
 }
 
 // Less implements sort.Interface
-func (pq *priorityQueueImpl) Less(i, j int) bool {
+func (pq *priorityQueueImpl[T]) Less(i, j int) bool {
 	return pq.compareLess(pq.items[i], pq.items[j])
 }
 
 // Swap implements sort.Interface
-func (pq *priorityQueueImpl) Swap(i, j int) {
+func (pq *priorityQueueImpl[T]) Swap(i, j int) {
 	pq.items[i], pq.items[j] = pq.items[j], pq.items[i]
 }
 
 // Push push an item to priority queue, used by go internal heap implementation
-func (pq *priorityQueueImpl) Push(item interface{}) {
-	pq.items = append(pq.items, item)
+func (pq *priorityQueueImpl[T]) Push(item interface{}) {
+	pq.items = append(pq.items, item.(T))
 }
 
 // Pop pop an item from priority queue, used by go internal heap implementation
-func (pq *priorityQueueImpl) Pop() interface{} {
+func (pq *priorityQueueImpl[T]) Pop() interface{} {
 	pqItem := pq.items[pq.Len()-1]
 	pq.items = pq.items[0 : pq.Len()-1]
 	return pqItem

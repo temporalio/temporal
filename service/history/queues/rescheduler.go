@@ -27,7 +27,13 @@
 package queues
 
 import (
+	"sync"
 	"time"
+
+	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/collection"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 )
 
 type (
@@ -50,4 +56,93 @@ type (
 		// Len returns the total number of task executables waiting to be rescheduled.
 		Len() int
 	}
+
+	rescheduledExecuable struct {
+		executable     Executable
+		rescheduleTime time.Time
+	}
+
+	reschedulerImpl struct {
+		scheduler  Scheduler
+		timeSource clock.TimeSource
+		scope      metrics.Scope
+
+		sync.Mutex
+		pq collection.Queue[rescheduledExecuable]
+	}
 )
+
+func NewRescheduler(
+	scheduler Scheduler,
+	timeSource clock.TimeSource,
+	scope metrics.Scope,
+) *reschedulerImpl {
+	return &reschedulerImpl{
+		scheduler:  scheduler,
+		timeSource: timeSource,
+		scope:      scope,
+		pq: collection.NewPriorityQueue((func(this rescheduledExecuable, that rescheduledExecuable) bool {
+			return this.rescheduleTime.Before(that.rescheduleTime)
+		})),
+	}
+}
+
+func (r *reschedulerImpl) Add(
+	executable Executable,
+	backoff time.Duration,
+) {
+	r.Lock()
+	defer r.Unlock()
+
+	r.pq.Add(rescheduledExecuable{
+		executable:     executable,
+		rescheduleTime: r.timeSource.Now().Add(backoff),
+	})
+}
+
+func (r *reschedulerImpl) Reschedule(
+	targetRescheduleSize int,
+) {
+	r.Lock()
+	defer r.Unlock()
+
+	r.scope.RecordDistribution(metrics.TaskReschedulerPendingTasks, r.pq.Len())
+
+	if targetRescheduleSize == 0 {
+		targetRescheduleSize = r.pq.Len()
+	}
+
+	var failToSubmit []rescheduledExecuable
+	numRescheduled := 0
+	for !r.pq.IsEmpty() {
+		if r.timeSource.Now().Before(r.pq.Peek().rescheduleTime) {
+			break
+		}
+
+		rescheduled := r.pq.Remove()
+		submitted, err := r.scheduler.TrySubmit(rescheduled.executable)
+		if err != nil {
+			rescheduled.executable.Logger().Error("Failed to reschedule task", tag.Error(err))
+		}
+
+		if !submitted {
+			failToSubmit = append(failToSubmit, rescheduled)
+		} else {
+			numRescheduled++
+			if numRescheduled >= targetRescheduleSize {
+				break
+			}
+		}
+	}
+
+	for _, rescheduled := range failToSubmit {
+		r.pq.Add(rescheduled)
+	}
+}
+
+func (r *reschedulerImpl) Len() int {
+	r.Lock()
+	defer r.Unlock()
+
+	return r.pq.Len()
+}
