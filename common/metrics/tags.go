@@ -188,6 +188,13 @@ func FailureTag(value string) Tag {
 	return &tagImpl{key: FailureTagName, value: value}
 }
 
+func TaskCategoryTag(value string) Tag {
+	if len(value) == 0 {
+		value = unknownValue
+	}
+	return &tagImpl{key: TaskCategoryTagName, value: value}
+}
+
 func TaskTypeTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
