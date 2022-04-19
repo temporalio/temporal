@@ -34,6 +34,8 @@ import (
 	"go.temporal.io/server/common/metrics"
 )
 
+var _ Scheduler = (*InterleavedWeightedRoundRobinScheduler)(nil)
+
 type (
 	// InterleavedWeightedRoundRobinSchedulerOptions is the config for
 	// interleaved weighted round robin scheduler
@@ -131,11 +133,23 @@ func (s *InterleavedWeightedRoundRobinScheduler) Stop() {
 
 func (s *InterleavedWeightedRoundRobinScheduler) Submit(
 	task PriorityTask,
-
 ) {
 	channel := s.getOrCreateTaskChannel(s.priorityToWeight[task.GetPriority()])
 	channel.Chan() <- task
 	s.notifyDispatcher()
+}
+
+func (s *InterleavedWeightedRoundRobinScheduler) TrySubmit(
+	task PriorityTask,
+) bool {
+	channel := s.getOrCreateTaskChannel(s.priorityToWeight[task.GetPriority()])
+	select {
+	case channel.Chan() <- task:
+		s.notifyDispatcher()
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *InterleavedWeightedRoundRobinScheduler) eventLoop() {

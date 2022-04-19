@@ -56,7 +56,7 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
 	metricsClient, err := metrics.NewClient(
 		&metrics.ClientConfig{},
 		tally.NewTestScope("test", nil),
-		metrics.Common,
+		metrics.UnitTestService,
 	)
 	if err != nil {
 		panic(err)
@@ -96,7 +96,7 @@ func (n *noopTask) HandleErr(err error) error        { panic("implement me") }
 func (n *noopTask) IsRetryableError(err error) bool  { panic("implement me") }
 func (n *noopTask) RetryPolicy() backoff.RetryPolicy { panic("implement me") }
 func (n *noopTask) Ack()                             { n.Done() }
-func (n *noopTask) Nack()                            { panic("implement me") }
+func (n *noopTask) Nack(err error)                   { panic("implement me") }
 func (n *noopTask) Reschedule()                      { panic("implement me") }
 func (n *noopTask) State() State                     { panic("implement me") }
 func (n *noopTask) GetPriority() int                 { return 0 }
