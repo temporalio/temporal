@@ -258,6 +258,6 @@ func (t *timerQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getTimerTaskMetricScope(taskInfo.Task, true)
+	metricScope := tasks.GetActiveTimerTaskMetricScope(taskInfo.Task)
 	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

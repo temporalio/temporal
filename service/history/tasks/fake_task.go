@@ -43,10 +43,12 @@ type (
 )
 
 func NewFakeTask(
+	workflowKey definition.WorkflowKey,
 	category Category,
 	visibilityTimestamp time.Time,
 ) Task {
 	return &fakeTask{
+		WorkflowKey:         workflowKey,
 		TaskID:              common.EmptyEventTaskID,
 		Version:             common.EmptyVersion,
 		VisibilityTimestamp: visibilityTimestamp,

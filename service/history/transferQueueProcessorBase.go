@@ -28,7 +28,6 @@ import (
 	"context"
 
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -101,52 +100,4 @@ func (t *transferQueueProcessorBase) updateAckLevel(
 
 func (t *transferQueueProcessorBase) queueShutdown() error {
 	return t.transferQueueShutdown()
-}
-
-func getTransferTaskMetricsScope(
-	task tasks.Task,
-	isActive bool,
-) int {
-	switch task.(type) {
-	case *tasks.ActivityTask:
-		if isActive {
-			return metrics.TransferActiveTaskActivityScope
-		}
-		return metrics.TransferStandbyTaskActivityScope
-	case *tasks.WorkflowTask:
-		if isActive {
-			return metrics.TransferActiveTaskWorkflowTaskScope
-		}
-		return metrics.TransferStandbyTaskWorkflowTaskScope
-	case *tasks.CloseExecutionTask:
-		if isActive {
-			return metrics.TransferActiveTaskCloseExecutionScope
-		}
-		return metrics.TransferStandbyTaskCloseExecutionScope
-	case *tasks.CancelExecutionTask:
-		if isActive {
-			return metrics.TransferActiveTaskCancelExecutionScope
-		}
-		return metrics.TransferStandbyTaskCancelExecutionScope
-	case *tasks.SignalExecutionTask:
-		if isActive {
-			return metrics.TransferActiveTaskSignalExecutionScope
-		}
-		return metrics.TransferStandbyTaskSignalExecutionScope
-	case *tasks.StartChildExecutionTask:
-		if isActive {
-			return metrics.TransferActiveTaskStartChildExecutionScope
-		}
-		return metrics.TransferStandbyTaskStartChildExecutionScope
-	case *tasks.ResetWorkflowTask:
-		if isActive {
-			return metrics.TransferActiveTaskResetWorkflowScope
-		}
-		return metrics.TransferStandbyTaskResetWorkflowScope
-	default:
-		if isActive {
-			return metrics.TransferActiveQueueProcessorScope
-		}
-		return metrics.TransferStandbyQueueProcessorScope
-	}
 }

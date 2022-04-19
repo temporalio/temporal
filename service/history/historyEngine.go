@@ -374,7 +374,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				now := e.shard.GetTimeSource().Now()
 				fakeTasks := make(map[tasks.Category][]tasks.Task)
 				for category := range e.queueProcessors {
-					fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(category, now)}
+					fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 				}
 				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
 			}
