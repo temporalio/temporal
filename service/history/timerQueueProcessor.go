@@ -54,7 +54,6 @@ import (
 
 var (
 	errUnknownTimerTask = serviceerror.NewInternal("unknown timer task")
-	timerComponentName  = "timer-queue"
 )
 
 type (
@@ -149,8 +148,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 	}
 	t.activeTimerProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
-		callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
-		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
+		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t)
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			standbyTimerProcessor.Stop()
@@ -337,9 +335,8 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 }
 
 func (t *timerQueueProcessorImpl) listenToClusterMetadataChange() {
-	callbackID := getMetadataChangeCallbackID(timerComponentName, t.shard.GetShardID())
 	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
-		callbackID,
+		t,
 		t.handleClusterMetadataUpdate,
 	)
 }

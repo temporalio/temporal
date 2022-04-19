@@ -120,13 +120,13 @@ func (r *Replicator) Stop() {
 }
 
 func (r *Replicator) listenToClusterMetadataChange() {
-	currentClusterName := r.clusterMetadata.GetCurrentClusterName()
 	r.clusterMetadata.RegisterMetadataChangeCallback(
-		currentClusterName,
+		r,
 		func(
 			oldClusterMetadata map[string]*cluster.ClusterInformation,
 			newClusterMetadata map[string]*cluster.ClusterInformation,
 		) {
+			currentClusterName := r.clusterMetadata.GetCurrentClusterName()
 			r.namespaceProcessorsLock.Lock()
 			defer r.namespaceProcessorsLock.Unlock()
 			for clusterName := range newClusterMetadata {
