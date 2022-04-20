@@ -68,11 +68,18 @@ type (
 )
 
 var (
+	// schedulerRetryPolicy is the retry policy for retrying the executable
+	// in one submission to scheduler, the goroutine for processing this executable
+	// is held during the retry
 	schedulerRetryPolicy = common.CreateTaskProcessingRetryPolicy()
-	reschedulePolicy     = common.CreateTaskReschedulePolicy()
+	// reschedulePolicy is the policy for determine reschedule backoff duration
+	// across multiple submissions to scheduler
+	reschedulePolicy = common.CreateTaskReschedulePolicy()
 )
 
 const (
+	// resubmitMaxAttempts is the max number of attempts we may skip rescheduler when a task is Nacked.
+	// check the comment in shouldResubmitOnNack() for more details
 	resubmitMaxAttempts = 10
 )
 
@@ -90,11 +97,11 @@ type (
 		rescheduler Rescheduler
 		timeSource  clock.TimeSource
 
-		loadTime           time.Time
-		userLatency        time.Duration
-		logger             log.Logger
-		scope              metrics.Scope
-		criticalRetryCount dynamicconfig.IntPropertyFn
+		loadTime             time.Time
+		userLatency          time.Duration
+		logger               log.Logger
+		scope                metrics.Scope
+		criticalRetryAttempt dynamicconfig.IntPropertyFn
 
 		queueType     QueueType
 		filter        TaskFilter
@@ -111,23 +118,23 @@ func NewExecutable(
 	timeSource clock.TimeSource,
 	logger log.Logger,
 	scope metrics.Scope,
-	criticalRetryCount dynamicconfig.IntPropertyFn,
+	criticalRetryAttempt dynamicconfig.IntPropertyFn,
 	queueType QueueType,
 ) Executable {
 	return &executableImpl{
-		Task:               task,
-		state:              ctasks.TaskStatePending,
-		attempt:            1,
-		executor:           executor,
-		scheduler:          scheduler,
-		rescheduler:        rescheduler,
-		timeSource:         timeSource,
-		loadTime:           timeSource.Now(),
-		logger:             tasks.InitializeLogger(task, logger),
-		scope:              scope,
-		queueType:          queueType,
-		criticalRetryCount: criticalRetryCount,
-		filter:             filter,
+		Task:                 task,
+		state:                ctasks.TaskStatePending,
+		attempt:              1,
+		executor:             executor,
+		scheduler:            scheduler,
+		rescheduler:          rescheduler,
+		timeSource:           timeSource,
+		loadTime:             timeSource.Now(),
+		logger:               tasks.InitializeLogger(task, logger),
+		scope:                scope,
+		queueType:            queueType,
+		criticalRetryAttempt: criticalRetryAttempt,
+		filter:               filter,
 	}
 }
 
@@ -161,7 +168,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 			defer e.Unlock()
 
 			e.attempt++
-			if e.attempt > e.criticalRetryCount() {
+			if e.attempt > e.criticalRetryAttempt() {
 				e.scope.RecordDistribution(metrics.TaskAttemptTimer, e.attempt)
 				e.logger.Error("Critical error processing task, retrying.", tag.Error(err), tag.OperationCritical)
 			}
@@ -257,7 +264,7 @@ func (e *executableImpl) Nack(err error) {
 	}
 
 	if !submitted {
-		e.rescheduler.Add(e, e.backoffDuration(attempt))
+		e.rescheduler.Add(e, e.rescheduleBackoff(attempt))
 	}
 }
 
@@ -308,7 +315,7 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	return e.IsRetryableError(err) && e.Attempt() < resubmitMaxAttempts
 }
 
-func (e *executableImpl) backoffDuration(attempt int) time.Duration {
+func (e *executableImpl) rescheduleBackoff(attempt int) time.Duration {
 	// elapsedTime (the first parameter) is not relevant here since reschedule policy
 	// has no expiration interval.
 	return reschedulePolicy.ComputeNextDelay(0, attempt)

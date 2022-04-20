@@ -36,16 +36,15 @@ func InitializeLogger(
 	task Task,
 	logger log.Logger,
 ) log.Logger {
-	var taskEventID func(task Task) int64
+	taskEventID := int64(0)
 	taskCategory := task.GetCategory()
 	switch taskCategory.ID() {
 	case CategoryIDTransfer:
-		taskEventID = GetTransferTaskEventID
+		taskEventID = GetTransferTaskEventID(task)
 	case CategoryIDTimer:
-		taskEventID = GetTimerTaskEventID
+		taskEventID = GetTimerTaskEventID(task)
 	case CategoryIDVisibility:
-		// visibility tasks don't have task eventID
-		taskEventID = func(task Task) int64 { return 0 }
+		// no-op, visibility tasks don't have task eventID
 	default:
 		// replication task won't reach here
 		panic(serviceerror.NewInternal("unknown task category"))
@@ -60,7 +59,7 @@ func InitializeLogger(
 		tag.TaskVisibilityTimestamp(task.GetVisibilityTime()),
 		tag.TaskType(task.GetType()),
 		tag.Task(task),
-		tag.WorkflowEventID(taskEventID(task)),
+		tag.WorkflowEventID(taskEventID),
 	)
 	return taskLogger
 }
