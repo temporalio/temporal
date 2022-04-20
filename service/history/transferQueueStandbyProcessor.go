@@ -169,6 +169,6 @@ func (t *transferQueueStandbyProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getTransferTaskMetricsScope(taskInfo.Task, false)
+	metricScope := tasks.GetStandbyTransferTaskMetricsScope(taskInfo.Task)
 	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

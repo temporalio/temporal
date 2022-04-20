@@ -30,7 +30,6 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -79,7 +78,7 @@ func loadMutableStateForTransferTask(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-	logger = initializeLoggerForTask(transferTask, logger)
+	logger = tasks.InitializeLogger(transferTask, logger)
 	mutableState, err := LoadMutableStateForTask(
 		ctx,
 		wfContext,
@@ -106,7 +105,7 @@ func loadMutableStateForTimerTask(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-	logger = initializeLoggerForTask(timerTask, logger)
+	logger = tasks.InitializeLogger(timerTask, logger)
 	return LoadMutableStateForTask(
 		ctx,
 		wfContext,
@@ -157,71 +156,11 @@ func LoadMutableStateForTask(
 	return mutableState, nil
 }
 
-func initializeLoggerForTask(
-	task tasks.Task,
-	logger log.Logger,
-) log.Logger {
-	var taskEventID func(task tasks.Task) int64
-	taskCategory := task.GetCategory()
-	switch taskCategory.ID() {
-	case tasks.CategoryIDTransfer:
-		taskEventID = getTransferTaskEventID
-	case tasks.CategoryIDTimer:
-		taskEventID = getTimerTaskEventID
-	case tasks.CategoryIDVisibility:
-		// visibility tasks don't have task eventID
-		taskEventID = func(task tasks.Task) int64 { return 0 }
-	default:
-		// replication task won't reach here
-		panic(serviceerror.NewInternal("unknown task category"))
-	}
-
-	taskLogger := log.With(
-		logger,
-		tag.WorkflowNamespaceID(task.GetNamespaceID()),
-		tag.WorkflowID(task.GetWorkflowID()),
-		tag.WorkflowRunID(task.GetRunID()),
-		tag.TaskID(task.GetTaskID()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTime()),
-		tag.TaskType(task.GetType()),
-		tag.Task(task),
-		tag.WorkflowEventID(taskEventID(task)),
-	)
-	return taskLogger
-}
-
-func getTransferTaskEventID(
-	transferTask tasks.Task,
-) int64 {
-	eventID := int64(0)
-	switch task := transferTask.(type) {
-	case *tasks.ActivityTask:
-		eventID = task.ScheduleID
-	case *tasks.WorkflowTask:
-		eventID = task.ScheduleID
-	case *tasks.CloseExecutionTask:
-		eventID = common.FirstEventID
-	case *tasks.DeleteExecutionTask:
-		eventID = common.FirstEventID
-	case *tasks.CancelExecutionTask:
-		eventID = task.InitiatedID
-	case *tasks.SignalExecutionTask:
-		eventID = task.InitiatedID
-	case *tasks.StartChildExecutionTask:
-		eventID = task.InitiatedID
-	case *tasks.ResetWorkflowTask:
-		eventID = common.FirstEventID
-	default:
-		panic(errUnknownTransferTask)
-	}
-	return eventID
-}
-
 func getTransferTaskEventIDAndRetryable(
 	transferTask tasks.Task,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 ) (int64, bool) {
-	eventID := getTransferTaskEventID(transferTask)
+	eventID := tasks.GetTransferTaskEventID(transferTask)
 	retryable := true
 
 	if task, ok := transferTask.(*tasks.WorkflowTask); ok {
@@ -231,37 +170,11 @@ func getTransferTaskEventIDAndRetryable(
 	return eventID, retryable
 }
 
-func getTimerTaskEventID(
-	timerTask tasks.Task,
-) int64 {
-	eventID := int64(0)
-
-	switch task := timerTask.(type) {
-	case *tasks.UserTimerTask:
-		eventID = task.EventID
-	case *tasks.ActivityTimeoutTask:
-		eventID = task.EventID
-	case *tasks.WorkflowTaskTimeoutTask:
-		eventID = task.EventID
-	case *tasks.WorkflowBackoffTimerTask:
-		eventID = common.FirstEventID
-	case *tasks.ActivityRetryTimerTask:
-		eventID = task.EventID
-	case *tasks.WorkflowTimeoutTask:
-		eventID = common.FirstEventID
-	case *tasks.DeleteHistoryEventTask:
-		eventID = common.FirstEventID
-	default:
-		panic(errUnknownTimerTask)
-	}
-	return eventID
-}
-
 func getTimerTaskEventIDAndRetryable(
 	timerTask tasks.Task,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 ) (int64, bool) {
-	eventID := getTimerTaskEventID(timerTask)
+	eventID := tasks.GetTimerTaskEventID(timerTask)
 	retryable := true
 
 	if task, ok := timerTask.(*tasks.WorkflowTaskTimeoutTask); ok {

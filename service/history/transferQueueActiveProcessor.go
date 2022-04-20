@@ -286,6 +286,6 @@ func (t *transferQueueActiveProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getTransferTaskMetricsScope(taskInfo.Task, true)
+	metricScope := tasks.GetActiveTransferTaskMetricsScope(taskInfo.Task)
 	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

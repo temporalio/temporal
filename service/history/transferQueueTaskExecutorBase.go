@@ -126,7 +126,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	if _, ok := err.(*serviceerror.NotFound); ok {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
-		initializeLoggerForTask(task, t.logger).Error("Matching returned not found error for AddActivityTask", tag.Error(err))
+		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddActivityTask", tag.Error(err))
 	}
 
 	return err
@@ -154,7 +154,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	if _, ok := err.(*serviceerror.NotFound); ok {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
-		initializeLoggerForTask(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))
+		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))
 	}
 
 	return err
