@@ -157,22 +157,14 @@ func (m *opentelemetryScope) RecordTimer(id int, d time.Duration) {
 	}
 	h.Record(ctx, d.Nanoseconds(), m.labels...)
 
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		hRollup, err := m.meter.SyncInt64().Histogram(def.metricRollupName.String(), opt...)
-		if err != nil {
-			panic(err)
-		}
-		hRollup.Record(ctx, d.Nanoseconds(), m.rootScope.labels...)
-	}
-
 	switch {
 	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		hRoot, err := m.rootScope.meter.SyncInt64().Histogram(def.metricRollupName.String(), opt...)
+		hRollup, err := m.rootScope.meter.SyncInt64().Histogram(def.metricRollupName.String(), opt...)
 		if err != nil {
 			panic(err)
 		}
 
-		hRoot.Record(ctx, d.Nanoseconds(), m.rootScope.labels...)
+		hRollup.Record(ctx, d.Nanoseconds(), m.rootScope.labels...)
 	case m.isNamespaceTagged:
 		hAll, err := m.meter.SyncInt64().Histogram(def.metricName.String(), opt...)
 		if err != nil {
@@ -202,24 +194,14 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	}
 	h.Record(ctx, value, m.labels...)
 
-	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
-		// TODO: is this a bug? shall we use m.meter here?
-		hRoot, err := m.rootScope.meter.SyncInt64().Histogram(def.metricRollupName.String(), opt...)
-		if err != nil {
-			panic(err)
-		}
-
-		hRoot.Record(ctx, value, m.rootScope.labels...)
-	}
-
 	switch {
 	case !def.metricRollupName.Empty() && (m.rootScope != nil):
-		hRoot, err := m.rootScope.meter.SyncInt64().Histogram(def.metricRollupName.String(), opt...)
+		hRollup, err := m.rootScope.meter.SyncInt64().Histogram(def.metricRollupName.String(), opt...)
 		if err != nil {
 			panic(err)
 		}
 
-		hRoot.Record(ctx, value, m.rootScope.labels...)
+		hRollup.Record(ctx, value, m.rootScope.labels...)
 	case m.isNamespaceTagged:
 		hAll, err := m.meter.SyncInt64().Histogram(def.metricName.String(), opt...)
 		if err != nil {
