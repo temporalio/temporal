@@ -118,8 +118,10 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 
 	// active tasks for active namespaces
 	switch executable.GetType() {
-	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
-		// TODO: add more task types here if we believe it's ok to delay those tasks
+	case enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT,
+		enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION,
+		enumsspb.TASK_TYPE_VISIBILITY_DELETE_EXECUTION:
+		// add more task types here if we believe it's ok to delay those tasks
 		// and assign them the same priority as throttled tasks
 		executable.SetPriority(configs.TaskPriorityDefault)
 		return nil
