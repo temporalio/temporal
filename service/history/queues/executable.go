@@ -263,7 +263,7 @@ func (e *executableImpl) Nack(err error) {
 }
 
 func (e *executableImpl) Reschedule() {
-	e.Nack(nil)
+	e.rescheduler.Add(e, e.rescheduleBackoff(e.Attempt()))
 }
 
 func (e *executableImpl) State() ctasks.State {
