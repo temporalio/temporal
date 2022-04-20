@@ -114,7 +114,7 @@ func (r *reschedulerImpl) Reschedule(
 
 	var failToSubmit []rescheduledExecuable
 	numRescheduled := 0
-	for !r.pq.IsEmpty() {
+	for !r.pq.IsEmpty() && numRescheduled < targetRescheduleSize {
 		if r.timeSource.Now().Before(r.pq.Peek().rescheduleTime) {
 			break
 		}
@@ -129,9 +129,6 @@ func (r *reschedulerImpl) Reschedule(
 			failToSubmit = append(failToSubmit, rescheduled)
 		} else {
 			numRescheduled++
-			if numRescheduled >= targetRescheduleSize {
-				break
-			}
 		}
 	}
 
