@@ -31,7 +31,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
+	"go.opentelemetry.io/otel/metric/instrument/syncint64"
 
 	"go.temporal.io/server/common/clock"
 )
@@ -49,13 +49,13 @@ type (
 	}
 
 	openTelemetryStopwatchMetricImpl struct {
-		timer  metric.Int64Histogram
+		timer  syncint64.Histogram
 		labels []attribute.KeyValue
 	}
 )
 
 func newOpenTelemetryStopwatchMetric(
-	timer metric.Int64Histogram,
+	timer syncint64.Histogram,
 	labels []attribute.KeyValue,
 ) *openTelemetryStopwatchMetricImpl {
 	return &openTelemetryStopwatchMetricImpl{

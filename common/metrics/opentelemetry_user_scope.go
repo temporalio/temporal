@@ -33,20 +33,20 @@ import (
 )
 
 type opentelemetryUserScope struct {
-	meterMust metric.MeterMust
-	labels    []attribute.KeyValue
-	tags      map[string]string
+	meter  metric.Meter
+	labels []attribute.KeyValue
+	tags   map[string]string
 
 	gaugeCache OtelGaugeCache
 }
 
 func NewOpentelemetryUserScope(
-	meterMust metric.MeterMust,
+	meter metric.Meter,
 	tags map[string]string,
 	gaugeCache OtelGaugeCache,
 ) *opentelemetryUserScope {
 	result := &opentelemetryUserScope{
-		meterMust:  meterMust,
+		meter:      meter,
 		tags:       tags,
 		gaugeCache: gaugeCache,
 	}
@@ -60,25 +60,43 @@ func (o opentelemetryUserScope) IncCounter(counter string) {
 
 func (o opentelemetryUserScope) AddCounter(counter string, delta int64) {
 	ctx := context.Background()
-	o.meterMust.NewInt64Counter(counter).Add(ctx, delta, o.labels...)
+
+	c, err := o.meter.SyncInt64().Counter(counter)
+	if err != nil {
+		panic(err)
+	}
+	c.Add(ctx, delta, o.labels...)
 }
 
 func (o opentelemetryUserScope) StartTimer(timer string) Stopwatch {
-	metric := newOpenTelemetryStopwatchMetric(
-		o.meterMust.NewInt64Histogram(timer),
-		o.labels)
+	h, err := o.meter.SyncInt64().Histogram(timer)
+	if err != nil {
+		panic(err)
+	}
+
+	metric := newOpenTelemetryStopwatchMetric(h, o.labels)
 	return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{metric})
 }
 
 func (o opentelemetryUserScope) RecordTimer(timer string, d time.Duration) {
 	ctx := context.Background()
-	o.meterMust.NewInt64Histogram(timer).Record(ctx, d.Nanoseconds(), o.labels...)
+
+	h, err := o.meter.SyncInt64().Histogram(timer)
+	if err != nil {
+		panic(err)
+	}
+	h.Record(ctx, d.Nanoseconds(), o.labels...)
 }
 
 func (o opentelemetryUserScope) RecordDistribution(id string, d int) {
 	value := int64(d)
 	ctx := context.Background()
-	o.meterMust.NewInt64Histogram(id).Record(ctx, value, o.labels...)
+
+	h, err := o.meter.SyncInt64().Histogram(id)
+	if err != nil {
+		panic(err)
+	}
+	h.Record(ctx, value, o.labels...)
 }
 
 func (o opentelemetryUserScope) UpdateGauge(gauge string, value float64) {
@@ -95,5 +113,5 @@ func (o opentelemetryUserScope) Tagged(tags map[string]string) UserScope {
 	for key, value := range tags {
 		tagMap[key] = value
 	}
-	return NewOpentelemetryUserScope(o.meterMust, tagMap, o.gaugeCache)
+	return NewOpentelemetryUserScope(o.meter, tagMap, o.gaugeCache)
 }

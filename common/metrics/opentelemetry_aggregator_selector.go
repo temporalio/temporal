@@ -25,11 +25,12 @@
 package metrics
 
 import (
-	"go.opentelemetry.io/otel/metric/sdkapi"
-	emetric "go.opentelemetry.io/otel/sdk/export/metric"
+	"go.opentelemetry.io/otel/sdk/metric/aggregator"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/lastvalue"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/sum"
+	emetric "go.opentelemetry.io/otel/sdk/metric/export"
+	"go.opentelemetry.io/otel/sdk/metric/sdkapi"
 )
 
 type (
@@ -57,7 +58,7 @@ func NewOtelAggregatorSelector(
 	}
 }
 
-func (s OtelAggregatorSelector) AggregatorFor(descriptor *sdkapi.Descriptor, aggPtrs ...*emetric.Aggregator) {
+func (s OtelAggregatorSelector) AggregatorFor(descriptor *sdkapi.Descriptor, aggPtrs ...*aggregator.Aggregator) {
 	switch descriptor.InstrumentKind() {
 	case sdkapi.GaugeObserverInstrumentKind:
 		lastValueAggs(aggPtrs)
@@ -75,14 +76,14 @@ func (s OtelAggregatorSelector) AggregatorFor(descriptor *sdkapi.Descriptor, agg
 	}
 }
 
-func sumAggs(aggPtrs []*emetric.Aggregator) {
+func sumAggs(aggPtrs []*aggregator.Aggregator) {
 	aggs := sum.New(len(aggPtrs))
 	for i := range aggPtrs {
 		*aggPtrs[i] = &aggs[i]
 	}
 }
 
-func lastValueAggs(aggPtrs []*emetric.Aggregator) {
+func lastValueAggs(aggPtrs []*aggregator.Aggregator) {
 	aggs := lastvalue.New(len(aggPtrs))
 	for i := range aggPtrs {
 		*aggPtrs[i] = &aggs[i]
