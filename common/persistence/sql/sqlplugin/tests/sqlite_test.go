@@ -384,7 +384,7 @@ func newSQLiteMemoryConfig() *config.SQL {
 			"cache": "private",
 		},
 		PluginName:   sqlite.PluginName,
-		DatabaseName: ":memory:",
+		DatabaseName: "default",
 	}
 }
 
