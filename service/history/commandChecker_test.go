@@ -147,34 +147,34 @@ func (s *commandAttrValidatorSuite) TestValidateSignalExternalWorkflowExecutionA
 
 	var attributes *commandpb.SignalExternalWorkflowExecutionCommandAttributes
 
-	err, fc := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err := s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalExternalWorkflowExecutionCommandAttributes is not set on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes = &commandpb.SignalExternalWorkflowExecutionCommandAttributes{}
-	err, fc = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Execution is nil on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes.Execution = &commonpb.WorkflowExecution{}
 	attributes.Execution.WorkflowId = "workflow-id"
-	err, fc = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "SignalName is not set on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes.Execution.RunId = "run-id"
-	err, fc = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.EqualError(err, "Invalid RunId set on command.")
 	attributes.Execution.RunId = tests.RunID
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SIGNAL_WORKFLOW_EXECUTION_ATTRIBUTES, fc)
 
 	attributes.SignalName = "my signal name"
-	err, fc = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 
 	attributes.Input = payloads.EncodeString("test input")
-	err, fc = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
+	fc, err = s.validator.validateSignalExternalWorkflowExecutionAttributes(s.testNamespaceID, s.testTargetNamespaceID, attributes)
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 }
@@ -183,17 +183,17 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	namespace := namespace.Name("tests.Namespace")
 	var attributes *commandpb.UpsertWorkflowSearchAttributesCommandAttributes
 
-	err, fc := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err := s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.EqualError(err, "UpsertWorkflowSearchAttributesCommandAttributes is not set on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes = &commandpb.UpsertWorkflowSearchAttributesCommandAttributes{}
-	err, fc = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.EqualError(err, "SearchAttributes is not set on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
 	attributes.SearchAttributes = &commonpb.SearchAttributes{}
-	err, fc = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.EqualError(err, "IndexedFields is empty on command.")
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SEARCH_ATTRIBUTES, fc)
 
@@ -202,7 +202,7 @@ func (s *commandAttrValidatorSuite) TestValidateUpsertWorkflowSearchAttributes()
 	attributes.SearchAttributes.IndexedFields = map[string]*commonpb.Payload{
 		"CustomKeywordField": saPayload,
 	}
-	err, fc = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
+	fc, err = s.validator.validateUpsertWorkflowSearchAttributes(namespace, attributes, "index-name")
 	s.NoError(err)
 	s.Equal(enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNSPECIFIED, fc)
 }
