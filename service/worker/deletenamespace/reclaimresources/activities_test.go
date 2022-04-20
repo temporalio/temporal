@@ -30,6 +30,7 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
+	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 
@@ -39,10 +40,9 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
 
-func Test_EnsureNoExecutionsActivity_NoExecutions(t *testing.T) {
+func Test_EnsureNoExecutionsAdvVisibilityActivity_NoExecutions(t *testing.T) {
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
-	visibilityManager.EXPECT().GetName().Return("elasticsearch")
 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
@@ -58,19 +58,18 @@ func Test_EnsureNoExecutionsActivity_NoExecutions(t *testing.T) {
 		logger:            log.NewNoopLogger(),
 	}
 
-	err := a.EnsureNoExecutionsActivity(context.Background(), "namespace-id", "namespace")
+	err := a.EnsureNoExecutionsAdvVisibilityActivity(context.Background(), "namespace-id", "namespace")
 	require.NoError(t, err)
 
 	ctrl.Finish()
 }
 
-func Test_EnsureNoExecutionsActivity_ExecutionsExist(t *testing.T) {
+func Test_EnsureNoExecutionsAdvVisibilityActivity_ExecutionsExist(t *testing.T) {
 	testSuite := &testsuite.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
 	ctrl := gomock.NewController(t)
 	visibilityManager := manager.NewMockVisibilityManager(ctrl)
-	visibilityManager.EXPECT().GetName().Return("elasticsearch")
 
 	visibilityManager.EXPECT().CountWorkflowExecutions(gomock.Any(), &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: "namespace-id",
@@ -85,9 +84,62 @@ func Test_EnsureNoExecutionsActivity_ExecutionsExist(t *testing.T) {
 		metricsClient:     metrics.NoopClient,
 		logger:            log.NewNoopLogger(),
 	}
-	env.RegisterActivity(a.EnsureNoExecutionsActivity)
+	env.RegisterActivity(a.EnsureNoExecutionsAdvVisibilityActivity)
 
-	_, err := env.ExecuteActivity(a.EnsureNoExecutionsActivity, namespace.ID("namespace-id"), namespace.Name("namespace"))
+	_, err := env.ExecuteActivity(a.EnsureNoExecutionsAdvVisibilityActivity, namespace.ID("namespace-id"), namespace.Name("namespace"))
+	require.Error(t, err)
+	var appErr *temporal.ApplicationError
+	require.ErrorAs(t, err, &appErr)
+	require.Equal(t, "ExecutionsStillExist", appErr.Type())
+	ctrl.Finish()
+}
+
+func Test_EnsureNoExecutionsStdVisibilityActivity_NoExecutions(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	visibilityManager := manager.NewMockVisibilityManager(ctrl)
+
+	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		PageSize:    1,
+	}).Return(&manager.ListWorkflowExecutionsResponse{
+		Executions: []*workflowpb.WorkflowExecutionInfo{},
+	}, nil)
+
+	a := &Activities{
+		visibilityManager: visibilityManager,
+		metadataManager:   nil,
+		metricsClient:     metrics.NoopClient,
+		logger:            log.NewNoopLogger(),
+	}
+
+	err := a.EnsureNoExecutionsStdVisibilityActivity(context.Background(), "namespace-id", "namespace")
+	require.NoError(t, err)
+
+	ctrl.Finish()
+}
+
+func Test_EnsureNoExecutionsStdVisibilityActivity_ExecutionsExist(t *testing.T) {
+	ctrl := gomock.NewController(t)
+	visibilityManager := manager.NewMockVisibilityManager(ctrl)
+
+	visibilityManager.EXPECT().ListWorkflowExecutions(gomock.Any(), &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: "namespace-id",
+		Namespace:   "namespace",
+		PageSize:    1,
+	}).Return(&manager.ListWorkflowExecutionsResponse{
+		Executions: []*workflowpb.WorkflowExecutionInfo{{}},
+	}, nil)
+
+	a := &Activities{
+		visibilityManager: visibilityManager,
+		metadataManager:   nil,
+		metricsClient:     metrics.NoopClient,
+		logger:            log.NewNoopLogger(),
+	}
+
+	err := a.EnsureNoExecutionsStdVisibilityActivity(context.Background(), "namespace-id", "namespace")
+
 	require.Error(t, err)
 	var appErr *temporal.ApplicationError
 	require.ErrorAs(t, err, &appErr)

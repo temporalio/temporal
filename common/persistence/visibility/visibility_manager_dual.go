@@ -26,6 +26,7 @@ package visibility
 
 import (
 	"context"
+	"strings"
 
 	"go.temporal.io/server/common/persistence/visibility/manager"
 )
@@ -60,7 +61,7 @@ func (v *visibilityManagerDual) Close() {
 }
 
 func (v *visibilityManagerDual) GetName() string {
-	return "VisibilityManagerDual"
+	return strings.Join([]string{v.visibilityManager.GetName(), v.secondaryVisibilityManager.GetName()}, ",")
 }
 
 func (v *visibilityManagerDual) RecordWorkflowExecutionStarted(

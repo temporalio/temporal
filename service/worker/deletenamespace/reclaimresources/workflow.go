@@ -71,6 +71,24 @@ var (
 		RetryPolicy:        retryPolicy,
 		WorkflowRunTimeout: 60 * time.Minute,
 	}
+
+	ensureNoExecutionsActivityRetryPolicy = &temporal.RetryPolicy{
+		InitialInterval:    1 * time.Second,
+		MaximumInterval:    2 * time.Minute,
+		BackoffCoefficient: 2,
+	}
+
+	ensureNoExecutionsStdVisibilityOptionsActivity = workflow.ActivityOptions{
+		RetryPolicy:            ensureNoExecutionsActivityRetryPolicy,
+		StartToCloseTimeout:    30 * time.Second,
+		ScheduleToCloseTimeout: 30 * time.Minute, // ~20 attempts
+	}
+
+	ensureNoExecutionsAdvVisibilityActivityOptions = workflow.ActivityOptions{
+		RetryPolicy:            ensureNoExecutionsActivityRetryPolicy,
+		StartToCloseTimeout:    30 * time.Second,
+		ScheduleToCloseTimeout: 10 * time.Hour, // Sanity check, advanced visibility can control the progress of activity.
+	}
 )
 
 func validateParams(params *ReclaimResourcesParams) error {
@@ -127,11 +145,18 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 	deleteAttempt := int32(1)
 	var result ReclaimResourcesResult
 
+	ctx1 := workflow.WithLocalActivityOptions(ctx, localActivityOptions)
+	var isAdvancedVisibility bool
+	err := workflow.ExecuteLocalActivity(ctx1, a.IsAdvancedVisibilityActivity).Get(ctx, &isAdvancedVisibility)
+	if err != nil {
+		return result, fmt.Errorf("%w: IsAdvancedVisibilityActivity: %v", errors.ErrUnableToExecuteActivity, err)
+	}
+
 	for {
-		ctx1 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
-		ctx1 = workflow.WithWorkflowID(ctx1, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
+		ctx2 := workflow.WithChildOptions(ctx, deleteExecutionsWorkflowOptions)
+		ctx2 = workflow.WithWorkflowID(ctx2, fmt.Sprintf("%s/%s", deleteexecutions.WorkflowName, params.Namespace))
 		var der deleteexecutions.DeleteExecutionsResult
-		err := workflow.ExecuteChildWorkflow(ctx1, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
+		err := workflow.ExecuteChildWorkflow(ctx2, deleteexecutions.DeleteExecutionsWorkflow, params.DeleteExecutionsParams).Get(ctx, &der)
 		if err != nil {
 			logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
 			return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
@@ -139,26 +164,21 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		result.SuccessCount += der.SuccessCount
 		result.ErrorCount += der.ErrorCount
 
-		ensureNoExecutionsActivityOptions := workflow.ActivityOptions{
-			// 445 seconds of total retry intervals.
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval:    1 * time.Second,
-				MaximumInterval:    200 * time.Second,
-				BackoffCoefficient: 1.8,
-				MaximumAttempts:    10,
-			},
-			StartToCloseTimeout:    30 * time.Second,
-			ScheduleToCloseTimeout: 600 * time.Second,
+		if isAdvancedVisibility {
+			ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
+			err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, isAdvancedVisibility).Get(ctx, nil)
+		} else {
+			ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsStdVisibilityOptionsActivity)
+			err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsStdVisibilityActivity, params.NamespaceID, params.Namespace, isAdvancedVisibility).Get(ctx, nil)
 		}
-		ctx2 := workflow.WithActivityOptions(ctx, ensureNoExecutionsActivityOptions)
-		err = workflow.ExecuteActivity(ctx2, a.EnsureNoExecutionsActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
 		if err == nil {
 			break
 		}
+
 		var appErr *temporal.ApplicationError
 		if stderrors.As(err, &appErr) {
 			switch appErr.Type() {
-			case errors.ExecutionsStillExistErrType:
+			case errors.ExecutionsStillExistErrType, errors.NoProgressErrType:
 				logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
 				deleteAttempt++
 				continue
