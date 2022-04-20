@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
@@ -206,11 +205,6 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	}
 
 	e.scope.IncCounter(metrics.TaskFailures)
-
-	if _, ok := err.(*persistence.CurrentWorkflowConditionFailedError); ok {
-		e.logger.Error("More than 2 workflow are running.", tag.Error(err), tag.LifeCycleProcessingFailed)
-		return nil
-	}
 
 	e.logger.Error("Fail to process task", tag.Error(err), tag.LifeCycleProcessingFailed)
 	return err

@@ -40,7 +40,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
@@ -156,14 +155,6 @@ func (s *executableSuite) TestHandleErr_NamespaceNotActiveError() {
 	})
 
 	s.Equal(err, executable.HandleErr(err))
-}
-
-func (s *executableSuite) TestHandleErr_CurrentWorkflowConditionFailedError() {
-	executable := s.newTestExecutable(func(_ tasks.Task) bool {
-		return true
-	})
-
-	s.NoError(executable.HandleErr(&persistence.CurrentWorkflowConditionFailedError{}))
 }
 
 func (s *executableSuite) TestHandleErr_RandomErr() {
