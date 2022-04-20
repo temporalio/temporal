@@ -55,7 +55,7 @@ import (
 )
 
 type (
-	commandAttrValidationFn func() (error, enumspb.WorkflowTaskFailedCause)
+	commandAttrValidationFn func() (enumspb.WorkflowTaskFailedCause, error)
 
 	workflowTaskHandlerImpl struct {
 		identity                string
@@ -225,7 +225,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 	}
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateActivityScheduleAttributes(
 				namespaceID,
 				targetNamespaceID,
@@ -333,7 +333,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelActivity(
 	)
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateActivityCancelAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
@@ -386,7 +386,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartTimer(
 	)
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateTimerScheduleAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
@@ -418,7 +418,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCompleteWorkflow(
 	}
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateCompleteWorkflowExecutionAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
@@ -484,7 +484,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandFailWorkflow(
 	}
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateFailWorkflowExecutionAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
@@ -560,7 +560,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelTimer(
 	)
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateTimerCancelAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
@@ -601,7 +601,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandCancelWorkflow(
 	}
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateCancelWorkflowExecutionAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
@@ -648,7 +648,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	}
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateCancelExternalWorkflowExecutionAttributes(
 				namespaceID,
 				targetNamespaceID,
@@ -679,7 +679,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRecordMarker(
 	)
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateRecordMarkerAttributes(attr)
 		},
 	); err != nil || handler.stopProcessing {
@@ -717,7 +717,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	namespaceName := handler.mutableState.GetNamespaceEntry().Name()
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateContinueAsNewWorkflowExecutionAttributes(
 				namespaceName,
 				attr,
@@ -829,7 +829,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	}
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateStartChildExecutionAttributes(
 				parentNamespaceID,
 				targetNamespaceID,
@@ -921,7 +921,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	}
 
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateSignalExternalWorkflowExecutionAttributes(
 				namespaceID,
 				targetNamespaceID,
@@ -970,7 +970,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandUpsertWorkflowSearchAttribu
 
 	// valid search attributes for upsert
 	if err := handler.validateCommandAttr(
-		func() (error, enumspb.WorkflowTaskFailedCause) {
+		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateUpsertWorkflowSearchAttributes(
 				namespace,
 				attr,
@@ -1111,7 +1111,7 @@ func (handler *workflowTaskHandlerImpl) validateCommandAttr(
 	validationFn commandAttrValidationFn,
 ) error {
 
-	if err, failedCause := validationFn(); err != nil {
+	if failedCause, err := validationFn(); err != nil {
 		if _, ok := err.(*serviceerror.InvalidArgument); ok {
 			return handler.failCommand(failedCause, err)
 		}
