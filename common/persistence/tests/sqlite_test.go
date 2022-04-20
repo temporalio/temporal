@@ -319,7 +319,7 @@ func NewSQLiteMemoryConfig() *config.SQL {
 		ConnectAddr:       environment.Localhost,
 		ConnectProtocol:   "tcp",
 		PluginName:        "sqlite",
-		DatabaseName:      ":memory:",
+		DatabaseName:      "default",
 		ConnectAttributes: map[string]string{"mode": "memory", "cache": "private"},
 	}
 }

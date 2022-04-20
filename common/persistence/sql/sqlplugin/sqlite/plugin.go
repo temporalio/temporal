@@ -158,7 +158,7 @@ func buildDSN(cfg *config.SQL) (string, error) {
 		return "", err
 	}
 	dsn := fmt.Sprintf(
-		"%s?%v",
+		"file:%s?%v",
 		cfg.DatabaseName,
 		vals.Encode(),
 	)

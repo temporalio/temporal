@@ -34,6 +34,7 @@ import "temporal/api/failure/v1/message.proto";
 import "temporal/api/history/v1/message.proto";
 import "temporal/api/workflow/v1/message.proto";
 
+import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/common.proto";
 import "temporal/server/api/enums/v1/workflow.proto";
 import "temporal/server/api/enums/v1/task.proto";
@@ -129,6 +130,7 @@ message WorkflowExecutionInfo {
     google.protobuf.Timestamp execution_time = 60 [(gogoproto.stdtime) = true];
     // If continued-as-new, or retried, or cron, holds the new run id.
     string new_execution_run_id = 61;
+    temporal.server.api.clock.v1.ShardClock parent_clock = 62;
 }
 
 message ExecutionStats {
@@ -276,6 +278,7 @@ message ChildExecutionInfo {
     string workflow_type_name = 10;
     temporal.api.enums.v1.ParentClosePolicy parent_close_policy = 11;
     int64 initiated_id = 12;
+    temporal.server.api.clock.v1.ShardClock clock = 13;
 }
 
 // request_cancel_map column

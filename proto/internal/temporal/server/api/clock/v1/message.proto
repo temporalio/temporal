@@ -1,8 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,22 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package errors
+syntax = "proto3";
 
-import (
-	"errors"
+package temporal.server.api.clock.v1;
 
-	"go.temporal.io/sdk/temporal"
-)
+option go_package = "go.temporal.io/server/api/clock/v1;clock";
 
-const (
-	ExecutionsStillExistErrType = "ExecutionsStillExist"
-	NoProgressErrType           = "NoProgress"
-)
-
-var (
-	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
-	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
-	ErrExecutionsStillExist         = temporal.NewApplicationError("executions are still exist", ExecutionsStillExistErrType)
-	ErrNoProgress                   = temporal.NewNonRetryableApplicationError("no progress were made", NoProgressErrType, nil)
-)
+message ShardClock {
+    int32 id = 1;
+    int64 clock = 2;
+}

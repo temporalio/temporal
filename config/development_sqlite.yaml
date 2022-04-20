@@ -36,7 +36,6 @@ persistence:
         connectAttributes:
           mode: "memory"
           cache: "private"
-          setup: true
         maxConns: 1
         maxIdleConns: 1
         maxConnLifetime: "1h"

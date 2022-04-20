@@ -1628,6 +1628,8 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 }
 
 func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
+	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceFailuresWithType)
+
 	switch err := err.(type) {
 	case *serviceerror.Unavailable:
 		adh.logger.Error("unavailable error", tag.Error(err))

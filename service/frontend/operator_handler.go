@@ -346,6 +346,8 @@ func (h *OperatorHandlerImpl) startRequestProfile(scope int) (metrics.Scope, met
 }
 
 func (h *OperatorHandlerImpl) error(err error, scope metrics.Scope, endpointName string) error {
+	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceFailuresWithType)
+
 	switch err := err.(type) {
 	case *serviceerror.Unavailable:
 		h.logger.Error("Unavailable error.", tag.Error(err), tag.Endpoint(endpointName))

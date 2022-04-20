@@ -26,9 +26,12 @@ option go_package = "go.temporal.io/server/api/workflow/v1;workflow";
 
 import "temporal/api/common/v1/message.proto";
 
+import "temporal/server/api/clock/v1/message.proto";
+
 message ParentExecutionInfo {
     string namespace_id = 1;
     string namespace = 2;
     temporal.api.common.v1.WorkflowExecution execution = 3;
     int64 initiated_id = 4;
+    temporal.server.api.clock.v1.ShardClock clock = 5;
 }

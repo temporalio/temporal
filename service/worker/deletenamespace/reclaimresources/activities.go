@@ -26,6 +26,7 @@ package reclaimresources
 
 import (
 	"context"
+	"strings"
 
 	"go.temporal.io/sdk/activity"
 
@@ -60,42 +61,68 @@ func NewActivities(
 		logger:            logger,
 	}
 }
+func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, error) {
+	return strings.Contains(a.visibilityManager.GetName(), "elasticsearch"), nil
+}
 
-func (a *Activities) EnsureNoExecutionsActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
-	// TODO: remove this check after CountWorkflowExecutions is implemented in standard visibility.
-	count := int64(0)
-	if a.visibilityManager.GetName() == "elasticsearch" {
-		req := &manager.CountWorkflowExecutionsRequest{
-			NamespaceID: nsID,
-			Namespace:   nsName,
-		}
-		resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
-		if err != nil {
-			a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
-			a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
-			return err
-		}
-
-		count = resp.Count
-	} else {
-		req := &manager.ListWorkflowExecutionsRequestV2{
-			NamespaceID: nsID,
-			Namespace:   nsName,
-			PageSize:    1,
-		}
-		resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
-		if err != nil {
-			a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
-			a.logger.Error("Unable to count workflow executions using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
-			return err
-		}
-		// If not 0, it will always be 1 due to PageSize set to 1.
-		count = int64(len(resp.Executions))
+func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+	req := &manager.CountWorkflowExecutionsRequest{
+		NamespaceID: nsID,
+		Namespace:   nsName,
+	}
+	resp, err := a.visibilityManager.CountWorkflowExecutions(ctx, req)
+	if err != nil {
+		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+		a.logger.Error("Unable to count workflow executions.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		return err
 	}
 
+	count := resp.Count
 	if count > 0 {
+		activityInfo := activity.GetInfo(ctx)
+		// Starting from 8th attempt, workflow executions deletion must show some progress.
+		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
+			var previousAttemptCount int64
+			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
+				a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+				a.logger.Error("Unable to get previous heartbeat details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+				return err
+			}
+			if count == previousAttemptCount {
+				// No progress were made. Something bad happened on task processor side or new executions were created during deletion.
+				// Return non-retryable error and workflow will try to delete executions again.
+				a.logger.Warn("No progress were made.", tag.WorkflowNamespace(nsName.String()), tag.Attempt(activityInfo.Attempt), tag.Counter(int(count)))
+				return errors.ErrNoProgress
+			}
+		}
+
 		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(int(count)))
 		activity.RecordHeartbeat(ctx, count)
+		return errors.ErrExecutionsStillExist
+	}
+	return nil
+}
+
+func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+	// Standard visibility does not support CountWorkflowExecutions but only supports ListWorkflowExecutions.
+	// To prevent read of many records from DB, set PageSize to 1 and use this single record as indicator of workflow executions existence.
+	// Unfortunately, this doesn't allow to report progress and retry is limited only by timeout.
+	// TODO: remove this activity after CountWorkflowExecutions is implemented in standard visibility.
+
+	req := &manager.ListWorkflowExecutionsRequestV2{
+		NamespaceID: nsID,
+		Namespace:   nsName,
+		PageSize:    1,
+	}
+	resp, err := a.visibilityManager.ListWorkflowExecutions(ctx, req)
+	if err != nil {
+		a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
+		a.logger.Error("Unable to count workflow executions using list.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
+		return err
+	}
+
+	if len(resp.Executions) > 0 {
+		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()))
 		return errors.ErrExecutionsStillExist
 	}
 	return nil

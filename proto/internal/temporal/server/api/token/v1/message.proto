@@ -24,6 +24,7 @@ package temporal.server.api.token.v1;
 
 option go_package = "go.temporal.io/server/api/token/v1;token";
 
+import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/history/v1/message.proto";
 
 message HistoryContinuation {
@@ -58,6 +59,7 @@ message Task {
     string activity_id = 6;
     string workflow_type = 7;
     string activity_type = 8;
+    temporal.server.api.clock.v1.ShardClock clock = 9;
 }
 
 message QueryTask {
