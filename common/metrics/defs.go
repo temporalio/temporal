@@ -97,6 +97,7 @@ const (
 	StatsTypeTagName      = "stats_type"
 	CacheTypeTagName      = "cache_type"
 	FailureTagName        = "failure"
+	TaskCategoryTagName   = "task_category"
 	TaskTypeTagName       = "task_type"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
@@ -1934,11 +1935,8 @@ const (
 	TaskNoUserQueueLatency
 	TaskRedispatchQueuePendingTasksTimer
 	TaskScheduleToStartLatency
-
+	TaskThrottledCounter
 	TransferTaskMissingEventCounter
-
-	TransferTaskThrottledCounter
-	TimerTaskThrottledCounter
 
 	ActivityE2ELatency
 	AckLevelUpdateCounter
@@ -2421,8 +2419,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TransferTaskMissingEventCounter:                   NewCounterDef("transfer_task_missing_event_counter"),
 		TaskBatchCompleteCounter:                          NewCounterDef("task_batch_complete_counter"),
 		TaskRedispatchQueuePendingTasksTimer:              NewTimerDef("task_redispatch_queue_pending_tasks"),
-		TransferTaskThrottledCounter:                      NewCounterDef("transfer_task_throttled_counter"),
-		TimerTaskThrottledCounter:                         NewCounterDef("timer_task_throttled_counter"),
+		TaskThrottledCounter:                              NewCounterDef("task_throttled_counter"),
 		ActivityE2ELatency:                                NewTimerDef("activity_end_to_end_latency"),
 		AckLevelUpdateCounter:                             NewCounterDef("ack_level_update"),
 		AckLevelUpdateFailedCounter:                       NewCounterDef("ack_level_update_failed"),

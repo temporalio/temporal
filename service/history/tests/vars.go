@@ -108,6 +108,19 @@ var (
 		Version,
 	)
 
+	GlobalStandbyNamespaceEntry = namespace.NewGlobalNamespaceForTest(
+		&persistencespb.NamespaceInfo{Id: TargetNamespaceID.String(), Name: TargetNamespace.String()},
+		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
+		&persistencespb.NamespaceReplicationConfig{
+			ActiveClusterName: cluster.TestAlternativeClusterName,
+			Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			},
+		},
+		Version,
+	)
+
 	GlobalChildNamespaceEntry = namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: ChildNamespaceID.String(), Name: ChildNamespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
