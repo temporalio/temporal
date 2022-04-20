@@ -51,6 +51,7 @@ var (
 	TargetNamespace   = namespace.Name("mock target namespace name")
 	ChildNamespaceID  = namespace.ID("deadbeef-0123-4567-890a-bcdef0123459")
 	ChildNamespace    = namespace.Name("mock child namespace name")
+	MissedNamespaceID = namespace.ID("missed-namespace-id")
 	WorkflowID        = "mock-workflow-id"
 	RunID             = "0d00698f-08e1-4d36-a3e2-3bf109f5d2d6"
 

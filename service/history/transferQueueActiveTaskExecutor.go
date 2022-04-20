@@ -414,31 +414,47 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 
 	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
 	if err != nil {
+		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
+			return err
+		}
+		// It is possible that target namespace got deleted. Record failure.
+		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
+		err = t.requestCancelExternalExecutionFailed(
+			ctx,
+			task,
+			executionContext,
+			namespace.Name(task.TargetNamespaceID), // Use ID as namespace name because namespace is already deleted and name is used only for history.
+			task.TargetWorkflowID,
+			task.TargetRunID,
+			enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND)
 		return err
 	}
-	targetNamespace := targetNamespaceEntry.Name()
+	targetNamespaceName := targetNamespaceEntry.Name()
 
 	// handle workflow cancel itself
 	if task.NamespaceID == task.TargetNamespaceID && task.WorkflowID == task.TargetWorkflowID {
 		// it does not matter if the run ID is a mismatch
-		err = t.requestCancelExternalExecutionFailed(ctx, task, executionContext, targetNamespace, task.TargetWorkflowID, task.TargetRunID)
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// this could happen if this is a duplicate processing of the task, and the execution has already completed.
-			return nil
-		}
+		err = t.requestCancelExternalExecutionFailed(
+			ctx,
+			task,
+			executionContext,
+			targetNamespaceName,
+			task.TargetWorkflowID,
+			task.TargetRunID,
+			enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND)
 		return err
 	}
 
 	if err = t.requestCancelExternalExecutionWithRetry(
 		task,
-		targetNamespace,
+		targetNamespaceName,
 		requestCancelInfo,
 		attributes,
 	); err != nil {
 		t.logger.Debug(fmt.Sprintf("Failed to cancel external workflow execution. Error: %v", err))
 
 		// Check to see if the error is non-transient, in which case add RequestCancelFailed
-		// event and complete transfer task by setting the err = nil
+		// event and complete transfer task by returning nil error.
 		if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
 			// for retryable error just return
 			return err
@@ -447,9 +463,10 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			ctx,
 			task,
 			executionContext,
-			targetNamespace,
+			targetNamespaceName,
 			task.TargetWorkflowID,
 			task.TargetRunID,
+			enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
 		)
 	}
 
@@ -458,7 +475,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		ctx,
 		task,
 		executionContext,
-		targetNamespace,
+		targetNamespaceName,
 		task.TargetWorkflowID,
 		task.TargetRunID,
 	)
@@ -511,9 +528,24 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 
 	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
 	if err != nil {
+		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
+			return err
+		}
+		// It is possible that target namespace got deleted. Record failure.
+		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
+		err = t.signalExternalExecutionFailed(
+			ctx,
+			task,
+			weContext,
+			namespace.Name(task.TargetNamespaceID), // Use ID as namespace name because namespace is already deleted and name is used only for history.
+			task.TargetWorkflowID,
+			task.TargetRunID,
+			attributes.Control,
+			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
+		)
 		return err
 	}
-	targetNamespace := targetNamespaceEntry.Name()
+	targetNamespaceName := targetNamespaceEntry.Name()
 
 	// handle workflow signal itself
 	if task.NamespaceID == task.TargetNamespaceID && task.WorkflowID == task.TargetWorkflowID {
@@ -522,23 +554,24 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			ctx,
 			task,
 			weContext,
-			targetNamespace,
+			targetNamespaceName,
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			attributes.Control,
+			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
 		)
 	}
 
 	if err = t.signalExternalExecutionWithRetry(
 		task,
-		targetNamespace,
+		targetNamespaceName,
 		signalInfo,
 		attributes,
 	); err != nil {
 		t.logger.Debug("Failed to signal external workflow execution", tag.Error(err))
 
 		// Check to see if the error is non-transient, in which case add SignalFailed
-		// event and complete transfer task by setting the err = nil
+		// event and complete transfer task by returning nil error.
 		if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
 			// for retryable error just return
 			return err
@@ -547,10 +580,11 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			ctx,
 			task,
 			weContext,
-			targetNamespace,
+			targetNamespaceName,
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			attributes.Control,
+			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
 		)
 	}
 
@@ -558,7 +592,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		ctx,
 		task,
 		weContext,
-		targetNamespace,
+		targetNamespaceName,
 		task.TargetWorkflowID,
 		task.TargetRunID,
 		attributes.Control,
@@ -613,6 +647,21 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return nil
 	}
 
+	childInfo, ok := mutableState.GetChildExecutionInfo(task.InitiatedID)
+	if !ok {
+		return nil
+	}
+	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
+	if !ok {
+		return nil
+	}
+
+	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, task.InitiatedID)
+	if err != nil {
+		return err
+	}
+	attributes := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
+
 	var parentNamespaceName namespace.Name
 	if namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.NamespaceID)); err != nil {
 		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
@@ -630,25 +679,12 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			return err
 		}
 		// It is possible that target namespace got deleted. Record failure.
-		t.recordStartChildExecutionFailed()
+		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
+		err = t.recordStartChildExecutionFailed(ctx, task, context, attributes, enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND)
+		return err
 	} else {
 		targetNamespaceName = namespaceEntry.Name()
 	}
-
-	childInfo, ok := mutableState.GetChildExecutionInfo(task.InitiatedID)
-	if !ok {
-		return nil
-	}
-	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), childInfo.Version, task.Version, task)
-	if !ok {
-		return nil
-	}
-
-	initiatedEvent, err := mutableState.GetChildExecutionInitiatedEvent(ctx, task.InitiatedID)
-	if err != nil {
-		return err
-	}
-	attributes := initiatedEvent.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 
 	// ChildExecution already started, just create WorkflowTask and complete transfer task
 	if childInfo.StartedId != common.EmptyEventID {
@@ -676,7 +712,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// Check to see if the error is non-transient, in which case add StartChildWorkflowExecutionFailed
 		// event and complete transfer task by setting err = nil
 		if _, isWorkflowExecutionAlreadyStarted := err.(*serviceerror.WorkflowExecutionAlreadyStarted); isWorkflowExecutionAlreadyStarted {
-			err = t.recordStartChildExecutionFailed(ctx, task, context, attributes)
+			err = t.recordStartChildExecutionFailed(ctx, task, context, attributes, enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS)
 		}
 
 		return err
@@ -873,6 +909,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 	task *tasks.StartChildExecutionTask,
 	context workflow.Context,
 	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
+	failedCause enumspb.StartChildWorkflowExecutionFailedCause,
 ) error {
 
 	return t.updateWorkflowExecution(ctx, context, true,
@@ -888,7 +925,7 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 
 			_, err := mutableState.AddStartChildWorkflowExecutionFailedEvent(
 				task.InitiatedID,
-				enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS,
+				failedCause,
 				initiatedAttributes,
 			)
 			return err
@@ -1004,6 +1041,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	targetNamespace namespace.Name,
 	targetWorkflowID string,
 	targetRunID string,
+	failedCause enumspb.CancelExternalWorkflowExecutionFailedCause,
 ) error {
 
 	err := t.updateWorkflowExecution(ctx, context, true,
@@ -1022,12 +1060,12 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 				targetNamespace,
 				targetWorkflowID,
 				targetRunID,
-				enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
+				failedCause,
 			)
 			return err
 		})
 
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// this could happen if this is a duplicate processing of the task,
 		// or the execution has already completed.
 		return nil
@@ -1043,6 +1081,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	targetWorkflowID string,
 	targetRunID string,
 	control string,
+	failedCause enumspb.SignalExternalWorkflowExecutionFailedCause,
 ) error {
 
 	err := t.updateWorkflowExecution(ctx, context, true,
@@ -1062,7 +1101,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 				targetWorkflowID,
 				targetRunID,
 				control,
-				enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
+				failedCause,
 			)
 			return err
 		})
