@@ -87,10 +87,8 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions{
-			QueueSize:   2,
-			WorkerCount: 1,
+			PriorityToWeight: priorityToWeight,
 		},
-		priorityToWeight,
 		s.mockProcessor,
 		metricsClient,
 		logger,
