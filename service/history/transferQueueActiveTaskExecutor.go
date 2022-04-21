@@ -459,6 +459,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			// for retryable error just return
 			return err
 		}
+		// TODO (alex): set failed cause NAMESPACE_NOT_FOUND when serviceerror.NamespaceNotFound error is returned.
 		return t.requestCancelExternalExecutionFailed(
 			ctx,
 			task,
@@ -576,6 +577,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			// for retryable error just return
 			return err
 		}
+		// TODO (alex): set failed cause NAMESPACE_NOT_FOUND when serviceerror.NamespaceNotFound error is returned.
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -680,7 +682,13 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		}
 		// It is possible that target namespace got deleted. Record failure.
 		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
-		err = t.recordStartChildExecutionFailed(ctx, task, context, attributes, enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND)
+		err = t.recordStartChildExecutionFailed(
+			ctx,
+			task,
+			context,
+			attributes,
+			enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
+		)
 		return err
 	} else {
 		targetNamespaceName = namespaceEntry.Name()
@@ -709,10 +717,24 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
 
-		// Check to see if the error is non-transient, in which case add StartChildWorkflowExecutionFailed
-		// event and complete transfer task by setting err = nil
-		if _, isWorkflowExecutionAlreadyStarted := err.(*serviceerror.WorkflowExecutionAlreadyStarted); isWorkflowExecutionAlreadyStarted {
-			err = t.recordStartChildExecutionFailed(ctx, task, context, attributes, enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS)
+		switch err.(type) {
+		// TODO (alex): uncomment this when serviceerror.NamespaceNotFound error is returned.
+		// case *serviceerror.NamespaceNotFound:
+		// 	err = t.recordStartChildExecutionFailed(
+		// 		ctx,
+		// 		task,
+		// 		context,
+		// 		attributes,
+		// 		enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
+		// 	)
+		case *serviceerror.WorkflowExecutionAlreadyStarted:
+			err = t.recordStartChildExecutionFailed(
+				ctx,
+				task,
+				context,
+				attributes,
+				enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS,
+			)
 		}
 
 		return err
@@ -727,8 +749,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		return err
 	}
 
-	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
+	// NOTE: do not access anything related mutable state after this lock is released.
+	// Release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	return t.createFirstWorkflowTask(task.TargetNamespaceID, &commonpb.WorkflowExecution{
