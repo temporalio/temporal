@@ -273,6 +273,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		RunId:       addRequest.Execution.GetRunId(),
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
+		Clock:       addRequest.GetClock(),
 		ExpiryTime:  expirationTime,
 		CreateTime:  now,
 	}
@@ -325,6 +326,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		RunId:       runID,
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),
+		Clock:       addRequest.GetClock(),
 		CreateTime:  now,
 		ExpiryTime:  expirationTime,
 	}
@@ -792,6 +794,7 @@ func (e *matchingEngineImpl) createPollWorkflowTaskQueueResponse(
 			RunId:           task.event.Data.GetRunId(),
 			ScheduleId:      historyResponse.GetScheduledEventId(),
 			ScheduleAttempt: historyResponse.GetAttempt(),
+			Clock:           task.event.Data.GetClock(),
 		}
 		serializedToken, _ = e.tokenSerializer.Serialize(taskToken)
 		if task.responseC == nil {
@@ -839,6 +842,7 @@ func (e *matchingEngineImpl) createPollActivityTaskQueueResponse(
 		ScheduleAttempt: historyResponse.GetAttempt(),
 		ActivityId:      attributes.GetActivityId(),
 		ActivityType:    attributes.GetActivityType().GetName(),
+		Clock:           task.event.Data.GetClock(),
 	}
 
 	serializedToken, _ := e.tokenSerializer.Serialize(taskToken)
@@ -872,6 +876,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
+		Clock:             task.event.Data.GetClock(),
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,
@@ -901,6 +906,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 		NamespaceId:       task.event.Data.GetNamespaceId(),
 		WorkflowExecution: task.workflowExecution(),
 		ScheduleId:        task.event.Data.GetScheduleId(),
+		Clock:             task.event.Data.GetClock(),
 		TaskId:            task.event.GetTaskId(),
 		RequestId:         uuid.New(),
 		PollRequest:       pollReq,

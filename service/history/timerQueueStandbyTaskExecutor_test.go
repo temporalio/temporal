@@ -37,6 +37,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -61,6 +62,7 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -1455,6 +1457,19 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PushT
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
 
+	timerTask := &tasks.ActivityRetryTimerTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Attempt:             2,
+		Version:             s.version,
+		TaskID:              int64(100),
+		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
+		EventID:             scheduledEvent.GetEventId(),
+	}
+
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, scheduledEvent.GetEventId(), scheduledEvent.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
@@ -1470,21 +1485,11 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_PushT
 			},
 			ScheduleId:             scheduledEvent.EventId,
 			ScheduleToStartTimeout: &timerTimeout,
+			Clock:                  vclock.NewShardClock(s.mockShard.GetShardID(), timerTask.TaskID),
 		},
 		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)
-	timerTask := &tasks.ActivityRetryTimerTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		Attempt:             2,
-		Version:             s.version,
-		TaskID:              int64(100),
-		VisibilityTimestamp: task.(*tasks.ActivityTimeoutTask).VisibilityTimestamp,
-		EventID:             scheduledEvent.GetEventId(),
-	}
+
 	err = s.timerQueueStandbyTaskExecutor.execute(context.Background(), timerTask, true)
 	s.Nil(err)
 }

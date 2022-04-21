@@ -46,6 +46,7 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/vclock"
 
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/consts"
@@ -2011,6 +2012,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 		},
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		Clock:                  vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
 	}
 }
 
@@ -2039,6 +2041,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: &timeout,
+		Clock:                  vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
 	}
 }
 
