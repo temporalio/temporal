@@ -287,7 +287,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 
 	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
-		activityInfo, ok := mutableState.GetActivityInfo(task.EventID) //activity schedule ID
+		activityInfo, ok := mutableState.GetActivityInfo(task.EventID) // activity schedule ID
 		if !ok {
 			return nil, nil
 		}
@@ -305,7 +305,7 @@ func (t *timerQueueStandbyTaskExecutor) executeActivityRetryTimerTask(
 			return nil, nil
 		}
 
-		return newActivityRetryTimerToMatchingInfo(activityInfo.TaskQueue, activityInfo.NamespaceId, *activityInfo.ScheduleToStartTimeout), nil
+		return newActivityRetryTimerToMatchingInfo(activityInfo.TaskQueue, *activityInfo.ScheduleToStartTimeout), nil
 	}
 
 	return t.processTimer(
@@ -586,8 +586,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	defer cancel()
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		NamespaceId:       pushActivityInfo.namespaceID,
-		SourceNamespaceId: activityTask.NamespaceID,
+		NamespaceId: activityTask.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityTask.WorkflowID,
 			RunId:      activityTask.RunID,

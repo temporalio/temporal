@@ -292,7 +292,6 @@ func (e *matchingEngineImpl) AddActivityTask(
 	addRequest *matchingservice.AddActivityTaskRequest,
 ) (bool, error) {
 	namespaceID := namespace.ID(addRequest.GetNamespaceId())
-	sourceNamespaceID := addRequest.GetSourceNamespaceId()
 	runID := addRequest.Execution.GetRunId()
 	taskQueueName := addRequest.TaskQueue.GetName()
 	taskQueueKind := addRequest.TaskQueue.GetKind()
@@ -322,7 +321,7 @@ func (e *matchingEngineImpl) AddActivityTask(
 		expirationTime = timestamp.TimePtr(now.Add(expirationDuration))
 	}
 	taskInfo := &persistencespb.TaskInfo{
-		NamespaceId: sourceNamespaceID,
+		NamespaceId: namespaceID.String(),
 		RunId:       runID,
 		WorkflowId:  addRequest.Execution.GetWorkflowId(),
 		ScheduleId:  addRequest.GetScheduleId(),

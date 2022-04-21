@@ -159,9 +159,8 @@ func (fwdr *Forwarder) ForwardTask(ctx context.Context, task *internalTask) erro
 		})
 	case enumspb.TASK_QUEUE_TYPE_ACTIVITY:
 		_, err = fwdr.client.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-			NamespaceId:       fwdr.taskQueueID.namespaceID.String(),
-			SourceNamespaceId: task.event.Data.GetNamespaceId(),
-			Execution:         task.workflowExecution(),
+			NamespaceId: task.event.Data.GetNamespaceId(),
+			Execution:   task.workflowExecution(),
 			TaskQueue: &taskqueuepb.TaskQueue{
 				Name: name,
 				Kind: fwdr.taskQueueKind,
