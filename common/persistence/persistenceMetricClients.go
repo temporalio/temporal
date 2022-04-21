@@ -1017,7 +1017,7 @@ func (p *queuePersistenceClient) EnqueueMessage(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceEnqueueMessageScope, err)
 	}
 
 	return err
@@ -1035,7 +1035,7 @@ func (p *queuePersistenceClient) ReadMessages(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceReadQueueMessagesScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceReadQueueMessagesScope, err)
 	}
 
 	return result, err
@@ -1052,7 +1052,7 @@ func (p *queuePersistenceClient) UpdateAckLevel(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceUpdateAckLevelScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceUpdateAckLevelScope, err)
 	}
 
 	return err
@@ -1068,7 +1068,7 @@ func (p *queuePersistenceClient) GetAckLevels(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceGetAckLevelScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceGetAckLevelScope, err)
 	}
 
 	return result, err
@@ -1085,7 +1085,7 @@ func (p *queuePersistenceClient) DeleteMessagesBefore(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceDeleteQueueMessagesScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceDeleteQueueMessagesScope, err)
 	}
 
 	return err
@@ -1102,7 +1102,7 @@ func (p *queuePersistenceClient) EnqueueMessageToDLQ(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceEnqueueMessageToDLQScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceEnqueueMessageToDLQScope, err)
 	}
 
 	return messageID, err
@@ -1122,7 +1122,7 @@ func (p *queuePersistenceClient) ReadMessagesFromDLQ(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceReadQueueMessagesFromDLQScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceReadQueueMessagesFromDLQScope, err)
 	}
 
 	return result, token, err
@@ -1139,7 +1139,7 @@ func (p *queuePersistenceClient) DeleteMessageFromDLQ(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceDeleteQueueMessageFromDLQScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceDeleteQueueMessageFromDLQScope, err)
 	}
 
 	return err
@@ -1157,7 +1157,7 @@ func (p *queuePersistenceClient) RangeDeleteMessagesFromDLQ(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceRangeDeleteMessagesFromDLQScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceRangeDeleteMessagesFromDLQScope, err)
 	}
 
 	return err
@@ -1174,7 +1174,7 @@ func (p *queuePersistenceClient) UpdateDLQAckLevel(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceUpdateDLQAckLevelScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceUpdateDLQAckLevelScope, err)
 	}
 
 	return err
@@ -1190,7 +1190,7 @@ func (p *queuePersistenceClient) GetDLQAckLevels(
 	sw.Stop()
 
 	if err != nil {
-		p.metricClient.IncCounter(metrics.PersistenceGetDLQAckLevelScope, metrics.PersistenceFailures)
+		p.updateErrorMetric(metrics.PersistenceGetDLQAckLevelScope, err)
 	}
 
 	return result, err
@@ -1216,7 +1216,7 @@ func (c *clusterMetadataPersistenceClient) ListClusterMetadata(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceListClusterMetadataScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistenceListClusterMetadataScope, err)
 	}
 
 	return result, err
@@ -1233,7 +1233,7 @@ func (c *clusterMetadataPersistenceClient) GetCurrentClusterMetadata(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistenceGetClusterMetadataScope, err)
 	}
 
 	return result, err
@@ -1250,7 +1250,7 @@ func (c *clusterMetadataPersistenceClient) GetClusterMetadata(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceGetClusterMetadataScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistenceGetClusterMetadataScope, err)
 	}
 
 	return result, err
@@ -1267,7 +1267,7 @@ func (c *clusterMetadataPersistenceClient) SaveClusterMetadata(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceSaveClusterMetadataScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistenceSaveClusterMetadataScope, err)
 	}
 
 	return applied, err
@@ -1284,7 +1284,7 @@ func (c *clusterMetadataPersistenceClient) DeleteClusterMetadata(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceDeleteClusterMetadataScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistenceDeleteClusterMetadataScope, err)
 	}
 
 	return err
@@ -1305,7 +1305,7 @@ func (c *clusterMetadataPersistenceClient) GetClusterMembers(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceGetClusterMembersScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistenceGetClusterMembersScope, err)
 	}
 
 	return res, err
@@ -1322,7 +1322,7 @@ func (c *clusterMetadataPersistenceClient) UpsertClusterMembership(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceUpsertClusterMembershipScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistenceUpsertClusterMembershipScope, err)
 	}
 
 	return err
@@ -1339,7 +1339,7 @@ func (c *clusterMetadataPersistenceClient) PruneClusterMembership(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistencePruneClusterMembershipScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistencePruneClusterMembershipScope, err)
 	}
 
 	return err
@@ -1356,13 +1356,14 @@ func (c *metadataPersistenceClient) InitializeSystemNamespaces(
 	sw.Stop()
 
 	if err != nil {
-		c.metricClient.IncCounter(metrics.PersistenceInitializeSystemNamespaceScope, metrics.PersistenceFailures)
+		c.updateErrorMetric(metrics.PersistenceInitializeSystemNamespaceScope, err)
 	}
 
 	return err
 }
 
 func (p *metricEmitter) updateErrorMetric(scope int, err error) {
+	p.metricClient.Scope(scope, metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.PersistenceFailures)
 
 	switch err.(type) {
 	case *ShardAlreadyExistError:
@@ -1377,8 +1378,6 @@ func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrConditionFailedCounter)
 	case *TimeoutError:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrTimeoutCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-
 	case *serviceerror.InvalidArgument:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBadRequestCounter)
 	case *serviceerror.NamespaceAlreadyExists:
@@ -1387,10 +1386,7 @@ func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
-
 	default:
 		p.logger.Error("Operation failed with internal error.", tag.Error(err), tag.MetricScope(scope))
-		p.metricClient.IncCounter(scope, metrics.PersistenceFailures)
 	}
 }
