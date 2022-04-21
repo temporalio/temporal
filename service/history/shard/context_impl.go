@@ -195,11 +195,22 @@ func (s *ContextImpl) GetMaxTaskIDForCurrentRangeID() int64 {
 	return s.maxTaskSequenceNumber - 1
 }
 
-func (s *ContextImpl) GetVClock() *clockpb.ShardClock {
-	s.rLock()
-	clock := s.taskSequenceNumber
-	s.rUnlock()
+func (s *ContextImpl) NewVectorClock() (*clockpb.ShardClock, error) {
+	s.wLock()
+	defer s.wUnlock()
 
+	clock, err := s.generateTaskIDLocked()
+	if err != nil {
+		return nil, err
+	}
+	return vclock.NewShardClock(s.shardID, clock), nil
+}
+
+func (s *ContextImpl) CurrentVectorClock() *clockpb.ShardClock {
+	s.rLock()
+	defer s.rUnlock()
+
+	clock := s.taskSequenceNumber
 	return vclock.NewShardClock(s.shardID, clock)
 }
 

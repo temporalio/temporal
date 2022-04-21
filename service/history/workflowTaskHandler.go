@@ -284,6 +284,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		runID := handler.mutableState.GetExecutionState().RunId
 		attr := event.GetActivityTaskScheduledEventAttributes()
 
+		shardClock, err := handler.shard.NewVectorClock()
+		if err != nil {
+			return err
+		}
 		taskToken := &tokenspb.Task{
 			NamespaceId:     namespaceID.String(),
 			WorkflowId:      executionInfo.WorkflowId,
@@ -292,7 +296,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 			ScheduleAttempt: ai.Attempt,
 			ActivityId:      attr.ActivityId,
 			ActivityType:    attr.ActivityType.GetName(),
-			Clock:           handler.shard.GetVClock(),
+			Clock:           shardClock,
 		}
 		serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 		if err != nil {

@@ -67,7 +67,8 @@ type (
 		GetEngine() (Engine, error)
 		GetEngineWithContext(ctx context.Context) (Engine, error)
 
-		GetVClock() *clockpb.ShardClock
+		NewVectorClock() (*clockpb.ShardClock, error)
+		CurrentVectorClock() *clockpb.ShardClock
 
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)
