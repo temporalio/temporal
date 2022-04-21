@@ -285,11 +285,14 @@ func (h *Handler) RecordActivityTaskStarted(ctx context.Context, request *histor
 		return nil, h.convertError(err)
 	}
 
-	response, err2 := engine.RecordActivityTaskStarted(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
+	response, err := engine.RecordActivityTaskStarted(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
 	}
-	response.Clock = shardContext.GetVClock()
+	response.Clock, err = shardContext.NewVectorClock()
+	if err != nil {
+		return nil, h.convertError(err)
+	}
 	return response, nil
 }
 
@@ -324,11 +327,14 @@ func (h *Handler) RecordWorkflowTaskStarted(ctx context.Context, request *histor
 		return nil, h.convertError(err)
 	}
 
-	response, err2 := engine.RecordWorkflowTaskStarted(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
+	response, err := engine.RecordWorkflowTaskStarted(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
 	}
-	response.Clock = shardContext.GetVClock()
+	response.Clock, err = shardContext.NewVectorClock()
+	if err != nil {
+		return nil, h.convertError(err)
+	}
 	return response, nil
 }
 
@@ -560,11 +566,14 @@ func (h *Handler) StartWorkflowExecution(ctx context.Context, request *historyse
 		return nil, h.convertError(err)
 	}
 
-	response, err2 := engine.StartWorkflowExecution(ctx, request)
-	if err2 != nil {
-		return nil, h.convertError(err2)
+	response, err := engine.StartWorkflowExecution(ctx, request)
+	if err != nil {
+		return nil, h.convertError(err)
 	}
-	response.Clock = shardContext.GetVClock()
+	response.Clock, err = shardContext.NewVectorClock()
+	if err != nil {
+		return nil, h.convertError(err)
+	}
 	return response, nil
 }
 
