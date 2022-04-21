@@ -63,7 +63,7 @@ const (
 	cacheMaxSize     = 64 * 1024
 	cacheTTL         = 0 // 0 means infinity
 	// CacheRefreshInterval namespace cache refresh interval
-	CacheRefreshInterval = 10 * time.Second
+	CacheRefreshInterval = 2 * time.Second
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
