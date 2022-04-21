@@ -1891,14 +1891,7 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 ) (*persistencespb.ActivityInfo, error) {
 
 	attributes := event.GetActivityTaskScheduledEventAttributes()
-	targetNamespaceID := namespace.ID(e.executionInfo.NamespaceId)
-	if attributes.GetNamespace() != "" {
-		targetNamespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespace(namespace.Name(attributes.GetNamespace()))
-		if err != nil {
-			return nil, err
-		}
-		targetNamespaceID = targetNamespaceEntry.ID()
-	}
+	namespaceID := namespace.ID(e.executionInfo.NamespaceId)
 
 	scheduleEventID := event.GetEventId()
 	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeout()
@@ -1911,7 +1904,7 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		StartedId:               common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),
 		ActivityId:              attributes.ActivityId,
-		NamespaceId:             targetNamespaceID.String(),
+		NamespaceId:             namespaceID.String(),
 		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
 		ScheduleToCloseTimeout:  scheduleToCloseTimeout,
 		StartToCloseTimeout:     attributes.GetStartToCloseTimeout(),
