@@ -56,25 +56,6 @@ require (
 )
 
 require (
-	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
-	github.com/mattn/go-isatty v0.0.14 // indirect
-	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
-	golang.org/x/tools v0.1.10 // indirect
-	lukechampine.com/uint128 v1.2.0 // indirect
-	modernc.org/cc/v3 v3.35.26 // indirect
-	modernc.org/ccgo/v3 v3.16.2 // indirect
-	modernc.org/libc v1.15.0 // indirect
-	modernc.org/mathutil v1.4.1 // indirect
-	modernc.org/memory v1.0.7 // indirect
-	modernc.org/opt v0.1.3 // indirect
-	modernc.org/strutil v1.1.1 // indirect
-	modernc.org/token v1.0.0 // indirect
-)
-
-require github.com/googleapis/go-type-adapters v1.0.0 // indirect
-
-require (
 	cloud.google.com/go v0.100.2 // indirect
 	cloud.google.com/go/compute v1.5.0 // indirect
 	cloud.google.com/go/iam v0.3.0 // indirect
@@ -94,11 +75,14 @@ require (
 	github.com/golang/snappy v0.0.4 // indirect
 	github.com/google/go-cmp v0.5.7 // indirect
 	github.com/googleapis/gax-go/v2 v2.3.0 // indirect
+	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
 	github.com/jmespath/go-jmespath v0.4.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
+	github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
+	github.com/mattn/go-isatty v0.0.14 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.1 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
@@ -107,6 +91,7 @@ require (
 	github.com/prometheus/common v0.33.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
+	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
 	github.com/robfig/cron v1.2.0 // indirect
 	github.com/russross/blackfriday/v2 v2.1.0 // indirect
 	github.com/sirupsen/logrus v1.8.1 // indirect
@@ -117,12 +102,23 @@ require (
 	go.opentelemetry.io/otel/trace v1.6.3 // indirect
 	go.uber.org/dig v1.14.1 // indirect
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
+	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
 	golang.org/x/net v0.0.0-20220412020605-290c469a71a5 // indirect
 	golang.org/x/sys v0.0.0-20220412211240-33da011f77ad // indirect
 	golang.org/x/text v0.3.7 // indirect
+	golang.org/x/tools v0.1.10 // indirect
 	golang.org/x/xerrors v0.0.0-20220411194840-2f41105eb62f // indirect
 	google.golang.org/appengine v1.6.7 // indirect
 	google.golang.org/genproto v0.0.0-20220407144326-9054f6ed7bac // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
+	lukechampine.com/uint128 v1.2.0 // indirect
+	modernc.org/cc/v3 v3.35.26 // indirect
+	modernc.org/ccgo/v3 v3.16.2 // indirect
+	modernc.org/libc v1.15.0 // indirect
+	modernc.org/mathutil v1.4.1 // indirect
+	modernc.org/memory v1.0.7 // indirect
+	modernc.org/opt v0.1.3 // indirect
+	modernc.org/strutil v1.1.1 // indirect
+	modernc.org/token v1.0.0 // indirect
 )
