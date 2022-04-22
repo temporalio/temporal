@@ -46,7 +46,7 @@ func NewTallyMetricTestUtility() *TallyMetricTestUtility {
 }
 
 func (t *TallyMetricTestUtility) GetClient(config *ClientConfig, idx ServiceIdx) Client {
-	result, err := NewClient(config, t.scope, nil, idx)
+	result, err := NewClient(config, t.scope, idx)
 	if err != nil {
 		panic(err)
 	}
