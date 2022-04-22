@@ -111,7 +111,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 	defer cancel()
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		NamespaceId: task.NamespaceID,
+		NamespaceId: task.TargetNamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
 			RunId:      task.RunID,
