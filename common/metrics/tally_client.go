@@ -49,7 +49,7 @@ type TallyClient struct {
 // Client implementation
 // reporter holds the common tags for the service
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx ServiceIdx) (Client, error) {
+func NewClient(clientConfig *ClientConfig, scope tally.Scope, userScope UserScope, serviceIdx ServiceIdx) (Client, error) {
 	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
 
 	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
@@ -76,7 +76,7 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 		serviceIdx:      serviceIdx,
 		scopeWrapper:    scopeWrapper,
 		perUnitBuckets:  perUnitBuckets,
-		userScope:       newTallyUserScope(scope),
+		userScope:       userScope,
 	}
 
 	for idx, def := range ScopeDefs[Common] {

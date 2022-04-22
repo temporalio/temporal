@@ -37,7 +37,7 @@ import (
 )
 
 type (
-	opentelemetryStopwatch struct {
+	openTelemetryStopwatch struct {
 		timeP       clock.TimeSource
 		start       time.Time
 		toSubstract time.Duration
@@ -66,15 +66,15 @@ func newOpenTelemetryStopwatchMetric(
 
 func newOpenTelemetryStopwatchCustomTimer(
 	metricsMeta []openTelemetryStopwatchMetric, timeP clock.TimeSource,
-) *opentelemetryStopwatch {
-	return &opentelemetryStopwatch{timeP, timeP.Now(), 0, metricsMeta}
+) *openTelemetryStopwatch {
+	return &openTelemetryStopwatch{timeP, timeP.Now(), 0, metricsMeta}
 }
 
-func newOpenTelemetryStopwatch(metricsMeta []openTelemetryStopwatchMetric) *opentelemetryStopwatch {
+func newOpenTelemetryStopwatch(metricsMeta []openTelemetryStopwatchMetric) *openTelemetryStopwatch {
 	return newOpenTelemetryStopwatchCustomTimer(metricsMeta, clock.NewRealTimeSource())
 }
 
-func (o *opentelemetryStopwatch) Stop() {
+func (o *openTelemetryStopwatch) Stop() {
 	ctx := context.Background()
 	d := o.timeP.Now().Sub(o.start)
 	d -= o.toSubstract
@@ -84,7 +84,7 @@ func (o *opentelemetryStopwatch) Stop() {
 	}
 }
 
-func (o *opentelemetryStopwatch) Subtract(toSubstract time.Duration) {
+func (o *openTelemetryStopwatch) Subtract(toSubstract time.Duration) {
 	o.toSubstract = o.toSubstract + toSubstract
 }
 

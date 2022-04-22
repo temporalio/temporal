@@ -165,7 +165,7 @@ func NewTest(
 
 	scope := tally.NewTestScope("test", nil)
 
-	metricClient, err := metrics.NewClient(&metrics.ClientConfig{}, scope, serviceMetricsIndex)
+	metricClient, err := metrics.NewClient(&metrics.ClientConfig{}, scope, nil, serviceMetricsIndex)
 	if err != nil {
 		panic(err)
 	}
