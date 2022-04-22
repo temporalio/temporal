@@ -61,7 +61,7 @@ func NewOpenTelemetryReporterFromPrometheusConfig(
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 ) (*openTelemetryReporterImpl, error) {
-	otelProvider, err := NewOpentelemetryProvider(logger, prometheusConfig, clientConfig)
+	otelProvider, err := NewOpenTelemetryProvider(logger, prometheusConfig, clientConfig)
 	if err != nil {
 		return nil, err
 	}

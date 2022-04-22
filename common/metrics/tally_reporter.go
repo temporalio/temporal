@@ -51,12 +51,7 @@ func NewTallyReporter(
 }
 
 func (tr *TallyReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	client, err := NewClient(tr.clientConfig, tr.scope, serviceIdx)
-	if err != nil {
-		return nil, err
-	}
-	tr.userScope = client.UserScope()
-	return client, nil
+	return NewClient(tr.clientConfig, tr.scope, serviceIdx)
 }
 
 func (tr *TallyReporter) GetScope() tally.Scope {

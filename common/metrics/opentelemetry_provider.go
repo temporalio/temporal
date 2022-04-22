@@ -56,20 +56,15 @@ type (
 	}
 )
 
-func NewOpentelemetryProvider(
+func NewOpenTelemetryProvider(
 	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
 ) (*openTelemetryProviderImpl, error) {
-	histogramBoundaries := prometheusConfig.DefaultHistogramBoundaries
-	if len(histogramBoundaries) == 0 {
-		histogramBoundaries = defaultHistogramBoundaries
-	}
 
 	c := controller.New(
 		processor.NewFactory(
 			NewOtelAggregatorSelector(
-				histogramBoundaries,
 				clientConfig.PerUnitHistogramBoundaries,
 			),
 			aggregation.CumulativeTemporalitySelector(),
@@ -77,7 +72,7 @@ func NewOpentelemetryProvider(
 		),
 		controller.WithResource(resource.Empty()),
 	)
-	exporter, err := prometheus.New(prometheus.Config{DefaultHistogramBoundaries: histogramBoundaries}, c)
+	exporter, err := prometheus.New(prometheus.Config{}, c)
 
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))

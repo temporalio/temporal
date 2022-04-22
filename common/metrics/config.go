@@ -182,29 +182,6 @@ var (
 
 	defaultQuantiles = []float64{50, 75, 90, 95, 99}
 
-	// TODO: Remove this defaultHistogramBoundaries only keep defaultPerUnitHistogramBoundaries
-	defaultHistogramBoundaries = []float64{
-		1 * ms,
-		2 * ms,
-		5 * ms,
-		10 * ms,
-		20 * ms,
-		50 * ms,
-		100 * ms,
-		200 * ms,
-		500 * ms,
-		1000 * ms,
-		2000 * ms,
-		5000 * ms,
-		10000 * ms,
-		20000 * ms,
-		50000 * ms,
-		100000 * ms,
-		200000 * ms,
-		500000 * ms,
-		1000000 * ms,
-	}
-
 	defaultPerUnitHistogramBoundaries = map[string][]float64{
 		Dimensionless: {
 			1,
@@ -385,7 +362,6 @@ func newM3Scope(logger log.Logger, c *Config) tally.Scope {
 		Tags:           c.Tags,
 		CachedReporter: reporter,
 		Prefix:         c.Prefix,
-		DefaultBuckets: histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -406,10 +382,9 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
 	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
 	scopeOpts := tally.ScopeOptions{
-		Tags:           c.Tags,
-		Reporter:       reporter,
-		Prefix:         c.Prefix,
-		DefaultBuckets: histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
+		Tags:     c.Tags,
+		Reporter: reporter,
+		Prefix:   c.Prefix,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -422,9 +397,6 @@ func newPrometheusScope(
 	config *prometheus.Configuration,
 	clientConfig *ClientConfig,
 ) tally.Scope {
-	if len(config.DefaultHistogramBuckets) == 0 {
-		config.DefaultHistogramBuckets = histogramBoundariesToHistogramObjectives(defaultHistogramBoundaries)
-	}
 	reporter, err := config.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
@@ -442,7 +414,6 @@ func newPrometheusScope(
 		Separator:       prometheus.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
 		Prefix:          clientConfig.Prefix,
-		DefaultBuckets:  histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
