@@ -182,37 +182,57 @@ var (
 
 	defaultQuantiles = []float64{50, 75, 90, 95, 99}
 
-	defaultHistogramBoundaries = []float64{
-		1 * ms,
-		2 * ms,
-		5 * ms,
-		10 * ms,
-		20 * ms,
-		50 * ms,
-		100 * ms,
-		200 * ms,
-		500 * ms,
-		1000 * ms,
-		2000 * ms,
-		5000 * ms,
-		10000 * ms,
-		20000 * ms,
-		50000 * ms,
-		100000 * ms,
-		200000 * ms,
-		500000 * ms,
-		1000000 * ms,
-		2000000 * ms,
-		5000000 * ms,
-		10000000 * ms,
-		20000000 * ms,
-		50000000 * ms,
-		100000000 * ms,
-		200000000 * ms,
-		500000000 * ms,
-		1000000000 * ms,
-		2000000000 * ms,
-		5000000000 * ms,
+	defaultPerUnitHistogramBoundaries = map[string][]float64{
+		Dimensionless: {
+			1,
+			2,
+			5,
+			10,
+			20,
+			50,
+			100,
+			200,
+			500,
+			1000,
+		},
+		Milliseconds: {
+			1 * ms,
+			2 * ms,
+			5 * ms,
+			10 * ms,
+			20 * ms,
+			50 * ms,
+			100 * ms,
+			200 * ms,
+			500 * ms,
+			1000 * ms,
+			2000 * ms,
+			5000 * ms,
+			10000 * ms,
+			20000 * ms,
+			50000 * ms,
+			100000 * ms,
+			200000 * ms,
+			500000 * ms,
+			1000000 * ms,
+		},
+		Bytes: {
+			1024,
+			2048,
+			4096,
+			8192,
+			16384,
+			32768,
+			65536,
+			131072,
+			262144,
+			524288,
+			1048576,
+			2097152,
+			4194304,
+			8388608,
+			16777216,
+		},
 	}
 )
 
@@ -250,7 +270,7 @@ func InitReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfi
 	case FrameworkTally:
 		return NewTallyReporterFromPrometheusConfig(logger, config, clientConfig), nil
 	case FrameworkOpentelemetry:
-		return NewOpentelemeteryReporterFromPrometheusConfig(logger, config, clientConfig)
+		return NewOpenTelemetryReporterFromPrometheusConfig(logger, config, clientConfig)
 	default:
 		err := fmt.Errorf("unsupported framework type specified in config: %q", config.Framework)
 		logger.Error(err.Error())
@@ -285,6 +305,7 @@ func NewTallyReporterFromPrometheusConfig(
 ) Reporter {
 	tallyConfig := convertPrometheusConfigToTally(config)
 	tallyScope := newPrometheusScope(logger, tallyConfig, clientConfig)
+	setDefaultPerUnitHistogramBoundaries(clientConfig)
 	return NewTallyReporter(tallyScope, clientConfig)
 }
 
@@ -323,6 +344,13 @@ func convertPrometheusConfigToTally(
 	}
 }
 
+func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
+	if clientConfig.PerUnitHistogramBoundaries != nil && len(clientConfig.PerUnitHistogramBoundaries) > 0 {
+		return
+	}
+	clientConfig.PerUnitHistogramBoundaries = defaultPerUnitHistogramBoundaries
+}
+
 // newM3Scope returns a new m3 scope with
 // a default reporting interval of a second
 func newM3Scope(logger log.Logger, c *Config) tally.Scope {
@@ -334,7 +362,6 @@ func newM3Scope(logger log.Logger, c *Config) tally.Scope {
 		Tags:           c.Tags,
 		CachedReporter: reporter,
 		Prefix:         c.Prefix,
-		DefaultBuckets: histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -355,10 +382,9 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
 	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
 	scopeOpts := tally.ScopeOptions{
-		Tags:           c.Tags,
-		Reporter:       reporter,
-		Prefix:         c.Prefix,
-		DefaultBuckets: histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
+		Tags:     c.Tags,
+		Reporter: reporter,
+		Prefix:   c.Prefix,
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope
@@ -371,9 +397,6 @@ func newPrometheusScope(
 	config *prometheus.Configuration,
 	clientConfig *ClientConfig,
 ) tally.Scope {
-	if len(config.DefaultHistogramBuckets) == 0 {
-		config.DefaultHistogramBuckets = histogramBoundariesToHistogramObjectives(defaultHistogramBoundaries)
-	}
 	reporter, err := config.NewReporter(
 		prometheus.ConfigurationOptions{
 			Registry: prom.NewRegistry(),
@@ -391,7 +414,6 @@ func newPrometheusScope(
 		Separator:       prometheus.DefaultSeparator,
 		SanitizeOptions: &sanitizeOptions,
 		Prefix:          clientConfig.Prefix,
-		DefaultBuckets:  histogramBoundariesToValueBuckets(defaultHistogramBoundaries),
 	}
 	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
 	return scope

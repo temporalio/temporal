@@ -76,7 +76,7 @@ func NewClient(clientConfig *ClientConfig, scope tally.Scope, serviceIdx Service
 		serviceIdx:      serviceIdx,
 		scopeWrapper:    scopeWrapper,
 		perUnitBuckets:  perUnitBuckets,
-		userScope:       newTallyUserScope(scope),
+		userScope:       newTallyUserScope(clientConfig, scope),
 	}
 
 	for idx, def := range ScopeDefs[Common] {

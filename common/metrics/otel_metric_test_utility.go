@@ -42,7 +42,7 @@ import (
 )
 
 var _ MetricTestUtility = (*OtelMetricTestUtility)(nil)
-var _ OpentelemetryReporter = (*TestOtelReporter)(nil)
+var _ OpenTelemetryReporter = (*TestOtelReporter)(nil)
 
 type (
 	TestOtelReporter struct {
@@ -66,7 +66,7 @@ func NewOtelMetricTestUtility() *OtelMetricTestUtility {
 }
 
 func (t *OtelMetricTestUtility) GetClient(config *ClientConfig, idx ServiceIdx) Client {
-	result, err := NewOpentelemeteryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
+	result, err := NewOpenTelemetryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
 	if err != nil {
 		panic(err)
 	}

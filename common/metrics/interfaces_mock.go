@@ -376,15 +376,15 @@ func (mr *MockUserScopeMockRecorder) IncCounter(counter interface{}) *gomock.Cal
 }
 
 // RecordDistribution mocks base method.
-func (m *MockUserScope) RecordDistribution(id string, d int) {
+func (m *MockUserScope) RecordDistribution(id string, unit MetricUnit, d int) {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "RecordDistribution", id, d)
+	m.ctrl.Call(m, "RecordDistribution", id, unit, d)
 }
 
 // RecordDistribution indicates an expected call of RecordDistribution.
-func (mr *MockUserScopeMockRecorder) RecordDistribution(id, d interface{}) *gomock.Call {
+func (mr *MockUserScopeMockRecorder) RecordDistribution(id, unit, d interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordDistribution", reflect.TypeOf((*MockUserScope)(nil).RecordDistribution), id, d)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "RecordDistribution", reflect.TypeOf((*MockUserScope)(nil).RecordDistribution), id, unit, d)
 }
 
 // RecordTimer mocks base method.

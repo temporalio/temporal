@@ -46,7 +46,7 @@ func NewTallyReporter(
 	return &TallyReporter{
 		scope:        scope,
 		clientConfig: clientConfig,
-		userScope:    newTallyUserScope(scope),
+		userScope:    newTallyUserScope(clientConfig, scope),
 	}
 }
 
