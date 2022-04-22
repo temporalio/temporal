@@ -586,7 +586,8 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 	defer cancel()
 
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		NamespaceId: activityTask.NamespaceID,
+		NamespaceId:       activityTask.NamespaceID,
+		SourceNamespaceId: activityTask.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: activityTask.WorkflowID,
 			RunId:      activityTask.RunID,

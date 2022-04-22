@@ -467,6 +467,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	defer cancel()
 	_, retError = t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:            targetNamespaceID,
+		SourceNamespaceId:      namespaceID.String(),
 		Execution:              &execution,
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.EventID,
