@@ -28,7 +28,8 @@ update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-
 GOOS        ?= $(shell go env GOOS)
 GOARCH      ?= $(shell go env GOARCH)
 GOPATH      ?= $(shell go env GOPATH)
-CGO_ENABLED ?= $(shell go env CGO_ENABLED)
+# Disable cgo by default.
+CGO_ENABLED ?= 0
 
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra

@@ -15,76 +15,40 @@ archives:
     files:
       - ./config/*
 
-  - id: no-cgo
-    builds:
-      - temporal-server-no-cgo
-      - temporal-cassandra-tool-no-cgo
-      - temporal-sql-tool-no-cgo
-    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}_no_cgo"
-    format_overrides:
-      - goos: windows
-        format: zip
-    files:
-      - ./config/*
-
 builds:
   - id: temporal-server
-    dir: cmd/server
-    binary: temporal-server
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-  - id: temporal-server-no-cgo
     dir: cmd/server
     binary: temporal-server
     env:
       - CGO_ENABLED=0
     goos:
       - linux
+      - darwin
+      - windows
     goarch:
       - amd64
       - arm64
   - id: temporal-cassandra-tool
     dir: cmd/tools/cassandra
     binary: temporal-cassandra-tool
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-  - id: temporal-cassandra-tool-no-cgo
-    dir: cmd/tools/cassandra
-    binary: temporal-cassandra-tool
     env:
       - CGO_ENABLED=0
     goos:
       - linux
+      - darwin
+      - windows
     goarch:
       - amd64
       - arm64
   - id: temporal-sql-tool
     dir: cmd/tools/sql
     binary: temporal-sql-tool
-    goos:
-      - linux
-      - darwin
-      - windows
-    goarch:
-      - amd64
-      - arm64
-  - id: temporal-sql-tool-no-cgo
-    dir: cmd/tools/sql
-    binary: temporal-sql-tool
     env:
       - CGO_ENABLED=0
     goos:
       - linux
+      - darwin
+      - windows
     goarch:
       - amd64
       - arm64
