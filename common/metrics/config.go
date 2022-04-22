@@ -202,17 +202,59 @@ var (
 		200000 * ms,
 		500000 * ms,
 		1000000 * ms,
-		2000000 * ms,
-		5000000 * ms,
-		10000000 * ms,
-		20000000 * ms,
-		50000000 * ms,
-		100000000 * ms,
-		200000000 * ms,
-		500000000 * ms,
-		1000000000 * ms,
-		2000000000 * ms,
-		5000000000 * ms,
+	}
+
+	defaultPerUnitHistogramBoundaries = map[string][]float64{
+		Dimensionless: {
+			1,
+			2,
+			5,
+			10,
+			20,
+			50,
+			100,
+			200,
+			500,
+			1000,
+		},
+		Milliseconds: {
+			1 * ms,
+			2 * ms,
+			5 * ms,
+			10 * ms,
+			20 * ms,
+			50 * ms,
+			100 * ms,
+			200 * ms,
+			500 * ms,
+			1000 * ms,
+			2000 * ms,
+			5000 * ms,
+			10000 * ms,
+			20000 * ms,
+			50000 * ms,
+			100000 * ms,
+			200000 * ms,
+			500000 * ms,
+			1000000 * ms,
+		},
+		Bytes: {
+			1024,
+			2048,
+			4096,
+			8192,
+			16384,
+			32768,
+			65536,
+			131072,
+			262144,
+			524288,
+			1048576,
+			2097152,
+			4194304,
+			8388608,
+			16777216,
+		},
 	}
 )
 
@@ -285,6 +327,7 @@ func NewTallyReporterFromPrometheusConfig(
 ) Reporter {
 	tallyConfig := convertPrometheusConfigToTally(config)
 	tallyScope := newPrometheusScope(logger, tallyConfig, clientConfig)
+	setDefaultPerUnitHistogramBoundaries(clientConfig)
 	return NewTallyReporter(tallyScope, clientConfig)
 }
 
@@ -321,6 +364,13 @@ func convertPrometheusConfigToTally(
 		DefaultSummaryObjectives: defaultObjectives,
 		OnError:                  config.OnError,
 	}
+}
+
+func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
+	if clientConfig.PerUnitHistogramBoundaries != nil && len(clientConfig.PerUnitHistogramBoundaries) > 0 {
+		return
+	}
+	clientConfig.PerUnitHistogramBoundaries = defaultPerUnitHistogramBoundaries
 }
 
 // newM3Scope returns a new m3 scope with

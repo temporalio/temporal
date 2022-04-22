@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -183,6 +184,20 @@ func (h *Handler) Start() {
 	h.controller.Start()
 
 	h.startWG.Done()
+	go h.testMetrics()
+}
+
+func (h *Handler) testMetrics() {
+	tk := time.NewTicker(time.Second * 30)
+	for {
+		select {
+		case <-tk.C:
+			h.metricsClient.Scope(metrics.HistoryGetShard).RecordDistribution(metrics.HistoryTestSize, 2000)
+		}
+		if h.isStopped() {
+			return
+		}
+	}
 }
 
 // Stop stops the handler
