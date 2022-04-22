@@ -26,8 +26,9 @@ package metrics
 
 import (
 	"context"
-	"go.opentelemetry.io/otel/metric/instrument"
 	"time"
+
+	"go.opentelemetry.io/otel/metric/instrument"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
