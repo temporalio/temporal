@@ -1850,7 +1850,6 @@ const (
 	HistoryArchiverTotalUploadSize
 	HistoryArchiverHistorySize
 	HistoryArchiverDuplicateArchivalsCount
-	HistoryTestSize
 
 	// The following metrics are only used by internal history archiver implemention.
 	// TODO: move them to internal repo once temporal plugin model is in place.
@@ -2337,7 +2336,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		HistoryArchiverHistoryMutatedCount:                        NewCounterDef("history_archiver_history_mutated"),
 		HistoryArchiverTotalUploadSize:                            NewBytesHistogramDef("history_archiver_total_upload_size"),
 		HistoryArchiverHistorySize:                                NewBytesHistogramDef("history_archiver_history_size"),
-		HistoryTestSize:                                           NewBytesHistogramDef("history_test_size"),
 		HistoryArchiverDuplicateArchivalsCount:                    NewCounterDef("history_archiver_duplicate_archivals"),
 		HistoryArchiverBlobExistsCount:                            NewCounterDef("history_archiver_blob_exists"),
 		HistoryArchiverBlobSize:                                   NewBytesHistogramDef("history_archiver_blob_size"),
