@@ -48,6 +48,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	clockpb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -5275,7 +5276,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder workflow.MutableState,
 }
 
 func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, workflowID, runID string,
-	workflowType string) *historypb.HistoryEvent {
+	workflowType string, clock *clockpb.ShardClock) *historypb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
 		namespace,
 		&commonpb.WorkflowExecution{
@@ -5285,6 +5286,7 @@ func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initia
 		&commonpb.WorkflowType{Name: workflowType},
 		initiatedID,
 		&commonpb.Header{},
+		clock,
 	)
 	return event
 }
