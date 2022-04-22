@@ -182,6 +182,7 @@ var (
 
 	defaultQuantiles = []float64{50, 75, 90, 95, 99}
 
+	// TODO: Remove this defaultHistogramBoundaries only keep defaultPerUnitHistogramBoundaries
 	defaultHistogramBoundaries = []float64{
 		1 * ms,
 		2 * ms,
