@@ -239,7 +239,10 @@ func (s *controllerSuite) TestAcquireShardSuccess() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for _, shardID := range myShards {
-		s.NotNil(s.shardController.GetEngineForShard(ctx, shardID))
+		shard, err := s.shardController.GetShardByID(ctx, shardID)
+		s.NoError(err)
+		_, err = shard.GetEngineWithContext(ctx)
+		s.NoError(err)
 		count++
 	}
 	s.Equal(2, count)
@@ -325,7 +328,10 @@ func (s *controllerSuite) TestAcquireShardsConcurrently() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for _, shardID := range myShards {
-		s.NotNil(s.shardController.GetEngineForShard(ctx, shardID))
+		shard, err := s.shardController.GetShardByID(ctx, shardID)
+		s.NoError(err)
+		_, err = shard.GetEngineWithContext(ctx)
+		s.NoError(err)
 		count++
 	}
 	s.Equal(2, count)
@@ -343,7 +349,7 @@ func (s *controllerSuite) TestAcquireShardLookupFailure() {
 	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
 		s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(nil, errors.New("ring failure"))
-		s.Nil(s.shardController.GetEngineForShard(ctx, shardID))
+		s.Nil(s.shardController.GetShardByID(ctx, shardID))
 	}
 }
 
@@ -421,7 +427,7 @@ func (s *controllerSuite) TestAcquireShardRenewSuccess() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		s.NotNil(s.shardController.GetEngineForShard(ctx, shardID))
+		s.NotNil(s.shardController.GetShardByID(ctx, shardID))
 	}
 }
 
@@ -499,7 +505,7 @@ func (s *controllerSuite) TestAcquireShardRenewLookupFailed() {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	for shardID := int32(1); shardID <= numShards; shardID++ {
-		s.NotNil(s.shardController.GetEngineForShard(ctx, shardID))
+		s.NotNil(s.shardController.GetShardByID(ctx, shardID))
 	}
 }
 
@@ -534,7 +540,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		go func() {
 			for attempt := 0; attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
-					engine, err := s.shardController.GetEngineForShard(ctx, shardID)
+					engine, err := s.shardController.GetShardByID(ctx, shardID)
 					s.Nil(err)
 					s.NotNil(engine)
 				}
@@ -558,7 +564,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 		go func() {
 			for attempt := 0; attempt < 10; attempt++ {
 				for shardID := int32(3); shardID <= numShards; shardID++ {
-					engine, err := s.shardController.GetEngineForShard(ctx, shardID)
+					engine, err := s.shardController.GetShardByID(ctx, shardID)
 					s.Nil(err)
 					s.NotNil(engine)
 					time.Sleep(20 * time.Millisecond)
@@ -574,7 +580,7 @@ func (s *controllerSuite) TestHistoryEngineClosed() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= 2; shardID++ {
-					_, err := s.shardController.GetEngineForShard(ctx, shardID)
+					_, err := s.shardController.GetShardByID(ctx, shardID)
 					if err != nil {
 						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
@@ -632,7 +638,7 @@ func (s *controllerSuite) TestShardControllerClosed() {
 			shardLost := false
 			for attempt := 0; !shardLost && attempt < 10; attempt++ {
 				for shardID := int32(1); shardID <= numShards; shardID++ {
-					_, err := s.shardController.GetEngineForShard(ctx, shardID)
+					_, err := s.shardController.GetShardByID(ctx, shardID)
 					if err != nil {
 						s.logger.Error("ShardLost", tag.Error(err))
 						shardLost = true
