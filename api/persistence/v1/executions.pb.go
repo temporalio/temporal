@@ -1344,10 +1344,11 @@ type ActivityInfo struct {
 	RetryNonRetryableErrorTypes []string       `protobuf:"bytes,26,rep,name=retry_non_retryable_error_types,json=retryNonRetryableErrorTypes,proto3" json:"retry_non_retryable_error_types,omitempty"`
 	RetryLastFailure            *v16.Failure   `protobuf:"bytes,27,opt,name=retry_last_failure,json=retryLastFailure,proto3" json:"retry_last_failure,omitempty"`
 	RetryLastWorkerIdentity     string         `protobuf:"bytes,28,opt,name=retry_last_worker_identity,json=retryLastWorkerIdentity,proto3" json:"retry_last_worker_identity,omitempty"`
-	NamespaceId                 string         `protobuf:"bytes,29,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	ScheduleId                  int64          `protobuf:"varint,30,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	LastHeartbeatDetails        *v11.Payloads  `protobuf:"bytes,31,opt,name=last_heartbeat_details,json=lastHeartbeatDetails,proto3" json:"last_heartbeat_details,omitempty"`
-	LastHeartbeatUpdateTime     *time.Time     `protobuf:"bytes,32,opt,name=last_heartbeat_update_time,json=lastHeartbeatUpdateTime,proto3,stdtime" json:"last_heartbeat_update_time,omitempty"`
+	// TODO: remove this after 1.17 release.
+	NamespaceId             string        `protobuf:"bytes,29,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	ScheduleId              int64         `protobuf:"varint,30,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	LastHeartbeatDetails    *v11.Payloads `protobuf:"bytes,31,opt,name=last_heartbeat_details,json=lastHeartbeatDetails,proto3" json:"last_heartbeat_details,omitempty"`
+	LastHeartbeatUpdateTime *time.Time    `protobuf:"bytes,32,opt,name=last_heartbeat_update_time,json=lastHeartbeatUpdateTime,proto3,stdtime" json:"last_heartbeat_update_time,omitempty"`
 }
 
 func (m *ActivityInfo) Reset()      { *m = ActivityInfo{} }

@@ -453,7 +453,6 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return nil
 	}
 
-	targetNamespaceID := activityInfo.NamespaceId
 	taskQueue := &taskqueuepb.TaskQueue{
 		Name: activityInfo.TaskQueue,
 		Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
@@ -466,7 +465,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 	ctx, cancel = context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
 	defer cancel()
 	_, retError = t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		NamespaceId:            targetNamespaceID,
+		NamespaceId:            namespaceID.String(),
 		SourceNamespaceId:      namespaceID.String(),
 		Execution:              &execution,
 		TaskQueue:              taskQueue,

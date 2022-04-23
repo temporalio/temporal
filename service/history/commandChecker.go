@@ -233,18 +233,11 @@ func (c *workflowSizeChecker) failWorkflowIfSearchAttributesSizeExceedsLimit(
 
 func (v *commandAttrValidator) validateActivityScheduleAttributes(
 	namespaceID namespace.ID,
-	targetNamespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 	runTimeout time.Duration,
 ) (enumspb.WorkflowTaskFailedCause, error) {
 
 	const failedCause = enumspb.WORKFLOW_TASK_FAILED_CAUSE_BAD_SCHEDULE_ACTIVITY_ATTRIBUTES
-	if err := v.validateCrossNamespaceCall(
-		namespaceID,
-		targetNamespaceID,
-	); err != nil {
-		return failedCause, err
-	}
 
 	if attributes == nil {
 		return failedCause, serviceerror.NewInvalidArgument("ScheduleActivityTaskCommandAttributes is not set on command.")
@@ -263,7 +256,7 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 		return failedCause, serviceerror.NewInvalidArgument("ActivityType is not set on command.")
 	}
 
-	if err := v.validateActivityRetryPolicy(attributes); err != nil {
+	if err := v.validateActivityRetryPolicy(namespaceID, attributes); err != nil {
 		return failedCause, err
 	}
 
@@ -273,10 +266,6 @@ func (v *commandAttrValidator) validateActivityScheduleAttributes(
 
 	if len(attributes.GetActivityType().GetName()) > v.maxIDLengthLimit {
 		return failedCause, serviceerror.NewInvalidArgument("ActivityType exceeds length limit.")
-	}
-
-	if len(attributes.GetNamespace()) > v.maxIDLengthLimit {
-		return failedCause, serviceerror.NewInvalidArgument("Namespace exceeds length limit.")
 	}
 
 	// Only attempt to deduce and fill in unspecified timeouts only when all timeouts are non-negative.
@@ -720,13 +709,14 @@ func (v *commandAttrValidator) validateTaskQueue(
 }
 
 func (v *commandAttrValidator) validateActivityRetryPolicy(
+	namespaceID namespace.ID,
 	attributes *commandpb.ScheduleActivityTaskCommandAttributes,
 ) error {
 	if attributes.RetryPolicy == nil {
 		attributes.RetryPolicy = &commonpb.RetryPolicy{}
 	}
 
-	defaultActivityRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultActivityRetrySettings(attributes.GetNamespace()))
+	defaultActivityRetrySettings := common.FromConfigToDefaultRetrySettings(v.getDefaultActivityRetrySettings(namespaceID.String()))
 	common.EnsureRetryPolicyDefaults(attributes.RetryPolicy, defaultActivityRetrySettings)
 	return common.ValidateRetryPolicy(attributes.RetryPolicy)
 }

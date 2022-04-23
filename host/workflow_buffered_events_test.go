@@ -308,7 +308,6 @@ func (s *integrationSuite) TestBufferedEventsOutOfOrder() {
 				Attributes: &commandpb.Command_ScheduleActivityTaskCommandAttributes{ScheduleActivityTaskCommandAttributes: &commandpb.ScheduleActivityTaskCommandAttributes{
 					ActivityId:             "Activity-1",
 					ActivityType:           &commonpb.ActivityType{Name: "ActivityType"},
-					Namespace:              s.namespace,
 					TaskQueue:              &taskqueuepb.TaskQueue{Name: tl},
 					Input:                  payloads.EncodeString("some random activity input"),
 					ScheduleToCloseTimeout: timestamp.DurationPtr(100 * time.Second),
