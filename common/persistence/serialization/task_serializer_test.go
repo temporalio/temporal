@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/shuffle"
@@ -94,7 +95,6 @@ func (s *taskSerializerSuite) TestTransferActivityTask() {
 		WorkflowKey:         s.workflowKey,
 		VisibilityTimestamp: time.Unix(0, rand.Int63()).UTC(),
 		TaskID:              rand.Int63(),
-		TargetNamespaceID:   uuid.New().String(),
 		TaskQueue:           shuffle.String("random task queue name"),
 		ScheduleID:          rand.Int63(),
 		Version:             rand.Int63(),

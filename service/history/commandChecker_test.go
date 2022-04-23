@@ -656,7 +656,7 @@ func (s *commandAttrValidatorSuite) TestValidateActivityRetryPolicy() {
 				RetryPolicy: tt.input,
 			}
 
-			err := s.validator.validateActivityRetryPolicy(attr)
+			err := s.validator.validateActivityRetryPolicy(s.testNamespaceID, attr)
 			assert.Nil(s.T(), err, "expected no error")
 			assert.Equal(s.T(), tt.want, attr.RetryPolicy, "unexpected retry policy")
 		})

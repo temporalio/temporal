@@ -735,7 +735,6 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 	startToCloseTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
 	heartbeatTimeout := timestamp.DurationPtr(time.Duration(rand.Int63()))
 	attributes := &commandpb.ScheduleActivityTaskCommandAttributes{
-		Namespace:              testNamespaceName.String(),
 		ActivityId:             activityID,
 		ActivityType:           testActivityType,
 		TaskQueue:              testTaskQueue,
@@ -761,7 +760,6 @@ func (s *historyBuilderSuite) TestActivityTaskScheduled() {
 		Attributes: &historypb.HistoryEvent_ActivityTaskScheduledEventAttributes{
 			ActivityTaskScheduledEventAttributes: &historypb.ActivityTaskScheduledEventAttributes{
 				WorkflowTaskCompletedEventId: workflowTaskCompletionEventID,
-				Namespace:                    testNamespaceName.String(),
 				ActivityId:                   activityID,
 				ActivityType:                 testActivityType,
 				TaskQueue:                    testTaskQueue,
