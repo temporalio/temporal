@@ -590,21 +590,6 @@ func (c *retryableClient) TerminateWorkflowExecution(
 	return resp, backoff.Retry(op, c.policy, c.isRetryable)
 }
 
-func (c *retryableClient) DeleteWorkflowExecution(
-	ctx context.Context,
-	request *workflowservice.DeleteWorkflowExecutionRequest,
-	opts ...grpc.CallOption,
-) (*workflowservice.DeleteWorkflowExecutionResponse, error) {
-	var resp *workflowservice.DeleteWorkflowExecutionResponse
-	op := func() error {
-		var err error
-		resp, err = c.client.DeleteWorkflowExecution(ctx, request, opts...)
-		return err
-	}
-
-	return resp, backoff.Retry(op, c.policy, c.isRetryable)
-}
-
 func (c *retryableClient) UpdateNamespace(
 	ctx context.Context,
 	request *workflowservice.UpdateNamespaceRequest,

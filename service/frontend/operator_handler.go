@@ -33,7 +33,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/serviceerror"
-	"go.temporal.io/api/workflowservice/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
@@ -61,28 +60,32 @@ type (
 	OperatorHandlerImpl struct {
 		status int32
 
-		healthStatus     int32
-		logger           log.Logger
-		config           *Config
-		esConfig         *esclient.Config
-		esClient         esclient.Client
-		sdkClientFactory sdk.ClientFactory
-		metricsClient    metrics.Client
-		saProvider       searchattribute.Provider
-		saManager        searchattribute.Manager
-		healthServer     *health.Server
+		healthStatus      int32
+		logger            log.Logger
+		config            *Config
+		esConfig          *esclient.Config
+		esClient          esclient.Client
+		sdkClientFactory  sdk.ClientFactory
+		metricsClient     metrics.Client
+		saProvider        searchattribute.Provider
+		saManager         searchattribute.Manager
+		healthServer      *health.Server
+		historyClient     historyservice.HistoryServiceClient
+		namespaceRegistry namespace.Registry
 	}
 
 	NewOperatorHandlerImplArgs struct {
-		config           *Config
-		EsConfig         *esclient.Config
-		EsClient         esclient.Client
-		Logger           log.Logger
-		sdkClientFactory sdk.ClientFactory
-		MetricsClient    metrics.Client
-		SaProvider       searchattribute.Provider
-		SaManager        searchattribute.Manager
-		healthServer     *health.Server
+		config            *Config
+		EsConfig          *esclient.Config
+		EsClient          esclient.Client
+		Logger            log.Logger
+		sdkClientFactory  sdk.ClientFactory
+		MetricsClient     metrics.Client
+		SaProvider        searchattribute.Provider
+		SaManager         searchattribute.Manager
+		healthServer      *health.Server
+		historyClient     historyservice.HistoryServiceClient
+		namespaceRegistry namespace.Registry
 	}
 )
 
@@ -92,16 +95,18 @@ func NewOperatorHandlerImpl(
 ) *OperatorHandlerImpl {
 
 	handler := &OperatorHandlerImpl{
-		logger:           args.Logger,
-		status:           common.DaemonStatusInitialized,
-		config:           args.config,
-		esConfig:         args.EsConfig,
-		esClient:         args.EsClient,
-		sdkClientFactory: args.sdkClientFactory,
-		metricsClient:    args.MetricsClient,
-		saProvider:       args.SaProvider,
-		saManager:        args.SaManager,
-		healthServer:     args.healthServer,
+		logger:            args.Logger,
+		status:            common.DaemonStatusInitialized,
+		config:            args.config,
+		esConfig:          args.EsConfig,
+		esClient:          args.EsClient,
+		sdkClientFactory:  args.sdkClientFactory,
+		metricsClient:     args.MetricsClient,
+		saProvider:        args.SaProvider,
+		saManager:         args.SaManager,
+		healthServer:      args.healthServer,
+		historyClient:     args.historyClient,
+		namespaceRegistry: args.namespaceRegistry,
 	}
 
 	return handler
@@ -341,22 +346,14 @@ func (h *OperatorHandlerImpl) DeleteNamespace(ctx context.Context, request *oper
 
 // DeleteWorkflowExecution deletes a closed workflow execution asynchronously (workflow must be completed or terminated before).
 // This method is EXPERIMENTAL and may be changed or removed in a later release.
-func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, request *operatorservice.DeleteWorkflowExecutionRequest) (_ *workflowservice.DeleteWorkflowExecutionResponse, retError error) {
+func (h *OperatorHandlerImpl) DeleteWorkflowExecution(ctx context.Context, request *operatorservice.DeleteWorkflowExecutionRequest) (_ *operatorservice.DeleteWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(h.logger, &retError)
-
-	if h.isStopped() {
-		return nil, errShuttingDown
-	}
-
-	if err := h.versionChecker.ClientSupported(ctx, h.config.EnableClientVersionCheck()); err != nil {
-		return nil, err
-	}
 
 	if request == nil {
 		return nil, errRequestNotSet
 	}
 
-	if err := h.validateExecution(request.WorkflowExecution); err != nil {
+	if err := validateExecution(request.WorkflowExecution); err != nil {
 		return nil, err
 	}
 
