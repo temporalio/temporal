@@ -38,11 +38,9 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		// TODO: remove after 1.17 release.
-		TargetNamespaceID string
-		TaskQueue         string
-		ScheduleID        int64
-		Version           int64
+		TaskQueue           string
+		ScheduleID          int64
+		Version             int64
 	}
 )
 

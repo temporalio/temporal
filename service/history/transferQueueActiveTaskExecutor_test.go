@@ -288,7 +288,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Success()
 			execution.GetRunId(),
 		),
 		Version:             s.version,
-		TargetNamespaceID:   tests.TargetNamespaceID.String(),
 		TaskID:              taskID,
 		TaskQueue:           taskQueueName,
 		ScheduleID:          event.GetEventId(),
@@ -345,7 +344,6 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessActivityTask_Duplicati
 			execution.GetRunId(),
 		),
 		Version:             s.version,
-		TargetNamespaceID:   s.targetNamespaceID.String(),
 		TaskID:              taskID,
 		TaskQueue:           taskQueueName,
 		ScheduleID:          event.GetEventId(),
@@ -2219,7 +2217,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 	ai *persistencespb.ActivityInfo,
 ) *matchingservice.AddActivityTaskRequest {
 	return &matchingservice.AddActivityTaskRequest{
-		NamespaceId:       task.TargetNamespaceID,
+		NamespaceId:       task.NamespaceID,
 		SourceNamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,

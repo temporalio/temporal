@@ -385,11 +385,10 @@ func (s *TestBase) CreateWorkflowExecutionManyTasks(ctx context.Context, namespa
 	for _, activityScheduleID := range activityScheduleIDs {
 		transferTasks = append(transferTasks,
 			&tasks.ActivityTask{
-				WorkflowKey:       workflowKey,
-				TaskID:            s.GetNextSequenceNumber(),
-				TargetNamespaceID: namespaceID,
-				TaskQueue:         taskQueue,
-				ScheduleID:        activityScheduleID,
+				WorkflowKey: workflowKey,
+				TaskID:      s.GetNextSequenceNumber(),
+				TaskQueue:   taskQueue,
+				ScheduleID:  activityScheduleID,
 			})
 	}
 
@@ -759,11 +758,10 @@ func (s *TestBase) UpdateWorkflowExecutionWithReplication(ctx context.Context, u
 
 	for _, activityScheduleID := range activityScheduleIDs {
 		transferTasks = append(transferTasks, &tasks.ActivityTask{
-			WorkflowKey:       workflowKey,
-			TaskID:            s.GetNextSequenceNumber(),
-			TargetNamespaceID: updatedInfo.NamespaceId,
-			TaskQueue:         updatedInfo.TaskQueue,
-			ScheduleID:        activityScheduleID})
+			WorkflowKey: workflowKey,
+			TaskID:      s.GetNextSequenceNumber(),
+			TaskQueue:   updatedInfo.TaskQueue,
+			ScheduleID:  activityScheduleID})
 	}
 	_, err := s.ExecutionManager.UpdateWorkflowExecution(ctx, &persistence.UpdateWorkflowExecutionRequest{
 		ShardID: s.ShardInfo.GetShardId(),
