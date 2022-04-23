@@ -55,7 +55,7 @@ require (
 	modernc.org/sqlite v1.16.0
 )
 
-replace go.temporal.io/api v1.7.1-0.20220422204533-60b4e0146b1c => ../temporal-api-go
+replace go.temporal.io/api v1.7.1-0.20220422210026-a8393024cc6b => ../temporal-api-go
 
 require (
 	cloud.google.com/go v0.100.2 // indirect
