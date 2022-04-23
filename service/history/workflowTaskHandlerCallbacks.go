@@ -499,7 +499,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 			tag.WorkflowID(token.GetWorkflowId()),
 			tag.WorkflowRunID(token.GetRunId()),
 			tag.WorkflowNamespaceID(namespaceID.String()))
-		if currentWorkflowTask.Attempt > 1 {
+		if currentWorkflowTask.Attempt > 1 && wtFailedCause.failedCause != enumspb.WORKFLOW_TASK_FAILED_CAUSE_UNHANDLED_COMMAND {
 			// drop this workflow task if it keeps failing. This will cause the workflow task to timeout and get retried after timeout.
 			return nil, serviceerror.NewInvalidArgument(wtFailedCause.Message())
 		}

@@ -186,15 +186,13 @@ func (c *clientImpl) DescribeHistoryHost(
 func (c *clientImpl) RemoveTask(
 	ctx context.Context,
 	request *historyservice.RemoveTaskRequest,
-	opts ...grpc.CallOption) (*historyservice.RemoveTaskResponse, error) {
-	var err error
-	var client historyservice.HistoryServiceClient
-	if request.GetShardId() != 0 {
-		client, err = c.getClientForShardID(request.GetShardId())
-		if err != nil {
-			return nil, err
-		}
+	opts ...grpc.CallOption,
+) (*historyservice.RemoveTaskResponse, error) {
+	client, err := c.getClientForShardID(request.GetShardId())
+	if err != nil {
+		return nil, err
 	}
+
 	var response *historyservice.RemoveTaskResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -214,16 +212,13 @@ func (c *clientImpl) RemoveTask(
 func (c *clientImpl) CloseShard(
 	ctx context.Context,
 	request *historyservice.CloseShardRequest,
-	opts ...grpc.CallOption) (*historyservice.CloseShardResponse, error) {
-
-	var err error
-	var client historyservice.HistoryServiceClient
-	if request.ShardId != 0 {
-		client, err = c.getClientForShardID(request.GetShardId())
-		if err != nil {
-			return nil, err
-		}
+	opts ...grpc.CallOption,
+) (*historyservice.CloseShardResponse, error) {
+	client, err := c.getClientForShardID(request.GetShardId())
+	if err != nil {
+		return nil, err
 	}
+
 	var response *historyservice.CloseShardResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -243,16 +238,13 @@ func (c *clientImpl) CloseShard(
 func (c *clientImpl) GetShard(
 	ctx context.Context,
 	request *historyservice.GetShardRequest,
-	opts ...grpc.CallOption) (*historyservice.GetShardResponse, error) {
-
-	var err error
-	var client historyservice.HistoryServiceClient
-	if request.ShardId != 0 {
-		client, err = c.getClientForShardID(request.GetShardId())
-		if err != nil {
-			return nil, err
-		}
+	opts ...grpc.CallOption,
+) (*historyservice.GetShardResponse, error) {
+	client, err := c.getClientForShardID(request.GetShardId())
+	if err != nil {
+		return nil, err
 	}
+
 	var response *historyservice.GetShardResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -830,7 +822,7 @@ func (c *clientImpl) SyncShardStatus(
 	opts ...grpc.CallOption) (*historyservice.SyncShardStatusResponse, error) {
 
 	// we do not have a workflow ID here, instead, we have something even better
-	client, err := c.getClientForShardID(int32(request.GetShardId()))
+	client, err := c.getClientForShardID(request.GetShardId())
 	if err != nil {
 		return nil, err
 	}

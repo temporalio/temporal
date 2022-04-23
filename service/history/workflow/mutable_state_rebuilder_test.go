@@ -196,7 +196,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_No
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ParentNamespace).Return(tests.GlobalParentNamespaceEntry, nil)
-	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(tests.ParentNamespaceID, execution, requestID, event).Return(nil)
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(tests.ParentNamespaceID, nil, execution, requestID, event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateRecordWorkflowStartedTasks(
 		timestamp.TimeValue(event.GetEventTime()),
@@ -244,7 +244,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionStarted_Wi
 	}
 
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ParentNamespace).Return(tests.GlobalParentNamespaceEntry, nil)
-	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(tests.ParentNamespaceID, execution, requestID, event).Return(nil)
+	s.mockMutableState.EXPECT().ReplicateWorkflowExecutionStartedEvent(tests.ParentNamespaceID, nil, execution, requestID, event).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateRecordWorkflowStartedTasks(
 		timestamp.TimeValue(event.GetEventTime()),
@@ -1384,7 +1384,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeChildWorkflowExecutionStart
 		EventType:  evenType,
 		Attributes: &historypb.HistoryEvent_ChildWorkflowExecutionStartedEventAttributes{ChildWorkflowExecutionStartedEventAttributes: &historypb.ChildWorkflowExecutionStartedEventAttributes{}},
 	}
-	s.mockMutableState.EXPECT().ReplicateChildWorkflowExecutionStartedEvent(event).Return(nil)
+	s.mockMutableState.EXPECT().ReplicateChildWorkflowExecutionStartedEvent(event, nil).Return(nil)
 	s.mockUpdateVersion(event)
 	s.mockMutableState.EXPECT().ClearStickyness()
 

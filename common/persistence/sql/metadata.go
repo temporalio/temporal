@@ -55,11 +55,9 @@ func newMetadataPersistenceV2(
 }
 
 func (m *sqlMetadataManagerV2) CreateNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalCreateNamespaceRequest,
 ) (*persistence.CreateNamespaceResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.ID)
 	if err != nil {
 		return nil, err
@@ -97,11 +95,9 @@ func (m *sqlMetadataManagerV2) CreateNamespace(
 }
 
 func (m *sqlMetadataManagerV2) GetNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.GetNamespaceRequest,
 ) (*persistence.InternalGetNamespaceResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.ID)
 	if err != nil {
 		return nil, err
@@ -151,25 +147,24 @@ func (m *sqlMetadataManagerV2) namespaceRowToGetNamespaceResponse(row *sqlplugin
 }
 
 func (m *sqlMetadataManagerV2) UpdateNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalUpdateNamespaceRequest,
 ) error {
-	return m.updateNamespace(request, "UpdateNamespace")
+	return m.updateNamespace(ctx, request, "UpdateNamespace")
 }
 
 func (m *sqlMetadataManagerV2) RenameNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalRenameNamespaceRequest,
 ) error {
-	return m.updateNamespace(request.InternalUpdateNamespaceRequest, "RenameNamespace")
+	return m.updateNamespace(ctx, request.InternalUpdateNamespaceRequest, "RenameNamespace")
 }
 
 func (m *sqlMetadataManagerV2) updateNamespace(
+	ctx context.Context,
 	request *persistence.InternalUpdateNamespaceRequest,
 	operationName string,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.Id)
 	if err != nil {
 		return err
@@ -210,11 +205,9 @@ func (m *sqlMetadataManagerV2) updateNamespace(
 }
 
 func (m *sqlMetadataManagerV2) DeleteNamespace(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.DeleteNamespaceRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	idBytes, err := primitives.ParseUUID(request.ID)
 	if err != nil {
 		return err
@@ -229,11 +222,9 @@ func (m *sqlMetadataManagerV2) DeleteNamespace(
 }
 
 func (m *sqlMetadataManagerV2) DeleteNamespaceByName(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.DeleteNamespaceByNameRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	return m.txExecute(ctx, "DeleteNamespaceByName", func(tx sqlplugin.Tx) error {
 		_, err := tx.DeleteFromNamespace(ctx, sqlplugin.NamespaceFilter{
 			Name: &request.Name,
@@ -243,10 +234,8 @@ func (m *sqlMetadataManagerV2) DeleteNamespaceByName(
 }
 
 func (m *sqlMetadataManagerV2) GetMetadata(
-	_ context.Context,
+	ctx context.Context,
 ) (*persistence.GetMetadataResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	row, err := m.Db.SelectFromNamespaceMetadata(ctx)
 	if err != nil {
 		return nil, serviceerror.NewUnavailable(fmt.Sprintf("GetMetadata operation failed. Error: %v", err))
@@ -255,11 +244,9 @@ func (m *sqlMetadataManagerV2) GetMetadata(
 }
 
 func (m *sqlMetadataManagerV2) ListNamespaces(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalListNamespacesRequest,
 ) (*persistence.InternalListNamespacesResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	var pageToken *primitives.UUID
 	if request.NextPageToken != nil {
 		token := primitives.UUID(request.NextPageToken)

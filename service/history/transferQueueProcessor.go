@@ -54,7 +54,6 @@ import (
 
 var (
 	errUnknownTransferTask = serviceerror.NewInternal("Unknown transfer task")
-	transferComponentName  = "transfer-queue"
 )
 
 type (
@@ -147,8 +146,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 	}
 	t.activeTaskProcessor.Stop()
 	if t.isGlobalNamespaceEnabled {
-		callbackID := getMetadataChangeCallbackID(transferComponentName, t.shard.GetShardID())
-		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(callbackID)
+		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t)
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			standbyTaskProcessor.Stop()
@@ -333,9 +331,8 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 }
 
 func (t *transferQueueProcessorImpl) listenToClusterMetadataChange() {
-	callbackID := getMetadataChangeCallbackID(transferComponentName, t.shard.GetShardID())
 	t.shard.GetClusterMetadata().RegisterMetadataChangeCallback(
-		callbackID,
+		t,
 		t.handleClusterMetadataUpdate,
 	)
 }

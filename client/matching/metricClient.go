@@ -265,7 +265,7 @@ func (c *metricClient) finishMetricsRecording(
 			// noop - not interest and too many logs
 		default:
 
-			c.throttledLogger.Error("matching client encountered error", tag.Error(err), tag.ErrorType(err))
+			c.throttledLogger.Info("matching client encountered error", tag.Error(err), tag.ErrorType(err))
 		}
 		scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ClientFailures)
 	}

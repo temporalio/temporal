@@ -65,7 +65,7 @@ func ShardControllerProvider(
 	saMapper searchattribute.Mapper,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
-	hostInfoProvider resource.HostInfoProvider,
+	hostInfoProvider membership.HostInfoProvider,
 	engineFactory EngineFactory,
 ) *ControllerImpl {
 	return &ControllerImpl{

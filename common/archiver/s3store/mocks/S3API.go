@@ -2324,6 +2324,56 @@ func (mr *MockS3APIMockRecorder) GetObjectAclWithContext(arg0, arg1 interface{},
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObjectAclWithContext", reflect.TypeOf((*MockS3API)(nil).GetObjectAclWithContext), varargs...)
 }
 
+// GetObjectAttributes mocks base method.
+func (m *MockS3API) GetObjectAttributes(arg0 *s3.GetObjectAttributesInput) (*s3.GetObjectAttributesOutput, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetObjectAttributes", arg0)
+	ret0, _ := ret[0].(*s3.GetObjectAttributesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetObjectAttributes indicates an expected call of GetObjectAttributes.
+func (mr *MockS3APIMockRecorder) GetObjectAttributes(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObjectAttributes", reflect.TypeOf((*MockS3API)(nil).GetObjectAttributes), arg0)
+}
+
+// GetObjectAttributesRequest mocks base method.
+func (m *MockS3API) GetObjectAttributesRequest(arg0 *s3.GetObjectAttributesInput) (*request.Request, *s3.GetObjectAttributesOutput) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetObjectAttributesRequest", arg0)
+	ret0, _ := ret[0].(*request.Request)
+	ret1, _ := ret[1].(*s3.GetObjectAttributesOutput)
+	return ret0, ret1
+}
+
+// GetObjectAttributesRequest indicates an expected call of GetObjectAttributesRequest.
+func (mr *MockS3APIMockRecorder) GetObjectAttributesRequest(arg0 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObjectAttributesRequest", reflect.TypeOf((*MockS3API)(nil).GetObjectAttributesRequest), arg0)
+}
+
+// GetObjectAttributesWithContext mocks base method.
+func (m *MockS3API) GetObjectAttributesWithContext(arg0 aws.Context, arg1 *s3.GetObjectAttributesInput, arg2 ...request.Option) (*s3.GetObjectAttributesOutput, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{arg0, arg1}
+	for _, a := range arg2 {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "GetObjectAttributesWithContext", varargs...)
+	ret0, _ := ret[0].(*s3.GetObjectAttributesOutput)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// GetObjectAttributesWithContext indicates an expected call of GetObjectAttributesWithContext.
+func (mr *MockS3APIMockRecorder) GetObjectAttributesWithContext(arg0, arg1 interface{}, arg2 ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{arg0, arg1}, arg2...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetObjectAttributesWithContext", reflect.TypeOf((*MockS3API)(nil).GetObjectAttributesWithContext), varargs...)
+}
+
 // GetObjectLegalHold mocks base method.
 func (m *MockS3API) GetObjectLegalHold(arg0 *s3.GetObjectLegalHoldInput) (*s3.GetObjectLegalHoldOutput, error) {
 	m.ctrl.T.Helper()

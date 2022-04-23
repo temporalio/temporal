@@ -63,7 +63,7 @@ membership_partition = $1, host_id = $2, rpc_address = $3, rpc_port = $4, role =
 	templatePruneStaleClusterMembership = `DELETE FROM
 cluster_membership 
 WHERE host_id = ANY(ARRAY(
-SELECT host_id FROM cluster_membership WHERE membership_partition = $1 AND record_expiry < $2 LIMIT $3))`
+SELECT host_id FROM cluster_membership WHERE membership_partition = $1 AND record_expiry < $2))`
 
 	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry FROM
 cluster_membership WHERE membership_partition = $`
@@ -281,6 +281,5 @@ func (pdb *db) PruneClusterMembership(
 		templatePruneStaleClusterMembership,
 		constMembershipPartition,
 		filter.PruneRecordsBefore,
-		filter.MaxRecordsAffected,
 	)
 }

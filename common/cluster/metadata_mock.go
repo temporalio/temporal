@@ -184,7 +184,7 @@ func (mr *MockMetadataMockRecorder) IsVersionFromSameCluster(version1, version2 
 }
 
 // RegisterMetadataChangeCallback mocks base method.
-func (m *MockMetadata) RegisterMetadataChangeCallback(callbackId string, cb CallbackFn) {
+func (m *MockMetadata) RegisterMetadataChangeCallback(callbackId any, cb CallbackFn) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "RegisterMetadataChangeCallback", callbackId, cb)
 }
@@ -220,7 +220,7 @@ func (mr *MockMetadataMockRecorder) Stop() *gomock.Call {
 }
 
 // UnRegisterMetadataChangeCallback mocks base method.
-func (m *MockMetadata) UnRegisterMetadataChangeCallback(callbackId string) {
+func (m *MockMetadata) UnRegisterMetadataChangeCallback(callbackId any) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "UnRegisterMetadataChangeCallback", callbackId)
 }

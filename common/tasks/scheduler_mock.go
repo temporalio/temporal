@@ -92,3 +92,17 @@ func (mr *MockSchedulerMockRecorder) Submit(task interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Submit", reflect.TypeOf((*MockScheduler)(nil).Submit), task)
 }
+
+// TrySubmit mocks base method.
+func (m *MockScheduler) TrySubmit(task PriorityTask) bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "TrySubmit", task)
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// TrySubmit indicates an expected call of TrySubmit.
+func (mr *MockSchedulerMockRecorder) TrySubmit(task interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TrySubmit", reflect.TypeOf((*MockScheduler)(nil).TrySubmit), task)
+}

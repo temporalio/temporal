@@ -297,7 +297,7 @@ func (t *visibilityQueueProcessorImpl) process(
 	taskInfo *taskInfo,
 ) (int, error) {
 	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := getVisibilityTaskMetricsScope(taskInfo.Task)
+	metricScope := tasks.GetVisibilityTaskMetricsScope(taskInfo.Task)
 	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }
 
@@ -334,22 +334,4 @@ func (t *visibilityQueueProcessorImpl) updateAckLevel(
 
 func (t *visibilityQueueProcessorImpl) queueShutdown() error {
 	return t.visibilityQueueShutdown()
-}
-
-// some aux stuff
-func getVisibilityTaskMetricsScope(
-	task tasks.Task,
-) int {
-	switch task.(type) {
-	case *tasks.StartExecutionVisibilityTask:
-		return metrics.VisibilityTaskStartExecutionScope
-	case *tasks.UpsertExecutionVisibilityTask:
-		return metrics.VisibilityTaskUpsertExecutionScope
-	case *tasks.CloseExecutionVisibilityTask:
-		return metrics.VisibilityTaskCloseExecutionScope
-	case *tasks.DeleteExecutionVisibilityTask:
-		return metrics.VisibilityTaskDeleteExecutionScope
-	default:
-		return metrics.VisibilityQueueProcessorScope
-	}
 }

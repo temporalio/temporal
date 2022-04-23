@@ -267,15 +267,17 @@ func (t *taskProcessor) processTaskOnce(
 	ctx = metrics.AddMetricsContext(ctx)
 	startTime := t.timeSource.Now()
 	scopeIdx, err := task.processor.process(ctx, task)
+	var userLatency time.Duration
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
-		task.userLatency += time.Duration(duration)
+		userLatency = time.Duration(duration)
 	}
+	task.userLatency += userLatency
 
 	scope := t.metricsClient.Scope(scopeIdx).Tagged(t.getNamespaceTagByID(namespace.ID(task.GetNamespaceID())))
 	if task.shouldProcessTask {
 		scope.IncCounter(metrics.TaskRequests)
 		scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
-		scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(startTime)-task.userLatency)
+		scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(startTime)-userLatency)
 	}
 
 	return scope, err
@@ -308,7 +310,7 @@ func (t *taskProcessor) handleTaskError(
 
 	if err == consts.ErrTaskDiscarded {
 		scope.IncCounter(metrics.TaskDiscarded)
-		err = nil
+		return nil
 	}
 
 	// this is a transient error

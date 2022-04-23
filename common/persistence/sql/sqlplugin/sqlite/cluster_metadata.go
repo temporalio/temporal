@@ -24,8 +24,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build cgo
-
 package sqlite
 
 import (
@@ -61,7 +59,7 @@ VALUES(?, ?, ?, ?, ?, ?, ?, ?) `
 
 	templatePruneStaleClusterMembership = `DELETE FROM
 cluster_membership 
-WHERE membership_partition = ? AND record_expiry < ? LIMIT ?`
+WHERE membership_partition = ? AND record_expiry < ?`
 
 	templateGetClusterMembership = `SELECT host_id, rpc_address, rpc_port, role, session_start, last_heartbeat, record_expiry FROM
 cluster_membership WHERE membership_partition = ?`
@@ -264,6 +262,5 @@ func (mdb *db) PruneClusterMembership(
 		templatePruneStaleClusterMembership,
 		constMembershipPartition,
 		mdb.converter.ToSQLiteDateTime(filter.PruneRecordsBefore),
-		filter.MaxRecordsAffected,
 	)
 }

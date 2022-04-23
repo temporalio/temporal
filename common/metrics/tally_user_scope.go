@@ -31,11 +31,21 @@ import (
 )
 
 type tallyUserScope struct {
-	scope tally.Scope
+	perUnitBuckets map[MetricUnit]tally.Buckets
+	scope          tally.Scope
 }
 
-func newTallyUserScope(scope tally.Scope) UserScope {
-	return &tallyUserScope{scope: scope}
+func newTallyUserScope(clientConfig *ClientConfig, scope tally.Scope) UserScope {
+	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
+	for unit, boundariesList := range clientConfig.PerUnitHistogramBoundaries {
+		perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
+	}
+
+	return &tallyUserScope{scope: scope, perUnitBuckets: perUnitBuckets}
+}
+
+func newTallyUserScopeWithUnitBuckets(perUnitBuckets map[MetricUnit]tally.Buckets, scope tally.Scope) UserScope {
+	return &tallyUserScope{scope: scope, perUnitBuckets: perUnitBuckets}
 }
 
 func (t tallyUserScope) IncCounter(counter string) {
@@ -55,9 +65,9 @@ func (t tallyUserScope) RecordTimer(timer string, d time.Duration) {
 	t.scope.Timer(timer).Record(d)
 }
 
-func (t tallyUserScope) RecordDistribution(id string, d int) {
-	dist := time.Duration(d * distributionToTimerRatio)
-	t.scope.Timer(id).Record(dist)
+func (t tallyUserScope) RecordDistribution(id string, unit MetricUnit, d int) {
+	buckets, _ := t.perUnitBuckets[unit]
+	t.scope.Histogram(id, buckets).RecordValue(float64(d))
 }
 
 func (t tallyUserScope) UpdateGauge(gauge string, value float64) {
@@ -65,5 +75,5 @@ func (t tallyUserScope) UpdateGauge(gauge string, value float64) {
 }
 
 func (t tallyUserScope) Tagged(tags map[string]string) UserScope {
-	return newTallyUserScope(t.scope.Tagged(tags))
+	return newTallyUserScopeWithUnitBuckets(t.perUnitBuckets, t.scope.Tagged(tags))
 }

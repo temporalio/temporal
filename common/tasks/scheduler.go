@@ -34,5 +34,6 @@ type (
 	Scheduler interface {
 		common.Daemon
 		Submit(task PriorityTask)
+		TrySubmit(task PriorityTask) bool
 	}
 )

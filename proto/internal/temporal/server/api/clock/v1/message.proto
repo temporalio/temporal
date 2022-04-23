@@ -1,8 +1,4 @@
-// The MIT License
-//
-// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
-//
-// Copyright (c) 2020 Uber Technologies, Inc.
+// Copyright (c) 2020 Temporal Technologies, Inc.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
@@ -22,17 +18,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package resource
+syntax = "proto3";
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination interfaces_mock.go
+package temporal.server.api.clock.v1;
 
-import (
-	"go.temporal.io/server/common/membership"
-)
+option go_package = "go.temporal.io/server/api/clock/v1;clock";
 
-type (
-	HostInfoProvider interface {
-		Start() error
-		HostInfo() *membership.HostInfo
-	}
-)
+message ShardClock {
+    int32 id = 1;
+    int64 clock = 2;
+}

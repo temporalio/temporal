@@ -58,11 +58,9 @@ func (m *sqlShardStore) GetClusterName() string {
 }
 
 func (m *sqlShardStore) GetOrCreateShard(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalGetOrCreateShardRequest,
 ) (*persistence.InternalGetOrCreateShardResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	row, err := m.Db.SelectFromShards(ctx, sqlplugin.ShardsFilter{
 		ShardID: request.ShardID,
 	})
@@ -103,11 +101,9 @@ func (m *sqlShardStore) GetOrCreateShard(
 }
 
 func (m *sqlShardStore) UpdateShard(
-	_ context.Context,
+	ctx context.Context,
 	request *persistence.InternalUpdateShardRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	return m.txExecute(ctx, "UpdateShard", func(tx sqlplugin.Tx) error {
 		if err := lockShard(ctx,
 			tx,

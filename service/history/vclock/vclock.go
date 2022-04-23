@@ -22,57 +22,56 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package resource
+package vclock
 
 import (
-	"context"
+	"fmt"
 
-	"go.uber.org/fx"
+	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/common/membership"
+	clockpb "go.temporal.io/server/api/clock/v1"
 )
 
-var HostInfoProviderModule = fx.Options(
-	fx.Provide(NewHostInfoProvider),
-	fx.Invoke(HostInfoProviderLifetimeHooks),
-)
-
-type (
-	CachingHostInfoProvider struct {
-		hostInfo          *membership.HostInfo
-		membershipMonitor membership.Monitor
-	}
-)
-
-func NewHostInfoProvider(membershipMonitor membership.Monitor) HostInfoProvider {
-	return &CachingHostInfoProvider{
-		membershipMonitor: membershipMonitor,
+func NewShardClock(
+	shardID int32,
+	clock int64,
+) *clockpb.ShardClock {
+	return &clockpb.ShardClock{
+		Id:    shardID,
+		Clock: clock,
 	}
 }
 
-func (hip *CachingHostInfoProvider) Start() error {
-	var err error
-	hip.hostInfo, err = hip.membershipMonitor.WhoAmI()
+func HappensBefore(
+	clock1 *clockpb.ShardClock,
+	clock2 *clockpb.ShardClock,
+) (bool, error) {
+	compare, err := Compare(clock1, clock2)
 	if err != nil {
-		return err
+		return false, err
 	}
-	return nil
+	return compare < 0, nil
 }
 
-func (hip *CachingHostInfoProvider) HostInfo() *membership.HostInfo {
-	return hip.hostInfo
-}
+func Compare(
+	clock1 *clockpb.ShardClock,
+	clock2 *clockpb.ShardClock,
+) (int, error) {
+	if clock1.GetId() != clock2.GetId() {
+		return 0, serviceerror.NewInternal(fmt.Sprintf(
+			"Encountered shard ID mismatch: %v vs %v",
+			clock1.GetId(),
+			clock2.GetId(),
+		))
+	}
 
-func HostInfoProviderLifetimeHooks(
-	lc fx.Lifecycle,
-	provider HostInfoProvider,
-) {
-	lc.Append(
-		fx.Hook{
-			OnStart: func(context.Context) error {
-				return provider.Start()
-			},
-		},
-	)
-
+	vClock1 := clock1.GetClock()
+	vClock2 := clock2.GetClock()
+	if vClock1 < vClock2 {
+		return -1, nil
+	} else if vClock1 > vClock2 {
+		return 1, nil
+	} else {
+		return 0, nil
+	}
 }

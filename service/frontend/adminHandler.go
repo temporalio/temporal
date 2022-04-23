@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/headers"
 	"go.temporal.io/server/common/log"
@@ -69,7 +70,6 @@ import (
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
@@ -118,7 +118,7 @@ type (
 	}
 
 	NewAdminHandlerArgs struct {
-		Params                              *resource.BootstrapParams
+		PersistenceConfig                   *config.Persistence
 		Config                              *Config
 		NamespaceReplicationQueue           persistence.NamespaceReplicationQueue
 		ReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
@@ -143,6 +143,7 @@ type (
 		ClusterMetadata                     cluster.Metadata
 		ArchivalMetadata                    archiver.ArchivalMetadata
 		HealthServer                        *health.Server
+		EventSerializer                     serialization.Serializer
 	}
 )
 
@@ -166,7 +167,7 @@ func NewAdminHandler(
 	return &AdminHandler{
 		logger:                args.Logger,
 		status:                common.DaemonStatusInitialized,
-		numberOfHistoryShards: args.Params.PersistenceConfig.NumHistoryShards,
+		numberOfHistoryShards: args.PersistenceConfig.NumHistoryShards,
 		config:                args.Config,
 		namespaceHandler: namespace.NewHandler(
 			args.Config.MaxBadBinaries,
@@ -182,7 +183,7 @@ func NewAdminHandler(
 			args.NamespaceReplicationQueue,
 			args.Logger,
 		),
-		eventSerializer:             serialization.NewSerializer(),
+		eventSerializer:             args.EventSerializer,
 		visibilityMgr:               args.VisibilityMrg,
 		ESConfig:                    args.EsConfig,
 		ESClient:                    args.EsClient,
@@ -1627,6 +1628,8 @@ func (adh *AdminHandler) startRequestProfile(scope int) (metrics.Scope, metrics.
 }
 
 func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
+	scope.Tagged(metrics.ServiceErrorTypeTag(err)).IncCounter(metrics.ServiceFailuresWithType)
+
 	switch err := err.(type) {
 	case *serviceerror.Unavailable:
 		adh.logger.Error("unavailable error", tag.Error(err))

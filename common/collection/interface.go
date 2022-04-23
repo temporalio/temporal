@@ -26,13 +26,13 @@ package collection
 
 type (
 	// Queue is the interface for queue
-	Queue interface {
+	Queue[T any] interface {
 		// Peek returns the first item of the queue
-		Peek() interface{}
+		Peek() T
 		// Add push an item to the queue
-		Add(item interface{})
+		Add(item T)
 		// Remove pop an item from the queue
-		Remove() interface{}
+		Remove() T
 		// IsEmpty indicate if the queue is empty
 		IsEmpty() bool
 		// Len return the size of the queue

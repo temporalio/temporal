@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"math/rand"
 	"testing"
 	"time"
 
@@ -42,10 +43,12 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/vclock"
 
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/consts"
@@ -197,6 +200,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ParentNamespace).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.ChildNamespaceID).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ChildNamespace).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.MissedNamespaceID).Return(nil, serviceerror.NewNotFound("namespace is not found")).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
@@ -666,6 +670,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		WorkflowId: "some random parent workflow ID",
 		RunId:      uuid.New(),
 	}
+	parentClock := vclock.NewShardClock(rand.Int31(), rand.Int63())
 
 	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
 	_, err := mutableState.AddWorkflowExecutionStartedEvent(
@@ -684,6 +689,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 				Namespace:   parentNamespace,
 				Execution:   parentExecution,
 				InitiatedId: parentInitiatedID,
+				Clock:       parentClock,
 			},
 		},
 	)
@@ -714,6 +720,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 		NamespaceId:        parentNamespaceID,
 		WorkflowExecution:  parentExecution,
 		InitiatedId:        parentInitiatedID,
+		Clock:              parentClock,
 		CompletedExecution: &execution,
 		CompletionEvent:    event,
 	}).Return(nil, nil)
@@ -1363,6 +1370,68 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failur
 	s.Nil(err)
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Failure_TargetNamespaceNotFound() {
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	targetExecution := commonpb.WorkflowExecution{
+		WorkflowId: "some random target workflow ID",
+		RunId:      uuid.New(),
+	}
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+			},
+		},
+	)
+	s.Nil(err)
+
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di.StartedID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+
+	taskID := int64(59)
+	event, _ = addRequestCancelInitiatedEvent(mutableState, event.GetEventId(), uuid.New(), tests.TargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId())
+
+	transferTask := &tasks.CancelExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:                 s.version,
+		TargetNamespaceID:       tests.MissedNamespaceID.String(),
+		TargetWorkflowID:        targetExecution.GetWorkflowId(),
+		TargetRunID:             targetExecution.GetRunId(),
+		TaskID:                  taskID,
+		TargetChildWorkflowOnly: true,
+		InitiatedID:             event.GetEventId(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(gomock.Any(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
+	s.Nil(err)
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessCancelExecution_Duplication() {
 
 	execution := commonpb.WorkflowExecution{
@@ -1573,6 +1642,76 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failur
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().SignalWorkflowExecution(gomock.Any(), s.createSignalWorkflowExecutionRequest(s.targetNamespace, transferTask, si, attributes)).Return(nil, serviceerror.NewNotFound(""))
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
+	s.Nil(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessSignalExecution_Failure_TargetNamespaceNotFound() {
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	targetExecution := commonpb.WorkflowExecution{
+		WorkflowId: "some random target workflow ID",
+		RunId:      uuid.New(),
+	}
+	signalName := "some random signal name"
+	signalInput := payloads.EncodeString("some random signal input")
+	signalControl := "some random signal control"
+	signalHeader := &commonpb.Header{
+		Fields: map[string]*commonpb.Payload{"signal header key": payload.EncodeString("signal header value")},
+	}
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+			},
+		},
+	)
+	s.NoError(err)
+
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di.StartedID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+
+	taskID := int64(59)
+	event, _ = addRequestSignalInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
+		tests.TargetNamespace, targetExecution.GetWorkflowId(), targetExecution.GetRunId(), signalName, signalInput,
+		signalControl, signalHeader)
+
+	transferTask := &tasks.SignalExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:                 s.version,
+		TargetNamespaceID:       tests.MissedNamespaceID.String(),
+		TargetWorkflowID:        targetExecution.GetWorkflowId(),
+		TargetRunID:             targetExecution.GetRunId(),
+		TaskID:                  taskID,
+		TargetChildWorkflowOnly: true,
+		InitiatedID:             event.GetEventId(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
 
@@ -1811,6 +1950,80 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 	s.Nil(err)
 }
 
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Failure_TargetNamespaceNotFound() {
+
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	childWorkflowID := "some random child workflow ID"
+	childWorkflowType := "some random child workflow type"
+	childTaskQueueName := "some random child task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+			},
+			ContinueAsNewInitiator: enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,
+		},
+	)
+	s.NoError(err)
+
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di.StartedID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+
+	taskID := int64(59)
+
+	event, _ = addStartChildWorkflowExecutionInitiatedEvent(
+		mutableState,
+		event.GetEventId(),
+		uuid.New(),
+		s.namespace,
+		childWorkflowID,
+		childWorkflowType,
+		childTaskQueueName,
+		nil,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
+	)
+
+	transferTask := &tasks.StartChildExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TargetNamespaceID:   tests.MissedNamespaceID.String(),
+		TargetWorkflowID:    childWorkflowID,
+		TaskID:              taskID,
+		InitiatedID:         event.GetEventId(),
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(cluster.TestCurrentClusterName).AnyTimes()
+
+	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
+	s.NoError(err)
+}
+
 func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Success_Dup() {
 
 	execution := commonpb.WorkflowExecution{
@@ -1875,8 +2088,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-
-	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childWorkflowID, childRunID, childWorkflowType)
+	childClock := &clockpb.ShardClock{
+		Id:    rand.Int31(),
+		Clock: rand.Int63(),
+	}
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childWorkflowID, childRunID, childWorkflowType, childClock)
 	// Flush buffered events so real IDs get assigned
 	mutableState.FlushBufferedEvents()
 	ci.StartedId = event.GetEventId()
@@ -1890,6 +2106,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 			RunId:      childRunID,
 		},
 		IsFirstWorkflowTask: true,
+		Clock:               childClock,
 	}).Return(nil, nil)
 
 	err = s.transferQueueActiveTaskExecutor.execute(context.Background(), transferTask, true)
@@ -1962,8 +2179,11 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-
-	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType)
+	childClock := &clockpb.ShardClock{
+		Id:    rand.Int31(),
+		Clock: rand.Int63(),
+	}
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType, childClock)
 	ci.StartedId = event.GetEventId()
 	event = addChildWorkflowExecutionCompletedEvent(mutableState, ci.InitiatedId, &childExecution, &historypb.WorkflowExecutionCompletedEventAttributes{
 		Result:                       payloads.EncodeString("some random child workflow execution result"),
@@ -2011,6 +2231,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddActivityTaskRequest(
 		},
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: ai.ScheduleToStartTimeout,
+		Clock:                  vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
 	}
 }
 
@@ -2039,6 +2260,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createAddWorkflowTaskRequest(
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: &timeout,
+		Clock:                  vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
 	}
 }
 
@@ -2173,6 +2395,7 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			Namespace:   tests.Namespace.String(),
 			Execution:   &execution,
 			InitiatedId: task.InitiatedID,
+			Clock:       vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
 		},
 		FirstWorkflowTaskBackoff:        backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
 		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,

@@ -32,10 +32,12 @@ import (
 
 const (
 	ExecutionsStillExistErrType = "ExecutionsStillExist"
+	NoProgressErrType           = "NoProgress"
 )
 
 var (
 	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
 	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
 	ErrExecutionsStillExist         = temporal.NewApplicationError("executions are still exist", ExecutionsStillExistErrType)
+	ErrNoProgress                   = temporal.NewNonRetryableApplicationError("no progress were made", NoProgressErrType, nil)
 )

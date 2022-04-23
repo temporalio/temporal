@@ -55,3 +55,20 @@ type (
 const (
 	ProcessorFactoryFxGroup = "queueProcessorFactory"
 )
+
+// TODO: remove QueueType after merging active and standby
+// transfer/timer queue. Use tasks.Category instead
+// Currently need queue processor active/standby information
+// for assigning priority
+type (
+	QueueType int
+)
+
+const (
+	QueueTypeUnknown QueueType = iota
+	QueueTypeActiveTransfer
+	QueueTypeStandbyTransfer
+	QueueTypeActiveTimer
+	QueueTypeStandbyTimer
+	QueueTypeVisibility
+)

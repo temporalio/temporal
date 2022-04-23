@@ -22,10 +22,55 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:build cgo
-
-package main
+package membership
 
 import (
-	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite" // needed to load sqlite plugin
+	"context"
+
+	"go.uber.org/fx"
 )
+
+var HostInfoProviderModule = fx.Options(
+	fx.Provide(NewHostInfoProvider),
+	fx.Invoke(HostInfoProviderLifetimeHooks),
+)
+
+type (
+	CachingHostInfoProvider struct {
+		hostInfo          *HostInfo
+		membershipMonitor Monitor
+	}
+)
+
+func NewHostInfoProvider(membershipMonitor Monitor) HostInfoProvider {
+	return &CachingHostInfoProvider{
+		membershipMonitor: membershipMonitor,
+	}
+}
+
+func (hip *CachingHostInfoProvider) Start() error {
+	var err error
+	hip.hostInfo, err = hip.membershipMonitor.WhoAmI()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (hip *CachingHostInfoProvider) HostInfo() *HostInfo {
+	return hip.hostInfo
+}
+
+func HostInfoProviderLifetimeHooks(
+	lc fx.Lifecycle,
+	provider HostInfoProvider,
+) {
+	lc.Append(
+		fx.Hook{
+			OnStart: func(context.Context) error {
+				return provider.Start()
+			},
+		},
+	)
+
+}

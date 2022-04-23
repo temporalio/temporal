@@ -26,6 +26,7 @@ package history
 
 import (
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -52,6 +53,7 @@ type (
 		RawMatchingClient       resource.MatchingRawClient
 		NewCacheFn              workflow.NewCacheFn
 		ArchivalClient          archiver.Client
+		EventSerializer         serialization.Serializer
 		QueueProcessorFactories []queues.ProcessorFactory `group:"queueProcessorFactory"`
 	}
 
@@ -75,6 +77,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.RawMatchingClient,
 		f.NewCacheFn,
 		f.ArchivalClient,
+		f.EventSerializer,
 		f.QueueProcessorFactories,
 	)
 }

@@ -104,7 +104,7 @@ func (s *contextSuite) SetupTest() {
 
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
 	s.mockHistoryEngine = NewMockEngine(s.controller)
-	shardContext.engine = s.mockHistoryEngine
+	shardContext.engineFuture.Set(s.mockHistoryEngine, nil)
 }
 
 func (s *contextSuite) TearDownTest() {

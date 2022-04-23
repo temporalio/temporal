@@ -348,7 +348,7 @@ func (t *timerQueueProcessorBase) submitTask(
 		NewTaskInfo(
 			t.timerProcessor,
 			taskInfo,
-			initializeLoggerForTask(t.shard.GetShardID(), taskInfo, t.logger),
+			tasks.InitializeLogger(taskInfo, t.logger),
 		),
 	)
 }
@@ -372,52 +372,4 @@ func (t *timerQueueProcessorBase) isPriorityTaskProcessorEnabled() bool {
 
 func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
 	return atomic.LoadUint64(&t.timerFiredCount)
-}
-
-func getTimerTaskMetricScope(
-	task tasks.Task,
-	isActive bool,
-) int {
-	switch task.(type) {
-	case *tasks.WorkflowTaskTimeoutTask:
-		if isActive {
-			return metrics.TimerActiveTaskWorkflowTaskTimeoutScope
-		}
-		return metrics.TimerStandbyTaskWorkflowTaskTimeoutScope
-	case *tasks.ActivityTimeoutTask:
-		if isActive {
-			return metrics.TimerActiveTaskActivityTimeoutScope
-		}
-		return metrics.TimerStandbyTaskActivityTimeoutScope
-	case *tasks.UserTimerTask:
-		if isActive {
-			return metrics.TimerActiveTaskUserTimerScope
-		}
-		return metrics.TimerStandbyTaskUserTimerScope
-	case *tasks.WorkflowTimeoutTask:
-		if isActive {
-			return metrics.TimerActiveTaskWorkflowTimeoutScope
-		}
-		return metrics.TimerStandbyTaskWorkflowTimeoutScope
-	case *tasks.DeleteHistoryEventTask:
-		if isActive {
-			return metrics.TimerActiveTaskDeleteHistoryEventScope
-		}
-		return metrics.TimerStandbyTaskDeleteHistoryEventScope
-	case *tasks.ActivityRetryTimerTask:
-		if isActive {
-			return metrics.TimerActiveTaskActivityRetryTimerScope
-		}
-		return metrics.TimerStandbyTaskActivityRetryTimerScope
-	case *tasks.WorkflowBackoffTimerTask:
-		if isActive {
-			return metrics.TimerActiveTaskWorkflowBackoffTimerScope
-		}
-		return metrics.TimerStandbyTaskWorkflowBackoffTimerScope
-	default:
-		if isActive {
-			return metrics.TimerActiveQueueProcessorScope
-		}
-		return metrics.TimerStandbyQueueProcessorScope
-	}
 }

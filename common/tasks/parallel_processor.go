@@ -157,7 +157,7 @@ func (p *ParallelProcessor) executeTask(
 			return
 		}
 
-		task.Nack()
+		task.Nack(err)
 		return
 	}
 

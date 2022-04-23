@@ -156,11 +156,6 @@ type (
 		MockAdminClient                  map[string]adminservice.AdminServiceClient
 		NamespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
 	}
-
-	membershipFactoryImpl struct {
-		serviceName string
-		hosts       map[string][]string
-	}
 )
 
 // NewTemporal returns an instance that hosts full temporal in one process
@@ -372,42 +367,34 @@ func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 }
 
 func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
-	params := &resource.BootstrapParams{}
-	params.DCRedirectionPolicy = config.DCRedirectionPolicy{}
-	params.Name = common.FrontendServiceName
-	params.ThrottledLogger = c.logger
-	params.RPCFactory = newRPCFactoryImpl(common.FrontendServiceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(),
-		c.logger)
-	tallyScope := tally.NewTestScope(common.FrontendServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
-		return newMembershipFactory(params.Name, hosts), nil
-	}
-	params.ClusterMetadataConfig = c.clusterMetadataConfig
-	var err error
-	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	serviceName := common.FrontendServiceName
+	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
-		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
 	}
-	params.ArchivalMetadata = c.archiverMetadata
-	params.ArchiverProvider = c.archiverProvider
-
-	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
-	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for frontend", tag.Error(err))
-	}
-
 	if c.esConfig != nil {
 		esDataStoreName := "es-visibility"
-		params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
-		params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
+		persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
 			Elasticsearch: c.esConfig,
 		}
 	}
 
-	params.SdkClientFactory = sdk.NewClientFactory(
+	rpcFactory := newRPCFactoryImpl(serviceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(), c.logger)
+
+	metricsClient, err := metrics.NewClient(
+		&metrics.ClientConfig{},
+		tally.NewTestScope(serviceName, make(map[string]string)),
+		metrics.GetMetricsServiceIdx(serviceName, c.logger),
+	)
+	if err != nil {
+		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+	}
+
+	sdkClientFactory := sdk.NewClientFactory(
 		c.FrontendGRPCAddress(),
 		nil,
-		sdk.NewMetricHandler(params.MetricsClient.UserScope()),
+		sdk.NewMetricHandler(metricsClient.UserScope()),
 	)
 
 	stoppedCh := make(chan struct{})
@@ -416,11 +403,22 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	var namespaceRegistry namespace.Registry
 	feApp := fx.New(
 		fx.Supply(
-			params,
 			stoppedCh,
-			params.ClusterMetadataConfig,
-			params.PersistenceConfig,
+			persistenceConfig,
 		),
+		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
+		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
+		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
+		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
+		fx.Provide(func() resource.NamespaceLogger { return c.logger }),
+		fx.Provide(func() common.RPCFactory { return rpcFactory }),
+		fx.Provide(func() membership.Monitor {
+			return newSimpleMonitor(serviceName, hosts)
+		}),
+		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
+		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
+		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
+		fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
 		fx.Provide(func() []grpc.UnaryServerInterceptor { return nil }),
 		fx.Provide(func() authorization.Authorizer { return nil }),
 		fx.Provide(func() authorization.ClaimMapper { return nil }),
@@ -456,7 +454,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	c.frontendApp = feApp
 	c.frontendService = frontendService
 	c.frontendNamespaceRegistry = namespaceRegistry
-	connection := params.RPCFactory.CreateFrontendGRPCConnection(c.FrontendGRPCAddress())
+	connection := rpcFactory.CreateFrontendGRPCConnection(c.FrontendGRPCAddress())
 	c.frontendClient = NewFrontendClient(connection)
 	c.adminClient = NewAdminClient(connection)
 
@@ -471,46 +469,40 @@ func (c *temporalImpl) startHistory(
 	hosts map[string][]string,
 	startWG *sync.WaitGroup,
 ) {
+	serviceName := common.HistoryServiceName
 	membershipPorts := c.HistoryServiceAddress(2)
 	for i, grpcPort := range c.HistoryServiceAddress(3) {
-		params := &resource.BootstrapParams{}
-		params.Name = common.HistoryServiceName
-		params.ThrottledLogger = c.logger
-		params.RPCFactory = newRPCFactoryImpl(common.HistoryServiceName, grpcPort, membershipPorts[i], c.logger)
-		tallyMetricsScope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-		params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
-			return newMembershipFactory(params.Name, hosts), nil
-		}
-		params.ClusterMetadataConfig = c.clusterMetadataConfig
-		var err error
-		params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-		if err != nil {
-			c.logger.Fatal("metrics.NewClient", tag.Error(err))
-		}
 		integrationClient := newIntegrationConfigClient(dynamicconfig.NewNoopClient())
 		c.overrideHistoryDynamicConfig(integrationClient)
 
-		params.SdkClientFactory = sdk.NewClientFactory(
-			c.FrontendGRPCAddress(),
-			nil,
-			sdk.NewMetricHandler(params.MetricsClient.UserScope()),
-		)
-
-		params.ArchivalMetadata = c.archiverMetadata
-		params.ArchiverProvider = c.archiverProvider
-
-		params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
+		persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 		if err != nil {
 			c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
 		}
-
 		if c.esConfig != nil {
 			esDataStoreName := "es-visibility"
-			params.PersistenceConfig.AdvancedVisibilityStore = esDataStoreName
-			params.PersistenceConfig.DataStores[esDataStoreName] = config.DataStore{
+			persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+			persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
 				Elasticsearch: c.esConfig,
 			}
 		}
+
+		rpcFactory := newRPCFactoryImpl(serviceName, grpcPort, membershipPorts[i], c.logger)
+
+		metricsClient, err := metrics.NewClient(
+			&metrics.ClientConfig{},
+			tally.NewTestScope(serviceName, make(map[string]string)),
+			metrics.GetMetricsServiceIdx(serviceName, c.logger),
+		)
+		if err != nil {
+			c.logger.Fatal("metrics.NewClient", tag.Error(err))
+		}
+
+		sdkClientFactory := sdk.NewClientFactory(
+			c.FrontendGRPCAddress(),
+			nil,
+			sdk.NewMetricHandler(metricsClient.UserScope()),
+		)
 
 		stoppedCh := make(chan struct{})
 		var historyService *history.Service
@@ -518,12 +510,22 @@ func (c *temporalImpl) startHistory(
 		var namespaceRegistry namespace.Registry
 		app := fx.New(
 			fx.Supply(
-				params,
 				stoppedCh,
 				integrationClient,
-				params.ClusterMetadataConfig,
-				params.PersistenceConfig,
+				persistenceConfig,
 			),
+			fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
+			fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
+			fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
+			fx.Provide(func() resource.ThrottledLogger { return c.logger }),
+			fx.Provide(func() common.RPCFactory { return rpcFactory }),
+			fx.Provide(func() membership.Monitor {
+				return newSimpleMonitor(serviceName, hosts)
+			}),
+			fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
+			fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
+			fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
+			fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
 			fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 			fx.Provide(func() searchattribute.Mapper { return nil }),
 			// Comment the line above and uncomment the line bellow to test with search attributes mapper.
@@ -576,28 +578,12 @@ func (c *temporalImpl) startHistory(
 }
 
 func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.WaitGroup) {
-	params := &resource.BootstrapParams{}
-	params.Name = common.MatchingServiceName
-	params.ThrottledLogger = c.logger
-	params.RPCFactory = newRPCFactoryImpl(common.MatchingServiceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
-	tallyMetricsScope := tally.NewTestScope(common.MatchingServiceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
-		return newMembershipFactory(params.Name, hosts), nil
-	}
-	params.ClusterMetadataConfig = c.clusterMetadataConfig
+	serviceName := common.MatchingServiceName
+	rpcFactory := newRPCFactoryImpl(serviceName, c.MatchingGRPCServiceAddress(), c.MatchingServiceRingpopAddress(), c.logger)
 
-	var err error
-	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
+	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
 	if err != nil {
-		c.logger.Fatal("metrics.NewClient", tag.Error(err))
-	}
-
-	params.ArchivalMetadata = c.archiverMetadata
-	params.ArchiverProvider = c.archiverProvider
-
-	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
-	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for matching", tag.Error(err))
+		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
 	}
 
 	stoppedCh := make(chan struct{})
@@ -607,9 +593,18 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 	app := fx.New(
 		fx.Supply(
 			stoppedCh,
-			params,
-			params.ClusterMetadataConfig,
+			persistenceConfig,
 		),
+		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
+		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
+		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
+		fx.Provide(func() common.RPCFactory { return rpcFactory }),
+		fx.Provide(func() membership.Monitor {
+			return newSimpleMonitor(serviceName, hosts)
+		}),
+		fx.Provide(func() *cluster.Config { return c.clusterMetadataConfig }),
+		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
+		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
@@ -645,14 +640,34 @@ func (c *temporalImpl) startMatching(hosts map[string][]string, startWG *sync.Wa
 func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.WaitGroup) {
 	serviceName := common.WorkerServiceName
 
-	params := &resource.BootstrapParams{}
-	params.Name = serviceName
-	params.ThrottledLogger = c.logger
-	params.RPCFactory = newRPCFactoryImpl(serviceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
-	tallyMetricsScope := tally.NewTestScope(serviceName, make(map[string]string))
-	params.MembershipFactoryInitializer = func(x persistenceClient.Bean, y log.Logger) (resource.MembershipMonitorFactory, error) {
-		return newMembershipFactory(params.Name, hosts), nil
+	persistenceConfig, err := copyPersistenceConfig(c.persistenceConfig)
+	if err != nil {
+		c.logger.Fatal("Failed to copy persistence config for history", tag.Error(err))
 	}
+	if c.esConfig != nil {
+		esDataStoreName := "es-visibility"
+		persistenceConfig.AdvancedVisibilityStore = esDataStoreName
+		persistenceConfig.DataStores[esDataStoreName] = config.DataStore{
+			Elasticsearch: c.esConfig,
+		}
+	}
+
+	rpcFactory := newRPCFactoryImpl(serviceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
+
+	metricsClient, err := metrics.NewClient(
+		&metrics.ClientConfig{},
+		tally.NewTestScope(serviceName, make(map[string]string)),
+		metrics.GetMetricsServiceIdx(serviceName, c.logger),
+	)
+	if err != nil {
+		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+	}
+
+	sdkClientFactory := sdk.NewClientFactory(
+		c.FrontendGRPCAddress(),
+		nil,
+		sdk.NewMetricHandler(metricsClient.UserScope()),
+	)
 
 	clusterConfigCopy := cluster.Config{
 		EnableGlobalNamespace:    c.clusterMetadataConfig.EnableGlobalNamespace,
@@ -667,27 +682,6 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	if c.workerConfig.EnableReplicator {
 		clusterConfigCopy.EnableGlobalNamespace = true
 	}
-	params.ClusterMetadataConfig = &clusterConfigCopy
-
-	var err error
-	params.MetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tallyMetricsScope, metrics.GetMetricsServiceIdx(params.Name, c.logger))
-	if err != nil {
-		c.logger.Fatal("metrics.NewClient", tag.Error(err))
-	}
-
-	params.ArchivalMetadata = c.archiverMetadata
-	params.ArchiverProvider = c.archiverProvider
-
-	params.PersistenceConfig, err = copyPersistenceConfig(c.persistenceConfig)
-	if err != nil {
-		c.logger.Fatal("Failed to copy persistence config for worker", tag.Error(err))
-	}
-
-	params.SdkClientFactory = sdk.NewClientFactory(
-		c.FrontendGRPCAddress(),
-		nil,
-		sdk.NewMetricHandler(params.MetricsClient.UserScope()),
-	)
 
 	stoppedCh := make(chan struct{})
 	var workerService *worker.Service
@@ -697,9 +691,20 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 	app := fx.New(
 		fx.Supply(
 			stoppedCh,
-			params,
-			params.ClusterMetadataConfig,
+			persistenceConfig,
 		),
+		fx.Provide(func() resource.ServerReporter { return metrics.NoopReporter }),
+		fx.Provide(func() resource.ServiceName { return resource.ServiceName(serviceName) }),
+		fx.Provide(func() config.DCRedirectionPolicy { return config.DCRedirectionPolicy{} }),
+		fx.Provide(func() resource.ThrottledLogger { return c.logger }),
+		fx.Provide(func() common.RPCFactory { return rpcFactory }),
+		fx.Provide(func() membership.Monitor {
+			return newSimpleMonitor(serviceName, hosts)
+		}),
+		fx.Provide(func() *cluster.Config { return &clusterConfigCopy }),
+		fx.Provide(func() carchiver.ArchivalMetadata { return c.archiverMetadata }),
+		fx.Provide(func() provider.ArchiverProvider { return c.archiverProvider }),
+		fx.Provide(func() sdk.ClientFactory { return sdkClientFactory }),
 		fx.Provide(func() client.FactoryProvider { return client.NewFactoryProvider() }),
 		fx.Provide(func() searchattribute.Mapper { return nil }),
 		fx.Provide(func() resolver.ServiceResolver { return resolver.NewNoopResolver() }),
@@ -786,17 +791,6 @@ func copyPersistenceConfig(pConfig config.Persistence) (config.Persistence, erro
 	}
 	pConfig.DataStores = copiedDataStores
 	return pConfig, nil
-}
-
-func newMembershipFactory(serviceName string, hosts map[string][]string) resource.MembershipMonitorFactory {
-	return &membershipFactoryImpl{
-		serviceName: serviceName,
-		hosts:       hosts,
-	}
-}
-
-func (p *membershipFactoryImpl) GetMembershipMonitor() (membership.Monitor, error) {
-	return newSimpleMonitor(p.serviceName, p.hosts), nil
 }
 
 type rpcFactoryImpl struct {

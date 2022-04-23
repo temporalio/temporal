@@ -34,11 +34,15 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/vclock"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -54,7 +58,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
@@ -101,7 +104,7 @@ type (
 		saMapper                searchattribute.Mapper
 		clusterMetadata         cluster.Metadata
 		archivalMetadata        archiver.ArchivalMetadata
-		hostInfoProvider        resource.HostInfoProvider
+		hostInfoProvider        membership.HostInfoProvider
 
 		// Context that lives for the lifetime of the shard context
 		lifecycleCtx    context.Context
@@ -110,7 +113,7 @@ type (
 		// All following fields are protected by rwLock, and only valid if state >= Acquiring:
 		rwLock                       sync.RWMutex
 		state                        contextState
-		engine                       Engine
+		engineFuture                 *future.FutureImpl[Engine]
 		lastUpdated                  time.Time
 		shardInfo                    *persistence.ShardInfoWithFailover
 		taskSequenceNumber           int64
@@ -139,7 +142,7 @@ type (
 
 	contextRequestAcquire    struct{}
 	contextRequestAcquired   struct{}
-	contextRequestLost       struct{ newMaxReadLevel int64 }
+	contextRequestLost       struct{}
 	contextRequestStop       struct{}
 	contextRequestFinishStop struct{}
 )
@@ -176,14 +179,13 @@ func (s *ContextImpl) GetExecutionManager() persistence.ExecutionManager {
 }
 
 func (s *ContextImpl) GetEngine() (Engine, error) {
-	s.rLock()
-	defer s.rUnlock()
+	return s.engineFuture.Get(context.Background())
+}
 
-	if err := s.errorByStateLocked(); err != nil {
-		return nil, err
-	}
-
-	return s.engine, nil
+func (s *ContextImpl) GetEngineWithContext(
+	ctx context.Context,
+) (Engine, error) {
+	return s.engineFuture.Get(ctx)
 }
 
 func (s *ContextImpl) GetMaxTaskIDForCurrentRangeID() int64 {
@@ -191,6 +193,25 @@ func (s *ContextImpl) GetMaxTaskIDForCurrentRangeID() int64 {
 	defer s.rUnlock()
 	// maxTaskSequenceNumber is the exclusive upper bound of task ID for current range.
 	return s.maxTaskSequenceNumber - 1
+}
+
+func (s *ContextImpl) NewVectorClock() (*clockpb.ShardClock, error) {
+	s.wLock()
+	defer s.wUnlock()
+
+	clock, err := s.generateTaskIDLocked()
+	if err != nil {
+		return nil, err
+	}
+	return vclock.NewShardClock(s.shardID, clock), nil
+}
+
+func (s *ContextImpl) CurrentVectorClock() *clockpb.ShardClock {
+	s.rLock()
+	defer s.rUnlock()
+
+	clock := s.taskSequenceNumber
+	return vclock.NewShardClock(s.shardID, clock)
 }
 
 func (s *ContextImpl) GenerateTaskID() (int64, error) {
@@ -384,7 +405,7 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 	case tasks.CategoryTransfer:
 		s.shardInfo.ClusterTransferAckLevel[cluster] = ackLevel.TaskID
 	case tasks.CategoryTimer:
-		s.shardInfo.TimerAckLevelTime = timestamp.TimePtr(ackLevel.FireTime)
+		s.shardInfo.ClusterTimerAckLevel[cluster] = timestamp.TimePtr(ackLevel.FireTime)
 	case tasks.CategoryReplication:
 		s.shardInfo.ClusterReplicationLevel[cluster] = ackLevel.TaskID
 	case tasks.CategoryVisibility:
@@ -784,6 +805,10 @@ func (s *ContextImpl) GetCurrentExecution(
 	ctx context.Context,
 	request *persistence.GetCurrentExecutionRequest,
 ) (*persistence.GetCurrentExecutionResponse, error) {
+	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
 	resp, err := s.executionManager.GetCurrentExecution(ctx, request)
 	if err = s.handleReadError(err); err != nil {
 		return nil, err
@@ -795,6 +820,10 @@ func (s *ContextImpl) GetWorkflowExecution(
 	ctx context.Context,
 	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.GetWorkflowExecutionResponse, error) {
+	if err := s.errorByState(); err != nil {
+		return nil, err
+	}
+
 	resp, err := s.executionManager.GetWorkflowExecution(ctx, request)
 	if err = s.handleReadError(err); err != nil {
 		return nil, err
@@ -822,7 +851,11 @@ func (s *ContextImpl) addTasksLocked(
 	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
 		return err
 	}
-	s.engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
+	engine, err := s.GetEngineWithContext(ctx)
+	if err != nil {
+		return err
+	}
+	engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
 	return nil
 }
 
@@ -832,12 +865,9 @@ func (s *ContextImpl) AppendHistoryEvents(
 	namespaceID namespace.ID,
 	execution commonpb.WorkflowExecution,
 ) (int, error) {
-	s.rLock()
-	if err := s.errorByStateLocked(); err != nil {
-		s.rUnlock()
+	if err := s.errorByState(); err != nil {
 		return 0, err
 	}
-	s.rUnlock()
 
 	request.ShardID = s.shardID
 
@@ -1013,6 +1043,13 @@ func (s *ContextImpl) GetThrottledLogger() log.Logger {
 
 func (s *ContextImpl) getRangeIDLocked() int64 {
 	return s.shardInfo.GetRangeId()
+}
+
+func (s *ContextImpl) errorByState() error {
+	s.rLock()
+	defer s.rUnlock()
+
+	return s.errorByStateLocked()
 }
 
 func (s *ContextImpl) errorByStateLocked() error {
@@ -1305,9 +1342,6 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		*serviceerror.ResourceExhausted:
 		// Persistence failure that means the write was definitely not committed:
 		// No special handling required for these errors.
-		// Update max read level here anyway because we already allocated the
-		// task ids and will not reuse them.
-		s.updateMaxReadLevelLocked(newMaxReadLevel)
 		return err
 
 	case *persistence.ShardOwnershipLostError:
@@ -1321,9 +1355,9 @@ func (s *ContextImpl) handleWriteErrorAndUpdateMaxReadLevelLocked(err error, new
 		// the shard in the background. If successful, we'll get a new RangeID, to guarantee that subsequent
 		// reads will either see that write, or know for certain that it failed. This allows the callers to
 		// reliably check the outcome by performing a read. If we fail, we'll shut down the shard.
-		// We only want to update the max read level _after_ the re-acquire succeeds, not right now, otherwise
-		// a write that gets applied after we see a timeout could cause us to lose tasks.
-		s.transitionLocked(contextRequestLost{newMaxReadLevel: newMaxReadLevel})
+		// Note that reacquiring the shard will cause the max read level to be updated
+		// to the new range (i.e. past newMaxReadLevel).
+		s.transitionLocked(contextRequestLost{})
 		return err
 	}
 }
@@ -1343,32 +1377,6 @@ func (s *ContextImpl) createEngine() Engine {
 	return engine
 }
 
-func (s *ContextImpl) getOrCreateEngine(ctx context.Context) (engine Engine, retErr error) {
-	// Block on shard acquisition for the lifetime of this context. Note that this retry is just
-	// polling a value in memory. Another goroutine is doing the actual work.
-	policy := backoff.NewExponentialRetryPolicy(5 * time.Millisecond)
-	policy.SetMaximumInterval(1 * time.Second)
-
-	isRetryable := func(err error) bool { return err == ErrShardStatusUnknown }
-
-	op := func(context.Context) error {
-		s.rLock()
-		defer s.rUnlock()
-		err := s.errorByStateLocked()
-		if err == nil {
-			engine = s.engine
-		}
-		return err
-	}
-
-	retErr = backoff.RetryContext(ctx, op, policy, isRetryable)
-	if retErr == nil && engine == nil {
-		// This shouldn't ever happen, but don't let it return nil error.
-		retErr = ErrShardStatusUnknown
-	}
-	return
-}
-
 // start should only be called by the controller.
 func (s *ContextImpl) start() {
 	s.wLock()
@@ -1384,10 +1392,15 @@ func (s *ContextImpl) Unload() {
 
 // finishStop should only be called by the controller.
 func (s *ContextImpl) finishStop() {
+	// Do this again in case we skipped the stopping state, which could happen
+	// when calling CloseShardByID or the controller is shutting down.
+	s.lifecycleCancel()
+
 	s.wLock()
 	s.transitionLocked(contextRequestFinishStop{})
-	engine := s.engine
-	s.engine = nil
+
+	// use a context that we know is cancelled so that this doesn't block
+	engine, _ := s.engineFuture.Get(s.lifecycleCtx)
 	s.wUnlock()
 
 	// Stop the engine if it was running (outside the lock but before returning)
@@ -1396,9 +1409,6 @@ func (s *ContextImpl) finishStop() {
 		engine.Stop()
 		s.contextTaggedLogger.Info("", tag.LifeCycleStopped, tag.ComponentShardEngine)
 	}
-
-	// Cancel lifecycle context after engine is stopped
-	s.lifecycleCancel()
 }
 
 func (s *ContextImpl) isValid() bool {
@@ -1482,9 +1492,9 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 
 	*/
 
-	setStateAcquiring := func(newMaxReadLevel int64) {
+	setStateAcquiring := func() {
 		s.state = contextStateAcquiring
-		go s.acquireShard(newMaxReadLevel)
+		go s.acquireShard()
 	}
 
 	setStateStopping := func() {
@@ -1495,6 +1505,8 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 		if s.shardInfo != nil {
 			s.shardInfo.RangeId = -1
 		}
+		// Cancel lifecycle context as soon as we know we're shutting down
+		s.lifecycleCancel()
 		// This will cause the controller to remove this shard from the map and then call s.finishStop()
 		go s.closeCallback(s)
 	}
@@ -1507,7 +1519,7 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 	case contextStateInitialized:
 		switch request.(type) {
 		case contextRequestAcquire:
-			setStateAcquiring(0)
+			setStateAcquiring()
 			return
 		case contextRequestStop:
 			setStateStopping()
@@ -1533,11 +1545,11 @@ func (s *ContextImpl) transitionLocked(request contextRequest) {
 			return
 		}
 	case contextStateAcquired:
-		switch request := request.(type) {
+		switch request.(type) {
 		case contextRequestAcquire:
 			return // nothing to to do, already acquired
 		case contextRequestLost:
-			setStateAcquiring(request.newMaxReadLevel)
+			setStateAcquiring()
 			return
 		case contextRequestStop:
 			setStateStopping()
@@ -1696,7 +1708,7 @@ func (s *ContextImpl) getRemoteClusterInfoLocked(clusterName string) *remoteClus
 	return info
 }
 
-func (s *ContextImpl) acquireShard(newMaxReadLevel int64) {
+func (s *ContextImpl) acquireShard() {
 	// Retry for 5m, with interval up to 10s (default)
 	policy := backoff.NewExponentialRetryPolicy(50 * time.Millisecond)
 	policy.SetExpirationInterval(5 * time.Minute)
@@ -1738,21 +1750,18 @@ func (s *ContextImpl) acquireShard(newMaxReadLevel int64) {
 		//    doing it ourselves) is Stopped. In that case, we'll have to stop the engine that we just
 		//    created, since the stop transition didn't do it.
 		// 2. We don't have an engine yet, so no one should be calling any of our methods that mutate things.
-		if s.engine == nil {
+		if !s.engineFuture.Ready() {
 			s.wUnlock()
 			s.maybeRecordShardAcquisitionLatency(ownershipChanged)
 			engine := s.createEngine()
 			s.wLock()
 			if s.state >= contextStateStopping {
 				engine.Stop()
+				s.engineFuture.Set(nil, errStoppingContext)
 				return errStoppingContext
 			}
-			s.engine = engine
+			s.engineFuture.Set(engine, nil)
 		}
-
-		// Set max read level after a re-acquisition (if this is the first
-		// acquisition, newMaxReadLevel will be zero so it's a no-op)
-		s.updateMaxReadLevelLocked(newMaxReadLevel)
 
 		s.transitionLocked(contextRequestAcquired{})
 		return nil
@@ -1796,7 +1805,7 @@ func newContext(
 	saMapper searchattribute.Mapper,
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
-	hostInfoProvider resource.HostInfoProvider,
+	hostInfoProvider membership.HostInfoProvider,
 ) (*ContextImpl, error) {
 
 	hostIdentity := hostInfoProvider.HostInfo().Identity()
@@ -1827,6 +1836,7 @@ func newContext(
 		handoverNamespaces:      make(map[string]*namespaceHandOverInfo),
 		lifecycleCtx:            lifecycleCtx,
 		lifecycleCancel:         lifecycleCancel,
+		engineFuture:            future.NewFuture[Engine](),
 	}
 	shardContext.eventsCache = events.NewEventsCache(
 		shardContext.GetShardID(),

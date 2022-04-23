@@ -28,7 +28,8 @@ update-proto: clean-proto update-proto-submodule buf-lint api-linter protoc fix-
 GOOS        ?= $(shell go env GOOS)
 GOARCH      ?= $(shell go env GOARCH)
 GOPATH      ?= $(shell go env GOPATH)
-CGO_ENABLED ?= $(shell go env CGO_ENABLED)
+# Disable cgo by default.
+CGO_ENABLED ?= 0
 
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra
@@ -77,7 +78,7 @@ ALL_SCRIPTS     := $(shell find . -name "*.sh")
 
 PINNED_DEPENDENCIES := \
 	github.com/apache/thrift@v0.0.0-20161221203622-b2a4d4ae21c7 \
-	github.com/go-sql-driver/mysql@v1.5.0
+	github.com/go-sql-driver/mysql@v1.5.0 
 
 # Code coverage output files.
 COVER_ROOT                 := ./.coverage
@@ -114,6 +115,14 @@ update-proto-plugins:
 # This to download sources of gogo-protobuf which are required to build proto files.
 	@GO111MODULE=off go get github.com/temporalio/gogo-protobuf/protoc-gen-gogoslick
 	@go install google.golang.org/grpc/cmd/protoc-gen-go-grpc@latest
+
+update-tctl:
+	@printf $(COLOR) "Install/update tctl..."
+	@go install github.com/temporalio/tctl/cmd/tctl@latest
+
+update-new-ui:
+	@printf $(COLOR) "Install/update temporal ui-server..."
+	@go install github.com/temporalio/ui-server/cmd/server@latest
 
 update-tools: update-checkers update-mockgen update-proto-plugins
 
@@ -214,8 +223,7 @@ goimports:
 
 staticcheck:
 	@printf $(COLOR) "Run staticcheck..."
-	# TODO: enable staticcheck after staticcheck support generics.
-	#@staticcheck -fail none ./...
+	@staticcheck -fail none ./...
 
 errcheck:
 	@printf $(COLOR) "Run errcheck..."

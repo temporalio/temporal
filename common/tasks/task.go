@@ -55,7 +55,7 @@ type (
 		// Ack marks the task as successful completed
 		Ack()
 		// Nack marks the task as unsuccessful completed
-		Nack()
+		Nack(err error)
 		// Reschedule marks the task for retry
 		Reschedule()
 		// State returns the current task state

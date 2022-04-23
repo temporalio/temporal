@@ -283,7 +283,7 @@ func (p *queueProcessorBase) submitTask(
 		NewTaskInfo(
 			p.processor,
 			taskInfo,
-			initializeLoggerForTask(p.shard.GetShardID(), taskInfo, p.logger),
+			tasks.InitializeLogger(taskInfo, p.logger),
 		),
 	)
 }

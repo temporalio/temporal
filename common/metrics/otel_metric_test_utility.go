@@ -25,151 +25,195 @@
 package metrics
 
 import (
+	"context"
 	"fmt"
 	"time"
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
-	"go.opentelemetry.io/otel/metric/metrictest"
+	"go.opentelemetry.io/otel/sdk/instrumentation"
+	controller "go.opentelemetry.io/otel/sdk/metric/controller/basic"
+	"go.opentelemetry.io/otel/sdk/metric/export"
+	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
+	processor "go.opentelemetry.io/otel/sdk/metric/processor/basic"
+	selector "go.opentelemetry.io/otel/sdk/metric/selector/simple"
 
 	"go.temporal.io/server/common/log"
 )
 
 var _ MetricTestUtility = (*OtelMetricTestUtility)(nil)
-var _ OpentelemetryReporter = (*TestOtelReporter)(nil)
+var _ OpenTelemetryReporter = (*TestOtelReporter)(nil)
 
 type (
 	TestOtelReporter struct {
-		MeterProvider *metrictest.MeterProvider
+		// TODO: https://github.com/open-telemetry/opentelemetry-go/issues/2722
+		controller *controller.Controller
 	}
 
 	OtelMetricTestUtility struct {
 		reporter   *TestOtelReporter
+		collection []export.Record
 		gaugeCache OtelGaugeCache
 	}
 )
-
-func (t *OtelMetricTestUtility) CollectionSize() int {
-	return len(t.reporter.MeterProvider.MeasurementBatches)
-}
 
 func NewOtelMetricTestUtility() *OtelMetricTestUtility {
 	reporter := NewTestOtelReporter()
 	return &OtelMetricTestUtility{
 		reporter:   reporter,
-		gaugeCache: NewOtelGaugeCache(reporter.GetMeterMust()),
+		gaugeCache: NewOtelGaugeCache(reporter.GetMeter()),
 	}
 }
 
 func (t *OtelMetricTestUtility) GetClient(config *ClientConfig, idx ServiceIdx) Client {
-	result, err := NewOpentelemeteryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
+	result, err := NewOpenTelemetryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
 	if err != nil {
 		panic(err)
 	}
 	return result
 }
 
-func (t *OtelMetricTestUtility) ContainsCounter(name MetricName, labels map[string]string, value int64) error {
-	t.reporter.MeterProvider.RunAsyncInstruments()
-	batches := t.reporter.MeterProvider.MeasurementBatches
-	if len(batches) == 0 {
-		return fmt.Errorf("no entries were recorded")
-	}
-	for _, batch := range batches {
-		if !t.labelsMatch(batch.Labels, labels) {
-			continue
-		}
-		measurements := batch.Measurements
-		for i := range measurements {
-			measurement := measurements[i]
-			descriptor := measurement.Instrument.Descriptor()
-			if descriptor.Name() == string(name) {
-				if measurement.Number.CompareInt64(value) == 0 {
+func (t *OtelMetricTestUtility) collect() {
+	t.reporter.controller.Collect(context.Background())
+	t.reporter.controller.ForEach(func(l instrumentation.Library, r export.Reader) error {
+		return r.ForEach(aggregation.CumulativeTemporalitySelector(), func(rec export.Record) error {
+			for idx, existingRec := range t.collection {
+				if existingRec.Descriptor().Name() == rec.Descriptor().Name() &&
+					existingRec.Labels().Equals(rec.Labels()) {
+					t.collection[idx] = rec
 					return nil
-				} else {
-					return fmt.Errorf("%s metric value %d != expected %d", name, measurement.Number.AsInt64(), value)
 				}
 			}
-		}
+
+			t.collection = append(t.collection, rec)
+			return nil
+		})
+	})
+}
+
+func (t *OtelMetricTestUtility) CollectionSize() int {
+	t.collect()
+
+	return len(t.collection)
+}
+
+func (t *OtelMetricTestUtility) ContainsCounter(name MetricName, labels map[string]string, value int64) error {
+	t.collect()
+	if len(t.collection) == 0 {
+		return fmt.Errorf("no entries were recorded")
 	}
+	for _, rec := range t.collection {
+		if !t.labelsMatch(rec.Labels().ToSlice(), labels) {
+			continue
+		}
+		if rec.Descriptor().Name() != name.String() {
+			continue
+		}
+		sumAgg, ok := rec.Aggregation().(aggregation.Sum)
+		if !ok {
+			return fmt.Errorf("record should have aggregation type Count")
+		}
+		sum, err := sumAgg.Sum()
+		if err != nil {
+			return err
+		}
+
+		if sum.CompareInt64(value) != 0 {
+			return fmt.Errorf("%s metric value %d != expected %d", name, sum.AsInt64(), value)
+		}
+		return nil
+	}
+
 	return fmt.Errorf("%s not found in batches", name)
 }
 
 func (t *OtelMetricTestUtility) ContainsGauge(name MetricName, labels map[string]string, value float64) error {
-	t.reporter.MeterProvider.RunAsyncInstruments()
-	batches := t.reporter.MeterProvider.MeasurementBatches
-	if len(batches) == 0 {
+	t.collect()
+	if len(t.collection) == 0 {
 		return fmt.Errorf("no entries were recorded")
 	}
-	for _, batch := range batches {
-		if !t.labelsMatch(batch.Labels, labels) {
+	for _, rec := range t.collection {
+		if !t.labelsMatch(rec.Labels().ToSlice(), labels) {
 			continue
 		}
-		measurements := batch.Measurements
-		for i := range measurements {
-			measurement := measurements[i]
-			descriptor := measurement.Instrument.Descriptor()
-			if descriptor.Name() == string(name) {
-				if measurement.Number.CompareFloat64(value) == 0 {
-					return nil
-				} else {
-					return fmt.Errorf("%s metric value %f != expected %f", name, measurement.Number.AsFloat64(), value)
-				}
-			}
+		if rec.Descriptor().Name() != name.String() {
+			continue
 		}
+		lastValueAgg, ok := rec.Aggregation().(aggregation.LastValue)
+		if !ok {
+			return fmt.Errorf("record should have aggregation type Count")
+		}
+		lastValue, _, err := lastValueAgg.LastValue()
+		if err != nil {
+			return err
+		}
+
+		if lastValue.CompareFloat64(value) != 0 {
+			return fmt.Errorf("%s metric value %f != expected %f", name, lastValue.AsFloat64(), value)
+		}
+		return nil
 	}
+
 	return fmt.Errorf("%s not found in batches", name)
 }
 
 func (t *OtelMetricTestUtility) ContainsTimer(name MetricName, labels map[string]string, value time.Duration) error {
-	t.reporter.MeterProvider.RunAsyncInstruments()
-	batches := t.reporter.MeterProvider.MeasurementBatches
-	if len(batches) == 0 {
+	t.collect()
+	if len(t.collection) == 0 {
 		return fmt.Errorf("no entries were recorded")
 	}
-	for _, batch := range batches {
-		if !t.labelsMatch(batch.Labels, labels) {
+	for _, rec := range t.collection {
+		if !t.labelsMatch(rec.Labels().ToSlice(), labels) {
 			continue
 		}
-		measurements := batch.Measurements
-		for i := range measurements {
-			measurement := measurements[i]
-			descriptor := measurement.Instrument.Descriptor()
-			if descriptor.Name() == string(name) {
-				if measurement.Number.CompareInt64(value.Nanoseconds()) == 0 {
-					return nil
-				} else {
-					return fmt.Errorf("%s metric value %d != expected %d", name, measurement.Number.AsInt64(), value.Nanoseconds())
-				}
-			}
+		if rec.Descriptor().Name() != name.String() {
+			continue
 		}
+		histAgg, ok := rec.Aggregation().(aggregation.Histogram)
+		if !ok {
+			return fmt.Errorf("record should have aggregation type Count")
+		}
+		sum, err := histAgg.Sum()
+		if err != nil {
+			return err
+		}
+
+		if sum.CompareInt64(value.Nanoseconds()) != 0 {
+			return fmt.Errorf("%s metric value %d != expected %d", name, sum.AsInt64(), value)
+		}
+		return nil
 	}
+
 	return fmt.Errorf("%s not found in batches", name)
 }
 
 func (t *OtelMetricTestUtility) ContainsHistogram(name MetricName, labels map[string]string, value int) error {
-	t.reporter.MeterProvider.RunAsyncInstruments()
-	batches := t.reporter.MeterProvider.MeasurementBatches
-	if len(batches) == 0 {
+	t.collect()
+	if len(t.collection) == 0 {
 		return fmt.Errorf("no entries were recorded")
 	}
-	for _, batch := range batches {
-		if !t.labelsMatch(batch.Labels, labels) {
+	for _, rec := range t.collection {
+		if !t.labelsMatch(rec.Labels().ToSlice(), labels) {
 			continue
 		}
-		measurements := batch.Measurements
-		for i := range measurements {
-			measurement := measurements[i]
-			descriptor := measurement.Instrument.Descriptor()
-			if descriptor.Name() == string(name) {
-				if measurement.Number.CompareInt64(int64(value)) == 0 {
-					return nil
-				} else {
-					return fmt.Errorf("%s metric value %d != expected %d", name, measurement.Number.AsInt64(), value)
-				}
-			}
+		if rec.Descriptor().Name() != name.String() {
+			continue
 		}
+		histAgg, ok := rec.Aggregation().(aggregation.Histogram)
+		if !ok {
+			return fmt.Errorf("record should have aggregation type Count")
+		}
+		sum, err := histAgg.Sum()
+		if err != nil {
+			return err
+		}
+
+		if sum.CompareInt64(int64(value)) != 0 {
+			return fmt.Errorf("%s metric value %d != expected %d", name, sum.AsInt64(), value)
+		}
+		return nil
 	}
+
 	return fmt.Errorf("%s not found in batches", name)
 }
 
@@ -188,16 +232,18 @@ func (t *OtelMetricTestUtility) labelsMatch(left []attribute.KeyValue, right map
 
 func NewTestOtelReporter() *TestOtelReporter {
 	return &TestOtelReporter{
-		MeterProvider: metrictest.NewMeterProvider(),
+		controller: controller.New(
+			processor.NewFactory(
+				selector.NewWithHistogramDistribution(),
+				aggregation.CumulativeTemporalitySelector(),
+			),
+			controller.WithCollectPeriod(0),
+		),
 	}
 }
 
 func (t TestOtelReporter) GetMeter() metric.Meter {
-	return t.MeterProvider.Meter("")
-}
-
-func (t TestOtelReporter) GetMeterMust() metric.MeterMust {
-	return metric.Must(t.MeterProvider.Meter(""))
+	return t.controller.Meter("")
 }
 
 func (t TestOtelReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {

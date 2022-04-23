@@ -99,4 +99,9 @@ type (
 		// Members returns all host addresses in hashring for any particular role
 		Members() []*HostInfo
 	}
+
+	HostInfoProvider interface {
+		Start() error
+		HostInfo() *HostInfo
+	}
 )

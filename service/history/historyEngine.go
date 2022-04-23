@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/common/payloads"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/queues"
@@ -119,6 +120,7 @@ type (
 		replicationDLQHandler         replicationDLQHandler
 		searchAttributesValidator     *searchattribute.Validator
 		workflowDeleteManager         workflow.DeleteManager
+		eventSerializer               serialization.Serializer
 	}
 )
 
@@ -135,6 +137,7 @@ func NewEngineWithShardContext(
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
 	archivalClient archiver.Client,
+	eventSerializer serialization.Serializer,
 	queueProcessorFactories []queues.ProcessorFactory,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -171,6 +174,7 @@ func NewEngineWithShardContext(
 		replicationTaskProcessors: make(map[string]ReplicationTaskProcessor),
 		replicationTaskFetchers:   replicationTaskFetchers,
 		workflowDeleteManager:     workflowDeleteManager,
+		eventSerializer:           eventSerializer,
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)
@@ -193,6 +197,7 @@ func NewEngineWithShardContext(
 			historyCache,
 			historyEngImpl.eventsReapplier,
 			logger,
+			eventSerializer,
 		)
 		historyEngImpl.nDCActivityReplicator = newNDCActivityReplicator(
 			shard,
@@ -271,9 +276,7 @@ func (e *historyEngineImpl) Stop() {
 	for _, queueProcessor := range e.queueProcessors {
 		queueProcessor.Stop()
 	}
-
-	callbackID := getMetadataChangeCallbackID(common.HistoryServiceName, e.shard.GetShardID())
-	e.clusterMetadata.UnRegisterMetadataChangeCallback(callbackID)
+	e.clusterMetadata.UnRegisterMetadataChangeCallback(e)
 	e.replicationTaskProcessorsLock.Lock()
 	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
 		replicationTaskProcessor.Stop()
@@ -281,7 +284,7 @@ func (e *historyEngineImpl) Stop() {
 	e.replicationTaskProcessorsLock.Unlock()
 
 	// unset the failover callback
-	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e.shard.GetShardID())
+	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e)
 }
 
 func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
@@ -318,7 +321,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 	// first set the failover callback
 	e.shard.GetNamespaceRegistry().RegisterNamespaceChangeCallback(
-		e.shard.GetShardID(),
+		e,
 		0, /* always want callback so UpdateHandoverNamespaces() can be called after shard reload */
 		func() {
 			for _, queueProcessor := range e.queueProcessors {
@@ -367,7 +370,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 				now := e.shard.GetTimeSource().Now()
 				fakeTasks := make(map[tasks.Category][]tasks.Task)
 				for category := range e.queueProcessors {
-					fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(category, now)}
+					fakeTasks[category] = []tasks.Task{tasks.NewFakeTask(definition.WorkflowKey{}, category, now)}
 				}
 				e.NotifyNewTasks(e.currentClusterName, fakeTasks)
 			}
@@ -379,9 +382,8 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 }
 
 func (e *historyEngineImpl) listenToClusterMetadataChange() {
-	callbackID := getMetadataChangeCallbackID(common.HistoryServiceName, e.shard.GetShardID())
 	e.clusterMetadata.RegisterMetadataChangeCallback(
-		callbackID,
+		e,
 		e.handleClusterMetadataUpdate,
 	)
 }
@@ -450,6 +452,7 @@ func (e *historyEngineImpl) handleClusterMetadataUpdate(
 				e.shard.GetMetricsClient(),
 				fetcher,
 				replicationTaskExecutor,
+				e.eventSerializer,
 			)
 			replicationTaskProcessor.Start()
 			e.replicationTaskProcessors[clusterName] = replicationTaskProcessor
@@ -3661,8 +3664,4 @@ func (e *historyEngineImpl) containsHistoryEvent(
 		versionhistory.NewVersionHistoryItem(reappliedEventID, reappliedEventVersion),
 	)
 	return err == nil
-}
-
-func getMetadataChangeCallbackID(componentName string, shardId int32) string {
-	return fmt.Sprintf("%s-%d", componentName, shardId)
 }

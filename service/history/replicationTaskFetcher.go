@@ -151,8 +151,7 @@ func (f *ReplicationTaskFetchersImpl) Stop() {
 		return
 	}
 
-	currentCluster := f.clusterMetadata.GetCurrentClusterName()
-	f.clusterMetadata.UnRegisterMetadataChangeCallback(currentCluster)
+	f.clusterMetadata.UnRegisterMetadataChangeCallback(f)
 	f.fetchersLock.Lock()
 	defer f.fetchersLock.Unlock()
 	for _, fetcher := range f.fetchers {
@@ -187,13 +186,13 @@ func (f *ReplicationTaskFetchersImpl) createReplicationFetcherLocked(clusterName
 }
 
 func (f *ReplicationTaskFetchersImpl) listenClusterMetadataChange() {
-	currentCluster := f.clusterMetadata.GetCurrentClusterName()
 	f.clusterMetadata.RegisterMetadataChangeCallback(
-		currentCluster,
+		f,
 		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
 			f.fetchersLock.Lock()
 			defer f.fetchersLock.Unlock()
 
+			currentCluster := f.clusterMetadata.GetCurrentClusterName()
 			// Fetcher is lazy init. The callback only need to handle remove case.
 			for clusterName, newClusterInfo := range newClusterMetadata {
 				if clusterName == currentCluster {

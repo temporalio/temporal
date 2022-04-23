@@ -28,8 +28,8 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -78,7 +78,8 @@ func loadMutableStateForTransferTask(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
-	return LoadMutableStateForTask(
+	logger = tasks.InitializeLogger(transferTask, logger)
+	mutableState, err := LoadMutableStateForTask(
 		ctx,
 		wfContext,
 		transferTask,
@@ -86,6 +87,13 @@ func loadMutableStateForTransferTask(
 		metricsClient.Scope(metrics.TransferQueueProcessorScope),
 		logger,
 	)
+	if _, ok := err.(*serviceerror.NotFound); ok {
+		// NotFound error will be ignored by task error handling logic, so log it here
+		// for transfer tasks, mutable state should always be available
+		logger.Error("Transfer Task Processor: workflow mutable state not found, skip.")
+	}
+
+	return mutableState, err
 }
 
 // load mutable state, if mutable state's next event ID <= task ID, will attempt to refresh
@@ -97,6 +105,7 @@ func loadMutableStateForTimerTask(
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) (workflow.MutableState, error) {
+	logger = tasks.InitializeLogger(timerTask, logger)
 	return LoadMutableStateForTask(
 		ctx,
 		wfContext,
@@ -140,10 +149,6 @@ func LoadMutableStateForTask(
 	if eventID >= mutableState.GetNextEventID() {
 		scope.IncCounter(metrics.TaskSkipped)
 		logger.Info("Task Processor: task event ID >= MS NextEventID, skip.",
-			tag.WorkflowNamespaceID(task.GetNamespaceID()),
-			tag.WorkflowID(task.GetWorkflowID()),
-			tag.WorkflowRunID(task.GetRunID()),
-			tag.WorkflowEventID(eventID),
 			tag.WorkflowNextEventID(mutableState.GetNextEventID()),
 		)
 		return nil, nil
@@ -151,49 +156,17 @@ func LoadMutableStateForTask(
 	return mutableState, nil
 }
 
-func initializeLoggerForTask(
-	shardID int32,
-	task tasks.Task,
-	logger log.Logger,
-) log.Logger {
-	taskLogger := log.With(
-		logger,
-		tag.ShardID(shardID),
-		tag.TaskID(task.GetTaskID()),
-		tag.TaskVisibilityTimestamp(task.GetVisibilityTime()),
-		tag.Task(task),
-	)
-	return taskLogger
-}
-
 func getTransferTaskEventIDAndRetryable(
 	transferTask tasks.Task,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 ) (int64, bool) {
-	eventID := int64(0)
+	eventID := tasks.GetTransferTaskEventID(transferTask)
 	retryable := true
 
-	switch task := transferTask.(type) {
-	case *tasks.ActivityTask:
-		eventID = task.ScheduleID
-	case *tasks.WorkflowTask:
-		eventID = task.ScheduleID
+	if task, ok := transferTask.(*tasks.WorkflowTask); ok {
 		retryable = !(executionInfo.WorkflowTaskScheduleId == task.ScheduleID && executionInfo.WorkflowTaskAttempt > 1)
-	case *tasks.CloseExecutionTask:
-		eventID = common.FirstEventID
-	case *tasks.DeleteExecutionTask:
-		eventID = common.FirstEventID
-	case *tasks.CancelExecutionTask:
-		eventID = task.InitiatedID
-	case *tasks.SignalExecutionTask:
-		eventID = task.InitiatedID
-	case *tasks.StartChildExecutionTask:
-		eventID = task.InitiatedID
-	case *tasks.ResetWorkflowTask:
-		eventID = common.FirstEventID
-	default:
-		panic(errUnknownTransferTask)
 	}
+
 	return eventID, retryable
 }
 
@@ -201,27 +174,12 @@ func getTimerTaskEventIDAndRetryable(
 	timerTask tasks.Task,
 	executionInfo *persistencespb.WorkflowExecutionInfo,
 ) (int64, bool) {
-	eventID := int64(0)
+	eventID := tasks.GetTimerTaskEventID(timerTask)
 	retryable := true
 
-	switch task := timerTask.(type) {
-	case *tasks.UserTimerTask:
-		eventID = task.EventID
-	case *tasks.ActivityTimeoutTask:
-		eventID = task.EventID
-	case *tasks.WorkflowTaskTimeoutTask:
-		eventID = task.EventID
+	if task, ok := timerTask.(*tasks.WorkflowTaskTimeoutTask); ok {
 		retryable = !(executionInfo.WorkflowTaskScheduleId == task.EventID && executionInfo.WorkflowTaskAttempt > 1)
-	case *tasks.WorkflowBackoffTimerTask:
-		eventID = common.FirstEventID
-	case *tasks.ActivityRetryTimerTask:
-		eventID = task.EventID
-	case *tasks.WorkflowTimeoutTask:
-		eventID = common.FirstEventID
-	case *tasks.DeleteHistoryEventTask:
-		eventID = common.FirstEventID
-	default:
-		panic(errUnknownTimerTask)
 	}
+
 	return eventID, retryable
 }

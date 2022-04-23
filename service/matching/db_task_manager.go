@@ -279,15 +279,15 @@ func (d *dbTaskManager) signalDispatch() {
 
 func (d *dbTaskManager) BufferAndWriteTask(
 	task *persistencespb.TaskInfo,
-) future.Future {
+) dbTaskWriterFuture {
 	select {
 	case <-d.startupChan:
 		if d.isStopped() {
-			return future.NewReadyFuture(nil, errDBTaskManagerNotReady)
+			return future.NewReadyFuture[struct{}](struct{}{}, errDBTaskManagerNotReady)
 		}
 		return d.taskWriter.appendTask(task)
 	default:
-		return future.NewReadyFuture(nil, errDBTaskManagerNotReady)
+		return future.NewReadyFuture[struct{}](struct{}{}, errDBTaskManagerNotReady)
 	}
 }
 

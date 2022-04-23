@@ -44,7 +44,8 @@ const (
 	testSQLiteUser      = ""
 	testSQLitePassword  = ""
 	testSQLiteMode      = "memory"
-	testSQLiteSchemaDir = "" // specify if mode is not "memory"
+	testSQLiteCache     = "private"
+	testSQLiteSchemaDir = "schema/sqlite/v3" // specify if mode is not "memory"
 )
 
 // GetMySQLTestClusterOption return test options
@@ -74,7 +75,7 @@ func GetPostgreSQLTestClusterOption() *TestBaseOptions {
 }
 
 // GetSQLiteTestClusterOption return test options
-func GetSQLiteTestClusterOption() *TestBaseOptions {
+func GetSQLiteFileTestClusterOption() *TestBaseOptions {
 	return &TestBaseOptions{
 		SQLDBPluginName:   sqlite.PluginName,
 		DBUsername:        testSQLiteUser,
@@ -83,6 +84,20 @@ func GetSQLiteTestClusterOption() *TestBaseOptions {
 		DBPort:            0,
 		SchemaDir:         testSQLiteSchemaDir,
 		StoreType:         config.StoreTypeSQL,
-		ConnectAttributes: map[string]string{"mode": testSQLiteMode},
+		ConnectAttributes: map[string]string{"cache": testSQLiteCache},
+	}
+}
+
+// GetSQLiteTestClusterOption return test options
+func GetSQLiteMemoryTestClusterOption() *TestBaseOptions {
+	return &TestBaseOptions{
+		SQLDBPluginName:   sqlite.PluginName,
+		DBUsername:        testSQLiteUser,
+		DBPassword:        testSQLitePassword,
+		DBHost:            environment.Localhost,
+		DBPort:            0,
+		SchemaDir:         "",
+		StoreType:         config.StoreTypeSQL,
+		ConnectAttributes: map[string]string{"mode": testSQLiteMode, "cache": testSQLiteCache},
 	}
 }

@@ -25,18 +25,18 @@
 package metrics
 
 import (
-	"go.opentelemetry.io/otel/metric/sdkapi"
-	emetric "go.opentelemetry.io/otel/sdk/export/metric"
+	"go.opentelemetry.io/otel/sdk/metric/aggregator"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/histogram"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/lastvalue"
 	"go.opentelemetry.io/otel/sdk/metric/aggregator/sum"
+	emetric "go.opentelemetry.io/otel/sdk/metric/export"
+	"go.opentelemetry.io/otel/sdk/metric/sdkapi"
 )
 
 type (
 	// OtelAggregatorSelector handles utilizing correct histogram bucket list for distinct metric unit types.
 	OtelAggregatorSelector struct {
-		buckets        map[MetricUnit][]histogram.Option
-		defaultBuckets []histogram.Option
+		buckets map[MetricUnit][]histogram.Option
 	}
 )
 
@@ -44,7 +44,6 @@ var _ emetric.AggregatorSelector = &OtelAggregatorSelector{}
 
 // Creates new instance of aggregator selector.
 func NewOtelAggregatorSelector(
-	defaultBoundaries []float64,
 	perUnitBoundaries map[string][]float64,
 ) *OtelAggregatorSelector {
 	perUnitBuckets := make(map[MetricUnit][]histogram.Option, len(perUnitBoundaries))
@@ -52,17 +51,16 @@ func NewOtelAggregatorSelector(
 		perUnitBuckets[MetricUnit(unit)] = []histogram.Option{histogram.WithExplicitBoundaries(buckets)}
 	}
 	return &OtelAggregatorSelector{
-		defaultBuckets: []histogram.Option{histogram.WithExplicitBoundaries(defaultBoundaries)},
-		buckets:        perUnitBuckets,
+		buckets: perUnitBuckets,
 	}
 }
 
-func (s OtelAggregatorSelector) AggregatorFor(descriptor *sdkapi.Descriptor, aggPtrs ...*emetric.Aggregator) {
+func (s OtelAggregatorSelector) AggregatorFor(descriptor *sdkapi.Descriptor, aggPtrs ...*aggregator.Aggregator) {
 	switch descriptor.InstrumentKind() {
 	case sdkapi.GaugeObserverInstrumentKind:
 		lastValueAggs(aggPtrs)
 	case sdkapi.HistogramInstrumentKind:
-		options := s.defaultBuckets
+		var options []histogram.Option
 		if opts, ok := s.buckets[MetricUnit(descriptor.Unit())]; ok {
 			options = opts
 		}
@@ -75,14 +73,14 @@ func (s OtelAggregatorSelector) AggregatorFor(descriptor *sdkapi.Descriptor, agg
 	}
 }
 
-func sumAggs(aggPtrs []*emetric.Aggregator) {
+func sumAggs(aggPtrs []*aggregator.Aggregator) {
 	aggs := sum.New(len(aggPtrs))
 	for i := range aggPtrs {
 		*aggPtrs[i] = &aggs[i]
 	}
 }
 
-func lastValueAggs(aggPtrs []*emetric.Aggregator) {
+func lastValueAggs(aggPtrs []*aggregator.Aggregator) {
 	aggs := lastvalue.New(len(aggPtrs))
 	for i := range aggPtrs {
 		*aggPtrs[i] = &aggs[i]

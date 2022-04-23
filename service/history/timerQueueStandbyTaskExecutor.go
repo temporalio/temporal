@@ -33,6 +33,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -46,6 +47,7 @@ import (
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -596,6 +598,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		},
 		ScheduleId:             activityTask.EventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
+		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), activityTask.TaskID),
 	})
 	return err
 }

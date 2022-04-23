@@ -80,6 +80,10 @@ const (
 	retryTaskProcessingMaxInterval     = 100 * time.Millisecond
 	retryTaskProcessingMaxAttempts     = 3
 
+	rescheduleTaskInitialInterval    = 3 * time.Second
+	rescheduleTaskBackoffCoefficient = 1.05
+	rescheduleTaskMaxInterval        = 3 * time.Minute
+
 	replicationServiceBusyInitialInterval    = 2 * time.Second
 	replicationServiceBusyMaxInterval        = 10 * time.Second
 	replicationServiceBusyExpirationInterval = 30 * time.Second
@@ -191,6 +195,16 @@ func CreateTaskProcessingRetryPolicy() backoff.RetryPolicy {
 	policy := backoff.NewExponentialRetryPolicy(retryTaskProcessingInitialInterval)
 	policy.SetMaximumInterval(retryTaskProcessingMaxInterval)
 	policy.SetMaximumAttempts(retryTaskProcessingMaxAttempts)
+
+	return policy
+}
+
+// CreateTaskReschedulePolicy creates a retry policy for task processing
+func CreateTaskReschedulePolicy() backoff.RetryPolicy {
+	policy := backoff.NewExponentialRetryPolicy(rescheduleTaskInitialInterval)
+	policy.SetBackoffCoefficient(rescheduleTaskBackoffCoefficient)
+	policy.SetMaximumInterval(rescheduleTaskMaxInterval)
+	policy.SetExpirationInterval(backoff.NoInterval)
 
 	return policy
 }

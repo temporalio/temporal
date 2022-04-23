@@ -28,25 +28,27 @@ import (
 	"context"
 	"time"
 
+	"go.opentelemetry.io/otel/metric/instrument"
+
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
 )
 
-type opentelemetryUserScope struct {
-	meterMust metric.MeterMust
-	labels    []attribute.KeyValue
-	tags      map[string]string
+type openTelemetryUserScope struct {
+	meter  metric.Meter
+	labels []attribute.KeyValue
+	tags   map[string]string
 
 	gaugeCache OtelGaugeCache
 }
 
-func NewOpentelemetryUserScope(
-	meterMust metric.MeterMust,
+func NewOpenTelemetryUserScope(
+	meter metric.Meter,
 	tags map[string]string,
 	gaugeCache OtelGaugeCache,
-) *opentelemetryUserScope {
-	result := &opentelemetryUserScope{
-		meterMust:  meterMust,
+) *openTelemetryUserScope {
+	result := &openTelemetryUserScope{
+		meter:      meter,
 		tags:       tags,
 		gaugeCache: gaugeCache,
 	}
@@ -54,39 +56,58 @@ func NewOpentelemetryUserScope(
 	return result
 }
 
-func (o opentelemetryUserScope) IncCounter(counter string) {
+func (o openTelemetryUserScope) IncCounter(counter string) {
 	o.AddCounter(counter, 1)
 }
 
-func (o opentelemetryUserScope) AddCounter(counter string, delta int64) {
+func (o openTelemetryUserScope) AddCounter(counter string, delta int64) {
 	ctx := context.Background()
-	o.meterMust.NewInt64Counter(counter).Add(ctx, delta, o.labels...)
+
+	c, err := o.meter.SyncInt64().Counter(counter)
+	if err != nil {
+		panic(err)
+	}
+	c.Add(ctx, delta, o.labels...)
 }
 
-func (o opentelemetryUserScope) StartTimer(timer string) Stopwatch {
-	metric := newOpenTelemetryStopwatchMetric(
-		o.meterMust.NewInt64Histogram(timer),
-		o.labels)
+func (o openTelemetryUserScope) StartTimer(timer string) Stopwatch {
+	h, err := o.meter.SyncInt64().Histogram(timer)
+	if err != nil {
+		panic(err)
+	}
+
+	metric := newOpenTelemetryStopwatchMetric(h, o.labels)
 	return newOpenTelemetryStopwatch([]openTelemetryStopwatchMetric{metric})
 }
 
-func (o opentelemetryUserScope) RecordTimer(timer string, d time.Duration) {
+func (o openTelemetryUserScope) RecordTimer(timer string, d time.Duration) {
 	ctx := context.Background()
-	o.meterMust.NewInt64Histogram(timer).Record(ctx, d.Nanoseconds(), o.labels...)
+
+	h, err := o.meter.SyncInt64().Histogram(timer)
+	if err != nil {
+		panic(err)
+	}
+	h.Record(ctx, d.Nanoseconds(), o.labels...)
 }
 
-func (o opentelemetryUserScope) RecordDistribution(id string, d int) {
+func (o openTelemetryUserScope) RecordDistribution(id string, unit MetricUnit, d int) {
 	value := int64(d)
 	ctx := context.Background()
-	o.meterMust.NewInt64Histogram(id).Record(ctx, value, o.labels...)
+
+	opt := []instrument.Option{unitToOptions(unit)}
+	h, err := o.meter.SyncInt64().Histogram(id, opt...)
+	if err != nil {
+		panic(err)
+	}
+	h.Record(ctx, value, o.labels...)
 }
 
-func (o opentelemetryUserScope) UpdateGauge(gauge string, value float64) {
+func (o openTelemetryUserScope) UpdateGauge(gauge string, value float64) {
 	o.gaugeCache.Set(gauge, o.tags, value)
 }
 
 // Tagged provides new scope with added and/or overriden tags values.
-func (o opentelemetryUserScope) Tagged(tags map[string]string) UserScope {
+func (o openTelemetryUserScope) Tagged(tags map[string]string) UserScope {
 	tagMap := make(map[string]string, len(tags)+len(o.tags))
 	for key, value := range o.tags {
 		tagMap[key] = value
@@ -95,5 +116,5 @@ func (o opentelemetryUserScope) Tagged(tags map[string]string) UserScope {
 	for key, value := range tags {
 		tagMap[key] = value
 	}
-	return NewOpentelemetryUserScope(o.meterMust, tagMap, o.gaugeCache)
+	return NewOpenTelemetryUserScope(o.meter, tagMap, o.gaugeCache)
 }

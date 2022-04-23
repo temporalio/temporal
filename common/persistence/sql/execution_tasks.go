@@ -42,11 +42,9 @@ import (
 )
 
 func (m *sqlExecutionStore) AddHistoryTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *p.InternalAddHistoryTasksRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	return m.txExecuteShardLocked(ctx,
 		"AddHistoryTasks",
 		request.ShardID,
@@ -61,82 +59,81 @@ func (m *sqlExecutionStore) AddHistoryTasks(
 }
 
 func (m *sqlExecutionStore) GetHistoryTask(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return m.getTransferTask(request)
+		return m.getTransferTask(ctx, request)
 	case tasks.CategoryIDTimer:
-		return m.getTimerTask(request)
+		return m.getTimerTask(ctx, request)
 	case tasks.CategoryIDVisibility:
-		return m.getVisibilityTask(request)
+		return m.getVisibilityTask(ctx, request)
 	case tasks.CategoryIDReplication:
-		return m.getReplicationTask(request)
+		return m.getReplicationTask(ctx, request)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category: %v", request.TaskCategory))
 	}
 }
 
 func (m *sqlExecutionStore) GetHistoryTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return m.getTransferTasks(request)
+		return m.getTransferTasks(ctx, request)
 	case tasks.CategoryIDTimer:
-		return m.getTimerTasks(request)
+		return m.getTimerTasks(ctx, request)
 	case tasks.CategoryIDVisibility:
-		return m.getVisibilityTasks(request)
+		return m.getVisibilityTasks(ctx, request)
 	case tasks.CategoryIDReplication:
-		return m.getReplicationTasks(request)
+		return m.getReplicationTasks(ctx, request)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("unknown task category: %v", request.TaskCategory))
 	}
 }
 
 func (m *sqlExecutionStore) CompleteHistoryTask(
-	_ context.Context,
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return m.completeTransferTask(request)
+		return m.completeTransferTask(ctx, request)
 	case tasks.CategoryIDTimer:
-		return m.completeTimerTask(request)
+		return m.completeTimerTask(ctx, request)
 	case tasks.CategoryIDVisibility:
-		return m.completeVisibilityTask(request)
+		return m.completeVisibilityTask(ctx, request)
 	case tasks.CategoryIDReplication:
-		return m.completeReplicationTask(request)
+		return m.completeReplicationTask(ctx, request)
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category: %v", request.TaskCategory))
 	}
 }
 
 func (m *sqlExecutionStore) RangeCompleteHistoryTasks(
-	_ context.Context,
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
 	switch request.TaskCategory.ID() {
 	case tasks.CategoryIDTransfer:
-		return m.rangeCompleteTransferTasks(request)
+		return m.rangeCompleteTransferTasks(ctx, request)
 	case tasks.CategoryIDTimer:
-		return m.rangeCompleteTimerTasks(request)
+		return m.rangeCompleteTimerTasks(ctx, request)
 	case tasks.CategoryIDVisibility:
-		return m.rangeCompleteVisibilityTasks(request)
+		return m.rangeCompleteVisibilityTasks(ctx, request)
 	case tasks.CategoryIDReplication:
-		return m.rangeCompleteReplicationTasks(request)
+		return m.rangeCompleteReplicationTasks(ctx, request)
 	default:
 		return serviceerror.NewInternal(fmt.Sprintf("unknown task category: %v", request.TaskCategory))
 	}
 }
 
 func (m *sqlExecutionStore) getTransferTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	rows, err := m.Db.SelectFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskKey.TaskID,
@@ -160,10 +157,9 @@ func (m *sqlExecutionStore) getTransferTask(
 }
 
 func (m *sqlExecutionStore) getTransferTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(request)
 	if err != nil {
 		return nil, err
@@ -201,10 +197,9 @@ func (m *sqlExecutionStore) getTransferTasks(
 }
 
 func (m *sqlExecutionStore) completeTransferTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.DeleteFromTransferTasks(ctx, sqlplugin.TransferTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskKey.TaskID,
@@ -215,10 +210,9 @@ func (m *sqlExecutionStore) completeTransferTask(
 }
 
 func (m *sqlExecutionStore) rangeCompleteTransferTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.RangeDeleteFromTransferTasks(ctx, sqlplugin.TransferTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
@@ -230,10 +224,9 @@ func (m *sqlExecutionStore) rangeCompleteTransferTasks(
 }
 
 func (m *sqlExecutionStore) getTimerTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	rows, err := m.Db.SelectFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
 		ShardID:             request.ShardID,
 		TaskID:              request.TaskKey.TaskID,
@@ -258,10 +251,9 @@ func (m *sqlExecutionStore) getTimerTask(
 }
 
 func (m *sqlExecutionStore) getTimerTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	pageToken := &timerTaskPageToken{TaskID: math.MinInt64, Timestamp: request.InclusiveMinTaskKey.FireTime}
 	if len(request.NextPageToken) > 0 {
 		if err := pageToken.deserialize(request.NextPageToken); err != nil {
@@ -302,10 +294,9 @@ func (m *sqlExecutionStore) getTimerTasks(
 }
 
 func (m *sqlExecutionStore) completeTimerTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.DeleteFromTimerTasks(ctx, sqlplugin.TimerTasksFilter{
 		ShardID:             request.ShardID,
 		VisibilityTimestamp: request.TaskKey.FireTime,
@@ -317,10 +308,9 @@ func (m *sqlExecutionStore) completeTimerTask(
 }
 
 func (m *sqlExecutionStore) rangeCompleteTimerTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	start := request.InclusiveMinTaskKey.FireTime
 	end := request.ExclusiveMaxTaskKey.FireTime
 	if _, err := m.Db.RangeDeleteFromTimerTasks(ctx, sqlplugin.TimerTasksRangeFilter{
@@ -334,10 +324,9 @@ func (m *sqlExecutionStore) rangeCompleteTimerTasks(
 }
 
 func (m *sqlExecutionStore) getReplicationTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	rows, err := m.Db.SelectFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskKey.TaskID,
@@ -359,10 +348,9 @@ func (m *sqlExecutionStore) getReplicationTask(
 }
 
 func (m *sqlExecutionStore) getReplicationTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(request)
 	if err != nil {
 		return nil, err
@@ -463,10 +451,9 @@ func (m *sqlExecutionStore) populateGetReplicationDLQTasksResponse(
 }
 
 func (m *sqlExecutionStore) completeReplicationTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.DeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskKey.TaskID,
@@ -477,10 +464,9 @@ func (m *sqlExecutionStore) completeReplicationTask(
 }
 
 func (m *sqlExecutionStore) rangeCompleteReplicationTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.RangeDeleteFromReplicationTasks(ctx, sqlplugin.ReplicationTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,
@@ -492,11 +478,9 @@ func (m *sqlExecutionStore) rangeCompleteReplicationTasks(
 }
 
 func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
-	_ context.Context,
+	ctx context.Context,
 	request *p.PutReplicationTaskToDLQRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	replicationTask := request.TaskInfo
 	blob, err := serialization.ReplicationTaskInfoToBlob(replicationTask)
 
@@ -522,11 +506,9 @@ func (m *sqlExecutionStore) PutReplicationTaskToDLQ(
 }
 
 func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	request *p.GetReplicationTasksFromDLQRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(&request.GetHistoryTasksRequest)
 	if err != nil {
 		return nil, err
@@ -551,11 +533,9 @@ func (m *sqlExecutionStore) GetReplicationTasksFromDLQ(
 }
 
 func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	request *p.DeleteReplicationTaskFromDLQRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.DeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksFilter{
 		ShardID:           request.ShardID,
 		TaskID:            request.TaskKey.TaskID,
@@ -567,11 +547,9 @@ func (m *sqlExecutionStore) DeleteReplicationTaskFromDLQ(
 }
 
 func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	request *p.RangeDeleteReplicationTaskFromDLQRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.RangeDeleteFromReplicationDLQTasks(ctx, sqlplugin.ReplicationDLQTasksRangeFilter{
 		ShardID:            request.ShardID,
 		SourceClusterName:  request.SourceClusterName,
@@ -584,10 +562,9 @@ func (m *sqlExecutionStore) RangeDeleteReplicationTaskFromDLQ(
 }
 
 func (m *sqlExecutionStore) getVisibilityTask(
+	ctx context.Context,
 	request *p.GetHistoryTaskRequest,
 ) (*p.InternalGetHistoryTaskResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	rows, err := m.Db.SelectFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskKey.TaskID,
@@ -609,10 +586,9 @@ func (m *sqlExecutionStore) getVisibilityTask(
 }
 
 func (m *sqlExecutionStore) getVisibilityTasks(
+	ctx context.Context,
 	request *p.GetHistoryTasksRequest,
 ) (*p.InternalGetHistoryTasksResponse, error) {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	inclusiveMinTaskID, exclusiveMaxTaskID, err := getImmediateTaskReadRange(request)
 	if err != nil {
 		return nil, err
@@ -650,10 +626,9 @@ func (m *sqlExecutionStore) getVisibilityTasks(
 }
 
 func (m *sqlExecutionStore) completeVisibilityTask(
+	ctx context.Context,
 	request *p.CompleteHistoryTaskRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.DeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksFilter{
 		ShardID: request.ShardID,
 		TaskID:  request.TaskKey.TaskID,
@@ -664,10 +639,9 @@ func (m *sqlExecutionStore) completeVisibilityTask(
 }
 
 func (m *sqlExecutionStore) rangeCompleteVisibilityTasks(
+	ctx context.Context,
 	request *p.RangeCompleteHistoryTasksRequest,
 ) error {
-	ctx, cancel := newExecutionContext()
-	defer cancel()
 	if _, err := m.Db.RangeDeleteFromVisibilityTasks(ctx, sqlplugin.VisibilityTasksRangeFilter{
 		ShardID:            request.ShardID,
 		InclusiveMinTaskID: request.InclusiveMinTaskKey.TaskID,

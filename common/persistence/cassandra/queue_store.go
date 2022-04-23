@@ -74,13 +74,13 @@ func NewQueueStore(
 }
 
 func (q *QueueStore) Init(
-	_ context.Context,
+	ctx context.Context,
 	blob *commonpb.DataBlob,
 ) error {
-	if err := q.initializeQueueMetadata(blob); err != nil {
+	if err := q.initializeQueueMetadata(ctx, blob); err != nil {
 		return err
 	}
-	if err := q.initializeDLQMetadata(blob); err != nil {
+	if err := q.initializeDLQMetadata(ctx, blob); err != nil {
 		return err
 	}
 
@@ -88,38 +88,39 @@ func (q *QueueStore) Init(
 }
 
 func (q *QueueStore) EnqueueMessage(
-	_ context.Context,
+	ctx context.Context,
 	blob commonpb.DataBlob,
 ) error {
-	lastMessageID, err := q.getLastMessageID(q.queueType)
+	lastMessageID, err := q.getLastMessageID(ctx, q.queueType)
 	if err != nil {
 		return err
 	}
 
-	_, err = q.tryEnqueue(q.queueType, lastMessageID+1, blob)
+	_, err = q.tryEnqueue(ctx, q.queueType, lastMessageID+1, blob)
 	return err
 }
 
 func (q *QueueStore) EnqueueMessageToDLQ(
-	_ context.Context,
+	ctx context.Context,
 	blob commonpb.DataBlob,
 ) (int64, error) {
 	// Use negative queue type as the dlq type
-	lastMessageID, err := q.getLastMessageID(q.getDLQTypeFromQueueType())
+	lastMessageID, err := q.getLastMessageID(ctx, q.getDLQTypeFromQueueType())
 	if err != nil {
 		return persistence.EmptyQueueMessageID, err
 	}
 
 	// Use negative queue type as the dlq type
-	return q.tryEnqueue(q.getDLQTypeFromQueueType(), lastMessageID+1, blob)
+	return q.tryEnqueue(ctx, q.getDLQTypeFromQueueType(), lastMessageID+1, blob)
 }
 
 func (q *QueueStore) tryEnqueue(
+	ctx context.Context,
 	queueType persistence.QueueType,
 	messageID int64,
 	blob commonpb.DataBlob,
 ) (int64, error) {
-	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String())
+	query := q.session.Query(templateEnqueueMessageQuery, queueType, messageID, blob.Data, blob.EncodingType.String()).WithContext(ctx)
 	previous := make(map[string]interface{})
 	applied, err := query.MapScanCAS(previous)
 	if err != nil {
@@ -134,10 +135,11 @@ func (q *QueueStore) tryEnqueue(
 }
 
 func (q *QueueStore) getLastMessageID(
+	ctx context.Context,
 	queueType persistence.QueueType,
 ) (int64, error) {
 
-	query := q.session.Query(templateGetLastMessageIDQuery, queueType)
+	query := q.session.Query(templateGetLastMessageIDQuery, queueType).WithContext(ctx)
 	result := make(map[string]interface{})
 	err := query.MapScan(result)
 	if err != nil {
@@ -150,7 +152,7 @@ func (q *QueueStore) getLastMessageID(
 }
 
 func (q *QueueStore) ReadMessages(
-	_ context.Context,
+	ctx context.Context,
 	lastMessageID int64,
 	maxCount int,
 ) ([]*persistence.QueueMessage, error) {
@@ -159,7 +161,7 @@ func (q *QueueStore) ReadMessages(
 		q.queueType,
 		lastMessageID,
 		maxCount,
-	)
+	).WithContext(ctx)
 
 	iter := query.Iter()
 
@@ -179,7 +181,7 @@ func (q *QueueStore) ReadMessages(
 }
 
 func (q *QueueStore) ReadMessagesFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 	pageSize int,
@@ -191,7 +193,7 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 		q.getDLQTypeFromQueueType(),
 		firstMessageID,
 		lastMessageID,
-	)
+	).WithContext(ctx)
 	iter := query.PageSize(pageSize).PageState(pageToken).Iter()
 
 	var result []*persistence.QueueMessage
@@ -214,11 +216,11 @@ func (q *QueueStore) ReadMessagesFromDLQ(
 }
 
 func (q *QueueStore) DeleteMessagesBefore(
-	_ context.Context,
+	ctx context.Context,
 	messageID int64,
 ) error {
 
-	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID)
+	query := q.session.Query(templateDeleteMessagesBeforeQuery, q.queueType, messageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessagesBefore operation failed. Error %v", err))
 	}
@@ -226,12 +228,12 @@ func (q *QueueStore) DeleteMessagesBefore(
 }
 
 func (q *QueueStore) DeleteMessageFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	messageID int64,
 ) error {
 
 	// Use negative queue type as the dlq type
-	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID)
+	query := q.session.Query(templateDeleteMessageQuery, q.getDLQTypeFromQueueType(), messageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("DeleteMessageFromDLQ operation failed. Error %v", err))
 	}
@@ -240,13 +242,13 @@ func (q *QueueStore) DeleteMessageFromDLQ(
 }
 
 func (q *QueueStore) RangeDeleteMessagesFromDLQ(
-	_ context.Context,
+	ctx context.Context,
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
 
 	// Use negative queue type as the dlq type
-	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID)
+	query := q.session.Query(templateDeleteMessagesQuery, q.getDLQTypeFromQueueType(), firstMessageID, lastMessageID).WithContext(ctx)
 	if err := query.Exec(); err != nil {
 		return serviceerror.NewUnavailable(fmt.Sprintf("RangeDeleteMessagesFromDLQ operation failed. Error %v", err))
 	}
@@ -255,16 +257,16 @@ func (q *QueueStore) RangeDeleteMessagesFromDLQ(
 }
 
 func (q *QueueStore) UpdateAckLevel(
-	_ context.Context,
+	ctx context.Context,
 	metadata *persistence.InternalQueueMetadata,
 ) error {
-	return q.updateAckLevel(metadata, q.queueType)
+	return q.updateAckLevel(ctx, metadata, q.queueType)
 }
 
 func (q *QueueStore) GetAckLevels(
-	_ context.Context,
+	ctx context.Context,
 ) (*persistence.InternalQueueMetadata, error) {
-	queueMetadata, err := q.getQueueMetadata(q.queueType)
+	queueMetadata, err := q.getQueueMetadata(ctx, q.queueType)
 	if err != nil {
 		return nil, gocql.ConvertError("GetAckLevels", err)
 	}
@@ -273,17 +275,17 @@ func (q *QueueStore) GetAckLevels(
 }
 
 func (q *QueueStore) UpdateDLQAckLevel(
-	_ context.Context,
+	ctx context.Context,
 	metadata *persistence.InternalQueueMetadata,
 ) error {
-	return q.updateAckLevel(metadata, q.getDLQTypeFromQueueType())
+	return q.updateAckLevel(ctx, metadata, q.getDLQTypeFromQueueType())
 }
 
 func (q *QueueStore) GetDLQAckLevels(
-	_ context.Context,
+	ctx context.Context,
 ) (*persistence.InternalQueueMetadata, error) {
 	// Use negative queue type as the dlq type
-	queueMetadata, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
+	queueMetadata, err := q.getQueueMetadata(ctx, q.getDLQTypeFromQueueType())
 	if err != nil {
 		return nil, gocql.ConvertError("GetDLQAckLevels", err)
 	}
@@ -292,6 +294,7 @@ func (q *QueueStore) GetDLQAckLevels(
 }
 
 func (q *QueueStore) insertInitialQueueMetadataRecord(
+	ctx context.Context,
 	queueType persistence.QueueType,
 	blob *commonpb.DataBlob,
 ) error {
@@ -305,7 +308,7 @@ func (q *QueueStore) insertInitialQueueMetadataRecord(
 		blob.Data,
 		blob.EncodingType.String(),
 		version,
-	)
+	).WithContext(ctx)
 	_, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		return fmt.Errorf("failed to insert initial queue metadata record: %v, Type: %v", err, queueType)
@@ -315,10 +318,11 @@ func (q *QueueStore) insertInitialQueueMetadataRecord(
 }
 
 func (q *QueueStore) getQueueMetadata(
+	ctx context.Context,
 	queueType persistence.QueueType,
 ) (*persistence.InternalQueueMetadata, error) {
 
-	query := q.session.Query(templateGetQueueMetadataQuery, queueType)
+	query := q.session.Query(templateGetQueueMetadataQuery, queueType).WithContext(ctx)
 	message := make(map[string]interface{})
 	err := query.MapScan(message)
 	if err != nil {
@@ -329,6 +333,7 @@ func (q *QueueStore) getQueueMetadata(
 }
 
 func (q *QueueStore) updateAckLevel(
+	ctx context.Context,
 	metadata *persistence.InternalQueueMetadata,
 	queueType persistence.QueueType,
 ) error {
@@ -343,7 +348,7 @@ func (q *QueueStore) updateAckLevel(
 		metadata.Version+1, // always increase version number on update
 		queueType,
 		metadata.Version, // condition update
-	)
+	).WithContext(ctx)
 	applied, err := query.MapScanCAS(make(map[string]interface{}))
 	if err != nil {
 		gocql.ConvertError("updateAckLevel", err)
@@ -365,18 +370,24 @@ func (q *QueueStore) getDLQTypeFromQueueType() persistence.QueueType {
 	return -q.queueType
 }
 
-func (q *QueueStore) initializeQueueMetadata(blob *commonpb.DataBlob) error {
-	_, err := q.getQueueMetadata(q.queueType)
+func (q *QueueStore) initializeQueueMetadata(
+	ctx context.Context,
+	blob *commonpb.DataBlob,
+) error {
+	_, err := q.getQueueMetadata(ctx, q.queueType)
 	if gocql.IsNotFoundError(err) {
-		return q.insertInitialQueueMetadataRecord(q.queueType, blob)
+		return q.insertInitialQueueMetadataRecord(ctx, q.queueType, blob)
 	}
 	return err
 }
 
-func (q *QueueStore) initializeDLQMetadata(blob *commonpb.DataBlob) error {
-	_, err := q.getQueueMetadata(q.getDLQTypeFromQueueType())
+func (q *QueueStore) initializeDLQMetadata(
+	ctx context.Context,
+	blob *commonpb.DataBlob,
+) error {
+	_, err := q.getQueueMetadata(ctx, q.getDLQTypeFromQueueType())
 	if gocql.IsNotFoundError(err) {
-		return q.insertInitialQueueMetadataRecord(q.getDLQTypeFromQueueType(), blob)
+		return q.insertInitialQueueMetadataRecord(ctx, q.getDLQTypeFromQueueType(), blob)
 	}
 	return err
 }

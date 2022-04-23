@@ -42,10 +42,16 @@ const (
 	TaskLowPrioritySubclass
 )
 
+var (
+	TaskPriorityHigh    = GetTaskPriority(TaskHighPriorityClass, TaskDefaultPrioritySubclass)
+	TaskPriorityDefault = GetTaskPriority(TaskDefaultPriorityClass, TaskDefaultPrioritySubclass)
+	TaskPriorityLow     = GetTaskPriority(TaskLowPriorityClass, TaskDefaultPrioritySubclass)
+)
+
 var DefaultTaskPriorityWeight = map[int]int{
-	GetTaskPriority(TaskHighPriorityClass, TaskDefaultPrioritySubclass):    200,
-	GetTaskPriority(TaskDefaultPriorityClass, TaskDefaultPrioritySubclass): 100,
-	GetTaskPriority(TaskLowPriorityClass, TaskDefaultPrioritySubclass):     50,
+	TaskPriorityHigh:    200,
+	TaskPriorityDefault: 100,
+	TaskPriorityLow:     50,
 }
 
 func ConvertWeightsToDynamicConfigValue(

@@ -60,12 +60,6 @@ type (
 
 var _ store.VisibilityStore = (*visibilityStore)(nil)
 
-// TODO remove this function when NoSQL & SQL layer all support context timeout
-func newVisibilityContext() (context.Context, context.CancelFunc) {
-	ctx := context.Background()
-	return context.WithTimeout(ctx, visibilityTimeout)
-}
-
 // NewSQLVisibilityStore creates an instance of VisibilityStore
 func NewSQLVisibilityStore(
 	cfg config.SQL,
@@ -91,11 +85,9 @@ func (s *visibilityStore) GetName() string {
 }
 
 func (s *visibilityStore) RecordWorkflowExecutionStarted(
-	_ context.Context,
+	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionStartedRequest,
 ) error {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	_, err := s.sqlStore.Db.InsertIntoVisibility(ctx, &sqlplugin.VisibilityRow{
 		NamespaceID:      request.NamespaceID,
 		WorkflowID:       request.WorkflowID,
@@ -113,11 +105,9 @@ func (s *visibilityStore) RecordWorkflowExecutionStarted(
 }
 
 func (s *visibilityStore) RecordWorkflowExecutionClosed(
-	_ context.Context,
+	ctx context.Context,
 	request *store.InternalRecordWorkflowExecutionClosedRequest,
 ) error {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	result, err := s.sqlStore.Db.ReplaceIntoVisibility(ctx, &sqlplugin.VisibilityRow{
 		NamespaceID:      request.NamespaceID,
 		WorkflowID:       request.WorkflowID,
@@ -154,11 +144,9 @@ func (s *visibilityStore) UpsertWorkflowExecution(
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutions(
-	_ context.Context,
+	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	return s.listWorkflowExecutions(
 		"ListOpenWorkflowExecutions",
 		request.NextPageToken,
@@ -178,11 +166,9 @@ func (s *visibilityStore) ListOpenWorkflowExecutions(
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutions(
-	_ context.Context,
+	ctx context.Context,
 	request *manager.ListWorkflowExecutionsRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	return s.listWorkflowExecutions("ListClosedWorkflowExecutions",
 		request.NextPageToken,
 		request.PageSize,
@@ -200,11 +186,9 @@ func (s *visibilityStore) ListClosedWorkflowExecutions(
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
-	_ context.Context,
+	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByTypeRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	return s.listWorkflowExecutions("ListOpenWorkflowExecutionsByType",
 		request.NextPageToken,
 		request.PageSize,
@@ -224,11 +208,9 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByType(
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
-	_ context.Context,
+	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByTypeRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	return s.listWorkflowExecutions("ListClosedWorkflowExecutionsByType",
 		request.NextPageToken,
 		request.PageSize,
@@ -247,11 +229,9 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByType(
 }
 
 func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
-	_ context.Context,
+	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	return s.listWorkflowExecutions("ListOpenWorkflowExecutionsByWorkflowID",
 		request.NextPageToken,
 		request.PageSize,
@@ -271,11 +251,9 @@ func (s *visibilityStore) ListOpenWorkflowExecutionsByWorkflowID(
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
-	_ context.Context,
+	ctx context.Context,
 	request *manager.ListWorkflowExecutionsByWorkflowIDRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	return s.listWorkflowExecutions("ListClosedWorkflowExecutionsByWorkflowID",
 		request.NextPageToken,
 		request.PageSize,
@@ -294,11 +272,9 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByWorkflowID(
 }
 
 func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
-	_ context.Context,
+	ctx context.Context,
 	request *manager.ListClosedWorkflowExecutionsByStatusRequest,
 ) (*store.InternalListWorkflowExecutionsResponse, error) {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	return s.listWorkflowExecutions("ListClosedWorkflowExecutionsByStatus",
 		request.NextPageToken,
 		request.PageSize,
@@ -317,11 +293,9 @@ func (s *visibilityStore) ListClosedWorkflowExecutionsByStatus(
 }
 
 func (s *visibilityStore) DeleteWorkflowExecution(
-	_ context.Context,
+	ctx context.Context,
 	request *manager.VisibilityDeleteWorkflowExecutionRequest,
 ) error {
-	ctx, cancel := newVisibilityContext()
-	defer cancel()
 	_, err := s.sqlStore.Db.DeleteFromVisibility(ctx, sqlplugin.VisibilityDeleteFilter{
 		NamespaceID: request.NamespaceID.String(),
 		RunID:       request.RunID,
