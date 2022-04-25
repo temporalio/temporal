@@ -40,6 +40,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -49,6 +50,11 @@ type (
 	workflowTaskStateMachine struct {
 		ms *MutableStateImpl
 	}
+)
+
+const (
+	workflowTaskRetryMinAttempts     = 3
+	workflowTaskRetryInitialInterval = 5 * time.Second
 )
 
 func newWorkflowTaskStateMachine(
@@ -274,11 +280,13 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 	scheduleID := m.ms.GetNextEventID() // we will generate the schedule event later for repeatedly failing workflow tasks
 	// Avoid creating new history events when workflow tasks are continuously failing
 	scheduleTime := m.ms.timeSource.Now().UTC()
-	if m.ms.executionInfo.WorkflowTaskAttempt == 1 {
+	attempt := m.ms.executionInfo.WorkflowTaskAttempt
+	startToCloseTimeoutSeconds := int32(m.getStartToCloseTimeout(taskTimeout, attempt).Seconds())
+	if attempt == 1 {
 		newWorkflowTaskEvent = m.ms.hBuilder.AddWorkflowTaskScheduledEvent(
 			taskQueue,
-			int32(taskTimeout.Seconds()),
-			m.ms.executionInfo.WorkflowTaskAttempt,
+			startToCloseTimeoutSeconds,
+			attempt,
 			m.ms.timeSource.Now(),
 		)
 		scheduleID = newWorkflowTaskEvent.GetEventId()
@@ -289,8 +297,8 @@ func (m *workflowTaskStateMachine) AddWorkflowTaskScheduledEventAsHeartbeat(
 		m.ms.GetCurrentVersion(),
 		scheduleID,
 		taskQueue,
-		int32(taskTimeout.Seconds()),
-		m.ms.executionInfo.WorkflowTaskAttempt,
+		startToCloseTimeoutSeconds,
+		attempt,
 		&scheduleTime,
 		originalScheduledTimestamp,
 	)
@@ -768,4 +776,18 @@ func (m *workflowTaskStateMachine) emitWorkflowTaskAttemptStats(
 			tag.Attempt(attempt),
 		)
 	}
+}
+
+func (m *workflowTaskStateMachine) getStartToCloseTimeout(
+	defaultTimeout time.Duration,
+	attempt int32,
+) time.Duration {
+	if attempt <= workflowTaskRetryMinAttempts {
+		return defaultTimeout
+	}
+
+	policy := backoff.NewExponentialRetryPolicy(workflowTaskRetryInitialInterval)
+	policy.SetMaximumInterval(m.ms.shard.GetConfig().WorkflowTaskRetryMaxInterval())
+	policy.SetExpirationInterval(backoff.NoInterval)
+	return defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryMinAttempts)
 }
