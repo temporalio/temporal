@@ -45,7 +45,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -116,7 +115,9 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.testCluster.RefreshNamespaceCache()
 	} else {
 		// Wait for one whole cycle of the namespace cache v2 refresh interval to be sure that our namespaces are loaded.
-		time.Sleep(namespace.CacheRefreshInterval + time.Second)
+		// We are using real server so we don't know what cache refresh interval it uses. Fall back to the 10s old value.
+		serverCacheRefreshInterval := 10 * time.Second
+		time.Sleep(serverCacheRefreshInterval + time.Second)
 	}
 }
 

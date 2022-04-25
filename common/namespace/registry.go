@@ -182,6 +182,7 @@ func NewRegistry(
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
 		prepareCallbacks:        make(map[any]PrepareCallbackFn),
 		callbacks:               make(map[any]CallbackFn),
+		refreshInterval:         refreshInterval,
 	}
 	reg.lastRefreshTime.Store(time.Time{})
 	return reg
@@ -345,7 +346,7 @@ func (r *registry) refreshLoop(ctx context.Context) error {
 			case r.triggerRefreshCh <- nil:
 			default:
 			}
-
+			timer.Reset(r.refreshInterval())
 		}
 	}()
 
