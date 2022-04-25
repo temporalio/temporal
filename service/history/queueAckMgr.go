@@ -162,7 +162,7 @@ TaskFilterLoop:
 		a.readLevel = task.GetTaskID()
 
 		taskExecutable := a.executableInitializer(task)
-		a.outstandingExecutables[task.GetTaskID()] = a.executableInitializer(task)
+		a.outstandingExecutables[task.GetTaskID()] = taskExecutable
 		filteredExecutables = append(filteredExecutables, taskExecutable)
 	}
 
