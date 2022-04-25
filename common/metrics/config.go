@@ -90,6 +90,9 @@ type (
 		// If FlushBytes is unspecified, it defaults  to 1432 bytes, which is
 		// considered safe for local traffic.
 		FlushBytes int `yaml:"flushBytes"`
+		// Tag separator allows tags to be appended with a separator. If not specified tags
+		// are appended to the stat name directly.
+		TagSeparator string `yaml:"tagSeparator"`
 	}
 
 	// PrometheusConfig is a new format for config for prometheus metrics.
