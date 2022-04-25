@@ -124,7 +124,6 @@ type (
 		workerConfig                     *WorkerConfig
 		mockAdminClient                  map[string]adminservice.AdminServiceClient
 		namespaceReplicationTaskExecutor namespace.ReplicationTaskExecutor
-		namespaceCacheRefreshInterval    dynamicconfig.DurationPropertyFn
 	}
 
 	// HistoryConfig contains configs for history service
@@ -218,8 +217,6 @@ func (c *temporalImpl) Start() error {
 		go c.startWorker(hosts, &startWG)
 		startWG.Wait()
 	}
-
-	c.namespaceCacheRefreshInterval = dynamicconfig.GetDurationPropertyFn(NamespaceCacheRefreshInterval)
 
 	return nil
 }
@@ -367,10 +364,6 @@ func (c *temporalImpl) GetFrontendClient() workflowservice.WorkflowServiceClient
 
 func (c *temporalImpl) GetHistoryClient() historyservice.HistoryServiceClient {
 	return c.historyClient
-}
-
-func (c *temporalImpl) GetNamespaceCacheRefreshInterval() time.Duration {
-	return c.namespaceCacheRefreshInterval()
 }
 
 func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.WaitGroup) {
