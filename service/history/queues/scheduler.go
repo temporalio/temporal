@@ -79,7 +79,7 @@ func NewScheduler(
 }
 
 func (s *schedulerImpl) Start() {
-	s.wRRScheduler.Stop()
+	s.wRRScheduler.Start()
 }
 
 func (s *schedulerImpl) Stop() {
