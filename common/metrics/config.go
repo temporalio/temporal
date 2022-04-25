@@ -33,8 +33,6 @@ import (
 	"github.com/uber-go/tally/v4"
 	"github.com/uber-go/tally/v4/m3"
 	"github.com/uber-go/tally/v4/prometheus"
-	tallystatsdreporter "github.com/uber-go/tally/v4/statsd"
-
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	statsdreporter "go.temporal.io/server/common/metrics/tally/statsd"
@@ -43,7 +41,7 @@ import (
 type (
 	// Config contains the config items for metrics subsystem
 	Config struct {
-		ClientConfig `yaml:"clientConfig,inline""`
+		ClientConfig `yaml:"clientConfig,inline"`
 
 		// M3 is the configuration for m3 metrics reporter
 		M3 *m3.Configuration `yaml:"m3"`
@@ -90,8 +88,13 @@ type (
 		// If FlushBytes is unspecified, it defaults  to 1432 bytes, which is
 		// considered safe for local traffic.
 		FlushBytes int `yaml:"flushBytes"`
-		// Tag separator allows tags to be appended with a separator. If not specified tags
-		// are appended to the stat name directly.
+		// Reporter allows additional configuration of the stats reporter, e.g. with custom tagging options.
+		Reporter StatsdReporterConfig `yaml:"reporter"`
+	}
+
+	StatsdReporterConfig struct {
+		// TagSeparator allows tags to be appended with a separator. If not specified tag keys and values
+		// are embedded to the stat name directly.
 		TagSeparator string `yaml:"tagSeparator"`
 	}
 
@@ -381,9 +384,10 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	if err != nil {
 		logger.Fatal("error creating statsd client", tag.Error(err))
 	}
+
 	//NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
-	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
+	reporter := statsdreporter.NewReporter(statter, statsdreporter.Options{})
 	scopeOpts := tally.ScopeOptions{
 		Tags:     c.Tags,
 		Reporter: reporter,
