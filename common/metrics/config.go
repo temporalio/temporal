@@ -373,7 +373,7 @@ func newM3Scope(logger log.Logger, c *Config) tally.Scope {
 	return scope
 }
 
-// newM3Scope returns a new statsd scope with
+// newStatsdScope returns a new statsd scope with
 // a default reporting interval of a second
 func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	config := c.Statsd
@@ -387,7 +387,10 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 
 	//NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
-	reporter := statsdreporter.NewReporter(statter, statsdreporter.Options{})
+	opts := statsdreporter.Options{
+		TagSeparator: c.Statsd.Reporter.TagSeparator,
+	}
+	reporter := statsdreporter.NewReporter(statter, opts)
 	scopeOpts := tally.ScopeOptions{
 		Tags:     c.Tags,
 		Reporter: reporter,
