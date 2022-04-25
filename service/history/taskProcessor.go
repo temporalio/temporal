@@ -317,7 +317,7 @@ func (t *taskProcessor) handleTaskError(
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
-		if t.timeSource.Now().Sub(task.startTime) > 2*namespace.CacheRefreshInterval {
+		if t.timeSource.Now().Sub(task.startTime) > 2*t.shard.GetConfig().NamespaceCacheRefreshInterval() {
 			scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil
 		}
