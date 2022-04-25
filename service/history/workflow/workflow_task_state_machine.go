@@ -53,8 +53,8 @@ type (
 )
 
 const (
-	workflowTaskRetryMinAttempts     = 3
-	workflowTaskRetryInitialInterval = 5 * time.Second
+	workflowTaskRetryBackoffMinAttempts = 3
+	workflowTaskRetryInitialInterval    = 5 * time.Second
 )
 
 func newWorkflowTaskStateMachine(
@@ -119,6 +119,10 @@ func (m *workflowTaskStateMachine) ReplicateTransientWorkflowTaskScheduled() (*W
 	// 2. if no failover happen during the life time of this transient workflow task
 	// then ReplicateWorkflowTaskScheduledEvent will overwrite everything
 	// including the workflow task schedule ID
+	//
+	// regarding workflow task timeout calculation:
+	// 1. the attempt will be set to 1, so we still use default worflow task timeout
+	// 2. ReplicateWorkflowTaskScheduledEvent will overwrite everything including workflowTaskTimeout
 	workflowTask := &WorkflowTaskInfo{
 		Version:             m.ms.GetCurrentVersion(),
 		ScheduleID:          m.ms.GetNextEventID(),
@@ -782,12 +786,12 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	defaultTimeout time.Duration,
 	attempt int32,
 ) time.Duration {
-	if attempt <= workflowTaskRetryMinAttempts {
+	if attempt <= workflowTaskRetryBackoffMinAttempts {
 		return defaultTimeout
 	}
 
 	policy := backoff.NewExponentialRetryPolicy(workflowTaskRetryInitialInterval)
 	policy.SetMaximumInterval(m.ms.shard.GetConfig().WorkflowTaskRetryMaxInterval())
 	policy.SetExpirationInterval(backoff.NoInterval)
-	return defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryMinAttempts)
+	return defaultTimeout + policy.ComputeNextDelay(0, int(attempt)-workflowTaskRetryBackoffMinAttempts)
 }
