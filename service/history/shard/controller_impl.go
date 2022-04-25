@@ -203,14 +203,14 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	}
 	c.RUnlock()
 
-	info, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
+	ownerInfo, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
 	if err != nil {
 		return nil, err
 	}
 
 	hostInfo := c.hostInfoProvider.HostInfo()
-	if info.Identity() != hostInfo.Identity() {
-		return nil, serviceerrors.NewShardOwnershipLost(hostInfo.Identity(), info.GetAddress())
+	if ownerInfo.Identity() != hostInfo.Identity() {
+		return nil, serviceerrors.NewShardOwnershipLost(ownerInfo.Identity(), hostInfo.GetAddress())
 	}
 
 	c.Lock()
