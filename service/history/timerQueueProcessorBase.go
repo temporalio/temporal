@@ -30,8 +30,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -55,26 +57,26 @@ var (
 
 type (
 	timerQueueProcessorBase struct {
-		scope            int
-		shard            shard.Context
-		cache            workflow.Cache
-		executionManager persistence.ExecutionManager
-		status           int32
-		shutdownWG       sync.WaitGroup
-		shutdownCh       chan struct{}
-		config           *configs.Config
-		logger           log.Logger
-		metricsClient    metrics.Client
-		metricsScope     metrics.Scope
-		timerFiredCount  uint64
-		timerProcessor   timerProcessor
-		timerQueueAckMgr timerQueueAckMgr
-		timerGate        timer.Gate
-		timeSource       clock.TimeSource
-		rateLimiter      quotas.RateLimiter
-		retryPolicy      backoff.RetryPolicy
-		lastPollTime     time.Time
-		taskProcessor    *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
+		scope               int
+		shard               shard.Context
+		cache               workflow.Cache
+		executionManager    persistence.ExecutionManager
+		status              int32
+		shutdownWG          sync.WaitGroup
+		shutdownCh          chan struct{}
+		config              *configs.Config
+		logger              log.Logger
+		metricsClient       metrics.Client
+		metricsScope        metrics.Scope
+		timerProcessor      timerProcessor
+		timerQueueAckMgr    timerQueueAckMgr
+		timerGate           timer.Gate
+		timeSource          clock.TimeSource
+		rateLimiter         quotas.RateLimiter
+		retryPolicy         backoff.RetryPolicy
+		lastPollTime        time.Time
+		executableScheduler queues.Scheduler
+		rescheduler         queues.Rescheduler
 
 		// timer notification
 		newTimerCh  chan struct{}
@@ -90,6 +92,8 @@ func newTimerQueueProcessorBase(
 	timerProcessor timerProcessor,
 	timerQueueAckMgr timerQueueAckMgr,
 	timerGate timer.Gate,
+	executableScheduler queues.Scheduler,
+	rescheduler queues.Rescheduler,
 	maxPollRPS dynamicconfig.IntPropertyFn,
 	logger log.Logger,
 	metricsScope metrics.Scope,
@@ -98,33 +102,25 @@ func newTimerQueueProcessorBase(
 	logger = log.With(logger, tag.ComponentTimerQueue)
 	config := shard.GetConfig()
 
-	var taskProcessor *taskProcessor
-	if !config.TimerProcessorEnablePriorityTaskProcessor() {
-		options := TaskProcessorOptions{
-			WorkerCount: config.TimerTaskWorkerCount(),
-			QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
-		}
-		taskProcessor = NewTaskProcessor(options, shard, workflowCache, logger)
-	}
-
 	base := &timerQueueProcessorBase{
-		scope:            scope,
-		shard:            shard,
-		timerProcessor:   timerProcessor,
-		cache:            workflowCache,
-		executionManager: shard.GetExecutionManager(),
-		status:           common.DaemonStatusInitialized,
-		shutdownCh:       make(chan struct{}),
-		config:           config,
-		logger:           logger,
-		metricsClient:    shard.GetMetricsClient(),
-		metricsScope:     metricsScope,
-		timerQueueAckMgr: timerQueueAckMgr,
-		timerGate:        timerGate,
-		timeSource:       shard.GetTimeSource(),
-		newTimerCh:       make(chan struct{}, 1),
-		lastPollTime:     time.Time{},
-		taskProcessor:    taskProcessor,
+		scope:               scope,
+		shard:               shard,
+		timerProcessor:      timerProcessor,
+		cache:               workflowCache,
+		executionManager:    shard.GetExecutionManager(),
+		status:              common.DaemonStatusInitialized,
+		shutdownCh:          make(chan struct{}),
+		config:              config,
+		logger:              logger,
+		metricsClient:       shard.GetMetricsClient(),
+		metricsScope:        metricsScope,
+		timerQueueAckMgr:    timerQueueAckMgr,
+		timerGate:           timerGate,
+		timeSource:          shard.GetTimeSource(),
+		newTimerCh:          make(chan struct{}, 1),
+		lastPollTime:        time.Time{},
+		executableScheduler: executableScheduler,
+		rescheduler:         rescheduler,
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(maxPollRPS()) },
 		),
@@ -139,9 +135,7 @@ func (t *timerQueueProcessorBase) Start() {
 		return
 	}
 
-	if t.taskProcessor != nil {
-		t.taskProcessor.Start()
-	}
+	t.executableScheduler.Start()
 	t.shutdownWG.Add(1)
 	// notify a initial scan
 	t.notifyNewTimer(time.Time{})
@@ -157,15 +151,13 @@ func (t *timerQueueProcessorBase) Stop() {
 
 	t.timerGate.Close()
 	close(t.shutdownCh)
-	t.retryTasks()
+	// t.retryTasks()
 
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		t.logger.Warn("Timer queue processor timedout on shutdown.")
 	}
 
-	if t.taskProcessor != nil {
-		t.taskProcessor.Stop()
-	}
+	t.executableScheduler.Stop()
 	t.logger.Info("Timer queue processor stopped.")
 }
 
@@ -240,6 +232,12 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 	))
 	defer updateAckTimer.Stop()
 
+	rescheduleTimer := time.NewTimer(backoff.JitDuration(
+		t.config.TimerProcessorRescheduleInterval(),
+		t.config.TimerProcessorRescheduleIntervalJitterCoefficient(),
+	))
+	defer rescheduleTimer.Stop()
+
 	for {
 		// Wait until one of four things occurs:
 		// 1. we get notified of a new message
@@ -297,12 +295,21 @@ func (t *timerQueueProcessorBase) internalProcessor() error {
 			// New Timer has arrived.
 			t.metricsClient.IncCounter(t.scope, metrics.NewTimerNotifyCounter)
 			t.timerGate.Update(newTime)
-
+		case <-rescheduleTimer.C:
+			t.rescheduler.Reschedule(0) // reschedule all
+			rescheduleTimer.Reset(backoff.JitDuration(
+				t.config.TimerProcessorRescheduleInterval(),
+				t.config.TimerProcessorRescheduleIntervalJitterCoefficient(),
+			))
 		}
 	}
 }
 
 func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) {
+	if !t.verifyReschedulerSize() {
+		return nil, nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), loadTimerTaskThrottleRetryDelay)
 	if err := t.rateLimiter.Wait(ctx); err != nil {
 		cancel()
@@ -319,9 +326,7 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 	}
 
 	for _, task := range timerTasks {
-		if submitted := t.submitTask(task); !submitted {
-			return nil, nil
-		}
+		t.submitTask(task)
 		select {
 		case <-t.shutdownCh:
 			return nil, nil
@@ -340,36 +345,53 @@ func (t *timerQueueProcessorBase) readAndFanoutTimerTasks() (*time.Time, error) 
 	return nil, nil
 }
 
-func (t *timerQueueProcessorBase) submitTask(
-	taskInfo tasks.Task,
-) bool {
+func (t *timerQueueProcessorBase) verifyReschedulerSize() bool {
+	length := t.rescheduler.Len()
+	maxLength := t.config.TimerProcessorMaxReschedulerSize()
+	if length > maxLength {
+		t.rescheduler.Reschedule(length - maxLength + t.config.TimerTaskBatchSize()*2)
+	}
 
-	return t.taskProcessor.addTask(
-		NewTaskInfo(
-			t.timerProcessor,
-			taskInfo,
-			tasks.InitializeLogger(taskInfo, t.logger),
-		),
-	)
+	passed := t.rescheduler.Len() < maxLength
+	if !passed {
+		// set backoff timer
+		t.notifyNewTimer(t.timeSource.Now().Add(t.config.TimerProcessorPollBackoffInterval()))
+	}
+
+	return passed
 }
 
-func (t *timerQueueProcessorBase) retryTasks() {
-	if t.taskProcessor != nil {
-		t.taskProcessor.retryTasks()
+func (t *timerQueueProcessorBase) submitTask(
+	executable queues.Executable,
+) {
+
+	submitted, err := t.executableScheduler.TrySubmit(executable)
+	if err != nil {
+		t.logger.Error("Failed to submit task", tag.Error(err))
+	}
+
+	if !submitted {
+		executable.Reschedule()
 	}
 }
 
-func (t *timerQueueProcessorBase) complete(
-	task tasks.Task,
-) {
-	t.timerQueueAckMgr.completeTimerTask(task.GetKey().FireTime, task.GetKey().TaskID)
-	atomic.AddUint64(&t.timerFiredCount, 1)
-}
-
-func (t *timerQueueProcessorBase) isPriorityTaskProcessorEnabled() bool {
-	return t.taskProcessor == nil
-}
-
-func (t *timerQueueProcessorBase) getTimerFiredCount() uint64 {
-	return atomic.LoadUint64(&t.timerFiredCount)
+func newTimerTaskScheduler(
+	shard shard.Context,
+	logger log.Logger,
+) queues.Scheduler {
+	config := shard.GetConfig()
+	return queues.NewScheduler(
+		queues.NewNoopPriorityAssigner(),
+		queues.SchedulerOptions{
+			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
+				WorkerCount: config.TimerTaskWorkerCount(),
+				QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
+			},
+			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
+				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerTaskSchedulerRoundRobinWeights()),
+			},
+		},
+		shard.GetMetricsClient(),
+		logger,
+	)
 }

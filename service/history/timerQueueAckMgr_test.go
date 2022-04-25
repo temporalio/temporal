@@ -28,25 +28,25 @@ import (
 	"testing"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
-
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/primitives"
-	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/tests"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	enumspb "go.temporal.io/api/enums/v1"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/primitives/timestamp"
+	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -152,6 +152,9 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		},
 		s.logger,
 		s.clusterName,
+		func(task tasks.Task) queues.Executable {
+			return queues.NewExecutable(task, nil, nil, nil, nil, nil, nil, nil, nil, queues.QueueTypeActiveTimer)
+		},
 	)
 }
 
@@ -306,7 +309,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 		FireTime: timer.VisibilityTimestamp,
 		TaskID:   timer.TaskID,
 	}
-	s.Equal(map[tasks.Key]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
+	s.Equal(map[tasks.Key]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingExecutables)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
 	s.Equal(s.timerQueueAckMgr.minQueryLevel, s.timerQueueAckMgr.maxQueryLevel)
@@ -354,7 +357,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 		FireTime: timer.VisibilityTimestamp,
 		TaskID:   timer.TaskID,
 	}
-	s.Equal(map[tasks.Key]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingTasks)
+	s.Equal(map[tasks.Key]bool{timerSequenceID: false}, s.timerQueueAckMgr.outstandingExecutables)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(minQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Equal(response.NextPageToken, s.timerQueueAckMgr.pageToken)
@@ -399,7 +402,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_NoNextPage() {
 	s.Equal(timer.GetVisibilityTime(), *nextFireTime)
 	s.False(moreTasks)
 
-	s.Equal(map[tasks.Key]bool{}, s.timerQueueAckMgr.outstandingTasks)
+	s.Equal(map[tasks.Key]bool{}, s.timerQueueAckMgr.outstandingExecutables)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
@@ -444,7 +447,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_HasLookAhead_HasNextPage() {
 	s.Equal(timer.GetVisibilityTime(), *nextFireTime)
 	s.False(moreTasks)
 
-	s.Equal(map[tasks.Key]bool{}, s.timerQueueAckMgr.outstandingTasks)
+	s.Equal(map[tasks.Key]bool{}, s.timerQueueAckMgr.outstandingExecutables)
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel, s.timerQueueAckMgr.minQueryLevel)
 	s.Empty(s.timerQueueAckMgr.pageToken)
@@ -498,8 +501,12 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(&persistence.GetHistoryTasksResponse{}, nil)
-	filteredTasks, nextFireTime, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
+	filteredExecutables, nextFireTime, moreTasks, err := s.timerQueueAckMgr.readTimerTasks()
 	s.Nil(err)
+	filteredTasks := make([]tasks.Task, 0, len(filteredExecutables))
+	for _, executable := range filteredExecutables {
+		filteredTasks = append(filteredTasks, executable.GetTask())
+	}
 	s.Equal([]tasks.Task{timer1, timer2, timer3}, filteredTasks)
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel.Add(s.timerQueueAckMgr.config.TimerProcessorMaxPollInterval()), *nextFireTime)
 	s.False(moreTasks)
@@ -510,8 +517,8 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		FireTime: timer1.VisibilityTimestamp,
 		TaskID:   timer1.TaskID,
 	}
-	s.timerQueueAckMgr.completeTimerTask(timer1.VisibilityTimestamp, timer1.TaskID)
-	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID1])
+	filteredExecutables[0].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.timerQueueAckMgr.outstandingExecutables[timerSequenceID1].State())
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 
@@ -520,8 +527,8 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		FireTime: timer3.VisibilityTimestamp,
 		TaskID:   timer3.TaskID,
 	}
-	s.timerQueueAckMgr.completeTimerTask(timer3.VisibilityTimestamp, timer3.TaskID)
-	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID3])
+	filteredExecutables[2].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.timerQueueAckMgr.outstandingExecutables[timerSequenceID3].State())
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	// ack level remains unchanged
 	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
@@ -532,8 +539,8 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		FireTime: timer2.VisibilityTimestamp,
 		TaskID:   timer2.TaskID,
 	}
-	s.timerQueueAckMgr.completeTimerTask(timer2.VisibilityTimestamp, timer2.TaskID)
-	s.True(s.timerQueueAckMgr.outstandingTasks[timerSequenceID2])
+	filteredExecutables[1].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.timerQueueAckMgr.outstandingExecutables[timerSequenceID2].State())
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	s.Equal(timer3.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 }
@@ -632,6 +639,9 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 			return s.mockShard.DeleteFailoverLevel(tasks.CategoryTimer, s.namespaceID)
 		},
 		s.logger,
+		func(task tasks.Task) queues.Executable {
+			return queues.NewExecutable(task, nil, nil, nil, nil, nil, nil, nil, nil, queues.QueueTypeActiveTimer)
+		},
 	)
 }
 
@@ -815,8 +825,12 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockExecutionMgr.EXPECT().GetHistoryTasks(gomock.Any(), gomock.Any()).Return(response, nil)
-	filteredTasks, nextFireTime, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
+	filteredExecutables, nextFireTime, moreTasks, err := s.timerQueueFailoverAckMgr.readTimerTasks()
 	s.Nil(err)
+	filteredTasks := make([]tasks.Task, 0, len(filteredExecutables))
+	for _, executable := range filteredExecutables {
+		filteredTasks = append(filteredTasks, executable.GetTask())
+	}
 	s.Equal([]tasks.Task{timer1, timer2, timer3}, filteredTasks)
 	s.Nil(nextFireTime)
 	s.False(moreTasks)
@@ -825,8 +839,8 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		FireTime: timer2.VisibilityTimestamp,
 		TaskID:   timer2.TaskID,
 	}
-	s.timerQueueFailoverAckMgr.completeTimerTask(timer2.VisibilityTimestamp, timer2.TaskID)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID2])
+	filteredExecutables[1].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.timerQueueFailoverAckMgr.outstandingExecutables[timerSequenceID2].State())
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
@@ -839,8 +853,8 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		FireTime: timer3.VisibilityTimestamp,
 		TaskID:   timer3.TaskID,
 	}
-	s.timerQueueFailoverAckMgr.completeTimerTask(timer3.VisibilityTimestamp, timer3.TaskID)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID3])
+	filteredExecutables[2].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.timerQueueFailoverAckMgr.outstandingExecutables[timerSequenceID3].State())
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {
@@ -853,8 +867,8 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 		FireTime: timer1.VisibilityTimestamp,
 		TaskID:   timer1.TaskID,
 	}
-	s.timerQueueFailoverAckMgr.completeTimerTask(timer1.VisibilityTimestamp, timer1.TaskID)
-	s.True(s.timerQueueFailoverAckMgr.outstandingTasks[timerSequenceID1])
+	filteredExecutables[0].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.timerQueueFailoverAckMgr.outstandingExecutables[timerSequenceID1].State())
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	_ = s.timerQueueFailoverAckMgr.updateAckLevel()
 	select {

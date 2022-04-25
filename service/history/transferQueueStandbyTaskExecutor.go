@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -66,7 +67,7 @@ func newTransferQueueStandbyTaskExecutor(
 	logger log.Logger,
 	clusterName string,
 	matchingClient matchingservice.MatchingServiceClient,
-) queueTaskExecutor {
+) queues.Executor {
 	return &transferQueueStandbyTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
@@ -81,36 +82,20 @@ func newTransferQueueStandbyTaskExecutor(
 	}
 }
 
-func (t *transferQueueStandbyTaskExecutor) execute(
+func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
-	taskInfo tasks.Task,
-	shouldProcessTask bool,
+	executable queues.Executable,
 ) error {
-	switch task := taskInfo.(type) {
+	switch task := executable.GetTask().(type) {
 	case *tasks.ActivityTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.processWorkflowTask(ctx, task)
 	case *tasks.CancelExecutionTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.processCancelExecution(ctx, task)
 	case *tasks.SignalExecutionTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby

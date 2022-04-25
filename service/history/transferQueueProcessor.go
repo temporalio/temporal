@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transferQueueProcessor_mock.go
-
 package history
 
 import (
@@ -178,7 +176,6 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	if len(transferTasks) != 0 {
 		standbyTaskProcessor.notifyNewTask()
 	}
-	standbyTaskProcessor.retryTasks()
 }
 
 func (t *transferQueueProcessorImpl) FailoverNamespace(
@@ -218,12 +215,6 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		t.taskAllocator,
 		t.logger,
 	)
-
-	t.standbyTaskProcessorsLock.RLock()
-	for _, standbyTaskProcessor := range t.standbyTaskProcessors {
-		standbyTaskProcessor.retryTasks()
-	}
-	t.standbyTaskProcessorsLock.RUnlock()
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function

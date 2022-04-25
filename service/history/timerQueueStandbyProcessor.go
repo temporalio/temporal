@@ -25,35 +25,27 @@
 package history
 
 import (
-	"context"
 	"time"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
-const (
-	historyRereplicationTimeout = 30 * time.Second
-)
-
 type (
 	timerQueueStandbyProcessorImpl struct {
-		shard                   shard.Context
-		timerTaskFilter         taskFilter
-		logger                  log.Logger
-		metricsClient           metrics.Client
 		timerGate               timer.RemoteGate
 		timerQueueProcessorBase *timerQueueProcessorBase
-		taskExecutor            queueTaskExecutor
 	}
 )
 
@@ -81,11 +73,38 @@ func newTimerQueueStandbyProcessor(
 	logger = log.With(logger, tag.ClusterName(clusterName))
 	metricsClient := shard.GetMetricsClient()
 	timerTaskFilter := func(task tasks.Task) bool {
-		return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
+		switch task.GetType() {
+		case enumsspb.TASK_TYPE_WORKFLOW_RUN_TIMEOUT,
+			enumsspb.TASK_TYPE_DELETE_HISTORY_EVENT:
+			return true
+		default:
+			return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
+		}
 	}
 
 	timerGate := timer.NewRemoteGate()
 	timerGate.SetCurrentTime(shard.GetCurrentTime(clusterName))
+
+	config := shard.GetConfig()
+	taskExecutor := newTimerQueueStandbyTaskExecutor(
+		shard,
+		workflowCache,
+		workflowDeleteManager,
+		nDCHistoryResender,
+		matchingClient,
+		logger,
+		clusterName,
+		config,
+	)
+
+	scheduler := newTimerTaskScheduler(shard, logger)
+
+	rescheduler := queues.NewRescheduler(
+		scheduler,
+		shard.GetTimeSource(),
+		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
+	)
+
 	timerQueueAckMgr := newTimerQueueAckMgr(
 		metrics.TimerStandbyQueueProcessorScope,
 		shard,
@@ -94,24 +113,26 @@ func newTimerQueueStandbyProcessor(
 		updateShardAckLevel,
 		logger,
 		clusterName,
+		func(t tasks.Task) queues.Executable {
+			return queues.NewExecutable(
+				t,
+				timerTaskFilter,
+				taskExecutor,
+				scheduler,
+				rescheduler,
+				shard.GetTimeSource(),
+				logger,
+				metricsClient.Scope(
+					tasks.GetStandbyTimerTaskMetricScope(t),
+				),
+				shard.GetConfig().TimerTaskMaxRetryCount,
+				queues.QueueTypeStandbyTimer,
+			)
+		},
 	)
 
 	processor := &timerQueueStandbyProcessorImpl{
-		shard:           shard,
-		timerTaskFilter: timerTaskFilter,
-		logger:          logger,
-		metricsClient:   metricsClient,
-		timerGate:       timerGate,
-		taskExecutor: newTimerQueueStandbyTaskExecutor(
-			shard,
-			workflowCache,
-			workflowDeleteManager,
-			nDCHistoryResender,
-			matchingClient,
-			logger,
-			clusterName,
-			shard.GetConfig(),
-		),
+		timerGate: timerGate,
 	}
 
 	processor.timerQueueProcessorBase = newTimerQueueProcessorBase(
@@ -121,6 +142,8 @@ func newTimerQueueStandbyProcessor(
 		processor,
 		timerQueueAckMgr,
 		timerGate,
+		scheduler,
+		rescheduler,
 		shard.GetConfig().TimerProcessorMaxPollRPS,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TimerStandbyQueueProcessorScope),
@@ -137,24 +160,11 @@ func (t *timerQueueStandbyProcessorImpl) Stop() {
 	t.timerQueueProcessorBase.Stop()
 }
 
-//nolint:unused
-func (t *timerQueueStandbyProcessorImpl) getTimerFiredCount() uint64 {
-	return t.timerQueueProcessorBase.getTimerFiredCount()
-}
-
 func (t *timerQueueStandbyProcessorImpl) setCurrentTime(
 	currentTime time.Time,
 ) {
 
 	t.timerGate.SetCurrentTime(currentTime)
-}
-
-func (t *timerQueueStandbyProcessorImpl) retryTasks() {
-	t.timerQueueProcessorBase.retryTasks()
-}
-
-func (t *timerQueueStandbyProcessorImpl) getTaskFilter() taskFilter {
-	return t.timerTaskFilter
 }
 
 func (t *timerQueueStandbyProcessorImpl) getAckLevel() tasks.Key {
@@ -173,19 +183,4 @@ func (t *timerQueueStandbyProcessorImpl) notifyNewTimers(
 ) {
 
 	t.timerQueueProcessorBase.notifyNewTimers(timerTasks)
-}
-
-func (t *timerQueueStandbyProcessorImpl) complete(
-	taskInfo *taskInfo,
-) {
-	t.timerQueueProcessorBase.complete(taskInfo.Task)
-}
-
-func (t *timerQueueStandbyProcessorImpl) process(
-	ctx context.Context,
-	taskInfo *taskInfo,
-) (int, error) {
-	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := tasks.GetStandbyTimerTaskMetricScope(taskInfo.Task)
-	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

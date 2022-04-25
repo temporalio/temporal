@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -71,7 +72,7 @@ func newTimerQueueStandbyTaskExecutor(
 	logger log.Logger,
 	clusterName string,
 	config *configs.Config,
-) queueTaskExecutor {
+) queues.Executor {
 	return &timerQueueStandbyTaskExecutor{
 		timerQueueTaskExecutorBase: newTimerQueueTaskExecutorBase(
 			shard,
@@ -87,37 +88,21 @@ func newTimerQueueStandbyTaskExecutor(
 	}
 }
 
-func (t *timerQueueStandbyTaskExecutor) execute(
+func (t *timerQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
-	taskInfo tasks.Task,
-	shouldProcessTask bool,
+	executable queues.Executable,
 ) error {
 
-	switch task := taskInfo.(type) {
+	switch task := executable.GetTask().(type) {
 	case *tasks.UserTimerTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		if !shouldProcessTask {
-			return nil
-		}
 		return t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
 		return t.executeWorkflowTimeoutTask(ctx, task)

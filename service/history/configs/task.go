@@ -24,7 +24,11 @@
 
 package configs
 
-import "strconv"
+import (
+	"fmt"
+	"strconv"
+	"strings"
+)
 
 const (
 	numBitsPerLevel = 3
@@ -62,6 +66,34 @@ func ConvertWeightsToDynamicConfigValue(
 		weightsForDC[strconv.Itoa(priority)] = weight
 	}
 	return weightsForDC
+}
+
+func ConvertDynamicConfigValueToWeights(
+	weightsFromDC map[string]interface{},
+) map[int]int {
+	weights := make(map[int]int)
+	for key, value := range weightsFromDC {
+		intKey, err := strconv.Atoi(strings.TrimSpace(key))
+		if err != nil {
+			panic(fmt.Sprintf("Failed to convert dynamicconfig map value to int map: %v is not integer", key))
+		}
+
+		var intValue int
+		switch value := value.(type) {
+		case float64:
+			intValue = int(value)
+		case int:
+			intValue = value
+		case int32:
+			intValue = int(value)
+		case int64:
+			intValue = int(value)
+		default:
+			panic(fmt.Sprintf("Failed to convert dynamicconfig map value to int map: %v is not integer", value))
+		}
+		weights[intKey] = intValue
+	}
+	return weights
 }
 
 func GetTaskPriority(

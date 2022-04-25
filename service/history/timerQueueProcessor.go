@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination timerQueueProcessor_mock.go
-
 package history
 
 import (
@@ -179,7 +177,6 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	}
 	standbyTimerProcessor.setCurrentTime(t.shard.GetCurrentTime(clusterName))
 	standbyTimerProcessor.notifyNewTimers(timerTasks)
-	standbyTimerProcessor.retryTasks()
 }
 
 func (t *timerQueueProcessorImpl) FailoverNamespace(
@@ -224,12 +221,6 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		t.taskAllocator,
 		t.logger,
 	)
-
-	t.standbyTimerProcessorsLock.RLock()
-	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
-		standbyTimerProcessor.retryTasks()
-	}
-	t.standbyTimerProcessorsLock.RUnlock()
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
