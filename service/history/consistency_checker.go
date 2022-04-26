@@ -78,6 +78,9 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 	namespaceID string,
 	workflowID string,
 ) (string, error) {
+	// to achieve read after write consistency,
+	// logic need to assert shard ownership *at most once* per read API call
+	// shard ownership asserted boolean keep tracks whether AssertOwnership is already caller
 	shardOwnershipAsserted := false
 	runID, err := c.getCurrentRunID(
 		ctx,
@@ -105,9 +108,12 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 		)
 	}
 
+	// to achieve read after write consistency,
+	// logic need to assert shard ownership *at most once* per read API call
+	// shard ownership asserted boolean keep tracks whether AssertOwnership is already caller
 	shardOwnershipAsserted := false
 	if len(workflowKey.RunID) != 0 {
-		return c.getWorkflowContextValidatedByCheckFns(
+		return c.getWorkflowContextValidatedByCheck(
 			ctx,
 			&shardOwnershipAsserted,
 			consistencyPredicate,
@@ -162,7 +168,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	return newWorkflowContext(wfContext, release, mutableState), nil
 }
 
-func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheckFns(
+func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 	ctx context.Context,
 	shardOwnershipAsserted *bool,
 	consistencyPredicate MutableStateConsistencyPredicate,
@@ -234,7 +240,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		if err != nil {
 			return nil, err
 		}
-		wfContext, err := c.getWorkflowContextValidatedByCheckFns(
+		wfContext, err := c.getWorkflowContextValidatedByCheck(
 			ctx,
 			shardOwnershipAsserted,
 			consistencyPredicate,

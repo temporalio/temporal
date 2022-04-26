@@ -34,7 +34,7 @@ import (
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
-	enums "go.temporal.io/api/enums/v1"
+	"go.temporal.io/api/enums/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	querypb "go.temporal.io/api/query/v1"
@@ -3640,8 +3640,4 @@ func (e *historyEngineImpl) setActivityTaskRunID(
 	}
 	token.RunId = runID
 	return nil
-}
-
-func getMetadataChangeCallbackID(componentName string, shardId int32) string {
-	return fmt.Sprintf("%s-%d", componentName, shardId)
 }
