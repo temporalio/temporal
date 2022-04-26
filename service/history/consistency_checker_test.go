@@ -101,7 +101,8 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 
 	wfContext := workflow.NewMockContext(s.controller)
 	mutableState := workflow.NewMockMutableState(s.controller)
-	releaseFn := workflow.NoopReleaseFn
+	released := false
+	releaseFn := func(err error) { released = true }
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
@@ -122,6 +123,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	)
 	s.NoError(err)
 	s.Equal(mutableState, workflowContext.getMutableState())
+	s.False(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_Success_FailedCheck() {
@@ -131,7 +133,8 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	wfContext := workflow.NewMockContext(s.controller)
 	mutableState1 := workflow.NewMockMutableState(s.controller)
 	mutableState2 := workflow.NewMockMutableState(s.controller)
-	releaseFn := workflow.NoopReleaseFn
+	released := false
+	releaseFn := func(err error) { released = true }
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
@@ -156,6 +159,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	)
 	s.NoError(err)
 	s.Equal(mutableState2, workflowContext.getMutableState())
+	s.False(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_NotFound_OwnershipAsserted() {
@@ -163,7 +167,8 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	shardOwnershipAsserted := false
 
 	wfContext := workflow.NewMockContext(s.controller)
-	releaseFn := workflow.NoopReleaseFn
+	released := false
+	releaseFn := func(err error) { released = true }
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
@@ -186,6 +191,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	)
 	s.IsType(&serviceerror.NotFound{}, err)
 	s.Nil(workflowContext)
+	s.True(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_NotFound_OwnershipLost() {
@@ -193,7 +199,8 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	shardOwnershipAsserted := false
 
 	wfContext := workflow.NewMockContext(s.controller)
-	releaseFn := workflow.NoopReleaseFn
+	released := false
+	releaseFn := func(err error) { released = true }
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
@@ -216,6 +223,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	)
 	s.IsType(&persistence.ShardOwnershipLostError{}, err)
 	s.Nil(workflowContext)
+	s.True(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck_Error() {
@@ -223,7 +231,8 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	shardOwnershipAsserted := false
 
 	wfContext := workflow.NewMockContext(s.controller)
-	releaseFn := workflow.NoopReleaseFn
+	released := false
+	releaseFn := func(err error) { released = true }
 
 	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(
 		ctx,
@@ -244,6 +253,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 	)
 	s.IsType(&serviceerror.Unavailable{}, err)
 	s.Nil(workflowContext)
+	s.True(released)
 }
 
 func (s *workflowConsistencyCheckerSuite) TestGetCurrentRunID_Success() {
