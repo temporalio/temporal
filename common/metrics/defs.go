@@ -1927,6 +1927,7 @@ const (
 	TaskSkipped
 	TaskAttemptTimer
 	TaskStandbyRetryCounter
+	TaskWorkflowBusyCounter
 	TaskNotActiveCounter
 	TaskLimitExceededCounter
 	TaskBatchCompleteCounter
@@ -2408,6 +2409,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskDiscarded:            NewCounterDef("task_errors_discarded"),
 		TaskSkipped:              NewCounterDef("task_skipped"),
 		TaskStandbyRetryCounter:  NewCounterDef("task_errors_standby_retry_counter"),
+		TaskWorkflowBusyCounter:  NewCounterDef("task_errors_workflow_busy"),
 		TaskNotActiveCounter:     NewCounterDef("task_errors_not_active_counter"),
 		TaskLimitExceededCounter: NewCounterDef("task_errors_limit_exceeded_counter"),
 
