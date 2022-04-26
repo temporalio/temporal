@@ -187,10 +187,12 @@ func NamespaceRegistryProvider(
 	metricsClient metrics.Client,
 	clusterMetadata cluster.Metadata,
 	metadataManager persistence.MetadataManager,
+	dynamicCollection *dynamicconfig.Collection,
 ) namespace.Registry {
 	return namespace.NewRegistry(
 		metadataManager,
 		clusterMetadata.IsGlobalNamespaceEnabled(),
+		dynamicCollection.GetDurationProperty(dynamicconfig.NamespaceCacheRefreshInterval, 10*time.Second),
 		metricsClient,
 		logger,
 	)

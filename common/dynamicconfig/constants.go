@@ -111,6 +111,8 @@ const (
 	EnableStickyQuery = "system.enableStickyQuery"
 	// EnableActivityLocalDispatch indicates if acitivty local dispatch is enabled per namespace
 	EnableActivityLocalDispatch = "system.enableActivityLocalDispatch"
+	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
+	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
 	// key for size limit
 
