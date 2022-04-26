@@ -58,6 +58,7 @@ type (
 		GetClusterName() string
 		GetOrCreateShard(ctx context.Context, request *InternalGetOrCreateShardRequest) (*InternalGetOrCreateShardResponse, error)
 		UpdateShard(ctx context.Context, request *InternalUpdateShardRequest) error
+		AssertShardOwnership(ctx context.Context, request *AssertShardOwnershipRequest) error
 	}
 
 	// TaskStore is a lower level of TaskManager

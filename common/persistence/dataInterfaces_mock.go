@@ -93,6 +93,20 @@ func (m *MockShardManager) EXPECT() *MockShardManagerMockRecorder {
 	return m.recorder
 }
 
+// AssertShardOwnership mocks base method.
+func (m *MockShardManager) AssertShardOwnership(ctx context.Context, request *AssertShardOwnershipRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AssertShardOwnership", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AssertShardOwnership indicates an expected call of AssertShardOwnership.
+func (mr *MockShardManagerMockRecorder) AssertShardOwnership(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssertShardOwnership", reflect.TypeOf((*MockShardManager)(nil).AssertShardOwnership), ctx, request)
+}
+
 // Close mocks base method.
 func (m *MockShardManager) Close() {
 	m.ctrl.T.Helper()

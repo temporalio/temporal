@@ -132,6 +132,13 @@ func (m *sqlShardStore) UpdateShard(
 	})
 }
 
+func (m *sqlShardStore) AssertShardOwnership(
+	ctx context.Context,
+	request *persistence.AssertShardOwnershipRequest,
+) error {
+	return nil
+}
+
 // initiated by the owning shard
 func lockShard(
 	ctx context.Context,
