@@ -137,25 +137,19 @@ func (t *transferQueueActiveTaskExecutor) Execute(
 }
 
 func (t *transferQueueActiveTaskExecutor) processActivityTask(
-	pctx context.Context,
+	ctx context.Context,
 	task *tasks.ActivityTask,
 ) (retError error) {
-
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	context, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -178,29 +172,23 @@ func (t *transferQueueActiveTaskExecutor) processActivityTask(
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushActivity(task, &timeout)
+	return t.pushActivity(ctx, task, &timeout)
 }
 
 func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
-	pctx context.Context,
+	ctx context.Context,
 	task *tasks.WorkflowTask,
 ) (retError error) {
-
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	context, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -247,23 +235,17 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushWorkflowTask(task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
+	return t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
-	pctx context.Context,
+	ctx context.Context,
 	task *tasks.CloseExecutionTask,
 ) (retError error) {
-
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -321,6 +303,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
 	err = t.recordWorkflowClosed(
+		ctx,
 		namespace.ID(task.NamespaceID),
 		task.WorkflowID,
 		task.RunID,
@@ -339,8 +322,6 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 
 	// Communicate the result to parent execution if this is Child Workflow execution
 	if replyToParentWorkflow {
-		ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-		defer cancel()
 		_, err := t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
 			NamespaceId: parentNamespaceID,
 			WorkflowExecution: &commonpb.WorkflowExecution{
@@ -366,33 +347,31 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	return t.processParentClosePolicy(
-		namespaceID.String(),
+		ctx,
+		task.GetNamespaceID(),
 		namespaceName.String(),
-		&execution,
+		commonpb.WorkflowExecution{
+			WorkflowId: task.GetWorkflowID(),
+			RunId:      task.GetRunID(),
+		},
 		children,
 	)
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
-	pctx context.Context,
+	ctx context.Context,
 	task *tasks.CancelExecutionTask,
 ) (retError error) {
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	executionContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, executionContext, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -425,7 +404,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		err = t.requestCancelExternalExecutionFailed(
 			ctx,
 			task,
-			executionContext,
+			weContext,
 			namespace.Name(task.TargetNamespaceID), // Use ID as namespace name because namespace is already deleted and name is used only for history.
 			task.TargetWorkflowID,
 			task.TargetRunID,
@@ -440,7 +419,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		err = t.requestCancelExternalExecutionFailed(
 			ctx,
 			task,
-			executionContext,
+			weContext,
 			targetNamespaceName,
 			task.TargetWorkflowID,
 			task.TargetRunID,
@@ -449,6 +428,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	}
 
 	if err = t.requestCancelExternalExecutionWithRetry(
+		ctx,
 		task,
 		targetNamespaceName,
 		requestCancelInfo,
@@ -466,7 +446,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		return t.requestCancelExternalExecutionFailed(
 			ctx,
 			task,
-			executionContext,
+			weContext,
 			targetNamespaceName,
 			task.TargetWorkflowID,
 			task.TargetRunID,
@@ -478,7 +458,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 	return t.requestCancelExternalExecutionCompleted(
 		ctx,
 		task,
-		executionContext,
+		weContext,
 		targetNamespaceName,
 		task.TargetWorkflowID,
 		task.TargetRunID,
@@ -486,19 +466,13 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processSignalExecution(
-	pctx context.Context,
+	ctx context.Context,
 	task *tasks.SignalExecutionTask,
 ) (retError error) {
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	weContext, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -567,6 +541,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	}
 
 	if err = t.signalExternalExecutionWithRetry(
+		ctx,
 		task,
 		targetNamespaceName,
 		signalInfo,
@@ -612,8 +587,6 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 	// the rest of logic is making RPC call, which takes time.
 	release(retError)
 	// remove signalRequestedID from target workflow, after Signal detail is removed from source workflow
-	ctx, cancel = context.WithTimeout(context.Background(), taskTimeout)
-	defer cancel()
 	_, err = t.historyClient.RemoveSignalMutableState(ctx, &historyservice.RemoveSignalMutableStateRequest{
 		NamespaceId: task.TargetNamespaceID,
 		WorkflowExecution: &commonpb.WorkflowExecution{
@@ -626,25 +599,19 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
-	pctx context.Context,
+	ctx context.Context,
 	task *tasks.StartChildExecutionTask,
 ) (retError error) {
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	context, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
 	defer func() { release(retError) }()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, context, task, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
 		return err
 	}
@@ -688,7 +655,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		err = t.recordStartChildExecutionFailed(
 			ctx,
 			task,
-			context,
+			weContext,
 			attributes,
 			enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
 		)
@@ -708,10 +675,11 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// release the context lock since we no longer need mutable state builder and
 		// the rest of logic is making RPC call, which takes time.
 		release(nil)
-		return t.createFirstWorkflowTask(task.TargetNamespaceID, childExecution, childClock)
+		return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, childExecution, childClock)
 	}
 
 	childRunID, childClock, err := t.startWorkflowWithRetry(
+		ctx,
 		task,
 		parentNamespaceName,
 		targetNamespaceName,
@@ -727,7 +695,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// 	err = t.recordStartChildExecutionFailed(
 		// 		ctx,
 		// 		task,
-		// 		context,
+		// 		weContext,
 		// 		attributes,
 		// 		enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
 		// 	)
@@ -735,7 +703,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 			err = t.recordStartChildExecutionFailed(
 				ctx,
 				task,
-				context,
+				weContext,
 				attributes,
 				enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS,
 			)
@@ -748,7 +716,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		tag.WorkflowID(attributes.WorkflowId), tag.WorkflowRunID(childRunID))
 
 	// Child execution is successfully started, record ChildExecutionStartedEvent in parent execution
-	err = t.recordChildExecutionStarted(ctx, task, context, attributes, childRunID, childClock)
+	err = t.recordChildExecutionStarted(ctx, task, weContext, attributes, childRunID, childClock)
 	if err != nil {
 		return err
 	}
@@ -757,26 +725,20 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	// Release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.createFirstWorkflowTask(task.TargetNamespaceID, &commonpb.WorkflowExecution{
+	return t.createFirstWorkflowTask(ctx, task.TargetNamespaceID, &commonpb.WorkflowExecution{
 		WorkflowId: task.TargetWorkflowID,
 		RunId:      childRunID,
 	}, childClock)
 }
 
 func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
-	pctx context.Context,
+	ctx context.Context,
 	task *tasks.ResetWorkflowTask,
 ) (retError error) {
-	ctx, cancel := context.WithTimeout(pctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(task)
-	currentContext, currentRelease, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+	currentContext, currentRelease, err := getWorkflowExecutionContextForTask(ctx, t.cache, task)
 	if err != nil {
 		return err
 	}
@@ -856,17 +818,14 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		baseMutableState = currentMutableState
 		baseRelease = currentRelease
 	} else {
-		baseExecution := &commonpb.WorkflowExecution{
-			WorkflowId: task.WorkflowID,
-			RunId:      resetPoint.GetRunId(),
-		}
-		ctx, cancel := context.WithTimeout(context.Background(), taskTimeout)
-		defer cancel()
-		baseContext, baseRelease, err = t.cache.GetOrCreateWorkflowExecution(
+		baseContext, baseRelease, err = getWorkflowExecutionContext(
 			ctx,
+			t.cache,
 			namespace.ID(task.NamespaceID),
-			*baseExecution,
-			workflow.CallerTypeTask,
+			commonpb.WorkflowExecution{
+				WorkflowId: task.WorkflowID,
+				RunId:      resetPoint.GetRunId(),
+			},
 		)
 		if err != nil {
 			return err
@@ -881,6 +840,8 @@ func (t *transferQueueActiveTaskExecutor) processResetWorkflow(
 		}
 	}
 
+	// NOTE: reset need to go through history which may take a longer time,
+	// so it's using its own timeout
 	if err := t.resetWorkflow(
 		task,
 		reason,
@@ -963,13 +924,12 @@ func (t *transferQueueActiveTaskExecutor) recordStartChildExecutionFailed(
 // createFirstWorkflowTask is used by StartChildExecution transfer task to create the first workflow task for
 // child execution.
 func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
+	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
 	clock *clockpb.ShardClock,
 ) error {
 
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
 	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
 		NamespaceId:         namespaceID,
 		WorkflowExecution:   execution,
@@ -1172,6 +1132,7 @@ func (t *transferQueueActiveTaskExecutor) updateWorkflowExecution(
 }
 
 func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetry(
+	ctx context.Context,
 	task *tasks.CancelExecutionTask,
 	targetNamespace namespace.Name,
 	requestCancelInfo *persistencespb.RequestCancelInfo,
@@ -1199,18 +1160,22 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionWithRetr
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-	op := func() error {
+	op := func(ctx context.Context) error {
 		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, request)
 		return err
 	}
 
-	err := backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	err := backoff.RetryContext(
+		ctx,
+		op,
+		workflow.PersistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
 	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
+	ctx context.Context,
 	task *tasks.SignalExecutionTask,
 	targetNamespace namespace.Name,
 	signalInfo *persistencespb.SignalInfo,
@@ -1240,17 +1205,21 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionWithRetry(
 		ChildWorkflowOnly: task.TargetChildWorkflowOnly,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-	op := func() error {
+	op := func(ctx context.Context) error {
 		_, err := t.historyClient.SignalWorkflowExecution(ctx, request)
 		return err
 	}
 
-	return backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
+	return backoff.RetryContext(
+		ctx,
+		op,
+		workflow.PersistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	)
 }
 
 func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
+	ctx context.Context,
 	task *tasks.StartChildExecutionTask,
 	namespace namespace.Name,
 	targetNamespace namespace.Name,
@@ -1291,17 +1260,19 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 		t.shard.GetTimeSource().Now(),
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
 	var response *historyservice.StartWorkflowExecutionResponse
 	var err error
-	op := func() error {
+	op := func(ctx context.Context) error {
 		response, err = t.historyClient.StartWorkflowExecution(ctx, request)
 		return err
 	}
 
-	err = backoff.Retry(op, workflow.PersistenceOperationRetryPolicy, common.IsPersistenceTransientError)
-	if err != nil {
+	if err = backoff.RetryContext(
+		ctx,
+		op,
+		workflow.PersistenceOperationRetryPolicy,
+		common.IsPersistenceTransientError,
+	); err != nil {
 		return "", nil, err
 	}
 	return response.GetRunId(), response.GetClock(), nil
@@ -1318,7 +1289,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 ) error {
 
 	var err error
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), taskHistoryOpTimeout)
 	defer cancel()
 
 	namespaceID := namespace.ID(task.NamespaceID)
@@ -1382,9 +1353,10 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 }
 
 func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
+	ctx context.Context,
 	namespaceID string,
 	namespaceName string,
-	parentExecution *commonpb.WorkflowExecution,
+	parentExecution commonpb.WorkflowExecution,
 	childInfos map[int64]*persistencespb.ChildExecutionInfo,
 ) error {
 
@@ -1429,15 +1401,16 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 		request := parentclosepolicy.Request{
 			Namespace:       namespaceName,
 			NamespaceID:     namespaceID,
-			ParentExecution: *parentExecution,
+			ParentExecution: parentExecution,
 			Executions:      executions,
 		}
-		return t.parentClosePolicyClient.SendParentClosePolicyRequest(request)
+		return t.parentClosePolicyClient.SendParentClosePolicyRequest(ctx, request)
 	}
 
 	for _, childInfo := range childInfos {
 		if err := t.applyParentClosePolicy(
-			parentExecution,
+			ctx,
+			&parentExecution,
 			childInfo,
 		); err != nil {
 			if _, ok := err.(*serviceerror.NotFound); !ok {
@@ -1451,13 +1424,10 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 }
 
 func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
+	ctx context.Context,
 	parentExecution *commonpb.WorkflowExecution,
 	childInfo *persistencespb.ChildExecutionInfo,
 ) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
 	switch childInfo.ParentClosePolicy {
 	case enumspb.PARENT_CLOSE_POLICY_ABANDON:
 		// noop

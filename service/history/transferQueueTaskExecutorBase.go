@@ -49,8 +49,9 @@ import (
 )
 
 const (
-	taskTimeout                      = time.Second * 10
-	transferActiveTaskDefaultTimeout = 20 * time.Second
+	taskTimeout             = time.Second * 3
+	taskGetExecutionTimeout = 500 * time.Millisecond
+	taskHistoryOpTimeout    = 20 * time.Second
 )
 
 type (
@@ -93,24 +94,11 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
-func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
-	task tasks.Task,
-) (namespace.ID, commonpb.WorkflowExecution) {
-
-	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowID(),
-		RunId:      task.GetRunID(),
-	}
-}
-
 func (t *transferQueueTaskExecutorBase) pushActivity(
+	ctx context.Context,
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout *time.Duration,
 ) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:       task.NamespaceID,
 		SourceNamespaceId: task.NamespaceID,
@@ -136,14 +124,11 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 }
 
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
+	ctx context.Context,
 	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout *time.Duration,
 ) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
 	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
@@ -165,6 +150,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 }
 
 func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -191,7 +177,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
+	ctx, cancel := context.WithTimeout(ctx, t.config.TransferProcessorVisibilityArchivalTimeLimit())
 	defer cancel()
 
 	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.config.DefaultVisibilityIndexName, false)

@@ -78,6 +78,8 @@ var (
 	ErrUnknownCluster = serviceerror.NewInvalidArgument("unknown cluster")
 	// ErrBufferedQueryCleared is error indicating mutable state is cleared while buffered query is pending
 	ErrBufferedQueryCleared = serviceerror.NewUnavailable("buffered query cleared, please retry")
+	// ErrWorkflowBusy is error indicating workflow is currently busy and workflow context can't be locked within specified timeout
+	ErrWorkflowBusy = serviceerror.NewUnavailable("timeout locking workflow execution")
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API

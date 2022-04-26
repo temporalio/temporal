@@ -116,7 +116,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		activityInfo, ok := mutableState.GetActivityInfo(transferTask.ScheduleID)
 		if !ok {
@@ -157,7 +157,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		wtInfo, ok := mutableState.GetWorkflowTaskInfo(transferTask.ScheduleID)
 		if !ok {
@@ -222,7 +222,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 ) error {
 
 	processTaskIfClosed := true
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		if mutableState.IsWorkflowExecutionRunning() {
 			// this can happen if workflow is reset.
@@ -258,6 +258,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		// DO NOT REPLY TO PARENT
 		// since event replication should be done by active cluster
 		return nil, t.recordWorkflowClosed(
+			ctx,
 			namespace.ID(transferTask.NamespaceID),
 			transferTask.WorkflowID,
 			transferTask.RunID,
@@ -287,7 +288,7 @@ func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		requestCancelInfo, ok := mutableState.GetRequestCancelInfo(transferTask.InitiatedID)
 		if !ok {
@@ -324,7 +325,7 @@ func (t *transferQueueStandbyTaskExecutor) processSignalExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		signalInfo, ok := mutableState.GetSignalInfo(transferTask.InitiatedID)
 		if !ok {
@@ -361,7 +362,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 ) error {
 
 	processTaskIfClosed := false
-	actionFn := func(context workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.InitiatedID)
 		if !ok {
@@ -403,16 +404,10 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	actionFn standbyActionFn,
 	postActionFn standbyPostActionFn,
 ) (retError error) {
-	var cancel context.CancelFunc
-	ctx, cancel = context.WithTimeout(ctx, taskTimeout)
+	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
-	namespaceID, execution := t.getNamespaceIDAndWorkflowExecution(taskInfo)
-	context, release, err := t.cache.GetOrCreateWorkflowExecution(
-		ctx,
-		namespaceID,
-		execution,
-		workflow.CallerTypeTask,
-	)
+
+	weContext, release, err := getWorkflowExecutionContextForTask(ctx, t.cache, taskInfo)
 	if err != nil {
 		return err
 	}
@@ -424,7 +419,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		}
 	}()
 
-	mutableState, err := loadMutableStateForTransferTask(ctx, context, taskInfo, t.metricsClient, t.logger)
+	mutableState, err := loadMutableStateForTransferTask(ctx, weContext, taskInfo, t.metricsClient, t.logger)
 	if err != nil || mutableState == nil {
 		return err
 	}
@@ -434,17 +429,18 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 		return nil
 	}
 
-	historyResendInfo, err := actionFn(context, mutableState)
+	historyResendInfo, err := actionFn(ctx, weContext, mutableState)
 	if err != nil {
 		return err
 	}
 
 	// NOTE: do not access anything related mutable state after this lock release
 	release(nil)
-	return postActionFn(taskInfo, historyResendInfo, t.logger)
+	return postActionFn(ctx, taskInfo, historyResendInfo, t.logger)
 }
 
 func (t *transferQueueStandbyTaskExecutor) pushActivity(
+	ctx context.Context,
 	task tasks.Task,
 	postActionInfo interface{},
 	logger log.Logger,
@@ -457,12 +453,14 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
 	timeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushActivity(
+		ctx,
 		task.(*tasks.ActivityTask),
 		&timeout,
 	)
 }
 
 func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
+	ctx context.Context,
 	task tasks.Task,
 	postActionInfo interface{},
 	logger log.Logger,
@@ -475,6 +473,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
 	timeout := pushwtInfo.workflowTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
+		ctx,
 		task.(*tasks.WorkflowTask),
 		&pushwtInfo.taskqueue,
 		timestamp.DurationFromSeconds(timeout),
@@ -482,6 +481,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 }
 
 func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
+	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
 	log log.Logger,
@@ -500,6 +500,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	var err error
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		if err := refreshTasks(
+			ctx,
 			t.adminClient,
 			t.shard.GetNamespaceRegistry(),
 			namespace.ID(taskInfo.GetNamespaceID()),
@@ -513,6 +514,9 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 				tag.WorkflowRunID(taskInfo.GetRunID()),
 				tag.ClusterName(t.clusterName))
 		}
+
+		// NOTE: history resend may take long time and its timeout is currently
+		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
