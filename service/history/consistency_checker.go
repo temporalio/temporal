@@ -199,8 +199,8 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 		if consistencyPredicate(mutableState) {
 			return newWorkflowContext(wfContext, release, mutableState), nil
 		}
-
 		wfContext.Clear()
+
 		mutableState, err := wfContext.LoadWorkflowExecution(ctx)
 		if err != nil {
 			release(err)
@@ -318,4 +318,10 @@ func BypassMutableStateConsistencyPredicate(
 	mutableState workflow.MutableState,
 ) bool {
 	return true
+}
+
+func FailMutableStateConsistencyPredicate(
+	mutableState workflow.MutableState,
+) bool {
+	return false
 }
