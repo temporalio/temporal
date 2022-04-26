@@ -347,8 +347,7 @@ func (r *registry) refreshLoop(ctx context.Context) error {
 				case r.triggerRefreshCh <- nil:
 				default:
 				}
-				timer.Stop()
-				timer = time.NewTicker(r.refreshInterval())
+				timer.Reset(r.refreshInterval())
 			case <-ctx.Done():
 				timer.Stop()
 				return
