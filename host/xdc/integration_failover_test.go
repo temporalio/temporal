@@ -40,9 +40,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/server/api/adminservice/v1"
-
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -57,23 +54,23 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/activity"
 	sdkclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
-	sw "go.temporal.io/server/service/worker"
-	"gopkg.in/yaml.v3"
-
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/failure"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
+	sw "go.temporal.io/server/service/worker"
 	"go.temporal.io/server/service/worker/migration"
+	"gopkg.in/yaml.v3"
 )
 
 type (
@@ -89,7 +86,7 @@ type (
 )
 
 const (
-	cacheRefreshInterval = namespace.CacheRefreshInterval + 5*time.Second
+	cacheRefreshInterval = host.NamespaceCacheRefreshInterval + 5*time.Second
 )
 
 var (
@@ -688,7 +685,7 @@ func (s *integrationClustersTestSuite) TestStartWorkflowExecution_Failover_Workf
 	_, err := client1.RegisterNamespace(host.NewContext(), regReq)
 	s.NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(namespace.CacheRefreshInterval)
+	time.Sleep(cacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespaceName,

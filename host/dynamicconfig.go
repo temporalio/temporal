@@ -32,6 +32,8 @@ import (
 	"go.temporal.io/server/common/persistence/visibility"
 )
 
+const NamespaceCacheRefreshInterval = time.Second
+
 var (
 	// Override values for dynamic configs
 	staticOverrides = map[dynamicconfig.Key]interface{}{
@@ -47,6 +49,7 @@ var (
 		dynamicconfig.ReplicationTaskFetcherErrorRetryWait:          50 * time.Millisecond,
 		dynamicconfig.ReplicationTaskProcessorErrorRetryWait:        time.Millisecond,
 		dynamicconfig.ClusterMetadataRefreshInterval:                100 * time.Millisecond,
+		dynamicconfig.NamespaceCacheRefreshInterval:                 NamespaceCacheRefreshInterval,
 	}
 )
 

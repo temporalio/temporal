@@ -39,12 +39,13 @@ import (
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
 )
+
+const namespaceCacheRefreshInterval = 10 * time.Second
 
 type (
 	executableSuite struct {
@@ -143,7 +144,7 @@ func (s *executableSuite) TestHandleErr_NamespaceNotActiveError() {
 	now := time.Now().UTC()
 	err := serviceerror.NewNamespaceNotActive("", "", "")
 
-	s.timeSource.Update(now.Add(-namespace.CacheRefreshInterval * time.Duration(3)))
+	s.timeSource.Update(now.Add(-namespaceCacheRefreshInterval * time.Duration(3)))
 	executable := s.newTestExecutable(func(_ tasks.Task) bool {
 		return true
 	})
@@ -220,5 +221,6 @@ func (s *executableSuite) newTestExecutable(
 		metrics.NoopScope,
 		dynamicconfig.GetIntPropertyFn(100),
 		QueueTypeActiveTransfer,
+		dynamicconfig.GetDurationPropertyFn(namespaceCacheRefreshInterval),
 	)
 }
