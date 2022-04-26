@@ -1159,7 +1159,6 @@ func (c *clientImpl) executeWithRedirect(ctx context.Context,
 	op func(ctx context.Context, client historyservice.HistoryServiceClient) error,
 ) error {
 
-redirectLoop:
 	for {
 		err := common.IsValidContext(ctx)
 		if err != nil {
@@ -1174,7 +1173,6 @@ redirectLoop:
 				return err
 			}
 			client = ret.(historyservice.HistoryServiceClient)
-			continue redirectLoop
 		} else {
 			return err
 		}
