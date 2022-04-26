@@ -336,17 +336,23 @@ func (r *registry) Refresh() {
 }
 
 func (r *registry) refreshLoop(ctx context.Context) error {
-	timer := time.NewTicker(r.refreshInterval())
-	defer timer.Stop()
-
 	// Put timer events on our channel so we can select on just one below.
 	go func() {
-		for range timer.C {
+		timer := time.NewTicker(r.refreshInterval())
+
+		for {
 			select {
-			case r.triggerRefreshCh <- nil:
-			default:
+			case <-timer.C:
+				select {
+				case r.triggerRefreshCh <- nil:
+				default:
+				}
+				timer.Stop()
+				timer = time.NewTicker(r.refreshInterval())
+			case <-ctx.Done():
+				timer.Stop()
+				return
 			}
-			timer.Reset(r.refreshInterval())
 		}
 	}()
 
