@@ -40,7 +40,16 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+var (
+	consistencyCtxKey = consistencyContextKey{}
+)
+
 type (
+	consistencyContextKey   struct{}
+	consistencyContextValue struct {
+		checked bool
+	}
+
 	MutableStateConsistencyPredicate func(mutableState workflow.MutableState) bool
 
 	WorkflowConsistencyChecker interface {
@@ -78,10 +87,9 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 	namespaceID string,
 	workflowID string,
 ) (string, error) {
-	shardOwnershipAsserted := false
+	ctx = context.WithValue(ctx, consistencyCtxKey, &consistencyContextValue{})
 	runID, err := c.getCurrentRunID(
 		ctx,
-		&shardOwnershipAsserted,
 		namespaceID,
 		workflowID,
 	)
@@ -105,18 +113,16 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 		)
 	}
 
-	shardOwnershipAsserted := false
+	ctx = context.WithValue(ctx, consistencyCtxKey, &consistencyContextValue{})
 	if len(workflowKey.RunID) != 0 {
 		return c.getWorkflowContextValidatedByCheckFns(
 			ctx,
-			&shardOwnershipAsserted,
 			consistencyPredicate,
 			workflowKey,
 		)
 	}
 	return c.getCurrentWorkflowContext(
 		ctx,
-		&shardOwnershipAsserted,
 		consistencyPredicate,
 		workflowKey.NamespaceID,
 		workflowKey.WorkflowID,
@@ -164,7 +170,6 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheckFns(
 	ctx context.Context,
-	shardOwnershipAsserted *bool,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 ) (workflowContext, error) {
@@ -206,7 +211,6 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheckFns(
 		if err := assertShardOwnership(
 			ctx,
 			c.shardContext,
-			shardOwnershipAsserted,
 		); err != nil {
 			return nil, err
 		}
@@ -219,7 +223,6 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheckFns(
 
 func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	ctx context.Context,
-	shardOwnershipAsserted *bool,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
 	workflowID string,
@@ -227,7 +230,6 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		runID, err := c.getCurrentRunID(
 			ctx,
-			shardOwnershipAsserted,
 			namespaceID,
 			workflowID,
 		)
@@ -236,7 +238,6 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		}
 		wfContext, err := c.getWorkflowContextValidatedByCheckFns(
 			ctx,
-			shardOwnershipAsserted,
 			consistencyPredicate,
 			definition.NewWorkflowKey(namespaceID, workflowID, runID),
 		)
@@ -249,7 +250,6 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 
 		currentRunID, err := c.getCurrentRunID(
 			ctx,
-			shardOwnershipAsserted,
 			namespaceID,
 			workflowID,
 		)
@@ -267,7 +267,6 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 
 func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 	ctx context.Context,
-	shardOwnershipAsserted *bool,
 	namespaceID string,
 	workflowID string,
 ) (string, error) {
@@ -286,7 +285,6 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 		if err := assertShardOwnership(
 			ctx,
 			c.shardContext,
-			shardOwnershipAsserted,
 		); err != nil {
 			return "", err
 		}
@@ -299,10 +297,10 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentRunID(
 func assertShardOwnership(
 	ctx context.Context,
 	shardContext shard.Context,
-	shardOwnershipAsserted *bool,
 ) error {
-	if !*shardOwnershipAsserted {
-		*shardOwnershipAsserted = true
+	consistencyChecked := ctx.Value(consistencyCtxKey).(*consistencyContextValue)
+	if !consistencyChecked.checked {
+		consistencyChecked.checked = true
 		return shardContext.AssertOwnership(ctx)
 	}
 	return nil
