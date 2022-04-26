@@ -25,9 +25,11 @@
 package configs
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 const (
@@ -70,12 +72,14 @@ func ConvertWeightsToDynamicConfigValue(
 
 func ConvertDynamicConfigValueToWeights(
 	weightsFromDC map[string]interface{},
+	logger log.Logger,
 ) map[int]int {
 	weights := make(map[int]int)
 	for key, value := range weightsFromDC {
 		intKey, err := strconv.Atoi(strings.TrimSpace(key))
 		if err != nil {
-			panic(fmt.Sprintf("Failed to convert dynamicconfig map value to int map: %v is not integer", key))
+			logger.Error("Failed to parse dynamic config map value to int map, fallback to default weights", tag.Error(err))
+			return DefaultTaskPriorityWeight
 		}
 
 		var intValue int
@@ -89,7 +93,8 @@ func ConvertDynamicConfigValueToWeights(
 		case int64:
 			intValue = int(value)
 		default:
-			panic(fmt.Sprintf("Failed to convert dynamicconfig map value to int map: %v is not integer", value))
+			logger.Error("Failed to parse dynamic config map value to int map, fallback to default weights", tag.Error(err))
+			return DefaultTaskPriorityWeight
 		}
 		weights[intKey] = intValue
 	}

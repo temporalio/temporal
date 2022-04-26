@@ -118,7 +118,7 @@ func newTransferTaskScheduler(
 				QueueSize:   config.TransferTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TransferTaskSchedulerRoundRobinWeights()),
+				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TransferTaskSchedulerRoundRobinWeights(), logger),
 			},
 		},
 		shard.GetMetricsClient(),

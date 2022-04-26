@@ -151,7 +151,6 @@ func (t *timerQueueProcessorBase) Stop() {
 
 	t.timerGate.Close()
 	close(t.shutdownCh)
-	// t.retryTasks()
 
 	if success := common.AwaitWaitGroup(&t.shutdownWG, time.Minute); !success {
 		t.logger.Warn("Timer queue processor timedout on shutdown.")
@@ -368,9 +367,8 @@ func (t *timerQueueProcessorBase) submitTask(
 	submitted, err := t.executableScheduler.TrySubmit(executable)
 	if err != nil {
 		t.logger.Error("Failed to submit task", tag.Error(err))
-	}
-
-	if !submitted {
+		executable.Reschedule()
+	} else if !submitted {
 		executable.Reschedule()
 	}
 }
@@ -388,7 +386,7 @@ func newTimerTaskScheduler(
 				QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerTaskSchedulerRoundRobinWeights()),
+				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerTaskSchedulerRoundRobinWeights(), logger),
 			},
 		},
 		shard.GetMetricsClient(),

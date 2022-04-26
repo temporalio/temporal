@@ -294,9 +294,8 @@ func (p *queueProcessorBase) submitTask(
 	submitted, err := p.executableScheduler.TrySubmit(executable)
 	if err != nil {
 		p.logger.Error("Failed to submit task", tag.Error(err))
-	}
-
-	if !submitted {
+		executable.Reschedule()
+	} else if !submitted {
 		executable.Reschedule()
 	}
 }

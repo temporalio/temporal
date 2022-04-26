@@ -353,7 +353,7 @@ func newVisibilityTaskScheduler(
 				QueueSize:   config.VisibilityTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityTaskSchedulerRoundRobinWeights()),
+				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityTaskSchedulerRoundRobinWeights(), logger),
 			},
 		},
 		shard.GetMetricsClient(),
