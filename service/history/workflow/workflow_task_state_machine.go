@@ -786,6 +786,13 @@ func (m *workflowTaskStateMachine) getStartToCloseTimeout(
 	defaultTimeout time.Duration,
 	attempt int32,
 ) time.Duration {
+	// This util function is only for calculating active workflow task timeout.
+	// Transient workflow task in passive cluster won't call this function and
+	// always use default timeout as it will either be completely overwritten by
+	// a replicated workflow schedule event from active cluster, or if used, it's
+	// attempt will be reset to 1.
+	// Check ReplicateTransientWorkflowTaskScheduled for details.
+
 	if attempt <= workflowTaskRetryBackoffMinAttempts {
 		return defaultTimeout
 	}
