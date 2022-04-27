@@ -24,7 +24,13 @@
 
 package configs
 
-import "strconv"
+import (
+	"strconv"
+	"strings"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+)
 
 const (
 	numBitsPerLevel = 3
@@ -62,6 +68,37 @@ func ConvertWeightsToDynamicConfigValue(
 		weightsForDC[strconv.Itoa(priority)] = weight
 	}
 	return weightsForDC
+}
+
+func ConvertDynamicConfigValueToWeights(
+	weightsFromDC map[string]interface{},
+	logger log.Logger,
+) map[int]int {
+	weights := make(map[int]int)
+	for key, value := range weightsFromDC {
+		intKey, err := strconv.Atoi(strings.TrimSpace(key))
+		if err != nil {
+			logger.Error("Failed to parse dynamic config map value to int map, fallback to default weights", tag.Error(err))
+			return DefaultTaskPriorityWeight
+		}
+
+		var intValue int
+		switch value := value.(type) {
+		case float64:
+			intValue = int(value)
+		case int:
+			intValue = value
+		case int32:
+			intValue = int(value)
+		case int64:
+			intValue = int(value)
+		default:
+			logger.Error("Failed to parse dynamic config map value to int map, fallback to default weights", tag.Error(err))
+			return DefaultTaskPriorityWeight
+		}
+		weights[intKey] = intValue
+	}
+	return weights
 }
 
 func GetTaskPriority(

@@ -39,7 +39,6 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/tasks"
@@ -52,6 +51,7 @@ type (
 
 		Attempt() int
 		Logger() log.Logger
+		GetTask() tasks.Task
 
 		QueueType() QueueType
 	}
@@ -96,15 +96,15 @@ type (
 		rescheduler Rescheduler
 		timeSource  clock.TimeSource
 
-		loadTime             time.Time
-		userLatency          time.Duration
-		logger               log.Logger
-		scope                metrics.Scope
-		criticalRetryAttempt dynamicconfig.IntPropertyFn
-
-		queueType     QueueType
-		filter        TaskFilter
-		shouldProcess bool
+		loadTime                      time.Time
+		userLatency                   time.Duration
+		logger                        log.Logger
+		scope                         metrics.Scope
+		criticalRetryAttempt          dynamicconfig.IntPropertyFn
+		namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn
+		queueType                     QueueType
+		filter                        TaskFilter
+		shouldProcess                 bool
 	}
 )
 
@@ -119,21 +119,23 @@ func NewExecutable(
 	scope metrics.Scope,
 	criticalRetryAttempt dynamicconfig.IntPropertyFn,
 	queueType QueueType,
+	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
 ) Executable {
 	return &executableImpl{
-		Task:                 task,
-		state:                ctasks.TaskStatePending,
-		attempt:              1,
-		executor:             executor,
-		scheduler:            scheduler,
-		rescheduler:          rescheduler,
-		timeSource:           timeSource,
-		loadTime:             timeSource.Now(),
-		logger:               tasks.InitializeLogger(task, logger),
-		scope:                scope,
-		queueType:            queueType,
-		criticalRetryAttempt: criticalRetryAttempt,
-		filter:               filter,
+		Task:                          task,
+		state:                         ctasks.TaskStatePending,
+		attempt:                       1,
+		executor:                      executor,
+		scheduler:                     scheduler,
+		rescheduler:                   rescheduler,
+		timeSource:                    timeSource,
+		loadTime:                      timeSource.Now(),
+		logger:                        tasks.InitializeLogger(task, logger),
+		scope:                         scope,
+		queueType:                     queueType,
+		criticalRetryAttempt:          criticalRetryAttempt,
+		filter:                        filter,
+		namespaceCacheRefreshInterval: namespaceCacheRefreshInterval,
 	}
 }
 
@@ -196,7 +198,7 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 	// TODO remove this error check special case
 	//  since the new task life cycle will not give up until task processed / verified
 	if _, ok := err.(*serviceerror.NamespaceNotActive); ok {
-		if e.timeSource.Now().Sub(e.loadTime) > 2*namespace.CacheRefreshInterval {
+		if e.timeSource.Now().Sub(e.loadTime) > 2*e.namespaceCacheRefreshInterval() {
 			e.scope.IncCounter(metrics.TaskNotActiveCounter)
 			return nil
 		}
@@ -296,6 +298,10 @@ func (e *executableImpl) Attempt() int {
 
 func (e *executableImpl) Logger() log.Logger {
 	return e.logger
+}
+
+func (e *executableImpl) GetTask() tasks.Task {
+	return e.Task
 }
 
 func (e *executableImpl) QueueType() QueueType {

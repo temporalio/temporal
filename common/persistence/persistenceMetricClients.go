@@ -185,6 +185,23 @@ func (p *shardPersistenceClient) UpdateShard(
 	return err
 }
 
+func (p *shardPersistenceClient) AssertShardOwnership(
+	ctx context.Context,
+	request *AssertShardOwnershipRequest,
+) error {
+	p.metricClient.IncCounter(metrics.PersistenceAssertShardOwnershipScope, metrics.PersistenceRequests)
+
+	sw := p.metricClient.StartTimer(metrics.PersistenceAssertShardOwnershipScope, metrics.PersistenceLatency)
+	err := p.persistence.AssertShardOwnership(ctx, request)
+	sw.Stop()
+
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceAssertShardOwnershipScope, err)
+	}
+
+	return err
+}
+
 func (p *shardPersistenceClient) Close() {
 	p.persistence.Close()
 }

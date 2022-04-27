@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -69,17 +70,11 @@ func newVisibilityQueueTaskExecutor(
 	}
 }
 
-func (t *visibilityQueueTaskExecutor) execute(
+func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
-	taskInfo tasks.Task,
-	shouldProcessTask bool,
+	executable queues.Executable,
 ) error {
-
-	if !shouldProcessTask {
-		return nil
-	}
-
-	switch task := taskInfo.(type) {
+	switch task := executable.GetTask().(type) {
 	case *tasks.StartExecutionVisibilityTask:
 		return t.processStartExecution(ctx, task)
 	case *tasks.UpsertExecutionVisibilityTask:

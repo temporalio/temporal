@@ -56,6 +56,7 @@ import (
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -83,7 +84,7 @@ func newTransferQueueActiveTaskExecutor(
 	logger log.Logger,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
-) queueTaskExecutor {
+) queues.Executor {
 	return &transferQueueActiveTaskExecutor{
 		transferQueueTaskExecutorBase: newTransferQueueTaskExecutorBase(
 			shard,
@@ -108,17 +109,12 @@ func newTransferQueueActiveTaskExecutor(
 	}
 }
 
-func (t *transferQueueActiveTaskExecutor) execute(
+func (t *transferQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
-	taskInfo tasks.Task,
-	shouldProcessTask bool,
+	executable queues.Executable,
 ) error {
 
-	if !shouldProcessTask {
-		return nil
-	}
-
-	switch task := taskInfo.(type) {
+	switch task := executable.GetTask().(type) {
 	case *tasks.ActivityTask:
 		return t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:

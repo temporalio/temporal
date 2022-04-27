@@ -31,9 +31,10 @@ import (
 	"sync"
 	"time"
 
-	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/primitives/timestamp"
+	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 
@@ -45,14 +46,6 @@ import (
 
 var (
 	maximumTime = time.Unix(0, math.MaxInt64).UTC()
-)
-
-const (
-	timerOpInitialInterval    = 100 * time.Millisecond
-	timerOpMaxInterval        = 1000 * time.Millisecond
-	timerOpExpirationInterval = 10 * time.Second
-	timerOpBackoffCoefficient = 2
-	timerOpMaximumAttempts    = 20
 )
 
 type (
@@ -76,8 +69,8 @@ type (
 		finishedChan chan struct{}
 
 		sync.Mutex
-		// outstanding timer task -> finished (true)
-		outstandingTasks map[tasks.Key]bool
+		// outstanding timer task key -> time task executable
+		outstandingExecutables map[tasks.Key]queues.Executable
 		// timer task ack level
 		ackLevel tasks.Key
 		// timer task read level, used by failover
@@ -88,6 +81,8 @@ type (
 		pageToken     []byte
 
 		clusterName string
+
+		executableInitializer taskExecutableInitializer
 	}
 	// for each cluster, the ack level is the point in time when
 	// all timers before the ack level are processed.
@@ -107,29 +102,31 @@ func newTimerQueueAckMgr(
 	updateTimerAckLevel updateTimerAckLevel,
 	logger log.Logger,
 	clusterName string,
+	executableInitializer taskExecutableInitializer,
 ) *timerQueueAckMgrImpl {
 	ackLevel := tasks.Key{FireTime: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
-		scope:               scope,
-		isFailover:          false,
-		shard:               shard,
-		executionMgr:        shard.GetExecutionManager(),
-		metricsClient:       shard.GetMetricsClient(),
-		logger:              logger,
-		config:              shard.GetConfig(),
-		timeNow:             timeNow,
-		updateTimerAckLevel: updateTimerAckLevel,
-		timerQueueShutdown:  func() error { return nil },
-		outstandingTasks:    make(map[tasks.Key]bool),
-		ackLevel:            ackLevel,
-		readLevel:           ackLevel,
-		minQueryLevel:       ackLevel.FireTime,
-		pageToken:           nil,
-		maxQueryLevel:       ackLevel.FireTime,
-		isReadFinished:      false,
-		finishedChan:        nil,
-		clusterName:         clusterName,
+		scope:                  scope,
+		isFailover:             false,
+		shard:                  shard,
+		executionMgr:           shard.GetExecutionManager(),
+		metricsClient:          shard.GetMetricsClient(),
+		logger:                 logger,
+		config:                 shard.GetConfig(),
+		timeNow:                timeNow,
+		updateTimerAckLevel:    updateTimerAckLevel,
+		timerQueueShutdown:     func() error { return nil },
+		outstandingExecutables: make(map[tasks.Key]queues.Executable),
+		ackLevel:               ackLevel,
+		readLevel:              ackLevel,
+		minQueryLevel:          ackLevel.FireTime,
+		pageToken:              nil,
+		maxQueryLevel:          ackLevel.FireTime,
+		isReadFinished:         false,
+		finishedChan:           nil,
+		clusterName:            clusterName,
+		executableInitializer:  executableInitializer,
 	}
 
 	return timerQueueAckMgrImpl
@@ -143,29 +140,31 @@ func newTimerQueueFailoverAckMgr(
 	updateTimerAckLevel updateTimerAckLevel,
 	timerQueueShutdown timerQueueShutdown,
 	logger log.Logger,
+	executableInitializer taskExecutableInitializer,
 ) *timerQueueAckMgrImpl {
 	// failover ack manager will start from the standby cluster's ack level to active cluster's ack level
 	ackLevel := tasks.Key{FireTime: minLevel}
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
-		scope:               metrics.TimerActiveQueueProcessorScope,
-		isFailover:          true,
-		shard:               shard,
-		executionMgr:        shard.GetExecutionManager(),
-		metricsClient:       shard.GetMetricsClient(),
-		logger:              logger,
-		config:              shard.GetConfig(),
-		timeNow:             timeNow,
-		updateTimerAckLevel: updateTimerAckLevel,
-		timerQueueShutdown:  timerQueueShutdown,
-		outstandingTasks:    make(map[tasks.Key]bool),
-		ackLevel:            ackLevel,
-		readLevel:           ackLevel,
-		minQueryLevel:       ackLevel.FireTime,
-		pageToken:           nil,
-		maxQueryLevel:       maxLevel,
-		isReadFinished:      false,
-		finishedChan:        make(chan struct{}, 1),
+		scope:                  metrics.TimerActiveQueueProcessorScope,
+		isFailover:             true,
+		shard:                  shard,
+		executionMgr:           shard.GetExecutionManager(),
+		metricsClient:          shard.GetMetricsClient(),
+		logger:                 logger,
+		config:                 shard.GetConfig(),
+		timeNow:                timeNow,
+		updateTimerAckLevel:    updateTimerAckLevel,
+		timerQueueShutdown:     timerQueueShutdown,
+		outstandingExecutables: make(map[tasks.Key]queues.Executable),
+		ackLevel:               ackLevel,
+		readLevel:              ackLevel,
+		minQueryLevel:          ackLevel.FireTime,
+		pageToken:              nil,
+		maxQueryLevel:          maxLevel,
+		isReadFinished:         false,
+		finishedChan:           make(chan struct{}, 1),
+		executableInitializer:  executableInitializer,
 	}
 
 	return timerQueueAckMgrImpl
@@ -175,7 +174,7 @@ func (t *timerQueueAckMgrImpl) getFinishedChan() <-chan struct{} {
 	return t.finishedChan
 }
 
-func (t *timerQueueAckMgrImpl) readTimerTasks() ([]tasks.Task, *time.Time, bool, error) {
+func (t *timerQueueAckMgrImpl) readTimerTasks() ([]queues.Executable, *time.Time, bool, error) {
 	if t.maxQueryLevel == t.minQueryLevel {
 		t.maxQueryLevel = t.shard.GetQueueMaxReadLevel(tasks.CategoryTimer, t.clusterName).FireTime
 	}
@@ -207,12 +206,12 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]tasks.Task, *time.Time, bool,
 	// to wait on it instead of doing queries.
 
 	var nextFireTime *time.Time
-	filteredTasks := []tasks.Task{}
+	filteredExecutables := make([]queues.Executable, 0, len(timerTasks))
 
 TaskFilterLoop:
 	for _, task := range timerTasks {
 		timerKey := &tasks.Key{FireTime: task.GetVisibilityTime(), TaskID: task.GetTaskID()}
-		_, isLoaded := t.outstandingTasks[*timerKey]
+		_, isLoaded := t.outstandingExecutables[*timerKey]
 		if isLoaded {
 			// timer already loaded
 			continue TaskFilterLoop
@@ -227,8 +226,9 @@ TaskFilterLoop:
 		t.logger.Debug("Moving timer read level", tag.Task(timerKey))
 		t.readLevel = *timerKey
 
-		t.outstandingTasks[*timerKey] = false
-		filteredTasks = append(filteredTasks, task)
+		taskExecutable := t.executableInitializer(task)
+		t.outstandingExecutables[*timerKey] = taskExecutable
+		filteredExecutables = append(filteredExecutables, taskExecutable)
 	}
 
 	if nextFireTime != nil || !morePage {
@@ -249,7 +249,7 @@ TaskFilterLoop:
 			// NOTE do not return nil filtered task
 			// or otherwise the tasks are loaded and will never be dispatched
 			// return true so timer quque process base will do another call
-			return filteredTasks, nil, true, nil
+			return filteredExecutables, nil, true, nil
 		}
 	}
 
@@ -257,7 +257,7 @@ TaskFilterLoop:
 	// can call back immediately to retrieve more tasks
 	moreTasks := nextFireTime == nil && morePage
 
-	return filteredTasks, nextFireTime, moreTasks, nil
+	return filteredExecutables, nextFireTime, moreTasks, nil
 }
 
 // read lookAheadTask from s.GetTimerMaxReadLevel to poll interval from there.
@@ -277,17 +277,6 @@ func (t *timerQueueAckMgrImpl) readLookAheadTask() (*time.Time, error) {
 	return timestamp.TimePtr(maxQueryLevel), nil
 }
 
-func (t *timerQueueAckMgrImpl) completeTimerTask(
-	taskTimestamp time.Time,
-	taskID int64,
-) {
-	timerKey := &tasks.Key{FireTime: taskTimestamp, TaskID: taskID}
-	t.Lock()
-	defer t.Unlock()
-
-	t.outstandingTasks[*timerKey] = true
-}
-
 func (t *timerQueueAckMgrImpl) getReadLevel() tasks.Key {
 	t.Lock()
 	defer t.Unlock()
@@ -305,12 +294,11 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 
 	t.Lock()
 	ackLevel := t.ackLevel
-	outstandingTasks := t.outstandingTasks
 
 	// Timer Sequence IDs can have holes in the middle. So we sort the map to get the order to
 	// check. TODO: we can maintain a sorted slice as well.
 	var sequenceIDs tasks.Keys
-	for k := range outstandingTasks {
+	for k := range t.outstandingExecutables {
 		sequenceIDs = append(sequenceIDs, k)
 	}
 	sort.Sort(sequenceIDs)
@@ -328,10 +316,10 @@ func (t *timerQueueAckMgrImpl) updateAckLevel() error {
 
 MoveAckLevelLoop:
 	for _, current := range sequenceIDs {
-		acked := outstandingTasks[current]
+		acked := t.outstandingExecutables[current].State() == ctasks.TaskStateAcked
 		if acked {
 			ackLevel = current
-			delete(outstandingTasks, current)
+			delete(t.outstandingExecutables, current)
 			t.logger.Debug("Moving timer ack level", tag.AckLevel(ackLevel))
 		} else {
 			break MoveAckLevelLoop
@@ -339,7 +327,7 @@ MoveAckLevelLoop:
 	}
 	t.ackLevel = ackLevel
 
-	if t.isFailover && t.isReadFinished && len(outstandingTasks) == 0 {
+	if t.isFailover && t.isReadFinished && len(t.outstandingExecutables) == 0 {
 		t.Unlock()
 		// this means in failover mode, all possible failover timer tasks
 		// are processed and we are free to shutdown
@@ -388,14 +376,4 @@ func (t *timerQueueAckMgrImpl) isProcessNow(expiryTime time.Time) bool {
 		t.logger.Warn("Timer task has timestamp zero")
 	}
 	return expiryTime.UnixNano() <= t.timeNow().UnixNano()
-}
-
-func createTimerRetryPolicy() backoff.RetryPolicy {
-	policy := backoff.NewExponentialRetryPolicy(timerOpInitialInterval)
-	policy.SetMaximumInterval(timerOpMaxInterval)
-	policy.SetExpirationInterval(timerOpExpirationInterval)
-	policy.SetBackoffCoefficient(timerOpBackoffCoefficient)
-	policy.SetMaximumAttempts(timerOpMaximumAttempts)
-
-	return policy
 }

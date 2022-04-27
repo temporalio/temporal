@@ -35,6 +35,7 @@ import (
 
 	gomock "github.com/golang/mock/gomock"
 	repication "go.temporal.io/server/api/replication/v1"
+	queues "go.temporal.io/server/service/history/queues"
 	tasks "go.temporal.io/server/service/history/tasks"
 )
 
@@ -209,18 +210,6 @@ func (m *MockqueueAckMgr) EXPECT() *MockqueueAckMgrMockRecorder {
 	return m.recorder
 }
 
-// completeQueueTask mocks base method.
-func (m *MockqueueAckMgr) completeQueueTask(taskID int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "completeQueueTask", taskID)
-}
-
-// completeQueueTask indicates an expected call of completeQueueTask.
-func (mr *MockqueueAckMgrMockRecorder) completeQueueTask(taskID interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "completeQueueTask", reflect.TypeOf((*MockqueueAckMgr)(nil).completeQueueTask), taskID)
-}
-
 // getFinishedChan mocks base method.
 func (m *MockqueueAckMgr) getFinishedChan() <-chan struct{} {
 	m.ctrl.T.Helper()
@@ -264,10 +253,10 @@ func (mr *MockqueueAckMgrMockRecorder) getQueueReadLevel() *gomock.Call {
 }
 
 // readQueueTasks mocks base method.
-func (m *MockqueueAckMgr) readQueueTasks() ([]tasks.Task, bool, error) {
+func (m *MockqueueAckMgr) readQueueTasks() ([]queues.Executable, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "readQueueTasks")
-	ret0, _ := ret[0].([]tasks.Task)
+	ret0, _ := ret[0].([]queues.Executable)
 	ret1, _ := ret[1].(bool)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
@@ -293,107 +282,6 @@ func (mr *MockqueueAckMgrMockRecorder) updateQueueAckLevel() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "updateQueueAckLevel", reflect.TypeOf((*MockqueueAckMgr)(nil).updateQueueAckLevel))
 }
 
-// MockqueueTaskExecutor is a mock of queueTaskExecutor interface.
-type MockqueueTaskExecutor struct {
-	ctrl     *gomock.Controller
-	recorder *MockqueueTaskExecutorMockRecorder
-}
-
-// MockqueueTaskExecutorMockRecorder is the mock recorder for MockqueueTaskExecutor.
-type MockqueueTaskExecutorMockRecorder struct {
-	mock *MockqueueTaskExecutor
-}
-
-// NewMockqueueTaskExecutor creates a new mock instance.
-func NewMockqueueTaskExecutor(ctrl *gomock.Controller) *MockqueueTaskExecutor {
-	mock := &MockqueueTaskExecutor{ctrl: ctrl}
-	mock.recorder = &MockqueueTaskExecutorMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockqueueTaskExecutor) EXPECT() *MockqueueTaskExecutorMockRecorder {
-	return m.recorder
-}
-
-// execute mocks base method.
-func (m *MockqueueTaskExecutor) execute(ctx context.Context, taskInfo tasks.Task, shouldProcessTask bool) error {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "execute", ctx, taskInfo, shouldProcessTask)
-	ret0, _ := ret[0].(error)
-	return ret0
-}
-
-// execute indicates an expected call of execute.
-func (mr *MockqueueTaskExecutorMockRecorder) execute(ctx, taskInfo, shouldProcessTask interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "execute", reflect.TypeOf((*MockqueueTaskExecutor)(nil).execute), ctx, taskInfo, shouldProcessTask)
-}
-
-// MocktaskExecutor is a mock of taskExecutor interface.
-type MocktaskExecutor struct {
-	ctrl     *gomock.Controller
-	recorder *MocktaskExecutorMockRecorder
-}
-
-// MocktaskExecutorMockRecorder is the mock recorder for MocktaskExecutor.
-type MocktaskExecutorMockRecorder struct {
-	mock *MocktaskExecutor
-}
-
-// NewMocktaskExecutor creates a new mock instance.
-func NewMocktaskExecutor(ctrl *gomock.Controller) *MocktaskExecutor {
-	mock := &MocktaskExecutor{ctrl: ctrl}
-	mock.recorder = &MocktaskExecutorMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MocktaskExecutor) EXPECT() *MocktaskExecutorMockRecorder {
-	return m.recorder
-}
-
-// complete mocks base method.
-func (m *MocktaskExecutor) complete(taskInfo *taskInfo) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "complete", taskInfo)
-}
-
-// complete indicates an expected call of complete.
-func (mr *MocktaskExecutorMockRecorder) complete(taskInfo interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "complete", reflect.TypeOf((*MocktaskExecutor)(nil).complete), taskInfo)
-}
-
-// getTaskFilter mocks base method.
-func (m *MocktaskExecutor) getTaskFilter() taskFilter {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getTaskFilter")
-	ret0, _ := ret[0].(taskFilter)
-	return ret0
-}
-
-// getTaskFilter indicates an expected call of getTaskFilter.
-func (mr *MocktaskExecutorMockRecorder) getTaskFilter() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getTaskFilter", reflect.TypeOf((*MocktaskExecutor)(nil).getTaskFilter))
-}
-
-// process mocks base method.
-func (m *MocktaskExecutor) process(ctx context.Context, taskInfo *taskInfo) (int, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "process", ctx, taskInfo)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// process indicates an expected call of process.
-func (mr *MocktaskExecutorMockRecorder) process(ctx, taskInfo interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*MocktaskExecutor)(nil).process), ctx, taskInfo)
-}
-
 // Mockprocessor is a mock of processor interface.
 type Mockprocessor struct {
 	ctrl     *gomock.Controller
@@ -415,47 +303,6 @@ func NewMockprocessor(ctrl *gomock.Controller) *Mockprocessor {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *Mockprocessor) EXPECT() *MockprocessorMockRecorder {
 	return m.recorder
-}
-
-// complete mocks base method.
-func (m *Mockprocessor) complete(taskInfo *taskInfo) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "complete", taskInfo)
-}
-
-// complete indicates an expected call of complete.
-func (mr *MockprocessorMockRecorder) complete(taskInfo interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "complete", reflect.TypeOf((*Mockprocessor)(nil).complete), taskInfo)
-}
-
-// getTaskFilter mocks base method.
-func (m *Mockprocessor) getTaskFilter() taskFilter {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getTaskFilter")
-	ret0, _ := ret[0].(taskFilter)
-	return ret0
-}
-
-// getTaskFilter indicates an expected call of getTaskFilter.
-func (mr *MockprocessorMockRecorder) getTaskFilter() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getTaskFilter", reflect.TypeOf((*Mockprocessor)(nil).getTaskFilter))
-}
-
-// process mocks base method.
-func (m *Mockprocessor) process(ctx context.Context, taskInfo *taskInfo) (int, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "process", ctx, taskInfo)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// process indicates an expected call of process.
-func (mr *MockprocessorMockRecorder) process(ctx, taskInfo interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*Mockprocessor)(nil).process), ctx, taskInfo)
 }
 
 // queueShutdown mocks base method.
@@ -525,32 +372,6 @@ func (m *MocktimerProcessor) EXPECT() *MocktimerProcessorMockRecorder {
 	return m.recorder
 }
 
-// complete mocks base method.
-func (m *MocktimerProcessor) complete(taskInfo *taskInfo) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "complete", taskInfo)
-}
-
-// complete indicates an expected call of complete.
-func (mr *MocktimerProcessorMockRecorder) complete(taskInfo interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "complete", reflect.TypeOf((*MocktimerProcessor)(nil).complete), taskInfo)
-}
-
-// getTaskFilter mocks base method.
-func (m *MocktimerProcessor) getTaskFilter() taskFilter {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "getTaskFilter")
-	ret0, _ := ret[0].(taskFilter)
-	return ret0
-}
-
-// getTaskFilter indicates an expected call of getTaskFilter.
-func (mr *MocktimerProcessorMockRecorder) getTaskFilter() *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "getTaskFilter", reflect.TypeOf((*MocktimerProcessor)(nil).getTaskFilter))
-}
-
 // notifyNewTimers mocks base method.
 func (m *MocktimerProcessor) notifyNewTimers(timerTask []tasks.Task) {
 	m.ctrl.T.Helper()
@@ -561,21 +382,6 @@ func (m *MocktimerProcessor) notifyNewTimers(timerTask []tasks.Task) {
 func (mr *MocktimerProcessorMockRecorder) notifyNewTimers(timerTask interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "notifyNewTimers", reflect.TypeOf((*MocktimerProcessor)(nil).notifyNewTimers), timerTask)
-}
-
-// process mocks base method.
-func (m *MocktimerProcessor) process(ctx context.Context, taskInfo *taskInfo) (int, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "process", ctx, taskInfo)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// process indicates an expected call of process.
-func (mr *MocktimerProcessorMockRecorder) process(ctx, taskInfo interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "process", reflect.TypeOf((*MocktimerProcessor)(nil).process), ctx, taskInfo)
 }
 
 // MocktimerQueueAckMgr is a mock of timerQueueAckMgr interface.
@@ -599,18 +405,6 @@ func NewMocktimerQueueAckMgr(ctrl *gomock.Controller) *MocktimerQueueAckMgr {
 // EXPECT returns an object that allows the caller to indicate expected use.
 func (m *MocktimerQueueAckMgr) EXPECT() *MocktimerQueueAckMgrMockRecorder {
 	return m.recorder
-}
-
-// completeTimerTask mocks base method.
-func (m *MocktimerQueueAckMgr) completeTimerTask(arg0 time.Time, arg1 int64) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "completeTimerTask", arg0, arg1)
-}
-
-// completeTimerTask indicates an expected call of completeTimerTask.
-func (mr *MocktimerQueueAckMgrMockRecorder) completeTimerTask(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "completeTimerTask", reflect.TypeOf((*MocktimerQueueAckMgr)(nil).completeTimerTask), arg0, arg1)
 }
 
 // getAckLevel mocks base method.
@@ -656,10 +450,10 @@ func (mr *MocktimerQueueAckMgrMockRecorder) getReadLevel() *gomock.Call {
 }
 
 // readTimerTasks mocks base method.
-func (m *MocktimerQueueAckMgr) readTimerTasks() ([]tasks.Task, *time.Time, bool, error) {
+func (m *MocktimerQueueAckMgr) readTimerTasks() ([]queues.Executable, *time.Time, bool, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "readTimerTasks")
-	ret0, _ := ret[0].([]tasks.Task)
+	ret0, _ := ret[0].([]queues.Executable)
 	ret1, _ := ret[1].(*time.Time)
 	ret2, _ := ret[2].(bool)
 	ret3, _ := ret[3].(error)

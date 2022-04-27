@@ -105,6 +105,20 @@ func (mr *MockContextMockRecorder) AppendHistoryEvents(ctx, request, namespaceID
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryEvents", reflect.TypeOf((*MockContext)(nil).AppendHistoryEvents), ctx, request, namespaceID, execution)
 }
 
+// AssertOwnership mocks base method.
+func (m *MockContext) AssertOwnership(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AssertOwnership", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AssertOwnership indicates an expected call of AssertOwnership.
+func (mr *MockContextMockRecorder) AssertOwnership(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssertOwnership", reflect.TypeOf((*MockContext)(nil).AssertOwnership), ctx)
+}
+
 // ConflictResolveWorkflowExecution mocks base method.
 func (m *MockContext) ConflictResolveWorkflowExecution(ctx context.Context, request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()

@@ -779,10 +779,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	if handler.mutableState.HasParentExecution() {
 		parentNamespaceID := namespace.ID(handler.mutableState.GetExecutionInfo().ParentNamespaceId)
 		parentNamespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(parentNamespaceID)
-		if err != nil {
-			return err
+		if err == nil {
+			parentNamespace = parentNamespaceEntry.Name()
 		}
-		parentNamespace = parentNamespaceEntry.Name()
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(

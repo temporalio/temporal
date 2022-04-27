@@ -1728,10 +1728,10 @@ func (h *Handler) convertError(err error) error {
 	switch err := err.(type) {
 	case *persistence.ShardOwnershipLostError:
 		hostInfo := h.hostInfoProvider.HostInfo()
-		if info, err := h.historyServiceResolver.Lookup(convert.Int32ToString(err.ShardID)); err == nil {
-			return serviceerrors.NewShardOwnershipLost(hostInfo.GetAddress(), info.GetAddress())
+		if ownerInfo, err := h.historyServiceResolver.Lookup(convert.Int32ToString(err.ShardID)); err == nil {
+			return serviceerrors.NewShardOwnershipLost(ownerInfo.GetAddress(), hostInfo.GetAddress())
 		}
-		return serviceerrors.NewShardOwnershipLost(hostInfo.GetAddress(), "<unknown>")
+		return serviceerrors.NewShardOwnershipLost("", hostInfo.GetAddress())
 	case *persistence.WorkflowConditionFailedError:
 		return serviceerror.NewUnavailable(err.Msg)
 	case *persistence.CurrentWorkflowConditionFailedError:

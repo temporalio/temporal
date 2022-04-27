@@ -49,6 +49,7 @@ import (
 )
 
 const (
+	taskTimeout                      = time.Second * 10
 	transferActiveTaskDefaultTimeout = 20 * time.Second
 )
 

@@ -30,8 +30,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/api/serviceerror"
-
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -40,8 +38,8 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/quotas"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -49,33 +47,33 @@ type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
 		BatchSize                           dynamicconfig.IntPropertyFn
-		WorkerCount                         dynamicconfig.IntPropertyFn
 		MaxPollRPS                          dynamicconfig.IntPropertyFn
 		MaxPollInterval                     dynamicconfig.DurationPropertyFn
 		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 		UpdateAckInterval                   dynamicconfig.DurationPropertyFn
 		UpdateAckIntervalJitterCoefficient  dynamicconfig.FloatPropertyFn
-		MaxRetryCount                       dynamicconfig.IntPropertyFn
-		RedispatchInterval                  dynamicconfig.DurationPropertyFn
-		RedispatchIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
-		MaxRedispatchQueueSize              dynamicconfig.IntPropertyFn
-		EnablePriorityTaskProcessor         dynamicconfig.BoolPropertyFn
+		RescheduleInterval                  dynamicconfig.DurationPropertyFn
+		RescheduleIntervalJitterCoefficient dynamicconfig.FloatPropertyFn
+		MaxReschdulerSize                   dynamicconfig.IntPropertyFn
+		PollBackoffInterval                 dynamicconfig.DurationPropertyFn
 		MetricScope                         int
 	}
 
 	queueProcessorBase struct {
-		clusterName   string
-		shard         shard.Context
-		timeSource    clock.TimeSource
-		options       *QueueProcessorOptions
-		processor     processor
-		logger        log.Logger
-		metricsScope  metrics.Scope
-		rateLimiter   quotas.RateLimiter // Read rate limiter
-		ackMgr        queueAckMgr
-		taskProcessor *taskProcessor // TODO: deprecate task processor, in favor of queueTaskProcessor
+		clusterName         string
+		shard               shard.Context
+		timeSource          clock.TimeSource
+		options             *QueueProcessorOptions
+		processor           processor
+		logger              log.Logger
+		metricsScope        metrics.Scope
+		rateLimiter         quotas.RateLimiter // Read rate limiter
+		ackMgr              queueAckMgr
+		executableScheduler queues.Scheduler
+		rescheduler         queues.Rescheduler
 
 		lastPollTime time.Time
+		backoffTimer *time.Timer
 
 		notifyCh   chan struct{}
 		status     int32
@@ -85,8 +83,6 @@ type (
 )
 
 var (
-	errUnexpectedQueueTask = serviceerror.NewInternal("unexpected queue task")
-
 	loadQueueTaskThrottleRetryDelay = 5 * time.Second
 )
 
@@ -97,18 +93,11 @@ func newQueueProcessorBase(
 	processor processor,
 	queueAckMgr queueAckMgr,
 	historyCache workflow.Cache,
+	executableScheduler queues.Scheduler,
+	rescheduler queues.Rescheduler,
 	logger log.Logger,
 	metricsScope metrics.Scope,
 ) *queueProcessorBase {
-
-	var taskProcessor *taskProcessor
-	if !options.EnablePriorityTaskProcessor() {
-		taskProcessorOptions := TaskProcessorOptions{
-			QueueSize:   options.BatchSize(),
-			WorkerCount: options.WorkerCount(),
-		}
-		taskProcessor = NewTaskProcessor(taskProcessorOptions, shard, historyCache, logger)
-	}
 
 	p := &queueProcessorBase{
 		clusterName: clusterName,
@@ -119,14 +108,15 @@ func newQueueProcessorBase(
 		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
 			func() float64 { return float64(options.MaxPollRPS()) },
 		),
-		status:        common.DaemonStatusInitialized,
-		notifyCh:      make(chan struct{}, 1),
-		shutdownCh:    make(chan struct{}),
-		logger:        logger,
-		metricsScope:  metricsScope,
-		ackMgr:        queueAckMgr,
-		lastPollTime:  time.Time{},
-		taskProcessor: taskProcessor,
+		status:              common.DaemonStatusInitialized,
+		notifyCh:            make(chan struct{}, 1),
+		shutdownCh:          make(chan struct{}),
+		logger:              logger,
+		metricsScope:        metricsScope,
+		ackMgr:              queueAckMgr,
+		lastPollTime:        time.Time{},
+		executableScheduler: executableScheduler,
+		rescheduler:         rescheduler,
 	}
 
 	return p
@@ -140,9 +130,7 @@ func (p *queueProcessorBase) Start() {
 	p.logger.Info("", tag.LifeCycleStarting, tag.ComponentTransferQueue)
 	defer p.logger.Info("", tag.LifeCycleStarted, tag.ComponentTransferQueue)
 
-	if p.taskProcessor != nil {
-		p.taskProcessor.Start()
-	}
+	p.executableScheduler.Start()
 	p.shutdownWG.Add(1)
 	p.notifyNewTask()
 	go p.processorPump()
@@ -157,15 +145,12 @@ func (p *queueProcessorBase) Stop() {
 	defer p.logger.Info("", tag.LifeCycleStopped, tag.ComponentTransferQueue)
 
 	close(p.shutdownCh)
-	p.retryTasks()
 
 	if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
 		p.logger.Warn("", tag.LifeCycleStopTimedout, tag.ComponentTransferQueue)
 	}
 
-	if p.taskProcessor != nil {
-		p.taskProcessor.Stop()
-	}
+	p.executableScheduler.Stop()
 }
 
 func (p *queueProcessorBase) notifyNewTask() {
@@ -191,11 +176,11 @@ func (p *queueProcessorBase) processorPump() {
 	))
 	defer updateAckTimer.Stop()
 
-	redispatchTimer := time.NewTimer(backoff.JitDuration(
-		p.options.RedispatchInterval(),
-		p.options.RedispatchIntervalJitterCoefficient(),
+	rescheduleTimer := time.NewTimer(backoff.JitDuration(
+		p.options.RescheduleInterval(),
+		p.options.RescheduleIntervalJitterCoefficient(),
 	))
-	defer redispatchTimer.Stop()
+	defer rescheduleTimer.Stop()
 
 processorPumpLoop:
 	for {
@@ -225,6 +210,12 @@ processorPumpLoop:
 				go p.Stop()
 				break processorPumpLoop
 			}
+		case <-rescheduleTimer.C:
+			p.rescheduler.Reschedule(0) // reschedule all
+			rescheduleTimer.Reset(backoff.JitDuration(
+				p.options.RescheduleInterval(),
+				p.options.RescheduleIntervalJitterCoefficient(),
+			))
 		}
 	}
 
@@ -232,6 +223,10 @@ processorPumpLoop:
 }
 
 func (p *queueProcessorBase) processBatch() {
+
+	if !p.verifyReschedulerSize() {
+		return
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), loadQueueTaskThrottleRetryDelay)
 	if err := p.rateLimiter.Wait(ctx); err != nil {
@@ -255,10 +250,7 @@ func (p *queueProcessorBase) processBatch() {
 	}
 
 	for _, task := range tasks {
-		if submitted := p.submitTask(task); !submitted {
-			// submitted since processor has been shutdown
-			return
-		}
+		p.submitTask(task)
 		select {
 		case <-p.shutdownCh:
 			return
@@ -271,31 +263,39 @@ func (p *queueProcessorBase) processBatch() {
 		// We return now to yield, but enqueue an event to poll later
 		p.notifyNewTask()
 	}
+}
 
-	return
+func (p *queueProcessorBase) verifyReschedulerSize() bool {
+	length := p.rescheduler.Len()
+	maxLength := p.options.MaxReschdulerSize()
+	buffer := p.options.BatchSize() * 2
+	if length+buffer > maxLength {
+		p.rescheduler.Reschedule(length + buffer - maxLength)
+	}
+
+	passed := p.rescheduler.Len() < maxLength
+	if passed && p.backoffTimer != nil {
+		p.backoffTimer.Stop()
+		p.backoffTimer = nil
+	}
+	if !passed && p.backoffTimer == nil {
+		p.backoffTimer = time.AfterFunc(p.options.PollBackoffInterval(), func() {
+			p.notifyNewTask() // re-enqueue the event
+		})
+	}
+
+	return passed
 }
 
 func (p *queueProcessorBase) submitTask(
-	taskInfo tasks.Task,
-) bool {
-
-	return p.taskProcessor.addTask(
-		NewTaskInfo(
-			p.processor,
-			taskInfo,
-			tasks.InitializeLogger(taskInfo, p.logger),
-		),
-	)
-}
-
-func (p *queueProcessorBase) retryTasks() {
-	if p.taskProcessor != nil {
-		p.taskProcessor.retryTasks()
-	}
-}
-
-func (p *queueProcessorBase) complete(
-	task tasks.Task,
+	executable queues.Executable,
 ) {
-	p.ackMgr.completeQueueTask(task.GetKey().TaskID)
+
+	submitted, err := p.executableScheduler.TrySubmit(executable)
+	if err != nil {
+		p.logger.Error("Failed to submit task", tag.Error(err))
+		executable.Reschedule()
+	} else if !submitted {
+		executable.Reschedule()
+	}
 }

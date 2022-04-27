@@ -25,15 +25,14 @@
 package history
 
 import (
-	"context"
-
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/xdc"
-	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -45,14 +44,6 @@ type (
 		*transferQueueProcessorBase
 		*queueProcessorBase
 		queueAckMgr
-
-		clusterName        string
-		shard              shard.Context
-		config             *configs.Config
-		transferTaskFilter taskFilter
-		logger             log.Logger
-		metricsClient      metrics.Client
-		taskExecutor       queueTaskExecutor
 	}
 )
 
@@ -70,23 +61,30 @@ func newTransferQueueStandbyProcessor(
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.TransferTaskBatchSize,
-		WorkerCount:                         config.TransferTaskWorkerCount,
 		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
 		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
 		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
 		UpdateAckIntervalJitterCoefficient:  config.TransferProcessorUpdateAckIntervalJitterCoefficient,
-		MaxRetryCount:                       config.TransferTaskMaxRetryCount,
-		RedispatchInterval:                  config.TransferProcessorRedispatchInterval,
-		RedispatchIntervalJitterCoefficient: config.TransferProcessorRedispatchIntervalJitterCoefficient,
-		MaxRedispatchQueueSize:              config.TransferProcessorMaxRedispatchQueueSize,
-		EnablePriorityTaskProcessor:         config.TransferProcessorEnablePriorityTaskProcessor,
+		RescheduleInterval:                  config.TransferProcessorRescheduleInterval,
+		RescheduleIntervalJitterCoefficient: config.TransferProcessorRescheduleIntervalJitterCoefficient,
+		MaxReschdulerSize:                   config.TransferProcessorMaxReschedulerSize,
+		PollBackoffInterval:                 config.TransferProcessorPollBackoffInterval,
 		MetricScope:                         metrics.TransferStandbyQueueProcessorScope,
 	}
 	logger = log.With(logger, tag.ClusterName(clusterName))
 
 	transferTaskFilter := func(task tasks.Task) bool {
-		return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
+		switch task.GetType() {
+		case enumsspb.TASK_TYPE_TRANSFER_RESET_WORKFLOW:
+			// no reset needed for standby
+			return false
+		case enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION,
+			enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION:
+			return true
+		default:
+			return taskAllocator.verifyStandbyTask(clusterName, namespace.ID(task.GetNamespaceID()), task)
+		}
 	}
 	maxReadAckLevel := func() int64 {
 		return shard.GetQueueMaxReadLevel(tasks.CategoryTransfer, clusterName).TaskID
@@ -99,21 +97,6 @@ func newTransferQueueStandbyProcessor(
 	}
 
 	processor := &transferQueueStandbyProcessorImpl{
-		clusterName:        clusterName,
-		shard:              shard,
-		config:             shard.GetConfig(),
-		transferTaskFilter: transferTaskFilter,
-		logger:             logger,
-		metricsClient:      shard.GetMetricsClient(),
-		taskExecutor: newTransferQueueStandbyTaskExecutor(
-			shard,
-			workflowCache,
-			archivalClient,
-			nDCHistoryResender,
-			logger,
-			clusterName,
-			matchingClient,
-		),
 		transferQueueProcessorBase: newTransferQueueProcessorBase(
 			shard,
 			options,
@@ -124,12 +107,47 @@ func newTransferQueueStandbyProcessor(
 		),
 	}
 
+	taskExecutor := newTransferQueueStandbyTaskExecutor(
+		shard,
+		workflowCache,
+		archivalClient,
+		nDCHistoryResender,
+		logger,
+		clusterName,
+		matchingClient,
+	)
+
+	scheduler := newTransferTaskScheduler(shard, logger)
+
+	rescheduler := queues.NewRescheduler(
+		scheduler,
+		shard.GetTimeSource(),
+		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
+	)
+
 	queueAckMgr := newQueueAckMgr(
 		shard,
 		options,
 		processor,
 		shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, clusterName).TaskID,
 		logger,
+		func(t tasks.Task) queues.Executable {
+			return queues.NewExecutable(
+				t,
+				transferTaskFilter,
+				taskExecutor,
+				scheduler,
+				rescheduler,
+				shard.GetTimeSource(),
+				logger,
+				shard.GetMetricsClient().Scope(
+					tasks.GetStandbyTransferTaskMetricsScope(t),
+				),
+				shard.GetConfig().TransferTaskMaxRetryCount,
+				queues.QueueTypeStandbyTransfer,
+				shard.GetConfig().NamespaceCacheRefreshInterval,
+			)
+		},
 	)
 
 	queueProcessorBase := newQueueProcessorBase(
@@ -139,6 +157,8 @@ func newTransferQueueStandbyProcessor(
 		processor,
 		queueAckMgr,
 		workflowCache,
+		scheduler,
+		rescheduler,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
 	)
@@ -149,26 +169,6 @@ func newTransferQueueStandbyProcessor(
 	return processor
 }
 
-func (t *transferQueueStandbyProcessorImpl) getTaskFilter() taskFilter {
-	return t.transferTaskFilter
-}
-
 func (t *transferQueueStandbyProcessorImpl) notifyNewTask() {
 	t.queueProcessorBase.notifyNewTask()
-}
-
-func (t *transferQueueStandbyProcessorImpl) complete(
-	taskInfo *taskInfo,
-) {
-
-	t.queueProcessorBase.complete(taskInfo.Task)
-}
-
-func (t *transferQueueStandbyProcessorImpl) process(
-	ctx context.Context,
-	taskInfo *taskInfo,
-) (int, error) {
-	// TODO: task metricScope should be determined when creating taskInfo
-	metricScope := tasks.GetStandbyTransferTaskMetricsScope(taskInfo.Task)
-	return metricScope, t.taskExecutor.execute(ctx, taskInfo.Task, taskInfo.shouldProcessTask)
 }

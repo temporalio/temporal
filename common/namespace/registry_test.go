@@ -35,9 +35,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
-
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -72,6 +72,7 @@ func (s *registrySuite) SetupTest() {
 	s.registry = namespace.NewRegistry(
 		s.regPersistence,
 		true,
+		dynamicconfig.GetDurationPropertyFn(time.Second),
 		metrics.NoopClient,
 		log.NewTestLogger())
 }
@@ -658,7 +659,7 @@ func TestCacheByName(t *testing.T) {
 		Namespaces: []*persistence.GetNamespaceResponse{&nsrec},
 	}, nil)
 	reg := namespace.NewRegistry(
-		regPersist, false, metrics.NoopClient, log.NewNoopLogger())
+		regPersist, false, dynamicconfig.GetDurationPropertyFn(time.Second), metrics.NoopClient, log.NewNoopLogger())
 	reg.Start()
 	defer reg.Stop()
 	ns, err := reg.GetNamespace(namespace.Name("foo"))
