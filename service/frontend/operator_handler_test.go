@@ -30,6 +30,7 @@ import (
 	"fmt"
 	"testing"
 
+	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/operatorservice/v1"
 	"google.golang.org/grpc/health"
 
@@ -41,8 +42,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	sdkmocks "go.temporal.io/sdk/mocks"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
@@ -82,6 +85,8 @@ func (s *operatorHandlerSuite) SetupTest() {
 		s.mockResource.GetSearchAttributesProvider(),
 		s.mockResource.GetSearchAttributesManager(),
 		health.NewServer(),
+		s.mockResource.GetHistoryClient(),
+		s.mockResource.GetNamespaceRegistry(),
 	}
 	s.handler = NewOperatorHandlerImpl(args)
 	s.handler.Start()
@@ -454,4 +459,72 @@ func (s *operatorHandlerSuite) Test_DeleteNamespace() {
 	s.Equal("test-namespace-deleted-ka2te", resp.DeletedNamespace)
 	mockRun.AssertExpectations(s.T())
 	mockSdkClient.AssertExpectations(s.T())
+}
+
+func (s *operatorHandlerSuite) Test_DeleteWorkflowExecution() {
+	handler := s.handler
+	ctx := context.Background()
+
+	type test struct {
+		Name     string
+		Request  *operatorservice.DeleteWorkflowExecutionRequest
+		Expected error
+	}
+	// request validation tests
+	testCases1 := []test{
+		{
+			Name:     "nil request",
+			Request:  nil,
+			Expected: &serviceerror.InvalidArgument{Message: "Request is nil."},
+		},
+		{
+			Name:     "empty request",
+			Request:  &operatorservice.DeleteWorkflowExecutionRequest{},
+			Expected: &serviceerror.InvalidArgument{Message: "Execution is not set on request."},
+		},
+		{
+			Name: "empty namespace",
+			Request: &operatorservice.DeleteWorkflowExecutionRequest{
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: "test-workflow-id",
+					RunId:      "wrong-run-id",
+				},
+			},
+			Expected: &serviceerror.InvalidArgument{Message: "Invalid RunId."},
+		},
+	}
+	for _, testCase := range testCases1 {
+		s.T().Run(testCase.Name, func(t *testing.T) {
+			resp, err := handler.DeleteWorkflowExecution(ctx, testCase.Request)
+			s.Equal(testCase.Expected, err)
+			s.Nil(resp)
+		})
+	}
+
+	// History call failed.
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("random error"))
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	resp, err := handler.DeleteWorkflowExecution(ctx, &operatorservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			RunId:      "d2595cb3-3b21-4026-a3e8-17bc32fb2a2b",
+		},
+	})
+	s.Error(err)
+	s.Equal("random error", err.Error())
+	s.Nil(resp)
+
+	// Success case.
+	s.mockResource.HistoryClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowExecutionResponse{}, nil)
+	s.mockResource.NamespaceCache.EXPECT().GetNamespaceID(namespace.Name("test-namespace")).Return(namespace.ID("test-namespace-id"), nil)
+	resp, err = handler.DeleteWorkflowExecution(ctx, &operatorservice.DeleteWorkflowExecutionRequest{
+		Namespace: "test-namespace",
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: "test-workflow-id",
+			// RunId is not required.
+		},
+	})
+	s.NoError(err)
+	s.NotNil(resp)
 }
