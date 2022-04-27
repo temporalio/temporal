@@ -117,6 +117,7 @@ func newTimerQueueActiveProcessor(
 				),
 				shard.GetConfig().TimerTaskMaxRetryCount,
 				queues.QueueTypeActiveTimer,
+				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
 	)
@@ -228,6 +229,7 @@ func newTimerQueueFailoverProcessor(
 				),
 				shard.GetConfig().TimerTaskMaxRetryCount,
 				queues.QueueTypeActiveTimer,
+				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
 	)

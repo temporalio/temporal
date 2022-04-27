@@ -31,53 +31,52 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-var _ Reporter = (OpentelemetryReporter)(nil)
-var _ OpentelemetryReporter = (*opentelemetryReporterImpl)(nil)
-var _ OpentelemetryProvider = (*opentelemetryProviderImpl)(nil)
+var _ Reporter = (OpenTelemetryReporter)(nil)
+var _ OpenTelemetryReporter = (*openTelemetryReporterImpl)(nil)
 
 type (
-	OpentelemetryReporter interface {
+	OpenTelemetryReporter interface {
 		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
 		Stop(logger log.Logger)
 		GetMeter() metric.Meter
 		UserScope() UserScope
 	}
 
-	// opentelemetryReporterImpl is a base class for reporting metrics to opentelemetry.
-	opentelemetryReporterImpl struct {
+	// openTelemetryReporterImpl is a base class for reporting metrics to open telemetry.
+	openTelemetryReporterImpl struct {
 		exporter     *prometheus.Exporter
 		meter        metric.Meter
 		clientConfig *ClientConfig
 		gaugeCache   OtelGaugeCache
 		userScope    UserScope
-		otelProvider OpentelemetryProvider
+		otelProvider OpenTelemetryProvider
 	}
 
-	OpentelemetryListener struct {
+	OpenTelemetryListener struct {
 	}
 )
 
-func NewOpentelemeteryReporterFromPrometheusConfig(
+func NewOpenTelemetryReporterFromPrometheusConfig(
 	logger log.Logger, // keeping this to maintain API in case of adding more logging later
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
-) (*opentelemetryReporterImpl, error) {
-	otelProvider, err := NewOpentelemetryProvider(logger, prometheusConfig, clientConfig)
+) (*openTelemetryReporterImpl, error) {
+	otelProvider, err := NewOpenTelemetryProvider(logger, prometheusConfig, clientConfig)
 	if err != nil {
 		return nil, err
 	}
-	return NewOpentelemeteryReporter(logger, clientConfig, otelProvider)
+	return NewOpenTelemeteryReporter(logger, clientConfig, otelProvider)
 }
 
-func NewOpentelemeteryReporter(
+func NewOpenTelemeteryReporter(
 	logger log.Logger, // keeping this to maintain API in case of adding more logging later
 	clientConfig *ClientConfig,
-	otelProvider OpentelemetryProvider,
-) (*opentelemetryReporterImpl, error) {
+	otelProvider OpenTelemetryProvider,
+) (*openTelemetryReporterImpl, error) {
 	meter := otelProvider.GetMeter()
 	gaugeCache := NewOtelGaugeCache(meter)
-	userScope := NewOpentelemetryUserScope(meter, clientConfig.Tags, gaugeCache)
-	reporter := &opentelemetryReporterImpl{
+	userScope := NewOpenTelemetryUserScope(meter, clientConfig.Tags, gaugeCache)
+	reporter := &openTelemetryReporterImpl{
 		clientConfig: clientConfig,
 		gaugeCache:   gaugeCache,
 		userScope:    userScope,
@@ -87,18 +86,18 @@ func NewOpentelemeteryReporter(
 	return reporter, nil
 }
 
-func (r *opentelemetryReporterImpl) GetMeter() metric.Meter {
+func (r *openTelemetryReporterImpl) GetMeter() metric.Meter {
 	return r.otelProvider.GetMeter()
 }
 
-func (r *opentelemetryReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
-	return NewOpentelemeteryClient(r.clientConfig, serviceIdx, r, logger, r.gaugeCache)
+func (r *openTelemetryReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
+	return NewOpenTelemetryClient(r.clientConfig, serviceIdx, r, logger, r.gaugeCache)
 }
 
-func (r *opentelemetryReporterImpl) Stop(logger log.Logger) {
+func (r *openTelemetryReporterImpl) Stop(logger log.Logger) {
 	r.otelProvider.Stop(logger)
 }
 
-func (r *opentelemetryReporterImpl) UserScope() UserScope {
+func (r *openTelemetryReporterImpl) UserScope() UserScope {
 	return r.userScope
 }

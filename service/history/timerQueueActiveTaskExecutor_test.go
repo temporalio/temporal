@@ -1492,5 +1492,5 @@ func (s *timerQueueActiveTaskExecutorSuite) getMutableStateFromCache(
 func (s *timerQueueActiveTaskExecutorSuite) newTaskExecutable(
 	task tasks.Task,
 ) queues.Executable {
-	return queues.NewExecutable(task, nil, s.timerQueueActiveTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer)
+	return queues.NewExecutable(task, nil, s.timerQueueActiveTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer, nil)
 }

@@ -153,7 +153,7 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 		s.logger,
 		s.clusterName,
 		func(task tasks.Task) queues.Executable {
-			return queues.NewExecutable(task, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer)
+			return queues.NewExecutable(task, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer, nil)
 		},
 	)
 }
@@ -659,7 +659,7 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 		},
 		s.logger,
 		func(task tasks.Task) queues.Executable {
-			return queues.NewExecutable(task, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer)
+			return queues.NewExecutable(task, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTimer, nil)
 		},
 	)
 }

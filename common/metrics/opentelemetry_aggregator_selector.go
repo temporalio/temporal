@@ -36,8 +36,7 @@ import (
 type (
 	// OtelAggregatorSelector handles utilizing correct histogram bucket list for distinct metric unit types.
 	OtelAggregatorSelector struct {
-		buckets        map[MetricUnit][]histogram.Option
-		defaultBuckets []histogram.Option
+		buckets map[MetricUnit][]histogram.Option
 	}
 )
 
@@ -45,7 +44,6 @@ var _ emetric.AggregatorSelector = &OtelAggregatorSelector{}
 
 // Creates new instance of aggregator selector.
 func NewOtelAggregatorSelector(
-	defaultBoundaries []float64,
 	perUnitBoundaries map[string][]float64,
 ) *OtelAggregatorSelector {
 	perUnitBuckets := make(map[MetricUnit][]histogram.Option, len(perUnitBoundaries))
@@ -53,8 +51,7 @@ func NewOtelAggregatorSelector(
 		perUnitBuckets[MetricUnit(unit)] = []histogram.Option{histogram.WithExplicitBoundaries(buckets)}
 	}
 	return &OtelAggregatorSelector{
-		defaultBuckets: []histogram.Option{histogram.WithExplicitBoundaries(defaultBoundaries)},
-		buckets:        perUnitBuckets,
+		buckets: perUnitBuckets,
 	}
 }
 
@@ -63,7 +60,7 @@ func (s OtelAggregatorSelector) AggregatorFor(descriptor *sdkapi.Descriptor, agg
 	case sdkapi.GaugeObserverInstrumentKind:
 		lastValueAggs(aggPtrs)
 	case sdkapi.HistogramInstrumentKind:
-		options := s.defaultBuckets
+		var options []histogram.Option
 		if opts, ok := s.buckets[MetricUnit(descriptor.Unit())]; ok {
 			options = opts
 		}

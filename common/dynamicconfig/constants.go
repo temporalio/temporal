@@ -111,6 +111,8 @@ const (
 	EnableStickyQuery = "system.enableStickyQuery"
 	// EnableActivityLocalDispatch indicates if acitivty local dispatch is enabled per namespace
 	EnableActivityLocalDispatch = "system.enableActivityLocalDispatch"
+	// NamespaceCacheRefreshInterval is the key for namespace cache refresh interval dynamic config
+	NamespaceCacheRefreshInterval = "system.namespaceCacheRefreshInterval"
 
 	// key for size limit
 
@@ -490,6 +492,8 @@ const (
 	WorkflowTaskHeartbeatTimeout = "history.workflowTaskHeartbeatTimeout"
 	// WorkflowTaskCriticalAttempts is the number of attempts for a workflow task that's regarded as critical
 	WorkflowTaskCriticalAttempts = "history.workflowTaskCriticalAttempt"
+	// WorkflowTaskRetryMaxInterval is the maximum interval added to a workflow task's startToClose timeout for slowing down retry
+	WorkflowTaskRetryMaxInterval = "history.workflowTaskRetryMaxInterval"
 	// DefaultWorkflowTaskTimeout for a workflow task
 	DefaultWorkflowTaskTimeout = "history.defaultWorkflowTaskTimeout"
 	// SkipReapplicationByNamespaceID is whether skipping a event re-application for a namespace

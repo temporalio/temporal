@@ -38,7 +38,6 @@ type (
 		definition.WorkflowKey
 		VisibilityTimestamp time.Time
 		TaskID              int64
-		TargetNamespaceID   string
 		TaskQueue           string
 		ScheduleID          int64
 		Version             int64

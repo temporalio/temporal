@@ -33,22 +33,21 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
-	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/configs"
-
-	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/configs"
 )
 
 const (
@@ -146,19 +145,22 @@ func (c *ControllerImpl) Status() int32 {
 	return atomic.LoadInt32(&c.status)
 }
 
-func (c *ControllerImpl) GetEngine(ctx context.Context, namespaceID namespace.ID, workflowID string) (Engine, error) {
+func (c *ControllerImpl) GetShardByNamespaceWorkflow(
+	ctx context.Context,
+	namespaceID namespace.ID,
+	workflowID string,
+) (Context, error) {
 	shardID := c.config.GetShardID(namespaceID, workflowID)
-	return c.GetEngineForShard(ctx, shardID)
+	return c.GetShardByID(ctx, shardID)
 }
 
-func (c *ControllerImpl) GetEngineForShard(ctx context.Context, shardID int32) (Engine, error) {
+func (c *ControllerImpl) GetShardByID(
+	ctx context.Context,
+	shardID int32,
+) (Context, error) {
 	sw := c.metricsScope.StartTimer(metrics.GetEngineForShardLatency)
 	defer sw.Stop()
-	shard, err := c.getOrCreateShardContext(shardID)
-	if err != nil {
-		return nil, err
-	}
-	return shard.GetEngineWithContext(ctx)
+	return c.getOrCreateShardContext(shardID)
 }
 
 func (c *ControllerImpl) CloseShardByID(shardID int32) {
@@ -201,14 +203,14 @@ func (c *ControllerImpl) getOrCreateShardContext(shardID int32) (*ContextImpl, e
 	}
 	c.RUnlock()
 
-	info, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
+	ownerInfo, err := c.historyServiceResolver.Lookup(convert.Int32ToString(shardID))
 	if err != nil {
 		return nil, err
 	}
 
 	hostInfo := c.hostInfoProvider.HostInfo()
-	if info.Identity() != hostInfo.Identity() {
-		return nil, serviceerrors.NewShardOwnershipLost(hostInfo.Identity(), info.GetAddress())
+	if ownerInfo.Identity() != hostInfo.Identity() {
+		return nil, serviceerrors.NewShardOwnershipLost(ownerInfo.Identity(), hostInfo.GetAddress())
 	}
 
 	c.Lock()
@@ -336,7 +338,7 @@ func (c *ControllerImpl) acquireShards() {
 					} else {
 						if info.Identity() == c.hostInfoProvider.HostInfo().Identity() {
 							ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
-							if _, err := c.GetEngineForShard(ctx, shardID); err != nil {
+							if _, err := c.GetShardByID(ctx, shardID); err != nil {
 								c.metricsScope.IncCounter(metrics.GetEngineForShardErrorCounter)
 								c.contextTaggedLogger.Error("Unable to create history shard context", tag.Error(err), tag.OperationFailed, tag.ShardID(shardID))
 							}

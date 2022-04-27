@@ -104,7 +104,7 @@ type (
 		RecordTimer(timer string, d time.Duration)
 		// RecordDistribution records a distribution (wrapper on top of timer) for the given
 		// metric name
-		RecordDistribution(id string, d int)
+		RecordDistribution(id string, unit MetricUnit, d int)
 		// UpdateGauge reports Gauge type absolute value metric
 		UpdateGauge(gauge string, value float64)
 		// Tagged returns a new scope with added and/or overriden tags values that can be used

@@ -198,6 +198,12 @@ type (
 		PreviousRangeID int64
 	}
 
+	// AssertShardOwnershipRequest is used to assert shard ownership
+	AssertShardOwnershipRequest struct {
+		ShardID int32
+		RangeID int64
+	}
+
 	// AddHistoryTasksRequest is used to write new tasks
 	AddHistoryTasksRequest struct {
 		ShardID int32
@@ -977,8 +983,10 @@ type (
 	ShardManager interface {
 		Closeable
 		GetName() string
+
 		GetOrCreateShard(ctx context.Context, request *GetOrCreateShardRequest) (*GetOrCreateShardResponse, error)
 		UpdateShard(ctx context.Context, request *UpdateShardRequest) error
+		AssertShardOwnership(ctx context.Context, request *AssertShardOwnershipRequest) error
 	}
 
 	// ExecutionManager is used to manage workflow executions

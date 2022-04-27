@@ -166,6 +166,7 @@ func newVisibilityQueueProcessor(
 				),
 				shard.GetConfig().VisibilityTaskMaxRetryCount,
 				queues.QueueTypeVisibility,
+				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
 	)

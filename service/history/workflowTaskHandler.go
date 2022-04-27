@@ -215,20 +215,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
-	targetNamespaceID := namespaceID
-	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
-		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
-		}
-		targetNamespaceID = targetNamespaceEntry.ID()
-	}
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateActivityScheduleAttributes(
 				namespaceID,
-				targetNamespaceID,
 				attr,
 				timestamp.DurationValue(executionInfo.WorkflowRunTimeout),
 			)
@@ -788,10 +779,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	if handler.mutableState.HasParentExecution() {
 		parentNamespaceID := namespace.ID(handler.mutableState.GetExecutionInfo().ParentNamespaceId)
 		parentNamespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(parentNamespaceID)
-		if err != nil {
-			return err
+		if err == nil {
+			parentNamespace = parentNamespaceEntry.Name()
 		}
-		parentNamespace = parentNamespaceEntry.Name()
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(

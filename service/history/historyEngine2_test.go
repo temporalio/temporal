@@ -134,6 +134,8 @@ func (s *engine2Suite) SetupTest() {
 		s.config,
 	)
 	s.mockShard = mockShard
+	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
+
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -175,6 +177,7 @@ func (s *engine2Suite) SetupTest() {
 			s.config.SearchAttributesSizeOfValueLimit,
 			s.config.SearchAttributesTotalSizeLimit,
 		),
+		workflowConsistencyChecker: newWorkflowConsistencyChecker(mockShard, historyCache),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -927,6 +930,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
 		ScheduleAttempt: 1,
+		NamespaceId:     namespaceID.String(),
 		WorkflowId:      "wId",
 		RunId:           we.GetRunId(),
 		ScheduleId:      2,
@@ -975,6 +979,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 }
 
 func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttributes() {
+	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
@@ -982,6 +987,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
 		ScheduleAttempt: 1,
+		NamespaceId:     namespaceID.String(),
 		WorkflowId:      "wId",
 		RunId:           we.GetRunId(),
 		ScheduleId:      2,

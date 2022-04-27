@@ -1156,28 +1156,25 @@ func (c *clientImpl) getClientForShardID(shardID int32) (historyservice.HistoryS
 
 func (c *clientImpl) executeWithRedirect(ctx context.Context,
 	client historyservice.HistoryServiceClient,
-	op func(ctx context.Context, client historyservice.HistoryServiceClient) error) error {
+	op func(ctx context.Context, client historyservice.HistoryServiceClient) error,
+) error {
 
-	var err error
-redirectLoop:
 	for {
-		err = common.IsValidContext(ctx)
+		err := common.IsValidContext(ctx)
 		if err != nil {
-			break redirectLoop
+			return err
 		}
+
 		err = op(ctx, client)
-		if err != nil {
-			if s, ok := err.(*serviceerrors.ShardOwnershipLost); ok {
-				// TODO: consider emitting a metric for number of redirects
-				ret, err := c.clients.GetClientForClientKey(s.OwnerHost)
-				if err != nil {
-					return err
-				}
-				client = ret.(historyservice.HistoryServiceClient)
-				continue redirectLoop
+		if s, ok := err.(*serviceerrors.ShardOwnershipLost); ok && len(s.OwnerHost) != 0 {
+			// TODO: consider emitting a metric for number of redirects
+			ret, err := c.clients.GetClientForClientKey(s.OwnerHost)
+			if err != nil {
+				return err
 			}
+			client = ret.(historyservice.HistoryServiceClient)
+		} else {
+			return err
 		}
-		break redirectLoop
 	}
-	return err
 }

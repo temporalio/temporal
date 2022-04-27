@@ -144,6 +144,7 @@ func newTransferQueueActiveProcessor(
 				),
 				config.TransferTaskMaxRetryCount,
 				queues.QueueTypeActiveTransfer,
+				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
 	)
@@ -277,6 +278,7 @@ func newTransferQueueFailoverProcessor(
 				),
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				queues.QueueTypeActiveTransfer,
+				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
 	)

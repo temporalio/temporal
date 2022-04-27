@@ -64,7 +64,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	test "go.temporal.io/server/common/testing"
 	"go.temporal.io/server/environment"
 	"go.temporal.io/server/host"
@@ -1748,7 +1747,7 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 	})
 	s.Require().NoError(err)
 	// Wait for namespace cache to pick the change
-	time.Sleep(2 * namespace.CacheRefreshInterval)
+	time.Sleep(2 * host.NamespaceCacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
 		Namespace: s.namespace,

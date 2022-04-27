@@ -349,7 +349,6 @@ func (r *TaskGeneratorImpl) GenerateActivityTasks(
 		// TaskID is set by shard
 		WorkflowKey:         r.mutableState.GetWorkflowKey(),
 		VisibilityTimestamp: now,
-		TargetNamespaceID:   activityInfo.NamespaceId,
 		TaskQueue:           activityInfo.TaskQueue,
 		ScheduleID:          activityInfo.ScheduleId,
 		Version:             activityInfo.Version,

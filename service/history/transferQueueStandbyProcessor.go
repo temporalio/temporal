@@ -145,6 +145,7 @@ func newTransferQueueStandbyProcessor(
 				),
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				queues.QueueTypeStandbyTransfer,
+				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
 	)
