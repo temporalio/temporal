@@ -51,6 +51,7 @@ type (
 
 		Attempt() int
 		Logger() log.Logger
+		GetTask() tasks.Task
 
 		QueueType() QueueType
 	}
@@ -297,6 +298,10 @@ func (e *executableImpl) Attempt() int {
 
 func (e *executableImpl) Logger() log.Logger {
 	return e.logger
+}
+
+func (e *executableImpl) GetTask() tasks.Task {
+	return e.Task
 }
 
 func (e *executableImpl) QueueType() QueueType {

@@ -29,6 +29,9 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
+	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -100,4 +103,25 @@ func (t *transferQueueProcessorBase) updateAckLevel(
 
 func (t *transferQueueProcessorBase) queueShutdown() error {
 	return t.transferQueueShutdown()
+}
+
+func newTransferTaskScheduler(
+	shard shard.Context,
+	logger log.Logger,
+) queues.Scheduler {
+	config := shard.GetConfig()
+	return queues.NewScheduler(
+		queues.NewNoopPriorityAssigner(),
+		queues.SchedulerOptions{
+			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
+				WorkerCount: config.TransferTaskWorkerCount(),
+				QueueSize:   config.TransferTaskBatchSize(),
+			},
+			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
+				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TransferTaskSchedulerRoundRobinWeights(), logger),
+			},
+		},
+		shard.GetMetricsClient(),
+		logger,
+	)
 }
