@@ -30,6 +30,7 @@ import (
 	"os"
 
 	"github.com/pborman/uuid"
+	"go.temporal.io/api/operatorservice/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -321,6 +322,10 @@ func (tc *TestCluster) GetFrontendClient() FrontendClient {
 // GetAdminClient returns an admin client from the test cluster
 func (tc *TestCluster) GetAdminClient() AdminClient {
 	return tc.host.GetAdminClient()
+}
+
+func (tc *TestCluster) GetOperatorClient() operatorservice.OperatorServiceClient {
+	return tc.host.GetOperatorClient()
 }
 
 // GetHistoryClient returns a history client from the test cluster
