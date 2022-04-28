@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -1031,7 +1032,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newStateBuilder, err := createMutableState(
+	newStateBuilder, err := api.CreateMutableState(
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,
@@ -1075,7 +1076,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newStateBuilder, err := createMutableState(
+	newStateBuilder, err := api.CreateMutableState(
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,

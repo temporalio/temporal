@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -557,7 +558,7 @@ func (t *timerQueueActiveTaskExecutor) executeWorkflowTimeoutTask(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newMutableState, err := createMutableState(
+	newMutableState, err := api.CreateMutableState(
 		t.shard,
 		mutableState.GetNamespaceEntry(),
 		newRunID,
