@@ -435,7 +435,3 @@ func histogramBoundariesToHistogramObjectives(boundaries []float64) []prometheus
 	}
 	return result
 }
-
-func histogramBoundariesToValueBuckets(buckets []float64) tally.ValueBuckets {
-	return tally.ValueBuckets(buckets)
-}
