@@ -32,6 +32,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/shard"
@@ -130,17 +131,13 @@ func GenerateFirstWorkflowTask(
 
 func NewWorkflowVersionCheck(
 	shard shard.Context,
-	prevMutableState workflow.MutableState,
+	prevLastWriteVersion int64,
 	newMutableState workflow.MutableState,
 ) error {
-	if prevMutableState == nil {
+	if prevLastWriteVersion == common.EmptyVersion {
 		return nil
 	}
 
-	prevLastWriteVersion, err := prevMutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
 	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
 		clusterMetadata := shard.GetClusterMetadata()
 		namespaceEntry := newMutableState.GetNamespaceEntry()

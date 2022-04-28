@@ -2131,10 +2131,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	if err := api.NewWorkflowVersionCheck(e.shard, prevMutableState, mutableState); err != nil {
-		return nil, err
-	}
-
 	newWorkflow, newWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
 		now,
 		workflow.TransactionPolicyActive,
@@ -2154,6 +2150,9 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		prevRunID = prevMutableState.GetExecutionState().GetRunId()
 		prevLastWriteVersion, err = prevMutableState.GetLastWriteVersion()
 		if err != nil {
+			return nil, err
+		}
+		if err := api.NewWorkflowVersionCheck(e.shard, prevLastWriteVersion, mutableState); err != nil {
 			return nil, err
 		}
 	}
