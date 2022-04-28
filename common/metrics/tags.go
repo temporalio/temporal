@@ -40,14 +40,13 @@ const (
 	buildPlatformTag = "build_platform"
 	goVersionTag     = "go_version"
 
-	instance      = "instance"
-	namespace     = "namespace"
-	targetCluster = "target_cluster"
-	taskQueue     = "taskqueue"
-	workflowType  = "workflowType"
-	activityType  = "activityType"
-	commandType   = "commandType"
-	serviceName   = "service_name"
+	instance     = "instance"
+	namespace    = "namespace"
+	taskQueue    = "taskqueue"
+	workflowType = "workflowType"
+	activityType = "activityType"
+	commandType  = "commandType"
+	serviceName  = "service_name"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -56,6 +55,8 @@ const (
 
 	getType     = "%T"
 	errorPrefix = "*"
+
+	TargetClusterTagName = "target_cluster"
 )
 
 // Tag is an interface to define metrics tags
@@ -125,7 +126,7 @@ func TargetClusterTag(value string) Tag {
 	if len(value) == 0 {
 		value = unknownValue
 	}
-	return &tagImpl{key: targetCluster, value: value}
+	return &tagImpl{key: TargetClusterTagName, value: value}
 }
 
 // TaskQueueTag returns a new task queue tag.

@@ -284,7 +284,11 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		return err
 	}
 
+	metricsHandler := workflow.GetMetricsHandler(ctx).WithTags(
+		map[string]string{"migrate-namespace": params.Namespace, metrics.TargetClusterTagName: params.RemoteCluster})
+
 	// ** Step 3, wait remote cluster to catch up on replication tasks
+	waitReplicationStart := workflow.Now(ctx)
 	ao3 := workflow.ActivityOptions{
 		StartToCloseTimeout: time.Hour,
 		HeartbeatTimeout:    time.Second * 10,
@@ -298,6 +302,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		WaitForTaskIds: repStatus.MaxReplicationTaskIds,
 	}
 	err = workflow.ExecuteActivity(ctx3, a.WaitReplication, waitRequest).Get(ctx3, nil)
+	metricsHandler.Timer("catchup_duration").Record(workflow.Now(ctx).Sub(waitReplicationStart))
 	if err != nil {
 		return err
 	}
@@ -313,6 +318,7 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 	}
 
 	// ** Step 5, wait remote to ack handover task id
+	waitHandoverStart := workflow.Now(ctx)
 	ao5 := workflow.ActivityOptions{
 		StartToCloseTimeout:    time.Second * 30,
 		HeartbeatTimeout:       time.Second * 10,
@@ -326,6 +332,8 @@ func NamespaceHandoverWorkflow(ctx workflow.Context, params NamespaceHandoverPar
 		RemoteCluster: params.RemoteCluster,
 	}
 	err5 := workflow.ExecuteActivity(ctx5, a.WaitHandover, waitHandover).Get(ctx5, nil)
+	metricsHandler.Timer("handover_duration").Record(workflow.Now(ctx).Sub(waitHandoverStart))
+
 	if err5 == nil {
 		// ** Step 6, remote cluster is ready to take over, update Namespace to use remote cluster as active
 		updateRequest := updateActiveClusterRequest{
