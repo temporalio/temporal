@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -53,7 +54,7 @@ type (
 
 	workflowRebuilderImpl struct {
 		shard                      shard.Context
-		workflowConsistencyChecker WorkflowConsistencyChecker
+		workflowConsistencyChecker api.WorkflowConsistencyChecker
 		newStateRebuilder          nDCStateRebuilderProvider
 		transaction                workflow.Transaction
 		logger                     log.Logger
@@ -69,7 +70,7 @@ func NewWorkflowRebuilder(
 ) *workflowRebuilderImpl {
 	return &workflowRebuilderImpl{
 		shard:                      shard,
-		workflowConsistencyChecker: newWorkflowConsistencyChecker(shard, workflowCache),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, workflowCache),
 		newStateRebuilder: func() nDCStateRebuilder {
 			return newNDCStateRebuilder(shard, logger)
 		},
@@ -86,18 +87,18 @@ func (r *workflowRebuilderImpl) rebuild(
 	wfContext, err := r.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		workflowKey,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		wfContext.getReleaseFn()(retError)
-		wfContext.getContext().Clear()
+		wfContext.GetReleaseFn()(retError)
+		wfContext.GetContext().Clear()
 	}()
 
-	mutableState := wfContext.getMutableState()
+	mutableState := wfContext.GetMutableState()
 	_, dbRecordVersion := mutableState.GetUpdateCondition()
 
 	requestID := mutableState.GetExecutionState().CreateRequestId

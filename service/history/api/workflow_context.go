@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package api
 
 import (
 	"context"
@@ -30,49 +30,49 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
-type workflowContext interface {
-	getContext() workflow.Context
-	getMutableState() workflow.MutableState
-	reloadMutableState(context.Context) (workflow.MutableState, error)
-	getReleaseFn() workflow.ReleaseCacheFunc
-	getWorkflowID() string
-	getRunID() string
+type WorkflowContext interface {
+	GetContext() workflow.Context
+	GetMutableState() workflow.MutableState
+	ReloadMutableState(context.Context) (workflow.MutableState, error)
+	GetReleaseFn() workflow.ReleaseCacheFunc
+	GetWorkflowID() string
+	GetRunID() string
 }
 
-type workflowContextImpl struct {
+type WorkflowContextImpl struct {
 	context      workflow.Context
 	mutableState workflow.MutableState
 	releaseFn    workflow.ReleaseCacheFunc
 }
 
-type updateWorkflowAction struct {
-	noop               bool
-	createWorkflowTask bool
+type UpdateWorkflowAction struct {
+	Noop               bool
+	CreateWorkflowTask bool
 }
 
 var (
-	updateWorkflowWithNewWorkflowTask = &updateWorkflowAction{
-		createWorkflowTask: true,
+	UpdateWorkflowWithNewWorkflowTask = &UpdateWorkflowAction{
+		CreateWorkflowTask: true,
 	}
-	updateWorkflowWithoutWorkflowTask = &updateWorkflowAction{
-		createWorkflowTask: false,
+	UpdateWorkflowWithoutWorkflowTask = &UpdateWorkflowAction{
+		CreateWorkflowTask: false,
 	}
 )
 
-type updateWorkflowActionFunc func(workflowContext) (*updateWorkflowAction, error)
+type UpdateWorkflowActionFunc func(WorkflowContext) (*UpdateWorkflowAction, error)
 
-func (w *workflowContextImpl) getContext() workflow.Context {
+func (w *WorkflowContextImpl) GetContext() workflow.Context {
 	return w.context
 }
 
-func (w *workflowContextImpl) getMutableState() workflow.MutableState {
+func (w *WorkflowContextImpl) GetMutableState() workflow.MutableState {
 	return w.mutableState
 }
 
-func (w *workflowContextImpl) reloadMutableState(
+func (w *WorkflowContextImpl) ReloadMutableState(
 	ctx context.Context,
 ) (workflow.MutableState, error) {
-	mutableState, err := w.getContext().LoadWorkflowExecution(ctx)
+	mutableState, err := w.GetContext().LoadWorkflowExecution(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -80,25 +80,25 @@ func (w *workflowContextImpl) reloadMutableState(
 	return mutableState, nil
 }
 
-func (w *workflowContextImpl) getReleaseFn() workflow.ReleaseCacheFunc {
+func (w *WorkflowContextImpl) GetReleaseFn() workflow.ReleaseCacheFunc {
 	return w.releaseFn
 }
 
-func (w *workflowContextImpl) getWorkflowID() string {
-	return w.getContext().GetWorkflowID()
+func (w *WorkflowContextImpl) GetWorkflowID() string {
+	return w.GetContext().GetWorkflowID()
 }
 
-func (w *workflowContextImpl) getRunID() string {
-	return w.getContext().GetRunID()
+func (w *WorkflowContextImpl) GetRunID() string {
+	return w.GetContext().GetRunID()
 }
 
-func newWorkflowContext(
+func NewWorkflowContext(
 	context workflow.Context,
 	releaseFn workflow.ReleaseCacheFunc,
 	mutableState workflow.MutableState,
-) *workflowContextImpl {
+) *WorkflowContextImpl {
 
-	return &workflowContextImpl{
+	return &WorkflowContextImpl{
 		context:      context,
 		releaseFn:    releaseFn,
 		mutableState: mutableState,

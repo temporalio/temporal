@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
@@ -152,7 +153,7 @@ func (s *engine3Suite) SetupTest() {
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
 		},
-		workflowConsistencyChecker: newWorkflowConsistencyChecker(s.mockShard, historyCache),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, historyCache),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)

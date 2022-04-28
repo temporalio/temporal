@@ -27,6 +27,7 @@ package api
 import (
 	commonpb "go.temporal.io/api/common/v1"
 	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -123,6 +124,31 @@ func GenerateFirstWorkflowTask(
 		); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+func NewWorkflowVersionCheck(
+	shard shard.Context,
+	prevMutableState workflow.MutableState,
+	newMutableState workflow.MutableState,
+) error {
+	if prevMutableState == nil {
+		return nil
+	}
+
+	prevLastWriteVersion, err := prevMutableState.GetLastWriteVersion()
+	if err != nil {
+		return err
+	}
+	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
+		clusterMetadata := shard.GetClusterMetadata()
+		namespaceEntry := newMutableState.GetNamespaceEntry()
+		return serviceerror.NewNamespaceNotActive(
+			namespaceEntry.Name().String(),
+			clusterMetadata.GetCurrentClusterName(),
+			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
+		)
 	}
 	return nil
 }
