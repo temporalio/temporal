@@ -24,10 +24,6 @@
 
 package metrics
 
-import (
-	"github.com/uber-go/tally/v4"
-)
-
 // types used/defined by the package
 type (
 	// MetricName is the name of the metric
@@ -41,10 +37,9 @@ type (
 	// metricDefinition contains the definition for a metric
 	metricDefinition struct {
 		// nolint
-		metricType       MetricType    // metric type
-		metricName       MetricName    // metric name
-		metricRollupName MetricName    // optional. if non-empty, this name must be used for rolled-up version of this metric
-		buckets          tally.Buckets // buckets if we are emitting histograms
+		metricType       MetricType // metric type
+		metricName       MetricName // metric name
+		metricRollupName MetricName // optional. if non-empty, this name must be used for rolled-up version of this metric
 		unit             MetricUnit
 	}
 
@@ -56,6 +51,10 @@ type (
 
 	// ServiceIdx is an index that uniquely identifies the service
 	ServiceIdx int
+
+	metricDefinitions map[ServiceIdx]map[int]metricDefinition
+
+	scopeDefinitions map[ServiceIdx]map[int]scopeDefinition
 )
 
 // MetricUnit supported values
@@ -1217,7 +1216,7 @@ const (
 )
 
 // ScopeDefs record the scopes for all services
-var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
+var ScopeDefs = scopeDefinitions{
 	// common scope Names
 	Common: {
 		UnknownScope:                                      {operation: "Unknown"},
@@ -2250,7 +2249,7 @@ const (
 )
 
 // MetricDefs record the metrics for all services
-var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
+var MetricDefs = metricDefinitions{
 	Common: {
 		ServiceRequests:                                     NewCounterDef("service_requests"),
 		ServicePendingRequests:                              NewGaugeDef("service_pending_requests"),
@@ -2760,4 +2759,36 @@ func NewRollupCounterDef(name string, rollupName string) metricDefinition {
 
 func NewGaugeDef(name string) metricDefinition {
 	return metricDefinition{metricName: MetricName(name), metricType: Gauge}
+}
+
+func (m metricDefinition) MetricName() MetricName {
+	return m.metricName
+}
+
+func (m metricDefinition) MetricRollupName() MetricName {
+	return m.metricRollupName
+}
+
+func (md metricDefinitions) MetricName(svc ServiceIdx, metric int) MetricName {
+	return md[svc][metric].MetricName()
+}
+
+func (md metricDefinitions) MetricRollupName(svc ServiceIdx, metric int) MetricName {
+	return md[svc][metric].MetricRollupName()
+}
+
+func (s scopeDefinition) OperationName() string {
+	return s.operation
+}
+
+func (s scopeDefinition) Tags() map[string]string {
+	return s.tags
+}
+
+func (sd scopeDefinitions) OperationName(svc ServiceIdx, scope int) string {
+	return sd[svc][scope].OperationName()
+}
+
+func (sd scopeDefinitions) Tags(svc ServiceIdx, scope int) map[string]string {
+	return sd[svc][scope].Tags()
 }

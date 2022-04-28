@@ -26,6 +26,7 @@ package metrics
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"testing"
 
@@ -33,7 +34,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var IsMetric = regexp.MustCompile(`^[a-z][a-z_]*$`).MatchString
+var (
+	IsMetric = regexp.MustCompile(`^[a-z_]*$`).MatchString
+	IsScope  = regexp.MustCompile(`^[A-Za-z]|[a-z_]*$`).MatchString
+)
 
 func TestScopeDefsMapped(t *testing.T) {
 	for i := PersistenceGetOrCreateShardScope; i < NumCommonScopes; i++ {
@@ -106,6 +110,70 @@ func TestMetricDefs(t *testing.T) {
 		for _, metricDef := range metrics {
 			matched := IsMetric(string(metricDef.metricName))
 			assert.True(t, matched, fmt.Sprintf("Service: %v, metric_name: %v", service, metricDef.metricName))
+		}
+	}
+}
+
+func TestMetricDefsFuncs(t *testing.T) {
+	for service, metrics := range MetricDefs {
+		for _, metricDef := range metrics {
+			matched := IsMetric(string(metricDef.MetricName()))
+			t.Logf("Service: %v, metric_name: %v", service, metricDef.MetricName())
+			assert.True(t, matched, fmt.Sprintf("Service: %v, metric_name: %v", service, metricDef.MetricName()))
+
+			if len(metricDef.metricRollupName) != 0 {
+				matched = IsMetric(string(metricDef.MetricRollupName()))
+				t.Logf("Service: %v, metric_rollup_name: %v", service, metricDef.MetricRollupName())
+				assert.True(t, matched, fmt.Sprintf("Service: %v, metric_rollup_name: %v", service, metricDef.MetricRollupName()))
+			}
+		}
+	}
+}
+
+func TestMetricDefsContainerFuncs(t *testing.T) {
+	for service, metrics := range MetricDefs {
+		for idx, metricDef := range metrics {
+			matched := IsMetric(string(MetricDefs.MetricName(service, idx)))
+			t.Logf("Service: %v, metric_name: %v", service, MetricDefs.MetricName(service, idx))
+			assert.True(t, matched, fmt.Sprintf("Service: %v, metric_name: %v", service, MetricDefs.MetricName(service, idx)))
+
+			if len(metricDef.metricRollupName) != 0 {
+				matched = IsMetric(string(MetricDefs.MetricRollupName(service, idx)))
+				t.Logf("Service: %v, metric_rollup_name: %v", service, MetricDefs.MetricRollupName(service, idx))
+				assert.True(t, matched, fmt.Sprintf("Service: %v, metric_rollup_name: %v", service, MetricDefs.MetricRollupName(service, idx)))
+			}
+		}
+	}
+}
+
+func TestScopeDefsFuncs(t *testing.T) {
+	for service, metrics := range ScopeDefs {
+		for _, scopeDef := range metrics {
+			matched := IsScope(string(scopeDef.OperationName()))
+			t.Logf("Service: %v, scope_name: %v", service, scopeDef.OperationName())
+			assert.True(t, matched, fmt.Sprintf("Service: %v, scope_name: %v", service, scopeDef.OperationName()))
+
+			if len(scopeDef.tags) != 0 {
+				matched = reflect.DeepEqual(scopeDef.tags, scopeDef.Tags())
+				t.Logf("Service: %v, scope_tags: %v", service, scopeDef.Tags())
+				assert.True(t, matched, fmt.Sprintf("Service: %v, scope_tags: %+v", service, scopeDef.Tags()))
+			}
+		}
+	}
+}
+
+func TestScopeDefsContainerFuncs(t *testing.T) {
+	for service, metrics := range ScopeDefs {
+		for idx, scopeDef := range metrics {
+			matched := IsScope(string(ScopeDefs.OperationName(service, idx)))
+			t.Logf("Service: %v, scope_name: %v", service, ScopeDefs.OperationName(service, idx))
+			assert.True(t, matched, fmt.Sprintf("Service: %v, scope_name: %v", service, ScopeDefs.OperationName(service, idx)))
+
+			if len(scopeDef.tags) != 0 {
+				matched = reflect.DeepEqual(scopeDef.tags, ScopeDefs.Tags(service, idx))
+				t.Logf("Service: %v, scope_tags: %v", service, ScopeDefs.Tags(service, idx))
+				assert.True(t, matched, fmt.Sprintf("Service: %v, scope_tags: %v", service, ScopeDefs.Tags(service, idx)))
+			}
 		}
 	}
 }
