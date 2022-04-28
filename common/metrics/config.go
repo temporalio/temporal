@@ -248,6 +248,7 @@ var (
 // extension := MyExtensions(reporter.UserScope())
 // serverOptions.WithReporter(reporter)
 func InitMetricsReporter(logger log.Logger, c *Config) (Reporter, error) {
+	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
 		return InitReporterFromPrometheusConfig(logger, c.Prometheus, &c.ClientConfig)
 	}
@@ -305,7 +306,6 @@ func NewTallyReporterFromPrometheusConfig(
 ) Reporter {
 	tallyConfig := convertPrometheusConfigToTally(config)
 	tallyScope := newPrometheusScope(logger, tallyConfig, clientConfig)
-	setDefaultPerUnitHistogramBoundaries(clientConfig)
 	return NewTallyReporter(tallyScope, clientConfig)
 }
 
@@ -345,7 +345,7 @@ func convertPrometheusConfigToTally(
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
-	if clientConfig.PerUnitHistogramBoundaries != nil && len(clientConfig.PerUnitHistogramBoundaries) > 0 {
+	if clientConfig.PerUnitHistogramBoundaries != nil && len(clientConfig.PerUnitHistogramBoundaries) == len(defaultPerUnitHistogramBoundaries) {
 		return
 	}
 	clientConfig.PerUnitHistogramBoundaries = defaultPerUnitHistogramBoundaries
