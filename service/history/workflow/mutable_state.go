@@ -236,7 +236,6 @@ type (
 		UpdateActivity(*persistencespb.ActivityInfo) error
 		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
-		UpdateWorkflowTask(*WorkflowTaskInfo)
 		UpdateUserTimer(*persistencespb.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error

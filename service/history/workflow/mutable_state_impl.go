@@ -1259,13 +1259,6 @@ func (e *MutableStateImpl) HasBufferedEvents() bool {
 	return e.hBuilder.HasBufferEvents()
 }
 
-// UpdateWorkflowTask updates a workflow task.
-func (e *MutableStateImpl) UpdateWorkflowTask(
-	workflowTask *WorkflowTaskInfo,
-) {
-	e.workflowTaskManager.UpdateWorkflowTask(workflowTask)
-}
-
 // DeleteWorkflowTask deletes a workflow task.
 func (e *MutableStateImpl) DeleteWorkflowTask() {
 	e.workflowTaskManager.DeleteWorkflowTask()
