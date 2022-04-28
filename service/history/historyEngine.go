@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/tasks"
 
@@ -58,7 +59,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -464,46 +464,6 @@ func (e *historyEngineImpl) handleClusterMetadataUpdate(
 	}
 }
 
-func createMutableState(
-	shard shard.Context,
-	namespaceEntry *namespace.Namespace,
-	runID string,
-) (workflow.MutableState, error) {
-
-	var newMutableState workflow.MutableState
-	// version history applies to both local and global namespace
-	newMutableState = workflow.NewMutableState(
-		shard,
-		shard.GetEventsCache(),
-		shard.GetLogger(),
-		namespaceEntry,
-		shard.GetTimeSource().Now(),
-	)
-
-	if err := newMutableState.SetHistoryTree(runID); err != nil {
-		return nil, err
-	}
-
-	return newMutableState, nil
-}
-
-func (e *historyEngineImpl) generateFirstWorkflowTask(
-	mutableState workflow.MutableState,
-	parentInfo *workflowspb.ParentExecutionInfo,
-	startEvent *historypb.HistoryEvent,
-) error {
-
-	if parentInfo == nil {
-		// WorkflowTask is only created when it is not a Child Workflow and no backoff is needed
-		if err := mutableState.AddFirstWorkflowTaskScheduled(
-			startEvent,
-		); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // StartWorkflowExecution starts a workflow execution
 // Consistency guarantee: always write
 func (e *historyEngineImpl) StartWorkflowExecution(
@@ -542,7 +502,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		RunId:      uuid.New(),
 	}
 
-	weContext, mutableState, err := e.newWorkflowWithSignal(namespaceEntry, execution, startRequest, nil)
+	weContext, mutableState, err := api.NewWorkflowWithSignal(e.shard, namespaceEntry, execution, startRequest, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -629,7 +589,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 			),
 			prevExecutionUpdateAction,
 			func() (workflow.Context, workflow.MutableState, error) {
-				return e.newWorkflowWithSignal(namespaceEntry, execution, startRequest, nil)
+				return api.NewWorkflowWithSignal(e.shard, namespaceEntry, execution, startRequest, nil)
 			},
 		)
 		switch err {
@@ -660,60 +620,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	return &historyservice.StartWorkflowExecutionResponse{
 		RunId: execution.GetRunId(),
 	}, nil
-}
-
-func (e *historyEngineImpl) newWorkflowWithSignal(
-	namespaceEntry *namespace.Namespace,
-	execution commonpb.WorkflowExecution,
-	startRequest *historyservice.StartWorkflowExecutionRequest,
-	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (workflow.Context, workflow.MutableState, error) {
-	newMutableState, err := createMutableState(e.shard, namespaceEntry, execution.GetRunId())
-	if err != nil {
-		return nil, nil, err
-	}
-
-	startEvent, err := newMutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		startRequest,
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	if signalWithStartRequest != nil {
-		if signalWithStartRequest.GetRequestId() != "" {
-			newMutableState.AddSignalRequested(signalWithStartRequest.GetRequestId())
-		}
-		if _, err := newMutableState.AddWorkflowExecutionSignaled(
-			signalWithStartRequest.GetSignalName(),
-			signalWithStartRequest.GetSignalInput(),
-			signalWithStartRequest.GetIdentity(),
-			signalWithStartRequest.GetHeader(),
-		); err != nil {
-			return nil, nil, err
-		}
-	}
-
-	// Generate first workflow task event if not child WF and no first workflow task backoff
-	if err := e.generateFirstWorkflowTask(
-		newMutableState,
-		startRequest.ParentExecutionInfo,
-		startEvent,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	newWorkflowContext := workflow.NewContext(
-		e.shard,
-		definition.NewWorkflowKey(
-			namespaceEntry.ID().String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		e.logger,
-	)
-	return newWorkflowContext, newMutableState, nil
 }
 
 // GetMutableState retrieves the mutable state of the workflow execution
@@ -2201,7 +2107,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				newWorkflowContext(prevContext, release, prevMutableState),
 				prevExecutionUpdateAction,
 				func() (workflow.Context, workflow.MutableState, error) {
-					return e.newWorkflowWithSignal(namespaceEntry, execution, startRequest, sRequest)
+					return api.NewWorkflowWithSignal(e.shard, namespaceEntry, execution, startRequest, sRequest)
 				},
 			)
 			switch err {
@@ -2219,7 +2125,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	now := e.timeSource.Now()
-	context, mutableState, err := e.newWorkflowWithSignal(namespaceEntry, execution, startRequest, sRequest)
+	context, mutableState, err := api.NewWorkflowWithSignal(e.shard, namespaceEntry, execution, startRequest, sRequest)
 	if err != nil {
 		return nil, err
 	}
