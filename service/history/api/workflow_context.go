@@ -27,6 +27,8 @@ package api
 import (
 	"context"
 
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/service/history/workflow"
 )
 
@@ -35,8 +37,13 @@ type WorkflowContext interface {
 	GetMutableState() workflow.MutableState
 	ReloadMutableState(context.Context) (workflow.MutableState, error)
 	GetReleaseFn() workflow.ReleaseCacheFunc
+
+	GetNamespaceID() namespace.ID
 	GetWorkflowID() string
 	GetRunID() string
+
+	GetNamespaceEntry() *namespace.Namespace
+	GetWorkflowKey() definition.WorkflowKey
 }
 
 type WorkflowContextImpl struct {
@@ -61,36 +68,7 @@ var (
 
 type UpdateWorkflowActionFunc func(WorkflowContext) (*UpdateWorkflowAction, error)
 
-func (w *WorkflowContextImpl) GetContext() workflow.Context {
-	return w.context
-}
-
-func (w *WorkflowContextImpl) GetMutableState() workflow.MutableState {
-	return w.mutableState
-}
-
-func (w *WorkflowContextImpl) ReloadMutableState(
-	ctx context.Context,
-) (workflow.MutableState, error) {
-	mutableState, err := w.GetContext().LoadWorkflowExecution(ctx)
-	if err != nil {
-		return nil, err
-	}
-	w.mutableState = mutableState
-	return mutableState, nil
-}
-
-func (w *WorkflowContextImpl) GetReleaseFn() workflow.ReleaseCacheFunc {
-	return w.releaseFn
-}
-
-func (w *WorkflowContextImpl) GetWorkflowID() string {
-	return w.GetContext().GetWorkflowID()
-}
-
-func (w *WorkflowContextImpl) GetRunID() string {
-	return w.GetContext().GetRunID()
-}
+var _ WorkflowContext = (*WorkflowContextImpl)(nil)
 
 func NewWorkflowContext(
 	context workflow.Context,
@@ -103,4 +81,52 @@ func NewWorkflowContext(
 		releaseFn:    releaseFn,
 		mutableState: mutableState,
 	}
+}
+
+func (w *WorkflowContextImpl) GetContext() workflow.Context {
+	return w.context
+}
+
+func (w *WorkflowContextImpl) GetMutableState() workflow.MutableState {
+	return w.mutableState
+}
+
+func (w *WorkflowContextImpl) ReloadMutableState(
+	ctx context.Context,
+) (workflow.MutableState, error) {
+	w.context.Clear()
+	mutableState, err := w.context.LoadWorkflowExecution(ctx)
+	if err != nil {
+		return nil, err
+	}
+	w.mutableState = mutableState
+	return mutableState, nil
+}
+
+func (w *WorkflowContextImpl) GetReleaseFn() workflow.ReleaseCacheFunc {
+	return w.releaseFn
+}
+
+func (w *WorkflowContextImpl) GetNamespaceID() namespace.ID {
+	return w.context.GetNamespaceID()
+}
+
+func (w *WorkflowContextImpl) GetWorkflowID() string {
+	return w.context.GetWorkflowID()
+}
+
+func (w *WorkflowContextImpl) GetRunID() string {
+	return w.context.GetRunID()
+}
+
+func (w *WorkflowContextImpl) GetNamespaceEntry() *namespace.Namespace {
+	return w.mutableState.GetNamespaceEntry()
+}
+
+func (w *WorkflowContextImpl) GetWorkflowKey() definition.WorkflowKey {
+	return definition.NewWorkflowKey(
+		w.context.GetNamespaceID().String(),
+		w.context.GetWorkflowID(),
+		w.context.GetRunID(),
+	)
 }
