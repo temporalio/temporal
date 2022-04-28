@@ -248,6 +248,7 @@ var (
 // extension := MyExtensions(reporter.UserScope())
 // serverOptions.WithReporter(reporter)
 func InitMetricsReporter(logger log.Logger, c *Config) (Reporter, error) {
+	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
 	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
 		return InitReporterFromPrometheusConfig(logger, c.Prometheus, &c.ClientConfig)
 	}
@@ -305,7 +306,6 @@ func NewTallyReporterFromPrometheusConfig(
 ) Reporter {
 	tallyConfig := convertPrometheusConfigToTally(config)
 	tallyScope := newPrometheusScope(logger, tallyConfig, clientConfig)
-	setDefaultPerUnitHistogramBoundaries(clientConfig)
 	return NewTallyReporter(tallyScope, clientConfig)
 }
 
@@ -345,10 +345,14 @@ func convertPrometheusConfigToTally(
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
-	if clientConfig.PerUnitHistogramBoundaries != nil && len(clientConfig.PerUnitHistogramBoundaries) > 0 {
-		return
+	if clientConfig.PerUnitHistogramBoundaries == nil {
+		clientConfig.PerUnitHistogramBoundaries = make(map[string][]float64)
 	}
-	clientConfig.PerUnitHistogramBoundaries = defaultPerUnitHistogramBoundaries
+	for unit, bucket := range defaultPerUnitHistogramBoundaries {
+		if _, ok := clientConfig.PerUnitHistogramBoundaries[unit]; !ok {
+			clientConfig.PerUnitHistogramBoundaries[unit] = bucket
+		}
+	}
 }
 
 // newM3Scope returns a new m3 scope with
@@ -430,8 +434,4 @@ func histogramBoundariesToHistogramObjectives(boundaries []float64) []prometheus
 		)
 	}
 	return result
-}
-
-func histogramBoundariesToValueBuckets(buckets []float64) tally.ValueBuckets {
-	return tally.ValueBuckets(buckets)
 }
