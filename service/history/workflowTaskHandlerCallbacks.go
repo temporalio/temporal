@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/api"
 
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -120,21 +121,21 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 	return handler.historyEngine.updateWorkflow(
 		ctx,
 		req.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
 
 			if mutableState.HasProcessedOrPendingWorkflowTask() {
-				return &updateWorkflowAction{
-					noop: true,
+				return &api.UpdateWorkflowAction{
+					Noop: true,
 				}, nil
 			}
 
@@ -148,7 +149,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskScheduled(
 				return nil, err
 			}
 
-			return &updateWorkflowAction{}, nil
+			return &api.UpdateWorkflowAction{}, nil
 		})
 }
 
@@ -169,14 +170,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 	err = handler.historyEngine.updateWorkflow(
 		ctx,
 		req.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			req.NamespaceId,
 			req.WorkflowExecution.WorkflowId,
 			req.WorkflowExecution.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -201,7 +202,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 				return nil, serviceerror.NewNotFound("Workflow task not found.")
 			}
 
-			updateAction := &updateWorkflowAction{}
+			updateAction := &api.UpdateWorkflowAction{}
 
 			if workflowTask.StartedID != common.EmptyEventID {
 				// If workflow task is started as part of the current request scope then return a positive response
@@ -210,7 +211,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskStarted(
 					if err != nil {
 						return nil, err
 					}
-					updateAction.noop = true
+					updateAction.Noop = true
 					return updateAction, nil
 				}
 
@@ -273,14 +274,14 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 	return handler.historyEngine.updateWorkflow(
 		ctx,
 		token.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			token.NamespaceId,
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -296,9 +297,9 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskFailed(
 			if err != nil {
 				return nil, err
 			}
-			return &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: true,
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: true,
 			}, nil
 		})
 }
@@ -341,10 +342,10 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { workflowContext.getReleaseFn()(retError) }()
+	defer func() { workflowContext.GetReleaseFn()(retError) }()
 
-	weContext := workflowContext.getContext()
-	msBuilder := workflowContext.getMutableState()
+	weContext := workflowContext.GetContext()
+	msBuilder := workflowContext.GetMutableState()
 	currentWorkflowTask, currentWorkflowTaskRunning := msBuilder.GetWorkflowTaskInfo(scheduleID)
 
 	executionInfo := msBuilder.GetExecutionInfo()

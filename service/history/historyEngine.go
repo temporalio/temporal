@@ -123,7 +123,7 @@ type (
 		searchAttributesValidator     *searchattribute.Validator
 		workflowDeleteManager         workflow.DeleteManager
 		eventSerializer               serialization.Serializer
-		workflowConsistencyChecker    WorkflowConsistencyChecker
+		workflowConsistencyChecker    api.WorkflowConsistencyChecker
 	}
 )
 
@@ -178,7 +178,7 @@ func NewEngineWithShardContext(
 		replicationTaskFetchers:    replicationTaskFetchers,
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
-		workflowConsistencyChecker: newWorkflowConsistencyChecker(shard, historyCache),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, historyCache),
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)
@@ -581,7 +581,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		err := e.updateWorkflowWithNew(
 			ctx,
 			nil,
-			BypassMutableStateConsistencyPredicate,
+			api.BypassMutableStateConsistencyPredicate,
 			definition.NewWorkflowKey(
 				namespaceID.String(),
 				execution.WorkflowId,
@@ -1105,22 +1105,22 @@ func (e *historyEngineImpl) ResetStickyTaskQueue(
 	err = e.updateWorkflow(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			resetRequest.NamespaceId,
 			resetRequest.Execution.WorkflowId,
 			resetRequest.Execution.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
 
 			mutableState.ClearStickyness()
-			return &updateWorkflowAction{
-				noop:               true,
-				createWorkflowTask: false,
+			return &api.UpdateWorkflowAction{
+				Noop:               true,
+				CreateWorkflowTask: false,
 			}, nil
 		},
 	)
@@ -1299,14 +1299,14 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 	err = e.updateWorkflow(
 		ctx,
 		request.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -1344,9 +1344,9 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 				if ai.RequestId == requestID {
 					response.StartedTime = ai.StartedTime
 					response.Attempt = ai.Attempt
-					return &updateWorkflowAction{
-						noop:               false,
-						createWorkflowTask: false,
+					return &api.UpdateWorkflowAction{
+						Noop:               false,
+						CreateWorkflowTask: false,
 					}, nil
 				}
 
@@ -1380,9 +1380,9 @@ func (e *historyEngineImpl) RecordActivityTaskStarted(
 			response.WorkflowType = mutableState.GetWorkflowType()
 			response.WorkflowNamespace = namespace.String()
 
-			return &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: false,
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
 			}, nil
 		})
 
@@ -1452,14 +1452,14 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 	err = e.updateWorkflow(
 		ctx,
 		token.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			token.NamespaceId,
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			workflowTypeName = mutableState.GetWorkflowType().GetName()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
@@ -1491,9 +1491,9 @@ func (e *historyEngineImpl) RespondActivityTaskCompleted(
 			}
 			activityStartedTime = *ai.StartedTime
 			taskQueue = ai.TaskQueue
-			return &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: true,
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: true,
 			}, nil
 		})
 
@@ -1537,14 +1537,14 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 	err = e.updateWorkflow(
 		ctx,
 		token.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			token.NamespaceId,
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			workflowTypeName = mutableState.GetWorkflowType().GetName()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
@@ -1583,7 +1583,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 				})
 			}
 
-			postActions := &updateWorkflowAction{}
+			postActions := &api.UpdateWorkflowAction{}
 			failure := request.GetFailure()
 			retryState, err := mutableState.RetryActivity(ai, failure)
 			if err != nil {
@@ -1595,7 +1595,7 @@ func (e *historyEngineImpl) RespondActivityTaskFailed(
 					// Unable to add ActivityTaskFailed event to history
 					return nil, err
 				}
-				postActions.createWorkflowTask = true
+				postActions.CreateWorkflowTask = true
 			}
 
 			activityStartedTime = *ai.StartedTime
@@ -1642,14 +1642,14 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 	err = e.updateWorkflow(
 		ctx,
 		token.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			token.NamespaceId,
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			workflowTypeName = mutableState.GetWorkflowType().GetName()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
@@ -1693,9 +1693,9 @@ func (e *historyEngineImpl) RespondActivityTaskCanceled(
 
 			activityStartedTime = *ai.StartedTime
 			taskQueue = ai.TaskQueue
-			return &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: true,
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: true,
 			}, nil
 		})
 
@@ -1739,14 +1739,14 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 	err = e.updateWorkflow(
 		ctx,
 		token.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			token.NamespaceId,
 			token.WorkflowId,
 			token.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				e.logger.Debug("Heartbeat failed")
 				return nil, consts.ErrWorkflowCompleted
@@ -1780,9 +1780,9 @@ func (e *historyEngineImpl) RecordActivityTaskHeartbeat(
 			// Save progress and last HB reported time.
 			mutableState.UpdateActivityProgress(ai, request)
 
-			return &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: false,
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
 			}, nil
 		})
 
@@ -1818,20 +1818,20 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 	return e.updateWorkflow(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			runID,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				// the request to cancel this workflow is a success even
 				// if the target workflow has already finished
-				return &updateWorkflowAction{
-					noop:               true,
-					createWorkflowTask: false,
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
 				}, nil
 			}
 
@@ -1856,9 +1856,9 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 			isCancelRequested := mutableState.IsCancelRequested()
 			if isCancelRequested {
 				// since cancellation is idempotent
-				return &updateWorkflowAction{
-					noop:               true,
-					createWorkflowTask: false,
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
 				}, nil
 			}
 
@@ -1866,7 +1866,7 @@ func (e *historyEngineImpl) RequestCancelWorkflowExecution(
 				return nil, err
 			}
 
-			return updateWorkflowWithNewWorkflowTask, nil
+			return api.UpdateWorkflowWithNewWorkflowTask, nil
 		})
 }
 
@@ -1888,18 +1888,18 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 	return e.updateWorkflow(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if request.GetRequestId() != "" && mutableState.IsSignalRequested(request.GetRequestId()) {
-				return &updateWorkflowAction{
-					noop:               true,
-					createWorkflowTask: false,
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
 				}, nil
 			}
 
@@ -1918,8 +1918,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespaceEntry.Name().String())
 			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
 				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
-					tag.WorkflowID(workflowContext.getWorkflowID()),
-					tag.WorkflowRunID(workflowContext.getRunID()),
+					tag.WorkflowID(workflowContext.GetWorkflowID()),
+					tag.WorkflowRunID(workflowContext.GetRunID()),
 					tag.WorkflowNamespaceID(namespaceID.String()))
 				return nil, consts.ErrSignalsLimitExceeded
 			}
@@ -1944,9 +1944,9 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				return nil, err
 			}
 
-			return &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: createWorkflowTask,
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: createWorkflowTask,
 			}, nil
 		})
 }
@@ -2102,9 +2102,10 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		}
 
 		if prevExecutionUpdateAction != nil {
-			err := e.updateWorkflowWithNewHelper(
+			err := api.UpdateWorkflowWithNew(
+				e.shard,
 				ctx,
-				newWorkflowContext(prevContext, release, prevMutableState),
+				api.NewWorkflowContext(prevContext, release, prevMutableState),
 				prevExecutionUpdateAction,
 				func() (workflow.Context, workflow.MutableState, error) {
 					return api.NewWorkflowWithSignal(e.shard, namespaceEntry, execution, startRequest, sRequest)
@@ -2130,7 +2131,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	if err := e.newWorkflowVersionCheck(prevMutableState, mutableState); err != nil {
+	if err := api.NewWorkflowVersionCheck(e.shard, prevMutableState, mutableState); err != nil {
 		return nil, err
 	}
 
@@ -2199,22 +2200,22 @@ func (e *historyEngineImpl) RemoveSignalMutableState(
 	return e.updateWorkflow(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.WorkflowExecution.WorkflowId,
 			request.WorkflowExecution.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
 
 			mutableState.DeleteSignalRequested(request.GetRequestId())
-			return &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: false,
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: false,
 			}, nil
 		})
 }
@@ -2241,14 +2242,14 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 	return e.updateWorkflow(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			runID,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -2271,7 +2272,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 
 			eventBatchFirstEventID := mutableState.GetNextEventID()
 
-			return updateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+			return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 				mutableState,
 				eventBatchFirstEventID,
 				request.GetReason(),
@@ -2290,7 +2291,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.WorkflowExecution.WorkflowId,
@@ -2300,7 +2301,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowContext.getReleaseFn()(retError) }()
+	defer func() { workflowContext.GetReleaseFn()(retError) }()
 
 	return e.workflowDeleteManager.AddDeleteWorkflowExecutionTask(
 		ctx,
@@ -2309,7 +2310,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
-		workflowContext.getMutableState(),
+		workflowContext.GetMutableState(),
 	)
 }
 
@@ -2327,14 +2328,14 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	return e.updateWorkflow(
 		ctx,
 		completionRequest.Clock,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			completionRequest.NamespaceId,
 			completionRequest.WorkflowExecution.WorkflowId,
 			completionRequest.WorkflowExecution.RunId,
 		),
-		func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+			mutableState := workflowContext.GetMutableState()
 			if !mutableState.IsWorkflowExecutionRunning() {
 				return nil, consts.ErrWorkflowCompleted
 			}
@@ -2355,8 +2356,8 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				// in the request after forced failover.
 				// If ErrStaleState is returned, the logic for this handler and processing of CloseWorkflowExecution
 				// task will keep retrying infinitely.
-				workflowContext.getContext().Clear()
-				mutableState, err = workflowContext.reloadMutableState(ctx)
+				workflowContext.GetContext().Clear()
+				mutableState, err = workflowContext.ReloadMutableState(ctx)
 				if err != nil {
 					return nil, err
 				}
@@ -2391,9 +2392,9 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 			if err != nil {
 				return nil, err
 			}
-			return &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: true,
+			return &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: true,
 			}, err
 		})
 }
@@ -2448,7 +2449,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	baseWFContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
@@ -2458,9 +2459,9 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { baseWFContext.getReleaseFn()(retError) }()
+	defer func() { baseWFContext.GetReleaseFn()(retError) }()
 
-	baseMutableState := baseWFContext.getMutableState()
+	baseMutableState := baseWFContext.GetMutableState()
 	if request.GetWorkflowTaskFinishEventId() <= common.FirstEventID ||
 		request.GetWorkflowTaskFinishEventId() >= baseMutableState.GetNextEventID() {
 		return nil, serviceerror.NewInvalidArgument("Workflow task finish ID must be > 1 && <= workflow last event ID.")
@@ -2490,14 +2491,14 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		baseRunID = currentRunID
 	}
 
-	var currentWFContext workflowContext
+	var currentWFContext api.WorkflowContext
 	if currentRunID == baseRunID {
 		currentWFContext = baseWFContext
 	} else {
 		currentWFContext, err = e.workflowConsistencyChecker.GetWorkflowContext(
 			ctx,
 			nil,
-			BypassMutableStateConsistencyPredicate,
+			api.BypassMutableStateConsistencyPredicate,
 			definition.NewWorkflowKey(
 				namespaceID.String(),
 				workflowID,
@@ -2507,11 +2508,11 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 		if err != nil {
 			return nil, err
 		}
-		defer func() { currentWFContext.getReleaseFn()(retError) }()
+		defer func() { currentWFContext.GetReleaseFn()(retError) }()
 	}
 
 	// dedup by requestID
-	if currentWFContext.getMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
+	if currentWFContext.GetMutableState().GetExecutionState().CreateRequestId == request.GetRequestId() {
 		e.logger.Info("Duplicated reset request",
 			tag.WorkflowID(workflowID),
 			tag.WorkflowRunID(currentRunID),
@@ -2550,9 +2551,9 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 			ctx,
 			e.shard.GetNamespaceRegistry(),
 			e.shard.GetClusterMetadata(),
-			currentWFContext.getContext(),
-			currentWFContext.getMutableState(),
-			currentWFContext.getReleaseFn(),
+			currentWFContext.GetContext(),
+			currentWFContext.GetMutableState(),
+			currentWFContext.GetReleaseFn(),
 		),
 		request.GetReason(),
 		nil,
@@ -2568,9 +2569,9 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 func (e *historyEngineImpl) updateWorkflow(
 	ctx context.Context,
 	reqClock *clockpb.ShardClock,
-	consistencyCheckFn MutableStateConsistencyPredicate,
+	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-	action updateWorkflowActionFunc,
+	action api.UpdateWorkflowActionFunc,
 ) (retError error) {
 	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
@@ -2581,17 +2582,17 @@ func (e *historyEngineImpl) updateWorkflow(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowContext.getReleaseFn()(retError) }()
+	defer func() { workflowContext.GetReleaseFn()(retError) }()
 
-	return e.updateWorkflowWithNewHelper(ctx, workflowContext, action, nil)
+	return api.UpdateWorkflowWithNew(e.shard, ctx, workflowContext, action, nil)
 }
 
 func (e *historyEngineImpl) updateWorkflowWithNew(
 	ctx context.Context,
 	reqClock *clockpb.ShardClock,
-	consistencyCheckFn MutableStateConsistencyPredicate,
+	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-	action updateWorkflowActionFunc,
+	action api.UpdateWorkflowActionFunc,
 	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
 ) (retError error) {
 	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
@@ -2603,115 +2604,9 @@ func (e *historyEngineImpl) updateWorkflowWithNew(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowContext.getReleaseFn()(retError) }()
+	defer func() { workflowContext.GetReleaseFn()(retError) }()
 
-	return e.updateWorkflowWithNewHelper(ctx, workflowContext, action, newWorkflowFn)
-}
-
-func (e *historyEngineImpl) updateWorkflowWithNewHelper(
-	ctx context.Context,
-	workflowContext workflowContext,
-	action updateWorkflowActionFunc,
-	newWorkflowFn func() (workflow.Context, workflow.MutableState, error),
-) (retError error) {
-
-UpdateHistoryLoop:
-	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
-		// conduct caller action
-		postActions, err := action(workflowContext)
-		if err != nil {
-			if err == consts.ErrStaleState {
-				// Handler detected that cached workflow mutable could potentially be stale
-				// Reload workflow execution history
-				workflowContext.getContext().Clear()
-				if attempt != conditionalRetryCount {
-					_, err = workflowContext.reloadMutableState(ctx)
-					if err != nil {
-						return err
-					}
-				}
-				continue UpdateHistoryLoop
-			}
-
-			// Returned error back to the caller
-			return err
-		}
-		if postActions.noop {
-			return nil
-		}
-
-		mutableState := workflowContext.getMutableState()
-		if postActions.createWorkflowTask {
-			// Create a transfer task to schedule a workflow task
-			if !mutableState.HasPendingWorkflowTask() {
-				if _, err := mutableState.AddWorkflowTaskScheduledEvent(
-					false,
-				); err != nil {
-					return err
-				}
-			}
-		}
-
-		if newWorkflowFn != nil {
-			var newContext workflow.Context
-			var newMutableState workflow.MutableState
-			newContext, newMutableState, err = newWorkflowFn()
-			if err != nil {
-				return err
-			}
-			if err = e.newWorkflowVersionCheck(mutableState, newMutableState); err != nil {
-				return err
-			}
-
-			err = workflowContext.getContext().UpdateWorkflowExecutionWithNewAsActive(
-				ctx,
-				e.shard.GetTimeSource().Now(),
-				newContext,
-				newMutableState,
-			)
-		} else {
-			err = workflowContext.getContext().UpdateWorkflowExecutionAsActive(
-				ctx,
-				e.shard.GetTimeSource().Now(),
-			)
-		}
-
-		if err == consts.ErrConflict {
-			if attempt != conditionalRetryCount {
-				_, err = workflowContext.reloadMutableState(ctx)
-				if err != nil {
-					return err
-				}
-			}
-			continue UpdateHistoryLoop
-		}
-		return err
-	}
-	return consts.ErrMaxAttemptsExceeded
-}
-
-func (e *historyEngineImpl) newWorkflowVersionCheck(
-	prevMutableState workflow.MutableState,
-	newMutableState workflow.MutableState,
-) error {
-	if prevMutableState == nil {
-		return nil
-	}
-
-	prevLastWriteVersion, err := prevMutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
-	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
-		clusterMetadata := e.shard.GetClusterMetadata()
-		namespaceEntry := newMutableState.GetNamespaceEntry()
-		return serviceerror.NewNamespaceNotActive(
-			namespaceEntry.Name().String(),
-			clusterMetadata.GetCurrentClusterName(),
-			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
-		)
-	}
-	return nil
+	return api.UpdateWorkflowWithNew(e.shard, ctx, workflowContext, action, newWorkflowFn)
 }
 
 func (e *historyEngineImpl) failWorkflowTask(
@@ -2979,7 +2874,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSignalWithStart(
 	prevExecutionState *persistencespb.WorkflowExecutionState,
 	execution commonpb.WorkflowExecution,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
-) (updateWorkflowActionFunc, error) {
+) (api.UpdateWorkflowActionFunc, error) {
 
 	prevStartRequestID := prevExecutionState.CreateRequestId
 	prevRunID := prevExecutionState.RunId
@@ -3008,7 +2903,7 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	prevStatus enumspb.WorkflowExecutionStatus,
 	newExecution commonpb.WorkflowExecution,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
-) (updateWorkflowActionFunc, error) {
+) (api.UpdateWorkflowActionFunc, error) {
 
 	// here we know there is some information about the prev workflow, i.e. either running right now
 	// or has history check if the this workflow is finished
@@ -3016,13 +2911,13 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
 	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
 		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
 		if wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
-			return func(workflowContext workflowContext) (*updateWorkflowAction, error) {
-				mutableState := workflowContext.getMutableState()
+			return func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+				mutableState := workflowContext.GetMutableState()
 				if !mutableState.IsWorkflowExecutionRunning() {
 					return nil, consts.ErrWorkflowCompleted
 				}
 
-				return updateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+				return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
 					mutableState,
 					mutableState.GetNextEventID(),
 					"TerminateIfRunning WorkflowIdReusePolicy Policy",
@@ -3144,15 +3039,15 @@ func (e *historyEngineImpl) ReapplyEvents(
 	return e.updateWorkflow(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			workflowID,
 			"",
 		),
-		func(workflowContext workflowContext) (action *updateWorkflowAction, retErr error) {
-			context := workflowContext.getContext()
-			mutableState := workflowContext.getMutableState()
+		func(workflowContext api.WorkflowContext) (action *api.UpdateWorkflowAction, retErr error) {
+			context := workflowContext.GetContext()
+			mutableState := workflowContext.GetMutableState()
 			// Filter out reapply event from the same cluster
 			toReapplyEvents := make([]*historypb.HistoryEvent, 0, len(reapplyEvents))
 			lastWriteVersion, err := mutableState.GetLastWriteVersion()
@@ -3164,14 +3059,14 @@ func (e *historyEngineImpl) ReapplyEvents(
 				originCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
 					ctx,
 					nil,
-					BypassMutableStateConsistencyPredicate,
+					api.BypassMutableStateConsistencyPredicate,
 					definition.NewWorkflowKey(namespaceID.String(), workflowID, runID),
 				)
 				if err != nil {
 					return nil, err
 				}
-				defer func() { originCtx.getReleaseFn()(retErr) }()
-				sourceMutableState = originCtx.getMutableState()
+				defer func() { originCtx.GetReleaseFn()(retErr) }()
+				sourceMutableState = originCtx.GetMutableState()
 			}
 
 			for _, event := range reapplyEvents {
@@ -3192,9 +3087,9 @@ func (e *historyEngineImpl) ReapplyEvents(
 				toReapplyEvents = append(toReapplyEvents, event)
 			}
 			if len(toReapplyEvents) == 0 {
-				return &updateWorkflowAction{
-					noop:               true,
-					createWorkflowTask: false,
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
 				}, nil
 			}
 
@@ -3213,9 +3108,9 @@ func (e *historyEngineImpl) ReapplyEvents(
 						tag.WorkflowID(workflowID),
 					)
 					e.metricsClient.IncCounter(metrics.HistoryReapplyEventsScope, metrics.EventReapplySkippedCount)
-					return &updateWorkflowAction{
-						noop:               true,
-						createWorkflowTask: false,
+					return &api.UpdateWorkflowAction{
+						Noop:               true,
+						CreateWorkflowTask: false,
 					}, nil
 				}
 
@@ -3263,19 +3158,19 @@ func (e *historyEngineImpl) ReapplyEvents(
 				default:
 					return nil, err
 				}
-				return &updateWorkflowAction{
-					noop:               true,
-					createWorkflowTask: false,
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
 				}, nil
 			}
 
-			postActions := &updateWorkflowAction{
-				noop:               false,
-				createWorkflowTask: true,
+			postActions := &api.UpdateWorkflowAction{
+				Noop:               false,
+				CreateWorkflowTask: true,
 			}
 			// Do not create workflow task when the workflow is cron and the cron has not been started yet
 			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingWorkflowTask() {
-				postActions.createWorkflowTask = false
+				postActions.CreateWorkflowTask = false
 			}
 			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
 				ctx,
@@ -3288,9 +3183,9 @@ func (e *historyEngineImpl) ReapplyEvents(
 				return nil, err
 			}
 			if len(reappliedEvents) == 0 {
-				return &updateWorkflowAction{
-					noop:               true,
-					createWorkflowTask: false,
+				return &api.UpdateWorkflowAction{
+					Noop:               true,
+					CreateWorkflowTask: false,
 				}, nil
 			}
 			return postActions, nil
@@ -3396,7 +3291,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	wfContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			execution.WorkflowId,
@@ -3406,9 +3301,9 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	if err != nil {
 		return err
 	}
-	defer func() { wfContext.getReleaseFn()(retError) }()
+	defer func() { wfContext.GetReleaseFn()(retError) }()
 
-	mutableState := wfContext.getMutableState()
+	mutableState := wfContext.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() {
 		return nil
 	}
@@ -3428,7 +3323,7 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 		return err
 	}
 
-	err = wfContext.getContext().UpdateWorkflowExecutionAsActive(ctx, now)
+	err = wfContext.GetContext().UpdateWorkflowExecutionAsActive(ctx, now)
 	if err != nil {
 		return err
 	}
@@ -3448,7 +3343,7 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	wfContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
-		BypassMutableStateConsistencyPredicate,
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			namespaceID.String(),
 			request.Execution.WorkflowId,
@@ -3458,10 +3353,10 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	if err != nil {
 		return nil, err
 	}
-	defer func() { wfContext.getReleaseFn()(retError) }()
+	defer func() { wfContext.GetReleaseFn()(retError) }()
 
 	now := e.shard.GetTimeSource().Now()
-	task, err := wfContext.getMutableState().GenerateLastHistoryReplicationTasks(now)
+	task, err := wfContext.GetMutableState().GenerateLastHistoryReplicationTasks(now)
 	if err != nil {
 		return nil, err
 	}

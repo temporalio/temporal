@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package api
 
 import (
 	"context"
@@ -54,7 +54,7 @@ type (
 			reqClock *clockpb.ShardClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
-		) (workflowContext, error)
+		) (WorkflowContext, error)
 	}
 
 	WorkflowConsistencyCheckerImpl struct {
@@ -63,7 +63,7 @@ type (
 	}
 )
 
-func newWorkflowConsistencyChecker(
+func NewWorkflowConsistencyChecker(
 	shardContext shard.Context,
 	workflowCache workflow.Cache,
 ) *WorkflowConsistencyCheckerImpl {
@@ -99,7 +99,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 	reqClock *clockpb.ShardClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-) (workflowContext, error) {
+) (WorkflowContext, error) {
 	if reqClock != nil {
 		return c.getWorkflowContextValidatedByClock(
 			ctx,
@@ -133,7 +133,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	ctx context.Context,
 	reqClock *clockpb.ShardClock,
 	workflowKey definition.WorkflowKey,
-) (workflowContext, error) {
+) (WorkflowContext, error) {
 	cmpResult, err := vclock.Compare(reqClock, c.shardContext.CurrentVectorClock())
 	if err != nil {
 		return nil, err
@@ -165,7 +165,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		release(err)
 		return nil, err
 	}
-	return newWorkflowContext(wfContext, release, mutableState), nil
+	return NewWorkflowContext(wfContext, release, mutableState), nil
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
@@ -173,7 +173,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 	shardOwnershipAsserted *bool,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-) (workflowContext, error) {
+) (WorkflowContext, error) {
 	if len(workflowKey.RunID) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf(
 			"loadWorkflowContext encountered empty run ID: %v", workflowKey,
@@ -197,7 +197,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 	switch err.(type) {
 	case nil:
 		if consistencyPredicate(mutableState) {
-			return newWorkflowContext(wfContext, release, mutableState), nil
+			return NewWorkflowContext(wfContext, release, mutableState), nil
 		}
 		wfContext.Clear()
 
@@ -206,7 +206,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 			release(err)
 			return nil, err
 		}
-		return newWorkflowContext(wfContext, release, mutableState), nil
+		return NewWorkflowContext(wfContext, release, mutableState), nil
 	case *serviceerror.NotFound:
 		release(err)
 		if err := assertShardOwnership(
@@ -229,7 +229,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
 	workflowID string,
-) (workflowContext, error) {
+) (WorkflowContext, error) {
 	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		runID, err := c.getCurrentRunID(
 			ctx,
@@ -249,7 +249,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		if err != nil {
 			return nil, err
 		}
-		if wfContext.getMutableState().IsWorkflowExecutionRunning() {
+		if wfContext.GetMutableState().IsWorkflowExecutionRunning() {
 			return wfContext, nil
 		}
 
@@ -260,13 +260,13 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 			workflowID,
 		)
 		if err != nil {
-			wfContext.getReleaseFn()(err)
+			wfContext.GetReleaseFn()(err)
 			return nil, err
 		}
-		if currentRunID == wfContext.getRunID() {
+		if currentRunID == wfContext.GetRunID() {
 			return wfContext, nil
 		}
-		wfContext.getReleaseFn()(nil)
+		wfContext.GetReleaseFn()(nil)
 	}
 	return nil, serviceerror.NewUnavailable("unable to locate current workflow execution")
 }

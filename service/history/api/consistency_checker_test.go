@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package api
 
 import (
 	"context"
@@ -88,7 +88,7 @@ func (s *workflowConsistencyCheckerSuite) SetupTest() {
 
 	s.shardContext.EXPECT().GetShardID().Return(s.shardID).AnyTimes()
 
-	s.checker = newWorkflowConsistencyChecker(s.shardContext, s.workflowCache)
+	s.checker = NewWorkflowConsistencyChecker(s.shardContext, s.workflowCache)
 }
 
 func (s *workflowConsistencyCheckerSuite) TearDownTest() {
@@ -122,7 +122,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
 	)
 	s.NoError(err)
-	s.Equal(mutableState, workflowContext.getMutableState())
+	s.Equal(mutableState, workflowContext.GetMutableState())
 	s.False(released)
 }
 
@@ -158,7 +158,7 @@ func (s *workflowConsistencyCheckerSuite) TestGetWorkflowContextValidatedByCheck
 		definition.NewWorkflowKey(s.namespaceID, s.workflowID, s.currentRunID),
 	)
 	s.NoError(err)
-	s.Equal(mutableState2, workflowContext.getMutableState())
+	s.Equal(mutableState2, workflowContext.GetMutableState())
 	s.False(released)
 }
 
