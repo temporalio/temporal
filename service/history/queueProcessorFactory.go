@@ -28,9 +28,14 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
+	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -55,8 +60,20 @@ var QueueProcessorModule = fx.Options(
 )
 
 type (
+	SchedulerParams struct {
+		fx.In
+
+		NamespaceRegistry namespace.Registry
+		ClusterMetadata   cluster.Metadata
+		Config            *configs.Config
+		MetricsClient     metrics.Client
+		Logger            resource.SnTaggedLogger
+	}
+
 	transferQueueProcessorFactoryParams struct {
 		fx.In
+
+		SchedulerParams
 
 		ArchivalClient   archiver.Client
 		SdkClientFactory sdk.ClientFactory
@@ -67,6 +84,8 @@ type (
 	timerQueueProcessorFactoryParams struct {
 		fx.In
 
+		SchedulerParams
+
 		ArchivalClient archiver.Client
 		MatchingClient resource.MatchingClient
 	}
@@ -74,27 +93,61 @@ type (
 	visibilityQueueProcessorFactoryParams struct {
 		fx.In
 
+		SchedulerParams
+
 		VisibilityMgr manager.VisibilityManager
 	}
 
 	transferQueueProcessorFactory struct {
 		transferQueueProcessorFactoryParams
+
+		scheduler queues.Scheduler
 	}
 
 	timerQueueProcessorFactory struct {
 		timerQueueProcessorFactoryParams
+
+		scheduler queues.Scheduler
 	}
 
 	visibilityQueueProcessorFactory struct {
 		visibilityQueueProcessorFactoryParams
+
+		scheduler queues.Scheduler
 	}
 )
 
 func NewTransferQueueProcessorFactory(
 	params transferQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
+	var scheduler queues.Scheduler
+	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
+		scheduler = queues.NewScheduler(
+			queues.NewPriorityAssigner(
+				params.ClusterMetadata.GetCurrentClusterName(),
+				params.NamespaceRegistry,
+				queues.PriorityAssignerOptions{
+					HighPriorityRPS:       params.Config.TransferTaskHighPriorityRPS,
+					CriticalRetryAttempts: params.Config.TransferTaskMaxRetryCount,
+				},
+				params.MetricsClient,
+			),
+			queues.SchedulerOptions{
+				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
+					WorkerCount: params.Config.TransferProcessorSchedulerWorkerCount(),
+					QueueSize:   params.Config.TransferProcessorSchedulerQueueSize(),
+				},
+				InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
+					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.TransferProcessorSchedulerRoundRobinWeights(), params.Logger),
+				},
+			},
+			params.MetricsClient,
+			params.Logger,
+		)
+	}
 	return &transferQueueProcessorFactory{
 		transferQueueProcessorFactoryParams: params,
+		scheduler:                           scheduler,
 	}
 }
 
@@ -107,6 +160,7 @@ func (f *transferQueueProcessorFactory) CreateProcessor(
 		shard,
 		engine,
 		workflowCache,
+		f.scheduler,
 		f.ArchivalClient,
 		f.SdkClientFactory,
 		f.MatchingClient,
@@ -117,8 +171,34 @@ func (f *transferQueueProcessorFactory) CreateProcessor(
 func NewTimerQueueProcessorFactory(
 	params timerQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
+	var scheduler queues.Scheduler
+	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
+		scheduler = queues.NewScheduler(
+			queues.NewPriorityAssigner(
+				params.ClusterMetadata.GetCurrentClusterName(),
+				params.NamespaceRegistry,
+				queues.PriorityAssignerOptions{
+					HighPriorityRPS:       params.Config.TimerTaskHighPriorityRPS,
+					CriticalRetryAttempts: params.Config.TimerTaskMaxRetryCount,
+				},
+				params.MetricsClient,
+			),
+			queues.SchedulerOptions{
+				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
+					WorkerCount: params.Config.TimerProcessorSchedulerWorkerCount(),
+					QueueSize:   params.Config.TimerProcessorSchedulerQueueSize(),
+				},
+				InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
+					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.TimerProcessorSchedulerRoundRobinWeights(), params.Logger),
+				},
+			},
+			params.MetricsClient,
+			params.Logger,
+		)
+	}
 	return &timerQueueProcessorFactory{
 		timerQueueProcessorFactoryParams: params,
+		scheduler:                        scheduler,
 	}
 }
 
@@ -131,6 +211,7 @@ func (f *timerQueueProcessorFactory) CreateProcessor(
 		shard,
 		engine,
 		workflowCache,
+		f.scheduler,
 		f.ArchivalClient,
 		f.MatchingClient,
 	)
@@ -139,8 +220,34 @@ func (f *timerQueueProcessorFactory) CreateProcessor(
 func NewVisibilityQueueProcessorFactory(
 	params visibilityQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
+	var scheduler queues.Scheduler
+	if params.Config.TimerProcessorEnablePriorityTaskScheduler() {
+		scheduler = queues.NewScheduler(
+			queues.NewPriorityAssigner(
+				params.ClusterMetadata.GetCurrentClusterName(),
+				params.NamespaceRegistry,
+				queues.PriorityAssignerOptions{
+					HighPriorityRPS:       params.Config.VisibilityTaskHighPriorityRPS,
+					CriticalRetryAttempts: params.Config.VisibilityTaskMaxRetryCount,
+				},
+				params.MetricsClient,
+			),
+			queues.SchedulerOptions{
+				ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
+					WorkerCount: params.Config.VisibilityProcessorSchedulerWorkerCount(),
+					QueueSize:   params.Config.VisibilityProcessorSchedulerQueueSize(),
+				},
+				InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
+					PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(params.Config.VisibilityProcessorSchedulerRoundRobinWeights(), params.Logger),
+				},
+			},
+			params.MetricsClient,
+			params.Logger,
+		)
+	}
 	return &visibilityQueueProcessorFactory{
 		visibilityQueueProcessorFactoryParams: params,
+		scheduler:                             scheduler,
 	}
 }
 
@@ -152,6 +259,7 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 	return newVisibilityQueueProcessor(
 		shard,
 		workflowCache,
+		f.scheduler,
 		f.VisibilityMgr,
 	)
 }

@@ -75,6 +75,7 @@ type (
 		isStarted                 int32
 		isStopped                 int32
 		shutdownChan              chan struct{}
+		scheduler                 queues.Scheduler
 		activeTaskProcessor       *transferQueueActiveProcessorImpl
 		standbyTaskProcessorsLock sync.RWMutex
 		standbyTaskProcessors     map[string]*transferQueueStandbyProcessorImpl
@@ -85,6 +86,7 @@ func newTransferQueueProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -112,9 +114,11 @@ func newTransferQueueProcessor(
 		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
 		logger:                   logger,
 		shutdownChan:             make(chan struct{}),
+		scheduler:                scheduler,
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			workflowCache,
+			scheduler,
 			archivalClient,
 			sdkClientFactory,
 			matchingClient,
@@ -361,6 +365,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 			processor := newTransferQueueStandbyProcessor(
 				clusterName,
 				t.shard,
+				t.scheduler,
 				t.workflowCache,
 				t.archivalClient,
 				t.taskAllocator,

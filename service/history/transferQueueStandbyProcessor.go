@@ -50,6 +50,7 @@ type (
 func newTransferQueueStandbyProcessor(
 	clusterName string,
 	shard shard.Context,
+	scheduler queues.Scheduler,
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	taskAllocator taskAllocator,
@@ -117,7 +118,9 @@ func newTransferQueueStandbyProcessor(
 		matchingClient,
 	)
 
-	scheduler := newTransferTaskScheduler(shard, logger)
+	if scheduler == nil {
+		scheduler = newTransferTaskScheduler(shard, logger)
+	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
