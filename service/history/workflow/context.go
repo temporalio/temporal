@@ -271,7 +271,7 @@ func (c *ContextImpl) LoadWorkflowExecution(ctx context.Context) (MutableState, 
 	}
 
 	if c.MutableState == nil {
-		response, err := getWorkflowExecutionWithRetry(c.shard, &persistence.GetWorkflowExecutionRequest{
+		response, err := getWorkflowExecutionWithRetry(ctx, c.shard, &persistence.GetWorkflowExecutionRequest{
 			ShardID:     c.shard.GetShardID(),
 			NamespaceID: c.workflowKey.NamespaceID,
 			WorkflowID:  c.workflowKey.WorkflowID,

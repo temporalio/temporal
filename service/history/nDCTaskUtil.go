@@ -26,7 +26,6 @@ package history
 
 import (
 	"context"
-	"time"
 
 	"go.temporal.io/api/serviceerror"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -37,10 +36,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-)
-
-const (
-	refreshTaskTimeout = 30 * time.Second
 )
 
 // VerifyTaskVersion, will return true if failover version check is successful

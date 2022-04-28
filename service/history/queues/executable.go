@@ -189,6 +189,11 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return err
 	}
 
+	if err == consts.ErrWorkflowBusy {
+		e.scope.IncCounter(metrics.TaskWorkflowBusyCounter)
+		return err
+	}
+
 	if err == consts.ErrTaskDiscarded {
 		e.scope.IncCounter(metrics.TaskDiscarded)
 		return nil
@@ -224,7 +229,7 @@ func (e *executableImpl) IsRetryableError(err error) bool {
 	// ErrTaskRetry means mutable state is not ready for standby task processing
 	// there's no point for retrying the task immediately which will hold the worker corouinte
 	// TODO: change ErrTaskRetry to a better name
-	return err != consts.ErrTaskRetry
+	return err != consts.ErrTaskRetry && err != consts.ErrWorkflowBusy
 }
 
 func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
@@ -312,7 +317,7 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner
 	// this can be useful for errors like unable to get workflow lock, which doesn't
 	// have to backoff for a long time and wait for the periodic rescheduling.
-	return e.IsRetryableError(err) && e.Attempt() < resubmitMaxAttempts
+	return (err == consts.ErrWorkflowBusy || e.IsRetryableError(err)) && e.Attempt() < resubmitMaxAttempts
 }
 
 func (e *executableImpl) rescheduleBackoff(attempt int) time.Duration {
