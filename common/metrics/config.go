@@ -345,10 +345,14 @@ func convertPrometheusConfigToTally(
 }
 
 func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
-	if clientConfig.PerUnitHistogramBoundaries != nil && len(clientConfig.PerUnitHistogramBoundaries) == len(defaultPerUnitHistogramBoundaries) {
-		return
+	if clientConfig.PerUnitHistogramBoundaries == nil {
+		clientConfig.PerUnitHistogramBoundaries = make(map[string][]float64)
 	}
-	clientConfig.PerUnitHistogramBoundaries = defaultPerUnitHistogramBoundaries
+	for unit, bucket := range defaultPerUnitHistogramBoundaries {
+		if _, ok := clientConfig.PerUnitHistogramBoundaries[unit]; !ok {
+			clientConfig.PerUnitHistogramBoundaries[unit] = bucket
+		}
+	}
 }
 
 // newM3Scope returns a new m3 scope with
