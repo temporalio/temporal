@@ -473,6 +473,13 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
 	})
 
+	t.logger.Info("Handle activity retry timer ",
+		tag.WorkflowNamespaceID(task.GetNamespaceID()),
+		tag.WorkflowID(task.GetWorkflowID()),
+		tag.WorkflowRunID(task.GetRunID()),
+		tag.ActivityInfo(activityInfo),
+	)
+
 	return retError
 }
 
