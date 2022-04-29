@@ -40,7 +40,6 @@ import (
 )
 
 const (
-	// WorkflowName is the workflow name.
 	WorkflowName = "temporal-sys-delete-namespace-workflow"
 )
 
