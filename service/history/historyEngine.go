@@ -2125,7 +2125,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		ctx,
 		e.shard,
 		mutableState,
-		request.GetInput().Size(),
+		sRequest.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
 		return nil, err
