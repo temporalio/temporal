@@ -142,7 +142,7 @@ func (a *activities) GenerateDeletedNamespaceNameActivity(ctx context.Context, n
 		switch err.(type) {
 		case nil:
 			a.logger.Warn("Regenerate namespace name due to collision.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
-		case *serviceerror.NotFound:
+		case *serviceerror.NamespaceNotFound:
 			a.logger.Info("Generated new name for deleted namespace.", tag.WorkflowNamespace(nsName.String()), tag.WorkflowNamespace(newName))
 			return namespace.Name(newName), nil
 		default:

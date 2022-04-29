@@ -951,7 +951,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
 	deleteVisibilityRecord := true
 	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
 			// If namespace is not found, skip visibility record delete but proceed with other deletions.
 			// This case might happen during namespace deletion.
 			deleteVisibilityRecord = false

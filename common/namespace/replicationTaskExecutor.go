@@ -161,7 +161,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 			if resp.Namespace.Info.Id != task.GetId() {
 				return ErrNameUUIDCollision
 			}
-		case *serviceerror.NotFound:
+		case *serviceerror.NamespaceNotFound:
 			// no check is necessary
 			recordExists = false
 		default:
@@ -177,7 +177,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceCreationReplicatio
 			if resp.Namespace.Info.Name != task.Info.GetName() {
 				return ErrNameUUIDCollision
 			}
-		case *serviceerror.NotFound:
+		case *serviceerror.NamespaceNotFound:
 			// no check is necessary
 			recordExists = false
 		default:
@@ -219,7 +219,7 @@ func (h *namespaceReplicationTaskExecutorImpl) handleNamespaceUpdateReplicationT
 		Name: task.Info.GetName(),
 	})
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
 			// this can happen if the create namespace replication task is to processed.
 			// e.g. new cluster which does not have anything
 			return h.handleNamespaceCreationReplicationTask(ctx, task)

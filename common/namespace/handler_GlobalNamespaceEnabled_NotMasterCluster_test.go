@@ -427,7 +427,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 		Namespace: namespace,
 	})
 	s.Error(err)
-	s.IsType(&serviceerror.NotFound{}, err)
+	s.IsType(&serviceerror.NamespaceNotFound{}, err)
 	s.Nil(resp)
 }
 
@@ -469,7 +469,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledNotMasterClusterSuite) TestRegist
 		Namespace: namespace,
 	})
 	s.Error(err)
-	s.IsType(&serviceerror.NotFound{}, err)
+	s.IsType(&serviceerror.NamespaceNotFound{}, err)
 	s.Nil(resp)
 }
 

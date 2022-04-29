@@ -339,7 +339,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		switch err.(type) {
 		case nil:
 			// noop
-		case *serviceerror.NotFound:
+		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 			// parent gone, noop
 		default:
 			return err
@@ -396,7 +396,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 
 	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
 	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
 			return err
 		}
 		// It is possible that target namespace got deleted. Record failure.
@@ -442,7 +442,15 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			// for retryable error just return
 			return err
 		}
-		// TODO (alex): set failed cause NAMESPACE_NOT_FOUND when serviceerror.NamespaceNotFound error is returned.
+		var failedCause enumspb.CancelExternalWorkflowExecutionFailedCause
+		switch err.(type) {
+		case *serviceerror.NotFound:
+			failedCause = enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND
+		case *serviceerror.NamespaceNotFound:
+			failedCause = enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
+		default:
+			failedCause = enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED
+		}
 		return t.requestCancelExternalExecutionFailed(
 			ctx,
 			task,
@@ -450,7 +458,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			targetNamespaceName,
 			task.TargetWorkflowID,
 			task.TargetRunID,
-			enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
+			failedCause,
 		)
 	}
 
@@ -506,12 +514,12 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 
 	targetNamespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID))
 	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
 			return err
 		}
 		// It is possible that target namespace got deleted. Record failure.
 		t.logger.Debug("Target namespace is not found.", tag.WorkflowNamespaceID(task.TargetNamespaceID))
-		err = t.signalExternalExecutionFailed(
+		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
 			weContext,
@@ -521,7 +529,6 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			attributes.Control,
 			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
 		)
-		return err
 	}
 	targetNamespaceName := targetNamespaceEntry.Name()
 
@@ -555,7 +562,15 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			// for retryable error just return
 			return err
 		}
-		// TODO (alex): set failed cause NAMESPACE_NOT_FOUND when serviceerror.NamespaceNotFound error is returned.
+		var failedCause enumspb.SignalExternalWorkflowExecutionFailedCause
+		switch err.(type) {
+		case *serviceerror.NotFound:
+			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND
+		case *serviceerror.NamespaceNotFound:
+			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
+		default:
+			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED
+		}
 		return t.signalExternalExecutionFailed(
 			ctx,
 			task,
@@ -564,7 +579,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			attributes.Control,
-			enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND,
+			failedCause,
 		)
 	}
 
@@ -636,7 +651,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	var parentNamespaceName namespace.Name
 	if namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.NamespaceID)); err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
 			return err
 		}
 		// It is possible that the parent namespace got deleted. Use namespaceID instead as this is only needed for the history event.
@@ -647,7 +662,7 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 
 	var targetNamespaceName namespace.Name
 	if namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.TargetNamespaceID)); err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); !isNotFound {
 			return err
 		}
 		// It is possible that target namespace got deleted. Record failure.
@@ -688,28 +703,23 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
-
+		var failedCause enumspb.StartChildWorkflowExecutionFailedCause
 		switch err.(type) {
-		// TODO (alex): uncomment this when serviceerror.NamespaceNotFound error is returned.
-		// case *serviceerror.NamespaceNotFound:
-		// 	err = t.recordStartChildExecutionFailed(
-		// 		ctx,
-		// 		task,
-		// 		weContext,
-		// 		attributes,
-		// 		enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND,
-		// 	)
 		case *serviceerror.WorkflowExecutionAlreadyStarted:
-			err = t.recordStartChildExecutionFailed(
-				ctx,
-				task,
-				weContext,
-				attributes,
-				enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS,
-			)
+			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_WORKFLOW_ALREADY_EXISTS
+		case *serviceerror.NamespaceNotFound:
+			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
+		default:
+			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED
 		}
 
-		return err
+		return t.recordStartChildExecutionFailed(
+			ctx,
+			task,
+			weContext,
+			attributes,
+			failedCause,
+		)
 	}
 
 	t.logger.Debug("Child Execution started successfully",
@@ -937,14 +947,6 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 		Clock:               clock,
 	})
 
-	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
-			// Maybe child workflow execution already timed out or terminated
-			// Safe to discard the error and complete this transfer task
-			return nil
-		}
-	}
-
 	return err
 }
 
@@ -960,7 +962,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedID)
@@ -977,11 +979,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 			return err
 		})
 
-	if _, ok := err.(*serviceerror.NotFound); ok {
-		// this could happen if this is a duplicate processing of the task,
-		// or the execution has already completed.
-		return nil
-	}
 	return err
 }
 
@@ -998,7 +995,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			_, ok := mutableState.GetSignalInfo(task.InitiatedID)
@@ -1015,12 +1012,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 			)
 			return err
 		})
-
-	if _, ok := err.(*serviceerror.NotFound); ok {
-		// this could happen if this is a duplicate processing of the task,
-		// or the execution has already completed.
-		return nil
-	}
 	return err
 }
 
@@ -1037,7 +1028,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &serviceerror.NotFound{Message: "Workflow execution already completed."}
+				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
 			_, ok := mutableState.GetRequestCancelInfo(task.InitiatedID)
@@ -1055,11 +1046,6 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 			return err
 		})
 
-	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
-		// this could happen if this is a duplicate processing of the task,
-		// or the execution has already completed.
-		return nil
-	}
 	return err
 }
 
@@ -1077,7 +1063,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	err := t.updateWorkflowExecution(ctx, context, true,
 		func(mutableState workflow.MutableState) error {
 			if !mutableState.IsWorkflowExecutionRunning() {
-				return &serviceerror.NotFound{Message: "Workflow is not running."}
+				return serviceerror.NewNotFound("Workflow is not running.")
 			}
 
 			_, ok := mutableState.GetSignalInfo(task.InitiatedID)
@@ -1096,11 +1082,6 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 			return err
 		})
 
-	if _, ok := err.(*serviceerror.NotFound); ok {
-		// this could happen if this is a duplicate processing of the task,
-		// or the execution has already completed.
-		return nil
-	}
 	return err
 }
 
@@ -1338,7 +1319,7 @@ func (t *transferQueueActiveTaskExecutor) resetWorkflow(
 	case nil:
 		return nil
 
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		// This means the reset point is corrupted and not retry able.
 		// There must be a bug in our system that we must fix.(for example, history is not the same in active/passive)
 		t.metricsClient.IncCounter(metrics.TransferQueueProcessorScope, metrics.AutoResetPointCorruptionCounter)
@@ -1378,7 +1359,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 			childNamespaceId, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
 			switch err.(type) {
 			case nil:
-			case *serviceerror.NotFound:
+			case *serviceerror.NamespaceNotFound:
 				// If child namespace is deleted there is nothing to close.
 				continue
 			default:
@@ -1413,7 +1394,8 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 			&parentExecution,
 			childInfo,
 		); err != nil {
-			if _, ok := err.(*serviceerror.NotFound); !ok {
+			switch err.(type) {
+			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 				scope.IncCounter(metrics.ParentClosePolicyProcessorFailures)
 				return err
 			}
@@ -1437,7 +1419,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		childNamespaceID, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
 		switch err.(type) {
 		case nil:
-		case *serviceerror.NotFound:
+		case *serviceerror.NamespaceNotFound:
 			// If child namespace is deleted there is nothing to close.
 			return nil
 		default:
@@ -1465,7 +1447,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		childNamespaceID, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
 		switch err.(type) {
 		case nil:
-		case *serviceerror.NotFound:
+		case *serviceerror.NamespaceNotFound:
 			// If child namespace is deleted there is nothing to close.
 			return nil
 		default:
