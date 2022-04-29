@@ -3744,8 +3744,6 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTasks)
-
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
 	e.executionInfo.StateTransitionCount += 1
@@ -3829,8 +3827,6 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 			return nil, nil, err
 		}
 	}
-
-	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
