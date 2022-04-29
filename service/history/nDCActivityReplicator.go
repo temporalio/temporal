@@ -176,6 +176,7 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 			tag.WorkflowID(request.GetWorkflowId()),
 			tag.WorkflowRunID(request.GetRunId()),
 			tag.ActivityInfo(activityInfo),
+			tag.Value(request),
 		)
 	}
 
