@@ -428,6 +428,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		return err
 	}
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
+		t.logger.Info("Drop activity retry timer due to ms not found",
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()),
+			tag.Task(task),
+		)
 		return nil
 	}
 
@@ -444,11 +450,31 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 				tag.FailoverVersion(activityInfo.Version),
 				tag.TimerTaskStatus(activityInfo.TimerTaskStatus),
 				tag.ScheduleAttempt(task.Attempt))
+			t.logger.Info("Drop activity retry timer due to mismatch",
+				tag.WorkflowNamespaceID(task.GetNamespaceID()),
+				tag.WorkflowID(task.GetWorkflowID()),
+				tag.WorkflowRunID(task.GetRunID()),
+				tag.ActivityInfo(activityInfo),
+				tag.Task(task),
+			)
 		}
+		t.logger.Info("Drop activity retry timer due to activity not found",
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()),
+			tag.Task(task),
+		)
 		return nil
 	}
 	ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), activityInfo.Version, task.Version, task)
 	if !ok {
+		t.logger.Info("Drop activity retry timer due to version mismatch",
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()),
+			tag.ActivityInfo(activityInfo),
+			tag.Task(task),
+		)
 		return nil
 	}
 
@@ -473,11 +499,12 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
 	})
 
-	t.logger.Info("Handle activity retry timer ",
+	t.logger.Info("Handled activity retry timer",
 		tag.WorkflowNamespaceID(task.GetNamespaceID()),
 		tag.WorkflowID(task.GetWorkflowID()),
 		tag.WorkflowRunID(task.GetRunID()),
 		tag.ActivityInfo(activityInfo),
+		tag.Task(task),
 	)
 
 	return retError
