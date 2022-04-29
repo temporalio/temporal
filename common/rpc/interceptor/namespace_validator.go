@@ -229,7 +229,7 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		}
 	}
 
-	return ni.invalidStateError(namespaceEntry, allowedStates)
+	return serviceerror.NewNamespaceInvalidState(namespaceEntry.Name().String(), namespaceEntry.State(), allowedStates)
 }
 
 func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *namespace.Namespace, fullMethod string) error {
@@ -247,12 +247,4 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 	}
 
 	return errNamespaceHandover
-}
-
-func (ni *NamespaceValidatorInterceptor) invalidStateError(ns *namespace.Namespace, allowedStates []enumspb.NamespaceState) error {
-	var allowedStatesStr []string
-	for _, allowedState := range allowedStates {
-		allowedStatesStr = append(allowedStatesStr, allowedState.String())
-	}
-	return serviceerror.NewNamespaceInvalidState(ns.Name().String(), ns.State().String(), allowedStatesStr)
 }
