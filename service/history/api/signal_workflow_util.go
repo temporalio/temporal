@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -63,7 +64,7 @@ func ValidateSignal(
 		namespaceName,
 		workflowID,
 		runID,
-		MetricsScope(ctx, shard.GetLogger()).Tagged(
+		interceptor.MetricsScope(ctx, shard.GetLogger()).Tagged(
 			metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String()),
 		),
 		shard.GetThrottledLogger(),

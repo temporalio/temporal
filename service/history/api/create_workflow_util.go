@@ -40,6 +40,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -180,7 +181,7 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
@@ -194,7 +195,7 @@ func ValidateStart(
 		namespaceName,
 		workflowID,
 		"",
-		MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
 		throttledLogger,
 		tag.BlobSizeViolationOperation(operation),
 	); err != nil {
