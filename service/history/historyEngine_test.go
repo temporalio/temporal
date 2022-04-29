@@ -1080,7 +1080,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		Identity:                 "identity",
 	}
 	err := s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		context.Background(), startRequest, tests.LocalNamespaceEntry.Name(), "SignalWithStartWorkflowExecution")
+		context.Background(), startRequest, tests.LocalNamespaceEntry, "SignalWithStartWorkflowExecution")
 	s.Error(err, "startRequest doesn't have request id, it should error out")
 
 	startRequest.RequestId = "request-id"
@@ -1088,7 +1088,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		"data": payload.EncodeBytes(make([]byte, 4*1024*1024)),
 	}}
 	err = s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		context.Background(), startRequest, tests.LocalNamespaceEntry.Name(), "SignalWithStartWorkflowExecution")
+		context.Background(), startRequest, tests.LocalNamespaceEntry, "SignalWithStartWorkflowExecution")
 	s.Error(err, "memo should be too big")
 }
 

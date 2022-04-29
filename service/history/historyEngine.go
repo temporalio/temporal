@@ -45,7 +45,6 @@ import (
 
 	clockpb "go.temporal.io/server/api/clock/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
@@ -57,7 +56,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
@@ -73,7 +71,6 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
@@ -475,12 +472,11 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err != nil {
 		return nil, err
 	}
-	namespace := namespaceEntry.Name()
 	namespaceID := namespaceEntry.ID()
 
 	request := startRequest.StartRequest
 	e.overrideStartWorkflowExecutionRequest(request, metrics.HistoryStartWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "StartWorkflowExecution")
+	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespaceEntry, "StartWorkflowExecution")
 	if err != nil {
 		return nil, err
 	}
@@ -564,7 +560,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		)
 	}
 
-	prevExecutionUpdateAction, err := e.applyWorkflowIDReusePolicyHelper(
+	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
 		t.RequestID,
 		prevRunID,
 		t.State,
@@ -1915,13 +1911,14 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 				createWorkflowTask = false
 			}
 
-			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespaceEntry.Name().String())
-			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
-				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
-					tag.WorkflowID(workflowContext.GetWorkflowID()),
-					tag.WorkflowRunID(workflowContext.GetRunID()),
-					tag.WorkflowNamespaceID(namespaceID.String()))
-				return nil, consts.ErrSignalsLimitExceeded
+			if err := api.ValidateSignal(
+				ctx,
+				e.shard,
+				mutableState,
+				request.GetInput().Size(),
+				"SignalWorkflowExecution",
+			); err != nil {
+				return nil, err
 			}
 
 			if childWorkflowOnly {
@@ -1963,7 +1960,6 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 	namespaceID := namespaceEntry.ID()
-	namespace := namespaceEntry.Name()
 
 	sRequest := signalWithStartRequest.SignalWithStartRequest
 	execution := commonpb.WorkflowExecution{
@@ -2002,14 +1998,14 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 				break
 			}
 
-			executionInfo := mutableState.GetExecutionInfo()
-			maxAllowedSignals := e.config.MaximumSignalsPerExecution(namespace.String())
-			if maxAllowedSignals > 0 && int(executionInfo.SignalCount) >= maxAllowedSignals {
-				e.logger.Info("Execution limit reached for maximum signals", tag.WorkflowSignalCount(executionInfo.SignalCount),
-					tag.WorkflowID(execution.GetWorkflowId()),
-					tag.WorkflowRunID(execution.GetRunId()),
-					tag.WorkflowNamespaceID(namespaceID.String()))
-				return nil, consts.ErrSignalsLimitExceeded
+			if err := api.ValidateSignal(
+				ctx,
+				e.shard,
+				mutableState,
+				sRequest.GetInput().Size(),
+				"SignalWithStartWorkflowExecution",
+			); err != nil {
+				return nil, err
 			}
 
 			if sRequest.GetRequestId() != "" && mutableState.IsSignalRequested(sRequest.GetRequestId()) {
@@ -2059,22 +2055,8 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	startRequest := e.getStartRequest(namespaceID, sRequest)
 	request := startRequest.StartRequest
 	e.overrideStartWorkflowExecutionRequest(request, metrics.HistorySignalWithStartWorkflowExecutionScope)
-	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespace, "SignalWithStartWorkflowExecution")
+	err = e.validateStartWorkflowExecutionRequest(ctx, request, namespaceEntry, "SignalWithStartWorkflowExecution")
 	if err != nil {
-		return nil, err
-	}
-
-	if err := common.CheckEventBlobSizeLimit(
-		sRequest.GetSignalInput().Size(),
-		e.config.BlobSizeLimitWarn(namespace.String()),
-		e.config.BlobSizeLimitError(namespace.String()),
-		namespace.String(),
-		sRequest.GetWorkflowId(),
-		"",
-		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		e.throttledLogger,
-		tag.BlobSizeViolationOperation("SignalWithStartWorkflowExecution"),
-	); err != nil {
 		return nil, err
 	}
 
@@ -2096,7 +2078,15 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	if prevMutableState != nil {
-		prevExecutionUpdateAction, err := e.applyWorkflowIDReusePolicyForSignalWithStart(prevMutableState.GetExecutionState(), execution, request.WorkflowIdReusePolicy)
+		executionState := prevMutableState.GetExecutionState()
+		prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
+			executionState.CreateRequestId,
+			executionState.RunId,
+			executionState.State,
+			executionState.Status,
+			execution,
+			request.WorkflowIdReusePolicy,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -2131,7 +2121,13 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		return nil, err
 	}
 
-	if err := api.NewWorkflowVersionCheck(e.shard, prevMutableState, mutableState); err != nil {
+	if err := api.ValidateSignal(
+		ctx,
+		e.shard,
+		mutableState,
+		sRequest.GetSignalInput().Size(),
+		"SignalWithStartWorkflowExecution",
+	); err != nil {
 		return nil, err
 	}
 
@@ -2154,6 +2150,9 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 		prevRunID = prevMutableState.GetExecutionState().GetRunId()
 		prevLastWriteVersion, err = prevMutableState.GetLastWriteVersion()
 		if err != nil {
+			return nil, err
+		}
+		if err := api.NewWorkflowVersionCheck(e.shard, prevLastWriteVersion, mutableState); err != nil {
 			return nil, err
 		}
 	}
@@ -2356,7 +2355,6 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				// in the request after forced failover.
 				// If ErrStaleState is returned, the logic for this handler and processing of CloseWorkflowExecution
 				// task will keep retrying infinitely.
-				workflowContext.GetContext().Clear()
 				mutableState, err = workflowContext.ReloadMutableState(ctx)
 				if err != nil {
 					return nil, err
@@ -2674,15 +2672,12 @@ func (e *historyEngineImpl) NotifyNewTasks(
 func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 	ctx context.Context,
 	request *workflowservice.StartWorkflowExecutionRequest,
-	namespace namespace.Name,
+	namespaceEntry *namespace.Namespace,
 	operation string,
 ) error {
 
+	workflowID := request.GetWorkflowId()
 	maxIDLengthLimit := e.config.MaxIDLengthLimit()
-	blobSizeLimitError := e.config.BlobSizeLimitError(namespace.String())
-	blobSizeLimitWarn := e.config.BlobSizeLimitWarn(namespace.String())
-	memoSizeLimitError := e.config.MemoSizeLimitError(namespace.String())
-	memoSizeLimitWarn := e.config.MemoSizeLimitWarn(namespace.String())
 
 	if len(request.GetRequestId()) == 0 {
 		return serviceerror.NewInvalidArgument("Missing request ID.")
@@ -2718,30 +2713,14 @@ func (e *historyEngineImpl) validateStartWorkflowExecutionRequest(
 		return err
 	}
 
-	if err := common.CheckEventBlobSizeLimit(
+	if err := api.ValidateStart(
+		ctx,
+		e.shard,
+		namespaceEntry,
+		workflowID,
 		request.GetInput().Size(),
-		blobSizeLimitWarn,
-		blobSizeLimitError,
-		namespace.String(),
-		request.GetWorkflowId(),
-		"",
-		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		e.throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
-	); err != nil {
-		return err
-	}
-
-	if err := common.CheckEventBlobSizeLimit(
 		request.GetMemo().Size(),
-		memoSizeLimitWarn,
-		memoSizeLimitError,
-		namespace.String(),
-		request.GetWorkflowId(),
-		"",
-		e.metricsScope(ctx).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
-		e.throttledLogger,
-		tag.BlobSizeViolationOperation(operation),
+		operation,
 	); err != nil {
 		return err
 	}
@@ -2867,102 +2846,6 @@ func (e *historyEngineImpl) getStartRequest(
 	}
 
 	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, e.shard.GetTimeSource().Now())
-}
-
-// for startWorkflowExecution & signalWithStart to handle workflow reuse policy
-func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSignalWithStart(
-	prevExecutionState *persistencespb.WorkflowExecutionState,
-	execution commonpb.WorkflowExecution,
-	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
-) (api.UpdateWorkflowActionFunc, error) {
-
-	prevStartRequestID := prevExecutionState.CreateRequestId
-	prevRunID := prevExecutionState.RunId
-	prevState := prevExecutionState.State
-	prevStatus := prevExecutionState.Status
-
-	return e.applyWorkflowIDReusePolicyHelper(
-		prevStartRequestID,
-		prevRunID,
-		prevState,
-		prevStatus,
-		execution,
-		wfIDReusePolicy,
-	)
-}
-
-// applyWorkflowIDReusePolicyHelper returns updateWorkflowActionFunc
-// for updating the previous execution and an error if the situation is
-// not allowed by the workflowIDReusePolicy.
-// Both result may be nil, if the case is allow and no update is needed
-// for the previous execution.
-func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
-	prevStartRequestID,
-	prevRunID string,
-	prevState enumsspb.WorkflowExecutionState,
-	prevStatus enumspb.WorkflowExecutionStatus,
-	newExecution commonpb.WorkflowExecution,
-	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
-) (api.UpdateWorkflowActionFunc, error) {
-
-	// here we know there is some information about the prev workflow, i.e. either running right now
-	// or has history check if the this workflow is finished
-	switch prevState {
-	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-		if wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
-			return func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-				mutableState := workflowContext.GetMutableState()
-				if !mutableState.IsWorkflowExecutionRunning() {
-					return nil, consts.ErrWorkflowCompleted
-				}
-
-				return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
-					mutableState,
-					mutableState.GetNextEventID(),
-					"TerminateIfRunning WorkflowIdReusePolicy Policy",
-					payloads.EncodeString(
-						fmt.Sprintf("terminated by new runID: %s", newExecution.RunId),
-					),
-					consts.IdentityHistoryService,
-				)
-			}, nil
-		}
-
-		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-		return nil, getWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
-	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-		// previous workflow completed, proceed
-	default:
-		// persistence.WorkflowStateZombie or unknown type
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", prevState))
-	}
-
-	switch wfIDReusePolicy {
-	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
-		if _, ok := consts.FailedWorkflowStatuses[prevStatus]; !ok {
-			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
-			return nil, getWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
-		}
-	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING:
-		// as long as workflow not running, so this case has no check
-	case enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
-		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
-		return nil, getWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow reuse policy: %v.", wfIDReusePolicy))
-	}
-
-	return nil, nil
-}
-
-func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workflowID string, runID string) error {
-	return serviceerror.NewWorkflowExecutionAlreadyStarted(
-		fmt.Sprintf(errMsg, workflowID, runID),
-		createRequestID,
-		runID,
-	)
 }
 
 func (e *historyEngineImpl) GetReplicationMessages(
@@ -3397,10 +3280,6 @@ func (e *historyEngineImpl) GetReplicationStatus(
 	resp.RemoteClusters = remoteClusters
 	resp.HandoverNamespaces = handoverNamespaces
 	return resp, nil
-}
-
-func (e *historyEngineImpl) metricsScope(ctx context.Context) metrics.Scope {
-	return interceptor.MetricsScope(ctx, e.logger)
 }
 
 func (e *historyEngineImpl) containsHistoryEvent(

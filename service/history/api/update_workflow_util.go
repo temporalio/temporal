@@ -88,7 +88,11 @@ UpdateHistoryLoop:
 			if err != nil {
 				return err
 			}
-			if err = NewWorkflowVersionCheck(shard, mutableState, newMutableState); err != nil {
+			lastWriteVersion, err := mutableState.GetLastWriteVersion()
+			if err != nil {
+				return err
+			}
+			if err = NewWorkflowVersionCheck(shard, lastWriteVersion, newMutableState); err != nil {
 				return err
 			}
 

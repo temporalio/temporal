@@ -25,15 +25,22 @@
 package api
 
 import (
+	"context"
+
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -130,17 +137,13 @@ func GenerateFirstWorkflowTask(
 
 func NewWorkflowVersionCheck(
 	shard shard.Context,
-	prevMutableState workflow.MutableState,
+	prevLastWriteVersion int64,
 	newMutableState workflow.MutableState,
 ) error {
-	if prevMutableState == nil {
+	if prevLastWriteVersion == common.EmptyVersion {
 		return nil
 	}
 
-	prevLastWriteVersion, err := prevMutableState.GetLastWriteVersion()
-	if err != nil {
-		return err
-	}
 	if prevLastWriteVersion > newMutableState.GetCurrentVersion() {
 		clusterMetadata := shard.GetClusterMetadata()
 		namespaceEntry := newMutableState.GetNamespaceEntry()
@@ -150,5 +153,54 @@ func NewWorkflowVersionCheck(
 			clusterMetadata.ClusterNameForFailoverVersion(namespaceEntry.IsGlobalNamespace(), prevLastWriteVersion),
 		)
 	}
+	return nil
+}
+
+func ValidateStart(
+	ctx context.Context,
+	shard shard.Context,
+	namespaceEntry *namespace.Namespace,
+	workflowID string,
+	workflowInputSize int,
+	workflowMemoSize int,
+	operation string,
+) error {
+	config := shard.GetConfig()
+	logger := shard.GetLogger()
+	throttledLogger := shard.GetThrottledLogger()
+
+	namespaceName := namespaceEntry.Name().String()
+
+	blobSizeLimitWarn := config.BlobSizeLimitWarn(namespaceName)
+	blobSizeLimitError := config.BlobSizeLimitError(namespaceName)
+
+	if err := common.CheckEventBlobSizeLimit(
+		workflowInputSize,
+		blobSizeLimitWarn,
+		blobSizeLimitError,
+		namespaceName,
+		workflowID,
+		"",
+		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		throttledLogger,
+		tag.BlobSizeViolationOperation(operation),
+	); err != nil {
+		return err
+	}
+
+	if err := common.CheckEventBlobSizeLimit(
+		workflowMemoSize,
+		blobSizeLimitWarn,
+		blobSizeLimitError,
+		namespaceName,
+		workflowID,
+		"",
+		interceptor.MetricsScope(ctx, logger).Tagged(metrics.CommandTypeTag(enumspb.COMMAND_TYPE_UNSPECIFIED.String())),
+		throttledLogger,
+		tag.BlobSizeViolationOperation(operation),
+	); err != nil {
+		return err
+	}
+
 	return nil
 }
