@@ -56,7 +56,6 @@ import (
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
-	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
@@ -2847,28 +2846,6 @@ func (e *historyEngineImpl) getStartRequest(
 	}
 
 	return common.CreateHistoryStartWorkflowRequest(namespaceID.String(), req, nil, e.shard.GetTimeSource().Now())
-}
-
-// for startWorkflowExecution & signalWithStart to handle workflow reuse policy
-func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSignalWithStart(
-	prevExecutionState *persistencespb.WorkflowExecutionState,
-	execution commonpb.WorkflowExecution,
-	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
-) (api.UpdateWorkflowActionFunc, error) {
-
-	prevStartRequestID := prevExecutionState.CreateRequestId
-	prevRunID := prevExecutionState.RunId
-	prevState := prevExecutionState.State
-	prevStatus := prevExecutionState.Status
-
-	return api.ApplyWorkflowIDReusePolicy(
-		prevStartRequestID,
-		prevRunID,
-		prevState,
-		prevStatus,
-		execution,
-		wfIDReusePolicy,
-	)
 }
 
 func (e *historyEngineImpl) GetReplicationMessages(
