@@ -176,7 +176,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 		RPCPort:      123,
 		Role:         p.Frontend,
 		SessionStart: now,
-		RecordExpiry: time.Second * 2,
+		RecordExpiry: time.Second * 5,
 	}
 
 	err := s.ClusterMetadataManager.UpsertClusterMembership(s.ctx, req)
