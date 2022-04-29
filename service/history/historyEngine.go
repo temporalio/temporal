@@ -45,7 +45,6 @@ import (
 
 	clockpb "go.temporal.io/server/api/clock/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/sdk"
@@ -562,7 +561,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 		)
 	}
 
-	prevExecutionUpdateAction, err := e.applyWorkflowIDReusePolicyHelper(
+	prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
 		t.RequestID,
 		prevRunID,
 		t.State,
@@ -2080,7 +2079,15 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 	}
 
 	if prevMutableState != nil {
-		prevExecutionUpdateAction, err := e.applyWorkflowIDReusePolicyForSignalWithStart(prevMutableState.GetExecutionState(), execution, request.WorkflowIdReusePolicy)
+		executionState := prevMutableState.GetExecutionState()
+		prevExecutionUpdateAction, err := api.ApplyWorkflowIDReusePolicy(
+			executionState.CreateRequestId,
+			executionState.RunId,
+			executionState.State,
+			executionState.Status,
+			execution,
+			request.WorkflowIdReusePolicy,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -2854,87 +2861,13 @@ func (e *historyEngineImpl) applyWorkflowIDReusePolicyForSignalWithStart(
 	prevState := prevExecutionState.State
 	prevStatus := prevExecutionState.Status
 
-	return e.applyWorkflowIDReusePolicyHelper(
+	return api.ApplyWorkflowIDReusePolicy(
 		prevStartRequestID,
 		prevRunID,
 		prevState,
 		prevStatus,
 		execution,
 		wfIDReusePolicy,
-	)
-}
-
-// applyWorkflowIDReusePolicyHelper returns updateWorkflowActionFunc
-// for updating the previous execution and an error if the situation is
-// not allowed by the workflowIDReusePolicy.
-// Both result may be nil, if the case is allow and no update is needed
-// for the previous execution.
-func (e *historyEngineImpl) applyWorkflowIDReusePolicyHelper(
-	prevStartRequestID,
-	prevRunID string,
-	prevState enumsspb.WorkflowExecutionState,
-	prevStatus enumspb.WorkflowExecutionStatus,
-	newExecution commonpb.WorkflowExecution,
-	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
-) (api.UpdateWorkflowActionFunc, error) {
-
-	// here we know there is some information about the prev workflow, i.e. either running right now
-	// or has history check if the this workflow is finished
-	switch prevState {
-	case enumsspb.WORKFLOW_EXECUTION_STATE_CREATED,
-		enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING:
-		if wfIDReusePolicy == enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING {
-			return func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-				mutableState := workflowContext.GetMutableState()
-				if !mutableState.IsWorkflowExecutionRunning() {
-					return nil, consts.ErrWorkflowCompleted
-				}
-
-				return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
-					mutableState,
-					mutableState.GetNextEventID(),
-					"TerminateIfRunning WorkflowIdReusePolicy Policy",
-					payloads.EncodeString(
-						fmt.Sprintf("terminated by new runID: %s", newExecution.RunId),
-					),
-					consts.IdentityHistoryService,
-				)
-			}, nil
-		}
-
-		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-		return nil, getWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
-	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
-		// previous workflow completed, proceed
-	default:
-		// persistence.WorkflowStateZombie or unknown type
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process workflow, workflow has invalid state: %v.", prevState))
-	}
-
-	switch wfIDReusePolicy {
-	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
-		if _, ok := consts.FailedWorkflowStatuses[prevStatus]; !ok {
-			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
-			return nil, getWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
-		}
-	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
-		enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING:
-		// as long as workflow not running, so this case has no check
-	case enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
-		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
-		return nil, getWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow reuse policy: %v.", wfIDReusePolicy))
-	}
-
-	return nil, nil
-}
-
-func getWorkflowAlreadyStartedError(errMsg string, createRequestID string, workflowID string, runID string) error {
-	return serviceerror.NewWorkflowExecutionAlreadyStarted(
-		fmt.Sprintf(errMsg, workflowID, runID),
-		createRequestID,
-		runID,
 	)
 }
 
