@@ -171,6 +171,12 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 			Version:             request.GetVersion(),
 			Attempt:             request.GetAttempt(),
 		})
+		r.logger.Info("Add activity retry timer from sync activity",
+			tag.WorkflowNamespaceID(request.GetNamespaceId()),
+			tag.WorkflowID(request.GetWorkflowId()),
+			tag.WorkflowRunID(request.GetRunId()),
+			tag.ActivityInfo(activityInfo),
+		)
 	}
 
 	refreshTask := r.testRefreshActivityTimerTaskMask(

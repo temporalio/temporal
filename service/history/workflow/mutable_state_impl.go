@@ -996,6 +996,12 @@ func (e *MutableStateImpl) UpdateActivityProgress(
 	ai.LastHeartbeatUpdateTime = &now
 	e.updateActivityInfos[ai.ScheduleId] = ai
 	e.syncActivityTasks[ai.ScheduleId] = struct{}{}
+	e.logger.Info("Add sync activity from heartbeat event",
+		tag.WorkflowNamespaceID(e.executionInfo.NamespaceId),
+		tag.WorkflowID(e.executionInfo.WorkflowId),
+		tag.WorkflowRunID(e.executionState.RunId),
+		tag.ActivityInfo(ai),
+	)
 }
 
 // ReplicateActivityInfo replicate the necessary activity information
@@ -2005,6 +2011,12 @@ func (e *MutableStateImpl) AddActivityTaskStartedEvent(
 		return nil, err
 	}
 	e.syncActivityTasks[ai.ScheduleId] = struct{}{}
+	e.logger.Info("Add sync activity from start event",
+		tag.WorkflowNamespaceID(e.executionInfo.NamespaceId),
+		tag.WorkflowID(e.executionInfo.WorkflowId),
+		tag.WorkflowRunID(e.executionState.RunId),
+		tag.ActivityInfo(ai),
+	)
 	return nil, nil
 }
 
@@ -3650,6 +3662,12 @@ func (e *MutableStateImpl) RetryActivity(
 
 	e.updateActivityInfos[ai.ScheduleId] = ai
 	e.syncActivityTasks[ai.ScheduleId] = struct{}{}
+	e.logger.Info("Add sync activity from retry event",
+		tag.WorkflowNamespaceID(e.executionInfo.NamespaceId),
+		tag.WorkflowID(e.executionInfo.WorkflowId),
+		tag.WorkflowRunID(e.executionState.RunId),
+		tag.ActivityInfo(ai),
+	)
 	return enumspb.RETRY_STATE_IN_PROGRESS, nil
 }
 
