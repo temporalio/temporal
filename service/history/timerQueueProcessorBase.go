@@ -386,7 +386,7 @@ func newTimerTaskScheduler(
 				QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerTaskSchedulerRoundRobinWeights(), logger),
+				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.TimerProcessorSchedulerRoundRobinWeights(), logger),
 			},
 		},
 		shard.GetMetricsClient(),

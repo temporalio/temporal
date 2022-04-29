@@ -67,6 +67,7 @@ type (
 		config                     *configs.Config
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
+		scheduler                  queues.Scheduler
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
 		logger                     log.Logger
@@ -84,6 +85,7 @@ func newTimerQueueProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Processor {
@@ -109,6 +111,7 @@ func newTimerQueueProcessor(
 		config:                   config,
 		metricsClient:            shard.GetMetricsClient(),
 		workflowCache:            workflowCache,
+		scheduler:                scheduler,
 		workflowDeleteManager:    workflowDeleteManager,
 		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTimer),
 		logger:                   logger,
@@ -118,6 +121,7 @@ func newTimerQueueProcessor(
 		activeTimerProcessor: newTimerQueueActiveProcessor(
 			shard,
 			workflowCache,
+			scheduler,
 			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
@@ -365,6 +369,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 			processor := newTimerQueueStandbyProcessor(
 				t.shard,
 				t.workflowCache,
+				t.scheduler,
 				t.workflowDeleteManager,
 				t.matchingClient,
 				clusterName,

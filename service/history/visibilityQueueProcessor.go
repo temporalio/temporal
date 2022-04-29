@@ -74,6 +74,7 @@ type (
 func newVisibilityQueueProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	visibilityMgr manager.VisibilityManager,
 ) queues.Processor {
 
@@ -138,7 +139,9 @@ func newVisibilityQueueProcessor(
 		logger,
 	)
 
-	scheduler := newVisibilityTaskScheduler(shard, logger)
+	if scheduler == nil {
+		scheduler = newVisibilityTaskScheduler(shard, logger)
+	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
@@ -354,7 +357,7 @@ func newVisibilityTaskScheduler(
 				QueueSize:   config.VisibilityTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
-				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityTaskSchedulerRoundRobinWeights(), logger),
+				PriorityToWeight: configs.ConvertDynamicConfigValueToWeights(config.VisibilityProcessorSchedulerRoundRobinWeights(), logger),
 			},
 		},
 		shard.GetMetricsClient(),

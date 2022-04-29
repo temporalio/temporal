@@ -52,6 +52,7 @@ type (
 func newTimerQueueStandbyProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	workflowDeleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	clusterName string,
@@ -97,7 +98,9 @@ func newTimerQueueStandbyProcessor(
 		config,
 	)
 
-	scheduler := newTimerTaskScheduler(shard, logger)
+	if scheduler == nil {
+		scheduler = newTimerTaskScheduler(shard, logger)
+	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,

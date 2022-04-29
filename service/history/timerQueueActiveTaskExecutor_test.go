@@ -183,6 +183,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 		newTimerQueueActiveProcessor(
 			s.mockShard,
 			h.historyCache,
+			nil,
 			s.mockDeleteManager,
 			s.mockMatchingClient,
 			newTaskAllocator(s.mockShard),
