@@ -419,12 +419,26 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		workflow.CallerTypeTask,
 	)
 	if err != nil {
+		t.logger.Info("Drop activity retry timer due to wf ctx err",
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()),
+			tag.Task(task),
+			tag.Error(err),
+		)
 		return err
 	}
 	defer func() { release(retError) }()
 
 	mutableState, err := loadMutableStateForTimerTask(ctx, weContext, task, t.metricsClient, t.logger)
 	if err != nil {
+		t.logger.Info("Drop activity retry timer due to ms err",
+			tag.WorkflowNamespaceID(task.GetNamespaceID()),
+			tag.WorkflowID(task.GetWorkflowID()),
+			tag.WorkflowRunID(task.GetRunID()),
+			tag.Task(task),
+			tag.Error(err),
+		)
 		return err
 	}
 	if mutableState == nil || !mutableState.IsWorkflowExecutionRunning() {
