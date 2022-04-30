@@ -215,7 +215,7 @@ func (s *integrationSuite) isMutableStateDeleted(namespaceID string, execution *
 
 	for i := 0; i < retryLimit; i++ {
 		_, err := s.testCluster.testBase.ExecutionManager.GetWorkflowExecution(NewContext(), request)
-		if _, ok := err.(*serviceerror.NotFound); ok {
+		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			return true
 		}
 		time.Sleep(retryBackoffTime)

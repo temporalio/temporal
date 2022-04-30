@@ -1979,12 +1979,11 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 
 	if err0 == nil {
 		defer func() { release(retError) }()
-	Just_Signal_Loop:
 		for ; attempt <= conditionalRetryCount; attempt++ {
 			// workflow not exist, will create workflow then signal
 			mutableState, err1 := context.LoadWorkflowExecution(ctx)
 			if err1 != nil {
-				if _, ok := err1.(*serviceerror.NotFound); ok {
+				if _, isNotFound := err1.(*serviceerror.NotFound); isNotFound {
 					break
 				}
 				return nil, err1
@@ -2035,7 +2034,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			// the history and try the operation again.
 			if err := context.UpdateWorkflowExecutionAsActive(ctx, e.shard.GetTimeSource().Now()); err != nil {
 				if err == consts.ErrConflict {
-					continue Just_Signal_Loop
+					continue
 				}
 				return nil, err
 			}
@@ -2045,7 +2044,7 @@ func (e *historyEngineImpl) SignalWithStartWorkflowExecution(
 			return nil, consts.ErrMaxAttemptsExceeded
 		}
 	} else {
-		if _, ok := err0.(*serviceerror.NotFound); !ok {
+		if _, isNotFound := err0.(*serviceerror.NotFound); !isNotFound {
 			return nil, err0
 		}
 		// workflow not exist, will create workflow then signal
@@ -3037,7 +3036,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					// no-op. Usually this is due to reset workflow with pending child workflows
 					e.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
 				case nil:
-					//no-op
+					// no-op
 				default:
 					return nil, err
 				}

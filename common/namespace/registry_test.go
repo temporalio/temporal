@@ -35,6 +35,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -520,7 +521,7 @@ func (s *registrySuite) TestGetTriggerListAndUpdateCache_ConcurrentAccess() {
 		case nil:
 			s.Equal(entryOld, entryNew)
 			waitGroup.Done()
-		case *serviceerror.NotFound:
+		case *serviceerror.NamespaceNotFound:
 			time.Sleep(4 * time.Second)
 			entryNew, err := s.registry.GetNamespaceByID(id)
 			s.NoError(err)
@@ -637,7 +638,7 @@ func (s *registrySuite) TestRemoveDeletedNamespace() {
 	ns1FromRegistry, err := s.registry.GetNamespace(namespace.Name(namespaceRecord1.Namespace.Info.Name))
 	s.Nil(ns1FromRegistry)
 	s.Error(err)
-	var notFound *serviceerror.NotFound
+	var notFound *serviceerror.NamespaceNotFound
 	s.ErrorAs(err, &notFound)
 }
 

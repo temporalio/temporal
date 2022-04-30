@@ -1574,8 +1574,7 @@ func (s *ExecutionManagerSuite) TestDeleteCurrentWorkflow() {
 	runID0, err1 = s.GetCurrentWorkflowRunID(s.ctx, namespaceID, workflowExecution.GetWorkflowId())
 	s.Error(err1)
 	s.Empty(runID0)
-	_, ok := err1.(*serviceerror.NotFound)
-	s.True(ok)
+	s.IsType(&serviceerror.NotFound{}, err1)
 
 	// execution record should still be there
 	_, err2 = s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
@@ -1623,12 +1622,11 @@ func (s *ExecutionManagerSuite) TestUpdateDeleteWorkflow() {
 	runID0, err1 = s.GetCurrentWorkflowRunID(s.ctx, namespaceID, workflowExecution.GetWorkflowId())
 	s.Error(err1)
 	s.Empty(runID0)
-	_, ok := err1.(*serviceerror.NotFound)
+	s.IsType(&serviceerror.NotFound{}, err1)
 	// execution record should still be there
 	_, err2 = s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.Error(err2)
-	_, ok = err2.(*serviceerror.NotFound)
-	s.True(ok)
+	s.IsType(&serviceerror.NotFound{}, err2)
 }
 
 // TestCleanupCorruptedWorkflow test
@@ -1656,8 +1654,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	runID0, err4 := s.GetCurrentWorkflowRunID(s.ctx, namespaceID, workflowExecution.GetWorkflowId())
 	s.Error(err4)
 	s.Empty(runID0)
-	_, ok := err4.(*serviceerror.NotFound)
-	s.True(ok)
+	s.IsType(&serviceerror.NotFound{}, err4)
 
 	// we should still be able to load with runID
 	info1, err5 := s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
@@ -1697,8 +1694,7 @@ func (s *ExecutionManagerSuite) TestCleanupCorruptedWorkflow() {
 	// execution record should be gone
 	_, err9 := s.GetWorkflowMutableState(s.ctx, namespaceID, workflowExecution)
 	s.Error(err9)
-	_, ok = err9.(*serviceerror.NotFound)
-	s.True(ok)
+	s.IsType(&serviceerror.NotFound{}, err9)
 }
 
 // TestGetCurrentWorkflow test

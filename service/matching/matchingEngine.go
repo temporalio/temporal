@@ -888,7 +888,7 @@ func (e *matchingEngineImpl) recordWorkflowTaskStarted(
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
+		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
 		}
 		return true
@@ -918,7 +918,7 @@ func (e *matchingEngineImpl) recordActivityTaskStarted(
 	}
 	err := backoff.Retry(op, historyServiceOperationRetryPolicy, func(err error) bool {
 		switch err.(type) {
-		case *serviceerror.NotFound, *serviceerrors.TaskAlreadyStarted:
+		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.TaskAlreadyStarted:
 			return false
 		}
 		return true

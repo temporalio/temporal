@@ -28,6 +28,7 @@ import (
 	"context"
 
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -82,10 +83,15 @@ func loadMutableStateForTransferTask(
 		metricsClient.Scope(metrics.TransferQueueProcessorScope),
 		logger,
 	)
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	switch err.(type) {
+	case *serviceerror.NotFound:
 		// NotFound error will be ignored by task error handling logic, so log it here
 		// for transfer tasks, mutable state should always be available
 		logger.Error("Transfer Task Processor: workflow mutable state not found, skip.")
+	case *serviceerror.NamespaceNotFound:
+		// NamespaceNotFound error will be ignored by task error handling logic, so log it here
+		// for transfer tasks, namespace should always be available.
+		logger.Error("Transfer Task Processor: namespace not found, skip.")
 	}
 
 	return mutableState, err

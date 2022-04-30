@@ -135,7 +135,7 @@ func (s *parentClosePolicyWorkflowSuite) TestProcessorActivity_SameCluster() {
 	s.mockHistoryClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).
 		Return(&historyservice.TerminateWorkflowExecutionResponse{}, nil).Times(1)
 	s.mockHistoryClient.EXPECT().RequestCancelWorkflowExecution(gomock.Any(), gomock.Any()).
-		Return(nil, &serviceerror.NotFound{}).Times(1)
+		Return(nil, serviceerror.NewNotFound("")).Times(1)
 
 	_, err := env.ExecuteActivity(ProcessorActivity, request)
 	s.NoError(err)

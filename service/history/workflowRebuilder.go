@@ -195,7 +195,7 @@ func (r *workflowRebuilderImpl) getMutableState(
 		WorkflowID:  workflowKey.WorkflowID,
 		RunID:       workflowKey.RunID,
 	})
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return nil, 0, err
 	}
 	// only check whether the execution is nil, do as much as we can

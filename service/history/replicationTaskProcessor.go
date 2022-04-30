@@ -542,7 +542,7 @@ func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, err error) {
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		metricsScope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
 		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		metricsScope.IncCounter(metrics.ServiceErrNotFoundCounter)
 		metricsScope.IncCounter(metrics.ReplicationTasksFailed)
 	case *serviceerror.ResourceExhausted:

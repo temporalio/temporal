@@ -27,7 +27,6 @@ package interceptor
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
@@ -54,11 +53,10 @@ type (
 )
 
 var (
-	ErrNamespaceNotSet              = serviceerror.NewInvalidArgument("Namespace not set on request.")
-	errNamespaceHandover            = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
-	errTaskTokenNotSet              = serviceerror.NewInvalidArgument("Task token not set on request.")
-	errTaskTokenNamespaceMismatch   = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
-	errInvalidNamespaceStateMessage = "Namespace has invalid state: %s. Must be %s."
+	ErrNamespaceNotSet            = serviceerror.NewInvalidArgument("Namespace not set on request.")
+	errNamespaceHandover          = serviceerror.NewUnavailable(fmt.Sprintf("Namespace replication in %s state.", enumspb.REPLICATION_STATE_HANDOVER.String()))
+	errTaskTokenNotSet            = serviceerror.NewInvalidArgument("Task token not set on request.")
+	errTaskTokenNamespaceMismatch = serviceerror.NewInvalidArgument("Operation requested with a token from a different namespace.")
 
 	allowedNamespaceStates = map[string][]enumspb.NamespaceState{
 		"StartWorkflowExecution":           {enumspb.NAMESPACE_STATE_REGISTERED},
@@ -231,7 +229,7 @@ func (ni *NamespaceValidatorInterceptor) checkNamespaceState(namespaceEntry *nam
 		}
 	}
 
-	return ni.stateNotAllowedError(namespaceEntry.State(), allowedStates)
+	return serviceerror.NewNamespaceInvalidState(namespaceEntry.Name().String(), namespaceEntry.State(), allowedStates)
 }
 
 func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *namespace.Namespace, fullMethod string) error {
@@ -249,12 +247,4 @@ func (ni *NamespaceValidatorInterceptor) checkReplicationState(namespaceEntry *n
 	}
 
 	return errNamespaceHandover
-}
-
-func (ni *NamespaceValidatorInterceptor) stateNotAllowedError(currentState enumspb.NamespaceState, allowedStates []enumspb.NamespaceState) error {
-	var allowedStatesStr []string
-	for _, allowedState := range allowedStates {
-		allowedStatesStr = append(allowedStatesStr, allowedState.String())
-	}
-	return serviceerror.NewInvalidArgument(fmt.Sprintf(errInvalidNamespaceStateMessage, currentState, strings.Join(allowedStatesStr, " or ")))
 }
