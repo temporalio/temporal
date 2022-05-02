@@ -153,7 +153,7 @@ func (h *historyArchiver) Archive(ctx context.Context, URI archiver.URI, request
 		part := progress.CurrentPageNumber
 		historyBlob, err := getNextHistoryBlob(ctx, historyIterator)
 		if err != nil {
-			if common.IsNotFoundError(err) {
+			if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 				// workflow history no longer exists, may due to duplicated archival signal
 				// this may happen even in the middle of iterating history as two archival signals
 				// can be processed concurrently.

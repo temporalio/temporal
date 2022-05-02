@@ -1399,7 +1399,7 @@ func (p *metricEmitter) updateErrorMetric(scope int, err error) {
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBadRequestCounter)
 	case *serviceerror.NamespaceAlreadyExists:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrNamespaceAlreadyExistsCounter)
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrEntityNotExistsCounter)
 	case *serviceerror.ResourceExhausted:
 		p.metricClient.IncCounter(scope, metrics.PersistenceErrBusyCounter)

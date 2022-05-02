@@ -273,7 +273,7 @@ func (s *engineSuite) TestGetMutableState_EmptyRunID() {
 		NamespaceId: tests.NamespaceID.String(),
 		Execution:   &execution,
 	})
-	s.Equal(&serviceerror.NotFound{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestGetMutableStateLongPoll() {

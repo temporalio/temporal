@@ -2874,7 +2874,7 @@ func (e *historyEngineImpl) ReapplyEvents(
 					// no-op. Usually this is due to reset workflow with pending child workflows
 					e.logger.Warn("Cannot reset workflow. Ignoring reapply events.", tag.Error(err))
 				case nil:
-					//no-op
+					// no-op
 				default:
 					return nil, err
 				}

@@ -392,7 +392,7 @@ func (h *OperatorHandlerImpl) error(err error, scope metrics.Scope, endpointName
 		scope.IncCounter(metrics.ServiceErrInvalidArgumentCounter)
 	case *serviceerror.ResourceExhausted:
 		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 	default:
 		h.logger.Error("Unknown error.", tag.Error(err), tag.Endpoint(endpointName))
 		scope.IncCounter(metrics.ServiceFailures)

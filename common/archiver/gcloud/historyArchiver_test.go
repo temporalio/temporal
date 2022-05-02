@@ -332,7 +332,7 @@ func (h *historyArchiverSuite) TestArchive_Skip() {
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next().Return(historyBlob, nil),
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, &serviceerror.NotFound{Message: "workflow not found"}),
+		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewNotFound("workflow not found")),
 	)
 
 	historyArchiver := newHistoryArchiver(h.container, historyIterator, storageWrapper)

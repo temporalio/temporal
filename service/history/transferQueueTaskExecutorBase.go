@@ -114,7 +114,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddActivityTask", tag.Error(err))
@@ -140,7 +140,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))

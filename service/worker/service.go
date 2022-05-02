@@ -497,7 +497,7 @@ func (s *Service) ensureSystemNamespaceExists(
 	switch err.(type) {
 	case nil:
 		// noop
-	case *serviceerror.NotFound:
+	case *serviceerror.NamespaceNotFound:
 		s.logger.Fatal(
 			"temporal-system namespace does not exist",
 			tag.Error(err),

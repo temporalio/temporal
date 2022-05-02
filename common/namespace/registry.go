@@ -28,13 +28,13 @@ package namespace
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
@@ -95,7 +95,7 @@ type (
 
 		// GetNamespace reads the state for a single namespace by name or ID
 		// from persistent storage, returning an instance of
-		// serviceerror.NotFound if there is no matching Namespace.
+		// serviceerror.NamespaceNotFound if there is no matching Namespace.
 		GetNamespace(
 			context.Context,
 			*persistence.GetNamespaceRequest,
@@ -484,8 +484,7 @@ func (r *registry) getNamespace(name Name) (*Namespace, error) {
 	if id, ok := r.cacheNameToID.Get(name).(ID); ok {
 		return r.getNamespaceByIDLocked(id)
 	}
-	return nil, serviceerror.NewNotFound(
-		fmt.Sprintf("Namespace name %q not found", name))
+	return nil, serviceerror.NewNamespaceNotFound(name.String())
 }
 
 // getNamespaceByID retrieves the information from the cache if it exists.
@@ -499,8 +498,7 @@ func (r *registry) getNamespaceByIDLocked(id ID) (*Namespace, error) {
 	if ns, ok := r.cacheByID.Get(id).(*Namespace); ok {
 		return ns, nil
 	}
-	return nil, serviceerror.NewNotFound(
-		fmt.Sprintf("Namespace id %q not found", id))
+	return nil, serviceerror.NewNamespaceNotFound(id.String())
 }
 
 func (r *registry) publishCacheUpdate(

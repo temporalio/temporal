@@ -801,7 +801,8 @@ func operationPossiblySucceeded(err error) bool {
 		*persistence.InvalidPersistenceRequestError,
 		*persistence.TransactionSizeLimitError,
 		*serviceerror.ResourceExhausted,
-		*serviceerror.NotFound:
+		*serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound:
 		// Persistence failure that means that write was definitely not committed.
 		return false
 	default:

@@ -207,7 +207,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 			return nil, err
 		}
 		return NewWorkflowContext(wfContext, release, mutableState), nil
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		release(err)
 		if err := assertShardOwnership(
 			ctx,

@@ -30,6 +30,7 @@ import (
 
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence/serialization"
@@ -59,7 +60,7 @@ type (
 
 var _ ClusterMetadataManager = (*clusterMetadataManagerImpl)(nil)
 
-//NewClusterMetadataManagerImpl returns new ClusterMetadataManager
+// NewClusterMetadataManagerImpl returns new ClusterMetadataManager
 func NewClusterMetadataManagerImpl(
 	persistence ClusterMetadataStore,
 	serializer serialization.Serializer,
@@ -183,7 +184,7 @@ func (m *clusterMetadataManagerImpl) SaveClusterMetadata(
 	}
 
 	oldClusterMetadata, err := m.GetClusterMetadata(ctx, &GetClusterMetadataRequest{ClusterName: request.GetClusterName()})
-	if _, notFound := err.(*serviceerror.NotFound); notFound {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return m.persistence.SaveClusterMetadata(ctx, &InternalSaveClusterMetadataRequest{
 			ClusterName:     request.ClusterName,
 			ClusterMetadata: mcm,

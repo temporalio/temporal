@@ -403,7 +403,7 @@ func processTask(
 		err = procFn(wf.GetWorkflowId(), wf.GetRunId())
 		if err != nil {
 			// NotFound means wf is not running or deleted
-			if _, ok := err.(*serviceerror.NotFound); !ok {
+			if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
 				return err
 			}
 		}
@@ -411,7 +411,7 @@ func processTask(
 		resp, err := sdkClient.DescribeWorkflowExecution(ctx, wf.GetWorkflowId(), wf.GetRunId())
 		if err != nil {
 			// NotFound means wf is deleted
-			if _, ok := err.(*serviceerror.NotFound); !ok {
+			if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
 				return err
 			}
 			continue
