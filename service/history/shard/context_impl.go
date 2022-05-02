@@ -424,9 +424,11 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 	s.wLock()
 	defer s.wUnlock()
 
-	for _, failoverLevel := range s.GetAllFailoverLevels(category) {
-		if ackLevel.CompareTo(failoverLevel.CurrentLevel) > 0 {
-			ackLevel = failoverLevel.CurrentLevel
+	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
+		for _, failoverLevel := range levels {
+			if ackLevel.CompareTo(failoverLevel.CurrentLevel) > 0 {
+				ackLevel = failoverLevel.CurrentLevel
+			}
 		}
 	}
 
