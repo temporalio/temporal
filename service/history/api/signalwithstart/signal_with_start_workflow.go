@@ -261,7 +261,7 @@ func signalWorkflow(
 		ctx,
 		shard,
 		workflowContext.GetMutableState(),
-		request.GetInput().Size(),
+		request.GetSignalInput().Size(),
 		"SignalWithStartWorkflowExecution",
 	); err != nil {
 		return err
