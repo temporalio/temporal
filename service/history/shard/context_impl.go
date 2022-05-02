@@ -340,6 +340,9 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 	s.wLock()
 	defer s.wUnlock()
 
+	// the ack level is already the min ack level across all types of
+	// queue processors: active, passive, failover
+
 	// backward compatibility (for rollback)
 	switch category {
 	case tasks.CategoryTransfer:
@@ -420,6 +423,12 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 ) error {
 	s.wLock()
 	defer s.wUnlock()
+
+	for _, failoverLevel := range s.GetAllFailoverLevels(category) {
+		if ackLevel.CompareTo(failoverLevel.CurrentLevel) > 0 {
+			ackLevel = failoverLevel.CurrentLevel
+		}
+	}
 
 	// backward compatibility (for rollback)
 	switch category {
