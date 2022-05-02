@@ -123,15 +123,20 @@ func NewExecutable(
 	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
 ) Executable {
 	return &executableImpl{
-		Task:                          task,
-		state:                         ctasks.TaskStatePending,
-		attempt:                       1,
-		executor:                      executor,
-		scheduler:                     scheduler,
-		rescheduler:                   rescheduler,
-		timeSource:                    timeSource,
-		loadTime:                      timeSource.Now(),
-		logger:                        tasks.InitializeLogger(task, logger),
+		Task:        task,
+		state:       ctasks.TaskStatePending,
+		attempt:     1,
+		executor:    executor,
+		scheduler:   scheduler,
+		rescheduler: rescheduler,
+		timeSource:  timeSource,
+		loadTime:    timeSource.Now(),
+		logger: log.NewLazyLogger(
+			logger,
+			func() []tag.Tag {
+				return tasks.Tags(task)
+			},
+		),
 		scope:                         scope,
 		queueType:                     queueType,
 		criticalRetryAttempt:          criticalRetryAttempt,
