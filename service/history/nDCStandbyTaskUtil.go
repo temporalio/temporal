@@ -101,12 +101,16 @@ type (
 		lastEventVersion int64
 	}
 
-	pushActivityTaskToMatchingInfo struct {
+	activityTaskPostActionInfo struct {
+		*historyResendInfo
+
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
 	}
 
-	pushWorkflowTaskToMatchingInfo struct {
+	workflowTaskPostActionInfo struct {
+		*historyResendInfo
+
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
 	}
@@ -122,35 +126,53 @@ func newHistoryResendInfo(
 	}
 }
 
-func newPushActivityToMatchingInfo(
+func newActivityTaskPostActionInfo(
+	mutableState workflow.MutableState,
 	activityScheduleToStartTimeout time.Duration,
-) *pushActivityTaskToMatchingInfo {
-
-	return &pushActivityTaskToMatchingInfo{
-		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+) (*activityTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
 	}
+
+	return &activityTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
+		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+	}, nil
 }
 
-func newActivityRetryTimerToMatchingInfo(
+func newActivityRetryTimePostActionInfo(
+	mutableState workflow.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
-) *pushActivityTaskToMatchingInfo {
+) (*activityTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
+	}
 
-	return &pushActivityTaskToMatchingInfo{
+	return &activityTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-	}
+	}, nil
 }
 
-func newPushWorkflowTaskToMatchingInfo(
+func newWorkflowTaskPostActionInfo(
+	mutableState workflow.MutableState,
 	workflowTaskScheduleToStartTimeout int64,
 	taskqueue taskqueuepb.TaskQueue,
-) *pushWorkflowTaskToMatchingInfo {
+) (*workflowTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
+	}
 
-	return &pushWorkflowTaskToMatchingInfo{
+	return &workflowTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
-	}
+	}, nil
 }
 
 func getHistoryResendInfo(
