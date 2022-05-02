@@ -1354,18 +1354,24 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	namespaceID := tests.NamespaceID
 	workflowID := "wId"
+	workflowType := "workflowType"
 	runID := tests.RunID
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
+	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:  namespaceID.String(),
-			WorkflowId: workflowID,
-			Identity:   identity,
-			SignalName: signalName,
-			Input:      input,
+			Namespace:    namespaceID.String(),
+			WorkflowId:   workflowID,
+			WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue},
+			Identity:     identity,
+			SignalName:   signalName,
+			Input:        input,
+			RequestId:    requestID,
 		},
 	}
 

@@ -27,7 +27,6 @@ package api
 import (
 	"fmt"
 
-	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -47,7 +46,8 @@ func ApplyWorkflowIDReusePolicy(
 	prevRunID string,
 	prevState enumsspb.WorkflowExecutionState,
 	prevStatus enumspb.WorkflowExecutionStatus,
-	newExecution commonpb.WorkflowExecution,
+	workflowID string,
+	runID string,
 	wfIDReusePolicy enumspb.WorkflowIdReusePolicy,
 ) (UpdateWorkflowActionFunc, error) {
 
@@ -68,7 +68,7 @@ func ApplyWorkflowIDReusePolicy(
 					mutableState.GetNextEventID(),
 					"TerminateIfRunning WorkflowIdReusePolicy Policy",
 					payloads.EncodeString(
-						fmt.Sprintf("terminated by new runID: %s", newExecution.RunId),
+						fmt.Sprintf("terminated by new runID: %s", runID),
 					),
 					consts.IdentityHistoryService,
 				)
@@ -76,7 +76,7 @@ func ApplyWorkflowIDReusePolicy(
 		}
 
 		msg := "Workflow execution is already running. WorkflowId: %v, RunId: %v."
-		return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
+		return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, workflowID, prevRunID)
 	case enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED:
 		// previous workflow completed, proceed
 	default:
@@ -88,14 +88,14 @@ func ApplyWorkflowIDReusePolicy(
 	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE_FAILED_ONLY:
 		if _, ok := consts.FailedWorkflowStatuses[prevStatus]; !ok {
 			msg := "Workflow execution already finished successfully. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: allow duplicate workflow Id if last run failed."
-			return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
+			return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, workflowID, prevRunID)
 		}
 	case enumspb.WORKFLOW_ID_REUSE_POLICY_ALLOW_DUPLICATE,
 		enumspb.WORKFLOW_ID_REUSE_POLICY_TERMINATE_IF_RUNNING:
 		// as long as workflow not running, so this case has no check
 	case enumspb.WORKFLOW_ID_REUSE_POLICY_REJECT_DUPLICATE:
 		msg := "Workflow execution already finished. WorkflowId: %v, RunId: %v. Workflow Id reuse policy: reject duplicate workflow Id."
-		return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, newExecution.GetWorkflowId(), prevRunID)
+		return nil, generateWorkflowAlreadyStartedError(msg, prevStartRequestID, workflowID, prevRunID)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Failed to process start workflow reuse policy: %v.", wfIDReusePolicy))
 	}

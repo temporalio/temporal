@@ -45,24 +45,35 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+type (
+	CreateWorkflowCASPredicate struct {
+		RunID            string
+		LastWriteVersion int64
+	}
+)
+
 func NewWorkflowWithSignal(
 	shard shard.Context,
 	namespaceEntry *namespace.Namespace,
-	execution commonpb.WorkflowExecution,
+	workflowID string,
+	runID string,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
 	signalWithStartRequest *workflowservice.SignalWithStartWorkflowExecutionRequest,
-) (workflow.Context, workflow.MutableState, error) {
-	newMutableState, err := CreateMutableState(shard, namespaceEntry, execution.GetRunId())
+) (WorkflowContext, error) {
+	newMutableState, err := CreateMutableState(shard, namespaceEntry, runID)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	startEvent, err := newMutableState.AddWorkflowExecutionStartedEvent(
-		execution,
+		commonpb.WorkflowExecution{
+			WorkflowId: workflowID,
+			RunId:      runID,
+		},
 		startRequest,
 	)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if signalWithStartRequest != nil {
@@ -75,7 +86,7 @@ func NewWorkflowWithSignal(
 			signalWithStartRequest.GetIdentity(),
 			signalWithStartRequest.GetHeader(),
 		); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 	}
 
@@ -85,19 +96,19 @@ func NewWorkflowWithSignal(
 		startRequest.ParentExecutionInfo,
 		startEvent,
 	); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	newWorkflowContext := workflow.NewContext(
 		shard,
 		definition.NewWorkflowKey(
 			namespaceEntry.ID().String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
+			workflowID,
+			runID,
 		),
 		shard.GetLogger(),
 	)
-	return newWorkflowContext, newMutableState, nil
+	return NewWorkflowContext(newWorkflowContext, workflow.NoopReleaseFn, newMutableState), nil
 }
 
 func CreateMutableState(
