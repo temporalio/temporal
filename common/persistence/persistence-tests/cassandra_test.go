@@ -51,20 +51,6 @@ func TestCassandraShardPersistence(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestCassandraExecutionManager(t *testing.T) {
-	s := new(ExecutionManagerSuite)
-	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
-func TestCassandraExecutionManagerWithEventsV2(t *testing.T) {
-	s := new(ExecutionManagerSuiteForEventsV2)
-	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
 func TestQueuePersistence(t *testing.T) {
 	s := new(QueuePersistenceSuite)
 	s.TestBase = NewTestBaseWithCassandra(&TestBaseOptions{})
