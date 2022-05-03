@@ -2403,15 +2403,3 @@ func (mr *MockMutableStateMockRecorder) UpdateWorkflowStateStatus(state, status 
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowStateStatus", reflect.TypeOf((*MockMutableState)(nil).UpdateWorkflowStateStatus), state, status)
 }
-
-// UpdateWorkflowTask mocks base method.
-func (m *MockMutableState) UpdateWorkflowTask(arg0 *WorkflowTaskInfo) {
-	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "UpdateWorkflowTask", arg0)
-}
-
-// UpdateWorkflowTask indicates an expected call of UpdateWorkflowTask.
-func (mr *MockMutableStateMockRecorder) UpdateWorkflowTask(arg0 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).UpdateWorkflowTask), arg0)
-}
