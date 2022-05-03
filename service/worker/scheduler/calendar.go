@@ -38,8 +38,13 @@ type (
 	parseMode int
 
 	compiledCalendar struct {
+		// Time zone that this calendar spec is interpreted in
 		tz *time.Location
 
+		// Matching predicates for each field (two for date). As in Go's time
+		// library, months start on 1 == January, day of month starts at 1, day
+		// of week starts at 0 == Sunday. A time matches this compiled calendar
+		// when all fields match.
 		year, month, dayOfMonth, dayOfWeek, hour, minute, second func(int) bool
 	}
 )
@@ -53,8 +58,11 @@ const (
 )
 
 const (
+	// Modes for parsing range strings: all modes accept decimal integers
 	parseModeInt parseMode = iota
+	// parseModeMonth also accepts month name prefixes (at least three letters)
 	parseModeMonth
+	// parseModeDow also accepts day-of-week prefixes (at least two letters)
 	parseModeDow
 )
 
@@ -109,6 +117,7 @@ func newCompiledCalendar(cal *schedpb.CalendarSpec, tz *time.Location) (*compile
 	return cc, nil
 }
 
+// Returns true if the given time matches this calendar spec.
 func (cc *compiledCalendar) matches(ts time.Time) bool {
 	// set time zone
 	ts = ts.In(cc.tz)
@@ -126,6 +135,8 @@ func (cc *compiledCalendar) matches(ts time.Time) bool {
 		cc.second(s)
 }
 
+// Returns the earliest time that matches this calendar spec that is after the given time.
+// All times are considered to have 1 second resolution.
 func (cc *compiledCalendar) next(ts time.Time) time.Time {
 	// set time zone
 	ts = ts.In(cc.tz)
@@ -276,6 +287,24 @@ func makeSliceMatcher(s string, min, max int, parseMode parseMode) (func(int) bo
 	}, nil
 }
 
+// Accepts strings of the form:
+//   *        matches always
+//   x        matches when the field equals x
+//   x-z      matches when the field is between x and z inclusive
+//   x-z/y    matches when the field is between x and z inclusive, skipping by y
+//   x/y      matches when the field is between x and max inclusive, skipping by y
+//   j,k,l    matches when the field is one of the listed values/ranges
+// Each comma-separated value can be a range, and any range can have a skip value, e.g.:
+//   1-5             matches 1,2,3,4,5
+//   1-5/2           matches 1,3,5
+//   3/5             matches 3,8,13,18,23,28 (assuming max=30)
+//   1-5/2,8         matches 1,3,5,8
+//   1-5/2,8-11      matches 1,3,5,8,9,10,11
+//   1-5/2,8-16/3,2  matches 1,2,3,5,8,11,14
+// Calls f for all values that should be considered matching. Values don't have to appear
+// in order, and f may be called out of order as well.
+// Handles day-of-week names or month names according to parseMode.
+// min and max are the complete range of expected values.
 func parseStringSpec(s string, min, max int, parseMode parseMode, f func(int)) error {
 	for _, part := range strings.Split(s, ",") {
 		var err error
@@ -330,6 +359,7 @@ func parseStringSpec(s string, min, max int, parseMode parseMode, f func(int)) e
 	return nil
 }
 
+// Parses a single value (integer or day-of-week or month name).
 func parseValue(s string, min, max int, parseMode parseMode) (int, error) {
 	if parseMode == parseModeMonth {
 		if len(s) >= 3 {

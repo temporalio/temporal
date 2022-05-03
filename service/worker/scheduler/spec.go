@@ -81,10 +81,15 @@ func loadTimezone(spec *schedpb.ScheduleSpec) (*time.Location, error) {
 	return time.LoadLocation(spec.TimezoneName)
 }
 
+// Returns the earliest time that matches the schedule spec that is after the given time.
+// Returns: nominal is the time that matches, pre-jitter. next is the nominal time with
+// jitter applied. has is false if there is no matching time.
 func (cs *compiledSpec) getNextTime(
 	state *schedpb.ScheduleState,
 	after time.Time,
 ) (nominal, next time.Time, has bool) {
+	// If we're starting before the schedule's allowed time range, jump up to right before
+	// it (so that we can still return the first second of the range if it happens to match).
 	if cs.spec.StartTime != nil && after.Before(*cs.spec.StartTime) {
 		after = cs.spec.StartTime.Add(-time.Second)
 	}
@@ -113,6 +118,7 @@ func (cs *compiledSpec) getNextTime(
 	return
 }
 
+// Returns the next matching time (without jitter), or the zero value if no time matches.
 func (cs *compiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 	var minTimestamp int64 = math.MaxInt64 // unix seconds-since-epoch as int64
 
@@ -139,6 +145,7 @@ func (cs *compiledSpec) rawNextTime(after time.Time) (nominal time.Time) {
 	return time.Unix(minTimestamp, 0).UTC()
 }
 
+// Returns the next matching time for a single interval spec.
 func (cs *compiledSpec) nextIntervalTime(iv *schedpb.IntervalSpec, ts int64) int64 {
 	interval := int64(timestamp.DurationValue(iv.Interval) / time.Second)
 	if interval < 1 {
@@ -151,6 +158,7 @@ func (cs *compiledSpec) nextIntervalTime(iv *schedpb.IntervalSpec, ts int64) int
 	return (((ts-phase)/interval)+1)*interval + phase
 }
 
+// Returns true if any exclude spec matches the time.
 func (cs *compiledSpec) excluded(nominal time.Time) bool {
 	for _, excal := range cs.excludes {
 		if excal.matches(nominal) {
@@ -160,6 +168,9 @@ func (cs *compiledSpec) excluded(nominal time.Time) bool {
 	return false
 }
 
+// Adds jitter to a nominal time, deterministically (by hashing the given time). The range
+// of jitter is the min of the schedule spec's jitter (default 1s if missing) and the
+// given limit value.
 func (cs *compiledSpec) addJitter(nominal time.Time, limit time.Duration) time.Time {
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
 	if maxJitter == 0 {
