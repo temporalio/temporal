@@ -84,10 +84,7 @@ func loadTimezone(spec *schedpb.ScheduleSpec) (*time.Location, error) {
 // Returns the earliest time that matches the schedule spec that is after the given time.
 // Returns: nominal is the time that matches, pre-jitter. next is the nominal time with
 // jitter applied. has is false if there is no matching time.
-func (cs *compiledSpec) getNextTime(
-	state *schedpb.ScheduleState,
-	after time.Time,
-) (nominal, next time.Time, has bool) {
+func (cs *compiledSpec) getNextTime(after time.Time) (nominal, next time.Time, has bool) {
 	// If we're starting before the schedule's allowed time range, jump up to right before
 	// it (so that we can still return the first second of the range if it happens to match).
 	if cs.spec.StartTime != nil && after.Before(*cs.spec.StartTime) {
