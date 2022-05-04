@@ -261,7 +261,8 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 					WorkflowId: testParentWorkflowID,
 					RunId:      testParentRunID,
 				},
-				ParentInitiatedEventId: testParentInitiatedID,
+				ParentInitiatedEventId:      testParentInitiatedID,
+				ParentInitiatedEventVersion: testParentInitiatedVersion,
 			},
 		},
 	}, event)
