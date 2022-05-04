@@ -120,6 +120,11 @@ type (
 	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
 	CallbackFn func(oldNamespaces []*Namespace, newNamespaces []*Namespace)
 
+	// StateChangeCallbackFn can be registered to be called on any namespace state change,
+	// plus once for all namespaces after registration. There is no guarantee about when
+	// these are called.
+	StateChangeCallbackFn func(*Namespace)
+
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
 		common.Daemon
@@ -132,6 +137,11 @@ type (
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 		// Refresh forces an immediate refresh of the namespace cache and blocks until it's complete.
 		Refresh()
+		// Registers callback for namespace state changes. This is regrettably
+		// different from the above RegisterNamespaceChangeCallback because we
+		// need different semantics (and that one is going away).
+		RegisterStateChangeCallback(key any, cb StateChangeCallbackFn)
+		UnregisterStateChangeCallback(key any)
 	}
 
 	registry struct {
@@ -159,6 +169,14 @@ type (
 		callbackLock     sync.Mutex
 		prepareCallbacks map[any]PrepareCallbackFn
 		callbacks        map[any]CallbackFn
+
+		// State-change callbacks. To avoid races, callbacks are first added to
+		// newStateChangeCallbacks. The refresh loop will call those on all namespaces,
+		// then move them to stateChangeCallbacks, where they will be called only on
+		// namespaces that change state.
+		stateChangeCallbacksLock sync.Mutex
+		stateChangeCallbacks     map[any]StateChangeCallbackFn
+		newStateChangeCallbacks  map[any]StateChangeCallbackFn
 	}
 )
 
@@ -183,6 +201,8 @@ func NewRegistry(
 		prepareCallbacks:        make(map[any]PrepareCallbackFn),
 		callbacks:               make(map[any]CallbackFn),
 		refreshInterval:         refreshInterval,
+		stateChangeCallbacks:    make(map[any]StateChangeCallbackFn),
+		newStateChangeCallbacks: make(map[any]StateChangeCallbackFn),
 	}
 	reg.lastRefreshTime.Store(time.Time{})
 	return reg
@@ -285,6 +305,19 @@ func (r *registry) UnregisterNamespaceChangeCallback(
 
 	delete(r.prepareCallbacks, listenerID)
 	delete(r.callbacks, listenerID)
+}
+
+func (r *registry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn) {
+	r.stateChangeCallbacksLock.Lock()
+	defer r.stateChangeCallbacksLock.Unlock()
+	r.newStateChangeCallbacks[key] = cb
+}
+
+func (r *registry) UnregisterStateChangeCallback(key any) {
+	r.stateChangeCallbacksLock.Lock()
+	defer r.stateChangeCallbacksLock.Unlock()
+	delete(r.stateChangeCallbacks, key)
+	delete(r.newStateChangeCallbacks, key)
 }
 
 // GetNamespace retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -428,6 +461,8 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 
 	var oldEntries []*Namespace
 	var newEntries []*Namespace
+	var allEntries []*Namespace
+	var stateChanged []*Namespace
 UpdateLoop:
 	for _, namespace := range namespacesDb {
 		if namespace.notificationVersion >= namespaceNotificationVersion {
@@ -438,12 +473,17 @@ UpdateLoop:
 			// will be loaded into cache in the next refresh
 			break UpdateLoop
 		}
-		oldNS := r.updateIDToNamespaceCache(newCacheByID, namespace.ID(), namespace)
-		r.updateNameToIDCache(newCacheNameToID, namespace.Name(), namespace.ID())
+		oldNS, oldNSAnyVersion := r.updateIDToNamespaceCache(newCacheByID, namespace.ID(), namespace)
+		newCacheNameToID.Put(namespace.Name(), namespace.ID())
 
 		if oldNS != nil {
 			oldEntries = append(oldEntries, oldNS)
 			newEntries = append(newEntries, namespace)
+		}
+
+		allEntries = append(allEntries, namespace)
+		if oldNSAnyVersion == nil || oldNSAnyVersion.State() != namespace.State() {
+			stateChanged = append(stateChanged, namespace)
 		}
 	}
 
@@ -456,25 +496,44 @@ UpdateLoop:
 		r.cacheNameToID = newCacheNameToID
 		return oldEntries, newEntries
 	})
+
+	r.callStateChangeCallbacks(stateChanged, allEntries)
+
 	return nil
 }
 
-func (r *registry) updateNameToIDCache(c cache.Cache, name Name, id ID) {
-	c.Put(name, id)
+func (r *registry) callStateChangeCallbacks(stateChanged, allEntries []*Namespace) {
+	r.stateChangeCallbacksLock.Lock()
+	defer r.stateChangeCallbacksLock.Unlock()
+
+	for _, cb := range r.stateChangeCallbacks {
+		for _, ns := range stateChanged {
+			cb(ns)
+		}
+	}
+
+	for key, cb := range r.newStateChangeCallbacks {
+		for _, ns := range allEntries {
+			cb(ns)
+		}
+		r.stateChangeCallbacks[key] = cb
+		delete(r.newStateChangeCallbacks, key)
+	}
 }
 
 func (r *registry) updateIDToNamespaceCache(
 	cacheByID cache.Cache,
 	id ID,
 	newNS *Namespace,
-) *Namespace {
+) (*Namespace, *Namespace) {
 	oldCacheRec := cacheByID.Put(id, newNS)
-	if oldNS, ok := oldCacheRec.(*Namespace); ok &&
-		newNS.notificationVersion > oldNS.notificationVersion &&
-		r.globalNamespacesEnabled {
-		return oldNS
+	if oldNS, ok := oldCacheRec.(*Namespace); ok {
+		if newNS.notificationVersion > oldNS.notificationVersion && r.globalNamespacesEnabled {
+			return oldNS, oldNS
+		}
+		return nil, oldNS
 	}
-	return nil
+	return nil, nil
 }
 
 // getNamespace retrieves the information from the cache if it exists

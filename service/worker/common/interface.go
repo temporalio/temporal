@@ -40,4 +40,22 @@ type (
 		TaskQueue string
 		Options   sdkworker.Options
 	}
+
+	// PerNamespaceWorkerComponent represent a type of work needed for worker role
+	PerNamespaceWorkerComponent interface {
+		// Register registers Workflow and Activity types provided by this worker component.
+		Register(sdkworker.Worker)
+		// DedicatedWorkerOptions returns a DedicatedWorkerOptions for this worker component.
+		// Must not return nil.
+		DedicatedWorkerOptions() *PerNamespaceDedicatedWorkerOptions
+	}
+
+	PerNamespaceDedicatedWorkerOptions struct {
+		// TaskQueue must be present, there is no default task queue
+		TaskQueue string
+		// How many worker nodes should run a worker per namespace
+		NumWorkers int
+		// Other worker options
+		Options sdkworker.Options
+	}
 )
