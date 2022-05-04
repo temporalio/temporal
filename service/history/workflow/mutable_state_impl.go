@@ -1544,12 +1544,8 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 		e.executionInfo.ParentWorkflowId = event.ParentWorkflowExecution.GetWorkflowId()
 		e.executionInfo.ParentRunId = event.ParentWorkflowExecution.GetRunId()
 		e.executionInfo.ParentClock = parentClock
-	}
-
-	if event.ParentInitiatedEventId != 0 {
-		e.executionInfo.InitiatedId = event.GetParentInitiatedEventId()
-	} else {
-		e.executionInfo.InitiatedId = common.EmptyEventID
+		e.executionInfo.ParentInitiatedId = event.GetParentInitiatedEventId()
+		e.executionInfo.ParentInitiatedVersion = event.GetParentInitiatedEventVersion()
 	}
 
 	e.executionInfo.ExecutionTime = timestamp.TimePtr(
@@ -3088,8 +3084,9 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 				WorkflowId: e.executionInfo.ParentWorkflowId,
 				RunId:      e.executionInfo.ParentRunId,
 			},
-			InitiatedId: e.executionInfo.InitiatedId,
-			Clock:       e.executionInfo.ParentClock,
+			InitiatedId:      e.executionInfo.ParentInitiatedId,
+			InitiatedVersion: e.executionInfo.ParentInitiatedVersion,
+			Clock:            e.executionInfo.ParentClock,
 		}
 	}
 

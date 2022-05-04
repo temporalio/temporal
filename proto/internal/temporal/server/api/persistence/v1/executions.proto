@@ -69,7 +69,7 @@ message WorkflowExecutionInfo {
     string parent_namespace_id = 3;
     string parent_workflow_id = 4;
     string parent_run_id = 5;
-    int64 initiated_id = 6;
+    int64 parent_initiated_id = 6;
     int64 completion_event_batch_id = 7;
     reserved 8;
     string task_queue = 9;
@@ -130,6 +130,8 @@ message WorkflowExecutionInfo {
     // If continued-as-new, or retried, or cron, holds the new run id.
     string new_execution_run_id = 61;
     temporal.server.api.clock.v1.ShardClock parent_clock = 62;
+    // version of child execution initiated event in parent workflow
+    int64 parent_initiated_version = 63; 
 }
 
 message ExecutionStats {

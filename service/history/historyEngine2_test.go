@@ -812,7 +812,8 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_ParentMismatch() {
 			WorkflowId: "parent wId",
 			RunId:      "parent rId",
 		},
-		InitiatedId: 123,
+		InitiatedId:      123,
+		InitiatedVersion: 456,
 	}
 
 	identity := "testIdentity"
@@ -855,7 +856,8 @@ func (s *engine2Suite) TestTerminateWorkflowExecution_ParentMismatch() {
 			WorkflowId: "parent wId",
 			RunId:      "parent rId",
 		},
-		InitiatedId: 123,
+		InitiatedId:      123,
+		InitiatedVersion: 456,
 	}
 
 	identity := "testIdentity"

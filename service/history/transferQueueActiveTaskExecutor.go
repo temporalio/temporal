@@ -280,7 +280,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	parentNamespaceID := executionInfo.ParentNamespaceId
 	parentWorkflowID := executionInfo.ParentWorkflowId
 	parentRunID := executionInfo.ParentRunId
-	initiatedID := executionInfo.InitiatedId
+	parentInitiatedID := executionInfo.ParentInitiatedId
+	parentInitiatedVersion := executionInfo.ParentInitiatedVersion
 	var parentClock *clockpb.ShardClock
 	if executionInfo.ParentClock != nil {
 		parentClock = vclock.NewShardClock(executionInfo.ParentClock.Id, executionInfo.ParentClock.Clock)
@@ -328,7 +329,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 				WorkflowId: parentWorkflowID,
 				RunId:      parentRunID,
 			},
-			InitiatedId: initiatedID,
+			ParentInitiatedId:      parentInitiatedID,
+			ParentInitiatedVersion: parentInitiatedVersion,
 			CompletedExecution: &commonpb.WorkflowExecution{
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
@@ -1235,8 +1237,9 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
 			},
-			InitiatedId: task.InitiatedID,
-			Clock:       vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
+			InitiatedId:      task.InitiatedID,
+			InitiatedVersion: task.Version,
+			Clock:            vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 		},
 		t.shard.GetTimeSource().Now(),
 	)
