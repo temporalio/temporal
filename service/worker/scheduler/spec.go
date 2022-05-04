@@ -185,8 +185,11 @@ func (cs *compiledSpec) addJitter(nominal time.Time, limit time.Duration) time.T
 	// we want to fit the result of a multiply in 64 bits, and use 32 bits of hash, which
 	// leaves 32 bits for the range. if we use nanoseconds or microseconds, our range is
 	// limited to only a few seconds or hours. using milliseconds supports up to 49 days.
-	fp := int64(farm.Fingerprint32(bin))
-	ms := maxJitter.Milliseconds()
+	fp := uint64(farm.Fingerprint32(bin))
+	ms := uint64(maxJitter.Milliseconds())
+	if ms > math.MaxUint32 {
+		ms = math.MaxUint32
+	}
 	jitter := time.Duration((fp*ms)>>32) * time.Millisecond
 	return nominal.Add(jitter)
 }
