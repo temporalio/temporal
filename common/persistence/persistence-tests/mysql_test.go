@@ -51,20 +51,6 @@ func TestMySQLShardPersistenceSuite(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestMySQLExecutionManagerSuite(t *testing.T) {
-	s := new(ExecutionManagerSuite)
-	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
-func TestMySQLExecutionManagerWithEventsV2(t *testing.T) {
-	s := new(ExecutionManagerSuiteForEventsV2)
-	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
 func TestMySQLQueuePersistence(t *testing.T) {
 	s := new(QueuePersistenceSuite)
 	s.TestBase = NewTestBaseWithSQL(GetMySQLTestClusterOption())
