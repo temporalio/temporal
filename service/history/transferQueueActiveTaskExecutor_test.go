@@ -662,6 +662,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 	parentNamespaceID := "some random parent namespace ID"
 	parentInitiatedID := int64(3222)
+	parentInitiatedVersion := int64(1234)
 	parentNamespace := "some random parent namespace Name"
 	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
@@ -682,11 +683,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
-				NamespaceId: parentNamespaceID,
-				Namespace:   parentNamespace,
-				Execution:   parentExecution,
-				InitiatedId: parentInitiatedID,
-				Clock:       parentClock,
+				NamespaceId:      parentNamespaceID,
+				Namespace:        parentNamespace,
+				Execution:        parentExecution,
+				InitiatedId:      parentInitiatedID,
+				InitiatedVersion: parentInitiatedVersion,
+				Clock:            parentClock,
 			},
 		},
 	)
@@ -714,12 +716,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().RecordChildExecutionCompleted(gomock.Any(), &historyservice.RecordChildExecutionCompletedRequest{
-		NamespaceId:        parentNamespaceID,
-		WorkflowExecution:  parentExecution,
-		InitiatedId:        parentInitiatedID,
-		Clock:              parentClock,
-		CompletedExecution: &execution,
-		CompletionEvent:    event,
+		NamespaceId:            parentNamespaceID,
+		WorkflowExecution:      parentExecution,
+		ParentInitiatedId:      parentInitiatedID,
+		ParentInitiatedVersion: parentInitiatedVersion,
+		Clock:                  parentClock,
+		CompletedExecution:     &execution,
+		CompletionEvent:        event,
 	}).Return(nil, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
 
@@ -2359,11 +2362,12 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 		},
 		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
-			NamespaceId: task.NamespaceID,
-			Namespace:   tests.Namespace.String(),
-			Execution:   &execution,
-			InitiatedId: task.InitiatedID,
-			Clock:       vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
+			NamespaceId:      task.NamespaceID,
+			Namespace:        tests.Namespace.String(),
+			Execution:        &execution,
+			InitiatedId:      task.InitiatedID,
+			InitiatedVersion: task.Version,
+			Clock:            vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
 		},
 		FirstWorkflowTaskBackoff:        backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
 		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,

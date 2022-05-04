@@ -34,4 +34,5 @@ message ParentExecutionInfo {
     temporal.api.common.v1.WorkflowExecution execution = 3;
     int64 initiated_id = 4;
     temporal.server.api.clock.v1.ShardClock clock = 5;
+    int64 initiated_version = 6;
 }

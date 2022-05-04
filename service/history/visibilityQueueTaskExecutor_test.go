@@ -188,6 +188,7 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 
 	parentNamespaceID := "some random parent namespace ID"
 	parentInitiatedID := int64(3222)
+	parentInitiatedVersion := int64(1234)
 	parentNamespace := "some random parent namespace Name"
 	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
@@ -207,10 +208,11 @@ func (s *visibilityQueueTaskExecutorSuite) TestProcessCloseExecution() {
 				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
-				NamespaceId: parentNamespaceID,
-				Namespace:   parentNamespace,
-				Execution:   parentExecution,
-				InitiatedId: parentInitiatedID,
+				NamespaceId:      parentNamespaceID,
+				Namespace:        parentNamespace,
+				Execution:        parentExecution,
+				InitiatedId:      parentInitiatedID,
+				InitiatedVersion: parentInitiatedVersion,
 			},
 		},
 	)

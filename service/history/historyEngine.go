@@ -2176,7 +2176,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			initiatedID := completionRequest.InitiatedId
+			initiatedID := completionRequest.ParentInitiatedId
 			completedExecution := completionRequest.CompletedExecution
 			completionEvent := completionRequest.CompletionEvent
 
