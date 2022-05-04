@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
@@ -119,6 +120,7 @@ func (s *engine3Suite) SetupTest() {
 		}},
 		s.config,
 	)
+	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -151,6 +153,7 @@ func (s *engine3Suite) SetupTest() {
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
 		},
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, historyCache),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -283,18 +286,24 @@ func (s *engine3Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	namespaceID := tests.NamespaceID
 	workflowID := "wId"
+	workflowType := "workflowType"
 	runID := tests.RunID
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
+	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:  namespaceID.String(),
-			WorkflowId: workflowID,
-			Identity:   identity,
-			SignalName: signalName,
-			Input:      input,
+			Namespace:    namespaceID.String(),
+			WorkflowId:   workflowID,
+			WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue},
+			Identity:     identity,
+			SignalName:   signalName,
+			Input:        input,
+			RequestId:    requestID,
 		},
 	}
 

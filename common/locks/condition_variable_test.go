@@ -201,6 +201,9 @@ func (s *conditionVariableSuite) TestCase_ProducerConsumer() {
 			remainingToken += consume
 		}
 		randSignalBroadcast(notifyProducerCV, signalRatio)
+		if tokens > 0 {
+			randSignalBroadcast(notifyConsumerCV, signalRatio)
+		}
 	}
 
 	for i := 0; i < numConsumer; i++ {

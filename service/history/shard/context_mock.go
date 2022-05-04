@@ -36,7 +36,8 @@ import (
 	gomock "github.com/golang/mock/gomock"
 	v1 "go.temporal.io/api/common/v1"
 	v10 "go.temporal.io/server/api/adminservice/v1"
-	v11 "go.temporal.io/server/api/historyservice/v1"
+	v11 "go.temporal.io/server/api/clock/v1"
+	v12 "go.temporal.io/server/api/historyservice/v1"
 	archiver "go.temporal.io/server/common/archiver"
 	clock "go.temporal.io/server/common/clock"
 	cluster "go.temporal.io/server/common/cluster"
@@ -104,6 +105,20 @@ func (mr *MockContextMockRecorder) AppendHistoryEvents(ctx, request, namespaceID
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryEvents", reflect.TypeOf((*MockContext)(nil).AppendHistoryEvents), ctx, request, namespaceID, execution)
 }
 
+// AssertOwnership mocks base method.
+func (m *MockContext) AssertOwnership(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AssertOwnership", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AssertOwnership indicates an expected call of AssertOwnership.
+func (mr *MockContextMockRecorder) AssertOwnership(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AssertOwnership", reflect.TypeOf((*MockContext)(nil).AssertOwnership), ctx)
+}
+
 // ConflictResolveWorkflowExecution mocks base method.
 func (m *MockContext) ConflictResolveWorkflowExecution(ctx context.Context, request *persistence.ConflictResolveWorkflowExecutionRequest) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
@@ -132,6 +147,20 @@ func (m *MockContext) CreateWorkflowExecution(ctx context.Context, request *pers
 func (mr *MockContextMockRecorder) CreateWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateWorkflowExecution", reflect.TypeOf((*MockContext)(nil).CreateWorkflowExecution), ctx, request)
+}
+
+// CurrentVectorClock mocks base method.
+func (m *MockContext) CurrentVectorClock() *v11.ShardClock {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CurrentVectorClock")
+	ret0, _ := ret[0].(*v11.ShardClock)
+	return ret0
+}
+
+// CurrentVectorClock indicates an expected call of CurrentVectorClock.
+func (mr *MockContextMockRecorder) CurrentVectorClock() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CurrentVectorClock", reflect.TypeOf((*MockContext)(nil).CurrentVectorClock))
 }
 
 // DeleteFailoverLevel mocks base method.
@@ -336,10 +365,10 @@ func (mr *MockContextMockRecorder) GetExecutionManager() *gomock.Call {
 }
 
 // GetHistoryClient mocks base method.
-func (m *MockContext) GetHistoryClient() v11.HistoryServiceClient {
+func (m *MockContext) GetHistoryClient() v12.HistoryServiceClient {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetHistoryClient")
-	ret0, _ := ret[0].(v11.HistoryServiceClient)
+	ret0, _ := ret[0].(v12.HistoryServiceClient)
 	return ret0
 }
 
@@ -504,11 +533,11 @@ func (mr *MockContextMockRecorder) GetRemoteAdminClient(cluster interface{}) *go
 }
 
 // GetReplicationStatus mocks base method.
-func (m *MockContext) GetReplicationStatus(cluster []string) (map[string]*v11.ShardReplicationStatusPerCluster, map[string]*v11.HandoverNamespaceInfo, error) {
+func (m *MockContext) GetReplicationStatus(cluster []string) (map[string]*v12.ShardReplicationStatusPerCluster, map[string]*v12.HandoverNamespaceInfo, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationStatus", cluster)
-	ret0, _ := ret[0].(map[string]*v11.ShardReplicationStatusPerCluster)
-	ret1, _ := ret[1].(map[string]*v11.HandoverNamespaceInfo)
+	ret0, _ := ret[0].(map[string]*v12.ShardReplicationStatusPerCluster)
+	ret1, _ := ret[1].(map[string]*v12.HandoverNamespaceInfo)
 	ret2, _ := ret[2].(error)
 	return ret0, ret1, ret2
 }
@@ -616,6 +645,21 @@ func (m *MockContext) GetWorkflowExecution(ctx context.Context, request *persist
 func (mr *MockContextMockRecorder) GetWorkflowExecution(ctx, request interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetWorkflowExecution", reflect.TypeOf((*MockContext)(nil).GetWorkflowExecution), ctx, request)
+}
+
+// NewVectorClock mocks base method.
+func (m *MockContext) NewVectorClock() (*v11.ShardClock, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "NewVectorClock")
+	ret0, _ := ret[0].(*v11.ShardClock)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// NewVectorClock indicates an expected call of NewVectorClock.
+func (mr *MockContextMockRecorder) NewVectorClock() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "NewVectorClock", reflect.TypeOf((*MockContext)(nil).NewVectorClock))
 }
 
 // SetCurrentTime mocks base method.

@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"gopkg.in/yaml.v3"
 
@@ -45,7 +46,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
@@ -63,6 +63,7 @@ type (
 		testClusterConfig           *TestClusterConfig
 		engine                      FrontendClient
 		adminClient                 AdminClient
+		operatorClient              operatorservice.OperatorServiceClient
 		Logger                      log.Logger
 		namespace                   string
 		testRawHistoryNamespaceName string
@@ -88,6 +89,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 
 		s.engine = NewFrontendClient(connection)
 		s.adminClient = NewAdminClient(connection)
+		s.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 	} else {
 		s.Logger.Info("Running integration test against test cluster")
 		cluster, err := NewCluster(clusterConfig, s.Logger)
@@ -95,6 +97,7 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.testCluster = cluster
 		s.engine = s.testCluster.GetFrontendClient()
 		s.adminClient = s.testCluster.GetAdminClient()
+		s.operatorClient = s.testCluster.GetOperatorClient()
 	}
 
 	s.namespace = s.randomizeStr("integration-test-namespace")
@@ -116,7 +119,9 @@ func (s *IntegrationBase) setupSuite(defaultClusterConfigFile string) {
 		s.testCluster.RefreshNamespaceCache()
 	} else {
 		// Wait for one whole cycle of the namespace cache v2 refresh interval to be sure that our namespaces are loaded.
-		time.Sleep(namespace.CacheRefreshInterval + time.Second)
+		// We are using real server so we don't know what cache refresh interval it uses. Fall back to the 10s old value.
+		serverCacheRefreshInterval := 10 * time.Second
+		time.Sleep(serverCacheRefreshInterval + time.Second)
 	}
 }
 

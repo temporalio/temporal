@@ -43,12 +43,15 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
-	transferActiveTaskDefaultTimeout = 20 * time.Second
+	taskTimeout             = time.Second * 3
+	taskGetExecutionTimeout = 500 * time.Millisecond
+	taskHistoryOpTimeout    = 20 * time.Second
 )
 
 type (
@@ -91,26 +94,13 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
-func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
-	task tasks.Task,
-) (namespace.ID, commonpb.WorkflowExecution) {
-
-	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowID(),
-		RunId:      task.GetRunID(),
-	}
-}
-
 func (t *transferQueueTaskExecutorBase) pushActivity(
+	ctx context.Context,
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout *time.Duration,
 ) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
-		NamespaceId:       task.TargetNamespaceID,
+		NamespaceId:       task.NamespaceID,
 		SourceNamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: task.WorkflowID,
@@ -122,8 +112,9 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		},
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
+		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddActivityTask", tag.Error(err))
@@ -133,14 +124,11 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 }
 
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
+	ctx context.Context,
 	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout *time.Duration,
 ) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
 	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
@@ -150,8 +138,9 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		TaskQueue:              taskqueue,
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
+		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))
@@ -161,6 +150,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 }
 
 func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -187,7 +177,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
+	ctx, cancel := context.WithTimeout(ctx, t.config.TransferProcessorVisibilityArchivalTimeLimit())
 	defer cancel()
 
 	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.config.DefaultVisibilityIndexName, false)

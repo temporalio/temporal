@@ -39,6 +39,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	clockpb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -94,7 +95,7 @@ type (
 		AddChildWorkflowExecutionCanceledEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCanceledEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionCompletedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionCompletedEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionFailedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionFailedEventAttributes) (*historypb.HistoryEvent, error)
-		AddChildWorkflowExecutionStartedEvent(namespace.Name, *commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, *commonpb.Header) (*historypb.HistoryEvent, error)
+		AddChildWorkflowExecutionStartedEvent(namespace.Name, *commonpb.WorkflowExecution, *commonpb.WorkflowType, int64, *commonpb.Header, *clockpb.ShardClock) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionTerminatedEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTerminatedEventAttributes) (*historypb.HistoryEvent, error)
 		AddChildWorkflowExecutionTimedOutEvent(int64, *commonpb.WorkflowExecution, *historypb.WorkflowExecutionTimedOutEventAttributes) (*historypb.HistoryEvent, error)
 		AddCompletedWorkflowEvent(int64, *commandpb.CompleteWorkflowExecutionCommandAttributes, string) (*historypb.HistoryEvent, error)
@@ -199,7 +200,7 @@ type (
 		ReplicateChildWorkflowExecutionCanceledEvent(*historypb.HistoryEvent) error
 		ReplicateChildWorkflowExecutionCompletedEvent(*historypb.HistoryEvent) error
 		ReplicateChildWorkflowExecutionFailedEvent(*historypb.HistoryEvent) error
-		ReplicateChildWorkflowExecutionStartedEvent(*historypb.HistoryEvent) error
+		ReplicateChildWorkflowExecutionStartedEvent(*historypb.HistoryEvent, *clockpb.ShardClock) error
 		ReplicateChildWorkflowExecutionTerminatedEvent(*historypb.HistoryEvent) error
 		ReplicateChildWorkflowExecutionTimedOutEvent(*historypb.HistoryEvent) error
 		ReplicateWorkflowTaskCompletedEvent(*historypb.HistoryEvent) error
@@ -226,7 +227,7 @@ type (
 		ReplicateWorkflowExecutionContinuedAsNewEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionFailedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionSignaled(*historypb.HistoryEvent) error
-		ReplicateWorkflowExecutionStartedEvent(namespace.ID, commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
+		ReplicateWorkflowExecutionStartedEvent(namespace.ID, *clockpb.ShardClock, commonpb.WorkflowExecution, string, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTerminatedEvent(int64, *historypb.HistoryEvent) error
 		ReplicateWorkflowExecutionTimedoutEvent(int64, *historypb.HistoryEvent) error
 		SetCurrentBranchToken(branchToken []byte) error
@@ -235,7 +236,6 @@ type (
 		UpdateActivity(*persistencespb.ActivityInfo) error
 		UpdateActivityWithTimerHeartbeat(*persistencespb.ActivityInfo, time.Time) error
 		UpdateActivityProgress(ai *persistencespb.ActivityInfo, request *workflowservice.RecordActivityTaskHeartbeatRequest)
-		UpdateWorkflowTask(*WorkflowTaskInfo)
 		UpdateUserTimer(*persistencespb.TimerInfo) error
 		UpdateCurrentVersion(version int64, forceUpdate bool) error
 		UpdateWorkflowStateStatus(state enumsspb.WorkflowExecutionState, status enumspb.WorkflowExecutionStatus) error

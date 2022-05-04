@@ -40,15 +40,13 @@ type (
 	// InterleavedWeightedRoundRobinSchedulerOptions is the config for
 	// interleaved weighted round robin scheduler
 	InterleavedWeightedRoundRobinSchedulerOptions struct {
-		QueueSize   int
-		WorkerCount int
+		PriorityToWeight map[int]int
 	}
 
 	// InterleavedWeightedRoundRobinScheduler is a round robin scheduler implementation
 	// ref: https://en.wikipedia.org/wiki/Weighted_round_robin#Interleaved_WRR
 	InterleavedWeightedRoundRobinScheduler struct {
 		status int32
-		option InterleavedWeightedRoundRobinSchedulerOptions
 
 		processor    Processor
 		metricsScope metrics.Scope
@@ -75,14 +73,12 @@ type (
 
 func NewInterleavedWeightedRoundRobinScheduler(
 	option InterleavedWeightedRoundRobinSchedulerOptions,
-	priorityToWeight map[int]int,
 	processor Processor,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) *InterleavedWeightedRoundRobinScheduler {
 	return &InterleavedWeightedRoundRobinScheduler{
 		status: common.DaemonStatusInitialized,
-		option: option,
 
 		processor:    processor,
 		metricsScope: metricsClient.Scope(metrics.TaskSchedulerScope),
@@ -91,7 +87,7 @@ func NewInterleavedWeightedRoundRobinScheduler(
 		notifyChan:   make(chan struct{}, 1),
 		shutdownChan: make(chan struct{}),
 
-		priorityToWeight:     priorityToWeight,
+		priorityToWeight:     option.PriorityToWeight,
 		weightToTaskChannels: make(map[int]*WeightedChannel),
 		iwrrChannels:         []*WeightedChannel{},
 	}

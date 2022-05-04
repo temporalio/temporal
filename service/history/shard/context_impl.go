@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
+	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/cluster"
@@ -41,6 +42,7 @@ import (
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/vclock"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -193,6 +195,46 @@ func (s *ContextImpl) GetMaxTaskIDForCurrentRangeID() int64 {
 	return s.maxTaskSequenceNumber - 1
 }
 
+func (s *ContextImpl) AssertOwnership(
+	ctx context.Context,
+) error {
+	s.wLock()
+	defer s.wUnlock()
+
+	if err := s.errorByStateLocked(); err != nil {
+		return err
+	}
+
+	rangeID := s.getRangeIDLocked()
+	err := s.persistenceShardManager.AssertShardOwnership(ctx, &persistence.AssertShardOwnershipRequest{
+		ShardID: s.shardID,
+		RangeID: rangeID,
+	})
+	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, 0); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *ContextImpl) NewVectorClock() (*clockpb.ShardClock, error) {
+	s.wLock()
+	defer s.wUnlock()
+
+	clock, err := s.generateTaskIDLocked()
+	if err != nil {
+		return nil, err
+	}
+	return vclock.NewShardClock(s.shardID, clock), nil
+}
+
+func (s *ContextImpl) CurrentVectorClock() *clockpb.ShardClock {
+	s.rLock()
+	defer s.rUnlock()
+
+	clock := s.taskSequenceNumber
+	return vclock.NewShardClock(s.shardID, clock)
+}
+
 func (s *ContextImpl) GenerateTaskID() (int64, error) {
 	s.wLock()
 	defer s.wUnlock()
@@ -298,6 +340,9 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 	s.wLock()
 	defer s.wUnlock()
 
+	// the ack level is already the min ack level across all types of
+	// queue processors: active, passive, failover
+
 	// backward compatibility (for rollback)
 	switch category {
 	case tasks.CategoryTransfer:
@@ -378,6 +423,14 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 ) error {
 	s.wLock()
 	defer s.wUnlock()
+
+	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
+		for _, failoverLevel := range levels {
+			if ackLevel.CompareTo(failoverLevel.CurrentLevel) > 0 {
+				ackLevel = failoverLevel.CurrentLevel
+			}
+		}
+	}
 
 	// backward compatibility (for rollback)
 	switch category {
@@ -909,7 +962,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
 	deleteVisibilityRecord := true
 	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
 			// If namespace is not found, skip visibility record delete but proceed with other deletions.
 			// This case might happen during namespace deletion.
 			deleteVisibilityRecord = false

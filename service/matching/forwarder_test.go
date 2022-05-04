@@ -127,7 +127,7 @@ func (t *ForwarderTestSuite) TestForwardActivityTask() {
 	t.NotNil(request)
 	t.Equal(t.taskQueue.Parent(20), request.TaskQueue.GetName())
 	t.Equal(t.fwdr.taskQueueKind, request.TaskQueue.GetKind())
-	t.Equal(t.taskQueue.namespaceID, namespace.ID(request.GetNamespaceId()))
+	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetNamespaceId())
 	t.Equal(taskInfo.Data.GetNamespaceId(), request.GetSourceNamespaceId())
 	t.Equal(taskInfo.Data.GetWorkflowId(), request.GetExecution().GetWorkflowId())
 	t.Equal(taskInfo.Data.GetRunId(), request.GetExecution().GetRunId())

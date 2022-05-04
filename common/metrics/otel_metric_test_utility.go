@@ -42,12 +42,13 @@ import (
 )
 
 var _ MetricTestUtility = (*OtelMetricTestUtility)(nil)
-var _ OpentelemetryReporter = (*TestOtelReporter)(nil)
+var _ OpenTelemetryReporter = (*TestOtelReporter)(nil)
 
 type (
 	TestOtelReporter struct {
 		// TODO: https://github.com/open-telemetry/opentelemetry-go/issues/2722
 		controller *controller.Controller
+		userScope  UserScope
 	}
 
 	OtelMetricTestUtility struct {
@@ -66,7 +67,7 @@ func NewOtelMetricTestUtility() *OtelMetricTestUtility {
 }
 
 func (t *OtelMetricTestUtility) GetClient(config *ClientConfig, idx ServiceIdx) Client {
-	result, err := NewOpentelemeteryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
+	result, err := NewOpenTelemetryClient(config, idx, t.reporter, log.NewNoopLogger(), t.gaugeCache)
 	if err != nil {
 		panic(err)
 	}
@@ -231,14 +232,18 @@ func (t *OtelMetricTestUtility) labelsMatch(left []attribute.KeyValue, right map
 }
 
 func NewTestOtelReporter() *TestOtelReporter {
-	return &TestOtelReporter{
-		controller: controller.New(
-			processor.NewFactory(
-				selector.NewWithHistogramDistribution(),
-				aggregation.CumulativeTemporalitySelector(),
-			),
-			controller.WithCollectPeriod(0),
+	ctr := controller.New(
+		processor.NewFactory(
+			selector.NewWithHistogramDistribution(),
+			aggregation.CumulativeTemporalitySelector(),
 		),
+		controller.WithCollectPeriod(0),
+	)
+	meter := ctr.Meter("")
+	gaugeCache := NewOtelGaugeCache(meter)
+	return &TestOtelReporter{
+		controller: ctr,
+		userScope:  NewOpenTelemetryUserScope(meter, nil, gaugeCache),
 	}
 }
 
@@ -253,5 +258,5 @@ func (t TestOtelReporter) NewClient(logger log.Logger, serviceIdx ServiceIdx) (C
 func (t TestOtelReporter) Stop(logger log.Logger) {}
 
 func (t TestOtelReporter) UserScope() UserScope {
-	return NoopUserScope
+	return t.userScope
 }

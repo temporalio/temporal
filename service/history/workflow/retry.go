@@ -187,6 +187,7 @@ func SetupNewWorkflowForRetryOrCron(
 				RunId:      previousExecutionInfo.ParentRunId,
 			},
 			InitiatedId: previousExecutionInfo.InitiatedId,
+			Clock:       previousExecutionInfo.ParentClock,
 		}
 	}
 
@@ -276,7 +277,9 @@ func SetupNewWorkflowForRetryOrCron(
 	if err != nil {
 		return serviceerror.NewInternal("Failed to add workflow execution started event.")
 	}
-	if err = newMutableState.AddFirstWorkflowTaskScheduled(event); err != nil {
+	if err = newMutableState.AddFirstWorkflowTaskScheduled(
+		event,
+	); err != nil {
 		return err
 	}
 

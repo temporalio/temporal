@@ -30,12 +30,15 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
+
+	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -135,7 +138,42 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 	)
 }
 
-func (t *timerQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
+func getWorkflowExecutionContextForTask(
+	ctx context.Context,
+	workflowCache workflow.Cache,
+	task tasks.Task,
+) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+	namespaceID, execution := getTaskNamespaceIDAndWorkflowExecution(task)
+	return getWorkflowExecutionContext(
+		ctx,
+		workflowCache,
+		namespaceID,
+		execution,
+	)
+}
+
+func getWorkflowExecutionContext(
+	ctx context.Context,
+	workflowCache workflow.Cache,
+	namespaceID namespace.ID,
+	execution commonpb.WorkflowExecution,
+) (workflow.Context, workflow.ReleaseCacheFunc, error) {
+	ctx, cancel := context.WithTimeout(ctx, taskGetExecutionTimeout)
+	defer cancel()
+
+	weContext, release, err := workflowCache.GetOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		execution,
+		workflow.CallerTypeTask,
+	)
+	if common.IsContextDeadlineExceededErr(err) {
+		err = consts.ErrWorkflowBusy
+	}
+	return weContext, release, err
+}
+
+func getTaskNamespaceIDAndWorkflowExecution(
 	task tasks.Task,
 ) (namespace.ID, commonpb.WorkflowExecution) {
 

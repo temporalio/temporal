@@ -427,6 +427,8 @@ func OperatorHandlerProvider(
 	saProvider searchattribute.Provider,
 	saManager searchattribute.Manager,
 	healthServer *health.Server,
+	historyClient historyservice.HistoryServiceClient,
+	namespaceRegistry namespace.Registry,
 ) *OperatorHandlerImpl {
 	args := NewOperatorHandlerImplArgs{
 		config,
@@ -438,6 +440,8 @@ func OperatorHandlerProvider(
 		saProvider,
 		saManager,
 		healthServer,
+		historyClient,
+		namespaceRegistry,
 	}
 	return NewOperatorHandlerImpl(args)
 }

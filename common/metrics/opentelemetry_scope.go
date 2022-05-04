@@ -35,12 +35,12 @@ import (
 )
 
 type (
-	opentelemetryScope struct {
+	openTelemetryScope struct {
 		serviceIdx        ServiceIdx
 		meter             metric.Meter
 		labels            []attribute.KeyValue
 		tags              map[string]string
-		rootScope         *opentelemetryScope
+		rootScope         *openTelemetryScope
 		defs              map[int]metricDefinition
 		isNamespaceTagged bool
 
@@ -48,17 +48,17 @@ type (
 	}
 )
 
-func newOpentelemetryScope(
+func newOpenTelemetryScope(
 	serviceIdx ServiceIdx,
 	meter metric.Meter,
-	rootScope *opentelemetryScope,
+	rootScope *openTelemetryScope,
 	tags map[string]string,
 	defs map[int]metricDefinition,
 	isNamespace bool,
 	gaugeCache OtelGaugeCache,
 	selfAsRoot bool,
-) *opentelemetryScope {
-	result := &opentelemetryScope{
+) *openTelemetryScope {
+	result := &openTelemetryScope{
 		serviceIdx:        serviceIdx,
 		meter:             meter,
 		tags:              tags,
@@ -74,11 +74,11 @@ func newOpentelemetryScope(
 	return result
 }
 
-func (m *opentelemetryScope) IncCounter(id int) {
+func (m *openTelemetryScope) IncCounter(id int) {
 	m.AddCounter(id, 1)
 }
 
-func (m *opentelemetryScope) AddCounter(id int, delta int64) {
+func (m *openTelemetryScope) AddCounter(id int, delta int64) {
 	def := m.defs[id]
 	ctx := context.Background()
 	c, err := m.meter.SyncInt64().Counter(def.metricName.String())
@@ -96,7 +96,7 @@ func (m *opentelemetryScope) AddCounter(id int, delta int64) {
 	}
 }
 
-func (m *opentelemetryScope) UpdateGauge(id int, value float64) {
+func (m *openTelemetryScope) UpdateGauge(id int, value float64) {
 	def := m.defs[id]
 	m.gaugeCache.Set(def.metricName.String(), m.tags, value)
 	if !def.metricRollupName.Empty() && (m.rootScope != nil) {
@@ -104,7 +104,7 @@ func (m *opentelemetryScope) UpdateGauge(id int, value float64) {
 	}
 }
 
-func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
+func (m *openTelemetryScope) StartTimer(id int) Stopwatch {
 	def := m.defs[id]
 	opt := make([]instrument.Option, 0, 1)
 	if len(def.unit) > 0 {
@@ -142,7 +142,7 @@ func (m *opentelemetryScope) StartTimer(id int) Stopwatch {
 	}
 }
 
-func (m *opentelemetryScope) RecordTimer(id int, d time.Duration) {
+func (m *openTelemetryScope) RecordTimer(id int, d time.Duration) {
 	def := m.defs[id]
 	ctx := context.Background()
 
@@ -179,7 +179,7 @@ func (m *opentelemetryScope) RecordTimer(id int, d time.Duration) {
 	}
 }
 
-func (m *opentelemetryScope) RecordDistribution(id int, d int) {
+func (m *openTelemetryScope) RecordDistribution(id int, d int) {
 	value := int64(d)
 	def := m.defs[id]
 	opt := make([]instrument.Option, 0, 1)
@@ -216,7 +216,7 @@ func (m *opentelemetryScope) RecordDistribution(id int, d int) {
 	}
 }
 
-func (m *opentelemetryScope) taggedString(tags map[string]string, selfAsRoot bool) *opentelemetryScope {
+func (m *openTelemetryScope) taggedString(tags map[string]string, selfAsRoot bool) *openTelemetryScope {
 	namespaceTagged := m.isNamespaceTagged
 	tagMap := make(map[string]string, len(tags)+len(m.labels))
 	for k, v := range m.tags {
@@ -229,34 +229,34 @@ func (m *opentelemetryScope) taggedString(tags map[string]string, selfAsRoot boo
 		}
 		tagMap[k] = v
 	}
-	return newOpentelemetryScope(m.serviceIdx, m.meter, m.rootScope, tagMap, m.defs, namespaceTagged, m.gaugeCache, selfAsRoot)
+	return newOpenTelemetryScope(m.serviceIdx, m.meter, m.rootScope, tagMap, m.defs, namespaceTagged, m.gaugeCache, selfAsRoot)
 }
 
-func (m *opentelemetryScope) Tagged(tags ...Tag) Scope {
+func (m *openTelemetryScope) Tagged(tags ...Tag) Scope {
 	return m.TaggedInternal(tags...)
 }
 
-func (m *opentelemetryScope) namespaceTagged(key string, value string) bool {
+func (m *openTelemetryScope) namespaceTagged(key string, value string) bool {
 	return key == namespace && value != namespaceAllValue
 }
 
-func (m *opentelemetryScope) AddCounterInternal(name string, delta int64) {
+func (m *openTelemetryScope) AddCounterInternal(name string, delta int64) {
 	panic("should not be used")
 }
 
-func (m *opentelemetryScope) StartTimerInternal(timer string) Stopwatch {
+func (m *openTelemetryScope) StartTimerInternal(timer string) Stopwatch {
 	panic("should not be used")
 }
 
-func (m *opentelemetryScope) RecordTimerInternal(timer string, d time.Duration) {
+func (m *openTelemetryScope) RecordTimerInternal(timer string, d time.Duration) {
 	panic("should not be used")
 }
 
-func (m *opentelemetryScope) RecordDistributionInternal(id string, unit MetricUnit, d int) {
+func (m *openTelemetryScope) RecordDistributionInternal(id string, unit MetricUnit, d int) {
 	panic("should not be used")
 }
 
-func (m *opentelemetryScope) TaggedInternal(tags ...Tag) internalScope {
+func (m *openTelemetryScope) TaggedInternal(tags ...Tag) internalScope {
 	tagMap := make(map[string]string, len(tags))
 	for _, tag := range tags {
 		tagMap[tag.Key()] = tag.Value()

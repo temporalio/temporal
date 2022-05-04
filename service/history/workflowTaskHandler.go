@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -215,20 +216,11 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 
 	executionInfo := handler.mutableState.GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.NamespaceId)
-	targetNamespaceID := namespaceID
-	if attr.GetNamespace() != "" {
-		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
-		if err != nil {
-			return nil, serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule activity across namespace %v.", attr.GetNamespace()))
-		}
-		targetNamespaceID = targetNamespaceEntry.ID()
-	}
 
 	if err := handler.validateCommandAttr(
 		func() (enumspb.WorkflowTaskFailedCause, error) {
 			return handler.attrValidator.validateActivityScheduleAttributes(
 				namespaceID,
-				targetNamespaceID,
 				attr,
 				timestamp.DurationValue(executionInfo.WorkflowRunTimeout),
 			)
@@ -283,6 +275,10 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 		runID := handler.mutableState.GetExecutionState().RunId
 		attr := event.GetActivityTaskScheduledEventAttributes()
 
+		shardClock, err := handler.shard.NewVectorClock()
+		if err != nil {
+			return err
+		}
 		taskToken := &tokenspb.Task{
 			NamespaceId:     namespaceID.String(),
 			WorkflowId:      executionInfo.WorkflowId,
@@ -291,6 +287,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandScheduleActivity(
 			ScheduleAttempt: ai.Attempt,
 			ActivityId:      attr.ActivityId,
 			ActivityType:    attr.ActivityType.GetName(),
+			Clock:           shardClock,
 		}
 		serializedToken, err := handler.tokenSerializer.Serialize(taskToken)
 		if err != nil {
@@ -783,10 +780,9 @@ func (handler *workflowTaskHandlerImpl) handleCommandContinueAsNewWorkflow(
 	if handler.mutableState.HasParentExecution() {
 		parentNamespaceID := namespace.ID(handler.mutableState.GetExecutionInfo().ParentNamespaceId)
 		parentNamespaceEntry, err := handler.namespaceRegistry.GetNamespaceByID(parentNamespaceID)
-		if err != nil {
-			return err
+		if err == nil {
+			parentNamespace = parentNamespaceEntry.Name()
 		}
-		parentNamespace = parentNamespaceEntry.Name()
 	}
 
 	_, newStateBuilder, err := handler.mutableState.AddContinueAsNewEvent(
@@ -1036,7 +1032,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newStateBuilder, err := createMutableState(
+	newStateBuilder, err := api.CreateMutableState(
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,
@@ -1080,7 +1076,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newStateBuilder, err := createMutableState(
+	newStateBuilder, err := api.CreateMutableState(
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,

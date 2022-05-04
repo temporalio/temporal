@@ -143,6 +143,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := b.mutableState.ReplicateWorkflowExecutionStartedEvent(
 				parentNamespaceID,
+				nil, // shard clock is local to cluster
 				execution,
 				requestID,
 				event,
@@ -387,6 +388,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 		case enumspb.EVENT_TYPE_CHILD_WORKFLOW_EXECUTION_STARTED:
 			if err := b.mutableState.ReplicateChildWorkflowExecutionStartedEvent(
 				event,
+				nil, // shard clock is local to cluster
 			); err != nil {
 				return nil, err
 			}

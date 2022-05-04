@@ -311,7 +311,6 @@ func (b *HistoryBuilder) AddActivityTaskScheduledEvent(
 			StartToCloseTimeout:          command.StartToCloseTimeout,
 			HeartbeatTimeout:             command.HeartbeatTimeout,
 			RetryPolicy:                  command.RetryPolicy,
-			Namespace:                    command.Namespace,
 		},
 	}
 

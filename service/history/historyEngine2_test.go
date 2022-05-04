@@ -52,6 +52,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -134,6 +135,8 @@ func (s *engine2Suite) SetupTest() {
 		s.config,
 	)
 	s.mockShard = mockShard
+	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
+
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
@@ -175,6 +178,7 @@ func (s *engine2Suite) SetupTest() {
 			s.config.SearchAttributesSizeOfValueLimit,
 			s.config.SearchAttributesTotalSizeLimit,
 		),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(mockShard, historyCache),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -779,7 +783,7 @@ func (s *engine2Suite) TestRequestCancelWorkflowExecution_NotFound() {
 		RunId:      tests.RunID,
 	}
 
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
 
 	err := s.historyEngine.RequestCancelWorkflowExecution(metrics.AddMetricsContext(context.Background()), &historyservice.RequestCancelWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
@@ -927,6 +931,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
 		ScheduleAttempt: 1,
+		NamespaceId:     namespaceID.String(),
 		WorkflowId:      "wId",
 		RunId:           we.GetRunId(),
 		ScheduleId:      2,
@@ -975,6 +980,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompletedRecordMarkerCommand() {
 }
 
 func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttributes() {
+	namespaceID := tests.NamespaceID
 	we := commonpb.WorkflowExecution{
 		WorkflowId: "wId",
 		RunId:      tests.RunID,
@@ -982,6 +988,7 @@ func (s *engine2Suite) TestRespondWorkflowTaskCompleted_StartChildWithSearchAttr
 	tl := "testTaskQueue"
 	taskToken := &tokenspb.Task{
 		ScheduleAttempt: 1,
+		NamespaceId:     namespaceID.String(),
 		WorkflowId:      "wId",
 		RunId:           we.GetRunId(),
 		ScheduleId:      2,
@@ -1347,18 +1354,24 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_JustSignal() {
 
 	namespaceID := tests.NamespaceID
 	workflowID := "wId"
+	workflowType := "workflowType"
 	runID := tests.RunID
+	taskQueue := "testTaskQueue"
 	identity := "testIdentity"
 	signalName := "my signal name"
 	input := payloads.EncodeString("test input")
+	requestID := uuid.New()
 	sRequest = &historyservice.SignalWithStartWorkflowExecutionRequest{
 		NamespaceId: namespaceID.String(),
 		SignalWithStartRequest: &workflowservice.SignalWithStartWorkflowExecutionRequest{
-			Namespace:  namespaceID.String(),
-			WorkflowId: workflowID,
-			Identity:   identity,
-			SignalName: signalName,
-			Input:      input,
+			Namespace:    namespaceID.String(),
+			WorkflowId:   workflowID,
+			WorkflowType: &commonpb.WorkflowType{Name: workflowType},
+			TaskQueue:    &taskqueuepb.TaskQueue{Name: taskQueue},
+			Identity:     identity,
+			SignalName:   signalName,
+			Input:        input,
+			RequestId:    requestID,
 		},
 	}
 

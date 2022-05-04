@@ -167,6 +167,8 @@ const (
 	PersistenceGetOrCreateShardScope
 	// PersistenceUpdateShardScope tracks UpdateShard calls made by service to persistence layer
 	PersistenceUpdateShardScope
+	// PersistenceAssertShardOwnershipScope tracks UpdateShard calls made by service to persistence layer
+	PersistenceAssertShardOwnershipScope
 	// PersistenceCreateWorkflowExecutionScope tracks CreateWorkflowExecution calls made by service to persistence layer
 	PersistenceCreateWorkflowExecutionScope
 	// PersistenceGetWorkflowExecutionScope tracks GetWorkflowExecution calls made by service to persistence layer
@@ -1223,6 +1225,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		UnknownScope:                                      {operation: "Unknown"},
 		PersistenceGetOrCreateShardScope:                  {operation: "GetOrCreateShard"},
 		PersistenceUpdateShardScope:                       {operation: "UpdateShard"},
+		PersistenceAssertShardOwnershipScope:              {operation: "AssertShardOwnership"},
 		PersistenceCreateWorkflowExecutionScope:           {operation: "CreateWorkflowExecution"},
 		PersistenceGetWorkflowExecutionScope:              {operation: "GetWorkflowExecution"},
 		PersistenceSetWorkflowExecutionScope:              {operation: "SetWorkflowExecution"},
@@ -1927,6 +1930,7 @@ const (
 	TaskSkipped
 	TaskAttemptTimer
 	TaskStandbyRetryCounter
+	TaskWorkflowBusyCounter
 	TaskNotActiveCounter
 	TaskLimitExceededCounter
 	TaskBatchCompleteCounter
@@ -2408,6 +2412,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		TaskDiscarded:            NewCounterDef("task_errors_discarded"),
 		TaskSkipped:              NewCounterDef("task_skipped"),
 		TaskStandbyRetryCounter:  NewCounterDef("task_errors_standby_retry_counter"),
+		TaskWorkflowBusyCounter:  NewCounterDef("task_errors_workflow_busy"),
 		TaskNotActiveCounter:     NewCounterDef("task_errors_not_active_counter"),
 		TaskLimitExceededCounter: NewCounterDef("task_errors_limit_exceeded_counter"),
 

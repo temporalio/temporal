@@ -167,6 +167,18 @@ func (p *shardRateLimitedPersistenceClient) UpdateShard(
 	return err
 }
 
+func (p *shardRateLimitedPersistenceClient) AssertShardOwnership(
+	ctx context.Context,
+	request *AssertShardOwnershipRequest,
+) error {
+	if ok := p.rateLimiter.Allow(); !ok {
+		return ErrPersistenceLimitExceeded
+	}
+
+	err := p.persistence.AssertShardOwnership(ctx, request)
+	return err
+}
+
 func (p *shardRateLimitedPersistenceClient) Close() {
 	p.persistence.Close()
 }

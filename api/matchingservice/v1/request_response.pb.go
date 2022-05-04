@@ -665,11 +665,12 @@ func (m *AddWorkflowTaskResponse) XXX_DiscardUnknown() {
 var xxx_messageInfo_AddWorkflowTaskResponse proto.InternalMessageInfo
 
 type AddActivityTaskRequest struct {
-	NamespaceId       string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	Execution         *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
-	SourceNamespaceId string                 `protobuf:"bytes,3,opt,name=source_namespace_id,json=sourceNamespaceId,proto3" json:"source_namespace_id,omitempty"`
-	TaskQueue         *v14.TaskQueue         `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
-	ScheduleId        int64                  `protobuf:"varint,5,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	NamespaceId string                 `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	Execution   *v11.WorkflowExecution `protobuf:"bytes,2,opt,name=execution,proto3" json:"execution,omitempty"`
+	// TODO: remove after 1.17 release.
+	SourceNamespaceId string         `protobuf:"bytes,3,opt,name=source_namespace_id,json=sourceNamespaceId,proto3" json:"source_namespace_id,omitempty"`
+	TaskQueue         *v14.TaskQueue `protobuf:"bytes,4,opt,name=task_queue,json=taskQueue,proto3" json:"task_queue,omitempty"`
+	ScheduleId        int64          `protobuf:"varint,5,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
 	// (-- api-linter: core::0140::prepositions=disabled
 	//     aip.dev/not-precedent: "to" is used to indicate interval. --)
 	ScheduleToStartTimeout *time.Duration  `protobuf:"bytes,6,opt,name=schedule_to_start_timeout,json=scheduleToStartTimeout,proto3,stdduration" json:"schedule_to_start_timeout,omitempty"`

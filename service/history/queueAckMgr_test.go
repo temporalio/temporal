@@ -28,23 +28,24 @@ import (
 	"testing"
 	"time"
 
-	persistencespb "go.temporal.io/server/api/persistence/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/tests"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	p "go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/primitives/timestamp"
+	ctasks "go.temporal.io/server/common/tasks"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/tests"
 )
 
 type (
@@ -118,9 +119,18 @@ func (s *queueAckMgrSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.queueAckMgr = newQueueAckMgr(s.mockShard, &QueueProcessorOptions{
-		MetricScope: metrics.ReplicatorQueueProcessorScope,
-	}, s.mockProcessor, 0, s.logger)
+	s.queueAckMgr = newQueueAckMgr(
+		s.mockShard,
+		&QueueProcessorOptions{
+			MetricScope: metrics.TransferActiveQueueProcessorScope,
+		},
+		s.mockProcessor,
+		0,
+		s.logger,
+		func(task tasks.Task) queues.Executable {
+			return queues.NewExecutable(task, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTransfer, nil)
+		},
+	)
 }
 
 func (s *queueAckMgrSuite) TearDownTest() {
@@ -150,11 +160,17 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 
 	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
-	tasksOutput, moreOutput, err := s.queueAckMgr.readQueueTasks()
+	taskExecutables, moreOutput, err := s.queueAckMgr.readQueueTasks()
 	s.Nil(err)
+
+	tasksOutput := make([]tasks.Task, 0, len(taskExecutables))
+	for _, executable := range taskExecutables {
+		tasksOutput = append(tasksOutput, executable.GetTask())
+		s.Equal(ctasks.TaskStatePending, s.queueAckMgr.outstandingExecutables[executable.GetTaskID()].State())
+	}
 	s.Equal(tasksOutput, tasksInput)
 	s.Equal(moreOutput, moreInput)
-	s.Equal(map[int64]bool{taskID1: false}, s.queueAckMgr.outstandingTasks)
+	s.Len(s.queueAckMgr.outstandingExecutables, 1)
 
 	moreInput = true
 	taskID2 := int64(60)
@@ -173,11 +189,17 @@ func (s *queueAckMgrSuite) TestReadTimerTasks() {
 
 	s.mockProcessor.EXPECT().readTasks(taskID1).Return(tasksInput, moreInput, nil)
 
-	tasksOutput, moreOutput, err = s.queueAckMgr.readQueueTasks()
+	taskExecutables, moreOutput, err = s.queueAckMgr.readQueueTasks()
 	s.Nil(err)
+
+	tasksOutput = make([]tasks.Task, 0, len(taskExecutables))
+	for _, executable := range taskExecutables {
+		tasksOutput = append(tasksOutput, executable.GetTask())
+		s.Equal(ctasks.TaskStatePending, s.queueAckMgr.outstandingExecutables[executable.GetTaskID()].State())
+	}
 	s.Equal(tasksOutput, tasksInput)
 	s.Equal(moreOutput, moreInput)
-	s.Equal(map[int64]bool{taskID1: false, taskID2: false}, s.queueAckMgr.outstandingTasks)
+	s.Len(s.queueAckMgr.outstandingExecutables, 2)
 }
 
 func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
@@ -202,14 +224,20 @@ func (s *queueAckMgrSuite) TestReadCompleteTimerTasks() {
 
 	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
-	tasksOutput, moreOutput, err := s.queueAckMgr.readQueueTasks()
+	taskExecutables, moreOutput, err := s.queueAckMgr.readQueueTasks()
 	s.Nil(err)
+
+	tasksOutput := make([]tasks.Task, 0, len(taskExecutables))
+	for _, executable := range taskExecutables {
+		tasksOutput = append(tasksOutput, executable.GetTask())
+		s.Equal(ctasks.TaskStatePending, s.queueAckMgr.outstandingExecutables[executable.GetTaskID()].State())
+	}
 	s.Equal(tasksOutput, tasksInput)
 	s.Equal(moreOutput, moreInput)
-	s.Equal(map[int64]bool{taskID: false}, s.queueAckMgr.outstandingTasks)
+	s.Len(s.queueAckMgr.outstandingExecutables, 1)
 
-	s.queueAckMgr.completeQueueTask(taskID)
-	s.Equal(map[int64]bool{taskID: true}, s.queueAckMgr.outstandingTasks)
+	taskExecutables[0].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.queueAckMgr.outstandingExecutables[taskID].State())
 }
 
 func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
@@ -256,24 +284,30 @@ func (s *queueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
-	tasksOutput, moreOutput, err := s.queueAckMgr.readQueueTasks()
+	taskExecutables, moreOutput, err := s.queueAckMgr.readQueueTasks()
 	s.Nil(err)
+
+	tasksOutput := make([]tasks.Task, 0, len(taskExecutables))
+	for _, executable := range taskExecutables {
+		tasksOutput = append(tasksOutput, executable.GetTask())
+		s.Equal(ctasks.TaskStatePending, s.queueAckMgr.outstandingExecutables[executable.GetTaskID()].State())
+	}
 	s.Equal(tasksOutput, tasksInput)
 	s.Equal(moreOutput, moreInput)
-	s.Equal(map[int64]bool{taskID1: false, taskID2: false, taskID3: false}, s.queueAckMgr.outstandingTasks)
+	s.Len(s.queueAckMgr.outstandingExecutables, 3)
 
 	s.mockProcessor.EXPECT().updateAckLevel(taskID1).Return(nil)
-	s.queueAckMgr.completeQueueTask(taskID1)
+	taskExecutables[0].Ack()
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID1, s.queueAckMgr.getQueueAckLevel())
 
 	s.mockProcessor.EXPECT().updateAckLevel(taskID1).Return(nil)
-	s.queueAckMgr.completeQueueTask(taskID3)
+	taskExecutables[2].Ack()
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID1, s.queueAckMgr.getQueueAckLevel())
 
 	s.mockProcessor.EXPECT().updateAckLevel(taskID3).Return(nil)
-	s.queueAckMgr.completeQueueTask(taskID2)
+	taskExecutables[1].Ack()
 	s.queueAckMgr.updateQueueAckLevel()
 	s.Equal(taskID3, s.queueAckMgr.getQueueAckLevel())
 }
@@ -312,9 +346,18 @@ func (s *queueFailoverAckMgrSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.queueFailoverAckMgr = newQueueFailoverAckMgr(s.mockShard, &QueueProcessorOptions{
-		MetricScope: metrics.ReplicatorQueueProcessorScope,
-	}, s.mockProcessor, 0, s.logger)
+	s.queueFailoverAckMgr = newQueueFailoverAckMgr(
+		s.mockShard,
+		&QueueProcessorOptions{
+			MetricScope: metrics.TransferQueueProcessorScope,
+		},
+		s.mockProcessor,
+		0,
+		s.logger,
+		func(task tasks.Task) queues.Executable {
+			return queues.NewExecutable(task, nil, nil, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeActiveTransfer, nil)
+		},
+	)
 }
 
 func (s *queueFailoverAckMgrSuite) TearDownTest() {
@@ -344,11 +387,17 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 
 	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
-	tasksOutput, moreOutput, err := s.queueFailoverAckMgr.readQueueTasks()
+	taskExecutables, moreOutput, err := s.queueFailoverAckMgr.readQueueTasks()
 	s.Nil(err)
+
+	tasksOutput := make([]tasks.Task, 0, len(taskExecutables))
+	for _, executable := range taskExecutables {
+		tasksOutput = append(tasksOutput, executable.GetTask())
+		s.Equal(ctasks.TaskStatePending, s.queueFailoverAckMgr.outstandingExecutables[executable.GetTaskID()].State())
+	}
 	s.Equal(tasksOutput, tasksInput)
 	s.Equal(moreOutput, moreInput)
-	s.Equal(map[int64]bool{taskID1: false}, s.queueFailoverAckMgr.outstandingTasks)
+	s.Len(s.queueFailoverAckMgr.outstandingExecutables, 1)
 	s.False(s.queueFailoverAckMgr.isReadFinished)
 
 	moreInput = false
@@ -368,11 +417,17 @@ func (s *queueFailoverAckMgrSuite) TestReadQueueTasks() {
 
 	s.mockProcessor.EXPECT().readTasks(taskID1).Return(tasksInput, moreInput, nil)
 
-	tasksOutput, moreOutput, err = s.queueFailoverAckMgr.readQueueTasks()
+	taskExecutables, moreOutput, err = s.queueFailoverAckMgr.readQueueTasks()
 	s.Nil(err)
+
+	tasksOutput = make([]tasks.Task, 0, len(taskExecutables))
+	for _, executable := range taskExecutables {
+		tasksOutput = append(tasksOutput, executable.GetTask())
+		s.Equal(ctasks.TaskStatePending, s.queueFailoverAckMgr.outstandingExecutables[executable.GetTaskID()].State())
+	}
 	s.Equal(tasksOutput, tasksInput)
 	s.Equal(moreOutput, moreInput)
-	s.Equal(map[int64]bool{taskID1: false, taskID2: false}, s.queueFailoverAckMgr.outstandingTasks)
+	s.Len(s.queueFailoverAckMgr.outstandingExecutables, 2)
 	s.True(s.queueFailoverAckMgr.isReadFinished)
 }
 
@@ -409,14 +464,20 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 
 	s.mockProcessor.EXPECT().readTasks(readLevel).Return(tasksInput, moreInput, nil)
 
-	tasksOutput, moreOutput, err := s.queueFailoverAckMgr.readQueueTasks()
+	taskExecutables, moreOutput, err := s.queueFailoverAckMgr.readQueueTasks()
 	s.Nil(err)
+
+	tasksOutput := make([]tasks.Task, 0, len(taskExecutables))
+	for _, executable := range taskExecutables {
+		tasksOutput = append(tasksOutput, executable.GetTask())
+		s.Equal(ctasks.TaskStatePending, s.queueFailoverAckMgr.outstandingExecutables[executable.GetTaskID()].State())
+	}
 	s.Equal(tasksOutput, tasksInput)
 	s.Equal(moreOutput, moreInput)
-	s.Equal(map[int64]bool{taskID1: false, taskID2: false}, s.queueFailoverAckMgr.outstandingTasks)
+	s.Len(s.queueFailoverAckMgr.outstandingExecutables, 2)
 
-	s.queueFailoverAckMgr.completeQueueTask(taskID2)
-	s.Equal(map[int64]bool{taskID1: false, taskID2: true}, s.queueFailoverAckMgr.outstandingTasks)
+	taskExecutables[1].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.queueFailoverAckMgr.outstandingExecutables[taskID2].State())
 	s.mockProcessor.EXPECT().updateAckLevel(s.queueFailoverAckMgr.getQueueAckLevel()).Return(nil)
 	s.queueFailoverAckMgr.updateQueueAckLevel()
 	select {
@@ -425,8 +486,8 @@ func (s *queueFailoverAckMgrSuite) TestReadCompleteQueueTasks() {
 	default:
 	}
 
-	s.queueFailoverAckMgr.completeQueueTask(taskID1)
-	s.Equal(map[int64]bool{taskID1: true, taskID2: true}, s.queueFailoverAckMgr.outstandingTasks)
+	taskExecutables[0].Ack()
+	s.Equal(ctasks.TaskStateAcked, s.queueFailoverAckMgr.outstandingExecutables[taskID1].State())
 	s.mockProcessor.EXPECT().queueShutdown().Return(nil)
 	s.queueFailoverAckMgr.updateQueueAckLevel()
 	select {

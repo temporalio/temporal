@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -97,6 +98,7 @@ func (s *transactionSuite) TestOperationMayApplied() {
 		{err: &persistence.TransactionSizeLimitError{}, mayApplied: false},
 		{err: &serviceerror.ResourceExhausted{}, mayApplied: false},
 		{err: &serviceerror.NotFound{}, mayApplied: false},
+		{err: &serviceerror.NamespaceNotFound{}, mayApplied: false},
 		{err: nil, mayApplied: true},
 		{err: &persistence.TimeoutError{}, mayApplied: true},
 		{err: &serviceerror.Unavailable{}, mayApplied: true},

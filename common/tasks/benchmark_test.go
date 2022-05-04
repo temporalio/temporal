@@ -64,10 +64,8 @@ func BenchmarkInterleavedWeightedRoundRobinScheduler(b *testing.B) {
 
 	scheduler := NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions{
-			QueueSize:   2,
-			WorkerCount: 1,
+			PriorityToWeight: priorityToWeight,
 		},
-		priorityToWeight,
 		&noopProcessor{},
 		metricsClient,
 		logger,

@@ -31,15 +31,14 @@ import (
 	"fmt"
 	"math"
 
-	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/log"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -54,11 +53,11 @@ type (
 	}
 
 	workflowRebuilderImpl struct {
-		shard             shard.Context
-		workflowCache     workflow.Cache
-		newStateRebuilder nDCStateRebuilderProvider
-		transaction       workflow.Transaction
-		logger            log.Logger
+		shard                      shard.Context
+		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		newStateRebuilder          nDCStateRebuilderProvider
+		transaction                workflow.Transaction
+		logger                     log.Logger
 	}
 )
 
@@ -70,8 +69,8 @@ func NewWorkflowRebuilder(
 	logger log.Logger,
 ) *workflowRebuilderImpl {
 	return &workflowRebuilderImpl{
-		shard:         shard,
-		workflowCache: workflowCache,
+		shard:                      shard,
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, workflowCache),
 		newStateRebuilder: func() nDCStateRebuilder {
 			return newNDCStateRebuilder(shard, logger)
 		},
@@ -84,35 +83,32 @@ func (r *workflowRebuilderImpl) rebuild(
 	ctx context.Context,
 	workflowKey definition.WorkflowKey,
 ) (retError error) {
-	context, releaseFn, err := r.workflowCache.GetOrCreateWorkflowExecution(
+
+	wfContext, err := r.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
-		namespace.ID(workflowKey.NamespaceID),
-		commonpb.WorkflowExecution{
-			WorkflowId: workflowKey.WorkflowID,
-			RunId:      workflowKey.RunID,
-		},
-		workflow.CallerTypeAPI,
+		nil,
+		api.BypassMutableStateConsistencyPredicate,
+		workflowKey,
 	)
 	if err != nil {
 		return err
 	}
 	defer func() {
-		releaseFn(retError)
-		context.Clear()
+		wfContext.GetReleaseFn()(retError)
+		wfContext.GetContext().Clear()
 	}()
 
-	msRecord, dbRecordVersion, err := r.getMutableState(ctx, workflowKey)
-	if err != nil {
-		return err
-	}
-	requestID := msRecord.ExecutionState.CreateRequestId
-	versionHistories := msRecord.ExecutionInfo.VersionHistories
+	mutableState := wfContext.GetMutableState()
+	_, dbRecordVersion := mutableState.GetUpdateCondition()
+
+	requestID := mutableState.GetExecutionState().CreateRequestId
+	versionHistories := mutableState.GetExecutionInfo().VersionHistories
 	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistories)
 	if err != nil {
 		return err
 	}
 	branchToken := currentVersionHistory.BranchToken
-	stateTransitionCount := msRecord.ExecutionInfo.StateTransitionCount
+	stateTransitionCount := mutableState.GetExecutionInfo().StateTransitionCount
 
 	rebuildMutableState, rebuildHistorySize, err := r.replayResetWorkflow(
 		ctx,
@@ -199,7 +195,7 @@ func (r *workflowRebuilderImpl) getMutableState(
 		WorkflowID:  workflowKey.WorkflowID,
 		RunID:       workflowKey.RunID,
 	})
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		return nil, 0, err
 	}
 	// only check whether the execution is nil, do as much as we can

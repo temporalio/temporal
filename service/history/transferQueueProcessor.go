@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination transferQueueProcessor_mock.go
-
 package history
 
 import (
@@ -77,6 +75,7 @@ type (
 		isStarted                 int32
 		isStopped                 int32
 		shutdownChan              chan struct{}
+		scheduler                 queues.Scheduler
 		activeTaskProcessor       *transferQueueActiveProcessorImpl
 		standbyTaskProcessorsLock sync.RWMutex
 		standbyTaskProcessors     map[string]*transferQueueStandbyProcessorImpl
@@ -87,6 +86,7 @@ func newTransferQueueProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -114,9 +114,11 @@ func newTransferQueueProcessor(
 		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
 		logger:                   logger,
 		shutdownChan:             make(chan struct{}),
+		scheduler:                scheduler,
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			workflowCache,
+			scheduler,
 			archivalClient,
 			sdkClientFactory,
 			matchingClient,
@@ -178,7 +180,6 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	if len(transferTasks) != 0 {
 		standbyTaskProcessor.notifyNewTask()
 	}
-	standbyTaskProcessor.retryTasks()
 }
 
 func (t *transferQueueProcessorImpl) FailoverNamespace(
@@ -218,12 +219,6 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		t.taskAllocator,
 		t.logger,
 	)
-
-	t.standbyTaskProcessorsLock.RLock()
-	for _, standbyTaskProcessor := range t.standbyTaskProcessors {
-		standbyTaskProcessor.retryTasks()
-	}
-	t.standbyTaskProcessorsLock.RUnlock()
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
@@ -370,6 +365,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 			processor := newTransferQueueStandbyProcessor(
 				clusterName,
 				t.shard,
+				t.scheduler,
 				t.workflowCache,
 				t.archivalClient,
 				t.taskAllocator,

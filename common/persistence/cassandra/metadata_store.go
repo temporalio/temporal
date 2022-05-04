@@ -288,7 +288,7 @@ func (m *MetadataStore) GetNamespace(
 			if len(ID) > 0 {
 				identity = ID
 			}
-			return serviceerror.NewNotFound(fmt.Sprintf("Namespace %s does not exist.", identity))
+			return serviceerror.NewNamespaceNotFound(identity)
 		}
 		return serviceerror.NewUnavailable(fmt.Sprintf("GetNamespace operation failed. Error %v", err))
 	}

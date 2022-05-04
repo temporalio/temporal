@@ -28,7 +28,6 @@ package namespace
 
 import (
 	"context"
-	"fmt"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -39,6 +38,7 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cache"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -62,16 +62,10 @@ const (
 	cacheInitialSize = 10 * 1024
 	cacheMaxSize     = 64 * 1024
 	cacheTTL         = 0 // 0 means infinity
-	// CacheRefreshInterval namespace cache refresh interval
-	CacheRefreshInterval = 10 * time.Second
 	// CacheRefreshFailureRetryInterval is the wait time
 	// if refreshment encounters error
 	CacheRefreshFailureRetryInterval = 1 * time.Second
 	CacheRefreshPageSize             = 200
-
-	cacheInitialized int32 = 0
-	cacheStarted     int32 = 1
-	cacheStopped     int32 = 2
 )
 
 const (
@@ -101,7 +95,7 @@ type (
 
 		// GetNamespace reads the state for a single namespace by name or ID
 		// from persistent storage, returning an instance of
-		// serviceerror.NotFound if there is no matching Namespace.
+		// serviceerror.NamespaceNotFound if there is no matching Namespace.
 		GetNamespace(
 			context.Context,
 			*persistence.GetNamespaceRequest,
@@ -150,6 +144,7 @@ type (
 		metricsClient           metrics.Client
 		logger                  log.Logger
 		lastRefreshTime         atomic.Value
+		refreshInterval         dynamicconfig.DurationPropertyFn
 
 		// cacheLock protects cachNameToID and cacheByID. If the exclusive side
 		// is to be held at the same time as the callbackLock (below), this lock
@@ -172,6 +167,7 @@ type (
 func NewRegistry(
 	persistence Persistence,
 	enableGlobalNamespaces bool,
+	refreshInterval dynamicconfig.DurationPropertyFn,
 	metricsClient metrics.Client,
 	logger log.Logger,
 ) Registry {
@@ -186,6 +182,7 @@ func NewRegistry(
 		cacheByID:               cache.New(cacheMaxSize, &cacheOpts),
 		prepareCallbacks:        make(map[any]PrepareCallbackFn),
 		callbacks:               make(map[any]CallbackFn),
+		refreshInterval:         refreshInterval,
 	}
 	reg.lastRefreshTime.Store(time.Time{})
 	return reg
@@ -339,17 +336,22 @@ func (r *registry) Refresh() {
 }
 
 func (r *registry) refreshLoop(ctx context.Context) error {
-	timer := time.NewTicker(CacheRefreshInterval)
-	defer timer.Stop()
-
 	// Put timer events on our channel so we can select on just one below.
 	go func() {
-		for range timer.C {
-			select {
-			case r.triggerRefreshCh <- nil:
-			default:
-			}
+		timer := time.NewTicker(r.refreshInterval())
 
+		for {
+			select {
+			case <-timer.C:
+				select {
+				case r.triggerRefreshCh <- nil:
+				default:
+				}
+				timer.Reset(r.refreshInterval())
+			case <-ctx.Done():
+				timer.Stop()
+				return
+			}
 		}
 	}()
 
@@ -482,8 +484,7 @@ func (r *registry) getNamespace(name Name) (*Namespace, error) {
 	if id, ok := r.cacheNameToID.Get(name).(ID); ok {
 		return r.getNamespaceByIDLocked(id)
 	}
-	return nil, serviceerror.NewNotFound(
-		fmt.Sprintf("Namespace name %q not found", name))
+	return nil, serviceerror.NewNamespaceNotFound(name.String())
 }
 
 // getNamespaceByID retrieves the information from the cache if it exists.
@@ -497,8 +498,7 @@ func (r *registry) getNamespaceByIDLocked(id ID) (*Namespace, error) {
 	if ns, ok := r.cacheByID.Get(id).(*Namespace); ok {
 		return ns, nil
 	}
-	return nil, serviceerror.NewNotFound(
-		fmt.Sprintf("Namespace id %q not found", id))
+	return nil, serviceerror.NewNamespaceNotFound(id.String())
 }
 
 func (r *registry) publishCacheUpdate(

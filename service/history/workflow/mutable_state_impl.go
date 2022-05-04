@@ -42,6 +42,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
+	clockpb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -1258,13 +1259,6 @@ func (e *MutableStateImpl) HasBufferedEvents() bool {
 	return e.hBuilder.HasBufferEvents()
 }
 
-// UpdateWorkflowTask updates a workflow task.
-func (e *MutableStateImpl) UpdateWorkflowTask(
-	workflowTask *WorkflowTaskInfo,
-) {
-	e.workflowTaskManager.UpdateWorkflowTask(workflowTask)
-}
-
 // DeleteWorkflowTask deletes a workflow task.
 func (e *MutableStateImpl) DeleteWorkflowTask() {
 	e.workflowTaskManager.DeleteWorkflowTask()
@@ -1484,6 +1478,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	)
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
 		parentNamespaceID,
+		startRequest.GetParentExecutionInfo().GetClock(),
 		execution,
 		startRequest.StartRequest.GetRequestId(),
 		event,
@@ -1509,6 +1504,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 
 func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	parentNamespaceID namespace.ID,
+	parentClock *clockpb.ShardClock,
 	execution commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
@@ -1547,6 +1543,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	if event.ParentWorkflowExecution != nil {
 		e.executionInfo.ParentWorkflowId = event.ParentWorkflowExecution.GetWorkflowId()
 		e.executionInfo.ParentRunId = event.ParentWorkflowExecution.GetRunId()
+		e.executionInfo.ParentClock = parentClock
 	}
 
 	if event.ParentInitiatedEventId != 0 {
@@ -1887,14 +1884,6 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 ) (*persistencespb.ActivityInfo, error) {
 
 	attributes := event.GetActivityTaskScheduledEventAttributes()
-	targetNamespaceID := namespace.ID(e.executionInfo.NamespaceId)
-	if attributes.GetNamespace() != "" {
-		targetNamespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespace(namespace.Name(attributes.GetNamespace()))
-		if err != nil {
-			return nil, err
-		}
-		targetNamespaceID = targetNamespaceEntry.ID()
-	}
 
 	scheduleEventID := event.GetEventId()
 	scheduleToCloseTimeout := attributes.GetScheduleToCloseTimeout()
@@ -1907,7 +1896,7 @@ func (e *MutableStateImpl) ReplicateActivityTaskScheduledEvent(
 		StartedId:               common.EmptyEventID,
 		StartedTime:             timestamp.TimePtr(time.Time{}),
 		ActivityId:              attributes.ActivityId,
-		NamespaceId:             targetNamespaceID.String(),
+		NamespaceId:             e.executionInfo.NamespaceId,
 		ScheduleToStartTimeout:  attributes.GetScheduleToStartTimeout(),
 		ScheduleToCloseTimeout:  scheduleToCloseTimeout,
 		StartToCloseTimeout:     attributes.GetStartToCloseTimeout(),
@@ -3100,6 +3089,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 				RunId:      e.executionInfo.ParentRunId,
 			},
 			InitiatedId: e.executionInfo.InitiatedId,
+			Clock:       e.executionInfo.ParentClock,
 		}
 	}
 
@@ -3252,6 +3242,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 	workflowType *commonpb.WorkflowType,
 	initiatedID int64,
 	header *commonpb.Header,
+	clock *clockpb.ShardClock,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowStarted
@@ -3276,7 +3267,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 		workflowType,
 		header,
 	)
-	if err := e.ReplicateChildWorkflowExecutionStartedEvent(event); err != nil {
+	if err := e.ReplicateChildWorkflowExecutionStartedEvent(event, clock); err != nil {
 		return nil, err
 	}
 	return event, nil
@@ -3284,6 +3275,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 
 func (e *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 	event *historypb.HistoryEvent,
+	clock *clockpb.ShardClock,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionStartedEventAttributes()
@@ -3300,6 +3292,7 @@ func (e *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 
 	ci.StartedId = event.GetEventId()
 	ci.StartedRunId = attributes.GetWorkflowExecution().GetRunId()
+	ci.Clock = clock
 	e.updateChildExecutionInfos[ci.InitiatedId] = ci
 
 	return nil
@@ -3744,8 +3737,6 @@ func (e *MutableStateImpl) CloseTransactionAsMutation(
 		}
 	}
 
-	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTasks)
-
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now
 	e.executionInfo.StateTransitionCount += 1
@@ -3829,8 +3820,6 @@ func (e *MutableStateImpl) CloseTransactionAsSnapshot(
 			return nil, nil, err
 		}
 	}
-
-	setTaskInfo(e.GetCurrentVersion(), now, e.InsertTasks)
 
 	// update last update time
 	e.executionInfo.LastUpdateTime = &now

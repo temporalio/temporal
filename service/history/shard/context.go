@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
@@ -65,6 +66,10 @@ type (
 
 		GetEngine() (Engine, error)
 		GetEngineWithContext(ctx context.Context) (Engine, error)
+
+		AssertOwnership(ctx context.Context) error
+		NewVectorClock() (*clockpb.ShardClock, error)
+		CurrentVectorClock() *clockpb.ShardClock
 
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)

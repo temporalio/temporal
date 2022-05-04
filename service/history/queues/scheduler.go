@@ -28,16 +28,83 @@ package queues
 
 import (
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/metrics"
+	tasks "go.temporal.io/server/common/tasks"
 )
 
 type (
 	// Scheduler is the component for scheduling and processing
 	// task executables. Ack(), Nack() or Reschedule() will always
-	// be called on all executables that have been successfully submited
+	// be called on all executables that have been successfully submited.
+	// Reschedule() will only be called after the Scheduler has been stopped
 	Scheduler interface {
 		common.Daemon
 
 		Submit(Executable) error
 		TrySubmit(Executable) (bool, error)
 	}
+
+	SchedulerOptions struct {
+		tasks.ParallelProcessorOptions
+		tasks.InterleavedWeightedRoundRobinSchedulerOptions
+	}
+
+	schedulerImpl struct {
+		priorityAssigner PriorityAssigner
+		wRRScheduler     tasks.Scheduler
+	}
 )
+
+func NewScheduler(
+	priorityAssigner PriorityAssigner,
+	options SchedulerOptions,
+	metricsClient metrics.Client,
+	logger log.Logger,
+) *schedulerImpl {
+	return &schedulerImpl{
+		priorityAssigner: priorityAssigner,
+		wRRScheduler: tasks.NewInterleavedWeightedRoundRobinScheduler(
+			options.InterleavedWeightedRoundRobinSchedulerOptions,
+			tasks.NewParallelProcessor(
+				&options.ParallelProcessorOptions,
+				metricsClient,
+				logger,
+			),
+			metricsClient,
+			logger,
+		),
+	}
+}
+
+func (s *schedulerImpl) Start() {
+	s.wRRScheduler.Start()
+}
+
+func (s *schedulerImpl) Stop() {
+	s.wRRScheduler.Stop()
+}
+
+func (s *schedulerImpl) Submit(
+	executable Executable,
+) error {
+	if err := s.priorityAssigner.Assign(executable); err != nil {
+		executable.Logger().Error("Failed to assign task executable priority", tag.Error(err))
+		return err
+	}
+
+	s.wRRScheduler.Submit(executable)
+	return nil
+}
+
+func (s *schedulerImpl) TrySubmit(
+	executable Executable,
+) (bool, error) {
+	if err := s.priorityAssigner.Assign(executable); err != nil {
+		executable.Logger().Error("Failed to assign task executable priority", tag.Error(err))
+		return false, err
+	}
+
+	return s.wRRScheduler.TrySubmit(executable), nil
+}

@@ -31,11 +31,11 @@ import (
 	"go.temporal.io/server/common/log"
 )
 
-// opentelemetryClient is used for reporting metrics by various Temporal services
+// openTelemetryClient is used for reporting metrics by various Temporal services
 type (
-	opentelemetryClient struct {
+	openTelemetryClient struct {
 		// parentReporter is the parent scope for the metrics
-		rootScope    *opentelemetryScope
+		rootScope    *openTelemetryScope
 		childScopes  map[int]Scope
 		metricDefs   map[int]metricDefinition
 		serviceIdx   ServiceIdx
@@ -45,43 +45,44 @@ type (
 	}
 )
 
-// NewOpentelemeteryClientByReporter creates and returns a new instance of Client implementation
+// NewOpenTelemetryClient creates and returns a new instance of Client implementation
 // serviceIdx indicates the service type in (InputhostIndex, ... StorageIndex)
-func NewOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter OpentelemetryReporter, logger log.Logger, gaugeCache OtelGaugeCache) (Client, error) {
+func NewOpenTelemetryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, reporter OpenTelemetryReporter, logger log.Logger, gaugeCache OtelGaugeCache) (Client, error) {
 	tagsFilterConfig := NewTagFilteringScopeConfig(clientConfig.ExcludeTags)
 
 	scopeWrapper := func(impl internalScope) internalScope {
 		return NewTagFilteringScope(tagsFilterConfig, impl)
 	}
 
-	globalRootScope := newOpentelemetryScope(serviceIdx, reporter.GetMeter(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
+	rootScope := newOpenTelemetryScope(serviceIdx, reporter.GetMeter(), nil, clientConfig.Tags, getMetricDefs(serviceIdx), false, gaugeCache, false)
 
 	serviceTypeTagValue, err := MetricsServiceIdxToServiceName(serviceIdx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to initialize metrics client: %w", err)
 	}
 
-	rootTags := make(map[string]string, len(clientConfig.Tags)+1)
+	rootTags := make(map[string]string, len(clientConfig.Tags)+2)
 	for k, v := range clientConfig.Tags {
 		rootTags[k] = v
 	}
 	rootTags[serviceName] = serviceTypeTagValue
+	rootTags[namespace] = namespaceAllValue
+	globalRootScope := rootScope.taggedString(rootTags, true)
 
 	totalScopes := len(ScopeDefs[Common]) + len(ScopeDefs[serviceIdx])
-	metricsClient := &opentelemetryClient{
+	metricsClient := &openTelemetryClient{
 		rootScope:    globalRootScope,
 		childScopes:  make(map[int]Scope, totalScopes),
 		metricDefs:   getMetricDefs(serviceIdx),
 		serviceIdx:   serviceIdx,
 		scopeWrapper: scopeWrapper,
 		gaugeCache:   gaugeCache,
-		userScope:    reporter.UserScope(),
+		userScope:    reporter.UserScope().Tagged(rootTags),
 	}
 
 	for idx, def := range ScopeDefs[Common] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
-			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scopeWrapper(globalRootScope.taggedString(scopeTags, true))
@@ -90,7 +91,6 @@ func NewOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 	for idx, def := range ScopeDefs[serviceIdx] {
 		scopeTags := map[string]string{
 			OperationTagName: def.operation,
-			namespace:        namespaceAllValue,
 		}
 		mergeMapToRight(def.tags, scopeTags)
 		metricsClient.childScopes[idx] = scopeWrapper(globalRootScope.taggedString(scopeTags, true))
@@ -101,46 +101,46 @@ func NewOpentelemeteryClient(clientConfig *ClientConfig, serviceIdx ServiceIdx, 
 
 // IncCounter increments one for a counter and emits
 // to metrics backend
-func (m *opentelemetryClient) IncCounter(scopeIdx int, counterIdx int) {
+func (m *openTelemetryClient) IncCounter(scopeIdx int, counterIdx int) {
 	m.childScopes[scopeIdx].IncCounter(counterIdx)
 }
 
 // AddCounter adds delta to the counter and
 // emits to the metrics backend
-func (m *opentelemetryClient) AddCounter(scopeIdx int, counterIdx int, delta int64) {
+func (m *openTelemetryClient) AddCounter(scopeIdx int, counterIdx int, delta int64) {
 	m.childScopes[scopeIdx].AddCounter(counterIdx, delta)
 }
 
 // StartTimer starts a timer for the given
 // metric name
-func (m *opentelemetryClient) StartTimer(scopeIdx int, timerIdx int) Stopwatch {
+func (m *openTelemetryClient) StartTimer(scopeIdx int, timerIdx int) Stopwatch {
 	return m.childScopes[scopeIdx].StartTimer(timerIdx)
 }
 
 // RecordTimer records and emits a timer for the given metric name
-func (m *opentelemetryClient) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
+func (m *openTelemetryClient) RecordTimer(scopeIdx int, timerIdx int, d time.Duration) {
 	m.childScopes[scopeIdx].RecordTimer(timerIdx, d)
 }
 
 // RecordDistribution records and emits a distribution (wrapper on top of timer) for the given
 // metric name
-func (m *opentelemetryClient) RecordDistribution(scopeIdx int, timerIdx int, d int) {
+func (m *openTelemetryClient) RecordDistribution(scopeIdx int, timerIdx int, d int) {
 	m.childScopes[scopeIdx].RecordDistribution(timerIdx, d)
 }
 
 // UpdateGauge reports Gauge type metric
-func (m *opentelemetryClient) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
+func (m *openTelemetryClient) UpdateGauge(scopeIdx int, gaugeIdx int, value float64) {
 	m.childScopes[scopeIdx].UpdateGauge(gaugeIdx, value)
 }
 
 // Scope returns a new internal metrics scope that can be used to add additional
 // information to the metrics emitted
-func (m *opentelemetryClient) Scope(scopeIdx int, tags ...Tag) Scope {
+func (m *openTelemetryClient) Scope(scopeIdx int, tags ...Tag) Scope {
 	return m.childScopes[scopeIdx].Tagged(tags...)
 }
 
 // UserScope returns a new metrics scope that can be used to add additional
 // information to the metrics emitted by user code.
-func (m *opentelemetryClient) UserScope() UserScope {
+func (m *openTelemetryClient) UserScope() UserScope {
 	return m.userScope
 }

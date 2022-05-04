@@ -104,7 +104,7 @@ func (s *integrationSuite) TestWorkflowTaskHeartbeatingWithEmptyResult() {
 			ReturnNewWorkflowTask:      true,
 			ForceCreateNewWorkflowTask: true,
 		})
-		if _, ok := err2.(*serviceerror.NotFound); ok {
+		if _, isNotFound := err2.(*serviceerror.NotFound); isNotFound {
 			hbTimeout++
 			s.IsType(&workflowservice.RespondWorkflowTaskCompletedResponse{}, resp2)
 

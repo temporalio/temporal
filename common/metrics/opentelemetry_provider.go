@@ -40,15 +40,15 @@ import (
 	"go.temporal.io/server/common/log/tag"
 )
 
-var _ OpentelemetryProvider = (*opentelemetryProviderImpl)(nil)
+var _ OpenTelemetryProvider = (*openTelemetryProviderImpl)(nil)
 
 type (
-	OpentelemetryProvider interface {
+	OpenTelemetryProvider interface {
 		Stop(logger log.Logger)
 		GetMeter() metric.Meter
 	}
 
-	opentelemetryProviderImpl struct {
+	openTelemetryProviderImpl struct {
 		exporter *prometheus.Exporter
 		meter    metric.Meter
 		config   *PrometheusConfig
@@ -56,20 +56,15 @@ type (
 	}
 )
 
-func NewOpentelemetryProvider(
+func NewOpenTelemetryProvider(
 	logger log.Logger,
 	prometheusConfig *PrometheusConfig,
 	clientConfig *ClientConfig,
-) (*opentelemetryProviderImpl, error) {
-	histogramBoundaries := prometheusConfig.DefaultHistogramBoundaries
-	if len(histogramBoundaries) == 0 {
-		histogramBoundaries = defaultHistogramBoundaries
-	}
+) (*openTelemetryProviderImpl, error) {
 
 	c := controller.New(
 		processor.NewFactory(
 			NewOtelAggregatorSelector(
-				histogramBoundaries,
 				clientConfig.PerUnitHistogramBoundaries,
 			),
 			aggregation.CumulativeTemporalitySelector(),
@@ -77,7 +72,7 @@ func NewOpentelemetryProvider(
 		),
 		controller.WithResource(resource.Empty()),
 	)
-	exporter, err := prometheus.New(prometheus.Config{DefaultHistogramBoundaries: histogramBoundaries}, c)
+	exporter, err := prometheus.New(prometheus.Config{}, c)
 
 	if err != nil {
 		logger.Error("Failed to initialize prometheus exporter.", tag.Error(err))
@@ -87,7 +82,7 @@ func NewOpentelemetryProvider(
 	metricServer := initPrometheusListener(prometheusConfig, logger, exporter)
 
 	meter := c.Meter("temporal")
-	reporter := &opentelemetryProviderImpl{
+	reporter := &openTelemetryProviderImpl{
 		exporter: exporter,
 		meter:    meter,
 		config:   prometheusConfig,
@@ -121,11 +116,11 @@ func initPrometheusListener(config *PrometheusConfig, logger log.Logger, exporte
 	return server
 }
 
-func (r *opentelemetryProviderImpl) GetMeter() metric.Meter {
+func (r *openTelemetryProviderImpl) GetMeter() metric.Meter {
 	return r.meter
 }
 
-func (r *opentelemetryProviderImpl) Stop(logger log.Logger) {
+func (r *openTelemetryProviderImpl) Stop(logger log.Logger) {
 	ctx, closeCtx := context.WithTimeout(context.Background(), time.Second)
 	defer closeCtx()
 	if err := r.server.Shutdown(ctx); !(err == nil || err == http.ErrServerClosed) {

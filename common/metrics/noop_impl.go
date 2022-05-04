@@ -75,7 +75,7 @@ func (n *noopMetricsUserScope) StartTimer(timer string) Stopwatch {
 
 func (n *noopMetricsUserScope) RecordTimer(timer string, d time.Duration) {}
 
-func (n *noopMetricsUserScope) RecordDistribution(id string, d int) {}
+func (n *noopMetricsUserScope) RecordDistribution(id string, unit MetricUnit, d int) {}
 
 func (n *noopMetricsUserScope) UpdateGauge(gauge string, value float64) {}
 

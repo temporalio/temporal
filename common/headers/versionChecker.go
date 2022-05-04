@@ -40,6 +40,7 @@ const (
 	ClientNamePHPSDK        = "temporal-php"
 	ClientNameTypeScriptSDK = "temporal-typescript"
 	ClientNameCLI           = "temporal-cli"
+	ClientNameUI            = "temporal-ui"
 
 	ServerVersion = "1.17.0"
 
@@ -66,6 +67,7 @@ var (
 		ClientNameTypeScriptSDK: "<2.0.0",
 		ClientNameCLI:           "<2.0.0",
 		ClientNameServer:        "<2.0.0",
+		ClientNameUI:            "<3.0.0",
 	}
 )
 
