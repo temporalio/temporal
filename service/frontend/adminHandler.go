@@ -778,6 +778,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 		VersionHistory: targetVersionHistory,
+		HistoryNodeIds: rawHistoryResponse.NodeIDs,
 	}
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
