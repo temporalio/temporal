@@ -27,6 +27,7 @@ package mysql
 import (
 	"context"
 	"database/sql"
+
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 )
