@@ -26,53 +26,46 @@ package serviceerror
 
 import (
 	"github.com/gogo/status"
-	"go.temporal.io/api/serviceerror"
 	"google.golang.org/grpc/codes"
 
 	"go.temporal.io/server/api/errordetails/v1"
 )
 
-// FromStatus converts gogo gRPC status to service error.
-func FromStatus(st *status.Status) error {
-	if st == nil || st.Code() == codes.OK {
-		return nil
+type (
+	// StickyWorkerUnavailable represents sticky worker unavailable error.
+	StickyWorkerUnavailable struct {
+		Message string
+		st      *status.Status
 	}
+)
 
-	errDetails := extractErrorDetails(st)
-
-	switch st.Code() {
-	case codes.InvalidArgument:
-		switch errDetails := errDetails.(type) {
-		case *errordetails.CurrentBranchChangedFailure:
-			return newCurrentBranchChanged(st, errDetails)
-		}
-	case codes.AlreadyExists:
-		switch errDetails.(type) {
-		case *errordetails.TaskAlreadyStartedFailure:
-			return newTaskAlreadyStarted(st)
-		}
-	case codes.Aborted:
-		switch errDetails := errDetails.(type) {
-		case *errordetails.ShardOwnershipLostFailure:
-			return newShardOwnershipLost(st, errDetails)
-		case *errordetails.RetryReplicationFailure:
-			return newRetryReplication(st, errDetails)
-		}
-	case codes.Unavailable:
-		switch errDetails.(type) {
-		case *errordetails.StickyWorkerUnavailableFailure:
-			return newStickyWorkerUnavailable(st)
-		}
+// NewStickyWorkerUnavailable returns new StickyWorkerUnavailable error.
+func NewStickyWorkerUnavailable() error {
+	return &StickyWorkerUnavailable{
+		Message: "sticky worker unavailable, please use original task queue.",
 	}
-
-	return serviceerror.FromStatus(st)
 }
 
-func extractErrorDetails(st *status.Status) interface{} {
-	details := st.Details()
-	if len(details) > 0 {
-		return details[0]
+// Error returns string message.
+func (e *StickyWorkerUnavailable) Error() string {
+	return e.Message
+}
+
+func (e *StickyWorkerUnavailable) Status() *status.Status {
+	if e.st != nil {
+		return e.st
 	}
 
-	return nil
+	st := status.New(codes.Unavailable, e.Message)
+	st, _ = st.WithDetails(
+		&errordetails.StickyWorkerUnavailableFailure{},
+	)
+	return st
+}
+
+func newStickyWorkerUnavailable(st *status.Status) error {
+	return &StickyWorkerUnavailable{
+		Message: st.Message(),
+		st:      st,
+	}
 }

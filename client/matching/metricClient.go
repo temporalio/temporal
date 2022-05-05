@@ -30,6 +30,7 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -258,10 +259,12 @@ func (c *metricClient) finishMetricsRecording(
 ) {
 	if err != nil {
 		switch err.(type) {
-		case *serviceerror.Canceled,
+		case *serviceerrors.StickyWorkerUnavailable,
+			*serviceerror.Canceled,
 			*serviceerror.DeadlineExceeded,
 			*serviceerror.NotFound,
 			*serviceerror.NamespaceNotFound,
+			*serviceerror.QueryFailed,
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:

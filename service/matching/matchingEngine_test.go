@@ -345,9 +345,24 @@ func (s *matchingEngineSuite) TestPollWorkflowTaskQueues() {
 	}
 
 	_, err := s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
+	// fail due to no sticky worker
+	s.Error(err)
+	s.ErrorContains(err, "sticky worker unavailable")
+	// poll the sticky queue, should get no result
+	resp, err := s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
+		NamespaceId: namespaceID.String(),
+		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
+			TaskQueue: stickyTaskQueue,
+			Identity:  identity},
+	})
+	s.NoError(err)
+	s.Equal(emptyPollWorkflowTaskQueueResponse, resp)
+
+	// add task to sticky queue again, this time it should pass
+	_, err = s.matchingEngine.AddWorkflowTask(s.handlerContext, &addRequest)
 	s.NoError(err)
 
-	resp, err := s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
+	resp, err = s.matchingEngine.PollWorkflowTaskQueue(s.handlerContext, &matchingservice.PollWorkflowTaskQueueRequest{
 		NamespaceId: namespaceID.String(),
 		PollRequest: &workflowservice.PollWorkflowTaskQueueRequest{
 			TaskQueue: stickyTaskQueue,
