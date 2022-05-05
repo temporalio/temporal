@@ -3002,18 +3002,17 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	execution commonpb.WorkflowExecution,
 ) (retError error) {
 
-	namespaceEntry, err := e.getActiveNamespaceEntry(namespaceUUID)
+	err := validateNamespaceUUID(namespaceUUID)
 	if err != nil {
 		return err
 	}
-	namespaceID := namespaceEntry.ID()
 
 	wfContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
-			namespaceID.String(),
+			namespaceUUID.String(),
 			execution.WorkflowId,
 			execution.RunId,
 		),
@@ -3043,11 +3042,14 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 		return err
 	}
 
-	err = wfContext.GetContext().UpdateWorkflowExecutionAsActive(ctx, now)
-	if err != nil {
-		return err
-	}
-	return nil
+	return e.shard.AddTasks(ctx, &persistence.AddHistoryTasksRequest{
+		ShardID: e.shard.GetShardID(),
+		// RangeID is set by shard
+		NamespaceID: namespaceUUID.String(),
+		WorkflowID:  execution.WorkflowId,
+		RunID:       execution.RunId,
+		Tasks:       mutableState.PopTasks(),
+	})
 }
 
 func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(

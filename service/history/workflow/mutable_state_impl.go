@@ -3669,6 +3669,12 @@ func (e *MutableStateImpl) AddTasks(
 	}
 }
 
+func (e *MutableStateImpl) PopTasks() map[tasks.Category][]tasks.Task {
+	insterTasks := e.InsertTasks
+	e.InsertTasks = make(map[tasks.Category][]tasks.Task)
+	return insterTasks
+}
+
 func (e *MutableStateImpl) SetUpdateCondition(
 	nextEventIDInDB int64,
 	dbRecordVersion int64,
