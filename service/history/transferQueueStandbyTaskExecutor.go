@@ -28,11 +28,13 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -55,6 +57,7 @@ type (
 
 		clusterName        string
 		adminClient        adminservice.AdminServiceClient
+		historyClient      historyservice.HistoryServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
@@ -78,6 +81,7 @@ func newTransferQueueStandbyTaskExecutor(
 		),
 		clusterName:        clusterName,
 		adminClient:        shard.GetRemoteAdminClient(clusterName),
+		historyClient:      shard.GetHistoryClient(),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }
@@ -255,9 +259,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		// DO NOT REPLY TO PARENT
-		// since event replication should be done by active cluster
-		return nil, t.recordWorkflowClosed(
+		if err := t.recordWorkflowClosed(
 			ctx,
 			namespace.ID(transferTask.NamespaceID),
 			transferTask.WorkflowID,
@@ -270,7 +272,51 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			workflowHistoryLength,
 			visibilityMemo,
 			searchAttr,
-		)
+		); err != nil {
+			return nil, err
+		}
+
+		// verify if parent got the completion event
+		replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+		if replyToParentWorkflow {
+			_, err := t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
+				NamespaceId: executionInfo.ParentNamespaceId,
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: executionInfo.ParentWorkflowId,
+					RunId:      executionInfo.ParentRunId,
+				},
+				ParentInitiatedId:      executionInfo.ParentInitiatedId,
+				ParentInitiatedVersion: executionInfo.ParentInitiatedVersion,
+				CompletedExecution: &commonpb.WorkflowExecution{
+					WorkflowId: transferTask.WorkflowID,
+					RunId:      transferTask.RunID,
+				},
+				Clock:              executionInfo.ParentClock,
+				CompletionEvent:    completionEvent,
+				VerifyRecordedOnly: true,
+			})
+			switch err.(type) {
+			case nil:
+				// noop
+				return nil, nil
+			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+				return nil, nil
+			case *serviceerror.Unavailable:
+				// TODO: change to new error type
+				return &struct{}{}, nil
+			case *serviceerror.NamespaceNotActive:
+				// it may happen duriong rollout and talking to an old history server
+				// DO NOT return the error directly here,
+				// the error handling logic in task executable will drop this task
+				// if the error is namespace not active and the task is pending for too long
+				return &struct{}{}, nil
+			default:
+				// parent workflow is not ready or we encounter some unknown error
+				// in either case, we retry
+				return nil, err
+			}
+		}
+		return nil, nil
 	}
 
 	return t.processTransfer(
@@ -278,8 +324,15 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
-		standbyTaskPostActionNoOp,
-	) // no op post action, since the entire workflow is finished
+		getStandbyPostActionFn(
+			transferTask,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			standbyTaskPostActionNoOp, // no-op since we are waiting for another shard
+			standbyTransferTaskPostActionTaskDiscarded,
+		),
+	)
 }
 
 func (t *transferQueueStandbyTaskExecutor) processCancelExecution(

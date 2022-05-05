@@ -2156,15 +2156,41 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	completionRequest *historyservice.RecordChildExecutionCompletedRequest,
 ) error {
 
-	_, err := e.getActiveNamespaceEntry(namespace.ID(completionRequest.GetNamespaceId()))
-	if err != nil {
-		return err
+	namespaceID := namespace.ID(completionRequest.GetNamespaceId())
+	if completionRequest.VerifyRecordedOnly {
+		if err := validateNamespaceUUID(namespaceID); err != nil {
+			return err
+		}
+	} else {
+		if _, err := e.getActiveNamespaceEntry(namespaceID); err != nil {
+			return err
+		}
 	}
 
-	return e.updateWorkflow(
+	parentInitiatedID := completionRequest.ParentInitiatedId
+	parentInitiatedVersion := completionRequest.ParentInitiatedVersion
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(parentInitiatedID, parentInitiatedVersion)
+
+	// TODO: create a new error type here, instead of using Unavailable
+	errMutableStateNotReady := serviceerror.NewUnavailable("ms not ready to handle the request")
+	errPendingChildNotFound := serviceerror.NewNotFound("Pending child execution not found.")
+
+	err := e.updateWorkflow(
 		ctx,
 		completionRequest.Clock,
-		api.BypassMutableStateConsistencyPredicate,
+		func(mutableState workflow.MutableState) bool {
+			if parentInitiatedVersion != 0 {
+				_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+					mutableState.GetExecutionInfo().GetVersionHistories(),
+					versionHistoryItem,
+				)
+				return err == nil
+			}
+			// if initiated version is 0, it means the namespace is local or
+			// the caller has old version and does sent the info.
+			// in either case, fallback to comparing next eventID
+			return parentInitiatedID < mutableState.GetNextEventID()
+		},
 		definition.NewWorkflowKey(
 			completionRequest.NamespaceId,
 			completionRequest.WorkflowExecution.WorkflowId,
@@ -2176,52 +2202,84 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			initiatedID := completionRequest.ParentInitiatedId
-			completedExecution := completionRequest.CompletedExecution
-			completionEvent := completionRequest.CompletionEvent
+			// the consistencyPredicate above already reloaded mutable state if necessary,
+			// we don't need to worry about stale case here.
+			if parentInitiatedVersion != 0 {
+				versionHistoryies := mutableState.GetExecutionInfo().GetVersionHistories()
+				if _, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+					versionHistoryies,
+					versionHistoryItem,
+				); err != nil {
+					return nil, errMutableStateNotReady
+				}
 
-			// Check mutable state to make sure child execution is in pending child executions
-			ci, isRunning := mutableState.GetChildExecutionInfo(initiatedID)
-			if !isRunning && initiatedID >= mutableState.GetNextEventID() {
-				// possible stale mutable state, try reload mutable state
-				//
-				// TODO: use initiate event ID and version to verify if the child exists or not
-				//
-				// NOTE: do not return ErrStaleState here, as in xdc there's no guarantee that parent
-				// will have the child information and its next eventID will larger than the initiatedID
-				// in the request after forced failover.
-				// If ErrStaleState is returned, the logic for this handler and processing of CloseWorkflowExecution
-				// task will keep retrying infinitely.
-				mutableState, err = workflowContext.ReloadMutableState(ctx)
+				// check if on current branch
+				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistoryies)
 				if err != nil {
 					return nil, err
 				}
+				if !versionhistory.ContainsVersionHistoryItem(
+					currentVersionHistory,
+					versionHistoryItem,
+				) {
+					// found on non-current branch
+					return nil, errPendingChildNotFound
+				}
 
-				ci, isRunning = mutableState.GetChildExecutionInfo(initiatedID)
+				// found on current branch, continue the existing check
+			} else {
+				if parentInitiatedID < mutableState.GetNextEventID() {
+					return nil, errMutableStateNotReady
+				}
+
+				// since there's no version, we have to assume the event is on the current branch
 			}
-			if !isRunning || ci.StartedId == common.EmptyEventID {
-				return nil, serviceerror.NewNotFound("Pending child execution not found.")
+
+			// Check mutable state to make sure child execution is in pending child executions
+			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
+			if !isRunning {
+				if completionRequest.VerifyRecordedOnly {
+					// confirmed that child completion has been recorded
+					return &api.UpdateWorkflowAction{
+						Noop: true,
+					}, nil
+				}
+				return nil, errPendingChildNotFound
 			}
+
+			if ci.StartedId == common.EmptyEventID {
+				return nil, errMutableStateNotReady
+			}
+
+			completedExecution := completionRequest.CompletedExecution
 			if ci.GetStartedWorkflowId() != completedExecution.GetWorkflowId() {
-				return nil, serviceerror.NewNotFound("Pending child execution not found.")
+				// this can happen since we may not have the initiated version
+				return nil, errPendingChildNotFound
 			}
 
+			if completionRequest.VerifyRecordedOnly {
+				// confirmed that child completion is not recorded yet
+				return nil, errMutableStateNotReady
+			}
+
+			var err error
+			completionEvent := completionRequest.CompletionEvent
 			switch completionEvent.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
 				attributes := completionEvent.GetWorkflowExecutionCompletedEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionCompletedEvent(initiatedID, completedExecution, attributes)
+				_, err = mutableState.AddChildWorkflowExecutionCompletedEvent(parentInitiatedID, completedExecution, attributes)
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_FAILED:
 				attributes := completionEvent.GetWorkflowExecutionFailedEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionFailedEvent(initiatedID, completedExecution, attributes)
+				_, err = mutableState.AddChildWorkflowExecutionFailedEvent(parentInitiatedID, completedExecution, attributes)
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_CANCELED:
 				attributes := completionEvent.GetWorkflowExecutionCanceledEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionCanceledEvent(initiatedID, completedExecution, attributes)
+				_, err = mutableState.AddChildWorkflowExecutionCanceledEvent(parentInitiatedID, completedExecution, attributes)
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TERMINATED:
 				attributes := completionEvent.GetWorkflowExecutionTerminatedEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(initiatedID, completedExecution, attributes)
+				_, err = mutableState.AddChildWorkflowExecutionTerminatedEvent(parentInitiatedID, completedExecution, attributes)
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_TIMED_OUT:
 				attributes := completionEvent.GetWorkflowExecutionTimedOutEventAttributes()
-				_, err = mutableState.AddChildWorkflowExecutionTimedOutEvent(initiatedID, completedExecution, attributes)
+				_, err = mutableState.AddChildWorkflowExecutionTimedOutEvent(parentInitiatedID, completedExecution, attributes)
 			}
 
 			if err != nil {
@@ -2230,8 +2288,27 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 			return &api.UpdateWorkflowAction{
 				Noop:               false,
 				CreateWorkflowTask: true,
-			}, err
+			}, nil
 		})
+
+	// TODO: we need a special error for workflow not found so we can check for it directly
+	if _, ok := err.(*serviceerror.NotFound); ok &&
+		err != errPendingChildNotFound &&
+		err != consts.ErrWorkflowCompleted {
+		if completionRequest.VerifyRecordedOnly {
+			// workflow not found error, verification logic need to keep waiting in this case
+			// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
+			return errMutableStateNotReady
+		}
+		return err
+	}
+
+	// this is for compatibility, since old caller (active close execution task) can't handle workflow not ready error.
+	if err == errMutableStateNotReady && !completionRequest.VerifyRecordedOnly {
+		err = errPendingChildNotFound
+	}
+
+	return err
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(

@@ -335,13 +335,15 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
 			},
-			Clock:           parentClock,
-			CompletionEvent: completionEvent,
+			Clock:              parentClock,
+			CompletionEvent:    completionEvent,
+			VerifyRecordedOnly: false,
 		})
 		switch err.(type) {
 		case nil:
 			// noop
-		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerror.Unavailable:
+			// TODO: change unavaialbe to the new error type
 			// parent gone, noop
 		default:
 			return err

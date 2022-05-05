@@ -331,6 +331,9 @@ message RecordChildExecutionCompletedRequest {
     temporal.api.history.v1.HistoryEvent completion_event = 5;
     temporal.server.api.clock.v1.ShardClock clock = 6;
     int64 parent_initiated_version = 7;
+    // If true, only verify if child completion has been recorded or not
+    // but skip actual recording of the completion event 
+    bool verify_recorded_only = 8;
 }
 
 message RecordChildExecutionCompletedResponse {
