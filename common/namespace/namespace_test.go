@@ -25,6 +25,7 @@
 package namespace_test
 
 import (
+	"github.com/stretchr/testify/assert"
 	"testing"
 	"time"
 
@@ -130,4 +131,15 @@ func Test_GetRetentionDays(t *testing.T) {
 			require.Equal(t, tt.want, ns.Retention())
 		})
 	}
+}
+
+func TestNamespace_GetCustomData(t *testing.T) {
+	base := base(t)
+	ns := base.Clone(namespace.WithData("foo", "bar"))
+	data := ns.GetCustomData()
+	assert.Equal(t, "bar", data["foo"])
+	assert.Equal(t, 1, len(data))
+	data["foo_test"] = "bar_test"
+	data2 := ns.GetCustomData()
+	assert.Equal(t, 1, len(data2))
 }
