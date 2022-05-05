@@ -2,6 +2,8 @@
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
 // Permission is hereby granted, free of charge, to any person obtaining a copy
 // of this software and associated documentation files (the "Software"), to deal
 // in the Software without restriction, including without limitation the rights
@@ -20,36 +22,49 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-syntax = "proto3";
+package serviceerror
 
-// These error details extend failures defined in https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
+import (
+	"github.com/gogo/status"
+	"go.temporal.io/server/api/errordetails/v1"
+	"google.golang.org/grpc/codes"
+)
 
-package temporal.server.api.errordetails.v1;
+type (
+	// WorkflowNotReady represents workflow state is not ready to handle the request error.
+	WorkflowNotReady struct {
+		Message string
+		st      *status.Status
+	}
+)
 
-option go_package = "go.temporal.io/server/api/errordetails/v1;errordetails";
-
-message TaskAlreadyStartedFailure {
+// NewWorkflowNotReady returns new WorkflowNotReady
+func NewWorkflowNotReady(message string) error {
+	return &WorkflowNotReady{
+		Message: message,
+	}
 }
 
-message CurrentBranchChangedFailure {
-    bytes current_branch_token = 1;
-    bytes request_branch_token = 2;
+// Error returns string message.
+func (e *WorkflowNotReady) Error() string {
+	return e.Message
 }
 
-message ShardOwnershipLostFailure {
-    string owner_host = 1;
-    string current_host = 2;
+func (e *WorkflowNotReady) Status() *status.Status {
+	if e.st != nil {
+		return e.st
+	}
+
+	st := status.New(codes.FailedPrecondition, e.Message)
+	st, _ = st.WithDetails(
+		&errordetails.WorkflowNotReadyFailure{},
+	)
+	return st
 }
 
-message RetryReplicationFailure {
-    string namespace_id = 1;
-    string workflow_id = 2;
-    string run_id = 3;
-    int64 start_event_id = 4;
-    int64 start_event_version = 5;
-    int64 end_event_id = 6;
-    int64 end_event_version = 7;
-}
-
-message WorkflowNotReadyFailure {    
+func newWorkflowNotReady(st *status.Status) error {
+	return &WorkflowNotReady{
+		Message: st.Message(),
+		st:      st,
+	}
 }

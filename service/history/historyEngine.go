@@ -2171,8 +2171,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	parentInitiatedVersion := completionRequest.ParentInitiatedVersion
 	versionHistoryItem := versionhistory.NewVersionHistoryItem(parentInitiatedID, parentInitiatedVersion)
 
-	// TODO: create a new error type here, instead of using Unavailable
-	errMutableStateNotReady := serviceerror.NewUnavailable("ms not ready to handle the request")
+	errMutableStateNotReady := serviceerrors.NewWorkflowNotReady("Workflow state is not ready to handle the request.")
 	errPendingChildNotFound := serviceerror.NewNotFound("Pending child execution not found.")
 
 	err := e.updateWorkflow(
@@ -2295,12 +2294,9 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	if _, ok := err.(*serviceerror.NotFound); ok &&
 		err != errPendingChildNotFound &&
 		err != consts.ErrWorkflowCompleted {
-		if completionRequest.VerifyRecordedOnly {
-			// workflow not found error, verification logic need to keep waiting in this case
-			// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
-			return errMutableStateNotReady
-		}
-		return err
+		// workflow not found error, verification logic need to keep waiting in this case
+		// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
+		return errMutableStateNotReady
 	}
 
 	// this is for compatibility, since old caller (active close execution task) can't handle workflow not ready error.

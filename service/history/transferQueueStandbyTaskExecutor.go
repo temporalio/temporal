@@ -42,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -301,8 +302,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				return nil, nil
 			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 				return nil, nil
-			case *serviceerror.Unavailable:
-				// TODO: change to new error type
+			case *serviceerrors.WorkflowNotReady:
 				return &struct{}{}, nil
 			case *serviceerror.NamespaceNotActive:
 				// it may happen duriong rollout and talking to an old history server
