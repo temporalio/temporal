@@ -224,6 +224,13 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 	return ReplicationPolicyOneCluster
 }
 
+func (ns *Namespace) GetCustomData(key string) string {
+	if ns.info.Data == nil {
+		return ""
+	}
+	return ns.info.Data[key]
+}
+
 // Len return length
 func (t Namespaces) Len() int {
 	return len(t)
