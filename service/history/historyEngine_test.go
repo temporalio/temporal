@@ -5254,10 +5254,16 @@ func addSignaledEvent(builder workflow.MutableState, initiatedID int64, namespac
 	return event
 }
 
-func addStartChildWorkflowExecutionInitiatedEvent(builder workflow.MutableState, workflowTaskCompletedID int64,
-	createRequestID string, namespace namespace.Name, workflowID, workflowType, taskQueue string, input *commonpb.Payloads,
-	executionTimeout, runTimeout, taskTimeout time.Duration) (*historypb.HistoryEvent,
-	*persistencespb.ChildExecutionInfo) {
+func addStartChildWorkflowExecutionInitiatedEvent(
+	builder workflow.MutableState,
+	workflowTaskCompletedID int64,
+	createRequestID string,
+	namespace namespace.Name,
+	workflowID, workflowType, taskQueue string,
+	input *commonpb.Payloads,
+	executionTimeout, runTimeout, taskTimeout time.Duration,
+	parentClosePolicy enumspb.ParentClosePolicy,
+) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo) {
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -5270,6 +5276,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder workflow.MutableState,
 			WorkflowRunTimeout:       &runTimeout,
 			WorkflowTaskTimeout:      &taskTimeout,
 			Control:                  "",
+			ParentClosePolicy:        parentClosePolicy,
 		})
 	return event, cei
 }

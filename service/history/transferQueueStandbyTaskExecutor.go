@@ -391,6 +391,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		if childWorkflowInfo.StartedId != common.EmptyEventID {
 			return nil, nil
 		}
+		// TODO: standby logic should verify if first workflow task is scheduled or not as well?
 
 		return getHistoryResendInfo(mutableState)
 	}
