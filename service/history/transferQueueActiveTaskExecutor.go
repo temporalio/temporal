@@ -655,14 +655,18 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		// case 2: workflow not running, child not started, parent close policy is not abandon
 		// case 3: workflow not running, child not started, parent close policy is abandon
 		//
-		// NOTE: ideally for case 3, we should continue to start child. However we can't do that because:
-		// 1. Since workflow is closed, we can't update mutable state or record child started event. If we
-		// do not record start and proceed to scheduling first workflow task. If the RPC call timeout but
-		// the call actually succeeds on child workflow. Then the child workflow can complete and another
-		// unrelated workflow can reuse this workflowID. Now when the start child task retries, we can't
-		// rely on requestID to dedup the start child call. (We can use runID instead of requestID to dedup)
+		// NOTE: ideally for case 3, we should continue to start child. However, with current start child
+		// and standby start child verification logic, we can't do that because:
+		// 1. Once workflow is closed, we can't update mutable state or record child started event.
+		// If the RPC call for scheduling first workflow task times out but the call actually succeeds on child workflow.
+		// Then the child workflow can run, complete and another unrelated workflow can reuse this workflowID.
+		// Now when the start child task retries, we can't rely on requestID to dedup the start child call. (We can use runID instead of requestID to dedup)
 		// 2. No update to mutable state and child started event means we are not able to replicate the information
-		// to the standby cluster, so standby start child logic won't be able to verify the child is started.
+		// to the standby cluster, so standby start child logic won't be able to verify the child has started.
+		// To resolve the issue above, we need to
+		// 1. Start child workflow and schedule the first workflow task in one transaction. Use runID to perform deduplication
+		// 2. Standby start child logic need to verify if child worflow actually started instead of relying on the information
+		// in parent mutable state.
 		return nil
 	}
 
