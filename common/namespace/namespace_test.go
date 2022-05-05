@@ -137,10 +137,8 @@ func Test_GetRetentionDays(t *testing.T) {
 func TestNamespace_GetCustomData(t *testing.T) {
 	base := base(t)
 	ns := base.Clone(namespace.WithData("foo", "bar"))
-	data := ns.GetCustomData()
-	assert.Equal(t, "bar", data["foo"])
-	assert.Equal(t, 1, len(data))
-	data["foo_test"] = "bar_test"
-	data2 := ns.GetCustomData()
-	assert.Equal(t, 1, len(data2))
+	data := ns.GetCustomData("foo")
+	assert.Equal(t, "bar", data)
+	data2 := ns.GetCustomData("fake")
+	assert.Equal(t, "", data2)
 }
