@@ -224,12 +224,11 @@ func (ns *Namespace) ReplicationPolicy() ReplicationPolicy {
 	return ReplicationPolicyOneCluster
 }
 
-func (ns *Namespace) GetCustomData() map[string]string {
-	res := make(map[string]string, len(ns.info.Data))
-	for k, v := range ns.info.Data {
-		res[k] = v
+func (ns *Namespace) GetCustomData(key string) string {
+	if ns.info.Data == nil {
+		return ""
 	}
-	return res
+	return ns.info.Data[key]
 }
 
 // Len return length
