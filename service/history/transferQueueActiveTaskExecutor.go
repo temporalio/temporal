@@ -451,7 +451,8 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 		default:
-			failedCause = enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED
+			t.logger.Error("Unexpected error type returned from RequestCancelWorkflowExecution API call.", tag.ErrorType(err), tag.Error(err))
+			return err
 		}
 		return t.requestCancelExternalExecutionFailed(
 			ctx,
@@ -571,7 +572,8 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 		default:
-			failedCause = enumspb.SIGNAL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED
+			t.logger.Error("Unexpected error type returned from SignalWorkflowExecution API call.", tag.ErrorType(err), tag.Error(err))
+			return err
 		}
 		return t.signalExternalExecutionFailed(
 			ctx,
@@ -739,6 +741,10 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 	)
 	if err != nil {
 		t.logger.Debug("Failed to start child workflow execution", tag.Error(err))
+		if common.IsServiceTransientError(err) || common.IsContextDeadlineExceededErr(err) {
+			// for retryable error just return
+			return err
+		}
 		var failedCause enumspb.StartChildWorkflowExecutionFailedCause
 		switch err.(type) {
 		case *serviceerror.WorkflowExecutionAlreadyStarted:
@@ -746,7 +752,8 @@ func (t *transferQueueActiveTaskExecutor) processStartChildExecution(
 		case *serviceerror.NamespaceNotFound:
 			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND
 		default:
-			failedCause = enumspb.START_CHILD_WORKFLOW_EXECUTION_FAILED_CAUSE_UNSPECIFIED
+			t.logger.Error("Unexpected error type returned from StartWorkflowExecution API call for child workflow.", tag.ErrorType(err), tag.Error(err))
+			return err
 		}
 
 		return t.recordStartChildExecutionFailed(
