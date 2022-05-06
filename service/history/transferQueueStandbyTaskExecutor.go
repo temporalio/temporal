@@ -278,41 +278,30 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		}
 
 		// verify if parent got the completion event
-		replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
-		if replyToParentWorkflow {
-			_, err := t.historyClient.RecordChildExecutionCompleted(ctx, &historyservice.RecordChildExecutionCompletedRequest{
+		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+		if verifyCompletionRecorded {
+			_, err := t.historyClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
 				WorkflowExecution: &commonpb.WorkflowExecution{
 					WorkflowId: executionInfo.ParentWorkflowId,
 					RunId:      executionInfo.ParentRunId,
 				},
-				ParentInitiatedId:      executionInfo.ParentInitiatedId,
-				ParentInitiatedVersion: executionInfo.ParentInitiatedVersion,
 				CompletedExecution: &commonpb.WorkflowExecution{
 					WorkflowId: transferTask.WorkflowID,
 					RunId:      transferTask.RunID,
 				},
-				Clock:              executionInfo.ParentClock,
-				CompletionEvent:    completionEvent,
-				VerifyRecordedOnly: true,
+				ParentInitiatedId:      executionInfo.ParentInitiatedId,
+				ParentInitiatedVersion: executionInfo.ParentInitiatedVersion,
+				Clock:                  executionInfo.ParentClock,
 			})
 			switch err.(type) {
 			case nil:
-				// noop
 				return nil, nil
 			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 				return nil, nil
 			case *serviceerrors.WorkflowNotReady:
-				return &struct{}{}, nil
-			case *serviceerror.NamespaceNotActive:
-				// it may happen duriong rollout and talking to an old history server
-				// DO NOT return the error directly here,
-				// the error handling logic in task executable will drop this task
-				// if the error is namespace not active and the task is pending for too long
-				return &struct{}{}, nil
+				return nil, consts.ErrTaskRetry
 			default:
-				// parent workflow is not ready or we encounter some unknown error
-				// in either case, we retry
 				return nil, err
 			}
 		}
@@ -329,7 +318,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			standbyTaskPostActionNoOp, // no-op since we are waiting for another shard
+			standbyTaskPostActionNoOp,
 			standbyTransferTaskPostActionTaskDiscarded,
 		),
 	)

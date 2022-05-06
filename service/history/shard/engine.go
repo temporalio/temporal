@@ -69,6 +69,7 @@ type (
 		ResetWorkflowExecution(ctx context.Context, request *historyservice.ResetWorkflowExecutionRequest) (*historyservice.ResetWorkflowExecutionResponse, error)
 		ScheduleWorkflowTask(ctx context.Context, request *historyservice.ScheduleWorkflowTaskRequest) error
 		RecordChildExecutionCompleted(ctx context.Context, request *historyservice.RecordChildExecutionCompletedRequest) error
+		VerifyChildExecutionCompletionRecorded(ctx context.Context, request *historyservice.VerifyChildExecutionCompletionRecordedRequest) error
 		ReplicateEventsV2(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error
 		SyncShardStatus(ctx context.Context, request *historyservice.SyncShardStatusRequest) error
 		SyncActivity(ctx context.Context, request *historyservice.SyncActivityRequest) error

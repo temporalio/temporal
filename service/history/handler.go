@@ -1205,6 +1205,45 @@ func (h *Handler) RecordChildExecutionCompleted(ctx context.Context, request *hi
 	return &historyservice.RecordChildExecutionCompletedResponse{}, nil
 }
 
+func (h *Handler) VerifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+) (_ *historyservice.VerifyChildExecutionCompletionRecordedResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	if request.WorkflowExecution == nil {
+		return nil, h.convertError(errWorkflowExecutionNotSet)
+	}
+
+	workflowExecution := request.WorkflowExecution
+	workflowID := workflowExecution.GetWorkflowId()
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+	engine, err := shardContext.GetEngineWithContext(ctx)
+	if err != nil {
+		return nil, h.convertError(err)
+	}
+
+	err2 := engine.VerifyChildExecutionCompletionRecorded(ctx, request)
+	if err2 != nil {
+		return nil, h.convertError(err2)
+	}
+
+	return &historyservice.VerifyChildExecutionCompletionRecordedResponse{}, nil
+}
+
 // ResetStickyTaskQueue reset the volatile information in mutable state of a given workflow.
 // Volatile information are the information related to client, such as:
 // 1. StickyTaskQueue

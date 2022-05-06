@@ -2156,40 +2156,18 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	completionRequest *historyservice.RecordChildExecutionCompletedRequest,
 ) error {
 
-	namespaceID := namespace.ID(completionRequest.GetNamespaceId())
-	if completionRequest.VerifyRecordedOnly {
-		if err := validateNamespaceUUID(namespaceID); err != nil {
-			return err
-		}
-	} else {
-		if _, err := e.getActiveNamespaceEntry(namespaceID); err != nil {
-			return err
-		}
+	_, err := e.getActiveNamespaceEntry(namespace.ID(completionRequest.GetNamespaceId()))
+	if err != nil {
+		return err
 	}
 
 	parentInitiatedID := completionRequest.ParentInitiatedId
 	parentInitiatedVersion := completionRequest.ParentInitiatedVersion
-	versionHistoryItem := versionhistory.NewVersionHistoryItem(parentInitiatedID, parentInitiatedVersion)
 
-	errMutableStateNotReady := serviceerrors.NewWorkflowNotReady("Workflow state is not ready to handle the request.")
-	errPendingChildNotFound := serviceerror.NewNotFound("Pending child execution not found.")
-
-	err := e.updateWorkflow(
+	return e.updateWorkflow(
 		ctx,
 		completionRequest.Clock,
-		func(mutableState workflow.MutableState) bool {
-			if parentInitiatedVersion != 0 {
-				_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-					mutableState.GetExecutionInfo().GetVersionHistories(),
-					versionHistoryItem,
-				)
-				return err == nil
-			}
-			// if initiated version is 0, it means the namespace is local or
-			// the caller has old version and does sent the info.
-			// in either case, fallback to comparing next eventID
-			return parentInitiatedID < mutableState.GetNextEventID()
-		},
+		api.HistoryEventConsistencyPredicate(parentInitiatedID, parentInitiatedVersion),
 		definition.NewWorkflowKey(
 			completionRequest.NamespaceId,
 			completionRequest.WorkflowExecution.WorkflowId,
@@ -2201,67 +2179,23 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				return nil, consts.ErrWorkflowCompleted
 			}
 
-			// the consistencyPredicate above already reloaded mutable state if necessary,
-			// we don't need to worry about stale case here.
-			if parentInitiatedVersion != 0 {
-				versionHistoryies := mutableState.GetExecutionInfo().GetVersionHistories()
-				if _, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-					versionHistoryies,
-					versionHistoryItem,
-				); err != nil {
-					return nil, errMutableStateNotReady
-				}
-
-				// check if on current branch
-				currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistoryies)
-				if err != nil {
-					return nil, err
-				}
-				if !versionhistory.ContainsVersionHistoryItem(
-					currentVersionHistory,
-					versionHistoryItem,
-				) {
-					// found on non-current branch
-					return nil, errPendingChildNotFound
-				}
-
-				// found on current branch, continue the existing check
-			} else {
-				if parentInitiatedID < mutableState.GetNextEventID() {
-					return nil, errMutableStateNotReady
-				}
-
-				// since there's no version, we have to assume the event is on the current branch
+			onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
+			if err != nil || !onCurrentBranch {
+				return nil, consts.ErrChildExecutionNotFound
 			}
 
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
-			if !isRunning {
-				if completionRequest.VerifyRecordedOnly {
-					// confirmed that child completion has been recorded
-					return &api.UpdateWorkflowAction{
-						Noop: true,
-					}, nil
-				}
-				return nil, errPendingChildNotFound
-			}
-
-			if ci.StartedId == common.EmptyEventID {
-				return nil, errMutableStateNotReady
+			if !isRunning || ci.StartedId == common.EmptyEventID {
+				return nil, consts.ErrChildExecutionNotFound
 			}
 
 			completedExecution := completionRequest.CompletedExecution
 			if ci.GetStartedWorkflowId() != completedExecution.GetWorkflowId() {
-				// this can happen since we may not have the initiated version
-				return nil, errPendingChildNotFound
+				// this can only happen since when we don't have the initiated version
+				return nil, consts.ErrChildExecutionNotFound
 			}
 
-			if completionRequest.VerifyRecordedOnly {
-				// confirmed that child completion is not recorded yet
-				return nil, errMutableStateNotReady
-			}
-
-			var err error
 			completionEvent := completionRequest.CompletionEvent
 			switch completionEvent.GetEventType() {
 			case enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED:
@@ -2289,22 +2223,64 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 				CreateWorkflowTask: true,
 			}, nil
 		})
+}
 
-	// TODO: we need a special error for workflow not found so we can check for it directly
-	if _, ok := err.(*serviceerror.NotFound); ok &&
-		err != errPendingChildNotFound &&
-		err != consts.ErrWorkflowCompleted {
-		// workflow not found error, verification logic need to keep waiting in this case
-		// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
-		return errMutableStateNotReady
+func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+) (retError error) {
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if err := validateNamespaceUUID(namespaceID); err != nil {
+		return err
 	}
 
-	// this is for compatibility, since old caller (active close execution task) can't handle workflow not ready error.
-	if err == errMutableStateNotReady && !completionRequest.VerifyRecordedOnly {
-		err = errPendingChildNotFound
+	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
+		ctx,
+		request.Clock,
+		api.HistoryEventConsistencyPredicate(request.ParentInitiatedId, request.ParentInitiatedVersion),
+		definition.NewWorkflowKey(
+			request.NamespaceId,
+			request.WorkflowExecution.WorkflowId,
+			request.WorkflowExecution.RunId,
+		),
+	)
+	if err != nil {
+		if _, ok := err.(*serviceerror.NotFound); ok {
+			// workflow not found error, verification logic need to keep waiting in this case
+			// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
+			return consts.ErrWorkflowNotReady
+		}
+		return err
+	}
+	defer func() { workflowContext.GetReleaseFn()(retError) }()
+
+	mutableState := workflowContext.GetMutableState()
+	if !mutableState.IsWorkflowExecutionRunning() {
+		return consts.ErrWorkflowCompleted
 	}
 
-	return err
+	onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, request.ParentInitiatedId, request.ParentInitiatedVersion)
+	if err != nil {
+		// initiated event not found on any branch
+		return consts.ErrWorkflowNotReady
+	}
+
+	if !onCurrentBranch {
+		return consts.ErrChildExecutionNotFound
+	}
+
+	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
+	if isRunning {
+		if ci.StartedId != common.EmptyEventID &&
+			ci.GetStartedWorkflowId() != request.CompletedExecution.GetWorkflowId() {
+			// this can happen since we may not have the initiated version
+			return consts.ErrChildExecutionNotFound
+		}
+
+		return consts.ErrWorkflowNotReady
+	}
+
+	return nil
 }
 
 func (e *historyEngineImpl) ReplicateEventsV2(
@@ -3231,4 +3207,39 @@ func (e *historyEngineImpl) setActivityTaskRunID(
 	}
 	token.RunId = runID
 	return nil
+}
+
+func historyEventOnCurrentBranch(
+	mutableState workflow.MutableState,
+	eventID int64,
+	eventVersion int64,
+) (bool, error) {
+	if eventVersion == 0 {
+		if eventID < mutableState.GetNextEventID() {
+			return false, &serviceerror.NotFound{Message: "History event not found"}
+		}
+
+		// there's no version, assume the event is on the current branch
+		return true, nil
+	}
+
+	versionHistoryies := mutableState.GetExecutionInfo().GetVersionHistories()
+	versionHistoryItem := versionhistory.NewVersionHistoryItem(eventID, eventVersion)
+	if _, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+		versionHistoryies,
+		versionHistoryItem,
+	); err != nil {
+		return false, &serviceerror.NotFound{Message: "History event not found"}
+	}
+
+	// check if on current branch
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(versionHistoryies)
+	if err != nil {
+		return false, err
+	}
+
+	return versionhistory.ContainsVersionHistoryItem(
+		currentVersionHistory,
+		versionHistoryItem,
+	), nil
 }

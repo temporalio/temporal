@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -336,14 +335,13 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 				WorkflowId: task.WorkflowID,
 				RunId:      task.RunID,
 			},
-			Clock:              parentClock,
-			CompletionEvent:    completionEvent,
-			VerifyRecordedOnly: false,
+			Clock:           parentClock,
+			CompletionEvent: completionEvent,
 		})
 		switch err.(type) {
 		case nil:
 			// noop
-		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound, *serviceerrors.WorkflowNotReady:
+		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 			// parent gone, noop
 		default:
 			return err

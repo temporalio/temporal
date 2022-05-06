@@ -169,6 +169,9 @@ service HistoryService {
     rpc RecordChildExecutionCompleted (RecordChildExecutionCompletedRequest) returns (RecordChildExecutionCompletedResponse) {
     }
 
+    rpc VerifyChildExecutionCompletionRecorded (VerifyChildExecutionCompletionRecordedRequest) returns (VerifyChildExecutionCompletionRecordedResponse) {
+    }
+
     // DescribeWorkflowExecution returns information about the specified workflow execution.
     rpc DescribeWorkflowExecution (DescribeWorkflowExecutionRequest) returns (DescribeWorkflowExecutionResponse) {
     }
