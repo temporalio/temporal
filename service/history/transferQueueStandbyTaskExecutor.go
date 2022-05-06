@@ -295,9 +295,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 				Clock:                  executionInfo.ParentClock,
 			})
 			switch err.(type) {
-			case nil:
-				return nil, nil
-			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 				return nil, nil
 			case *serviceerrors.WorkflowNotReady:
 				return &verifyChildCompletionRecordedInfo{}, nil

@@ -437,7 +437,7 @@ func (c *metricClient) VerifyChildExecutionCompletionRecorded(
 	opts ...grpc.CallOption,
 ) (_ *historyservice.VerifyChildExecutionCompletionRecordedResponse, retError error) {
 
-	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientRecordChildExecutionCompletedScope)
+	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientVerifyChildExecutionCompletionRecordedScope)
 	defer func() {
 		c.finishMetricsRecording(scope, stopwatch, retError)
 	}()
