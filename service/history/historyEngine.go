@@ -2237,7 +2237,11 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		request.Clock,
-		api.HistoryEventConsistencyPredicate(request.ParentInitiatedId, request.ParentInitiatedVersion),
+		// it's ok we have stale state when doing verification,
+		// the logic will return WorkflowNotReady error and the caller will retry
+		// this can prevent keep reloading mutable state when there's a replication lag
+		// in parent shard.
+		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
 			request.WorkflowExecution.WorkflowId,
