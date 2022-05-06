@@ -3215,7 +3215,7 @@ func historyEventOnCurrentBranch(
 	eventVersion int64,
 ) (bool, error) {
 	if eventVersion == 0 {
-		if eventID < mutableState.GetNextEventID() {
+		if eventID >= mutableState.GetNextEventID() {
 			return false, &serviceerror.NotFound{Message: "History event not found"}
 		}
 
