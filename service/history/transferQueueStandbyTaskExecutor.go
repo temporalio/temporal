@@ -300,7 +300,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 				return nil, nil
 			case *serviceerrors.WorkflowNotReady:
-				return nil, consts.ErrTaskRetry
+				return &verifyChildCompletionRecordedInfo{}, nil
 			default:
 				return nil, err
 			}

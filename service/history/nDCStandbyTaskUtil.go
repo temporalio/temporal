@@ -110,6 +110,8 @@ type (
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
 	}
+
+	verifyChildCompletionRecordedInfo struct{}
 )
 
 func newHistoryResendInfo(

@@ -2192,7 +2192,7 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 
 			completedExecution := completionRequest.CompletedExecution
 			if ci.GetStartedWorkflowId() != completedExecution.GetWorkflowId() {
-				// this can only happen since when we don't have the initiated version
+				// this can only happen when we don't have the initiated version
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
