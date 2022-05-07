@@ -368,7 +368,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		}
 	}
 
-	return t.processParentClosePolicy(
+	err = t.processParentClosePolicy(
 		ctx,
 		task.GetNamespaceID(),
 		namespaceName.String(),
@@ -378,6 +378,13 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		},
 		children,
 	)
+
+	if err != nil {
+		// This is some retryable error, not NotFound or NamespaceNotFound.
+		return err
+	}
+
+	return nil
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
@@ -1453,18 +1460,18 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 	}
 
 	for _, childInfo := range childInfos {
-		if err := t.applyParentClosePolicy(
-			ctx,
-			&parentExecution,
-			childInfo,
-		); err != nil {
-			switch err.(type) {
-			case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
-				scope.IncCounter(metrics.ParentClosePolicyProcessorFailures)
-				return err
-			}
+		err := t.applyParentClosePolicy(ctx, &parentExecution, childInfo)
+		switch err.(type) {
+		case nil:
+			scope.IncCounter(metrics.ParentClosePolicyProcessorSuccess)
+		case *serviceerror.NotFound:
+			// If child execution is deleted there is nothing to close.
+		case *serviceerror.NamespaceNotFound:
+			// If child namespace is deleted there is nothing to close.
+		default:
+			scope.IncCounter(metrics.ParentClosePolicyProcessorFailures)
+			return err
 		}
-		scope.IncCounter(metrics.ParentClosePolicyProcessorSuccess)
 	}
 	return nil
 }
@@ -1481,14 +1488,10 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
 		childNamespaceID, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-		switch err.(type) {
-		case nil:
-		case *serviceerror.NamespaceNotFound:
-			// If child namespace is deleted there is nothing to close.
-			return nil
-		default:
+		if err != nil {
 			return err
 		}
+
 		_, err = t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceId: childNamespaceID.String(),
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
@@ -1509,12 +1512,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 		childNamespaceID, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-		switch err.(type) {
-		case nil:
-		case *serviceerror.NamespaceNotFound:
-			// If child namespace is deleted there is nothing to close.
-			return nil
-		default:
+		if err != nil {
 			return err
 		}
 
@@ -1536,9 +1534,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	default:
-		return serviceerror.NewInternal(
-			fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy),
-		)
+		return serviceerror.NewInternal(fmt.Sprintf("unknown parent close policy: %v", childInfo.ParentClosePolicy))
 	}
 }
 
