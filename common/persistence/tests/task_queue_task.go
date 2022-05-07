@@ -35,7 +35,7 @@ import (
 	"github.com/stretchr/testify/suite"
 	enumspb "go.temporal.io/api/enums/v1"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	p "go.temporal.io/server/common/persistence"
@@ -345,7 +345,7 @@ func (s *TaskQueueTaskSuite) randomTask(
 			ScheduleId:  rand.Int63(),
 			CreateTime:  now,
 			ExpiryTime:  timestamp.TimePtr(now.Add(s.taskTTL)),
-			Clock: &clockpb.ShardClock{
+			Clock: &clockspb.ShardClock{
 				Id:    rand.Int31(),
 				Clock: rand.Int63(),
 			},

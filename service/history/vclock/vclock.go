@@ -29,22 +29,22 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 )
 
 func NewShardClock(
 	shardID int32,
 	clock int64,
-) *clockpb.ShardClock {
-	return &clockpb.ShardClock{
+) *clockspb.ShardClock {
+	return &clockspb.ShardClock{
 		Id:    shardID,
 		Clock: clock,
 	}
 }
 
 func HappensBefore(
-	clock1 *clockpb.ShardClock,
-	clock2 *clockpb.ShardClock,
+	clock1 *clockspb.ShardClock,
+	clock2 *clockspb.ShardClock,
 ) (bool, error) {
 	compare, err := Compare(clock1, clock2)
 	if err != nil {
@@ -54,8 +54,8 @@ func HappensBefore(
 }
 
 func Compare(
-	clock1 *clockpb.ShardClock,
-	clock2 *clockpb.ShardClock,
+	clock1 *clockspb.ShardClock,
+	clock2 *clockspb.ShardClock,
 ) (int, error) {
 	if clock1.GetId() != clock2.GetId() {
 		return 0, serviceerror.NewInternal(fmt.Sprintf(

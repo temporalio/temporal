@@ -28,6 +28,7 @@ package elasticsearch
 
 import (
 	"github.com/xwb1989/sqlparser"
+
 	"go.temporal.io/server/common/persistence/visibility/store/query"
 )
 

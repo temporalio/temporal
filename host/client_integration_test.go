@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log/tag"
@@ -710,7 +711,7 @@ func (s *clientIntegrationSuite) Test_ActivityTimeouts() {
 	s.NoError(timeoutErr.LastHeartbeatDetails(&v))
 	s.Equal(2, v)
 
-	//s.printHistory(id, workflowRun.GetRunID())
+	// s.printHistory(id, workflowRun.GetRunID())
 }
 
 // This test simulates workflow try to complete itself while there is buffered event.

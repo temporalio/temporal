@@ -42,21 +42,13 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
-	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/visibility/manager"
-	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/service/history/api"
-	"go.temporal.io/server/service/history/api/signalwithstart"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
-
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
+	tokenspb "go.temporal.io/server/api/token/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
@@ -69,15 +61,22 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
+	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/api"
+	"go.temporal.io/server/service/history/api/signalwithstart"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
 )
@@ -2373,7 +2372,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 func (e *historyEngineImpl) updateWorkflow(
 	ctx context.Context,
-	reqClock *clockpb.ShardClock,
+	reqClock *clockspb.ShardClock,
 	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action api.UpdateWorkflowActionFunc,
@@ -2394,7 +2393,7 @@ func (e *historyEngineImpl) updateWorkflow(
 
 func (e *historyEngineImpl) updateWorkflowWithNew(
 	ctx context.Context,
-	reqClock *clockpb.ShardClock,
+	reqClock *clockspb.ShardClock,
 	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action api.UpdateWorkflowActionFunc,

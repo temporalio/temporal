@@ -28,6 +28,8 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/log"
@@ -35,7 +37,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	workercommon "go.temporal.io/server/service/worker/common"
-	"go.uber.org/fx"
 )
 
 type (

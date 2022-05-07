@@ -31,6 +31,7 @@ import (
 	"reflect"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/persistence/visibility/store"
 )
