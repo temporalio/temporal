@@ -50,6 +50,13 @@ type (
 		// as that will lead to a cycle dependency issue between shard and workflow package.
 		CreateProcessor(shard shard.Context, engine shard.Engine, cache workflow.Cache) Processor
 	}
+
+	ReplicationExecutorFactory interface {
+		CreateExecutor(shard shard.Context, engine shard.Engine, cache workflow.Cache) ReplicationExecutor
+	}
+
+	ReplicationExecutor interface {
+	}
 )
 
 const (

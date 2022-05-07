@@ -22,15 +22,24 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_processor_mock.go
 
-package history
+package replication
 
 import (
 	"context"
 	"fmt"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/client/history"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/xdc"
+	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/workflow"
+	"go.temporal.io/server/service/worker/archiver"
 
 	"go.temporal.io/server/common/persistence/serialization"
 
@@ -67,8 +76,28 @@ var (
 )
 
 type (
-	// ReplicationTaskProcessorImpl is responsible for processing replication tasks for a shard.
-	ReplicationTaskProcessorImpl struct {
+	// TaskProcessor is the interface for task processor
+	TaskProcessor interface {
+		common.Daemon
+	}
+
+	// taskProcessorFactoryImpl is to manage replication task processors
+	taskProcessorFactoryImpl struct {
+		config                        *configs.Config
+		deleteMgr                     workflow.DeleteManager
+		engine                        shard.Engine
+		eventSerializer               serialization.Serializer
+		shard                         shard.Context
+		status                        int32
+		replicationTaskFetcherFactory TaskFetcherFactory
+		workflowCache                 workflow.Cache
+
+		taskProcessorLock sync.RWMutex
+		taskProcessors    map[string]TaskProcessor
+	}
+
+	// taskProcessorImpl is responsible for processing replication tasks for a shard.
+	taskProcessorImpl struct {
 		currentCluster          string
 		sourceCluster           string
 		status                  int32
@@ -78,7 +107,7 @@ type (
 		config                  *configs.Config
 		metricsClient           metrics.Client
 		logger                  log.Logger
-		replicationTaskExecutor replicationTaskExecutor
+		replicationTaskExecutor TaskExecutor
 
 		rateLimiter quotas.RateLimiter
 
@@ -98,27 +127,185 @@ type (
 		shutdownChan  chan struct{}
 	}
 
-	// ReplicationTaskProcessor is responsible for processing replication tasks for a shard.
-	ReplicationTaskProcessor interface {
-		common.Daemon
-	}
-
 	replicationTaskRequest struct {
 		token    *replicationspb.ReplicationToken
 		respChan chan<- *replicationspb.ReplicationMessages
 	}
 )
 
-// NewReplicationTaskProcessor creates a new replication task processor.
-func NewReplicationTaskProcessor(
+func NewTaskProcessorFactory(
+	archivalClient archiver.Client,
+	config *configs.Config,
+	engine shard.Engine,
+	eventSerializer serialization.Serializer,
+	shard shard.Context,
+	replicationTaskFetcherFactory TaskFetcherFactory,
+	workflowCache workflow.Cache,
+) queues.Processor {
+	workflowDeleteManager := workflow.NewDeleteManager(
+		shard,
+		workflowCache,
+		config,
+		archivalClient,
+		shard.GetTimeSource(),
+	)
+	return &taskProcessorFactoryImpl{
+		config:                        config,
+		deleteMgr:                     workflowDeleteManager,
+		engine:                        engine,
+		eventSerializer:               eventSerializer,
+		shard:                         shard,
+		status:                        common.DaemonStatusInitialized,
+		replicationTaskFetcherFactory: replicationTaskFetcherFactory,
+		workflowCache:                 workflowCache,
+		taskProcessors:                make(map[string]TaskProcessor),
+	}
+}
+
+func (r *taskProcessorFactoryImpl) Start() {
+	if !atomic.CompareAndSwapInt32(
+		&r.status,
+		common.DaemonStatusInitialized,
+		common.DaemonStatusStarted,
+	) {
+		return
+	}
+
+	// Listen to cluster metadata and dynamically update replication processor for remote clusters.
+	r.listenToClusterMetadataChange()
+}
+
+func (r *taskProcessorFactoryImpl) Stop() {
+	if !atomic.CompareAndSwapInt32(
+		&r.status,
+		common.DaemonStatusStarted,
+		common.DaemonStatusStopped,
+	) {
+		return
+	}
+
+	r.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(r)
+	r.taskProcessorLock.Lock()
+	for _, replicationTaskProcessor := range r.taskProcessors {
+		replicationTaskProcessor.Stop()
+	}
+	r.taskProcessorLock.Unlock()
+}
+
+func (r taskProcessorFactoryImpl) Category() tasks.Category {
+	return tasks.CategoryReplication
+}
+
+func (r taskProcessorFactoryImpl) NotifyNewTasks(_ string, _ []tasks.Task) {
+	//no-op
+	return
+}
+
+func (r taskProcessorFactoryImpl) FailoverNamespace(_ map[string]struct{}) {
+	//no-op
+	return
+}
+
+func (r taskProcessorFactoryImpl) LockTaskProcessing() {
+	//no-op
+	return
+}
+
+func (r taskProcessorFactoryImpl) UnlockTaskProcessing() {
+	//no-op
+	return
+}
+
+func (r *taskProcessorFactoryImpl) listenToClusterMetadataChange() {
+	clusterMetadata := r.shard.GetClusterMetadata()
+	clusterMetadata.RegisterMetadataChangeCallback(
+		r,
+		r.handleClusterMetadataUpdate,
+	)
+}
+
+func (r *taskProcessorFactoryImpl) handleClusterMetadataUpdate(
+	oldClusterMetadata map[string]*cluster.ClusterInformation,
+	newClusterMetadata map[string]*cluster.ClusterInformation,
+) {
+	r.taskProcessorLock.Lock()
+	defer r.taskProcessorLock.Unlock()
+	currentClusterName := r.shard.GetClusterMetadata().GetCurrentClusterName()
+	for clusterName := range oldClusterMetadata {
+		if clusterName == currentClusterName {
+			continue
+		}
+		// The metadata triggers a update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
+		// The callback covers three cases:
+		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
+
+		if processor, ok := r.taskProcessors[clusterName]; ok {
+			// Case 1 and Case 3
+			processor.Stop()
+			delete(r.taskProcessors, clusterName)
+		}
+		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+			// Case 2 and Case 3
+			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
+			adminClient := r.shard.GetRemoteAdminClient(clusterName)
+			adminRetryableClient := admin.NewRetryableClient(
+				adminClient,
+				common.CreateReplicationServiceBusyRetryPolicy(),
+				common.IsResourceExhausted,
+			)
+			// Intentionally use the raw client to create its own retry policy
+			historyClient := r.shard.GetHistoryClient()
+			historyRetryableClient := history.NewRetryableClient(
+				historyClient,
+				common.CreateReplicationServiceBusyRetryPolicy(),
+				common.IsResourceExhausted,
+			)
+			nDCHistoryResender := xdc.NewNDCHistoryResender(
+				r.shard.GetNamespaceRegistry(),
+				adminRetryableClient,
+				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+					_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
+					return err
+				},
+				r.shard.GetPayloadSerializer(),
+				r.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
+				r.shard.GetLogger(),
+			)
+			replicationTaskExecutor := NewTaskExecutor(
+				r.shard,
+				r.shard.GetNamespaceRegistry(),
+				nDCHistoryResender,
+				r.engine,
+				r.deleteMgr,
+				r.workflowCache,
+				r.shard.GetMetricsClient(),
+				r.shard.GetLogger(),
+			)
+			replicationTaskProcessor := NewTaskProcessor(
+				r.shard,
+				r.engine,
+				r.config,
+				r.shard.GetMetricsClient(),
+				fetcher,
+				replicationTaskExecutor,
+				r.eventSerializer,
+			)
+			replicationTaskProcessor.Start()
+			r.taskProcessors[clusterName] = replicationTaskProcessor
+		}
+	}
+}
+
+// NewTaskProcessor creates a new replication task processor.
+func NewTaskProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	config *configs.Config,
 	metricsClient metrics.Client,
-	replicationTaskFetcher ReplicationTaskFetcher,
-	replicationTaskExecutor replicationTaskExecutor,
+	replicationTaskFetcher taskFetcher,
+	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
-) *ReplicationTaskProcessorImpl {
+) TaskProcessor {
 	shardID := shard.GetShardID()
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
 	taskRetryPolicy.SetBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID))
@@ -132,9 +319,9 @@ func NewReplicationTaskProcessor(
 	dlqRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
 	dlqRetryPolicy.SetExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
-	return &ReplicationTaskProcessorImpl{
+	return &taskProcessorImpl{
 		currentCluster:          shard.GetClusterMetadata().GetCurrentClusterName(),
-		sourceCluster:           replicationTaskFetcher.GetSourceCluster(),
+		sourceCluster:           replicationTaskFetcher.getSourceCluster(),
 		status:                  common.DaemonStatusInitialized,
 		shard:                   shard,
 		historyEngine:           historyEngine,
@@ -147,10 +334,10 @@ func NewReplicationTaskProcessor(
 			quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 { return config.ReplicationTaskProcessorShardQPS() },
 			),
-			replicationTaskFetcher.GetRateLimiter(),
+			replicationTaskFetcher.getRateLimiter(),
 		}),
 		taskRetryPolicy:      taskRetryPolicy,
-		requestChan:          replicationTaskFetcher.GetRequestChan(),
+		requestChan:          replicationTaskFetcher.getRequestChan(),
 		syncShardChan:        make(chan *replicationspb.SyncShardStatus, 1),
 		shutdownChan:         make(chan struct{}),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
@@ -160,7 +347,7 @@ func NewReplicationTaskProcessor(
 }
 
 // Start starts the processor
-func (p *ReplicationTaskProcessorImpl) Start() {
+func (p *taskProcessorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&p.status,
 		common.DaemonStatusInitialized,
@@ -175,7 +362,7 @@ func (p *ReplicationTaskProcessorImpl) Start() {
 }
 
 // Stop stops the processor
-func (p *ReplicationTaskProcessorImpl) Stop() {
+func (p *taskProcessorImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&p.status,
 		common.DaemonStatusStarted,
@@ -189,7 +376,7 @@ func (p *ReplicationTaskProcessorImpl) Stop() {
 	p.logger.Info("ReplicationTaskProcessor shutting down.")
 }
 
-func (p *ReplicationTaskProcessorImpl) eventLoop() {
+func (p *taskProcessorImpl) eventLoop() {
 	shardID := p.shard.GetShardID()
 
 	syncShardTimer := time.NewTimer(backoff.JitDuration(
@@ -244,7 +431,7 @@ func (p *ReplicationTaskProcessorImpl) eventLoop() {
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError error) {
+func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 	defer func() {
 		if retError != nil {
 			p.maxRxReceivedTaskID = p.maxRxProcessedTaskID
@@ -285,7 +472,7 @@ func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError e
 	return nil
 }
 
-func (p *ReplicationTaskProcessorImpl) applyReplicationTask(
+func (p *taskProcessorImpl) applyReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
 	err := p.handleReplicationTask(replicationTask)
@@ -309,7 +496,7 @@ func (p *ReplicationTaskProcessorImpl) applyReplicationTask(
 	return nil
 }
 
-func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
+func (p *taskProcessorImpl) handleSyncShardStatus(
 	status *replicationspb.SyncShardStatus,
 ) error {
 
@@ -330,20 +517,20 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 	})
 }
 
-func (p *ReplicationTaskProcessorImpl) handleReplicationTask(
+func (p *taskProcessorImpl) handleReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
 	_ = p.rateLimiter.Wait(context.Background())
 
 	operation := func() error {
-		scope, err := p.replicationTaskExecutor.execute(replicationTask, false)
+		scope, err := p.replicationTaskExecutor.Execute(replicationTask, false)
 		p.emitTaskMetrics(scope, err)
 		return err
 	}
 	return backoff.Retry(operation, p.taskRetryPolicy, p.isRetryableError)
 }
 
-func (p *ReplicationTaskProcessorImpl) handleReplicationDLQTask(
+func (p *taskProcessorImpl) handleReplicationDLQTask(
 	request *persistence.PutReplicationTaskToDLQRequest,
 ) error {
 
@@ -375,7 +562,7 @@ func (p *ReplicationTaskProcessorImpl) handleReplicationDLQTask(
 	}, p.dlqRetryPolicy, p.isRetryableError)
 }
 
-func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
+func (p *taskProcessorImpl) convertTaskToDLQTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch replicationTask.TaskType {
@@ -432,7 +619,7 @@ func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
+func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	p.requestChan <- &replicationTaskRequest{
 		token: &replicationspb.ReplicationToken{
@@ -475,7 +662,7 @@ func (p *ReplicationTaskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
+func (p *taskProcessorImpl) cleanupReplicationTasks() error {
 
 	clusterMetadata := p.shard.GetClusterMetadata()
 	currentCluster := clusterMetadata.GetCurrentClusterName()
@@ -519,7 +706,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 	return err
 }
 
-func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, err error) {
+func (p *taskProcessorImpl) emitTaskMetrics(scope int, err error) {
 	metricsScope := p.metricsClient.Scope(scope)
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		metricsScope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
@@ -556,11 +743,11 @@ func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, err error) {
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) isStopped() bool {
+func (p *taskProcessorImpl) isStopped() bool {
 	return atomic.LoadInt32(&p.status) == common.DaemonStatusStopped
 }
 
-func (p *ReplicationTaskProcessorImpl) isRetryableError(
+func (p *taskProcessorImpl) isRetryableError(
 	err error,
 ) bool {
 	if p.isStopped() {

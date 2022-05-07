@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package replication
 
 import (
 	"math/rand"
@@ -61,7 +61,7 @@ import (
 )
 
 type (
-	replicationTaskProcessorSuite struct {
+	taskProcessorSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -74,8 +74,8 @@ type (
 		mockAdminClient             *adminservicemock.MockAdminServiceClient
 		mockClusterMetadata         *cluster.MockMetadata
 		mockHistoryClient           *historyservicemock.MockHistoryServiceClient
-		mockReplicationTaskExecutor *MockreplicationTaskExecutor
-		mockReplicationTaskFetcher  *MockReplicationTaskFetcher
+		mockReplicationTaskExecutor *MockTaskExecutor
+		mockReplicationTaskFetcher  *MocktaskFetcher
 
 		mockExecutionManager *persistence.MockExecutionManager
 
@@ -83,24 +83,24 @@ type (
 		config      *configs.Config
 		requestChan chan *replicationTaskRequest
 
-		replicationTaskProcessor *ReplicationTaskProcessorImpl
+		replicationTaskProcessor *taskProcessorImpl
 	}
 )
 
-func TestReplicationTaskProcessorSuite(t *testing.T) {
-	s := new(replicationTaskProcessorSuite)
+func TestTaskProcessorSuite(t *testing.T) {
+	s := new(taskProcessorSuite)
 	suite.Run(t, s)
 }
 
-func (s *replicationTaskProcessorSuite) SetupSuite() {
+func (s *taskProcessorSuite) SetupSuite() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func (s *replicationTaskProcessorSuite) TearDownSuite() {
+func (s *taskProcessorSuite) TearDownSuite() {
 
 }
 
-func (s *replicationTaskProcessorSuite) SetupTest() {
+func (s *taskProcessorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
@@ -129,21 +129,21 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 	s.mockAdminClient = s.mockResource.RemoteAdminClient
 	s.mockClusterMetadata = s.mockResource.ClusterMetadata
 	s.mockExecutionManager = s.mockResource.ExecutionMgr
-	s.mockReplicationTaskExecutor = NewMockreplicationTaskExecutor(s.controller)
+	s.mockReplicationTaskExecutor = NewMockTaskExecutor(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	s.mockReplicationTaskFetcher = NewMockReplicationTaskFetcher(s.controller)
+	s.mockReplicationTaskFetcher = NewMocktaskFetcher(s.controller)
 	rateLimiter := quotas.NewDefaultOutgoingRateLimiter(
 		func() float64 { return 100 },
 	)
-	s.mockReplicationTaskFetcher.EXPECT().GetSourceCluster().Return(cluster.TestAlternativeClusterName).AnyTimes()
-	s.mockReplicationTaskFetcher.EXPECT().GetRequestChan().Return(s.requestChan).AnyTimes()
-	s.mockReplicationTaskFetcher.EXPECT().GetRateLimiter().Return(rateLimiter).AnyTimes()
+	s.mockReplicationTaskFetcher.EXPECT().getSourceCluster().Return(cluster.TestAlternativeClusterName).AnyTimes()
+	s.mockReplicationTaskFetcher.EXPECT().getRequestChan().Return(s.requestChan).AnyTimes()
+	s.mockReplicationTaskFetcher.EXPECT().getRateLimiter().Return(rateLimiter).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 
 	metricsClient := metrics.NoopClient
 
-	s.replicationTaskProcessor = NewReplicationTaskProcessor(
+	s.replicationTaskProcessor = NewTaskProcessor(
 		s.mockShard,
 		s.mockEngine,
 		s.config,
@@ -151,15 +151,15 @@ func (s *replicationTaskProcessorSuite) SetupTest() {
 		s.mockReplicationTaskFetcher,
 		s.mockReplicationTaskExecutor,
 		serialization.NewSerializer(),
-	)
+	).(*taskProcessorImpl)
 }
 
-func (s *replicationTaskProcessorSuite) TearDownTest() {
+func (s *taskProcessorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Stale() {
+func (s *taskProcessorSuite) TestHandleSyncShardStatus_Stale() {
 	now := timestamp.TimePtr(time.Now().Add(-2 * dropSyncShardTaskTimeThreshold))
 	err := s.replicationTaskProcessor.handleSyncShardStatus(&replicationspb.SyncShardStatus{
 		StatusTime: now,
@@ -167,7 +167,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Stale() {
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Success() {
+func (s *taskProcessorSuite) TestHandleSyncShardStatus_Success() {
 	now := timestamp.TimeNowPtrUtc()
 	s.mockEngine.EXPECT().SyncShardStatus(gomock.Any(), &historyservice.SyncShardStatusRequest{
 		SourceCluster: cluster.TestAlternativeClusterName,
@@ -181,7 +181,7 @@ func (s *replicationTaskProcessorSuite) TestHandleSyncShardStatus_Success() {
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
+func (s *taskProcessorSuite) TestHandleReplicationTask_SyncActivity() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -200,12 +200,12 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_SyncActivity()
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(task, false).Return(0, nil)
 	err := s.replicationTaskProcessor.handleReplicationTask(task)
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_History() {
+func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -239,12 +239,12 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationTask_History() {
 		VisibilityTime: &now,
 	}
 
-	s.mockReplicationTaskExecutor.EXPECT().execute(task, false).Return(0, nil)
+	s.mockReplicationTaskExecutor.EXPECT().Execute(task, false).Return(0, nil)
 	err = s.replicationTaskProcessor.handleReplicationTask(task)
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
+func (s *taskProcessorSuite) TestHandleReplicationDLQTask_SyncActivity() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -264,7 +264,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_SyncActivit
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_History() {
+func (s *taskProcessorSuite) TestHandleReplicationDLQTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -288,7 +288,7 @@ func (s *replicationTaskProcessorSuite) TestHandleReplicationDLQTask_History() {
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() {
+func (s *taskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -317,7 +317,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_SyncActivity() 
 	s.Equal(request, dlqTask)
 }
 
-func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
+func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -367,7 +367,7 @@ func (s *replicationTaskProcessorSuite) TestConvertTaskToDLQTask_History() {
 	s.Equal(request, dlqTask)
 }
 
-func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
+func (s *taskProcessorSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
 	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.Key{TaskID: ackedTaskID})
@@ -378,7 +378,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Noop() {
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
+func (s *taskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
 	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.Key{TaskID: ackedTaskID})
@@ -399,7 +399,7 @@ func (s *replicationTaskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	s.NoError(err)
 }
 
-func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_More() {
+func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -472,7 +472,7 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_More() {
 	s.Equal(time.Duration(0), s.replicationTaskProcessor.rxTaskBackoff)
 }
 
-func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_NoMore() {
+func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	namespaceID := uuid.NewRandom().String()
 	workflowID := uuid.New()
 	runID := uuid.NewRandom().String()
@@ -545,7 +545,7 @@ func (s *replicationTaskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	s.NotEqual(time.Duration(0), s.replicationTaskProcessor.rxTaskBackoff)
 }
 
-func (s *replicationTaskProcessorSuite) TestPaginationFn_Error() {
+func (s *taskProcessorSuite) TestPaginationFn_Error() {
 
 	maxRxProcessedTaskID := rand.Int63()
 	maxRxReceivedTaskID := rand.Int63()

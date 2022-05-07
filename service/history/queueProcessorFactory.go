@@ -25,6 +25,8 @@
 package history
 
 import (
+	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/service/history/replication"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -55,6 +57,10 @@ var QueueProcessorModule = fx.Options(
 		fx.Annotated{
 			Group:  queues.ProcessorFactoryFxGroup,
 			Target: NewVisibilityQueueProcessorFactory,
+		},
+		fx.Annotated{
+			Group:  queues.ProcessorFactoryFxGroup,
+			Target: NewReplicationQueueProcessorFactory,
 		},
 	),
 )
@@ -98,6 +104,16 @@ type (
 		VisibilityMgr manager.VisibilityManager
 	}
 
+	replicationQueueProcessorFactoryParams struct {
+		fx.In
+
+		SchedulerParams
+
+		ArchivalClient     archiver.Client
+		EventSerializer    serialization.Serializer
+		TaskFetcherFactory replication.TaskFetcherFactory
+	}
+
 	transferQueueProcessorFactory struct {
 		transferQueueProcessorFactoryParams
 
@@ -114,6 +130,10 @@ type (
 		visibilityQueueProcessorFactoryParams
 
 		scheduler queues.Scheduler
+	}
+
+	replicationQueueProcessorFactory struct {
+		replicationQueueProcessorFactoryParams
 	}
 )
 
@@ -261,5 +281,30 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 		workflowCache,
 		f.scheduler,
 		f.VisibilityMgr,
+	)
+}
+
+func NewReplicationQueueProcessorFactory(
+	params replicationQueueProcessorFactoryParams,
+) queues.ProcessorFactory {
+
+	return &replicationQueueProcessorFactory{
+		replicationQueueProcessorFactoryParams: params,
+	}
+}
+
+func (f *replicationQueueProcessorFactory) CreateProcessor(
+	shard shard.Context,
+	engine shard.Engine,
+	workflowCache workflow.Cache,
+) queues.Processor {
+	return replication.NewTaskProcessorFactory(
+		f.ArchivalClient,
+		f.Config,
+		engine,
+		f.EventSerializer,
+		shard,
+		f.TaskFetcherFactory,
+		workflowCache,
 	)
 }

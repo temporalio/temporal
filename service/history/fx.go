@@ -28,6 +28,8 @@ import (
 	"context"
 	"net"
 
+	"go.temporal.io/server/service/history/replication"
+
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -78,7 +80,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(ServiceResolverProvider),
 	fx.Provide(EventNotifierProvider),
-	fx.Provide(ReplicationTaskFetchersProvider),
+	fx.Provide(ReplicationTaskFetcherFactoryProvider),
 	fx.Provide(ArchivalClientProvider),
 	fx.Provide(HistoryEngineFactoryProvider),
 	fx.Provide(HandlerProvider),
@@ -132,7 +134,7 @@ func HandlerProvider(
 	hostInfoProvider membership.HostInfoProvider,
 	shardController *shard.ControllerImpl,
 	eventNotifier events.Notifier,
-	replicationTaskFetchers ReplicationTaskFetchers,
+	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 ) *Handler {
 	args := NewHandlerArgs{
 		config,
@@ -152,7 +154,7 @@ func HandlerProvider(
 		hostInfoProvider,
 		shardController,
 		eventNotifier,
-		replicationTaskFetchers,
+		replicationTaskFetcherFactory,
 	}
 	return NewHandler(args)
 }
@@ -267,13 +269,13 @@ func EventNotifierProvider(
 	)
 }
 
-func ReplicationTaskFetchersProvider(
+func ReplicationTaskFetcherFactoryProvider(
 	logger log.Logger,
 	config *configs.Config,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
-) ReplicationTaskFetchers {
-	return NewReplicationTaskFetchers(
+) replication.TaskFetcherFactory {
+	return replication.NewTaskFetcherFactory(
 		logger,
 		config,
 		clusterMetadata,
