@@ -28,8 +28,6 @@ import (
 	"context"
 	"net"
 
-	"go.temporal.io/server/service/history/replication"
-
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -60,6 +58,7 @@ import (
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	warchiver "go.temporal.io/server/service/worker/archiver"

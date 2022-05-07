@@ -30,8 +30,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"go.temporal.io/server/service/history/replication"
-
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -62,6 +60,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
