@@ -30,6 +30,7 @@ import (
 	"go.temporal.io/server/common/searchattribute"
 
 	"go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	"go.temporal.io/server/common/persistence/visibility/store/elasticsearch"

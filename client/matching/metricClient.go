@@ -30,8 +30,9 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"google.golang.org/grpc"
+
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common/log"

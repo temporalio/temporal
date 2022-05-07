@@ -43,15 +43,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/vclock"
-
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/consts"
-
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -65,6 +57,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -74,10 +67,15 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
@@ -2103,7 +2101,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-	childClock := &clockpb.ShardClock{
+	childClock := &clockspb.ShardClock{
 		Id:    rand.Int31(),
 		Clock: rand.Int63(),
 	}
@@ -2195,7 +2193,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-	childClock := &clockpb.ShardClock{
+	childClock := &clockspb.ShardClock{
 		Id:    rand.Int31(),
 		Clock: rand.Int63(),
 	}
@@ -2281,7 +2279,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-	childClock := &clockpb.ShardClock{
+	childClock := &clockspb.ShardClock{
 		Id:    rand.Int31(),
 		Clock: rand.Int63(),
 	}

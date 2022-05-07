@@ -28,9 +28,10 @@ import (
 	"context"
 	"sync"
 
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/version/check"
 	"google.golang.org/grpc"
+
+	"go.temporal.io/server/common/headers"
 )
 
 type SDKVersionInterceptor struct {

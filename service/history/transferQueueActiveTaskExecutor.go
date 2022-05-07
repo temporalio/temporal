@@ -38,9 +38,8 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -55,6 +54,7 @@ import (
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -302,7 +302,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	parentRunID := executionInfo.ParentRunId
 	parentInitiatedID := executionInfo.ParentInitiatedId
 	parentInitiatedVersion := executionInfo.ParentInitiatedVersion
-	var parentClock *clockpb.ShardClock
+	var parentClock *clockspb.ShardClock
 	if executionInfo.ParentClock != nil {
 		parentClock = vclock.NewShardClock(executionInfo.ParentClock.Id, executionInfo.ParentClock.Clock)
 	}
@@ -935,7 +935,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 	context workflow.Context,
 	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	runID string,
-	clock *clockpb.ShardClock,
+	clock *clockspb.ShardClock,
 ) error {
 
 	return t.updateWorkflowExecution(ctx, context, true,
@@ -1000,7 +1000,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	clock *clockpb.ShardClock,
+	clock *clockspb.ShardClock,
 ) error {
 
 	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
@@ -1269,7 +1269,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	targetNamespace namespace.Name,
 	childRequestID string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
-) (string, *clockpb.ShardClock, error) {
+) (string, *clockspb.ShardClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
 		&workflowservice.StartWorkflowExecutionRequest{
