@@ -253,7 +253,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		if err := t.recordWorkflowClosed(
+		if err := t.archiveVisibility(
 			ctx,
 			namespace.ID(transferTask.NamespaceID),
 			transferTask.WorkflowID,

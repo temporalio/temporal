@@ -41,10 +41,10 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-func (s *integrationSuite) TestDeleteWorkflowExecution() {
-	id := "integration-delete-workflow-test"
-	wt := "integration-delete-workflow-test-type"
-	tl := "integration-delete-workflow-test-taskqueue"
+func (s *integrationSuite) TestDeleteCompetedWorkflowExecution() {
+	id := "integration-delete-completed-workflow-test"
+	wt := "integration-delete-completed-workflow-test-type"
+	tl := "integration-delete-completed-workflow-test-taskqueue"
 	identity := "worker1"
 
 	// Start workflow execution.
@@ -88,6 +88,111 @@ func (s *integrationSuite) TestDeleteWorkflowExecution() {
 	s.NoError(err)
 
 	// Verify that workflow is completed and visibility is updated.
+	executionsCount := 0
+	for i := 0; i < 10; i++ {
+		visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+			Namespace:     s.namespace,
+			PageSize:      1,
+			NextPageToken: nil,
+			Query:         fmt.Sprintf("WorkflowId='%s'", id),
+		})
+		s.NoError(err)
+		if len(visibilityResponse.Executions) == 0 {
+			time.Sleep(100 * time.Millisecond)
+		} else {
+			executionsCount = len(visibilityResponse.Executions)
+			break
+		}
+	}
+	s.Equal(1, executionsCount)
+
+	// Delete workflow execution.
+	_, err = s.operatorClient.DeleteWorkflowExecution(NewContext(), &operatorservice.DeleteWorkflowExecutionRequest{
+		Namespace: s.namespace,
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: id,
+			RunId:      we.RunId,
+		},
+	})
+	s.NoError(err)
+
+	executionDeleted := false
+	for i := 0; i < 10; i++ {
+		// Check execution is deleted.
+		describeResponse, err := s.engine.DescribeWorkflowExecution(NewContext(), &workflowservice.DescribeWorkflowExecutionRequest{
+			Namespace: s.namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
+			},
+		})
+		if err == nil {
+			s.Logger.Warn("Execution not deleted yet")
+			time.Sleep(100 * time.Millisecond)
+			continue
+		}
+		var notFoundErr *serviceerror.NotFound
+		s.ErrorAs(err, &notFoundErr)
+		s.Nil(describeResponse)
+
+		// Check history is deleted.
+		historyResponse, err := s.engine.GetWorkflowExecutionHistory(NewContext(), &workflowservice.GetWorkflowExecutionHistoryRequest{
+			Namespace: s.namespace,
+			Execution: &commonpb.WorkflowExecution{
+				WorkflowId: id,
+				RunId:      we.RunId,
+			},
+		})
+		var invalidArgumentErr *serviceerror.InvalidArgument
+		s.ErrorAs(err, &invalidArgumentErr)
+		s.Nil(historyResponse)
+
+		// Check visibility is updated.
+		for i := 0; i < 10; i++ {
+			visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{
+				Namespace:     s.namespace,
+				PageSize:      1,
+				NextPageToken: nil,
+				Query:         fmt.Sprintf("WorkflowId='%s'", id),
+			})
+			s.NoError(err)
+			if len(visibilityResponse.Executions) != 0 {
+				time.Sleep(100 * time.Millisecond)
+			} else {
+				executionsCount = len(visibilityResponse.Executions)
+				break
+			}
+		}
+		s.Equal(0, executionsCount)
+
+		executionDeleted = true
+		break
+	}
+
+	s.True(executionDeleted)
+}
+
+func (s *integrationSuite) TestDeleteRunningWorkflowExecution() {
+	id := "integration-delete-running-workflow-test"
+	wt := "integration-delete-running-workflow-test-type"
+	tl := "integration-delete-running-workflow-test-taskqueue"
+	identity := "worker1"
+
+	// Start workflow execution.
+	we, err := s.engine.StartWorkflowExecution(NewContext(), &workflowservice.StartWorkflowExecutionRequest{
+		RequestId:           uuid.New(),
+		Namespace:           s.namespace,
+		WorkflowId:          id,
+		WorkflowType:        &commonpb.WorkflowType{Name: wt},
+		TaskQueue:           &taskqueuepb.TaskQueue{Name: tl},
+		Input:               nil,
+		WorkflowRunTimeout:  timestamp.DurationPtr(100 * time.Second),
+		WorkflowTaskTimeout: timestamp.DurationPtr(1 * time.Second),
+		Identity:            identity,
+	})
+	s.NoError(err)
+
+	// Verify that workflow is running and visibility is updated.
 	executionsCount := 0
 	for i := 0; i < 10; i++ {
 		visibilityResponse, err := s.engine.ListWorkflowExecutions(NewContext(), &workflowservice.ListWorkflowExecutionsRequest{

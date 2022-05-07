@@ -162,6 +162,7 @@ message TransferTaskInfo {
     int64 task_id = 12;
     google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
     reserved 14;
+    bool delete_on_close = 15;
 }
 
 // replication column

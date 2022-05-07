@@ -149,7 +149,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
+func (t *transferQueueTaskExecutorBase) archiveVisibility(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -260,5 +260,6 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		weCtx,
 		mutableState,
 		task.GetVersion(),
+		false,
 	)
 }

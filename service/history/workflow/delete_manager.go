@@ -53,7 +53,7 @@ import (
 type (
 	DeleteManager interface {
 		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState) error
-		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
+		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64, deleteFromOpenVisibility bool) error
 		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 		DeleteWorkflowExecutionByReplication(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 	}
@@ -132,6 +132,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	weCtx Context,
 	ms MutableState,
 	sourceTaskVersion int64,
+	deleteFromOpenVisibility bool,
 ) error {
 
 	if ms.IsWorkflowExecutionRunning() {
@@ -141,9 +142,19 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		// workflow should not be deleted. NotFound errors are ignored by task processor.
 		return consts.ErrWorkflowNotCompleted
 	}
-	completionEvent, err := ms.GetCompletionEvent(ctx)
-	if err != nil {
-		return err
+
+	var startTime *time.Time
+	var closeTime *time.Time
+	if deleteFromOpenVisibility {
+		// Although workflow execution is closed, visibility is not updated and still open.
+		// This happens when workflow execution is deleted right from CloseExecutionTask.
+		startTime = ms.GetExecutionInfo().GetStartTime()
+	} else {
+		completionEvent, err := ms.GetCompletionEvent(ctx)
+		if err != nil {
+			return err
+		}
+		closeTime = completionEvent.GetEventTime()
 	}
 
 	return m.deleteWorkflowExecutionInternal(
@@ -154,8 +165,8 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		ms,
 		sourceTaskVersion,
 		false,
-		nil,
-		completionEvent.GetEventTime(),
+		startTime,
+		closeTime,
 		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
 	)
 }
