@@ -471,7 +471,7 @@ func (v *visibilityStore) DeleteWorkflowExecution(
 			request.RunID,
 		).WithContext(ctx)
 	} else {
-		panic("both StartTime and CloseTime are nil")
+		panic("Cassandra visibility store: DeleteWorkflowExecution: both StartTime and CloseTime are nil")
 	}
 
 	if err := query.Consistency(v.lowConslevel).Exec(); err != nil {
