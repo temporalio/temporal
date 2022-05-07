@@ -38,6 +38,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 
 	clockpb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -231,11 +232,30 @@ func (t *transferQueueActiveTaskExecutor) processWorkflowTask(
 		taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
 	}
 
+	originalTaskQueue := mutableState.GetExecutionInfo().TaskQueue
 	// NOTE: do not access anything related mutable state after this lock release
 	// release the context lock since we no longer need mutable state builder and
 	// the rest of logic is making RPC call, which takes time.
 	release(nil)
-	return t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
+
+	err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
+
+	if _, ok := err.(*serviceerrors.StickyWorkerUnavailable); ok {
+		// sticky worker is unavailable, switch to original task queue
+		taskQueue = &taskqueuepb.TaskQueue{
+			// do not use task.TaskQueue which is sticky, use original task queue from mutable state
+			Name: originalTaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
+		}
+
+		// Continue to use sticky schedule_to_start timeout as TTL for the matching task. Because the schedule_to_start
+		// timeout timer task is already created which will timeout this task if no worker pick it up in 5s anyway.
+		// There is no need to reset sticky, because if this task is picked by new worker, the new worker will reset
+		// the sticky queue to a new one. However, if worker is completely down, that schedule_to_start timeout task
+		// will re-create a new non-sticky task and reset sticky.
+		err = t.pushWorkflowTask(ctx, task, taskQueue, timestamp.DurationFromSeconds(taskScheduleToStartTimeoutSeconds))
+	}
+	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) processCloseExecution(
