@@ -664,3 +664,17 @@ func (mr *MockEngineMockRecorder) VerifyChildExecutionCompletionRecorded(ctx, re
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockEngine)(nil).VerifyChildExecutionCompletionRecorded), ctx, request)
 }
+
+// VerifyFirstWorkflowTaskScheduled mocks base method.
+func (m *MockEngine) VerifyFirstWorkflowTaskScheduled(ctx context.Context, request *historyservice.VerifyFirstWorkflowTaskScheduledRequest) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyFirstWorkflowTaskScheduled", ctx, request)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// VerifyFirstWorkflowTaskScheduled indicates an expected call of VerifyFirstWorkflowTaskScheduled.
+func (mr *MockEngineMockRecorder) VerifyFirstWorkflowTaskScheduled(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockEngine)(nil).VerifyFirstWorkflowTaskScheduled), ctx, request)
+}

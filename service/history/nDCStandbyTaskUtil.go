@@ -110,6 +110,10 @@ type (
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
 	}
+
+	startChildExecutionPostActionInfo struct {
+		*historyResendInfo
+	}
 )
 
 var (

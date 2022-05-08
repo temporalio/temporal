@@ -1374,6 +1374,13 @@ func (e *historyEngineImpl) ScheduleWorkflowTask(
 	return e.workflowTaskHandler.handleWorkflowTaskScheduled(ctx, req)
 }
 
+func (e *historyEngineImpl) VerifyFirstWorkflowTaskScheduled(
+	ctx context.Context,
+	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
+) (retError error) {
+	return e.workflowTaskHandler.verifyFirstWorkflowTaskScheduled(ctx, request)
+}
+
 // RecordWorkflowTaskStarted starts a workflow task
 func (e *historyEngineImpl) RecordWorkflowTaskStarted(
 	ctx context.Context,
@@ -2229,7 +2236,8 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	defer func() { workflowContext.GetReleaseFn()(retError) }()
 
 	mutableState := workflowContext.GetMutableState()
-	if !mutableState.IsWorkflowExecutionRunning() {
+	if !mutableState.IsWorkflowExecutionRunning() &&
+		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_ZOMBIE {
 		// standby logic will stop verification as the parent has already completed
 		// and can't be blocked after failover.
 		return consts.ErrWorkflowCompleted
