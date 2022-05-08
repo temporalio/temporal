@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -251,6 +252,13 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
 	if !ok {
 		return nil
+	}
+
+	if mutableState.IsWorkflowExecutionRunning() {
+		// DeleteExecutionTask transfer task is created only if workflow is not running.
+		// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
+		// workflow should not be deleted. NotFound errors are ignored by task processor.
+		return consts.ErrWorkflowNotCompleted
 	}
 
 	return t.workflowDeleteManager.DeleteWorkflowExecution(

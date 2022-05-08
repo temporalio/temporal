@@ -174,7 +174,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
-			//no-op
+			// no-op
 		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
@@ -238,7 +238,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
-			//no-op
+			// no-op
 		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
@@ -295,12 +295,19 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 	if err != nil {
 		return err
 	}
-	return e.deleteManager.DeleteWorkflowExecutionByReplication(
+
+	namespaceEntry := mutableState.GetNamespaceEntry()
+	if namespaceEntry.ActiveClusterName() == e.shard.GetClusterMetadata().GetCurrentClusterName() {
+		return serviceerror.NewInvalidArgument("Cannot cleanup workflows in active cluster by replication")
+	}
+
+	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
 		nsID,
 		ex,
 		wfCtx,
 		mutableState,
 		lastWriteVersion,
+		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 	)
 }

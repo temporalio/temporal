@@ -97,7 +97,7 @@ func (s *integrationSuite) TestDeleteCompetedWorkflowExecution() {
 			Query:         fmt.Sprintf("WorkflowId='%s'", id),
 		})
 		s.NoError(err)
-		if len(visibilityResponse.Executions) == 0 {
+		if len(visibilityResponse.Executions) == 0 || visibilityResponse.Executions[0].Status != enumspb.WORKFLOW_EXECUTION_STATUS_COMPLETED {
 			time.Sleep(100 * time.Millisecond)
 		} else {
 			executionsCount = len(visibilityResponse.Executions)
@@ -202,7 +202,7 @@ func (s *integrationSuite) TestDeleteRunningWorkflowExecution() {
 			Query:         fmt.Sprintf("WorkflowId='%s'", id),
 		})
 		s.NoError(err)
-		if len(visibilityResponse.Executions) == 0 {
+		if len(visibilityResponse.Executions) == 0 || visibilityResponse.Executions[0].Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 			time.Sleep(100 * time.Millisecond)
 		} else {
 			executionsCount = len(visibilityResponse.Executions)

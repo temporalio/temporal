@@ -128,6 +128,13 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return serviceerror.NewInternal("Mutable state has different version but same branch token")
 	}
 
+	if mutableState.IsWorkflowExecutionRunning() {
+		// If workflow is running then just ignore DeleteHistoryEventTask timer task.
+		// This should almost never happen because DeleteHistoryEventTask is created only for closed workflows.
+		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
+		return nil
+	}
+
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(
 		ctx,
 		namespace.ID(task.GetNamespaceID()),

@@ -130,6 +130,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
 	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 		gomock.Any(),
@@ -173,6 +174,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
+	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 
 	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 		gomock.Any(),

@@ -505,7 +505,7 @@ func (s *TaskSerializer) transferCloseTaskToProto(
 		Version:                 closeTask.Version,
 		TaskId:                  closeTask.TaskID,
 		VisibilityTime:          timestamp.TimePtr(closeTask.VisibilityTimestamp),
-		DeleteOnClose:           closeTask.DeleteAfterClose,
+		DeleteAfterClose:        closeTask.DeleteAfterClose,
 	}
 }
 
@@ -521,7 +521,7 @@ func (s *TaskSerializer) transferCloseTaskFromProto(
 		VisibilityTimestamp: *closeTask.VisibilityTime,
 		TaskID:              closeTask.TaskId,
 		Version:             closeTask.Version,
-		DeleteAfterClose:    closeTask.DeleteOnClose,
+		DeleteAfterClose:    closeTask.DeleteAfterClose,
 	}
 }
 

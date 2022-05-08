@@ -30,11 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/pborman/uuid"
-
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/cluster"
-
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -118,7 +113,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
@@ -162,7 +156,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
@@ -197,7 +190,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	s.Error(err)
 }
 
-func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByReplication_OpenWorkflow() {
+func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() {
 	we := commonpb.WorkflowExecution{
 		WorkflowId: tests.WorkflowID,
 		RunId:      tests.RunID,
@@ -207,14 +200,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByReplication_Op
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
-	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
-	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{
-		State: enumsspb.WORKFLOW_EXECUTION_STATE_RUNNING,
-	})
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{StartTime: &now})
-	mockClusterMetadata := cluster.NewMockMetadata(s.controller)
-	s.mockShardContext.EXPECT().GetClusterMetadata().Return(mockClusterMetadata)
-	mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
 		definition.WorkflowKey{
@@ -229,13 +215,14 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionByReplication_Op
 	).Return(nil)
 	mockWeCtx.EXPECT().Clear()
 
-	err := s.deleteManager.DeleteWorkflowExecutionByReplication(
+	err := s.deleteManager.DeleteWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
 		we,
 		mockWeCtx,
 		mockMutableState,
 		1,
+		true,
 	)
 	s.NoError(err)
 }
@@ -249,7 +236,6 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
 
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
@@ -325,15 +311,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
 
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
-	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	completionEvent := &historypb.HistoryEvent{
-		EventId:   int64(1),
-		EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
-		EventTime: &closeTime,
-	}
-	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
 
 	// ====================== Archival mocks =======================================
 	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
