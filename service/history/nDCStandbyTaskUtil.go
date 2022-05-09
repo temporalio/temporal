@@ -112,6 +112,14 @@ type (
 	}
 )
 
+var (
+	// verifyChildCompletionRecordedInfo is the post action info returned by
+	// standby close execution task action func. The actual content of the
+	// struct doesn't matter. We just need a non-nil pointer to to indicate
+	// that the verification has failed.
+	verifyChildCompletionRecordedInfo = &struct{}{}
+)
+
 func newHistoryResendInfo(
 	lastEventID int64,
 	lastEventVersion int64,

@@ -35,6 +35,7 @@ import (
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -324,4 +325,23 @@ func FailMutableStateConsistencyPredicate(
 	mutableState workflow.MutableState,
 ) bool {
 	return false
+}
+
+func HistoryEventConsistencyPredicate(
+	eventID int64,
+	eventVersion int64,
+) MutableStateConsistencyPredicate {
+	return func(mutableState workflow.MutableState) bool {
+		if eventVersion != 0 {
+			_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+				mutableState.GetExecutionInfo().GetVersionHistories(),
+				versionhistory.NewVersionHistoryItem(eventID, eventVersion),
+			)
+			return err == nil
+		}
+		// if initiated version is 0, it means the namespace is local or
+		// the caller has old version and does not sent the info.
+		// in either case, fallback to comparing next eventID
+		return eventID < mutableState.GetNextEventID()
+	}
 }

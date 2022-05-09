@@ -28,11 +28,13 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -40,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -55,6 +58,7 @@ type (
 
 		clusterName        string
 		adminClient        adminservice.AdminServiceClient
+		historyClient      historyservice.HistoryServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
@@ -78,6 +82,7 @@ func newTransferQueueStandbyTaskExecutor(
 		),
 		clusterName:        clusterName,
 		adminClient:        shard.GetRemoteAdminClient(clusterName),
+		historyClient:      shard.GetHistoryClient(),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }
@@ -249,9 +254,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		// DO NOT REPLY TO PARENT
-		// since event replication should be done by active cluster
-		return nil, t.recordWorkflowClosed(
+		if err := t.recordWorkflowClosed(
 			ctx,
 			namespace.ID(transferTask.NamespaceID),
 			transferTask.WorkflowID,
@@ -264,7 +267,37 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			workflowHistoryLength,
 			visibilityMemo,
 			searchAttr,
-		)
+		); err != nil {
+			return nil, err
+		}
+
+		// verify if parent got the completion event
+		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+		if verifyCompletionRecorded {
+			_, err := t.historyClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+				NamespaceId: executionInfo.ParentNamespaceId,
+				ParentExecution: &commonpb.WorkflowExecution{
+					WorkflowId: executionInfo.ParentWorkflowId,
+					RunId:      executionInfo.ParentRunId,
+				},
+				ChildExecution: &commonpb.WorkflowExecution{
+					WorkflowId: transferTask.WorkflowID,
+					RunId:      transferTask.RunID,
+				},
+				ParentInitiatedId:      executionInfo.ParentInitiatedId,
+				ParentInitiatedVersion: executionInfo.ParentInitiatedVersion,
+				Clock:                  executionInfo.ParentClock,
+			})
+			switch err.(type) {
+			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+				return nil, nil
+			case *serviceerrors.WorkflowNotReady:
+				return verifyChildCompletionRecordedInfo, nil
+			default:
+				return nil, err
+			}
+		}
+		return nil, nil
 	}
 
 	return t.processTransfer(
@@ -272,8 +305,15 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
-		standbyTaskPostActionNoOp,
-	) // no op post action, since the entire workflow is finished
+		getStandbyPostActionFn(
+			transferTask,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			standbyTaskPostActionNoOp,
+			standbyTransferTaskPostActionTaskDiscarded,
+		),
+	)
 }
 
 func (t *transferQueueStandbyTaskExecutor) processCancelExecution(

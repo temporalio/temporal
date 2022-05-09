@@ -58,6 +58,11 @@ func FromStatus(st *status.Status) error {
 		case *errordetails.RetryReplicationFailure:
 			return newRetryReplication(st, errDetails)
 		}
+	case codes.FailedPrecondition:
+		switch errDetails.(type) {
+		case *errordetails.WorkflowNotReadyFailure:
+			return newWorkflowNotReady(st)
+		}
 	case codes.Unavailable:
 		switch errDetails.(type) {
 		case *errordetails.StickyWorkerUnavailableFailure:
