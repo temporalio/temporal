@@ -326,11 +326,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	// NOTE: do not access anything related mutable state after this lock release.
 	// Lock is needed if execution is about to be deleted. Otherwise, release lock immediately
 	// since mutable state builder is not needed and the rest of logic is RPC calls, which can take time.
-	if task.DeleteAfterClose {
-		defer func() { release(nil) }()
-	} else {
-		release(nil)
-	}
+	release(nil)
+
 	err = t.archiveVisibility(
 		ctx,
 		namespace.ID(task.NamespaceID),
@@ -387,16 +384,11 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	}
 
 	if task.DeleteAfterClose {
-		err = t.workflowDeleteManager.DeleteWorkflowExecution(
+		err = t.deleteExecution(
 			ctx,
-			namespace.ID(task.GetNamespaceID()),
-			workflowExecution,
-			weContext,
-			mutableState,
-			task.GetVersion(),
-			// Visibility is not updated and workflow execution is still open there (performance optimization).
-			true,
-		)
+			task,
+			// Visibility is not updated and workflow execution is still open there (performance optimization and avoid race condition for visibility tasks).
+			true)
 	}
 
 	return err

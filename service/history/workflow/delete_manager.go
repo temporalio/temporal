@@ -161,7 +161,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		ms,
 		sourceTaskVersion,
 		true,  // Archive.
-		false, // Retention is always for closed executions.
+		false, // When retention is fired, workflow execution is always closed.
 		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)
 }

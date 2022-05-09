@@ -219,6 +219,14 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	ctx context.Context,
 	task *tasks.DeleteExecutionTask,
+) error {
+	return t.deleteExecution(ctx, task, false)
+}
+
+func (t *transferQueueTaskExecutorBase) deleteExecution(
+	ctx context.Context,
+	task tasks.Task,
+	deleteFromOpenVisibility bool,
 ) (retError error) {
 
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
@@ -249,7 +257,7 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	if err != nil {
 		return err
 	}
-	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
 	if !ok {
 		return nil
 	}
@@ -268,6 +276,6 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		weCtx,
 		mutableState,
 		task.GetVersion(),
-		false,
+		deleteFromOpenVisibility,
 	)
 }
