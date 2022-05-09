@@ -150,6 +150,7 @@ message GetWorkflowExecutionRawHistoryV2Response {
     bytes next_page_token = 1;
     repeated temporal.api.common.v1.DataBlob history_batches = 2;
     temporal.server.api.history.v1.VersionHistory version_history = 3;
+    repeated int64 history_node_ids = 4;
 }
 
 message GetReplicationMessagesRequest {

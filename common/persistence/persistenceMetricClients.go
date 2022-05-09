@@ -883,6 +883,21 @@ func (p *executionPersistenceClient) AppendHistoryNodes(
 	return resp, err
 }
 
+// AppendRawHistoryNodes add a node to history node table
+func (p *executionPersistenceClient) AppendRawHistoryNodes(
+	ctx context.Context,
+	request *AppendRawHistoryNodesRequest,
+) (*AppendHistoryNodesResponse, error) {
+	p.metricClient.IncCounter(metrics.PersistenceAppendRawHistoryNodesScope, metrics.PersistenceRequests)
+	sw := p.metricClient.StartTimer(metrics.PersistenceAppendRawHistoryNodesScope, metrics.PersistenceLatency)
+	resp, err := p.persistence.AppendRawHistoryNodes(ctx, request)
+	sw.Stop()
+	if err != nil {
+		p.updateErrorMetric(metrics.PersistenceAppendRawHistoryNodesScope, err)
+	}
+	return resp, err
+}
+
 // ReadHistoryBranch returns history node data for a branch
 func (p *executionPersistenceClient) ReadHistoryBranch(
 	ctx context.Context,
