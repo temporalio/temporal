@@ -2136,7 +2136,25 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 	return e.updateWorkflow(
 		ctx,
 		completionRequest.Clock,
-		api.HistoryEventConsistencyPredicate(parentInitiatedID, parentInitiatedVersion),
+		func(mutableState workflow.MutableState) bool {
+			if !mutableState.IsWorkflowExecutionRunning() {
+				// current branch already closed, we won't perform any operation, pass the check
+				return true
+			}
+
+			onCurrentBranch, err := historyEventOnCurrentBranch(mutableState, parentInitiatedID, parentInitiatedVersion)
+			if err != nil {
+				// can't find initiated event, potential stale mutable, fail the predicate check
+				return false
+			}
+			if !onCurrentBranch {
+				// found on different branch, since we don't record completion on a different branch, pass the check
+				return true
+			}
+
+			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
+			return !(isRunning && ci.StartedId == common.EmptyEventID) // !(potential stale)
+		},
 		definition.NewWorkflowKey(
 			completionRequest.NamespaceId,
 			completionRequest.WorkflowExecution.WorkflowId,
@@ -2156,6 +2174,8 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(parentInitiatedID)
 			if !isRunning || ci.StartedId == common.EmptyEventID {
+				// note we already checked if startedID is empty (in consistency predicate)
+				// and reloaded mutable state
 				return nil, consts.ErrChildExecutionNotFound
 			}
 
