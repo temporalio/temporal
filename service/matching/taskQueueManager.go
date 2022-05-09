@@ -96,6 +96,7 @@ type (
 		DispatchQueryTask(ctx context.Context, taskID string, request *matchingservice.QueryWorkflowRequest) (*matchingservice.QueryWorkflowResponse, error)
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
+		HasPollerAfter(accessTime time.Time) bool
 		// DescribeTaskQueue returns information about the target task queue
 		DescribeTaskQueue(includeTaskQueueStatus bool) *matchingservice.DescribeTaskQueueResponse
 		String() string
@@ -344,6 +345,10 @@ func (c *taskQueueManagerImpl) GetTask(
 	identity, ok := ctx.Value(identityKey).(string)
 	if ok && identity != "" {
 		c.pollerHistory.updatePollerInfo(pollerIdentity(identity), maxDispatchPerSecond)
+		defer func() {
+			// to update timestamp when long poll ends
+			c.pollerHistory.updatePollerInfo(pollerIdentity(identity), maxDispatchPerSecond)
+		}()
 	}
 
 	namespaceEntry, err := c.namespaceRegistry.GetNamespaceByID(c.taskQueueID.namespaceID)
@@ -395,7 +400,19 @@ func (c *taskQueueManagerImpl) DispatchQueryTask(
 
 // GetAllPollerInfo returns all pollers that polled from this taskqueue in last few minutes
 func (c *taskQueueManagerImpl) GetAllPollerInfo() []*taskqueuepb.PollerInfo {
-	return c.pollerHistory.getAllPollerInfo()
+	return c.pollerHistory.getPollerInfo(time.Time{})
+}
+
+func (c *taskQueueManagerImpl) HasPollerAfter(accessTime time.Time) bool {
+	inflightPollerCount := 0
+	c.outstandingPollsLock.Lock()
+	inflightPollerCount = len(c.outstandingPollsMap)
+	c.outstandingPollsLock.Unlock()
+	if inflightPollerCount > 0 {
+		return true
+	}
+	recentPollers := c.pollerHistory.getPollerInfo(accessTime)
+	return len(recentPollers) > 0
 }
 
 func (c *taskQueueManagerImpl) CancelPoller(pollerID string) {

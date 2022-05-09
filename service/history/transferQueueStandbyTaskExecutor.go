@@ -171,25 +171,19 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 
 		executionInfo := mutableState.GetExecutionInfo()
 
-		var taskQueue *taskqueuepb.TaskQueue
-		var taskScheduleToStartTimeoutSeconds = int64(0)
-		if mutableState.GetExecutionInfo().TaskQueue != transferTask.TaskQueue {
-			// this workflowTask is an sticky workflowTask
-			// there shall already be an timer set
-			taskQueue = &taskqueuepb.TaskQueue{
-				Name: transferTask.TaskQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-			}
-			taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
-		} else {
-			taskQueue = &taskqueuepb.TaskQueue{
-				Name: transferTask.TaskQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			}
-			workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
-			taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
+		taskQueue := &taskqueuepb.TaskQueue{
+			// at standby, always use original task queue, disregards the task.TaskQueue which could be sticky
+			Name: mutableState.GetExecutionInfo().TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
-
+		workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
+		taskScheduleToStartTimeoutSeconds := int64(workflowRunTimeout.Round(time.Second).Seconds())
+		if mutableState.GetExecutionInfo().TaskQueue != transferTask.TaskQueue {
+			// Experimental: try to push sticky task as regular task with sticky timeout as TTL.
+			// workflow might be sticky before namespace become standby
+			// there shall already be a schedule_to_start timer created
+			taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
+		}
 		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
 		if !ok {
 			return nil, nil
@@ -417,6 +411,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		if childWorkflowInfo.StartedId != common.EmptyEventID {
 			return nil, nil
 		}
+		// TODO: standby logic should verify if first workflow task is scheduled or not as well?
 
 		return getHistoryResendInfo(mutableState)
 	}

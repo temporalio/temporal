@@ -63,6 +63,11 @@ func FromStatus(st *status.Status) error {
 		case *errordetails.WorkflowNotReadyFailure:
 			return newWorkflowNotReady(st)
 		}
+	case codes.Unavailable:
+		switch errDetails.(type) {
+		case *errordetails.StickyWorkerUnavailableFailure:
+			return newStickyWorkerUnavailable(st)
+		}
 	}
 
 	return serviceerror.FromStatus(st)

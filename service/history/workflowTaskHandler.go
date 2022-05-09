@@ -639,7 +639,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
+			return err
 		}
 		targetNamespaceID = targetNamespaceEntry.ID()
 	}
@@ -816,7 +816,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
+			return err
 		}
 		targetNamespace = targetNamespaceEntry.Name()
 		targetNamespaceID = targetNamespaceEntry.ID()
@@ -911,7 +911,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
+			return err
 		}
 		targetNamespaceID = targetNamespaceEntry.ID()
 	}

@@ -422,12 +422,6 @@ func (t *visibilityQueueTaskExecutor) processDeleteExecution(
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
 	defer cancel()
 
-	if task.CloseTime == nil {
-		// CloseTime is not set for workflow executions with TTL (old version).
-		// They will be deleted using Cassandra TTL and this task should be ignored.
-		return nil
-	}
-
 	request := &manager.VisibilityDeleteWorkflowExecutionRequest{
 		NamespaceID: namespace.ID(task.NamespaceID),
 		WorkflowID:  task.WorkflowID,

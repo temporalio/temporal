@@ -48,7 +48,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -5397,10 +5397,16 @@ func addSignaledEvent(builder workflow.MutableState, initiatedID int64, namespac
 	return event
 }
 
-func addStartChildWorkflowExecutionInitiatedEvent(builder workflow.MutableState, workflowTaskCompletedID int64,
-	createRequestID string, namespace namespace.Name, workflowID, workflowType, taskQueue string, input *commonpb.Payloads,
-	executionTimeout, runTimeout, taskTimeout time.Duration) (*historypb.HistoryEvent,
-	*persistencespb.ChildExecutionInfo) {
+func addStartChildWorkflowExecutionInitiatedEvent(
+	builder workflow.MutableState,
+	workflowTaskCompletedID int64,
+	createRequestID string,
+	namespace namespace.Name,
+	workflowID, workflowType, taskQueue string,
+	input *commonpb.Payloads,
+	executionTimeout, runTimeout, taskTimeout time.Duration,
+	parentClosePolicy enumspb.ParentClosePolicy,
+) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo) {
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -5413,12 +5419,13 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder workflow.MutableState,
 			WorkflowRunTimeout:       &runTimeout,
 			WorkflowTaskTimeout:      &taskTimeout,
 			Control:                  "",
+			ParentClosePolicy:        parentClosePolicy,
 		})
 	return event, cei
 }
 
 func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, workflowID, runID string,
-	workflowType string, clock *clockpb.ShardClock) *historypb.HistoryEvent {
+	workflowType string, clock *clockspb.ShardClock) *historypb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
 		namespace,
 		&commonpb.WorkflowExecution{

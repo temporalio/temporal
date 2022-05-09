@@ -31,7 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -52,7 +52,7 @@ type (
 		) (string, error)
 		GetWorkflowContext(
 			ctx context.Context,
-			reqClock *clockpb.ShardClock,
+			reqClock *clockspb.ShardClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 		) (WorkflowContext, error)
@@ -97,7 +97,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 
 func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 	ctx context.Context,
-	reqClock *clockpb.ShardClock,
+	reqClock *clockspb.ShardClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 ) (WorkflowContext, error) {
@@ -132,7 +132,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	ctx context.Context,
-	reqClock *clockpb.ShardClock,
+	reqClock *clockspb.ShardClock,
 	workflowKey definition.WorkflowKey,
 ) (WorkflowContext, error) {
 	cmpResult, err := vclock.Compare(reqClock, c.shardContext.CurrentVectorClock())

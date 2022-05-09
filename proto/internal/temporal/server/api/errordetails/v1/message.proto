@@ -51,5 +51,8 @@ message RetryReplicationFailure {
     int64 end_event_version = 7;
 }
 
+message StickyWorkerUnavailableFailure {
+}
+
 message WorkflowNotReadyFailure {    
 }
