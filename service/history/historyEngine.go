@@ -3023,10 +3023,6 @@ func (e *historyEngineImpl) RefreshWorkflowTasks(
 	defer func() { wfContext.GetReleaseFn()(retError) }()
 
 	mutableState := wfContext.GetMutableState()
-	if !mutableState.IsWorkflowExecutionRunning() {
-		return nil
-	}
-
 	mutableStateTaskRefresher := workflow.NewTaskRefresher(
 		e.shard,
 		e.shard.GetConfig(),

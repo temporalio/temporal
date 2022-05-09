@@ -1052,6 +1052,10 @@ func (c *clientImpl) RefreshWorkflowTasks(
 	opts ...grpc.CallOption,
 ) (*historyservice.RefreshWorkflowTasksResponse, error) {
 	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetRequest().GetExecution().GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
 	var response *historyservice.RefreshWorkflowTasksResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
@@ -1073,6 +1077,10 @@ func (c *clientImpl) GenerateLastHistoryReplicationTasks(
 	opts ...grpc.CallOption,
 ) (*historyservice.GenerateLastHistoryReplicationTasksResponse, error) {
 	client, err := c.getClientForWorkflowID(request.NamespaceId, request.GetExecution().GetWorkflowId())
+	if err != nil {
+		return nil, err
+	}
+
 	var response *historyservice.GenerateLastHistoryReplicationTasksResponse
 	op := func(ctx context.Context, client historyservice.HistoryServiceClient) error {
 		var err error
