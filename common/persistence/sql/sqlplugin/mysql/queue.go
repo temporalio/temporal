@@ -39,7 +39,9 @@ const (
 	templateDeleteMessageQuery       = `DELETE FROM queue WHERE queue_type = ? and message_id = ?`
 	templateRangeDeleteMessagesQuery = `DELETE FROM queue WHERE queue_type = ? and message_id > ? and message_id <= ?`
 
-	templateGetLastMessageIDQuery = `SELECT message_id FROM queue WHERE message_id >= (SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1) FOR UPDATE`
+	// Note that even though this query takes a range lock that serializes all writes, it will return multiple rows
+	// whenever more than one enqueue-er blocks. This is why we max().
+	templateGetLastMessageIDQuery = `SELECT MAX(message_id) FROM queue WHERE message_id >= (SELECT message_id FROM queue WHERE queue_type=? ORDER BY message_id DESC LIMIT 1) FOR UPDATE`
 
 	templateCreateQueueMetadataQuery = `INSERT INTO queue_metadata (queue_type, data, data_encoding, version) VALUES(:queue_type, :data, :data_encoding, :version)`
 	templateUpdateQueueMetadataQuery = `UPDATE queue_metadata SET data = :data, data_encoding = :data_encoding, version= :version+1 WHERE queue_type = :queue_type and version = :version`
@@ -118,13 +120,19 @@ func (mdb *db) GetLastEnqueuedMessageIDForUpdate(
 	ctx context.Context,
 	queueType persistence.QueueType,
 ) (int64, error) {
-	var lastMessageID int64
+	var lastMessageID *int64
 	err := mdb.conn.GetContext(ctx,
 		&lastMessageID,
 		templateGetLastMessageIDQuery,
 		queueType,
 	)
-	return lastMessageID, err
+	if lastMessageID == nil {
+		// The layer of code above us expects ErrNoRows when the queue is empty. MAX() yields
+		// null when the queue is empty, so we need to turn that into the correct error.
+		return 0, sql.ErrNoRows
+	} else {
+		return *lastMessageID, err
+	}
 }
 
 func (mdb *db) InsertIntoQueueMetadata(
