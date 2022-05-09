@@ -43,15 +43,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/service/history/queues"
-	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/vclock"
-
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/consts"
-
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
@@ -65,6 +57,7 @@ import (
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
+	"go.temporal.io/server/common/definition"
 	dc "go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -74,10 +67,15 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
+	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/tests"
+	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
 	warchiver "go.temporal.io/server/service/worker/archiver"
 	"go.temporal.io/server/service/worker/parentclosepolicy"
@@ -662,6 +660,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 
 	parentNamespaceID := "some random parent namespace ID"
 	parentInitiatedID := int64(3222)
+	parentInitiatedVersion := int64(1234)
 	parentNamespace := "some random parent namespace Name"
 	parentExecution := &commonpb.WorkflowExecution{
 		WorkflowId: "some random parent workflow ID",
@@ -682,11 +681,12 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
 			},
 			ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
-				NamespaceId: parentNamespaceID,
-				Namespace:   parentNamespace,
-				Execution:   parentExecution,
-				InitiatedId: parentInitiatedID,
-				Clock:       parentClock,
+				NamespaceId:      parentNamespaceID,
+				Namespace:        parentNamespace,
+				Execution:        parentExecution,
+				InitiatedId:      parentInitiatedID,
+				InitiatedVersion: parentInitiatedVersion,
+				Clock:            parentClock,
 			},
 		},
 	)
@@ -714,12 +714,13 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessCloseExecution_HasPare
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().RecordChildExecutionCompleted(gomock.Any(), &historyservice.RecordChildExecutionCompletedRequest{
-		NamespaceId:        parentNamespaceID,
-		WorkflowExecution:  parentExecution,
-		InitiatedId:        parentInitiatedID,
-		Clock:              parentClock,
-		CompletedExecution: &execution,
-		CompletionEvent:    event,
+		NamespaceId:            parentNamespaceID,
+		WorkflowExecution:      parentExecution,
+		ParentInitiatedId:      parentInitiatedID,
+		ParentInitiatedVersion: parentInitiatedVersion,
+		Clock:                  parentClock,
+		CompletedExecution:     &execution,
+		CompletionEvent:        event,
 	}).Return(nil, nil)
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig())
 
@@ -1825,8 +1826,20 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 
 	taskID := int64(59)
 
-	event, ci := addStartChildWorkflowExecutionInitiatedEvent(mutableState, event.GetEventId(), uuid.New(),
-		s.childNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second)
+	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
+		mutableState,
+		event.GetEventId(),
+		uuid.New(),
+		s.childNamespace,
+		childWorkflowID,
+		childWorkflowType,
+		childTaskQueueName,
+		nil,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
+	)
 
 	transferTask := &tasks.StartChildExecutionTask{
 		WorkflowKey: definition.NewWorkflowKey(
@@ -1915,6 +1928,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		1*time.Second,
 		1*time.Second,
 		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	)
 
 	transferTask := &tasks.StartChildExecutionTask{
@@ -1996,6 +2010,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Fa
 		1*time.Second,
 		1*time.Second,
 		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	)
 
 	transferTask := &tasks.StartChildExecutionTask{
@@ -2070,6 +2085,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		1*time.Second,
 		1*time.Second,
 		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	)
 
 	transferTask := &tasks.StartChildExecutionTask{
@@ -2085,7 +2101,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Su
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-	childClock := &clockpb.ShardClock{
+	childClock := &clockspb.ShardClock{
 		Id:    rand.Int31(),
 		Clock: rand.Int63(),
 	}
@@ -2161,6 +2177,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		1*time.Second,
 		1*time.Second,
 		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_TERMINATE,
 	)
 
 	transferTask := &tasks.StartChildExecutionTask{
@@ -2176,7 +2193,7 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 		InitiatedID:         event.GetEventId(),
 		VisibilityTimestamp: time.Now().UTC(),
 	}
-	childClock := &clockpb.ShardClock{
+	childClock := &clockspb.ShardClock{
 		Id:    rand.Int31(),
 		Clock: rand.Int63(),
 	}
@@ -2191,6 +2208,102 @@ func (s *transferQueueActiveTaskExecutorSuite) TestProcessStartChildExecution_Du
 
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+
+	err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Nil(err)
+}
+
+func (s *transferQueueActiveTaskExecutorSuite) TestProcessorStartChildExecution_ChildStarted_ParentClosed() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: "some random workflow ID",
+		RunId:      uuid.New(),
+	}
+	workflowType := "some random workflow type"
+	taskQueueName := "some random task queue"
+
+	childExecution := commonpb.WorkflowExecution{
+		WorkflowId: "some random child workflow ID",
+		RunId:      uuid.New(),
+	}
+	childWorkflowType := "some random child workflow type"
+	childTaskQueueName := "some random child task queue"
+
+	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
+	_, err := mutableState.AddWorkflowExecutionStartedEvent(
+		execution,
+		&historyservice.StartWorkflowExecutionRequest{
+			Attempt:     1,
+			NamespaceId: s.namespaceID.String(),
+			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
+				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
+				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
+				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
+				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
+			},
+		},
+	)
+	s.Nil(err)
+
+	di := addWorkflowTaskScheduledEvent(mutableState)
+	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
+	di.StartedID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+
+	taskID := int64(59)
+
+	event, ci := addStartChildWorkflowExecutionInitiatedEvent(
+		mutableState,
+		event.GetEventId(),
+		uuid.New(),
+		s.childNamespace,
+		childExecution.GetWorkflowId(),
+		childWorkflowType,
+		childTaskQueueName,
+		nil,
+		1*time.Second,
+		1*time.Second,
+		1*time.Second,
+		enumspb.PARENT_CLOSE_POLICY_ABANDON,
+	)
+
+	transferTask := &tasks.StartChildExecutionTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			s.namespaceID.String(),
+			execution.GetWorkflowId(),
+			execution.GetRunId(),
+		),
+		Version:             s.version,
+		TargetNamespaceID:   tests.ChildNamespaceID.String(),
+		TargetWorkflowID:    childExecution.GetWorkflowId(),
+		TaskID:              taskID,
+		InitiatedID:         event.GetEventId(),
+		VisibilityTimestamp: time.Now().UTC(),
+	}
+	childClock := &clockspb.ShardClock{
+		Id:    rand.Int31(),
+		Clock: rand.Int63(),
+	}
+	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childExecution.GetWorkflowId(), childExecution.GetRunId(), childWorkflowType, childClock)
+	ci.StartedId = event.GetEventId()
+	di = addWorkflowTaskScheduledEvent(mutableState)
+	event = addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, "some random identity")
+	di.StartedID = event.GetEventId()
+	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
+	event = addCompleteWorkflowEvent(mutableState, event.EventId, nil)
+	// Flush buffered events so real IDs get assigned
+	mutableState.FlushBufferedEvents()
+
+	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	s.mockHistoryClient.EXPECT().ScheduleWorkflowTask(gomock.Any(), &historyservice.ScheduleWorkflowTaskRequest{
+		NamespaceId: s.childNamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: childExecution.WorkflowId,
+			RunId:      childExecution.RunId,
+		},
+		IsFirstWorkflowTask: true,
+		Clock:               childClock,
+	}).Return(&historyservice.ScheduleWorkflowTaskResponse{}, nil).Times(1)
 
 	err = s.transferQueueActiveTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
@@ -2359,11 +2472,12 @@ func (s *transferQueueActiveTaskExecutorSuite) createChildWorkflowExecutionReque
 			WorkflowIdReusePolicy: attributes.WorkflowIdReusePolicy,
 		},
 		ParentExecutionInfo: &workflowspb.ParentExecutionInfo{
-			NamespaceId: task.NamespaceID,
-			Namespace:   tests.Namespace.String(),
-			Execution:   &execution,
-			InitiatedId: task.InitiatedID,
-			Clock:       vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
+			NamespaceId:      task.NamespaceID,
+			Namespace:        tests.Namespace.String(),
+			Execution:        &execution,
+			InitiatedId:      task.InitiatedID,
+			InitiatedVersion: task.Version,
+			Clock:            vclock.NewShardClock(s.mockShard.GetShardID(), task.TaskID),
 		},
 		FirstWorkflowTaskBackoff:        backoff.GetBackoffForNextScheduleNonNegative(attributes.GetCronSchedule(), now, now),
 		ContinueAsNewInitiator:          enumspb.CONTINUE_AS_NEW_INITIATOR_UNSPECIFIED,

@@ -42,7 +42,7 @@ import (
 	workflowpb "go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -1504,7 +1504,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 
 func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	parentNamespaceID namespace.ID,
-	parentClock *clockpb.ShardClock,
+	parentClock *clockspb.ShardClock,
 	execution commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
@@ -1547,9 +1547,15 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	}
 
 	if event.ParentInitiatedEventId != 0 {
-		e.executionInfo.InitiatedId = event.GetParentInitiatedEventId()
+		e.executionInfo.ParentInitiatedId = event.GetParentInitiatedEventId()
 	} else {
-		e.executionInfo.InitiatedId = common.EmptyEventID
+		e.executionInfo.ParentInitiatedId = common.EmptyEventID
+	}
+
+	if event.ParentInitiatedEventVersion != 0 {
+		e.executionInfo.ParentInitiatedVersion = event.GetParentInitiatedEventVersion()
+	} else {
+		e.executionInfo.ParentInitiatedVersion = common.EmptyVersion
 	}
 
 	e.executionInfo.ExecutionTime = timestamp.TimePtr(
@@ -3088,8 +3094,9 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 				WorkflowId: e.executionInfo.ParentWorkflowId,
 				RunId:      e.executionInfo.ParentRunId,
 			},
-			InitiatedId: e.executionInfo.InitiatedId,
-			Clock:       e.executionInfo.ParentClock,
+			InitiatedId:      e.executionInfo.ParentInitiatedId,
+			InitiatedVersion: e.executionInfo.ParentInitiatedVersion,
+			Clock:            e.executionInfo.ParentClock,
 		}
 	}
 
@@ -3242,7 +3249,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 	workflowType *commonpb.WorkflowType,
 	initiatedID int64,
 	header *commonpb.Header,
-	clock *clockpb.ShardClock,
+	clock *clockspb.ShardClock,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowStarted
@@ -3275,7 +3282,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 
 func (e *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 	event *historypb.HistoryEvent,
-	clock *clockpb.ShardClock,
+	clock *clockspb.ShardClock,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionStartedEventAttributes()

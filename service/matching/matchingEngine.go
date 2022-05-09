@@ -57,6 +57,10 @@ import (
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
 
+// If sticky poller is not seem in last 10s, we treat it as sticky worker unavailable
+// This seems aggressive, but the default sticky schedule_to_start timeout is 5s, so 10s seems reasonable.
+const stickyPollerUnavailableWindow = 10 * time.Second
+
 // Implements matching.Engine
 // TODO: Switch implementation from lock/channel based to a partitioned agent
 // to simplify code and reduce possibility of synchronization errors.
@@ -241,14 +245,6 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	taskQueueName := addRequest.TaskQueue.GetName()
 	taskQueueKind := addRequest.TaskQueue.GetKind()
 
-	// TODO: use tags
-	e.logger.Debug(
-		fmt.Sprintf("Received AddWorkflowTask for taskQueue=%v, WorkflowId=%v, RunId=%v, ScheduleToStartTimeout=%v",
-			addRequest.TaskQueue.GetName(),
-			addRequest.Execution.GetWorkflowId(),
-			addRequest.Execution.GetRunId(),
-			timestamp.DurationValue(addRequest.GetScheduleToStartTimeout())))
-
 	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
 	if err != nil {
 		return false, err
@@ -257,6 +253,13 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
 	if err != nil {
 		return false, err
+	}
+
+	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// check if sticky worker is gone, if so fail this request, caller should use original task queue
+		if !tlMgr.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
+			return false, serviceerrors.NewStickyWorkerUnavailable()
+		}
 	}
 
 	// This needs to move to history see - https://go.temporal.io/server/issues/181
@@ -542,6 +545,13 @@ func (e *matchingEngineImpl) QueryWorkflow(
 	if err != nil {
 		return nil, err
 	}
+	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
+		// check if sticky worker is gone, if so fail this request, caller should use original task queue
+		if !tlMgr.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
+			return nil, serviceerrors.NewStickyWorkerUnavailable()
+		}
+	}
+
 	taskID := uuid.New()
 	resp, err := tlMgr.DispatchQueryTask(hCtx.Context, taskID, queryRequest)
 

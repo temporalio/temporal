@@ -32,15 +32,16 @@ import (
 	"strings"
 
 	"github.com/stretchr/testify/suite"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/examples/helloworld/helloworld"
+	"google.golang.org/grpc/peer"
+
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/config"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/rpc"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/examples/helloworld/helloworld"
-	"google.golang.org/grpc/peer"
 )
 
 // HelloServer is used to implement helloworld.GreeterServer.
