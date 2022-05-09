@@ -1221,13 +1221,11 @@ func (h *Handler) VerifyChildExecutionCompletionRecorded(
 		return nil, h.convertError(errNamespaceNotSet)
 	}
 
-	if request.WorkflowExecution == nil {
+	if request.ParentExecution == nil {
 		return nil, h.convertError(errWorkflowExecutionNotSet)
 	}
 
-	workflowExecution := request.WorkflowExecution
-	workflowID := workflowExecution.GetWorkflowId()
-	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, workflowID)
+	shardContext, err := h.controller.GetShardByNamespaceWorkflow(ctx, namespaceID, request.ParentExecution.GetWorkflowId())
 	if err != nil {
 		return nil, h.convertError(err)
 	}

@@ -2244,14 +2244,15 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 		api.BypassMutableStateConsistencyPredicate,
 		definition.NewWorkflowKey(
 			request.NamespaceId,
-			request.WorkflowExecution.WorkflowId,
-			request.WorkflowExecution.RunId,
+			request.ParentExecution.WorkflowId,
+			request.ParentExecution.RunId,
 		),
 	)
 	if err != nil {
 		if _, ok := err.(*serviceerror.NotFound); ok {
 			// workflow not found error, verification logic need to keep waiting in this case
 			// if we return NotFound directly, caller can't tell if it's workflow not found or child not found
+			// standby logic will continue verification
 			return consts.ErrWorkflowNotReady
 		}
 		return err
@@ -2260,6 +2261,8 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 
 	mutableState := workflowContext.GetMutableState()
 	if !mutableState.IsWorkflowExecutionRunning() {
+		// standby logic will stop verification as the parent has already completed
+		// and can't be blocked after failover.
 		return consts.ErrWorkflowCompleted
 	}
 
@@ -2270,13 +2273,16 @@ func (e *historyEngineImpl) VerifyChildExecutionCompletionRecorded(
 	}
 
 	if !onCurrentBranch {
+		// due to conflict resolution, the initiated event may on a different branch of the workflow.
+		// we don't have to do anything and can simply return not found error. Standby logic
+		// after seeing this error will give up verification.
 		return consts.ErrChildExecutionNotFound
 	}
 
 	ci, isRunning := mutableState.GetChildExecutionInfo(request.ParentInitiatedId)
 	if isRunning {
 		if ci.StartedId != common.EmptyEventID &&
-			ci.GetStartedWorkflowId() != request.CompletedExecution.GetWorkflowId() {
+			ci.GetStartedWorkflowId() != request.ChildExecution.GetWorkflowId() {
 			// this can happen since we may not have the initiated version
 			return consts.ErrChildExecutionNotFound
 		}

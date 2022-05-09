@@ -796,7 +796,7 @@ func (c *clientImpl) VerifyChildExecutionCompletionRecorded(
 	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
 	opts ...grpc.CallOption,
 ) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
-	client, err := c.getClientForWorkflowID(request.NamespaceId, request.WorkflowExecution.WorkflowId)
+	client, err := c.getClientForWorkflowID(request.NamespaceId, request.ParentExecution.WorkflowId)
 	if err != nil {
 		return nil, err
 	}

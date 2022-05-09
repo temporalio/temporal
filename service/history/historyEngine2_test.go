@@ -1645,11 +1645,11 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExi
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
-		CompletedExecution: &commonpb.WorkflowExecution{
+		ChildExecution: &commonpb.WorkflowExecution{
 			WorkflowId: "child workflowId",
 			RunId:      "child runId",
 		},
@@ -1667,11 +1667,11 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.ParentNamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
-		CompletedExecution: &commonpb.WorkflowExecution{
+		ChildExecution: &commonpb.WorkflowExecution{
 			WorkflowId: "child workflowId",
 			RunId:      "child runId",
 		},
@@ -1703,11 +1703,11 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
-		CompletedExecution: &commonpb.WorkflowExecution{
+		ChildExecution: &commonpb.WorkflowExecution{
 			WorkflowId: "child workflowId",
 			RunId:      "child runId",
 		},
@@ -1734,11 +1734,11 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	inititatedVersion := tests.Version - 100
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
-		CompletedExecution: &commonpb.WorkflowExecution{
+		ChildExecution: &commonpb.WorkflowExecution{
 			WorkflowId: "child workflowId",
 			RunId:      "child runId",
 		},
@@ -1802,11 +1802,11 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.NamespaceID.String(),
-		WorkflowExecution: &commonpb.WorkflowExecution{
+		ParentExecution: &commonpb.WorkflowExecution{
 			WorkflowId: tests.WorkflowID,
 			RunId:      tests.RunID,
 		},
-		CompletedExecution: &commonpb.WorkflowExecution{
+		ChildExecution: &commonpb.WorkflowExecution{
 			WorkflowId: childWorkflowID,
 			RunId:      childRunID,
 		},

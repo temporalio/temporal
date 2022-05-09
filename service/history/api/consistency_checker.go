@@ -340,7 +340,7 @@ func HistoryEventConsistencyPredicate(
 			return err == nil
 		}
 		// if initiated version is 0, it means the namespace is local or
-		// the caller has old version and does sent the info.
+		// the caller has old version and does not sent the info.
 		// in either case, fallback to comparing next eventID
 		return eventID < mutableState.GetNextEventID()
 	}

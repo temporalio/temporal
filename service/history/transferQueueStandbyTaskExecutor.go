@@ -282,11 +282,11 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		if verifyCompletionRecorded {
 			_, err := t.historyClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 				NamespaceId: executionInfo.ParentNamespaceId,
-				WorkflowExecution: &commonpb.WorkflowExecution{
+				ParentExecution: &commonpb.WorkflowExecution{
 					WorkflowId: executionInfo.ParentWorkflowId,
 					RunId:      executionInfo.ParentRunId,
 				},
-				CompletedExecution: &commonpb.WorkflowExecution{
+				ChildExecution: &commonpb.WorkflowExecution{
 					WorkflowId: transferTask.WorkflowID,
 					RunId:      transferTask.RunID,
 				},
@@ -298,7 +298,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 				return nil, nil
 			case *serviceerrors.WorkflowNotReady:
-				return &verifyChildCompletionRecordedInfo{}, nil
+				return verifyChildCompletionRecordedInfo, nil
 			default:
 				return nil, err
 			}

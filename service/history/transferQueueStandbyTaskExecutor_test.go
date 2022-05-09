@@ -664,8 +664,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	s.mockArchivalMetadata.EXPECT().GetVisibilityConfig().Return(archiver.NewDisabledArchvialConfig()).Times(3)
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId:            parentNamespaceID,
-		WorkflowExecution:      parentExecution,
-		CompletedExecution:     &execution,
+		ParentExecution:        parentExecution,
+		ChildExecution:         &execution,
 		ParentInitiatedId:      parentInitiatedID,
 		ParentInitiatedVersion: parentInitiatedVersion,
 		Clock:                  parentClock,
@@ -677,8 +677,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId:            parentNamespaceID,
-		WorkflowExecution:      parentExecution,
-		CompletedExecution:     &execution,
+		ParentExecution:        parentExecution,
+		ChildExecution:         &execution,
 		ParentInitiatedId:      parentInitiatedID,
 		ParentInitiatedVersion: parentInitiatedVersion,
 		Clock:                  parentClock,
@@ -690,8 +690,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId:            parentNamespaceID,
-		WorkflowExecution:      parentExecution,
-		CompletedExecution:     &execution,
+		ParentExecution:        parentExecution,
+		ChildExecution:         &execution,
 		ParentInitiatedId:      parentInitiatedID,
 		ParentInitiatedVersion: parentInitiatedVersion,
 		Clock:                  parentClock,
