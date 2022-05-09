@@ -76,15 +76,16 @@ func NewHistoryEventsSuite(
 	store p.ExecutionStore,
 	logger log.Logger,
 ) *HistoryEventsSuite {
+	eventSerializer := serialization.NewSerializer()
 	return &HistoryEventsSuite{
 		Assertions: require.New(t),
 		store: p.NewExecutionManager(
 			store,
-			serialization.NewSerializer(),
+			eventSerializer,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
-		serializer: serialization.NewSerializer(),
+		serializer: eventSerializer,
 		logger:     logger,
 	}
 }
