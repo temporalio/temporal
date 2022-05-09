@@ -3113,7 +3113,7 @@ func (wh *WorkflowHandler) getHistory(
 		return nil, nil, err
 	}
 
-	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).RecordDistribution(metrics.HistorySize, size)
+	scope.RecordDistribution(metrics.HistorySize, size)
 
 	isLastPage := len(nextPageToken) == 0
 	if err := wh.verifyHistoryIsComplete(
@@ -3192,7 +3192,7 @@ func (wh *WorkflowHandler) getHistoryReverse(
 		return nil, nil, 0, err
 	}
 
-	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).RecordDistribution(metrics.HistorySize, size)
+	scope.RecordDistribution(metrics.HistorySize, size)
 
 	if err := wh.processOutgoingSearchAttributes(historyEvents, namespace); err != nil {
 		return nil, nil, 0, err
