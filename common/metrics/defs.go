@@ -94,7 +94,6 @@ const (
 const (
 	OperationTagName      = "operation"
 	ServiceRoleTagName    = "service_role"
-	StatsTypeTagName      = "stats_type"
 	CacheTypeTagName      = "cache_type"
 	FailureTagName        = "failure"
 	TaskCategoryTagName   = "task_category"
@@ -114,9 +113,6 @@ const (
 	AdminRoleTagValue         = "admin"
 	DCRedirectionRoleTagValue = "dc_redirection"
 	BlobstoreRoleTagValue     = "blobstore"
-
-	SizeStatsTypeTagValue  = "size"
-	CountStatsTypeTagValue = "count"
 
 	MutableStateCacheTypeTagValue = "mutablestate"
 	EventsCacheTypeTagValue       = "events"
@@ -1095,14 +1091,10 @@ const (
 	EventsCacheDeleteEventScope
 	// EventsCacheGetFromStoreScope is the scope used by events cache
 	EventsCacheGetFromStoreScope
-	// ExecutionSizeStatsScope is the scope used for emiting workflow execution size related stats
-	ExecutionSizeStatsScope
-	// ExecutionCountStatsScope is the scope used for emiting workflow execution count related stats
-	ExecutionCountStatsScope
-	// SessionSizeStatsScope is the scope used for emiting session update size related stats
-	SessionSizeStatsScope
-	// SessionCountStatsScope is the scope used for emiting session update count related stats
-	SessionCountStatsScope
+	// ExecutionStatsScope is the scope used for emiting workflow execution related stats
+	ExecutionStatsScope
+	// SessionSizeStatsScope is the scope used for emiting session update related stats
+	SessionStatsScope
 	// HistoryResetWorkflowExecutionScope tracks ResetWorkflowExecution API calls received by service
 	HistoryResetWorkflowExecutionScope
 	// HistoryQueryWorkflowScope tracks QueryWorkflow API calls received by service
@@ -1699,11 +1691,9 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		EventsCachePutEventScope:                  {operation: "EventsCachePutEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		EventsCacheDeleteEventScope:               {operation: "EventsCacheDeleteEvent", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
 		EventsCacheGetFromStoreScope:              {operation: "EventsCacheGetFromStore", tags: map[string]string{CacheTypeTagName: EventsCacheTypeTagValue}},
-		ExecutionSizeStatsScope:                   {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
-		ExecutionCountStatsScope:                  {operation: "ExecutionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
-		SessionSizeStatsScope:                     {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: SizeStatsTypeTagValue}},
-		SessionCountStatsScope:                    {operation: "SessionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
-		WorkflowCompletionStatsScope:              {operation: "CompletionStats", tags: map[string]string{StatsTypeTagName: CountStatsTypeTagValue}},
+		ExecutionStatsScope:                       {operation: "ExecutionStats"},
+		SessionStatsScope:                         {operation: "SessionStats"},
+		WorkflowCompletionStatsScope:              {operation: "CompletionStats"},
 		ArchiverClientScope:                       {operation: "ArchiverClient"},
 		ReplicationTaskFetcherScope:               {operation: "ReplicationTaskFetcher"},
 		ReplicationTaskCleanupScope:               {operation: "ReplicationTaskCleanup"},

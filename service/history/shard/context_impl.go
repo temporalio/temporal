@@ -906,10 +906,10 @@ func (s *ContextImpl) AppendHistoryEvents(
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
-		s.GetMetricsClient().RecordDistribution(metrics.SessionSizeStatsScope, metrics.HistorySize, size)
+		s.GetMetricsClient().RecordDistribution(metrics.SessionStatsScope, metrics.HistorySize, size)
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
 			s.GetMetricsClient().Scope(
-				metrics.SessionSizeStatsScope,
+				metrics.SessionStatsScope,
 				metrics.NamespaceTag(entry.Name().String()),
 			).RecordDistribution(metrics.HistorySize, size)
 		}

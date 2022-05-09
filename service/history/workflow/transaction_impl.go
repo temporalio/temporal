@@ -718,8 +718,7 @@ func emitMutationMetrics(
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName.String())),
-			metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsClient.Scope(metrics.SessionStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -734,8 +733,7 @@ func emitGetMetrics(
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName.String())),
-			metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
