@@ -254,7 +254,6 @@ func newTransferQueueFailoverProcessor(
 		matchingClient,
 	)
 
-	// TODO: pass in scheuduler
 	if scheduler == nil {
 		scheduler = newTransferTaskScheduler(shard, logger)
 	}
