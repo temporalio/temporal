@@ -1648,6 +1648,20 @@ func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionRunning() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionRunning", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowExecutionRunning))
 }
 
+// PopTasks mocks base method.
+func (m *MockMutableState) PopTasks() map[tasks.Category][]tasks.Task {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PopTasks")
+	ret0, _ := ret[0].(map[tasks.Category][]tasks.Task)
+	return ret0
+}
+
+// PopTasks indicates an expected call of PopTasks.
+func (mr *MockMutableStateMockRecorder) PopTasks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopTasks", reflect.TypeOf((*MockMutableState)(nil).PopTasks))
+}
+
 // ReplicateActivityInfo mocks base method.
 func (m *MockMutableState) ReplicateActivityInfo(arg0 *v19.SyncActivityRequest, arg1 bool) error {
 	m.ctrl.T.Helper()

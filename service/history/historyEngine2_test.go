@@ -1923,6 +1923,43 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	s.NoError(err)
 }
 
+func (s *engine2Suite) TestRefreshWorkflowTasks() {
+	execution := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+
+	msBuilder := workflow.TestGlobalMutableState(s.historyEngine.shard, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
+	startEvent := addWorkflowExecutionStartedEvent(msBuilder, execution, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
+	startVersion := startEvent.GetVersion()
+	_, err := msBuilder.AddTimeoutWorkflowEvent(
+		msBuilder.GetNextEventID(),
+		enumspb.RETRY_STATE_RETRY_POLICY_NOT_SET,
+		uuid.New(),
+	)
+	s.NoError(err)
+
+	ms := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().AddHistoryTasks(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockEventsCache.EXPECT().GetEvent(
+		gomock.Any(),
+		events.EventKey{
+			NamespaceID: tests.NamespaceID,
+			WorkflowID:  execution.GetWorkflowId(),
+			RunID:       execution.GetRunId(),
+			EventID:     common.FirstEventID,
+			Version:     startVersion,
+		},
+		common.FirstEventID,
+		gomock.Any(),
+	).Return(startEvent, nil).AnyTimes()
+
+	err = s.historyEngine.RefreshWorkflowTasks(metrics.AddMetricsContext(context.Background()), tests.NamespaceID, execution)
+	s.NoError(err)
+}
+
 func (s *engine2Suite) getBuilder(namespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
 	weContext, release, err := s.historyEngine.historyCache.GetOrCreateWorkflowExecution(
 		metrics.AddMetricsContext(context.Background()),
