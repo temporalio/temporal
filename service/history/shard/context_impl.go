@@ -892,16 +892,6 @@ func (s *ContextImpl) addTasksLocked(
 	request.RangeID = s.getRangeIDLocked()
 	err := s.executionManager.AddHistoryTasks(ctx, request)
 	return s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel)
-
-	// if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
-	// 	return err
-	// }
-	// engine, err := s.GetEngineWithContext(ctx)
-	// if err != nil {
-	// 	return err
-	// }
-	// engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
-	// return nil
 }
 
 func (s *ContextImpl) AppendHistoryEvents(
