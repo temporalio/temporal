@@ -681,7 +681,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	de, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	nsEntry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -701,27 +701,36 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
+	if !mutableState.HasProcessedOrPendingWorkflowTask() {
+		// workflow has no workflow task ever scheduled, this usually is due to firstWorkflowTaskBackoff (cron / retry)
+		// in this case, don't buffer the query, because it is almost certain the query will time out.
+		return nil, consts.ErrWorkflowTaskNotScheduled
+	}
+
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
 	// These workflow tasks potentially contain new events and queries. The events are treated as coming before the query in time.
 	// The second way in which queries are dispatched to workflow worker is directly through matching; in this approach queries can be
 	// dispatched to workflow worker immediately even if there are outstanding events that came before the query. The following logic
 	// is used to determine if a query can be safely dispatched directly through matching or must be dispatched on a workflow task.
 	//
-	// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
-	// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
-	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
-	// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
-	safeToDispatchDirectly := !de.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName()) ||
-		!mutableState.IsWorkflowExecutionRunning() ||
-		(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
-	if safeToDispatchDirectly {
-		release(nil)
-		msResp, err := e.getMutableState(ctx, namespaceID, *request.GetRequest().GetExecution())
-		if err != nil {
-			return nil, err
+	// Precondition to dispatch query directly to matching is workflow has at least one WorkflowTaskStarted event. Otherwise, sdk would panic.
+	if mutableState.GetPreviousStartedEventID() != common.EmptyEventID {
+		// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
+		// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
+		// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
+		// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
+		safeToDispatchDirectly := !nsEntry.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName()) ||
+			!mutableState.IsWorkflowExecutionRunning() ||
+			(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
+		if safeToDispatchDirectly {
+			release(nil)
+			msResp, err := e.getMutableState(ctx, namespaceID, *request.GetRequest().GetExecution())
+			if err != nil {
+				return nil, err
+			}
+			req.Execution.RunId = msResp.Execution.RunId
+			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceId(), req, scope)
 		}
-		req.Execution.RunId = msResp.Execution.RunId
-		return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceId(), req, scope)
 	}
 
 	// If we get here it means query could not be dispatched through matching directly, so it must block
