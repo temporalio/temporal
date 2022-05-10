@@ -441,7 +441,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		switch err.(type) {
 		case nil, *serviceerror.NamespaceNotFound:
 			return nil, nil
-		case *serviceerrors.WorkflowNotReady:
+		case *serviceerror.WorkflowNotReady:
 			return &startChildExecutionPostActionInfo{}, nil
 		default:
 			return nil, err
