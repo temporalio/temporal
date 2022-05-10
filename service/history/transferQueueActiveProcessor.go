@@ -173,6 +173,7 @@ func newTransferQueueActiveProcessor(
 func newTransferQueueFailoverProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -253,7 +254,10 @@ func newTransferQueueFailoverProcessor(
 		matchingClient,
 	)
 
-	scheduler := newTransferTaskScheduler(shard, logger)
+	// TODO: pass in scheuduler
+	if scheduler == nil {
+		scheduler = newTransferTaskScheduler(shard, logger)
+	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
