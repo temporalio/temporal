@@ -504,20 +504,26 @@ UpdateLoop:
 
 func (r *registry) callStateChangeCallbacks(stateChanged, allEntries []*Namespace) {
 	r.stateChangeCallbacksLock.Lock()
-	defer r.stateChangeCallbacksLock.Unlock()
 
-	for _, cb := range r.stateChangeCallbacks {
+	stateChangeCallbacks := mapAnyValues(r.stateChangeCallbacks)
+	newStateChangeCallbacks := mapAnyValues(r.newStateChangeCallbacks)
+
+	for key, cb := range r.newStateChangeCallbacks {
+		r.stateChangeCallbacks[key] = cb
+		delete(r.newStateChangeCallbacks, key)
+	}
+
+	r.stateChangeCallbacksLock.Unlock()
+
+	for _, cb := range stateChangeCallbacks {
 		for _, ns := range stateChanged {
 			cb(ns)
 		}
 	}
-
-	for key, cb := range r.newStateChangeCallbacks {
+	for _, cb := range newStateChangeCallbacks {
 		for _, ns := range allEntries {
 			cb(ns)
 		}
-		r.stateChangeCallbacks[key] = cb
-		delete(r.newStateChangeCallbacks, key)
 	}
 }
 
@@ -602,4 +608,14 @@ func byName(name Name) *persistence.GetNamespaceRequest {
 
 func byID(id ID) *persistence.GetNamespaceRequest {
 	return &persistence.GetNamespaceRequest{ID: id.String()}
+}
+
+// This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works
+// for map[any]T (see https://github.com/golang/go/issues/51257 and many more)
+func mapAnyValues[T any](m map[any]T) []T {
+	r := make([]T, 0, len(m))
+	for _, v := range m {
+		r = append(r, v)
+	}
+	return r
 }
