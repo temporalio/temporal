@@ -632,6 +632,7 @@ func (s *ContextImpl) AddTasks(
 	s.wUnlock()
 
 	if OperationPossiblySucceeded(err) {
+		fmt.Println("add task notify")
 		engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
 	}
 
@@ -996,7 +997,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	// Step 1. Delete visibility.
 	if deleteVisibilityRecord {
 		// TODO: move to existing task generator logic
-		newTasks := map[tasks.Category][]tasks.Task{
+		newTasks = map[tasks.Category][]tasks.Task{
 			tasks.CategoryVisibility: {
 				&tasks.DeleteExecutionVisibilityTask{
 					// TaskID is set by addTasksLocked
