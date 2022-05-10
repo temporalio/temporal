@@ -450,8 +450,8 @@ go.opentelemetry.io/otel/trace v1.6.3 h1:IqN4L+5b0mPNjdXIiZ90Ni4Bl5BRkDQywePLWem
 go.opentelemetry.io/otel/trace v1.6.3/go.mod h1:GNJQusJlUgZl9/TQBPKU/Y/ty+0iVB5fjhKeJGZPGFs=
 go.opentelemetry.io/proto/otlp v0.7.0/go.mod h1:PqfVotwruBrMGOCsRd/89rSnXhoiJIqeYNgFYFoEGnI=
 go.temporal.io/api v1.7.1-0.20220429205751-8a73b1f896d0/go.mod h1:QXFU+pt4JL280LYD40YrvLelG1jfei1TZ0GD7X3DLSg=
-go.temporal.io/api v1.7.1-0.20220504205736-d21ec94bbedb h1:OJ8HqmvirSPUh3hMHcyroUmouhTK8Kul+33045iaOZk=
-go.temporal.io/api v1.7.1-0.20220504205736-d21ec94bbedb/go.mod h1:CC6Y6/sdqu//fcK03bRiVe68Qu0tuB3QBbQ+xZel75k=
+go.temporal.io/api v1.7.1-0.20220510045017-9181247f5f2f h1:1aIYVk/HUapYFf5pAEmSq80nvuPVCnqp8pfTOm2GQrA=
+go.temporal.io/api v1.7.1-0.20220510045017-9181247f5f2f/go.mod h1:YU5EQaONkIr0ZRju0NqdqYNH/hCkBuwqRMDA0iaj7JM=
 go.temporal.io/sdk v1.14.1-0.20220429221638-3a2b86ebed54 h1:2h9Fyc7rdARX4+3sZnup/qz6kZKW2GXF06mxYJ3PSMY=
 go.temporal.io/sdk v1.14.1-0.20220429221638-3a2b86ebed54/go.mod h1:6GXFBXb11hWtZbpHdYz7JkEWqPhjX8kMYzE4M0Vpua0=
 go.temporal.io/version v0.3.0 h1:dMrei9l9NyHt8nG6EB8vAwDLLTwx2SvRyucCSumAiig=
@@ -874,8 +874,8 @@ google.golang.org/genproto v0.0.0-20220324131243-acbaeb5b85eb/go.mod h1:hAL49I2I
 google.golang.org/genproto v0.0.0-20220405205423-9d709892a2bf/go.mod h1:8w6bsBMX6yCPbAVTeqQHvzxW0EIFigd5lZyahWgyfDo=
 google.golang.org/genproto v0.0.0-20220407144326-9054f6ed7bac/go.mod h1:8w6bsBMX6yCPbAVTeqQHvzxW0EIFigd5lZyahWgyfDo=
 google.golang.org/genproto v0.0.0-20220429170224-98d788798c3e/go.mod h1:8w6bsBMX6yCPbAVTeqQHvzxW0EIFigd5lZyahWgyfDo=
-google.golang.org/genproto v0.0.0-20220504150022-98cd25cafc72 h1:iif0mpUetMBqcQPUoq+JnCcmzvfpp8wRx515va8wP1c=
-google.golang.org/genproto v0.0.0-20220504150022-98cd25cafc72/go.mod h1:RAyBrSAP7Fh3Nc84ghnVLDPuV51xc9agzmm4Ph6i0Q4=
+google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3 h1:q1kiSVscqoDeqTF27eQ2NnLLDmqF0I373qQNXYMy0fo=
+google.golang.org/genproto v0.0.0-20220505152158-f39f71e6c8f3/go.mod h1:RAyBrSAP7Fh3Nc84ghnVLDPuV51xc9agzmm4Ph6i0Q4=
 google.golang.org/grpc v1.12.0/go.mod h1:yo6s7OP7yaDglbqo1J04qKzAhqBH6lvTonzMVmEdcZw=
 google.golang.org/grpc v1.19.0/go.mod h1:mqu4LbDTu4XGKhr4mRzUsmM4RtVoemTSY81AxZiDr8c=
 google.golang.org/grpc v1.20.1/go.mod h1:10oTOabMzJvdu6/UiuZezV6QK5dSlG84ov/aaiqXj38=
