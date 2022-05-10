@@ -214,6 +214,21 @@ func (mr *MockExecutionManagerMockRecorder) AppendHistoryNodes(ctx, request inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendHistoryNodes", reflect.TypeOf((*MockExecutionManager)(nil).AppendHistoryNodes), ctx, request)
 }
 
+// AppendRawHistoryNodes mocks base method.
+func (m *MockExecutionManager) AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "AppendRawHistoryNodes", ctx, request)
+	ret0, _ := ret[0].(*AppendHistoryNodesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// AppendRawHistoryNodes indicates an expected call of AppendRawHistoryNodes.
+func (mr *MockExecutionManagerMockRecorder) AppendRawHistoryNodes(ctx, request interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AppendRawHistoryNodes", reflect.TypeOf((*MockExecutionManager)(nil).AppendRawHistoryNodes), ctx, request)
+}
+
 // Close mocks base method.
 func (m *MockExecutionManager) Close() {
 	m.ctrl.T.Helper()

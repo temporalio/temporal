@@ -28,11 +28,13 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -40,6 +42,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
+	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -55,6 +58,7 @@ type (
 
 		clusterName        string
 		adminClient        adminservice.AdminServiceClient
+		historyClient      historyservice.HistoryServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
@@ -78,6 +82,7 @@ func newTransferQueueStandbyTaskExecutor(
 		),
 		clusterName:        clusterName,
 		adminClient:        shard.GetRemoteAdminClient(clusterName),
+		historyClient:      shard.GetHistoryClient(),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }
@@ -166,25 +171,19 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 
 		executionInfo := mutableState.GetExecutionInfo()
 
-		var taskQueue *taskqueuepb.TaskQueue
-		var taskScheduleToStartTimeoutSeconds = int64(0)
-		if mutableState.GetExecutionInfo().TaskQueue != transferTask.TaskQueue {
-			// this workflowTask is an sticky workflowTask
-			// there shall already be an timer set
-			taskQueue = &taskqueuepb.TaskQueue{
-				Name: transferTask.TaskQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_STICKY,
-			}
-			taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
-		} else {
-			taskQueue = &taskqueuepb.TaskQueue{
-				Name: transferTask.TaskQueue,
-				Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
-			}
-			workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
-			taskScheduleToStartTimeoutSeconds = int64(workflowRunTimeout.Round(time.Second).Seconds())
+		taskQueue := &taskqueuepb.TaskQueue{
+			// at standby, always use original task queue, disregards the task.TaskQueue which could be sticky
+			Name: mutableState.GetExecutionInfo().TaskQueue,
+			Kind: enumspb.TASK_QUEUE_KIND_NORMAL,
 		}
-
+		workflowRunTimeout := timestamp.DurationValue(executionInfo.WorkflowRunTimeout)
+		taskScheduleToStartTimeoutSeconds := int64(workflowRunTimeout.Round(time.Second).Seconds())
+		if mutableState.GetExecutionInfo().TaskQueue != transferTask.TaskQueue {
+			// Experimental: try to push sticky task as regular task with sticky timeout as TTL.
+			// workflow might be sticky before namespace become standby
+			// there shall already be a schedule_to_start timer created
+			taskScheduleToStartTimeoutSeconds = int64(timestamp.DurationValue(executionInfo.StickyScheduleToStartTimeout).Seconds())
+		}
 		ok = VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), wtInfo.Version, transferTask.Version, transferTask)
 		if !ok {
 			return nil, nil
@@ -255,9 +254,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		// DO NOT REPLY TO PARENT
-		// since event replication should be done by active cluster
-		return nil, t.recordWorkflowClosed(
+		if err := t.recordWorkflowClosed(
 			ctx,
 			namespace.ID(transferTask.NamespaceID),
 			transferTask.WorkflowID,
@@ -270,7 +267,37 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			workflowHistoryLength,
 			visibilityMemo,
 			searchAttr,
-		)
+		); err != nil {
+			return nil, err
+		}
+
+		// verify if parent got the completion event
+		verifyCompletionRecorded := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
+		if verifyCompletionRecorded {
+			_, err := t.historyClient.VerifyChildExecutionCompletionRecorded(ctx, &historyservice.VerifyChildExecutionCompletionRecordedRequest{
+				NamespaceId: executionInfo.ParentNamespaceId,
+				ParentExecution: &commonpb.WorkflowExecution{
+					WorkflowId: executionInfo.ParentWorkflowId,
+					RunId:      executionInfo.ParentRunId,
+				},
+				ChildExecution: &commonpb.WorkflowExecution{
+					WorkflowId: transferTask.WorkflowID,
+					RunId:      transferTask.RunID,
+				},
+				ParentInitiatedId:      executionInfo.ParentInitiatedId,
+				ParentInitiatedVersion: executionInfo.ParentInitiatedVersion,
+				Clock:                  executionInfo.ParentClock,
+			})
+			switch err.(type) {
+			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
+				return nil, nil
+			case *serviceerrors.WorkflowNotReady:
+				return verifyChildCompletionRecordedInfo, nil
+			default:
+				return nil, err
+			}
+		}
+		return nil, nil
 	}
 
 	return t.processTransfer(
@@ -278,8 +305,15 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 		processTaskIfClosed,
 		transferTask,
 		actionFn,
-		standbyTaskPostActionNoOp,
-	) // no op post action, since the entire workflow is finished
+		getStandbyPostActionFn(
+			transferTask,
+			t.getCurrentTime,
+			t.config.StandbyTaskMissingEventsResendDelay(),
+			t.config.StandbyTaskMissingEventsDiscardDelay(),
+			standbyTaskPostActionNoOp,
+			standbyTransferTaskPostActionTaskDiscarded,
+		),
+	)
 }
 
 func (t *transferQueueStandbyTaskExecutor) processCancelExecution(
@@ -361,8 +395,8 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	transferTask *tasks.StartChildExecutionTask,
 ) error {
 
-	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	processTaskIfClosed := true
+	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.InitiatedID)
 		if !ok {
@@ -374,12 +408,45 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, nil
 		}
 
-		if childWorkflowInfo.StartedId != common.EmptyEventID {
+		workflowClosed := !mutableState.IsWorkflowExecutionRunning()
+		childStarted := childWorkflowInfo.StartedId != common.EmptyEventID
+		childAbandon := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
+
+		if workflowClosed && !(childStarted && childAbandon) {
+			// NOTE: ideally for workflowClosed, child not started, parent close policy is abandon case,
+			// we should continue to start the child workflow in active cluster, so standby logic also need to
+			// perform the verification. However, we can't do that due to some technial reasons.
+			// Please check the comments in processStartChildExecution in transferQueueActiveTaskExecutor.go
+			// for details.
 			return nil, nil
 		}
-		// TODO: standby logic should verify if first workflow task is scheduled or not as well?
 
-		return getHistoryResendInfo(mutableState)
+		if !childStarted {
+			historyResendInfo, err := getHistoryResendInfo(mutableState)
+			if err != nil {
+				return nil, err
+			}
+			return &startChildExecutionPostActionInfo{
+				historyResendInfo: historyResendInfo,
+			}, nil
+		}
+
+		_, err := t.historyClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+			NamespaceId: transferTask.TargetNamespaceID,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: childWorkflowInfo.StartedWorkflowId,
+				RunId:      childWorkflowInfo.StartedRunId,
+			},
+			Clock: childWorkflowInfo.Clock,
+		})
+		switch err.(type) {
+		case nil, *serviceerror.NamespaceNotFound:
+			return nil, nil
+		case *serviceerrors.WorkflowNotReady:
+			return &startChildExecutionPostActionInfo{}, nil
+		default:
+			return nil, err
+		}
 	}
 
 	return t.processTransfer(
@@ -392,7 +459,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.fetchHistoryFromRemote,
+			t.startChildExecutionResendPostAction,
 			standbyTransferTaskPostActionTaskDiscarded,
 		),
 	)
@@ -479,6 +546,24 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		&pushwtInfo.taskqueue,
 		timestamp.DurationFromSeconds(timeout),
 	)
+}
+
+func (t *transferQueueStandbyTaskExecutor) startChildExecutionResendPostAction(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo interface{},
+	log log.Logger,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+
+	historyResendInfo := postActionInfo.(*startChildExecutionPostActionInfo).historyResendInfo
+	if historyResendInfo != nil {
+		return t.fetchHistoryFromRemote(ctx, taskInfo, historyResendInfo, log)
+	}
+
+	return standbyTaskPostActionNoOp(ctx, taskInfo, postActionInfo, log)
 }
 
 func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(

@@ -30,6 +30,8 @@ import (
 	"testing"
 	"time"
 
+	enumspb "go.temporal.io/api/enums/v1"
+
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -60,8 +62,9 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		store  p.ExecutionManager
-		logger log.Logger
+		store      p.ExecutionManager
+		serializer serialization.Serializer
+		logger     log.Logger
 
 		Ctx    context.Context
 		Cancel context.CancelFunc
@@ -73,15 +76,17 @@ func NewHistoryEventsSuite(
 	store p.ExecutionStore,
 	logger log.Logger,
 ) *HistoryEventsSuite {
+	eventSerializer := serialization.NewSerializer()
 	return &HistoryEventsSuite{
 		Assertions: require.New(t),
 		store: p.NewExecutionManager(
 			store,
-			serialization.NewSerializer(),
+			eventSerializer,
 			logger,
 			dynamicconfig.GetIntPropertyFn(4*1024*1024),
 		),
-		logger: logger,
+		serializer: eventSerializer,
+		logger:     logger,
 	}
 }
 
@@ -480,6 +485,38 @@ func (s *HistoryEventsSuite) TestAppendForkSelectTrim_LastBranch() {
 	s.Equal(events, s.listAllHistoryEvents(shardID, newBranchToken))
 }
 
+func (s *HistoryEventsSuite) TestAppendBatches() {
+	shardID := rand.Int31()
+	treeID := uuid.New()
+	branchID := uuid.New()
+	branchToken, err := p.NewHistoryBranchTokenByBranchID(treeID, branchID)
+	s.NoError(err)
+
+	eventsPacket1 := s.newHistoryEvents(
+		[]int64{1, 2, 3},
+		rand.Int63(),
+		0,
+	)
+	eventsPacket2 := s.newHistoryEvents(
+		[]int64{4, 5},
+		eventsPacket1.transactionID+100,
+		eventsPacket1.transactionID,
+	)
+	eventsPacket3 := s.newHistoryEvents(
+		[]int64{6},
+		eventsPacket2.transactionID+100,
+		eventsPacket2.transactionID,
+	)
+
+	s.appendRawHistoryBatches(shardID, branchToken, eventsPacket1)
+	s.appendRawHistoryBatches(shardID, branchToken, eventsPacket2)
+	s.appendRawHistoryBatches(shardID, branchToken, eventsPacket3)
+	s.Equal(eventsPacket1.events, s.listHistoryEvents(shardID, branchToken, common.FirstEventID, 4))
+	expectedEvents := append(eventsPacket1.events, append(eventsPacket2.events, eventsPacket3.events...)...)
+	events := s.listAllHistoryEvents(shardID, branchToken)
+	s.Equal(expectedEvents, events)
+}
+
 func (s *HistoryEventsSuite) TestForkDeleteBranch_DeleteBaseBranchFirst() {
 	shardID := rand.Int31()
 	treeID := uuid.New()
@@ -609,6 +646,26 @@ func (s *HistoryEventsSuite) appendHistoryEvents(
 		PrevTransactionID: packet.prevTransactionID,
 		IsNewBranch:       packet.nodeID == common.FirstEventID,
 		Info:              "",
+	})
+	s.NoError(err)
+}
+
+func (s *HistoryEventsSuite) appendRawHistoryBatches(
+	shardID int32,
+	branchToken []byte,
+	packet HistoryEventsPacket,
+) {
+	blob, err := s.serializer.SerializeEvents(packet.events, enumspb.ENCODING_TYPE_PROTO3)
+	s.NoError(err)
+	_, err = s.store.AppendRawHistoryNodes(s.Ctx, &p.AppendRawHistoryNodesRequest{
+		ShardID:           shardID,
+		BranchToken:       branchToken,
+		NodeID:            packet.nodeID,
+		TransactionID:     packet.transactionID,
+		PrevTransactionID: packet.prevTransactionID,
+		IsNewBranch:       packet.nodeID == common.FirstEventID,
+		Info:              "",
+		History:           blob,
 	})
 	s.NoError(err)
 }

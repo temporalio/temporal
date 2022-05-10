@@ -25,6 +25,9 @@
 package history
 
 import (
+	"go.uber.org/fx"
+
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -34,7 +37,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
-	"go.uber.org/fx"
 )
 
 type (

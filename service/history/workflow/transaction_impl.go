@@ -87,7 +87,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		NewWorkflowSnapshot: *newWorkflowSnapshot,
 		NewWorkflowEvents:   newWorkflowEventsSeq,
 	})
-	if operationPossiblySucceeded(err) {
+	if shard.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
 	}
 	if err != nil {
@@ -129,7 +129,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		CurrentWorkflowMutation: currentWorkflowMutation,
 		CurrentWorkflowEvents:   currentWorkflowEventsSeq,
 	})
-	if operationPossiblySucceeded(err) {
+	if shard.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, clusterName)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, clusterName)
@@ -182,7 +182,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		NewWorkflowSnapshot:    newWorkflowSnapshot,
 		NewWorkflowEvents:      newWorkflowEventsSeq,
 	})
-	if operationPossiblySucceeded(err) {
+	if shard.OperationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, clusterName)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
 	}
@@ -219,7 +219,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 		// RangeID , this is set by shard context
 		SetWorkflowSnapshot: *workflowSnapshot,
 	})
-	if operationPossiblySucceeded(err) {
+	if shard.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, workflowSnapshot, clusterName)
 	}
 	if err != nil {
@@ -718,8 +718,7 @@ func emitMutationMetrics(
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName.String())),
-			metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsClient.Scope(metrics.SessionStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -734,8 +733,7 @@ func emitGetMetrics(
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName.String())),
-			metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -786,27 +784,4 @@ func emitCompletionMetrics(
 			completionMetric.status,
 		)
 	}
-}
-
-func operationPossiblySucceeded(err error) bool {
-	if err == consts.ErrConflict {
-		return false
-	}
-
-	switch err.(type) {
-	case *persistence.CurrentWorkflowConditionFailedError,
-		*persistence.WorkflowConditionFailedError,
-		*persistence.ConditionFailedError,
-		*persistence.ShardOwnershipLostError,
-		*persistence.InvalidPersistenceRequestError,
-		*persistence.TransactionSizeLimitError,
-		*serviceerror.ResourceExhausted,
-		*serviceerror.NotFound,
-		*serviceerror.NamespaceNotFound:
-		// Persistence failure that means that write was definitely not committed.
-		return false
-	default:
-		return true
-	}
-
 }
