@@ -216,6 +216,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
 		t.shard,
 		t.workflowCache,
+		t.scheduler,
 		t.workflowDeleteManager,
 		namespaceIDs,
 		standbyClusterName,

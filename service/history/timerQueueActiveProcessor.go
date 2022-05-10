@@ -145,6 +145,7 @@ func newTimerQueueActiveProcessor(
 func newTimerQueueFailoverProcessor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	workflowDeleteManager workflow.DeleteManager,
 	namespaceIDs map[string]struct{},
 	standbyClusterName string,
@@ -202,7 +203,9 @@ func newTimerQueueFailoverProcessor(
 		matchingClient,
 	)
 
-	scheduler := newTimerTaskScheduler(shard, logger)
+	if scheduler == nil {
+		scheduler = newTimerTaskScheduler(shard, logger)
+	}
 
 	rescheduler := queues.NewRescheduler(
 		scheduler,
@@ -223,7 +226,7 @@ func newTimerQueueFailoverProcessor(
 				t,
 				timerTaskFilter,
 				taskExecutor,
-				nil,
+				scheduler,
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
