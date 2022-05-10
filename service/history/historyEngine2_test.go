@@ -1729,7 +1729,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExi
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.NotFound{})
 
 	err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
-	s.IsType(&serviceerrors.WorkflowNotReady{}, err)
+	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowClosed() {
@@ -1795,7 +1795,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
-	s.IsType(&serviceerrors.WorkflowNotReady{}, err)
+	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 }
 
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEventFoundOnNonCurrentBranch() {
@@ -1889,7 +1889,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	err := s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
-	s.IsType(&serviceerrors.WorkflowNotReady{}, err)
+	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 	// child workflow started but not completed
 	addChildWorkflowExecutionStartedEvent(msBuilder, initiatedEvent.GetEventId(), tests.ChildNamespace, childWorkflowID, childRunID, childWorkflowType, nil)
@@ -1899,7 +1899,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
 
 	err = s.historyEngine.VerifyChildExecutionCompletionRecorded(metrics.AddMetricsContext(context.Background()), request)
-	s.IsType(&serviceerrors.WorkflowNotReady{}, err)
+	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 	// child completion recorded
 	addChildWorkflowExecutionCompletedEvent(

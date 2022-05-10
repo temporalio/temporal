@@ -42,7 +42,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
-	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/queues"
@@ -291,7 +290,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			switch err.(type) {
 			case nil, *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 				return nil, nil
-			case *serviceerrors.WorkflowNotReady:
+			case *serviceerror.WorkflowNotReady:
 				return verifyChildCompletionRecordedInfo, nil
 			default:
 				return nil, err
