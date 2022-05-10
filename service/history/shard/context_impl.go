@@ -632,7 +632,6 @@ func (s *ContextImpl) AddTasks(
 	s.wUnlock()
 
 	if OperationPossiblySucceeded(err) {
-		fmt.Println("add task notify")
 		engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
 	}
 
