@@ -287,6 +287,14 @@ func IsWhitelistServiceTransientError(err error) bool {
 	return false
 }
 
+func IsStickyWorkerUnavailable(err error) bool {
+	switch err.(type) {
+	case *serviceerrors.StickyWorkerUnavailable:
+		return true
+	}
+	return false
+}
+
 // IsResourceExhausted checks if the error is a service busy error.
 func IsResourceExhausted(err error) bool {
 	switch err.(type) {

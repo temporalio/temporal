@@ -29,8 +29,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"go.temporal.io/server/common/log"
 	"go.uber.org/zap/zaptest"
+
+	"go.temporal.io/server/common/log"
 
 	"go.temporal.io/server/tests/testhelper"
 

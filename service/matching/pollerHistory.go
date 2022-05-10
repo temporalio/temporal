@@ -72,7 +72,7 @@ func (pollers *pollerHistory) updatePollerInfo(id pollerIdentity, ratePerSecond 
 	pollers.history.Put(id, &pollerInfo{ratePerSecond: rps})
 }
 
-func (pollers *pollerHistory) getAllPollerInfo() []*taskqueuepb.PollerInfo {
+func (pollers *pollerHistory) getPollerInfo(earliestAccessTime time.Time) []*taskqueuepb.PollerInfo {
 	var result []*taskqueuepb.PollerInfo
 
 	ite := pollers.history.Iterator()
@@ -83,11 +83,13 @@ func (pollers *pollerHistory) getAllPollerInfo() []*taskqueuepb.PollerInfo {
 		value := entry.Value().(*pollerInfo)
 		// TODO add IP, T1396795
 		lastAccessTime := entry.CreateTime()
-		result = append(result, &taskqueuepb.PollerInfo{
-			Identity:       string(key),
-			LastAccessTime: &lastAccessTime,
-			RatePerSecond:  value.ratePerSecond,
-		})
+		if earliestAccessTime.Before(lastAccessTime) {
+			result = append(result, &taskqueuepb.PollerInfo{
+				Identity:       string(key),
+				LastAccessTime: &lastAccessTime,
+				RatePerSecond:  value.ratePerSecond,
+			})
+		}
 	}
 
 	return result

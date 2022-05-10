@@ -34,33 +34,32 @@ import (
 	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/archiver"
-	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/future"
-	"go.temporal.io/server/common/membership"
-	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/service/history/vclock"
-
 	"go.temporal.io/server/api/adminservice/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
+	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
+	"go.temporal.io/server/service/history/vclock"
 )
 
 var (
@@ -216,7 +215,7 @@ func (s *ContextImpl) AssertOwnership(
 	return nil
 }
 
-func (s *ContextImpl) NewVectorClock() (*clockpb.ShardClock, error) {
+func (s *ContextImpl) NewVectorClock() (*clockspb.ShardClock, error) {
 	s.wLock()
 	defer s.wUnlock()
 
@@ -227,7 +226,7 @@ func (s *ContextImpl) NewVectorClock() (*clockpb.ShardClock, error) {
 	return vclock.NewShardClock(s.shardID, clock), nil
 }
 
-func (s *ContextImpl) CurrentVectorClock() *clockpb.ShardClock {
+func (s *ContextImpl) CurrentVectorClock() *clockspb.ShardClock {
 	s.rLock()
 	defer s.rUnlock()
 
@@ -907,10 +906,10 @@ func (s *ContextImpl) AppendHistoryEvents(
 	defer func() {
 		// N.B. - Dual emit here makes sense so that we can see aggregate timer stats across all
 		// namespaces along with the individual namespaces stats
-		s.GetMetricsClient().RecordDistribution(metrics.SessionSizeStatsScope, metrics.HistorySize, size)
+		s.GetMetricsClient().RecordDistribution(metrics.SessionStatsScope, metrics.HistorySize, size)
 		if entry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespaceID); err == nil && entry != nil {
 			s.GetMetricsClient().Scope(
-				metrics.SessionSizeStatsScope,
+				metrics.SessionStatsScope,
 				metrics.NamespaceTag(entry.Name().String()),
 			).RecordDistribution(metrics.HistorySize, size)
 		}

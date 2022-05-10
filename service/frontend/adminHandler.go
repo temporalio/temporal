@@ -770,14 +770,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
 	adh.metricsClient.
-		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
+		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope).
 		RecordDistribution(metrics.HistorySize, size)
-	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordDistribution(metrics.HistorySize, size)
+	scope.RecordDistribution(metrics.HistorySize, size)
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 		VersionHistory: targetVersionHistory,
+		HistoryNodeIds: rawHistoryResponse.NodeIDs,
 	}
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil

@@ -22,56 +22,49 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package vclock
+package serviceerror
 
 import (
-	"fmt"
-
-	"go.temporal.io/api/serviceerror"
-
-	clockspb "go.temporal.io/server/api/clock/v1"
+	"github.com/gogo/status"
+	"go.temporal.io/server/api/errordetails/v1"
+	"google.golang.org/grpc/codes"
 )
 
-func NewShardClock(
-	shardID int32,
-	clock int64,
-) *clockspb.ShardClock {
-	return &clockspb.ShardClock{
-		Id:    shardID,
-		Clock: clock,
+type (
+	// WorkflowNotReady represents workflow state is not ready to handle the request error.
+	WorkflowNotReady struct {
+		Message string
+		st      *status.Status
+	}
+)
+
+// NewWorkflowNotReady returns new WorkflowNotReady
+func NewWorkflowNotReady(message string) error {
+	return &WorkflowNotReady{
+		Message: message,
 	}
 }
 
-func HappensBefore(
-	clock1 *clockspb.ShardClock,
-	clock2 *clockspb.ShardClock,
-) (bool, error) {
-	compare, err := Compare(clock1, clock2)
-	if err != nil {
-		return false, err
-	}
-	return compare < 0, nil
+// Error returns string message.
+func (e *WorkflowNotReady) Error() string {
+	return e.Message
 }
 
-func Compare(
-	clock1 *clockspb.ShardClock,
-	clock2 *clockspb.ShardClock,
-) (int, error) {
-	if clock1.GetId() != clock2.GetId() {
-		return 0, serviceerror.NewInternal(fmt.Sprintf(
-			"Encountered shard ID mismatch: %v vs %v",
-			clock1.GetId(),
-			clock2.GetId(),
-		))
+func (e *WorkflowNotReady) Status() *status.Status {
+	if e.st != nil {
+		return e.st
 	}
 
-	vClock1 := clock1.GetClock()
-	vClock2 := clock2.GetClock()
-	if vClock1 < vClock2 {
-		return -1, nil
-	} else if vClock1 > vClock2 {
-		return 1, nil
-	} else {
-		return 0, nil
+	st := status.New(codes.FailedPrecondition, e.Message)
+	st, _ = st.WithDetails(
+		&errordetails.WorkflowNotReadyFailure{},
+	)
+	return st
+}
+
+func newWorkflowNotReady(st *status.Status) error {
+	return &WorkflowNotReady{
+		Message: st.Message(),
+		st:      st,
 	}
 }

@@ -40,7 +40,6 @@ import (
 
 const (
 	EmptyQueueMessageID = int64(-1)
-	MinQueueMessageID   = EmptyQueueMessageID + 1
 	MaxQueueMessageID   = math.MaxInt64
 )
 

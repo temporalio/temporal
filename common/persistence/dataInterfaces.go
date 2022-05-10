@@ -719,6 +719,26 @@ type (
 		Size int
 	}
 
+	// AppendRawHistoryNodesRequest is used to append a batch of raw history nodes
+	AppendRawHistoryNodesRequest struct {
+		// The shard to get history node data
+		ShardID int32
+		// true if this is the first append request to the branch
+		IsNewBranch bool
+		// the info for clean up data in background
+		Info string
+		// The branch to be appended
+		BranchToken []byte
+		// The batch of events to be appended. The first eventID will become the nodeID of this batch
+		History *commonpb.DataBlob
+		// TransactionID for events before these events. For events chaining
+		PrevTransactionID int64
+		// requested TransactionID for this write operation. For the same eventID, the node with larger TransactionID always wins
+		TransactionID int64
+		// NodeID is the first event id.
+		NodeID int64
+	}
+
 	// ReadHistoryBranchRequest is used to read a history branch
 	ReadHistoryBranchRequest struct {
 		// The shard to get history branch data
@@ -795,6 +815,8 @@ type (
 	ReadRawHistoryBranchResponse struct {
 		// HistoryEventBlobs history event blobs
 		HistoryEventBlobs []*commonpb.DataBlob
+		// NodeIDs is the first event id of each history blob
+		NodeIDs []int64
 		// Token to read next page if there are more events beyond page size.
 		// Use this to set NextPageToken on ReadHistoryBranchRequest to read the next page.
 		// Empty means we have reached the last page, not need to continue
@@ -1026,6 +1048,8 @@ type (
 
 		// AppendHistoryNodes add a node to history node table
 		AppendHistoryNodes(ctx context.Context, request *AppendHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
+		// AppendRawHistoryNodes add a node of raw histories to history ndoe table
+		AppendRawHistoryNodes(ctx context.Context, request *AppendRawHistoryNodesRequest) (*AppendHistoryNodesResponse, error)
 		// ReadHistoryBranch returns history node data for a branch
 		ReadHistoryBranch(ctx context.Context, request *ReadHistoryBranchRequest) (*ReadHistoryBranchResponse, error)
 		// ReadHistoryBranchByBatch returns history node data for a branch ByBatch

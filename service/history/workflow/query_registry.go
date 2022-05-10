@@ -29,6 +29,7 @@ import (
 
 	querypb "go.temporal.io/api/query/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/service/history/consts"
 )
 

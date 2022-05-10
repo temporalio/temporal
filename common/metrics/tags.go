@@ -172,14 +172,6 @@ func ServiceRoleTag(value string) Tag {
 	return &tagImpl{key: ServiceRoleTagName, value: value}
 }
 
-// Returns a new stats type tag
-func StatsTypeTag(value string) Tag {
-	if len(value) == 0 {
-		value = unknownValue
-	}
-	return &tagImpl{key: StatsTypeTagName, value: value}
-}
-
 // Returns a new failure type tag
 func FailureTag(value string) Tag {
 	if len(value) == 0 {

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
 	dconf "go.temporal.io/server/common/dynamicconfig"
 )
 

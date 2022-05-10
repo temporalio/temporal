@@ -880,6 +880,26 @@ func (mr *MockHistoryServiceClientMockRecorder) TerminateWorkflowExecution(ctx, 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).TerminateWorkflowExecution), varargs...)
 }
 
+// VerifyChildExecutionCompletionRecorded mocks base method.
+func (m *MockHistoryServiceClient) VerifyChildExecutionCompletionRecorded(ctx context.Context, in *historyservice.VerifyChildExecutionCompletionRecordedRequest, opts ...grpc.CallOption) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "VerifyChildExecutionCompletionRecorded", varargs...)
+	ret0, _ := ret[0].(*historyservice.VerifyChildExecutionCompletionRecordedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyChildExecutionCompletionRecorded indicates an expected call of VerifyChildExecutionCompletionRecorded.
+func (mr *MockHistoryServiceClientMockRecorder) VerifyChildExecutionCompletionRecorded(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockHistoryServiceClient)(nil).VerifyChildExecutionCompletionRecorded), varargs...)
+}
+
 // MockHistoryServiceServer is a mock of HistoryServiceServer interface.
 type MockHistoryServiceServer struct {
 	ctrl     *gomock.Controller
@@ -1516,4 +1536,19 @@ func (m *MockHistoryServiceServer) TerminateWorkflowExecution(arg0 context.Conte
 func (mr *MockHistoryServiceServerMockRecorder) TerminateWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "TerminateWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).TerminateWorkflowExecution), arg0, arg1)
+}
+
+// VerifyChildExecutionCompletionRecorded mocks base method.
+func (m *MockHistoryServiceServer) VerifyChildExecutionCompletionRecorded(arg0 context.Context, arg1 *historyservice.VerifyChildExecutionCompletionRecordedRequest) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyChildExecutionCompletionRecorded", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.VerifyChildExecutionCompletionRecordedResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyChildExecutionCompletionRecorded indicates an expected call of VerifyChildExecutionCompletionRecorded.
+func (mr *MockHistoryServiceServerMockRecorder) VerifyChildExecutionCompletionRecorded(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockHistoryServiceServer)(nil).VerifyChildExecutionCompletionRecorded), arg0, arg1)
 }

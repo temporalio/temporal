@@ -426,6 +426,71 @@ func (m *executionManagerImpl) serializeAppendHistoryNodesRequest(
 	return req, nil
 }
 
+func (m *executionManagerImpl) serializeAppendRawHistoryNodesRequest(
+	request *AppendRawHistoryNodesRequest,
+) (*InternalAppendHistoryNodesRequest, error) {
+	branch, err := m.serializer.HistoryBranchFromBlob(&commonpb.DataBlob{Data: request.BranchToken, EncodingType: enumspb.ENCODING_TYPE_PROTO3})
+	if err != nil {
+		return nil, err
+	}
+
+	if len(request.History.Data) == 0 {
+		return nil, &InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("events to be appended cannot be empty"),
+		}
+	}
+	sortAncestors(branch.Ancestors)
+
+	nodeID := request.NodeID
+	if nodeID <= 0 {
+		return nil, &InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("eventID cannot be less than 1"),
+		}
+	}
+	// nodeID will be the first eventID
+	size := len(request.History.Data)
+	sizeLimit := m.transactionSizeLimit()
+	if size > sizeLimit {
+		return nil, &TransactionSizeLimitError{
+			Msg: fmt.Sprintf("transaction size of %v bytes exceeds limit of %v bytes", size, sizeLimit),
+		}
+	}
+
+	req := &InternalAppendHistoryNodesRequest{
+		IsNewBranch: request.IsNewBranch,
+		Info:        request.Info,
+		BranchInfo:  branch,
+		Node: InternalHistoryNode{
+			NodeID:            nodeID,
+			Events:            request.History,
+			PrevTransactionID: request.PrevTransactionID,
+			TransactionID:     request.TransactionID,
+		},
+		ShardID: request.ShardID,
+	}
+
+	if req.IsNewBranch {
+		// TreeInfo is only needed for new branch
+		treeInfoBlob, err := m.serializer.HistoryTreeInfoToBlob(&persistencespb.HistoryTreeInfo{
+			BranchInfo: branch,
+			ForkTime:   timestamp.TimeNowPtrUtc(),
+			Info:       request.Info,
+		}, enumspb.ENCODING_TYPE_PROTO3)
+		if err != nil {
+			return nil, err
+		}
+		req.TreeInfo = treeInfoBlob
+	}
+
+	if nodeID < GetBeginNodeID(branch) {
+		return nil, &InvalidPersistenceRequestError{
+			Msg: fmt.Sprintf("cannot append to ancestors' nodes"),
+		}
+	}
+
+	return req, nil
+}
+
 // AppendHistoryNodes add a node to history node table
 func (m *executionManagerImpl) AppendHistoryNodes(
 	ctx context.Context,
@@ -442,6 +507,23 @@ func (m *executionManagerImpl) AppendHistoryNodes(
 
 	return &AppendHistoryNodesResponse{
 		Size: len(req.Node.Events.Data),
+	}, err
+}
+
+// AppendRawHistoryNodes add raw history nodes to history node table
+func (m *executionManagerImpl) AppendRawHistoryNodes(
+	ctx context.Context,
+	request *AppendRawHistoryNodesRequest,
+) (*AppendHistoryNodesResponse, error) {
+
+	req, err := m.serializeAppendRawHistoryNodesRequest(request)
+	if err != nil {
+		return nil, err
+	}
+
+	err = m.persistence.AppendHistoryNodes(ctx, req)
+	return &AppendHistoryNodesResponse{
+		Size: len(request.History.Data),
 	}, err
 }
 
@@ -479,7 +561,7 @@ func (m *executionManagerImpl) ReadRawHistoryBranch(
 	request *ReadHistoryBranchRequest,
 ) (*ReadRawHistoryBranchResponse, error) {
 
-	dataBlobs, _, token, dataSize, err := m.readRawHistoryBranchAndFilter(ctx, request)
+	dataBlobs, _, nodeIDs, token, dataSize, err := m.readRawHistoryBranchAndFilter(ctx, request)
 	if err != nil {
 		return nil, err
 	}
@@ -491,6 +573,7 @@ func (m *executionManagerImpl) ReadRawHistoryBranch(
 
 	return &ReadRawHistoryBranchResponse{
 		HistoryEventBlobs: dataBlobs,
+		NodeIDs:           nodeIDs,
 		NextPageToken:     nextPageToken,
 		Size:              dataSize,
 	}, nil
@@ -660,7 +743,7 @@ func (m *executionManagerImpl) readRawHistoryBranchReverse(
 func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 	ctx context.Context,
 	request *ReadHistoryBranchRequest,
-) ([]*commonpb.DataBlob, []int64, *historyPagingToken, int, error) {
+) ([]*commonpb.DataBlob, []int64, []int64, *historyPagingToken, int, error) {
 
 	shardID := request.ShardID
 	branchToken := request.BranchToken
@@ -669,7 +752,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 
 	branch, err := serialization.HistoryBranchFromBlob(branchToken, enumspb.ENCODING_TYPE_PROTO3.String())
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, err
 	}
 	treeID := branch.TreeId
 	branchID := branch.BranchId
@@ -692,7 +775,7 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		defaultLastTransactionID,
 	)
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, err
 	}
 
 	nodes, token, err := m.readRawHistoryBranch(
@@ -707,10 +790,10 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		false,
 	)
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, err
 	}
 	if len(nodes) == 0 && len(request.NextPageToken) == 0 {
-		return nil, nil, nil, 0, serviceerror.NewNotFound("Workflow execution history not found.")
+		return nil, nil, nil, nil, 0, serviceerror.NewNotFound("Workflow execution history not found.")
 	}
 
 	nodes, err = m.filterHistoryNodes(
@@ -719,11 +802,12 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 		nodes,
 	)
 	if err != nil {
-		return nil, nil, nil, 0, err
+		return nil, nil, nil, nil, 0, err
 	}
 
 	var dataBlobs []*commonpb.DataBlob
 	transactionIDs := make([]int64, 0, len(nodes))
+	nodeIDs := make([]int64, 0, len(nodes))
 	dataSize := 0
 	if len(nodes) > 0 {
 		dataBlobs = make([]*commonpb.DataBlob, len(nodes))
@@ -731,13 +815,14 @@ func (m *executionManagerImpl) readRawHistoryBranchAndFilter(
 			dataBlobs[index] = node.Events
 			dataSize += len(node.Events.Data)
 			transactionIDs = append(transactionIDs, node.TransactionID)
+			nodeIDs = append(nodeIDs, node.NodeID)
 		}
 		lastNode := nodes[len(nodes)-1]
 		token.LastNodeID = lastNode.NodeID
 		token.LastTransactionID = lastNode.TransactionID
 	}
 
-	return dataBlobs, transactionIDs, token, dataSize, nil
+	return dataBlobs, transactionIDs, nodeIDs, token, dataSize, nil
 }
 
 func (m *executionManagerImpl) readRawHistoryBranchReverseAndFilter(
@@ -834,7 +919,7 @@ func (m *executionManagerImpl) readHistoryBranch(
 	request *ReadHistoryBranchRequest,
 ) ([]*historypb.HistoryEvent, []*historypb.History, []int64, []byte, int, error) {
 
-	dataBlobs, transactionIDs, token, dataSize, err := m.readRawHistoryBranchAndFilter(ctx, request)
+	dataBlobs, transactionIDs, _, token, dataSize, err := m.readRawHistoryBranchAndFilter(ctx, request)
 	if err != nil {
 		return nil, nil, nil, nil, 0, err
 	}
