@@ -57,6 +57,7 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -616,14 +617,25 @@ func (s *ContextImpl) AddTasks(
 		return err
 	}
 
-	s.wLock()
-	defer s.wUnlock()
-
-	if err := s.errorByStateLocked(); err != nil {
+	engine, err := s.GetEngineWithContext(ctx)
+	if err != nil {
 		return err
 	}
 
-	return s.addTasksLocked(ctx, request, namespaceEntry)
+	s.wLock()
+	if err := s.errorByStateLocked(); err != nil {
+		s.wUnlock()
+		return err
+	}
+
+	err = s.addTasksLocked(ctx, request, namespaceEntry)
+	s.wUnlock()
+
+	if OperationPossiblySucceeded(err) {
+		engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
+	}
+
+	return err
 }
 
 func (s *ContextImpl) CreateWorkflowExecution(
@@ -879,15 +891,7 @@ func (s *ContextImpl) addTasksLocked(
 
 	request.RangeID = s.getRangeIDLocked()
 	err := s.executionManager.AddHistoryTasks(ctx, request)
-	if err = s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel); err != nil {
-		return err
-	}
-	engine, err := s.GetEngineWithContext(ctx)
-	if err != nil {
-		return err
-	}
-	engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), request.Tasks)
-	return nil
+	return s.handleWriteErrorAndUpdateMaxReadLevelLocked(err, transferMaxReadLevel)
 }
 
 func (s *ContextImpl) AppendHistoryEvents(
@@ -935,7 +939,7 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	newTaskVersion int64,
 	startTime *time.Time,
 	closeTime *time.Time,
-) error {
+) (retErr error) {
 	// DeleteWorkflowExecution is a 4-steps process (order is very important and should not be changed):
 	// 1. Add visibility delete task, i.e. schedule visibility record delete,
 	// 2. Delete current workflow execution pointer,
@@ -957,6 +961,11 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 	}
 	defer cancel()
 
+	engine, err := s.GetEngineWithContext(ctx)
+	if err != nil {
+		return err
+	}
+
 	// Do not get namespace cache within shard lock.
 	namespaceEntry, err := s.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(key.NamespaceID))
 	deleteVisibilityRecord := true
@@ -970,6 +979,13 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 		}
 	}
 
+	var newTasks map[tasks.Category][]tasks.Task
+	defer func() {
+		if OperationPossiblySucceeded(retErr) && newTasks != nil {
+			engine.NotifyNewTasks(namespaceEntry.ActiveClusterName(), newTasks)
+		}
+	}()
+
 	s.wLock()
 	defer s.wUnlock()
 
@@ -979,24 +995,26 @@ func (s *ContextImpl) DeleteWorkflowExecution(
 
 	// Step 1. Delete visibility.
 	if deleteVisibilityRecord {
+		// TODO: move to existing task generator logic
+		newTasks = map[tasks.Category][]tasks.Task{
+			tasks.CategoryVisibility: {
+				&tasks.DeleteExecutionVisibilityTask{
+					// TaskID is set by addTasksLocked
+					WorkflowKey:         key,
+					VisibilityTimestamp: s.timeSource.Now(),
+					Version:             newTaskVersion,
+					StartTime:           startTime,
+					CloseTime:           closeTime,
+				},
+			},
+		}
 		addTasksRequest := &persistence.AddHistoryTasksRequest{
 			ShardID:     s.shardID,
 			NamespaceID: key.NamespaceID,
 			WorkflowID:  key.WorkflowID,
 			RunID:       key.RunID,
 
-			Tasks: map[tasks.Category][]tasks.Task{
-				tasks.CategoryVisibility: {
-					&tasks.DeleteExecutionVisibilityTask{
-						// TaskID is set by addTasksLocked
-						WorkflowKey:         key,
-						VisibilityTimestamp: s.timeSource.Now(),
-						Version:             newTaskVersion,
-						StartTime:           startTime,
-						CloseTime:           closeTime,
-					},
-				},
-			},
+			Tasks: newTasks,
 		}
 		err = s.addTasksLocked(ctx, addTasksRequest, namespaceEntry)
 		if err != nil {
@@ -1999,6 +2017,28 @@ func (s *ContextImpl) ensureMinContextTimeout(
 
 	newContext, cancel := context.WithTimeout(context.Background(), minContextTimeout)
 	return newContext, cancel, nil
+}
+
+func OperationPossiblySucceeded(err error) bool {
+	if err == consts.ErrConflict {
+		return false
+	}
+
+	switch err.(type) {
+	case *persistence.CurrentWorkflowConditionFailedError,
+		*persistence.WorkflowConditionFailedError,
+		*persistence.ConditionFailedError,
+		*persistence.ShardOwnershipLostError,
+		*persistence.InvalidPersistenceRequestError,
+		*persistence.TransactionSizeLimitError,
+		*serviceerror.ResourceExhausted,
+		*serviceerror.NotFound,
+		*serviceerror.NamespaceNotFound:
+		// Persistence failure that means that write was definitely not committed.
+		return false
+	default:
+		return true
+	}
 }
 
 func convertAckLevelToTaskKey(
