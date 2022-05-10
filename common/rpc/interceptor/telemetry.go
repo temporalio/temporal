@@ -191,6 +191,8 @@ func (ti *TelemetryInterceptor) handleError(
 	case *serviceerror.Unavailable:
 		scope.IncCounter(metrics.ServiceFailures)
 		ti.logger.Error("unavailable error", append(logTags, tag.Error(err))...)
+	case *serviceerror.WorkflowNotReady:
+		scope.IncCounter(metrics.ServiceErrWorkflowNotReadyCounter)
 	default:
 		scope.IncCounter(metrics.ServiceFailures)
 		ti.logger.Error("uncategorized error", append(logTags, tag.Error(err))...)

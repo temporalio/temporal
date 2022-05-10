@@ -192,8 +192,9 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 		},
 	}
 
-	// There is no reason to update visibility and schedule history retention task if workflow executions in about to be deleted.
-	// This will save one call to visibility storage and one timer task creation.
+	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
+	// Also, there is no reason to schedule history retention task if workflow executions in about to be deleted.
+	// This will also save one call to visibility storage and one timer task creation.
 	if !deleteAfterClose {
 		closeTasks = append(closeTasks,
 			&tasks.CloseExecutionVisibilityTask{

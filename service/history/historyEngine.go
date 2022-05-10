@@ -2014,7 +2014,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 		return err
 	}
 
-	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
+	weCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -2027,7 +2027,7 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
+	defer func() { weCtx.GetReleaseFn()(retError) }()
 
 	// Open and Close workflow executions are deleted differently.
 	// Open workflow execution is deleted by terminating with special flag `deleteAfterTerminate` set to true.
@@ -2039,14 +2039,14 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	// Although running workflows in active cluster are terminated first and the termination is replicated.
 	// In passive cluster, workflow executions are just deleted in regardless of its status.
 
-	if workflowContext.GetMutableState().IsWorkflowExecutionRunning() &&
+	if weCtx.GetMutableState().IsWorkflowExecutionRunning() &&
 		namespaceEntry.ActiveInCluster(e.shard.GetClusterMetadata().GetCurrentClusterName()) {
 
 		// If workflow execution is running and in active cluster.
 		return api.UpdateWorkflowWithNew(
 			e.shard,
 			ctx,
-			workflowContext,
+			weCtx,
 			func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
 				mutableState := workflowContext.GetMutableState()
 				eventBatchFirstEventID := mutableState.GetNextEventID()
@@ -2071,7 +2071,9 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
-		workflowContext.GetMutableState(),
+		weCtx.GetMutableState(),
+		e.shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
+		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
 	)
 }
 

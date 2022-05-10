@@ -324,8 +324,8 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
 	// NOTE: do not access anything related mutable state after this lock release.
-	// Lock is needed if execution is about to be deleted. Otherwise, release lock immediately
-	// since mutable state builder is not needed and the rest of logic is RPC calls, which can take time.
+	// Release lock immediately since mutable state builder is not needed
+	// and the rest of logic is RPC calls, which can take time.
 	release(nil)
 
 	err = t.archiveVisibility(

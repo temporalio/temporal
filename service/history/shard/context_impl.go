@@ -36,6 +36,7 @@ import (
 
 	"go.temporal.io/server/api/adminservice/v1"
 	clockspb "go.temporal.io/server/api/clock/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/client"
@@ -716,6 +717,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 	); err != nil {
 		return nil, err
 	}
+	s.updateCloseTaskIDs(request.UpdateWorkflowMutation.ExecutionInfo, request.UpdateWorkflowMutation.Tasks)
 	if request.NewWorkflowSnapshot != nil {
 		if err := s.allocateTaskIDsLocked(
 			namespaceEntry,
@@ -725,6 +727,7 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		); err != nil {
 			return nil, err
 		}
+		s.updateCloseTaskIDs(request.NewWorkflowSnapshot.ExecutionInfo, request.NewWorkflowSnapshot.Tasks)
 	}
 
 	currentRangeID := s.getRangeIDLocked()
@@ -734,6 +737,21 @@ func (s *ContextImpl) UpdateWorkflowExecution(
 		return nil, err
 	}
 	return resp, nil
+}
+
+func (s *ContextImpl) updateCloseTaskIDs(executionInfo *persistencespb.WorkflowExecutionInfo, tasksByCategory map[tasks.Category][]tasks.Task) {
+	for _, t := range tasksByCategory[tasks.CategoryTransfer] {
+		if t.GetType() == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION {
+			executionInfo.CloseTransferTaskId = t.GetTaskID()
+			break
+		}
+	}
+	for _, t := range tasksByCategory[tasks.CategoryVisibility] {
+		if t.GetType() == enumsspb.TASK_TYPE_VISIBILITY_CLOSE_EXECUTION {
+			executionInfo.CloseVisibilityTaskId = t.GetTaskID()
+			break
+		}
+	}
 }
 
 func (s *ContextImpl) ConflictResolveWorkflowExecution(

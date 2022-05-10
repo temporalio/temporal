@@ -131,7 +131,9 @@ message WorkflowExecutionInfo {
     string new_execution_run_id = 61;
     temporal.server.api.clock.v1.ShardClock parent_clock = 62;
     // version of child execution initiated event in parent workflow
-    int64 parent_initiated_version = 63; 
+    int64 parent_initiated_version = 63;
+    int64 close_transfer_task_id = 64;
+    int64 close_visibility_task_id = 65;
 }
 
 message ExecutionStats {

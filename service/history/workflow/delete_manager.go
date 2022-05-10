@@ -49,7 +49,7 @@ import (
 
 type (
 	DeleteManager interface {
-		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState) error
+		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState, transferQueueAckLevel int64, visibilityQueueAckLevel int64) error
 		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64, deleteFromOpenVisibility bool) error
 		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 	}
@@ -90,11 +90,24 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	nsID namespace.ID,
 	we commonpb.WorkflowExecution,
 	ms MutableState,
+	transferQueueAckLevel int64,
+	visibilityQueueAckLevel int64,
 ) error {
 
 	if ms.IsWorkflowExecutionRunning() {
 		// Running workflow cannot be deleted. Close or terminate it first.
 		return consts.ErrWorkflowNotCompleted
+	}
+
+	// Create delete workflow execution task only if workflow is closed successfully and all pending tasks are completed.
+	// Otherwise, mutable state might be deleted before close tasks are executed.
+	// Unfortunately, queue ack levels are updated with delay (default 60s),
+	// therefore this API will return error if workflow is deleted within 60 seconds after close.
+	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // backward compatibility (remove in 1.18).
+		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel) || // Transfer close task wasn't executed.
+		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // backward compatibility (remove in 1.18).
+			ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) {
+		return consts.ErrWorkflowNotReady
 	}
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(m.shard, ms)
