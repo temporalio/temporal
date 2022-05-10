@@ -900,6 +900,26 @@ func (mr *MockHistoryServiceClientMockRecorder) VerifyChildExecutionCompletionRe
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockHistoryServiceClient)(nil).VerifyChildExecutionCompletionRecorded), varargs...)
 }
 
+// VerifyFirstWorkflowTaskScheduled mocks base method.
+func (m *MockHistoryServiceClient) VerifyFirstWorkflowTaskScheduled(ctx context.Context, in *historyservice.VerifyFirstWorkflowTaskScheduledRequest, opts ...grpc.CallOption) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "VerifyFirstWorkflowTaskScheduled", varargs...)
+	ret0, _ := ret[0].(*historyservice.VerifyFirstWorkflowTaskScheduledResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyFirstWorkflowTaskScheduled indicates an expected call of VerifyFirstWorkflowTaskScheduled.
+func (mr *MockHistoryServiceClientMockRecorder) VerifyFirstWorkflowTaskScheduled(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockHistoryServiceClient)(nil).VerifyFirstWorkflowTaskScheduled), varargs...)
+}
+
 // MockHistoryServiceServer is a mock of HistoryServiceServer interface.
 type MockHistoryServiceServer struct {
 	ctrl     *gomock.Controller
@@ -1551,4 +1571,19 @@ func (m *MockHistoryServiceServer) VerifyChildExecutionCompletionRecorded(arg0 c
 func (mr *MockHistoryServiceServerMockRecorder) VerifyChildExecutionCompletionRecorded(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyChildExecutionCompletionRecorded", reflect.TypeOf((*MockHistoryServiceServer)(nil).VerifyChildExecutionCompletionRecorded), arg0, arg1)
+}
+
+// VerifyFirstWorkflowTaskScheduled mocks base method.
+func (m *MockHistoryServiceServer) VerifyFirstWorkflowTaskScheduled(arg0 context.Context, arg1 *historyservice.VerifyFirstWorkflowTaskScheduledRequest) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "VerifyFirstWorkflowTaskScheduled", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.VerifyFirstWorkflowTaskScheduledResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// VerifyFirstWorkflowTaskScheduled indicates an expected call of VerifyFirstWorkflowTaskScheduled.
+func (mr *MockHistoryServiceServerMockRecorder) VerifyFirstWorkflowTaskScheduled(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "VerifyFirstWorkflowTaskScheduled", reflect.TypeOf((*MockHistoryServiceServer)(nil).VerifyFirstWorkflowTaskScheduled), arg0, arg1)
 }

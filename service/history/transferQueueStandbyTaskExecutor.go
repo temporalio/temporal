@@ -395,8 +395,8 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 	transferTask *tasks.StartChildExecutionTask,
 ) error {
 
-	processTaskIfClosed := false
-	actionFn := func(_ context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
+	processTaskIfClosed := true
+	actionFn := func(ctx context.Context, wfContext workflow.Context, mutableState workflow.MutableState) (interface{}, error) {
 
 		childWorkflowInfo, ok := mutableState.GetChildExecutionInfo(transferTask.InitiatedID)
 		if !ok {
@@ -408,12 +408,45 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			return nil, nil
 		}
 
-		if childWorkflowInfo.StartedId != common.EmptyEventID {
+		workflowClosed := !mutableState.IsWorkflowExecutionRunning()
+		childStarted := childWorkflowInfo.StartedId != common.EmptyEventID
+		childAbandon := childWorkflowInfo.ParentClosePolicy == enumspb.PARENT_CLOSE_POLICY_ABANDON
+
+		if workflowClosed && !(childStarted && childAbandon) {
+			// NOTE: ideally for workflowClosed, child not started, parent close policy is abandon case,
+			// we should continue to start the child workflow in active cluster, so standby logic also need to
+			// perform the verification. However, we can't do that due to some technial reasons.
+			// Please check the comments in processStartChildExecution in transferQueueActiveTaskExecutor.go
+			// for details.
 			return nil, nil
 		}
-		// TODO: standby logic should verify if first workflow task is scheduled or not as well?
 
-		return getHistoryResendInfo(mutableState)
+		if !childStarted {
+			historyResendInfo, err := getHistoryResendInfo(mutableState)
+			if err != nil {
+				return nil, err
+			}
+			return &startChildExecutionPostActionInfo{
+				historyResendInfo: historyResendInfo,
+			}, nil
+		}
+
+		_, err := t.historyClient.VerifyFirstWorkflowTaskScheduled(ctx, &historyservice.VerifyFirstWorkflowTaskScheduledRequest{
+			NamespaceId: transferTask.TargetNamespaceID,
+			WorkflowExecution: &commonpb.WorkflowExecution{
+				WorkflowId: childWorkflowInfo.StartedWorkflowId,
+				RunId:      childWorkflowInfo.StartedRunId,
+			},
+			Clock: childWorkflowInfo.Clock,
+		})
+		switch err.(type) {
+		case nil, *serviceerror.NamespaceNotFound:
+			return nil, nil
+		case *serviceerrors.WorkflowNotReady:
+			return &startChildExecutionPostActionInfo{}, nil
+		default:
+			return nil, err
+		}
 	}
 
 	return t.processTransfer(
@@ -426,7 +459,7 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.fetchHistoryFromRemote,
+			t.startChildExecutionResendPostAction,
 			standbyTransferTaskPostActionTaskDiscarded,
 		),
 	)
@@ -513,6 +546,24 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		&pushwtInfo.taskqueue,
 		timestamp.DurationFromSeconds(timeout),
 	)
+}
+
+func (t *transferQueueStandbyTaskExecutor) startChildExecutionResendPostAction(
+	ctx context.Context,
+	taskInfo tasks.Task,
+	postActionInfo interface{},
+	log log.Logger,
+) error {
+	if postActionInfo == nil {
+		return nil
+	}
+
+	historyResendInfo := postActionInfo.(*startChildExecutionPostActionInfo).historyResendInfo
+	if historyResendInfo != nil {
+		return t.fetchHistoryFromRemote(ctx, taskInfo, historyResendInfo, log)
+	}
+
+	return standbyTaskPostActionNoOp(ctx, taskInfo, postActionInfo, log)
 }
 
 func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(

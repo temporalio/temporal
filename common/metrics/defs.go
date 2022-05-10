@@ -379,6 +379,8 @@ const (
 	HistoryClientResetWorkflowExecutionScope
 	// HistoryClientScheduleWorkflowTaskScope tracks RPC calls to history service
 	HistoryClientScheduleWorkflowTaskScope
+	// HistoryClientVerifyFirstWorkflowTaskScheduled tracks RPC calls to history service
+	HistoryClientVerifyFirstWorkflowTaskScheduled
 	// HistoryClientRecordChildExecutionCompletedScope tracks RPC calls to history service
 	HistoryClientRecordChildExecutionCompletedScope
 	// HistoryClientVerifyChildExecutionCompletionRecordedScope tracks RPC calls to history service
@@ -937,6 +939,8 @@ const (
 	HistoryTerminateWorkflowExecutionScope
 	// HistoryScheduleWorkflowTaskScope tracks ScheduleWorkflowTask API calls received by service
 	HistoryScheduleWorkflowTaskScope
+	// HistoryVerifyFirstWorkflowTaskScheduled tracks VerifyFirstWorkflowTaskScheduled API calls received by service
+	HistoryVerifyFirstWorkflowTaskScheduled
 	// HistoryRecordChildExecutionCompletedScope tracks RecordChildExecutionCompleted API calls received by service
 	HistoryRecordChildExecutionCompletedScope
 	// HistoryVerifyChildExecutionCompletionRecordedScope tracks VerifyChildExecutionCompletionRecorded API calls received by service
@@ -1344,6 +1348,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientDeleteWorkflowExecutionScope:                {operation: "HistoryClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientResetWorkflowExecutionScope:                 {operation: "HistoryClientResetWorkflowExecution", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientScheduleWorkflowTaskScope:                   {operation: "HistoryClientScheduleWorkflowTask", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientVerifyFirstWorkflowTaskScheduled:            {operation: "HistoryClientVerifyFirstWorkflowTaskScheduled", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientRecordChildExecutionCompletedScope:          {operation: "HistoryClientRecordChildExecutionCompleted", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientVerifyChildExecutionCompletionRecordedScope: {operation: "HistoryClientVerifyChildExecutionCompletionRecorded", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientReplicateEventsV2Scope:                      {operation: "HistoryClientReplicateEventsV2", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
@@ -1614,6 +1619,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryProcessDeleteHistoryEventScope:              {operation: "ProcessDeleteHistoryEvent"},
 		HistoryDeleteWorkflowExecutionScope:                {operation: "DeleteWorkflowExecution"},
 		HistoryScheduleWorkflowTaskScope:                   {operation: "ScheduleWorkflowTask"},
+		HistoryVerifyFirstWorkflowTaskScheduled:            {operation: "VerifyFirstWorkflowTaskScheduled"},
 		HistoryRecordChildExecutionCompletedScope:          {operation: "RecordChildExecutionCompleted"},
 		HistoryVerifyChildExecutionCompletionRecordedScope: {operation: "VerifyChildExecutionCompletionRecorded"},
 		HistoryRequestCancelWorkflowExecutionScope:         {operation: "RequestCancelWorkflowExecution"},

@@ -64,6 +64,7 @@ var (
 		"RespondWorkflowTaskCompleted":           0,
 		"RespondWorkflowTaskFailed":              0,
 		"ScheduleWorkflowTask":                   0,
+		"VerifyFirstWorkflowTaskScheduled":       0,
 		"SignalWithStartWorkflowExecution":       0,
 		"SignalWorkflowExecution":                0,
 		"StartWorkflowExecution":                 0,
