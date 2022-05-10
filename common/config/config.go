@@ -320,6 +320,9 @@ type (
 		TaskScanPartitions int `yaml:"taskScanPartitions"`
 		// TLS is the configuration for TLS connections
 		TLS *auth.TLS `yaml:"tls"`
+		// AuthPlugin The name of a database authentication stategy
+		// - currently drivers 'mysql' and 'postgres' support 'rds-iam-auth'
+		AuthPlugin string `yaml:"authPlugin"`
 	}
 
 	// CustomDatastoreConfig is the configuration for connecting to a custom datastore that is not supported by temporal core

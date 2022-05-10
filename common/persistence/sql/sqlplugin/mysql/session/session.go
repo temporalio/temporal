@@ -37,6 +37,7 @@ import (
 
 	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
+	SQLAuth "go.temporal.io/server/common/persistence/sql/sqlplugin/auth"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -63,6 +64,18 @@ func NewSession(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*Session, error) {
+	if cfg.AuthPlugin != "" {
+		authPlugin, err := SQLAuth.LookupPlugin(cfg.AuthPlugin)
+		if err != nil {
+			return nil, err
+		}
+
+		cfg, err = authPlugin.GetConfig(cfg)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	db, err := createConnection(cfg, resolver)
 	if err != nil {
 		return nil, err

@@ -25,6 +25,7 @@
 package session
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -33,6 +34,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/persistence/sql/sqlplugin/auth"
 	"go.temporal.io/server/common/resolver"
 )
 
@@ -149,6 +151,51 @@ func (s *sessionTestSuite) TestBuildDSN() {
 		s.NoError(err)
 		wantAttrs := buildExpectedURLParams(tc.in.ConnectAttributes, tc.outIsolationKey, tc.outIsolationVal)
 		s.Equal(wantAttrs, qry.Query(), "invalid dsn url params")
+	}
+}
+
+func (s *sessionTestSuite) TestAuthPlugins() {
+	testCases := []struct {
+		in            config.SQL
+		expectedError error
+	}{
+		{
+			in: config.SQL{
+				User:            "test",
+				Password:        "pass",
+				ConnectProtocol: "tcp",
+				ConnectAddr:     "192.168.0.1:3306",
+				DatabaseName:    "db1",
+				AuthPlugin:      "unsupported",
+			},
+			expectedError: auth.ErrInvalidAuthPluginName,
+		},
+		{
+			in: config.SQL{
+				User:            "test",
+				Password:        "pass",
+				ConnectProtocol: "tcp",
+				ConnectAddr:     "192.168.0.1:3306",
+				DatabaseName:    "db1",
+				AuthPlugin:      "rds-iam-auth",
+			},
+			expectedError: fmt.Errorf("NOOP"),
+		},
+	}
+
+	rdsPlugin, _ := auth.LookupPlugin("rds-iam-auth")
+	rdsMock := auth.NewMockAuthPlugin(s.controller)
+	auth.RegisterPlugin("rds-iam-auth", rdsMock)
+	defer func() {
+		auth.RegisterPlugin("rds-iam-auth", rdsPlugin)
+	}()
+
+	// return a noop error to avoid having to mock the SQL connection
+	rdsMock.EXPECT().GetConfig(gomock.Any()).Return(nil, fmt.Errorf("NOOP")).AnyTimes()
+
+	for _, tc := range testCases {
+		_, err := NewSession(&tc.in, nil)
+		s.Equal(tc.expectedError, err)
 	}
 }
 
