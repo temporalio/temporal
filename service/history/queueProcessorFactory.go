@@ -107,8 +107,7 @@ type (
 	replicationQueueProcessorFactoryParams struct {
 		fx.In
 
-		SchedulerParams
-
+		Config             *configs.Config
 		ArchivalClient     archiver.Client
 		EventSerializer    serialization.Serializer
 		TaskFetcherFactory replication.TaskFetcherFactory

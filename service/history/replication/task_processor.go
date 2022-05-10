@@ -29,7 +29,6 @@ package replication
 import (
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,11 +38,8 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/convert"
 	"go.temporal.io/server/common/log"
@@ -54,13 +50,9 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
-	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 const (
@@ -77,21 +69,6 @@ type (
 	// TaskProcessor is the interface for task processor
 	TaskProcessor interface {
 		common.Daemon
-	}
-
-	// taskProcessorFactoryImpl is to manage replication task processors
-	taskProcessorFactoryImpl struct {
-		config                        *configs.Config
-		deleteMgr                     workflow.DeleteManager
-		engine                        shard.Engine
-		eventSerializer               serialization.Serializer
-		shard                         shard.Context
-		status                        int32
-		replicationTaskFetcherFactory TaskFetcherFactory
-		workflowCache                 workflow.Cache
-
-		taskProcessorLock sync.RWMutex
-		taskProcessors    map[string]TaskProcessor
 	}
 
 	// taskProcessorImpl is responsible for processing replication tasks for a shard.
@@ -130,169 +107,6 @@ type (
 		respChan chan<- *replicationspb.ReplicationMessages
 	}
 )
-
-func NewTaskProcessorFactory(
-	archivalClient archiver.Client,
-	config *configs.Config,
-	engine shard.Engine,
-	eventSerializer serialization.Serializer,
-	shard shard.Context,
-	replicationTaskFetcherFactory TaskFetcherFactory,
-	workflowCache workflow.Cache,
-) queues.Processor {
-	workflowDeleteManager := workflow.NewDeleteManager(
-		shard,
-		workflowCache,
-		config,
-		archivalClient,
-		shard.GetTimeSource(),
-	)
-	return &taskProcessorFactoryImpl{
-		config:                        config,
-		deleteMgr:                     workflowDeleteManager,
-		engine:                        engine,
-		eventSerializer:               eventSerializer,
-		shard:                         shard,
-		status:                        common.DaemonStatusInitialized,
-		replicationTaskFetcherFactory: replicationTaskFetcherFactory,
-		workflowCache:                 workflowCache,
-		taskProcessors:                make(map[string]TaskProcessor),
-	}
-}
-
-func (r *taskProcessorFactoryImpl) Start() {
-	if !atomic.CompareAndSwapInt32(
-		&r.status,
-		common.DaemonStatusInitialized,
-		common.DaemonStatusStarted,
-	) {
-		return
-	}
-
-	// Listen to cluster metadata and dynamically update replication processor for remote clusters.
-	r.listenToClusterMetadataChange()
-}
-
-func (r *taskProcessorFactoryImpl) Stop() {
-	if !atomic.CompareAndSwapInt32(
-		&r.status,
-		common.DaemonStatusStarted,
-		common.DaemonStatusStopped,
-	) {
-		return
-	}
-
-	r.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(r)
-	r.taskProcessorLock.Lock()
-	for _, replicationTaskProcessor := range r.taskProcessors {
-		replicationTaskProcessor.Stop()
-	}
-	r.taskProcessorLock.Unlock()
-}
-
-func (r taskProcessorFactoryImpl) Category() tasks.Category {
-	return tasks.CategoryReplication
-}
-
-func (r taskProcessorFactoryImpl) NotifyNewTasks(_ string, _ []tasks.Task) {
-	//no-op
-	return
-}
-
-func (r taskProcessorFactoryImpl) FailoverNamespace(_ map[string]struct{}) {
-	//no-op
-	return
-}
-
-func (r taskProcessorFactoryImpl) LockTaskProcessing() {
-	//no-op
-	return
-}
-
-func (r taskProcessorFactoryImpl) UnlockTaskProcessing() {
-	//no-op
-	return
-}
-
-func (r *taskProcessorFactoryImpl) listenToClusterMetadataChange() {
-	clusterMetadata := r.shard.GetClusterMetadata()
-	clusterMetadata.RegisterMetadataChangeCallback(
-		r,
-		r.handleClusterMetadataUpdate,
-	)
-}
-
-func (r *taskProcessorFactoryImpl) handleClusterMetadataUpdate(
-	oldClusterMetadata map[string]*cluster.ClusterInformation,
-	newClusterMetadata map[string]*cluster.ClusterInformation,
-) {
-	r.taskProcessorLock.Lock()
-	defer r.taskProcessorLock.Unlock()
-	currentClusterName := r.shard.GetClusterMetadata().GetCurrentClusterName()
-	for clusterName := range oldClusterMetadata {
-		if clusterName == currentClusterName {
-			continue
-		}
-		// The metadata triggers a update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
-		// The callback covers three cases:
-		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
-
-		if processor, ok := r.taskProcessors[clusterName]; ok {
-			// Case 1 and Case 3
-			processor.Stop()
-			delete(r.taskProcessors, clusterName)
-		}
-		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-			// Case 2 and Case 3
-			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
-			adminClient := r.shard.GetRemoteAdminClient(clusterName)
-			adminRetryableClient := admin.NewRetryableClient(
-				adminClient,
-				common.CreateReplicationServiceBusyRetryPolicy(),
-				common.IsResourceExhausted,
-			)
-			// Intentionally use the raw client to create its own retry policy
-			historyClient := r.shard.GetHistoryClient()
-			historyRetryableClient := history.NewRetryableClient(
-				historyClient,
-				common.CreateReplicationServiceBusyRetryPolicy(),
-				common.IsResourceExhausted,
-			)
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				r.shard.GetNamespaceRegistry(),
-				adminRetryableClient,
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
-					return err
-				},
-				r.shard.GetPayloadSerializer(),
-				r.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-				r.shard.GetLogger(),
-			)
-			replicationTaskExecutor := NewTaskExecutor(
-				r.shard,
-				r.shard.GetNamespaceRegistry(),
-				nDCHistoryResender,
-				r.engine,
-				r.deleteMgr,
-				r.workflowCache,
-				r.shard.GetMetricsClient(),
-				r.shard.GetLogger(),
-			)
-			replicationTaskProcessor := NewTaskProcessor(
-				r.shard,
-				r.engine,
-				r.config,
-				r.shard.GetMetricsClient(),
-				fetcher,
-				replicationTaskExecutor,
-				r.eventSerializer,
-			)
-			replicationTaskProcessor.Start()
-			r.taskProcessors[clusterName] = replicationTaskProcessor
-		}
-	}
-}
 
 // NewTaskProcessor creates a new replication task processor.
 func NewTaskProcessor(
