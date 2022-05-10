@@ -30,6 +30,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
@@ -144,18 +145,10 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_Consistent_PiggybackQuery() {
 }
 
 func (s *clientIntegrationSuite) TestQueryWorkflow_QueryWhileBackoff() {
-	firstWorkflowDone := make(chan struct{}, 1)
 	workflowFn := func(ctx workflow.Context) (string, error) {
 		workflow.SetQueryHandler(ctx, "test", func() (string, error) {
 			return "should-reach-here", nil
 		})
-
-		// only for test: to notify the test is ready for a query
-		select {
-		case firstWorkflowDone <- struct{}{}:
-		default:
-		}
-
 		return "", temporal.NewApplicationError("retry-me", "test-error")
 	}
 
@@ -180,13 +173,24 @@ func (s *clientIntegrationSuite) TestQueryWorkflow_QueryWhileBackoff() {
 	s.NotNil(workflowRun)
 	s.True(workflowRun.GetRunID() != "")
 
-	// block until first workflow is done
-	select {
-	case <-firstWorkflowDone:
-		// unblock, no-op
-	case <-time.After(time.Second * 5):
-		s.Logger.Fatal("first workflow is not done in 5s")
+	// wait until retry with backoff is scheduled
+	findBackoffWorkflow := false
+	for i := 0; i < 5; i++ {
+		historyEvents := s.getHistory(s.namespace, &commonpb.WorkflowExecution{
+			WorkflowId: id,
+		})
+		s.True(len(historyEvents) > 0)
+		startEvent := historyEvents[0]
+		startAttributes := startEvent.GetWorkflowExecutionStartedEventAttributes()
+		s.NotNil(startAttributes)
+		if startAttributes.FirstWorkflowTaskBackoff != nil && *startAttributes.FirstWorkflowTaskBackoff > 0 {
+			findBackoffWorkflow = true
+			break
+		}
+		// wait for the retry, which will have backoff
+		time.Sleep(time.Second)
 	}
+	s.True(findBackoffWorkflow)
 
 	_, err = s.sdkClient.QueryWorkflow(ctx, id, "", "test")
 	s.Error(err)
