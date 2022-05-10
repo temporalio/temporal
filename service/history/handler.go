@@ -60,6 +60,7 @@ import (
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 )
@@ -70,47 +71,47 @@ type (
 	Handler struct {
 		status int32
 
-		tokenSerializer             common.TaskTokenSerializer
-		startWG                     sync.WaitGroup
-		config                      *configs.Config
-		eventNotifier               events.Notifier
-		replicationTaskFetchers     ReplicationTaskFetchers
-		logger                      log.Logger
-		throttledLogger             log.Logger
-		persistenceExecutionManager persistence.ExecutionManager
-		persistenceShardManager     persistence.ShardManager
-		historyServiceResolver      membership.ServiceResolver
-		metricsClient               metrics.Client
-		payloadSerializer           serialization.Serializer
-		timeSource                  clock.TimeSource
-		namespaceRegistry           namespace.Registry
-		saProvider                  searchattribute.Provider
-		saMapper                    searchattribute.Mapper
-		clusterMetadata             cluster.Metadata
-		archivalMetadata            archiver.ArchivalMetadata
-		hostInfoProvider            membership.HostInfoProvider
-		controller                  *shard.ControllerImpl
+		tokenSerializer               common.TaskTokenSerializer
+		startWG                       sync.WaitGroup
+		config                        *configs.Config
+		eventNotifier                 events.Notifier
+		replicationTaskFetcherFactory replication.TaskFetcherFactory
+		logger                        log.Logger
+		throttledLogger               log.Logger
+		persistenceExecutionManager   persistence.ExecutionManager
+		persistenceShardManager       persistence.ShardManager
+		historyServiceResolver        membership.ServiceResolver
+		metricsClient                 metrics.Client
+		payloadSerializer             serialization.Serializer
+		timeSource                    clock.TimeSource
+		namespaceRegistry             namespace.Registry
+		saProvider                    searchattribute.Provider
+		saMapper                      searchattribute.Mapper
+		clusterMetadata               cluster.Metadata
+		archivalMetadata              archiver.ArchivalMetadata
+		hostInfoProvider              membership.HostInfoProvider
+		controller                    *shard.ControllerImpl
 	}
 
 	NewHandlerArgs struct {
-		Config                      *configs.Config
-		Logger                      log.Logger
-		ThrottledLogger             log.Logger
-		PersistenceExecutionManager persistence.ExecutionManager
-		PersistenceShardManager     persistence.ShardManager
-		HistoryServiceResolver      membership.ServiceResolver
-		MetricsClient               metrics.Client
-		PayloadSerializer           serialization.Serializer
-		TimeSource                  clock.TimeSource
-		NamespaceRegistry           namespace.Registry
-		SaProvider                  searchattribute.Provider
-		SaMapper                    searchattribute.Mapper
-		ClusterMetadata             cluster.Metadata
-		ArchivalMetadata            archiver.ArchivalMetadata
-		HostInfoProvider            membership.HostInfoProvider
-		ShardController             *shard.ControllerImpl
-		EventNotifier               events.Notifier
-		ReplicationTaskFetchers     ReplicationTaskFetchers
+		Config                        *configs.Config
+		Logger                        log.Logger
+		ThrottledLogger               log.Logger
+		PersistenceExecutionManager   persistence.ExecutionManager
+		PersistenceShardManager       persistence.ShardManager
+		HistoryServiceResolver        membership.ServiceResolver
+		MetricsClient                 metrics.Client
+		PayloadSerializer             serialization.Serializer
+		TimeSource                    clock.TimeSource
+		NamespaceRegistry             namespace.Registry
+		SaProvider                    searchattribute.Provider
+		SaMapper                      searchattribute.Mapper
+		ClusterMetadata               cluster.Metadata
+		ArchivalMetadata              archiver.ArchivalMetadata
+		HostInfoProvider              membership.HostInfoProvider
+		ShardController               *shard.ControllerImpl
+		EventNotifier                 events.Notifier
+		ReplicationTaskFetcherFactory replication.TaskFetcherFactory
 	}
 )
 
@@ -139,26 +140,26 @@ var (
 // NewHandler creates a thrift handler for the history service
 func NewHandler(args NewHandlerArgs) *Handler {
 	handler := &Handler{
-		status:                      common.DaemonStatusInitialized,
-		config:                      args.Config,
-		tokenSerializer:             common.NewProtoTaskTokenSerializer(),
-		logger:                      args.Logger,
-		throttledLogger:             args.ThrottledLogger,
-		persistenceExecutionManager: args.PersistenceExecutionManager,
-		persistenceShardManager:     args.PersistenceShardManager,
-		historyServiceResolver:      args.HistoryServiceResolver,
-		metricsClient:               args.MetricsClient,
-		payloadSerializer:           args.PayloadSerializer,
-		timeSource:                  args.TimeSource,
-		namespaceRegistry:           args.NamespaceRegistry,
-		saProvider:                  args.SaProvider,
-		saMapper:                    args.SaMapper,
-		clusterMetadata:             args.ClusterMetadata,
-		archivalMetadata:            args.ArchivalMetadata,
-		hostInfoProvider:            args.HostInfoProvider,
-		controller:                  args.ShardController,
-		eventNotifier:               args.EventNotifier,
-		replicationTaskFetchers:     args.ReplicationTaskFetchers,
+		status:                        common.DaemonStatusInitialized,
+		config:                        args.Config,
+		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
+		logger:                        args.Logger,
+		throttledLogger:               args.ThrottledLogger,
+		persistenceExecutionManager:   args.PersistenceExecutionManager,
+		persistenceShardManager:       args.PersistenceShardManager,
+		historyServiceResolver:        args.HistoryServiceResolver,
+		metricsClient:                 args.MetricsClient,
+		payloadSerializer:             args.PayloadSerializer,
+		timeSource:                    args.TimeSource,
+		namespaceRegistry:             args.NamespaceRegistry,
+		saProvider:                    args.SaProvider,
+		saMapper:                      args.SaMapper,
+		clusterMetadata:               args.ClusterMetadata,
+		archivalMetadata:              args.ArchivalMetadata,
+		hostInfoProvider:              args.HostInfoProvider,
+		controller:                    args.ShardController,
+		eventNotifier:                 args.EventNotifier,
+		replicationTaskFetcherFactory: args.ReplicationTaskFetcherFactory,
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
@@ -176,7 +177,7 @@ func (h *Handler) Start() {
 		return
 	}
 
-	h.replicationTaskFetchers.Start()
+	h.replicationTaskFetcherFactory.Start()
 
 	// events notifier must starts before controller
 	h.eventNotifier.Start()
@@ -195,7 +196,7 @@ func (h *Handler) Stop() {
 		return
 	}
 
-	h.replicationTaskFetchers.Stop()
+	h.replicationTaskFetcherFactory.Stop()
 	h.controller.Stop()
 	h.eventNotifier.Stop()
 }

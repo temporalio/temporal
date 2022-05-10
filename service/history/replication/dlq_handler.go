@@ -22,29 +22,27 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationDLQHandler_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination dlq_handler_mock.go
 
-package history
+package replication
 
 import (
 	"context"
 	"fmt"
 	"sync"
 
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/client/admin"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/xdc"
-
-	"go.temporal.io/api/serviceerror"
-
-	"go.temporal.io/server/api/adminservice/v1"
-	enumsspb "go.temporal.io/server/api/enums/v1"
-	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -55,21 +53,21 @@ var (
 )
 
 type (
-	// replicationDLQHandler is the interface handles replication DLQ messages
-	replicationDLQHandler interface {
-		getMessages(
+	// DLQHandler is the interface handles replication DLQ messages
+	DLQHandler interface {
+		GetMessages(
 			ctx context.Context,
 			sourceCluster string,
 			lastMessageID int64,
 			pageSize int,
 			pageToken []byte,
 		) ([]*replicationspb.ReplicationTask, []byte, error)
-		purgeMessages(
+		PurgeMessages(
 			ctx context.Context,
 			sourceCluster string,
 			lastMessageID int64,
 		) error
-		mergeMessages(
+		MergeMessages(
 			ctx context.Context,
 			sourceCluster string,
 			lastMessageID int64,
@@ -78,9 +76,9 @@ type (
 		) ([]byte, error)
 	}
 
-	replicationDLQHandlerImpl struct {
+	dlqHandlerImpl struct {
 		taskExecutorsLock sync.Mutex
-		taskExecutors     map[string]replicationTaskExecutor
+		taskExecutors     map[string]TaskExecutor
 		shard             shard.Context
 		deleteManager     workflow.DeleteManager
 		workflowCache     workflow.Cache
@@ -88,30 +86,30 @@ type (
 	}
 )
 
-func newLazyReplicationDLQHandler(
+func NewLazyDLQHandler(
 	shard shard.Context,
 	deleteManager workflow.DeleteManager,
 	workflowCache workflow.Cache,
-) replicationDLQHandler {
-	return newReplicationDLQHandler(
+) DLQHandler {
+	return newDLQHandler(
 		shard,
 		deleteManager,
 		workflowCache,
-		make(map[string]replicationTaskExecutor),
+		make(map[string]TaskExecutor),
 	)
 }
 
-func newReplicationDLQHandler(
+func newDLQHandler(
 	shard shard.Context,
 	deleteManager workflow.DeleteManager,
 	workflowCache workflow.Cache,
-	taskExecutors map[string]replicationTaskExecutor,
-) replicationDLQHandler {
+	taskExecutors map[string]TaskExecutor,
+) *dlqHandlerImpl {
 
 	if taskExecutors == nil {
 		panic("Failed to initialize replication DLQ handler due to nil task executors")
 	}
-	return &replicationDLQHandlerImpl{
+	return &dlqHandlerImpl{
 		shard:         shard,
 		deleteManager: deleteManager,
 		workflowCache: workflowCache,
@@ -120,7 +118,7 @@ func newReplicationDLQHandler(
 	}
 }
 
-func (r *replicationDLQHandlerImpl) getMessages(
+func (r *dlqHandlerImpl) GetMessages(
 	ctx context.Context,
 	sourceCluster string,
 	lastMessageID int64,
@@ -138,7 +136,96 @@ func (r *replicationDLQHandlerImpl) getMessages(
 	return tasks, token, err
 }
 
-func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
+func (r *dlqHandlerImpl) PurgeMessages(
+	ctx context.Context,
+	sourceCluster string,
+	lastMessageID int64,
+) error {
+
+	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
+	err := r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
+		ctx,
+		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
+			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
+				ShardID:             r.shard.GetShardID(),
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: tasks.Key{TaskID: ackLevel + 1},
+				ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			},
+			SourceClusterName: sourceCluster,
+		},
+	)
+	if err != nil {
+		return err
+	}
+
+	if err = r.shard.UpdateReplicatorDLQAckLevel(
+		sourceCluster,
+		lastMessageID,
+	); err != nil {
+		r.logger.Error("Failed to purge history replication message", tag.Error(err))
+		// The update ack level should not block the call. Ignore the error.
+	}
+	return nil
+}
+
+func (r *dlqHandlerImpl) MergeMessages(
+	ctx context.Context,
+	sourceCluster string,
+	lastMessageID int64,
+	pageSize int,
+	pageToken []byte,
+) ([]byte, error) {
+
+	replicationTasks, ackLevel, token, err := r.readMessagesWithAckLevel(
+		ctx,
+		sourceCluster,
+		lastMessageID,
+		pageSize,
+		pageToken,
+	)
+
+	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, task := range replicationTasks {
+		if _, err := taskExecutor.Execute(
+			task,
+			true,
+		); err != nil {
+			return nil, err
+		}
+	}
+
+	err = r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
+		ctx,
+		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
+			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
+				ShardID:             r.shard.GetShardID(),
+				TaskCategory:        tasks.CategoryReplication,
+				InclusiveMinTaskKey: tasks.Key{TaskID: ackLevel + 1},
+				ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			},
+			SourceClusterName: sourceCluster,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = r.shard.UpdateReplicatorDLQAckLevel(
+		sourceCluster,
+		lastMessageID,
+	); err != nil {
+		r.logger.Error("Failed to purge history replication message", tag.Error(err))
+		// The update ack level should not block the call. Ignore the error.
+	}
+	return token, nil
+}
+
+func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	ctx context.Context,
 	sourceCluster string,
 	lastMessageID int64,
@@ -213,96 +300,7 @@ func (r *replicationDLQHandlerImpl) readMessagesWithAckLevel(
 	return dlqResponse.ReplicationTasks, ackLevel, pageToken, nil
 }
 
-func (r *replicationDLQHandlerImpl) purgeMessages(
-	ctx context.Context,
-	sourceCluster string,
-	lastMessageID int64,
-) error {
-
-	ackLevel := r.shard.GetReplicatorDLQAckLevel(sourceCluster)
-	err := r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
-		ctx,
-		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
-				ShardID:             r.shard.GetShardID(),
-				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: tasks.Key{TaskID: ackLevel + 1},
-				ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
-			},
-			SourceClusterName: sourceCluster,
-		},
-	)
-	if err != nil {
-		return err
-	}
-
-	if err = r.shard.UpdateReplicatorDLQAckLevel(
-		sourceCluster,
-		lastMessageID,
-	); err != nil {
-		r.logger.Error("Failed to purge history replication message", tag.Error(err))
-		// The update ack level should not block the call. Ignore the error.
-	}
-	return nil
-}
-
-func (r *replicationDLQHandlerImpl) mergeMessages(
-	ctx context.Context,
-	sourceCluster string,
-	lastMessageID int64,
-	pageSize int,
-	pageToken []byte,
-) ([]byte, error) {
-
-	replicationTasks, ackLevel, token, err := r.readMessagesWithAckLevel(
-		ctx,
-		sourceCluster,
-		lastMessageID,
-		pageSize,
-		pageToken,
-	)
-
-	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, task := range replicationTasks {
-		if _, err := taskExecutor.execute(
-			task,
-			true,
-		); err != nil {
-			return nil, err
-		}
-	}
-
-	err = r.shard.GetExecutionManager().RangeDeleteReplicationTaskFromDLQ(
-		ctx,
-		&persistence.RangeDeleteReplicationTaskFromDLQRequest{
-			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
-				ShardID:             r.shard.GetShardID(),
-				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: tasks.Key{TaskID: ackLevel + 1},
-				ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
-			},
-			SourceClusterName: sourceCluster,
-		},
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	if err = r.shard.UpdateReplicatorDLQAckLevel(
-		sourceCluster,
-		lastMessageID,
-	); err != nil {
-		r.logger.Error("Failed to purge history replication message", tag.Error(err))
-		// The update ack level should not block the call. Ignore the error.
-	}
-	return token, nil
-}
-
-func (r *replicationDLQHandlerImpl) getOrCreateTaskExecutor(clusterName string) (replicationTaskExecutor, error) {
+func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecutor, error) {
 	r.taskExecutorsLock.Lock()
 	defer r.taskExecutorsLock.Unlock()
 	if executor, ok := r.taskExecutors[clusterName]; ok {
@@ -335,7 +333,7 @@ func (r *replicationDLQHandlerImpl) getOrCreateTaskExecutor(clusterName string) 
 		r.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 		r.shard.GetLogger(),
 	)
-	taskExecutor := newReplicationTaskExecutor(
+	taskExecutor := NewTaskExecutor(
 		r.shard,
 		r.shard.GetNamespaceRegistry(),
 		resender,

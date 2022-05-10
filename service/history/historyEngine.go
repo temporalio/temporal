@@ -28,7 +28,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -49,8 +48,6 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
-	"go.temporal.io/server/client/admin"
-	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -63,18 +60,17 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/versionhistory"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/api/signalwithstart"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
@@ -88,51 +84,45 @@ const (
 
 type (
 	historyEngineImpl struct {
-		status                        int32
-		currentClusterName            string
-		shard                         shard.Context
-		timeSource                    clock.TimeSource
-		workflowTaskHandler           workflowTaskHandlerCallbacks
-		clusterMetadata               cluster.Metadata
-		executionManager              persistence.ExecutionManager
-		queueProcessors               map[tasks.Category]queues.Processor
-		replicatorProcessor           *replicatorQueueProcessorImpl
-		nDCReplicator                 nDCHistoryReplicator
-		nDCActivityReplicator         nDCActivityReplicator
-		eventNotifier                 events.Notifier
-		tokenSerializer               common.TaskTokenSerializer
-		historyCache                  workflow.Cache
-		metricsClient                 metrics.Client
-		logger                        log.Logger
-		throttledLogger               log.Logger
-		config                        *configs.Config
-		workflowRebuilder             workflowRebuilder
-		workflowResetter              workflowResetter
-		replicationTaskFetchers       ReplicationTaskFetchers
-		replicationTaskProcessorsLock sync.Mutex
-		replicationTaskProcessors     map[string]ReplicationTaskProcessor
-		sdkClientFactory              sdk.ClientFactory
-		eventsReapplier               nDCEventsReapplier
-		matchingClient                matchingservice.MatchingServiceClient
-		rawMatchingClient             matchingservice.MatchingServiceClient
-		replicationDLQHandler         replicationDLQHandler
-		searchAttributesValidator     *searchattribute.Validator
-		workflowDeleteManager         workflow.DeleteManager
-		eventSerializer               serialization.Serializer
-		workflowConsistencyChecker    api.WorkflowConsistencyChecker
+		status                     int32
+		currentClusterName         string
+		shard                      shard.Context
+		timeSource                 clock.TimeSource
+		workflowTaskHandler        workflowTaskHandlerCallbacks
+		clusterMetadata            cluster.Metadata
+		executionManager           persistence.ExecutionManager
+		queueProcessors            map[tasks.Category]queues.Processor
+		replicationAckMgr          replication.AckManager
+		nDCReplicator              nDCHistoryReplicator
+		nDCActivityReplicator      nDCActivityReplicator
+		eventNotifier              events.Notifier
+		tokenSerializer            common.TaskTokenSerializer
+		historyCache               workflow.Cache
+		metricsClient              metrics.Client
+		logger                     log.Logger
+		throttledLogger            log.Logger
+		config                     *configs.Config
+		workflowRebuilder          workflowRebuilder
+		workflowResetter           workflowResetter
+		sdkClientFactory           sdk.ClientFactory
+		eventsReapplier            nDCEventsReapplier
+		matchingClient             matchingservice.MatchingServiceClient
+		rawMatchingClient          matchingservice.MatchingServiceClient
+		replicationDLQHandler      replication.DLQHandler
+		searchAttributesValidator  *searchattribute.Validator
+		workflowDeleteManager      workflow.DeleteManager
+		eventSerializer            serialization.Serializer
+		workflowConsistencyChecker api.WorkflowConsistencyChecker
 	}
 )
 
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
-	visibilityMgr manager.VisibilityManager,
 	matchingClient matchingservice.MatchingServiceClient,
-	historyClient historyservice.HistoryServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
 	config *configs.Config,
-	replicationTaskFetchers ReplicationTaskFetchers,
 	rawMatchingClient matchingservice.MatchingServiceClient,
 	newCacheFn workflow.NewCacheFn,
 	archivalClient archiver.Client,
@@ -170,8 +160,6 @@ func NewEngineWithShardContext(
 		sdkClientFactory:           sdkClientFactory,
 		matchingClient:             matchingClient,
 		rawMatchingClient:          rawMatchingClient,
-		replicationTaskProcessors:  make(map[string]ReplicationTaskProcessor),
-		replicationTaskFetchers:    replicationTaskFetchers,
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, historyCache),
@@ -186,7 +174,7 @@ func NewEngineWithShardContext(
 	historyEngImpl.eventsReapplier = newNDCEventsReapplier(shard.GetMetricsClient(), logger)
 
 	if shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-		historyEngImpl.replicatorProcessor = newReplicatorQueueProcessor(
+		historyEngImpl.replicationAckMgr = replication.NewAckManager(
 			shard,
 			historyCache,
 			executionManager,
@@ -225,7 +213,7 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
-	historyEngImpl.replicationDLQHandler = newLazyReplicationDLQHandler(shard, workflowDeleteManager, historyCache)
+	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache)
 
 	return historyEngImpl
 }
@@ -255,9 +243,6 @@ func (e *historyEngineImpl) Start() {
 	// before queue processor is started, it may result in a deadline as to create the failover queue,
 	// queue processor need to be started.
 	e.registerNamespaceFailoverCallback()
-
-	// Listen to cluster metadata and dynamically update replication processor for remote clussters.
-	e.listenToClusterMetadataChange()
 }
 
 // Stop the service.
@@ -276,12 +261,6 @@ func (e *historyEngineImpl) Stop() {
 	for _, queueProcessor := range e.queueProcessors {
 		queueProcessor.Stop()
 	}
-	e.clusterMetadata.UnRegisterMetadataChangeCallback(e)
-	e.replicationTaskProcessorsLock.Lock()
-	for _, replicationTaskProcessor := range e.replicationTaskProcessors {
-		replicationTaskProcessor.Stop()
-	}
-	e.replicationTaskProcessorsLock.Unlock()
 
 	// unset the failover callback
 	e.shard.GetNamespaceRegistry().UnregisterNamespaceChangeCallback(e)
@@ -340,7 +319,7 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			}
 
 			if e.shard.GetClusterMetadata().IsGlobalNamespaceEnabled() {
-				e.shard.UpdateHandoverNamespaces(nextNamespaces, e.replicatorProcessor.GetMaxReplicationTaskID())
+				e.shard.UpdateHandoverNamespaces(nextNamespaces, e.replicationAckMgr.GetMaxTaskID())
 			}
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
@@ -379,85 +358,6 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 			e.shard.UpdateNamespaceNotificationVersion(newNotificationVersion)
 		},
 	)
-}
-
-func (e *historyEngineImpl) listenToClusterMetadataChange() {
-	e.clusterMetadata.RegisterMetadataChangeCallback(
-		e,
-		e.handleClusterMetadataUpdate,
-	)
-}
-
-func (e *historyEngineImpl) handleClusterMetadataUpdate(
-	oldClusterMetadata map[string]*cluster.ClusterInformation,
-	newClusterMetadata map[string]*cluster.ClusterInformation,
-) {
-	e.replicationTaskProcessorsLock.Lock()
-	defer e.replicationTaskProcessorsLock.Unlock()
-
-	for clusterName := range oldClusterMetadata {
-		if clusterName == e.currentClusterName {
-			continue
-		}
-		// The metadata triggers a update when the following fields update: 1. Enabled 2. Initial Failover Version 3. Cluster address
-		// The callback covers three cases:
-		// Case 1: Remove a cluster Case 2: Add a new cluster Case 3: Refresh cluster metadata.
-
-		if processor, ok := e.replicationTaskProcessors[clusterName]; ok {
-			// Case 1 and Case 3
-			processor.Stop()
-			delete(e.replicationTaskProcessors, clusterName)
-		}
-		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-			// Case 2 and Case 3
-			fetcher := e.replicationTaskFetchers.GetOrCreateFetcher(clusterName)
-			adminClient := e.shard.GetRemoteAdminClient(clusterName)
-			adminRetryableClient := admin.NewRetryableClient(
-				adminClient,
-				common.CreateReplicationServiceBusyRetryPolicy(),
-				common.IsResourceExhausted,
-			)
-			// Intentionally use the raw client to create its own retry policy
-			historyClient := e.shard.GetHistoryClient()
-			historyRetryableClient := history.NewRetryableClient(
-				historyClient,
-				common.CreateReplicationServiceBusyRetryPolicy(),
-				common.IsResourceExhausted,
-			)
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				e.shard.GetNamespaceRegistry(),
-				adminRetryableClient,
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
-					return err
-				},
-				e.shard.GetPayloadSerializer(),
-				e.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-				e.shard.GetLogger(),
-			)
-			replicationTaskExecutor := newReplicationTaskExecutor(
-				e.shard,
-				e.shard.GetNamespaceRegistry(),
-				nDCHistoryResender,
-				e,
-				e.workflowDeleteManager,
-				e.historyCache,
-				e.shard.GetMetricsClient(),
-				e.shard.GetLogger(),
-			)
-			replicationTaskProcessor := NewReplicationTaskProcessor(
-				e.shard,
-				e,
-				e.config,
-				e.shard.GetMetricsClient(),
-				fetcher,
-				replicationTaskExecutor,
-				e.eventSerializer,
-			)
-			replicationTaskProcessor.Start()
-			e.replicationTaskProcessors[clusterName] = replicationTaskProcessor
-		}
-	}
 }
 
 // StartWorkflowExecution starts a workflow execution
@@ -2550,8 +2450,8 @@ func (e *historyEngineImpl) NotifyNewTasks(
 		// TODO: make replicatorProcessor part of queueProcessors list
 		// and get rid of the special case here.
 		if category == tasks.CategoryReplication {
-			if e.replicatorProcessor != nil {
-				e.replicatorProcessor.NotifyNewTasks(tasksByCategory)
+			if e.replicationAckMgr != nil {
+				e.replicationAckMgr.NotifyNewTasks(tasksByCategory)
 			}
 			continue
 		}
@@ -2762,7 +2662,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 		e.shard.UpdateRemoteClusterInfo(pollingCluster, ackMessageID, ackTimestampe)
 	}
 
-	replicationMessages, err := e.replicatorProcessor.paginateTasks(
+	replicationMessages, err := e.replicationAckMgr.GetTasks(
 		ctx,
 		pollingCluster,
 		queryMessageID,
@@ -2783,7 +2683,7 @@ func (e *historyEngineImpl) GetDLQReplicationMessages(
 
 	tasks := make([]*replicationspb.ReplicationTask, 0, len(taskInfos))
 	for _, taskInfo := range taskInfos {
-		task, err := e.replicatorProcessor.getTask(ctx, taskInfo)
+		task, err := e.replicationAckMgr.GetTask(ctx, taskInfo)
 		if err != nil {
 			e.logger.Error("Failed to fetch DLQ replication messages.", tag.Error(err))
 			return nil, err
@@ -2978,7 +2878,7 @@ func (e *historyEngineImpl) GetDLQMessages(
 		return nil, consts.ErrUnknownCluster
 	}
 
-	tasks, token, err := e.replicationDLQHandler.getMessages(
+	tasks, token, err := e.replicationDLQHandler.GetMessages(
 		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageId(),
@@ -3005,7 +2905,7 @@ func (e *historyEngineImpl) PurgeDLQMessages(
 		return consts.ErrUnknownCluster
 	}
 
-	return e.replicationDLQHandler.purgeMessages(
+	return e.replicationDLQHandler.PurgeMessages(
 		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageId(),
@@ -3022,7 +2922,7 @@ func (e *historyEngineImpl) MergeDLQMessages(
 		return nil, consts.ErrUnknownCluster
 	}
 
-	token, err := e.replicationDLQHandler.mergeMessages(
+	token, err := e.replicationDLQHandler.MergeMessages(
 		ctx,
 		request.GetSourceCluster(),
 		request.GetInclusiveEndMessageId(),
@@ -3160,10 +3060,8 @@ func (e *historyEngineImpl) GetReplicationStatus(
 		ShardId:        e.shard.GetShardID(),
 		ShardLocalTime: timestamp.TimePtr(e.shard.GetTimeSource().Now()),
 	}
-	if e.replicatorProcessor.maxTaskID != nil {
-		resp.MaxReplicationTaskId = *e.replicatorProcessor.maxTaskID
-	}
 
+	resp.MaxReplicationTaskId = e.replicationAckMgr.GetMaxTaskID()
 	remoteClusters, handoverNamespaces, err := e.shard.GetReplicationStatus(request.RemoteClusters)
 	if err != nil {
 		return nil, err

@@ -22,9 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskFetcher_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_fetcher_mock.go
 
-package history
+package replication
 
 import (
 	"sync"
@@ -51,24 +51,24 @@ const (
 )
 
 type (
-	// ReplicationTaskFetchers is a group of fetchers, one per source DC.
-	ReplicationTaskFetchers interface {
+	// TaskFetcherFactory is a group of fetchers, one per source DC.
+	TaskFetcherFactory interface {
 		common.Daemon
 
-		GetOrCreateFetcher(clusterName string) ReplicationTaskFetcher
+		GetOrCreateFetcher(clusterName string) taskFetcher
 	}
 
-	// ReplicationTaskFetcher is responsible for fetching replication messages from remote DC.
-	ReplicationTaskFetcher interface {
+	// taskFetcher is responsible for fetching replication messages from remote DC.
+	taskFetcher interface {
 		common.Daemon
 
-		GetSourceCluster() string
-		GetRequestChan() chan<- *replicationTaskRequest
-		GetRateLimiter() quotas.RateLimiter
+		getSourceCluster() string
+		getRequestChan() chan<- *replicationTaskRequest
+		getRateLimiter() quotas.RateLimiter
 	}
 
-	// ReplicationTaskFetchersImpl is a group of fetchers, one per source DC.
-	ReplicationTaskFetchersImpl struct {
+	// taskFetcherFactoryImpl is a group of fetchers, one per source DC.
+	taskFetcherFactoryImpl struct {
 		status          int32
 		config          *configs.Config
 		clientBean      client.Bean
@@ -76,11 +76,11 @@ type (
 		logger          log.Logger
 
 		fetchersLock sync.Mutex
-		fetchers     map[string]ReplicationTaskFetcher
+		fetchers     map[string]taskFetcher
 	}
 
-	// ReplicationTaskFetcherImpl is the implementation of fetching replication messages.
-	ReplicationTaskFetcherImpl struct {
+	// taskFetcherImpl is the implementation of fetching replication messages.
+	taskFetcherImpl struct {
 		status         int32
 		currentCluster string
 		sourceCluster  string
@@ -109,26 +109,26 @@ type (
 	}
 )
 
-// NewReplicationTaskFetchers creates an instance of ReplicationTaskFetchers with given configs.
-func NewReplicationTaskFetchers(
+// NewTaskFetcherFactory creates an instance of TaskFetcherFactory with given configs.
+func NewTaskFetcherFactory(
 	logger log.Logger,
 	config *configs.Config,
 	clusterMetadata cluster.Metadata,
 	clientBean client.Bean,
-) ReplicationTaskFetchers {
+) TaskFetcherFactory {
 
-	return &ReplicationTaskFetchersImpl{
+	return &taskFetcherFactoryImpl{
 		clusterMetadata: clusterMetadata,
 		clientBean:      clientBean,
 		config:          config,
-		fetchers:        make(map[string]ReplicationTaskFetcher),
+		fetchers:        make(map[string]taskFetcher),
 		status:          common.DaemonStatusInitialized,
 		logger:          logger,
 	}
 }
 
 // Start starts the fetchers
-func (f *ReplicationTaskFetchersImpl) Start() {
+func (f *taskFetcherFactoryImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&f.status,
 		common.DaemonStatusInitialized,
@@ -142,7 +142,7 @@ func (f *ReplicationTaskFetchersImpl) Start() {
 }
 
 // Stop stops the fetchers
-func (f *ReplicationTaskFetchersImpl) Stop() {
+func (f *taskFetcherFactoryImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&f.status,
 		common.DaemonStatusStarted,
@@ -160,7 +160,7 @@ func (f *ReplicationTaskFetchersImpl) Stop() {
 	f.logger.Info("Replication task fetchers stopped.")
 }
 
-func (f *ReplicationTaskFetchersImpl) GetOrCreateFetcher(clusterName string) ReplicationTaskFetcher {
+func (f *taskFetcherFactoryImpl) GetOrCreateFetcher(clusterName string) taskFetcher {
 	f.fetchersLock.Lock()
 	defer f.fetchersLock.Unlock()
 
@@ -171,7 +171,7 @@ func (f *ReplicationTaskFetchersImpl) GetOrCreateFetcher(clusterName string) Rep
 	return f.createReplicationFetcherLocked(clusterName)
 }
 
-func (f *ReplicationTaskFetchersImpl) createReplicationFetcherLocked(clusterName string) ReplicationTaskFetcher {
+func (f *taskFetcherFactoryImpl) createReplicationFetcherLocked(clusterName string) taskFetcher {
 	currentCluster := f.clusterMetadata.GetCurrentClusterName()
 	fetcher := newReplicationTaskFetcher(
 		f.logger,
@@ -185,7 +185,7 @@ func (f *ReplicationTaskFetchersImpl) createReplicationFetcherLocked(clusterName
 	return fetcher
 }
 
-func (f *ReplicationTaskFetchersImpl) listenClusterMetadataChange() {
+func (f *taskFetcherFactoryImpl) listenClusterMetadataChange() {
 	f.clusterMetadata.RegisterMetadataChangeCallback(
 		f,
 		func(oldClusterMetadata map[string]*cluster.ClusterInformation, newClusterMetadata map[string]*cluster.ClusterInformation) {
@@ -216,7 +216,7 @@ func newReplicationTaskFetcher(
 	currentCluster string,
 	config *configs.Config,
 	clientBean client.Bean,
-) *ReplicationTaskFetcherImpl {
+) *taskFetcherImpl {
 	numWorker := config.ReplicationTaskFetcherParallelism()
 	requestChan := make(chan *replicationTaskRequest, requestChanBufferSize)
 	shutdownChan := make(chan struct{})
@@ -238,7 +238,7 @@ func newReplicationTaskFetcher(
 		)
 	}
 
-	return &ReplicationTaskFetcherImpl{
+	return &taskFetcherImpl{
 		status:         common.DaemonStatusInitialized,
 		config:         config,
 		numWorker:      numWorker,
@@ -253,7 +253,7 @@ func newReplicationTaskFetcher(
 }
 
 // Start starts the fetcher
-func (f *ReplicationTaskFetcherImpl) Start() {
+func (f *taskFetcherImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&f.status,
 		common.DaemonStatusInitialized,
@@ -269,7 +269,7 @@ func (f *ReplicationTaskFetcherImpl) Start() {
 }
 
 // Stop stops the fetcher
-func (f *ReplicationTaskFetcherImpl) Stop() {
+func (f *taskFetcherImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&f.status,
 		common.DaemonStatusStarted,
@@ -286,17 +286,17 @@ func (f *ReplicationTaskFetcherImpl) Stop() {
 }
 
 // GetSourceCluster returns the source cluster for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetSourceCluster() string {
+func (f *taskFetcherImpl) getSourceCluster() string {
 	return f.sourceCluster
 }
 
 // GetRequestChan returns the request chan for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetRequestChan() chan<- *replicationTaskRequest {
+func (f *taskFetcherImpl) getRequestChan() chan<- *replicationTaskRequest {
 	return f.requestChan
 }
 
 // GetRateLimiter returns the host level rate limiter for the fetcher
-func (f *ReplicationTaskFetcherImpl) GetRateLimiter() quotas.RateLimiter {
+func (f *taskFetcherImpl) getRateLimiter() quotas.RateLimiter {
 	return f.rateLimiter
 }
 

@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package replication
 
 import (
 	"errors"
@@ -47,7 +47,7 @@ import (
 )
 
 type (
-	replicationTaskFetcherSuite struct {
+	taskFetcherSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -58,7 +58,7 @@ type (
 		config *configs.Config
 		logger log.Logger
 
-		replicationTaskFetcher *ReplicationTaskFetcherImpl
+		replicationTaskFetcher *taskFetcherImpl
 	}
 
 	getReplicationMessagesRequestMatcher struct {
@@ -67,20 +67,20 @@ type (
 	}
 )
 
-func TestReplicationTaskFetcherSuite(t *testing.T) {
-	s := new(replicationTaskFetcherSuite)
+func TestTaskFetcherSuite(t *testing.T) {
+	s := new(taskFetcherSuite)
 	suite.Run(t, s)
 }
 
-func (s *replicationTaskFetcherSuite) SetupSuite() {
+func (s *taskFetcherSuite) SetupSuite() {
 
 }
 
-func (s *replicationTaskFetcherSuite) TearDownSuite() {
+func (s *taskFetcherSuite) TearDownSuite() {
 
 }
 
-func (s *replicationTaskFetcherSuite) SetupTest() {
+func (s *taskFetcherSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
@@ -99,11 +99,11 @@ func (s *replicationTaskFetcherSuite) SetupTest() {
 	)
 }
 
-func (s *replicationTaskFetcherSuite) TearDownTest() {
+func (s *taskFetcherSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-func (s *replicationTaskFetcherSuite) TestBufferRequests_NoDuplicate() {
+func (s *taskFetcherSuite) TestBufferRequests_NoDuplicate() {
 	shardID := int32(1)
 
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
@@ -130,7 +130,7 @@ func (s *replicationTaskFetcherSuite) TestBufferRequests_NoDuplicate() {
 	}, s.replicationTaskFetcher.workers[0].requestByShard)
 }
 
-func (s *replicationTaskFetcherSuite) TestBufferRequests_Duplicate() {
+func (s *taskFetcherSuite) TestBufferRequests_Duplicate() {
 	shardID := int32(1)
 
 	respChan1 := make(chan *replicationspb.ReplicationMessages, 1)
@@ -171,7 +171,7 @@ func (s *replicationTaskFetcherSuite) TestBufferRequests_Duplicate() {
 	}, s.replicationTaskFetcher.workers[0].requestByShard)
 }
 
-func (s *replicationTaskFetcherSuite) TestGetMessages_All() {
+func (s *taskFetcherSuite) TestGetMessages_All() {
 	shardID := int32(1)
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest := &replicationTaskRequest{
@@ -205,7 +205,7 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_All() {
 	s.Equal(responseByShard[shardID], <-respChan)
 }
 
-func (s *replicationTaskFetcherSuite) TestGetMessages_Partial() {
+func (s *taskFetcherSuite) TestGetMessages_Partial() {
 	shardID1 := int32(1)
 	respChan1 := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest1 := &replicationTaskRequest{
@@ -252,7 +252,7 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_Partial() {
 	s.Equal((*replicationspb.ReplicationMessages)(nil), <-respChan2)
 }
 
-func (s *replicationTaskFetcherSuite) TestGetMessages_Error() {
+func (s *taskFetcherSuite) TestGetMessages_Error() {
 	shardID1 := int32(1)
 	respChan1 := make(chan *replicationspb.ReplicationMessages, 1)
 	shardRequest1 := &replicationTaskRequest{
@@ -296,7 +296,7 @@ func (s *replicationTaskFetcherSuite) TestGetMessages_Error() {
 	s.Equal((*replicationspb.ReplicationMessages)(nil), <-respChan2)
 }
 
-func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
+func (s *taskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
 	numShards := 1024
 
 	s.config.ReplicationTaskFetcherParallelism = dynamicconfig.GetIntPropertyFn(8)
@@ -333,14 +333,14 @@ func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Success() {
 				respChan: respChan,
 			}
 
-			s.replicationTaskFetcher.GetRequestChan() <- shardRequest
+			s.replicationTaskFetcher.getRequestChan() <- shardRequest
 			<-respChan
 		}()
 	}
 	waitGroup.Wait()
 }
 
-func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Error() {
+func (s *taskFetcherSuite) TestConcurrentFetchAndProcess_Error() {
 	numShards := 1024
 
 	s.config.ReplicationTaskFetcherParallelism = dynamicconfig.GetIntPropertyFn(8)
@@ -377,7 +377,7 @@ func (s *replicationTaskFetcherSuite) TestConcurrentFetchAndProcess_Error() {
 				respChan: respChan,
 			}
 
-			s.replicationTaskFetcher.GetRequestChan() <- shardRequest
+			s.replicationTaskFetcher.getRequestChan() <- shardRequest
 			<-respChan
 		}()
 	}

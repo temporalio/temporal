@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package replication
 
 import (
 	"context"
@@ -53,7 +53,7 @@ import (
 )
 
 type (
-	replicationDLQHandlerSuite struct {
+	dlqHandlerSuite struct {
 		suite.Suite
 		*require.Assertions
 		controller *gomock.Controller
@@ -66,28 +66,28 @@ type (
 		clusterMetadata  *cluster.MockMetadata
 		executionManager *persistence.MockExecutionManager
 		shardManager     *persistence.MockShardManager
-		taskExecutor     *MockreplicationTaskExecutor
-		taskExecutors    map[string]replicationTaskExecutor
+		taskExecutor     *MockTaskExecutor
+		taskExecutors    map[string]TaskExecutor
 		sourceCluster    string
 
-		replicationMessageHandler *replicationDLQHandlerImpl
+		replicationMessageHandler *dlqHandlerImpl
 	}
 )
 
-func TestReplicationMessageHandlerSuite(t *testing.T) {
-	s := new(replicationDLQHandlerSuite)
+func TestDLQHandlerSuite(t *testing.T) {
+	s := new(dlqHandlerSuite)
 	suite.Run(t, s)
 }
 
-func (s *replicationDLQHandlerSuite) SetupSuite() {
+func (s *dlqHandlerSuite) SetupSuite() {
 
 }
 
-func (s *replicationDLQHandlerSuite) TearDownSuite() {
+func (s *dlqHandlerSuite) TearDownSuite() {
 
 }
 
-func (s *replicationDLQHandlerSuite) SetupTest() {
+func (s *dlqHandlerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 
@@ -111,25 +111,25 @@ func (s *replicationDLQHandlerSuite) SetupTest() {
 	s.config = tests.NewDynamicConfig()
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.clusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
-	s.taskExecutors = make(map[string]replicationTaskExecutor)
-	s.taskExecutor = NewMockreplicationTaskExecutor(s.controller)
+	s.taskExecutors = make(map[string]TaskExecutor)
+	s.taskExecutor = NewMockTaskExecutor(s.controller)
 	s.sourceCluster = cluster.TestAlternativeClusterName
 	s.taskExecutors[s.sourceCluster] = s.taskExecutor
 
-	s.replicationMessageHandler = newReplicationDLQHandler(
+	s.replicationMessageHandler = newDLQHandler(
 		s.mockShard,
 		workflow.NewMockDeleteManager(s.controller),
 		workflow.NewMockCache(s.controller),
 		s.taskExecutors,
-	).(*replicationDLQHandlerImpl)
+	)
 }
 
-func (s *replicationDLQHandlerSuite) TearDownTest() {
+func (s *dlqHandlerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
+func (s *dlqHandlerSuite) TestReadMessages_OK() {
 	ctx := context.Background()
 
 	namespaceID := uuid.New()
@@ -192,13 +192,13 @@ func (s *replicationDLQHandlerSuite) TestReadMessages_OK() {
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	tasks, token, err := s.replicationMessageHandler.getMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
+	tasks, token, err := s.replicationMessageHandler.GetMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Equal(pageToken, token)
 	s.Equal([]*replicationspb.ReplicationTask{remoteTask}, tasks)
 }
 
-func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
+func (s *dlqHandlerSuite) TestPurgeMessages() {
 	lastMessageID := int64(1)
 
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(
@@ -214,10 +214,10 @@ func (s *replicationDLQHandlerSuite) TestPurgeMessages() {
 		}).Return(nil)
 
 	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.replicationMessageHandler.purgeMessages(context.Background(), s.sourceCluster, lastMessageID)
+	err := s.replicationMessageHandler.PurgeMessages(context.Background(), s.sourceCluster, lastMessageID)
 	s.NoError(err)
 }
-func (s *replicationDLQHandlerSuite) TestMergeMessages() {
+func (s *dlqHandlerSuite) TestMergeMessages() {
 	ctx := context.Background()
 
 	namespaceID := uuid.New()
@@ -281,7 +281,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
 		}, nil)
-	s.taskExecutor.EXPECT().execute(remoteTask, true).Return(0, nil)
+	s.taskExecutor.EXPECT().Execute(remoteTask, true).Return(0, nil)
 	s.executionManager.EXPECT().RangeDeleteReplicationTaskFromDLQ(gomock.Any(), &persistence.RangeDeleteReplicationTaskFromDLQRequest{
 		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
@@ -294,7 +294,7 @@ func (s *replicationDLQHandlerSuite) TestMergeMessages() {
 
 	s.shardManager.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
 
-	token, err := s.replicationMessageHandler.mergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
+	token, err := s.replicationMessageHandler.MergeMessages(ctx, s.sourceCluster, lastMessageID, pageSize, pageToken)
 	s.NoError(err)
 	s.Equal(pageToken, token)
 }
