@@ -415,7 +415,6 @@ func (t *transferQueueStandbyTaskExecutor) processStartChildExecution(
 		if workflowClosed && !(childStarted && childAbandon) {
 			return nil, nil
 		}
-		// TODO: standby logic should verify if first workflow task is scheduled or not as well?
 
 		if !childStarted {
 			historyResendInfo, err := getHistoryResendInfo(mutableState)
