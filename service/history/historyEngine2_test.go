@@ -1641,6 +1641,75 @@ func (s *engine2Suite) TestSignalWithStartWorkflowExecution_Start_WorkflowAlread
 	s.NotNil(err)
 }
 
+func (s *engine2Suite) TestRecordChildExecutionCompleted() {
+	childWorkflowID := "some random child workflow ID"
+	childRunID := uuid.New()
+	childWorkflowType := "some random child workflow type"
+	childTaskQueueName := "some random child task queue"
+
+	request := &historyservice.RecordChildExecutionCompletedRequest{
+		NamespaceId: tests.NamespaceID.String(),
+		WorkflowExecution: &commonpb.WorkflowExecution{
+			WorkflowId: tests.WorkflowID,
+			RunId:      tests.RunID,
+		},
+		CompletedExecution: &commonpb.WorkflowExecution{
+			WorkflowId: childWorkflowID,
+			RunId:      childRunID,
+		},
+		CompletionEvent: &historypb.HistoryEvent{
+			EventId:   456,
+			EventType: enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_COMPLETED,
+			Attributes: &historypb.HistoryEvent_WorkflowExecutionCompletedEventAttributes{
+				WorkflowExecutionCompletedEventAttributes: &historypb.WorkflowExecutionCompletedEventAttributes{},
+			},
+		},
+		ParentInitiatedId:      123,
+		ParentInitiatedVersion: 100,
+	}
+
+	msBuilder := workflow.TestGlobalMutableState(s.historyEngine.shard, s.mockEventsCache, log.NewTestLogger(), tests.Version, tests.RunID)
+	addWorkflowExecutionStartedEvent(msBuilder, commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}, "wType", "testTaskQueue", payloads.EncodeString("input"), 25*time.Second, 20*time.Second, 200*time.Second, "identity")
+	ms := workflow.TestCloneToProto(msBuilder)
+	gwmsResponse := &persistence.GetWorkflowExecutionResponse{State: ms}
+
+	// reload mutable state due to potential stale mutable state (initiated event not found)
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil).Times(2)
+	err := s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
+	s.IsType(&serviceerror.NotFound{}, err)
+
+	// add child init event
+	di := addWorkflowTaskScheduledEvent(msBuilder)
+	workflowTasksStartEvent := addWorkflowTaskStartedEvent(msBuilder, di.ScheduleID, "testTaskQueue", uuid.New())
+	di.StartedID = workflowTasksStartEvent.GetEventId()
+	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
+
+	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
+		tests.ChildNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
+	request.ParentInitiatedId = initiatedEvent.GetEventId()
+	request.ParentInitiatedVersion = initiatedEvent.GetVersion()
+
+	// reload mutable state due to potential stale mutable state (started event not found)
+	ms = workflow.TestCloneToProto(msBuilder)
+	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil).Times(2)
+	err = s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
+	s.IsType(&serviceerror.NotFound{}, err)
+
+	// add child started event
+	addChildWorkflowExecutionStartedEvent(msBuilder, initiatedEvent.GetEventId(), tests.ChildNamespace, childWorkflowID, childRunID, childWorkflowType, nil)
+
+	ms = workflow.TestCloneToProto(msBuilder)
+	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: ms}
+	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gwmsResponse, nil)
+	s.mockExecutionMgr.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(tests.UpdateWorkflowExecutionResponse, nil)
+	err = s.historyEngine.RecordChildExecutionCompleted(metrics.AddMetricsContext(context.Background()), request)
+	s.NoError(err)
+}
+
 func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_WorkflowNotExist() {
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
