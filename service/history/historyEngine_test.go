@@ -243,6 +243,7 @@ func (s *engineSuite) TestGetMutableStateSync() {
 	})
 	s.Nil(err)
 	s.Equal(int64(4), response.GetNextEventId())
+	s.Equal(tests.RunID, response.GetFirstExecutionRunId())
 }
 
 func (s *engineSuite) TestGetMutableState_IntestRunID() {

@@ -564,6 +564,7 @@ func (e *historyEngineImpl) PollMutableState(
 		VersionHistories:                      response.VersionHistories,
 		WorkflowState:                         response.WorkflowState,
 		WorkflowStatus:                        response.WorkflowStatus,
+		FirstExecutionRunId:                   response.FirstExecutionRunId,
 	}, nil
 }
 
@@ -921,6 +922,7 @@ func (e *historyEngineImpl) getMutableState(
 		VersionHistories: versionhistory.CopyVersionHistories(
 			mutableState.GetExecutionInfo().GetVersionHistories(),
 		),
+		FirstExecutionRunId: executionInfo.FirstExecutionRunId,
 	}, nil
 }
 
