@@ -166,7 +166,9 @@ func (s *sessionTestSuite) TestAuthPlugins() {
 				ConnectProtocol: "tcp",
 				ConnectAddr:     "192.168.0.1:3306",
 				DatabaseName:    "db1",
-				AuthPlugin:      "unsupported",
+				AuthPlugin: &config.SQLAuthPlugin{
+					Plugin: "unsupported",
+				},
 			},
 			expectedError: auth.ErrInvalidAuthPluginName,
 		},
@@ -177,7 +179,9 @@ func (s *sessionTestSuite) TestAuthPlugins() {
 				ConnectProtocol: "tcp",
 				ConnectAddr:     "192.168.0.1:3306",
 				DatabaseName:    "db1",
-				AuthPlugin:      "rds-iam-auth",
+				AuthPlugin: &config.SQLAuthPlugin{
+					Plugin: "rds-iam-auth",
+				},
 			},
 			expectedError: errors.New("NOOP"),
 		},

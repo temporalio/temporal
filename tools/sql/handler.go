@@ -157,7 +157,9 @@ func parseConnectConfig(cli *cli.Context) (*config.SQL, error) {
 	cfg.Password = cli.GlobalString(schema.CLIOptPassword)
 	cfg.DatabaseName = cli.GlobalString(schema.CLIOptDatabase)
 	cfg.PluginName = cli.GlobalString(schema.CLIOptPluginName)
-	cfg.AuthPlugin = cli.GlobalString(schema.CLIOptAuthPluginName)
+	cfg.AuthPlugin = &config.SQLAuthPlugin{
+		Plugin: cli.GlobalString(schema.CLIOptAuthPluginName),
+	}
 
 	if cfg.ConnectAttributes == nil {
 		cfg.ConnectAttributes = map[string]string{}
@@ -207,10 +209,10 @@ func ValidateConnectConfig(cfg *config.SQL) error {
 	if cfg.DatabaseName == "" {
 		return schema.NewConfigError("missing " + flag(schema.CLIOptDatabase) + " argument")
 	}
-	if cfg.AuthPlugin != "" {
-		_, err := SQLAuth.LookupPlugin(cfg.AuthPlugin)
+	if cfg.AuthPlugin != nil && cfg.AuthPlugin.Plugin != "" {
+		_, err := SQLAuth.LookupPlugin(cfg.AuthPlugin.Plugin)
 		if errors.Is(err, SQLAuth.ErrInvalidAuthPluginName) {
-			return schema.NewConfigError("invalid option for " + flag(schema.CLIOptAuthPluginName) + ": " + cfg.AuthPlugin)
+			return schema.NewConfigError("invalid option for " + flag(schema.CLIOptAuthPluginName) + ": " + cfg.AuthPlugin.Plugin)
 		}
 	}
 

@@ -22,6 +22,7 @@ package auth
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -61,19 +62,23 @@ func (s *rdsAuthPluginTestSuite) TearDownTest() {
 }
 
 func (s *rdsAuthPluginTestSuite) TestRdsAuthPlugin() {
-	originalPem := rdsPemBundle
 	originalFn := rdsAuthFn
 	defer func() {
-		rdsPemBundle = originalPem
 		rdsAuthFn = originalFn
 	}()
 
-	rdsPemBundle = "test"
 	rdsAuthFn = func(ctx context.Context, endpoint, region, dbUser string, creds aws.CredentialsProvider, optFns ...func(options *auth.BuildAuthTokenOptions)) (string, error) {
 		return "token", nil
 	}
+	syncRdsPemBundle := sync.Once{}
+	syncRdsPemBundle.Do(func() {})
 
-	plugin := NewRDSAuthPlugin(aws.NewConfig())
+	plugin := &RDSAuthPlugin{
+		awsConfig:        aws.NewConfig(),
+		rdsPemBundle:     "test",
+		initRdsPemBundle: syncRdsPemBundle,
+	}
+
 	cfg, err := plugin.GetConfig(context.TODO(), &config.SQL{
 		PluginName:        "mysql",
 		ConnectAttributes: map[string]string{},
@@ -89,7 +94,7 @@ func (s *rdsAuthPluginTestSuite) TestRdsAuthPlugin() {
 		},
 		TLS: &TLS.TLS{
 			Enabled: true,
-			CaData:  rdsPemBundle,
+			CaData:  "test",
 		},
 	}, cfg)
 }

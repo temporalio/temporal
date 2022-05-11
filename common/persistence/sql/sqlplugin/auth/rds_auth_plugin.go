@@ -25,6 +25,7 @@ import (
 	"encoding/base64"
 	"io/ioutil"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -39,18 +40,21 @@ const defaultTimeout = time.Second * 10
 const rdsCaUrl = "https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem"
 
 var rdsAuthFn = AWSAuth.BuildAuthToken
-var rdsPemBundle string
 
 func init() {
 	RegisterPlugin("rds-iam-auth", NewRDSAuthPlugin(nil))
 }
 
 func fetchRdsCA(ctx context.Context) (string, error) {
-	_, cancel := context.WithTimeout(ctx, defaultTimeout)
+	ctx, cancel := context.WithTimeout(ctx, defaultTimeout)
 	defer cancel()
 
-	client := http.DefaultClient
-	resp, err := client.Get(rdsCaUrl)
+	req, err := http.NewRequestWithContext(ctx, "GET", rdsCaUrl, nil)
+	if err != nil {
+		return "", err
+	}
+
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -65,7 +69,9 @@ func fetchRdsCA(ctx context.Context) (string, error) {
 }
 
 type RDSAuthPlugin struct {
-	awsConfig *aws.Config
+	awsConfig        *aws.Config
+	rdsPemBundle     string
+	initRdsPemBundle sync.Once
 }
 
 func NewRDSAuthPlugin(awsConfig *aws.Config) AuthPlugin {
@@ -123,18 +129,20 @@ func (plugin *RDSAuthPlugin) GetConfig(ctx context.Context, cfg *config.SQL) (*c
 	// if TLS is not configured, we default to the RDS CA
 	// this is required for mysql to send cleartext passwords
 	if cfg.TLS == nil {
-		if rdsPemBundle == "" {
+		plugin.initRdsPemBundle.Do(func() {
 			ca, err := fetchRdsCA(ctx)
 			if err != nil {
-				return nil, err
+				return
 			}
 
-			rdsPemBundle = ca
-		}
+			plugin.rdsPemBundle = ca
+		})
 
-		cfg.TLS = &auth.TLS{
-			Enabled: true,
-			CaData:  rdsPemBundle,
+		if plugin.rdsPemBundle != "" {
+			cfg.TLS = &auth.TLS{
+				Enabled: true,
+				CaData:  plugin.rdsPemBundle,
+			}
 		}
 	}
 

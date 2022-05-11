@@ -29,6 +29,7 @@ import (
 	"fmt"
 	"net/url"
 	"strings"
+	"time"
 
 	"github.com/iancoleman/strcase"
 	"github.com/jmoiron/sqlx"
@@ -64,13 +65,21 @@ func NewSession(
 	cfg *config.SQL,
 	resolver resolver.ServiceResolver,
 ) (*Session, error) {
-	if cfg.AuthPlugin != "" {
-		authPlugin, err := SQLAuth.LookupPlugin(cfg.AuthPlugin)
+	if cfg.AuthPlugin != nil && cfg.AuthPlugin.Plugin != "" {
+		authPlugin, err := SQLAuth.LookupPlugin(cfg.AuthPlugin.Plugin)
 		if err != nil {
 			return nil, err
 		}
 
-		cfg, err = authPlugin.GetConfig(context.TODO(), cfg)
+		timeout := cfg.AuthPlugin.Timeout
+		if timeout == 0 {
+			timeout = time.Duration(time.Second * 10)
+		}
+
+		ctx, cancel := context.WithTimeout(context.TODO(), timeout)
+		defer cancel()
+
+		cfg, err = authPlugin.GetConfig(ctx, cfg)
 		if err != nil {
 			return nil, err
 		}
