@@ -2454,7 +2454,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		EmptyCompletionCommandsCounter:                    NewCounterDef("empty_completion_commands"),
 		MultipleCompletionCommandsCounter:                 NewCounterDef("multiple_completion_commands"),
 		FailedWorkflowTasksCounter:                        NewCounterDef("failed_workflow_tasks"),
-		WorkflowTaskAttempt:                               NewDimensionlessHistogramDef("worrkflow_task_attempt"),
+		WorkflowTaskAttempt:                               NewDimensionlessHistogramDef("workflow_task_attempt"),
 		StaleMutableStateCounter:                          NewCounterDef("stale_mutable_state"),
 		AutoResetPointsLimitExceededCounter:               NewCounterDef("auto_reset_points_exceed_limit"),
 		AutoResetPointCorruptionCounter:                   NewCounterDef("auto_reset_point_corruption"),
