@@ -89,7 +89,7 @@ const (
 	CLIOptDatabase = "database"
 	// CLIOptPluginName is the cli option for plugin name
 	CLIOptPluginName = "plugin"
-	// CLIOptPluginName is the cli option for plugin name
+	// CLIOptAuthPluginName is the cli option for auth plugin name
 	CLIOptAuthPluginName = "sql-auth-plugin"
 	// CLIOptConnectAttributes is the cli option for connect attributes (key/values via a url query string)
 	CLIOptConnectAttributes = "connect-attributes"
