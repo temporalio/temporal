@@ -2009,11 +2009,6 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	request *historyservice.DeleteWorkflowExecutionRequest,
 ) (retError error) {
 
-	namespaceEntry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
-	if err != nil {
-		return err
-	}
-
 	weCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
@@ -2039,34 +2034,38 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	// Although running workflows in active cluster are terminated first and the termination is replicated.
 	// In passive cluster, workflow executions are just deleted in regardless of its status.
 
-	if weCtx.GetMutableState().IsWorkflowExecutionRunning() &&
-		namespaceEntry.ActiveInCluster(e.shard.GetClusterMetadata().GetCurrentClusterName()) {
+	if weCtx.GetMutableState().GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		if err != nil {
+			return err
+		}
+		if ns.ActiveInCluster(e.shard.GetClusterMetadata().GetCurrentClusterName()) {
+			// If workflow execution is running and in active cluster.
+			return api.UpdateWorkflowWithNew(
+				e.shard,
+				ctx,
+				weCtx,
+				func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+					mutableState := workflowContext.GetMutableState()
+					eventBatchFirstEventID := mutableState.GetNextEventID()
 
-		// If workflow execution is running and in active cluster.
-		return api.UpdateWorkflowWithNew(
-			e.shard,
-			ctx,
-			weCtx,
-			func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
-				mutableState := workflowContext.GetMutableState()
-				eventBatchFirstEventID := mutableState.GetNextEventID()
-
-				return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
-					mutableState,
-					eventBatchFirstEventID,
-					"Delete workflow execution",
-					nil,
-					consts.IdentityHistoryService,
-					true,
-				)
-			},
-			nil)
+					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+						mutableState,
+						eventBatchFirstEventID,
+						"Delete workflow execution",
+						nil,
+						consts.IdentityHistoryService,
+						true,
+					)
+				},
+				nil)
+		}
 	}
 
 	// If workflow execution is closed or in passive cluster.
 	return e.workflowDeleteManager.AddDeleteWorkflowExecutionTask(
 		ctx,
-		namespaceEntry.ID(),
+		namespace.ID(request.GetNamespaceId()),
 		commonpb.WorkflowExecution{
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
 			RunId:      request.GetWorkflowExecution().GetRunId(),

@@ -254,10 +254,16 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	}
 
 	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		// DeleteExecutionTask transfer task is created only if workflow is not running.
-		// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
-		// workflow should not be deleted.
-		return nil
+		ns, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+		if err != nil {
+			return err
+		}
+		if ns.ActiveInCluster(t.shard.GetClusterMetadata().GetCurrentClusterName()) {
+			// DeleteExecutionTask transfer task is created only if workflow is not running.
+			// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
+			// workflow should not be deleted.
+			return nil
+		}
 	}
 
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()
