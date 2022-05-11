@@ -33,6 +33,30 @@ import (
 	"go.temporal.io/server/tools/common/schema"
 )
 
+const (
+	CLIOptESVersion       = "es-version"
+	CLIOptESURL           = "endpoint"
+	CLIOptESUsername      = "user"
+	CLIOptESPassword      = "password"
+	CLIOptVisibilityIndex = "index"
+	CLIOptAWSCredentials  = "aws-credentials"
+	CLIOptAWSToken        = "aws-token"
+	CLIOptSettingsFile    = "settings-file"
+	CLIOptTemplateFile    = "template-file"
+	CLIOptFailSilently    = "fail"
+
+	CLIFlagESVersion       = CLIOptESVersion
+	CLIFlagESURL           = CLIOptESURL + ", e"
+	CLIFlagESUsername      = CLIOptESUsername + ", u"
+	CLIFlagESPassword      = CLIOptESPassword + ", p"
+	CLIFlagAWSToken        = CLIOptAWSToken + ", t"
+	CLIFlagVisibilityIndex = CLIOptVisibilityIndex + ", i"
+	CLIFlagAWSCredentials  = CLIOptAWSCredentials + ", aws"
+	CLIFlagFailSilently    = CLIOptFailSilently
+	CLIFlagSettingsFile    = CLIOptSettingsFile
+	CLIFlagTemplateFile    = CLIOptTemplateFile
+)
+
 // RunTool runs the temporal-elasticsearch-tool command line tool
 func RunTool(args []string) error {
 	app := BuildCLIOptions()
@@ -114,6 +138,10 @@ func BuildCLIOptions() *cli.App {
 				cli.StringFlag{
 					Name:  CLIFlagVisibilityIndex,
 					Usage: "name of the visibility index to create",
+				},
+				cli.StringFlag{
+					Name:  CLIFlagFailSilently,
+					Usage: "fail silently on HTTP errors",
 				},
 			},
 			Action: func(c *cli.Context) {

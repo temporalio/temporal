@@ -38,28 +38,6 @@ import (
 	"go.temporal.io/server/tools/common/schema"
 )
 
-const (
-	CLIOptESVersion       = "es-version"
-	CLIOptESURL           = "endpoint"
-	CLIOptESUsername      = "user"
-	CLIOptESPassword      = "password"
-	CLIOptVisibilityIndex = "index"
-	CLIOptAWSCredentials  = "aws-credentials"
-	CLIOptAWSToken        = "aws-token"
-	CLIOptSettingsFile    = "settings-file"
-	CLIOptTemplateFile    = "template-file"
-
-	CLIFlagESVersion       = CLIOptESVersion
-	CLIFlagESURL           = CLIOptESURL + ", e"
-	CLIFlagESUsername      = CLIOptESUsername + ", u"
-	CLIFlagESPassword      = CLIOptESPassword + ", p"
-	CLIFlagAWSToken        = CLIOptAWSToken + ", t"
-	CLIFlagVisibilityIndex = CLIOptVisibilityIndex + ", i"
-	CLIFlagAWSCredentials  = CLIOptAWSCredentials + ", aws"
-	CLIFlagSettingsFile    = CLIOptSettingsFile
-	CLIFlagTemplateFile    = CLIOptTemplateFile
-)
-
 func createClient(cli *cli.Context, logger log.Logger) (esclient.CLIClient, error) {
 	cfg, err := parseElasticConfig(cli)
 	if err != nil {
@@ -97,6 +75,7 @@ func setup(cli *cli.Context, logger log.Logger) error {
 			SettingsFilePath: cli.String(CLIOptSettingsFile),
 			TemplateFilePath: cli.String(CLIOptTemplateFile),
 			VisibilityIndex:  cli.String(CLIOptVisibilityIndex),
+			FailSilently:     cli.Bool(CLIOptFailSilently),
 		},
 	}
 
@@ -145,12 +124,9 @@ func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {
 		cfg.AWSRequestSigning.Enabled = true
 
 		if cfg.AWSRequestSigning.CredentialProvider == "static" {
-			if cli.GlobalString(CLIOptAWSToken) != "" {
-				cfg.AWSRequestSigning.Static.Token = cli.GlobalString(CLIOptAWSToken)
-			} else {
-				cfg.AWSRequestSigning.Static.AccessKeyID = cfg.Username
-				cfg.AWSRequestSigning.Static.SecretAccessKey = cfg.Password
-			}
+			cfg.AWSRequestSigning.Static.AccessKeyID = cfg.Username
+			cfg.AWSRequestSigning.Static.SecretAccessKey = cfg.Password
+			cfg.AWSRequestSigning.Static.Token = cli.GlobalString(CLIOptAWSToken)
 		}
 	}
 

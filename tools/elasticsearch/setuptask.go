@@ -40,6 +40,7 @@ type SetupConfig struct {
 	TemplateFilePath string
 	SettingsFilePath string
 	VisibilityIndex  string
+	FailSilently     bool
 }
 
 type SetupTask struct {
@@ -53,6 +54,12 @@ func (task *SetupTask) Run() error {
 	config := task.config
 	task.logger.Info("Starting schema setup", tag.NewAnyTag("config", config))
 
+	handleErr := func(msg string, err error) {
+		if !config.FailSilently {
+			task.logger.Fatal(msg, tag.Error(err))
+		}
+	}
+
 	if len(config.SettingsFilePath) > 0 {
 		filePath, err := filepath.Abs(config.SettingsFilePath)
 		if err != nil {
@@ -65,12 +72,9 @@ func (task *SetupTask) Run() error {
 
 		success, err := task.esClient.ClusterPutSettings(context.TODO(), string(body))
 		if err != nil && err.Error() != "" {
-			task.logger.Fatal("error updating cluster settings",
-				tag.Error(err),
-			)
-		}
-		if !success {
-			task.logger.Fatal("cluster settings update failed without error")
+			handleErr("cluster settings update failed", err)
+		} else if !success {
+			handleErr("cluster settings update failed without error", nil)
 		}
 	} else {
 		task.logger.Info("Skipping cluster settings update, missing " + flag(CLIOptSettingsFile))
@@ -87,13 +91,10 @@ func (task *SetupTask) Run() error {
 		}
 
 		success, err := task.esClient.IndexPutTemplate(context.TODO(), templateName, string(body))
-		if err != nil {
-			task.logger.Fatal("error creating template",
-				tag.Error(err),
-			)
-		}
-		if !success {
-			task.logger.Fatal("template creation failed without error")
+		if err != nil && err.Error() != "" {
+			handleErr("template creation failed", err)
+		} else if !success {
+			handleErr("template creation failed without error", nil)
 		}
 	} else {
 		task.logger.Info("Skipping template creation, missing " + flag(CLIOptTemplateFile))
@@ -101,13 +102,10 @@ func (task *SetupTask) Run() error {
 
 	if len(config.VisibilityIndex) > 0 {
 		success, err := task.esClient.CreateIndex(context.TODO(), task.config.VisibilityIndex)
-		if err != nil {
-			task.logger.Fatal("error creating index",
-				tag.Error(err),
-			)
-		}
-		if !success {
-			task.logger.Fatal("index creation failed without error")
+		if err != nil && err.Error() != "" {
+			handleErr("index creation failed", err)
+		} else if !success {
+			handleErr("index creation failed without error", nil)
 		}
 	} else {
 		task.logger.Info("Skipping index creation, missing " + flag(CLIOptVisibilityIndex))
