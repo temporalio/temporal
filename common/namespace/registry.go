@@ -156,9 +156,9 @@ type (
 		lastRefreshTime         atomic.Value
 		refreshInterval         dynamicconfig.DurationPropertyFn
 
-		// cacheLock protects cachNameToID and cacheByID. If the exclusive side
-		// is to be held at the same time as the callbackLock (below), this lock
-		// MUST be acquired *first*.
+		// cacheLock protects cachNameToID, cacheByID and stateChangeCallbacks.
+		// If the exclusive side is to be held at the same time as the
+		// callbackLock (below), this lock MUST be acquired *first*.
 		cacheLock     sync.RWMutex
 		cacheNameToID cache.Cache
 		cacheByID     cache.Cache
@@ -170,13 +170,8 @@ type (
 		prepareCallbacks map[any]PrepareCallbackFn
 		callbacks        map[any]CallbackFn
 
-		// State-change callbacks. To avoid races, callbacks are first added to
-		// newStateChangeCallbacks. The refresh loop will call those on all namespaces,
-		// then move them to stateChangeCallbacks, where they will be called only on
-		// namespaces that change state.
-		stateChangeCallbacksLock sync.Mutex
-		stateChangeCallbacks     map[any]StateChangeCallbackFn
-		newStateChangeCallbacks  map[any]StateChangeCallbackFn
+		// State-change callbacks. Protected by cacheLock
+		stateChangeCallbacks map[any]StateChangeCallbackFn
 	}
 )
 
@@ -202,7 +197,6 @@ func NewRegistry(
 		callbacks:               make(map[any]CallbackFn),
 		refreshInterval:         refreshInterval,
 		stateChangeCallbacks:    make(map[any]StateChangeCallbackFn),
-		newStateChangeCallbacks: make(map[any]StateChangeCallbackFn),
 	}
 	reg.lastRefreshTime.Store(time.Time{})
 	return reg
@@ -242,9 +236,13 @@ func (r *registry) Stop() {
 }
 
 func (r *registry) getAllNamespace() map[ID]*Namespace {
-	result := make(map[ID]*Namespace)
 	r.cacheLock.RLock()
 	defer r.cacheLock.RUnlock()
+	return r.getAllNamespaceLocked()
+}
+
+func (r *registry) getAllNamespaceLocked() map[ID]*Namespace {
+	result := make(map[ID]*Namespace)
 
 	ite := r.cacheByID.Iterator()
 	defer ite.Close()
@@ -308,16 +306,21 @@ func (r *registry) UnregisterNamespaceChangeCallback(
 }
 
 func (r *registry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn) {
-	r.stateChangeCallbacksLock.Lock()
-	defer r.stateChangeCallbacksLock.Unlock()
-	r.newStateChangeCallbacks[key] = cb
+	r.cacheLock.Lock()
+	r.stateChangeCallbacks[key] = cb
+	allNamespaces := r.getAllNamespaceLocked()
+	r.cacheLock.Unlock()
+
+	// call once for each namespace already in the registry
+	for _, ns := range allNamespaces {
+		cb(ns)
+	}
 }
 
 func (r *registry) UnregisterStateChangeCallback(key any) {
-	r.stateChangeCallbacksLock.Lock()
-	defer r.stateChangeCallbacksLock.Unlock()
+	r.cacheLock.Lock()
+	defer r.cacheLock.Unlock()
 	delete(r.stateChangeCallbacks, key)
-	delete(r.newStateChangeCallbacks, key)
 }
 
 // GetNamespace retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -461,7 +464,6 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 
 	var oldEntries []*Namespace
 	var newEntries []*Namespace
-	var allEntries []*Namespace
 	var stateChanged []*Namespace
 UpdateLoop:
 	for _, namespace := range namespacesDb {
@@ -481,11 +483,12 @@ UpdateLoop:
 			newEntries = append(newEntries, namespace)
 		}
 
-		allEntries = append(allEntries, namespace)
 		if oldNSAnyVersion == nil || oldNSAnyVersion.State() != namespace.State() {
 			stateChanged = append(stateChanged, namespace)
 		}
 	}
+
+	var stateChangeCallbacks []StateChangeCallbackFn
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
@@ -494,37 +497,18 @@ UpdateLoop:
 		defer r.cacheLock.Unlock()
 		r.cacheByID = newCacheByID
 		r.cacheNameToID = newCacheNameToID
+		stateChangeCallbacks = mapAnyValues(r.stateChangeCallbacks)
 		return oldEntries, newEntries
 	})
 
-	r.callStateChangeCallbacks(stateChanged, allEntries)
-
-	return nil
-}
-
-func (r *registry) callStateChangeCallbacks(stateChanged, allEntries []*Namespace) {
-	r.stateChangeCallbacksLock.Lock()
-
-	stateChangeCallbacks := mapAnyValues(r.stateChangeCallbacks)
-	newStateChangeCallbacks := mapAnyValues(r.newStateChangeCallbacks)
-
-	for key, cb := range r.newStateChangeCallbacks {
-		r.stateChangeCallbacks[key] = cb
-		delete(r.newStateChangeCallbacks, key)
-	}
-
-	r.stateChangeCallbacksLock.Unlock()
-
+	// call state change callbacks
 	for _, cb := range stateChangeCallbacks {
 		for _, ns := range stateChanged {
 			cb(ns)
 		}
 	}
-	for _, cb := range newStateChangeCallbacks {
-		for _, ns := range allEntries {
-			cb(ns)
-		}
-	}
+
+	return nil
 }
 
 func (r *registry) updateIDToNamespaceCache(
