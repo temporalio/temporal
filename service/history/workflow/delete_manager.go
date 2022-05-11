@@ -94,15 +94,11 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	visibilityQueueAckLevel int64,
 ) error {
 
-	if ms.IsWorkflowExecutionRunning() {
-		// Running workflow cannot be deleted. Close or terminate it first.
-		return consts.ErrWorkflowNotCompleted
-	}
-
 	// Create delete workflow execution task only if workflow is closed successfully and all pending tasks are completed.
 	// Otherwise, mutable state might be deleted before close tasks are executed.
 	// Unfortunately, queue ack levels are updated with delay (default 60s),
 	// therefore this API will return error if workflow is deleted within 60 seconds after close.
+	// The check is on API call side not on task processor side because visibility delete task doesn't have access to mutable state.
 	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // backward compatibility (remove in 1.18).
 		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel) || // Transfer close task wasn't executed.
 		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // backward compatibility (remove in 1.18).
@@ -173,7 +169,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecutionByRetention(
 		weCtx,
 		ms,
 		sourceTaskVersion,
-		true,  // Archive.
+		true,  // When retention is fired, archive workflow execution.
 		false, // When retention is fired, workflow execution is always closed.
 		m.metricsClient.Scope(metrics.HistoryProcessDeleteHistoryEventScope),
 	)

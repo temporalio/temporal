@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -110,6 +111,13 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return err
 	}
 
+	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// If workflow is running then just ignore DeleteHistoryEventTask timer task.
+		// This should almost never happen because DeleteHistoryEventTask is created only for closed workflows.
+		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
+		return nil
+	}
+
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()
 	if err != nil {
 		return err
@@ -126,13 +134,6 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		}
 		t.logger.Error("Different mutable state versions have the same branch token", tag.TaskVersion(task.Version), tag.LastEventVersion(lastWriteVersion))
 		return serviceerror.NewInternal("Mutable state has different version but same branch token")
-	}
-
-	if mutableState.IsWorkflowExecutionRunning() {
-		// If workflow is running then just ignore DeleteHistoryEventTask timer task.
-		// This should almost never happen because DeleteHistoryEventTask is created only for closed workflows.
-		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
-		return nil
 	}
 
 	return t.deleteManager.DeleteWorkflowExecutionByRetention(

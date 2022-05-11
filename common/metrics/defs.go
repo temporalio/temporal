@@ -1790,7 +1790,6 @@ const (
 	ServiceErrNonDeterministicCounter
 	ServiceErrUnauthorizedCounter
 	ServiceErrAuthorizeFailedCounter
-	ServiceErrWorkflowNotReadyCounter
 
 	PersistenceRequests
 	PersistenceFailures
@@ -2289,7 +2288,6 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrNonDeterministicCounter:                   NewCounterDef("service_errors_nondeterministic"),
 		ServiceErrUnauthorizedCounter:                       NewCounterDef("service_errors_unauthorized"),
 		ServiceErrAuthorizeFailedCounter:                    NewCounterDef("service_errors_authorize_failed"),
-		ServiceErrWorkflowNotReadyCounter:                   NewCounterDef("service_errors_workflow_not_ready"),
 		PersistenceRequests:                                 NewCounterDef("persistence_requests"),
 		PersistenceFailures:                                 NewCounterDef("persistence_errors"),
 		PersistenceLatency:                                  NewTimerDef("persistence_latency"),

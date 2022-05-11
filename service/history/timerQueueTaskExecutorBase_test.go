@@ -35,6 +35,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
@@ -130,7 +131,7 @@ func (s *timerQueueTaskExecutorBaseSuite) Test_executeDeleteHistoryEventTask_NoE
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 
 	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 		gomock.Any(),
@@ -174,7 +175,7 @@ func (s *timerQueueTaskExecutorBaseSuite) TestArchiveHistory_DeleteFailed() {
 	mockMutableState.EXPECT().GetNextEventID().Return(int64(2))
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.LocalNamespaceEntry)
 	s.testShardContext.Resource.ClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false)
-	mockMutableState.EXPECT().IsWorkflowExecutionRunning().Return(false)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 
 	s.mockDeleteManager.EXPECT().DeleteWorkflowExecutionByRetention(
 		gomock.Any(),

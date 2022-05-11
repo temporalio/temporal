@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -41,7 +42,6 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/vclock"
@@ -253,6 +253,13 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		return err
 	}
 
+	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// DeleteExecutionTask transfer task is created only if workflow is not running.
+		// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
+		// workflow should not be deleted.
+		return nil
+	}
+
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()
 	if err != nil {
 		return err
@@ -260,13 +267,6 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
 	if !ok {
 		return nil
-	}
-
-	if mutableState.IsWorkflowExecutionRunning() {
-		// DeleteExecutionTask transfer task is created only if workflow is not running.
-		// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
-		// workflow should not be deleted. NotFound errors are ignored by task processor.
-		return consts.ErrWorkflowNotCompleted
 	}
 
 	return t.workflowDeleteManager.DeleteWorkflowExecution(

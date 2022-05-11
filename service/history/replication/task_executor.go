@@ -296,11 +296,6 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		return err
 	}
 
-	namespaceEntry := mutableState.GetNamespaceEntry()
-	if namespaceEntry.ActiveClusterName() == e.shard.GetClusterMetadata().GetCurrentClusterName() {
-		return serviceerror.NewInvalidArgument("Cannot cleanup workflows in active cluster by replication")
-	}
-
 	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
 		nsID,

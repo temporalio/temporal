@@ -2072,8 +2072,8 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
 		weCtx.GetMutableState(),
-		e.shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
-		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
+		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
+		e.shard.GetQueueClusterAckLevel(tasks.CategoryVisibility, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
 	)
 }
 

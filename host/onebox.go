@@ -767,9 +767,7 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	}
 
 	// For DeleteWorkflowExecution tests
-	client.OverrideValue(dynamicconfig.TransferProcessorCompleteTransferInterval, 2*time.Second)
 	client.OverrideValue(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
-	client.OverrideValue(dynamicconfig.VisibilityProcessorCompleteTaskInterval, 2*time.Second)
 	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
 }
 
