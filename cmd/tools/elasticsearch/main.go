@@ -22,44 +22,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package client
+package main
 
 import (
-	"fmt"
-	"net/http"
+	"os"
 
-	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/tools/elasticsearch"
 )
 
-func NewClient(config *Config, httpClient *http.Client, logger log.Logger) (Client, error) {
-	switch config.Version {
-	case "v6":
-		return newClientV6(config, httpClient, logger)
-	case "v7", "":
-		return newClientV7(config, httpClient, logger)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
-	}
-}
-
-func NewCLIClient(config *Config, httpClient *http.Client, logger log.Logger) (CLIClient, error) {
-	switch config.Version {
-	case "v6":
-		return newClientV6(config, httpClient, logger)
-	case "v7", "":
-		return newClientV7(config, httpClient, logger)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
-	}
-}
-
-func NewIntegrationTestsClient(config *Config, logger log.Logger) (IntegrationTestsClient, error) {
-	switch config.Version {
-	case "v6":
-		return newClientV6(config, nil, logger)
-	case "v7", "":
-		return newClientV7(config, nil, logger)
-	default:
-		return nil, fmt.Errorf("not supported Elasticsearch version: %v", config.Version)
-	}
+func main() {
+	elasticsearch.RunTool(os.Args) //nolint:errcheck
 }

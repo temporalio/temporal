@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -42,6 +43,7 @@ type (
 	// clientV6 implements Client
 	clientV6 struct {
 		esClient *elastic6.Client
+		url      url.URL
 	}
 )
 
@@ -99,7 +101,10 @@ func newClientV6(cfg *Config, httpClient *http.Client, logger log.Logger) (*clie
 		client.Start()
 	}
 
-	return &clientV6{esClient: client}, nil
+	return &clientV6{
+		esClient: client,
+		url:      cfg.URL,
+	}, nil
 }
 
 func (c *clientV6) Search(ctx context.Context, p *SearchParameters) (*elastic.SearchResult, error) {
@@ -257,6 +262,35 @@ func (c *clientV6) Delete(ctx context.Context, indexName string, docID string, v
 		VersionType(versionTypeExternal).
 		Do(ctx)
 	return err
+}
+
+func (c *clientV6) Ping(ctx context.Context) (bool, error) {
+	_, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
+	if err != nil {
+		return false, convertV6ErrorToV7(err)
+	}
+
+	return true, nil
+}
+
+// Patching the missing ClusterPutSettings method in esclient library
+func (c *clientV6) ClusterPutSettings(ctx context.Context, bodyString string) (bool, error) {
+	res, err := c.esClient.PerformRequest(ctx, elastic6.PerformRequestOptions{
+		Method:      "PUT",
+		Path:        "/_cluster/settings",
+		Body:        bodyString,
+		ContentType: "application/json",
+	})
+	if err != nil {
+		return false, convertV6ErrorToV7(err)
+	}
+
+	ret := new(elastic6.AcknowledgedResponse)
+	if err := json.Unmarshal(res.Body, ret); err != nil {
+		return false, err
+	}
+
+	return ret.Acknowledged, nil
 }
 
 // =============== V6/V7 adapters ===============

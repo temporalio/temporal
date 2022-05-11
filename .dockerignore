@@ -12,3 +12,4 @@ tctl
 temporal-server
 temporal-cassandra-tool
 temporal-sql-tool
+temporal-elasticsearch-tool

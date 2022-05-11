@@ -26,6 +26,7 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"strings"
@@ -316,6 +317,35 @@ func (c *clientV7) Delete(ctx context.Context, indexName string, docID string, v
 		VersionType(versionTypeExternal).
 		Do(ctx)
 	return err
+}
+
+func (c *clientV7) Ping(ctx context.Context) (bool, error) {
+	_, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+
+	return true, nil
+}
+
+// Patching the missing ClusterPutSettings method in esclient library
+func (c *clientV7) ClusterPutSettings(ctx context.Context, bodyString string) (bool, error) {
+	res, err := c.esClient.PerformRequest(ctx, elastic.PerformRequestOptions{
+		Method:      "PUT",
+		Path:        "/_cluster/settings",
+		Body:        bodyString,
+		ContentType: "application/json",
+	})
+	if err != nil {
+		return false, err
+	}
+
+	ret := new(elastic.AcknowledgedResponse)
+	if err := json.Unmarshal(res.Body, ret); err != nil {
+		return false, err
+	}
+
+	return ret.Acknowledged, nil
 }
 
 func getLoggerOptions(logLevel string, logger log.Logger) []elastic.ClientOptionFunc {

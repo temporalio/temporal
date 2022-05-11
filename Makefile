@@ -3,7 +3,7 @@
 install: update-tools bins
 
 # Rebuild binaries (used by Dockerfile).
-bins: temporal-server temporal-cassandra-tool temporal-sql-tool
+bins: temporal-server temporal-cassandra-tool temporal-sql-tool temporal-elasticsearch-tool
 
 # Install all tools, recompile proto files, run all possible checks and tests (long but comprehensive).
 all: update-tools clean proto bins check test
@@ -186,6 +186,7 @@ clean-bins:
 	@rm -f temporal-server
 	@rm -f temporal-cassandra-tool
 	@rm -f temporal-sql-tool
+	@rm -f temporal-elasticsearch-tool
 
 temporal-server: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
@@ -198,6 +199,10 @@ temporal-cassandra-tool: $(ALL_SRC)
 temporal-sql-tool: $(ALL_SRC)
 	@printf $(COLOR) "Build temporal-sql-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
 	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-sql-tool ./cmd/tools/sql
+
+temporal-elasticsearch-tool:
+	@printf $(COLOR) "Build temporal-elasticsearch-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
+	go build -o temporal-elasticsearch-tool ./cmd/tools/elasticsearch
 
 ##### Checks #####
 copyright-check:
@@ -371,10 +376,10 @@ install-schema-postgresql: temporal-sql-tool
 
 install-schema-es:
 	@printf $(COLOR) "Install Elasticsearch schema..."
-	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
-	curl --fail -X PUT "http://127.0.0.1:9200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
-# No --fail here because create index is not idempotent operation.
-	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev" --write-out "\n"
+	./temporal-elasticsearch-tool -e http://127.0.0.1:9200 setup \
+		--settings-file ./schema/elasticsearch/visibility/cluster_settings_v7.json \
+		--template-file ./schema/elasticsearch/visibility/index_template_v7.json \
+		--index temporal_visibility_v1_dev
 
 install-schema-cdc: temporal-cassandra-tool
 	@printf $(COLOR)  "Install Cassandra schema (active)..."
