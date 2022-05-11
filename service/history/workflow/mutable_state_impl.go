@@ -3717,8 +3717,6 @@ func (e *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 
-	e.startTransactionHandleWorkflowTaskTTL()
-
 	return flushBeforeReady, nil
 }
 
@@ -4171,18 +4169,6 @@ func (e *MutableStateImpl) validateNoEventsAfterWorkflowFinish(
 			tag.WorkflowRunID(e.executionState.RunId),
 		)
 		return consts.ErrEventsAterWorkflowFinish
-	}
-}
-
-func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
-	if e.executionInfo.StickyTaskQueue == "" {
-		return
-	}
-
-	ttl := e.config.StickyTTL(e.GetNamespaceEntry().Name().String())
-	expired := e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdateTime).Add(ttl))
-	if expired && !e.HasPendingWorkflowTask() {
-		e.ClearStickyness()
 	}
 }
 
