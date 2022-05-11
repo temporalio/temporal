@@ -120,13 +120,21 @@ func (s *integrationSuite) Test_DeleteWorkflowExecution_Competed() {
 
 	// Delete workflow executions.
 	for _, we := range wes {
-		_, err := s.operatorClient.DeleteWorkflowExecution(NewContext(), &operatorservice.DeleteWorkflowExecutionRequest{
-			Namespace: s.namespace,
-			WorkflowExecution: &commonpb.WorkflowExecution{
-				WorkflowId: we.WorkflowId,
-				RunId:      we.RunId,
-			},
-		})
+		var err error
+		for {
+			_, err = s.operatorClient.DeleteWorkflowExecution(NewContext(), &operatorservice.DeleteWorkflowExecutionRequest{
+				Namespace: s.namespace,
+				WorkflowExecution: &commonpb.WorkflowExecution{
+					WorkflowId: we.WorkflowId,
+					RunId:      we.RunId,
+				},
+			})
+			if _, isNotReady := err.(*serviceerror.WorkflowNotReady); err == nil || !isNotReady {
+				break
+			}
+			// Overrides are defined in onebox.go:770 to iterate faster.
+			time.Sleep(500 * time.Millisecond)
+		}
 		s.NoError(err)
 	}
 
