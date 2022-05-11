@@ -290,8 +290,10 @@ type WorkflowExecutionInfo struct {
 	ParentClock       *v13.ShardClock `protobuf:"bytes,62,opt,name=parent_clock,json=parentClock,proto3" json:"parent_clock,omitempty"`
 	// version of child execution initiated event in parent workflow
 	ParentInitiatedVersion int64 `protobuf:"varint,63,opt,name=parent_initiated_version,json=parentInitiatedVersion,proto3" json:"parent_initiated_version,omitempty"`
-	CloseTransferTaskId    int64 `protobuf:"varint,64,opt,name=close_transfer_task_id,json=closeTransferTaskId,proto3" json:"close_transfer_task_id,omitempty"`
-	CloseVisibilityTaskId  int64 `protobuf:"varint,65,opt,name=close_visibility_task_id,json=closeVisibilityTaskId,proto3" json:"close_visibility_task_id,omitempty"`
+	// Used to check if transfer close task is processed before deleting the workflow execution.
+	CloseTransferTaskId int64 `protobuf:"varint,64,opt,name=close_transfer_task_id,json=closeTransferTaskId,proto3" json:"close_transfer_task_id,omitempty"`
+	// Used to check if visibility close task is processed before deleting the workflow execution.
+	CloseVisibilityTaskId int64 `protobuf:"varint,65,opt,name=close_visibility_task_id,json=closeVisibilityTaskId,proto3" json:"close_visibility_task_id,omitempty"`
 }
 
 func (m *WorkflowExecutionInfo) Reset()      { *m = WorkflowExecutionInfo{} }
