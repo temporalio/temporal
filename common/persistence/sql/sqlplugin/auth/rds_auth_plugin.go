@@ -22,18 +22,46 @@ package auth
 
 import (
 	"context"
+	"encoding/base64"
+	"io/ioutil"
+	"net/http"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	AWSConfig "github.com/aws/aws-sdk-go-v2/config"
 	AWSAuth "github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 
+	"go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 )
 
+const defaultTimeout = time.Second * 10
+const rdsCaUrl = "https://s3.amazonaws.com/rds-downloads/rds-combined-ca-bundle.pem"
+
 var rdsAuthFn = AWSAuth.BuildAuthToken
+var rdsPemBundle string
 
 func init() {
 	RegisterPlugin("rds-iam-auth", NewRDSAuthPlugin(nil))
+}
+
+func fetchRdsCA(ctx context.Context) (string, error) {
+	_, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	client := http.DefaultClient
+	resp, err := client.Get(rdsCaUrl)
+	if err != nil {
+		return "", err
+	}
+
+	defer resp.Body.Close()
+	pem, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	return base64.StdEncoding.EncodeToString(pem), nil
 }
 
 type RDSAuthPlugin struct {
@@ -46,18 +74,36 @@ func NewRDSAuthPlugin(awsConfig *aws.Config) AuthPlugin {
 	}
 }
 
-func (plugin *RDSAuthPlugin) GetConfig(cfg *config.SQL) (*config.SQL, error) {
-	awsCfg := plugin.awsConfig
-	if awsCfg == nil {
-		c, err := AWSConfig.LoadDefaultConfig(context.TODO())
-		if err != nil {
-			return nil, err
-		}
+func (plugin *RDSAuthPlugin) getToken(ctx context.Context, addr string, region string, user string, credentials aws.CredentialsProvider) (string, error) {
+	reqCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
 
-		awsCfg = &c
+	return rdsAuthFn(reqCtx, addr, region, user, credentials)
+}
+
+func (plugin *RDSAuthPlugin) resolveAwsConfig(ctx context.Context) (*aws.Config, error) {
+	if plugin.awsConfig != nil {
+		return plugin.awsConfig, nil
 	}
 
-	token, err := rdsAuthFn(context.TODO(), cfg.ConnectAddr, awsCfg.Region, cfg.User, awsCfg.Credentials)
+	reqCtx, cancel := context.WithTimeout(ctx, defaultTimeout)
+	defer cancel()
+
+	cfg, err := AWSConfig.LoadDefaultConfig(reqCtx)
+	if err != nil {
+		return nil, err
+	}
+
+	return &cfg, nil
+}
+
+func (plugin *RDSAuthPlugin) GetConfig(ctx context.Context, cfg *config.SQL) (*config.SQL, error) {
+	awsCfg, err := plugin.resolveAwsConfig(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	token, err := plugin.getToken(ctx, cfg.ConnectAddr, awsCfg.Region, cfg.User, awsCfg.Credentials)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +115,27 @@ func (plugin *RDSAuthPlugin) GetConfig(cfg *config.SQL) (*config.SQL, error) {
 		cfg.ConnectAttributes = map[string]string{}
 	}
 
+	// mysql requires this plugin to use the token as a password
 	if cfg.PluginName == "mysql" {
 		cfg.ConnectAttributes["allowCleartextPasswords"] = "true"
+	}
+
+	// if TLS is not configured, we default to the RDS CA
+	// this is required for mysql to send cleartext passwords
+	if cfg.TLS == nil {
+		if rdsPemBundle == "" {
+			ca, err := fetchRdsCA(ctx)
+			if err != nil {
+				return nil, err
+			}
+
+			rdsPemBundle = ca
+		}
+
+		cfg.TLS = &auth.TLS{
+			Enabled: true,
+			CaData:  rdsPemBundle,
+		}
 	}
 
 	return cfg, nil

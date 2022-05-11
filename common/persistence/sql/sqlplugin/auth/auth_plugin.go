@@ -22,13 +22,14 @@
 package auth
 
 import (
-	"fmt"
+	"context"
+	"errors"
 
 	"go.temporal.io/server/common/config"
 )
 
 var (
-	ErrInvalidAuthPluginName = fmt.Errorf("auth_plugin: invalid auth plugin requested")
+	ErrInvalidAuthPluginName = errors.New("auth_plugin: invalid auth plugin requested")
 	plugins                  = map[string]AuthPlugin{}
 )
 
@@ -36,16 +37,14 @@ type (
 	// AuthPlugin interface for mutating SQL connection parameters
 	AuthPlugin interface {
 		// GetConfig returns a mutated SQL config
-		GetConfig(*config.SQL) (*config.SQL, error)
+		GetConfig(context.Context, *config.SQL) (*config.SQL, error)
 	}
 )
 
+// RegisterPlugin adds an auth plugin to the plugin registry
+// it is only safe to use from a package init function
 func RegisterPlugin(name string, plugin AuthPlugin) {
 	plugins[name] = plugin
-}
-
-func DeregisterPlugin(name string) {
-	delete(plugins, name)
 }
 
 func LookupPlugin(name string) (AuthPlugin, error) {

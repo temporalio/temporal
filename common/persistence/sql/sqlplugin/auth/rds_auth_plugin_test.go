@@ -28,6 +28,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/rds/auth"
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
+	TLS "go.temporal.io/server/common/auth"
 	"go.temporal.io/server/common/config"
 )
 
@@ -60,13 +61,20 @@ func (s *rdsAuthPluginTestSuite) TearDownTest() {
 }
 
 func (s *rdsAuthPluginTestSuite) TestRdsAuthPlugin() {
+	originalPem := rdsPemBundle
+	originalFn := rdsAuthFn
+	defer func() {
+		rdsPemBundle = originalPem
+		rdsAuthFn = originalFn
+	}()
+
+	rdsPemBundle = "test"
 	rdsAuthFn = func(ctx context.Context, endpoint, region, dbUser string, creds aws.CredentialsProvider, optFns ...func(options *auth.BuildAuthTokenOptions)) (string, error) {
 		return "token", nil
 	}
 
 	plugin := NewRDSAuthPlugin(aws.NewConfig())
-
-	cfg, err := plugin.GetConfig(&config.SQL{
+	cfg, err := plugin.GetConfig(context.TODO(), &config.SQL{
 		PluginName:        "mysql",
 		ConnectAttributes: map[string]string{},
 	})
@@ -78,6 +86,10 @@ func (s *rdsAuthPluginTestSuite) TestRdsAuthPlugin() {
 		ConnectProtocol: "tcp",
 		ConnectAttributes: map[string]string{
 			"allowCleartextPasswords": "true",
+		},
+		TLS: &TLS.TLS{
+			Enabled: true,
+			CaData:  rdsPemBundle,
 		},
 	}, cfg)
 }

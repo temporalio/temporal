@@ -25,6 +25,7 @@
 package session
 
 import (
+	"context"
 	"crypto/tls"
 	"crypto/x509"
 	"fmt"
@@ -70,7 +71,7 @@ func NewSession(
 			return nil, err
 		}
 
-		cfg, err = authPlugin.GetConfig(cfg)
+		cfg, err = authPlugin.GetConfig(context.TODO(), cfg)
 		if err != nil {
 			return nil, err
 		}

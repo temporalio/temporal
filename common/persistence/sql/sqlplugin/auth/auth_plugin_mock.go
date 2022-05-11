@@ -29,6 +29,7 @@
 package auth
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -59,16 +60,16 @@ func (m *MockAuthPlugin) EXPECT() *MockAuthPluginMockRecorder {
 }
 
 // GetConfig mocks base method.
-func (m *MockAuthPlugin) GetConfig(arg0 *config.SQL) (*config.SQL, error) {
+func (m *MockAuthPlugin) GetConfig(arg0 context.Context, arg1 *config.SQL) (*config.SQL, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetConfig", arg0)
+	ret := m.ctrl.Call(m, "GetConfig", arg0, arg1)
 	ret0, _ := ret[0].(*config.SQL)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
 // GetConfig indicates an expected call of GetConfig.
-func (mr *MockAuthPluginMockRecorder) GetConfig(arg0 interface{}) *gomock.Call {
+func (mr *MockAuthPluginMockRecorder) GetConfig(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MockAuthPlugin)(nil).GetConfig), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetConfig", reflect.TypeOf((*MockAuthPlugin)(nil).GetConfig), arg0, arg1)
 }

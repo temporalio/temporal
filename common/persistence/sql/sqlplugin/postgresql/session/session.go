@@ -25,6 +25,7 @@
 package session
 
 import (
+	"context"
 	"fmt"
 	"net/url"
 	"strings"
@@ -69,7 +70,7 @@ func NewSession(
 			return nil, err
 		}
 
-		cfg, err = authPlugin.GetConfig(cfg)
+		cfg, err = authPlugin.GetConfig(context.TODO(), cfg)
 		if err != nil {
 			return nil, err
 		}

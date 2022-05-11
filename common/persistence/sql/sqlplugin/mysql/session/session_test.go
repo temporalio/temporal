@@ -25,7 +25,7 @@
 package session
 
 import (
-	"fmt"
+	"errors"
 	"net/url"
 	"strings"
 	"testing"
@@ -179,7 +179,7 @@ func (s *sessionTestSuite) TestAuthPlugins() {
 				DatabaseName:    "db1",
 				AuthPlugin:      "rds-iam-auth",
 			},
-			expectedError: fmt.Errorf("NOOP"),
+			expectedError: errors.New("NOOP"),
 		},
 	}
 
@@ -191,7 +191,7 @@ func (s *sessionTestSuite) TestAuthPlugins() {
 	}()
 
 	// return a noop error to avoid having to mock the SQL connection
-	rdsMock.EXPECT().GetConfig(gomock.Any()).Return(nil, fmt.Errorf("NOOP")).AnyTimes()
+	rdsMock.EXPECT().GetConfig(gomock.Any(), gomock.Any()).Return(nil, errors.New("NOOP")).AnyTimes()
 
 	for _, tc := range testCases {
 		_, err := NewSession(&tc.in, nil)
