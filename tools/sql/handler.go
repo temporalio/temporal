@@ -210,7 +210,7 @@ func ValidateConnectConfig(cfg *config.SQL) error {
 	if cfg.AuthPlugin != "" {
 		_, err := SQLAuth.LookupPlugin(cfg.AuthPlugin)
 		if errors.Is(err, SQLAuth.ErrInvalidAuthPluginName) {
-			return schema.NewConfigError("invalid option for " + flag(schema.CLIFlagAuthPluginName) + ": " + cfg.AuthPlugin)
+			return schema.NewConfigError("invalid option for " + flag(schema.CLIOptAuthPluginName) + ": " + cfg.AuthPlugin)
 		}
 	}
 
