@@ -332,9 +332,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
 
 	// ====================== Archival mocks =======================================
-	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
-	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
-	mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespace.NewLocalNamespaceForTest(
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Name: tests.Namespace.String(),
 		},
@@ -400,9 +398,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 
 	// ====================== Archival mocks =======================================
-	mockNamespaceRegistry := namespace.NewMockRegistry(s.controller)
-	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(mockNamespaceRegistry)
-	mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespace.NewLocalNamespaceForTest(
+	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Name: tests.Namespace.String(),
 		},
