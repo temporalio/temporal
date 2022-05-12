@@ -108,5 +108,18 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 		deDupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 		msBuilder.UpdateDuplicatedResource(deDupResource)
 	}
+
+	// After reapply event, checking if we should schedule a workflow task
+	// Do not create workflow task when the workflow is cron and the cron has not been started yet
+	if msBuilder.GetExecutionInfo().CronSchedule != "" && !msBuilder.HasProcessedOrPendingWorkflowTask() {
+		return reappliedEvents, nil
+	}
+	if !msBuilder.HasPendingWorkflowTask() {
+		if _, err := msBuilder.AddWorkflowTaskScheduledEvent(
+			false,
+		); err != nil {
+			return nil, err
+		}
+	}
 	return reappliedEvents, nil
 }
