@@ -291,8 +291,6 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	// NotFound errors should not affect the error count.
 	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).Times(2)
-	historyClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil)
-	historyClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
@@ -380,8 +378,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	}, nil).Times(2)
 
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
-	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("random")).Times(2)
-	historyClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("random")).Times(2)
+	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("random")).Times(4)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,

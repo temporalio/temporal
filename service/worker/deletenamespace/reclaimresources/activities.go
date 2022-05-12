@@ -65,7 +65,7 @@ func (a *Activities) IsAdvancedVisibilityActivity(_ context.Context) (bool, erro
 	return strings.Contains(a.visibilityManager.GetName(), "elasticsearch"), nil
 }
 
-func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name) error {
+func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context, nsID namespace.ID, nsName namespace.Name, notDeletedCount int) error {
 	req := &manager.CountWorkflowExecutionsRequest{
 		NamespaceID: nsID,
 		Namespace:   nsName,
@@ -78,9 +78,9 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 	}
 
 	count := resp.Count
-	if count > 0 {
+	if count > int64(notDeletedCount) {
 		activityInfo := activity.GetInfo(ctx)
-		// Starting from 8th attempt, workflow executions deletion must show some progress.
+		// Starting from 8th attempt (after ~127s), workflow executions deletion must show some progress.
 		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
 			var previousAttemptCount int64
 			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
@@ -100,6 +100,12 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 		activity.RecordHeartbeat(ctx, count)
 		return errors.ErrExecutionsStillExist
 	}
+
+	if notDeletedCount > 0 {
+		a.logger.Warn("Some workflow executions were not deleted and still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(notDeletedCount))
+		return errors.ErrNotDeletedExecutionsStillExist
+	}
+
 	return nil
 }
 

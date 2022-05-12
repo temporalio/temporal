@@ -2226,8 +2226,6 @@ const (
 	RenameNamespaceFailuresCount
 	ReadNamespaceFailuresCount
 	ListExecutionsFailuresCount
-	TerminateExecutionFailuresCount
-	TerminateExecutionNotFoundCount
 	DeleteExecutionFailuresCount
 	DeleteExecutionNotFoundCount
 	RateLimiterFailuresCount
@@ -2690,19 +2688,17 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CatchUpReadyShardCountGauge:                   NewGaugeDef("catchup_ready_shard_count"),
 		HandoverReadyShardCountGauge:                  NewGaugeDef("handover_ready_shard_count"),
 
-		DeleteNamespaceSuccessCount:     NewCounterDef("delete_namespace_success"),
-		RenameNamespaceSuccessCount:     NewCounterDef("rename_namespace_success"),
-		DeleteExecutionsSuccessCount:    NewCounterDef("delete_executions_success"),
-		DeleteNamespaceFailuresCount:    NewCounterDef("delete_namespace_failures"),
-		UpdateNamespaceFailuresCount:    NewCounterDef("update_namespace_failures"),
-		RenameNamespaceFailuresCount:    NewCounterDef("rename_namespace_failures"),
-		ReadNamespaceFailuresCount:      NewCounterDef("read_namespace_failures"),
-		ListExecutionsFailuresCount:     NewCounterDef("list_executions_failures"),
-		TerminateExecutionFailuresCount: NewCounterDef("terminate_executions_failures"),
-		TerminateExecutionNotFoundCount: NewCounterDef("terminate_executions_not_found"),
-		DeleteExecutionFailuresCount:    NewCounterDef("delete_execution_failures"),
-		DeleteExecutionNotFoundCount:    NewCounterDef("delete_execution_not_found"),
-		RateLimiterFailuresCount:        NewCounterDef("rate_limiter_failures"),
+		DeleteNamespaceSuccessCount:  NewCounterDef("delete_namespace_success"),
+		RenameNamespaceSuccessCount:  NewCounterDef("rename_namespace_success"),
+		DeleteExecutionsSuccessCount: NewCounterDef("delete_executions_success"),
+		DeleteNamespaceFailuresCount: NewCounterDef("delete_namespace_failures"),
+		UpdateNamespaceFailuresCount: NewCounterDef("update_namespace_failures"),
+		RenameNamespaceFailuresCount: NewCounterDef("rename_namespace_failures"),
+		ReadNamespaceFailuresCount:   NewCounterDef("read_namespace_failures"),
+		ListExecutionsFailuresCount:  NewCounterDef("list_executions_failures"),
+		DeleteExecutionFailuresCount: NewCounterDef("delete_execution_failures"),
+		DeleteExecutionNotFoundCount: NewCounterDef("delete_execution_not_found"),
+		RateLimiterFailuresCount:     NewCounterDef("rate_limiter_failures"),
 	},
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),
