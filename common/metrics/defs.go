@@ -565,6 +565,8 @@ const (
 	AdminClientResendReplicationTasksScope
 	// AdminClientGetTaskQueueTasksScope tracks RPC calls to admin service
 	AdminClientGetTaskQueueTasksScope
+	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
+	AdminClientDeleteWorkflowExecutionScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -787,6 +789,8 @@ const (
 	AdminAddOrUpdateRemoteClusterScope
 	// AdminRemoveRemoteClusterScope is the metric scope for admin.AdminRemoveRemoteClusterScope
 	AdminRemoveRemoteClusterScope
+	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecutionScope
+	AdminDeleteWorkflowExecutionScope
 
 	NumAdminScopes
 )
@@ -1444,6 +1448,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientGetDLQMessagesScope:                   {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                 {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                 {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDeleteWorkflowExecutionScope:          {operation: "AdminClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 
 		DCRedirectionDeprecateNamespaceScope:                 {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeNamespaceScope:                  {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1545,6 +1550,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminListClustersScope:                          {operation: "AdminListClusters"},
 		AdminAddOrUpdateRemoteClusterScope:              {operation: "AdminAddOrUpdateRemoteCluster"},
 		AdminRemoveRemoteClusterScope:                   {operation: "AdminRemoveRemoteCluster"},
+		AdminDeleteWorkflowExecutionScope:               {operation: "AdminDeleteWorkflowExecution"},
 		OperatorAddSearchAttributesScope:                {operation: "OperatorAddSearchAttributes"},
 		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
 		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
