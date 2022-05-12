@@ -1976,9 +1976,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 
 			executionInfo := mutableState.GetExecutionInfo()
 			createWorkflowTask := true
-			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-			workflowTaskBackoff := timestamp.TimeValue(executionInfo.GetExecutionTime()).After(timestamp.TimeValue(executionInfo.GetStartTime()))
-			if workflowTaskBackoff && !mutableState.HasProcessedOrPendingWorkflowTask() {
+			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
+				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
 				createWorkflowTask = false
 			}
 

@@ -1647,6 +1647,34 @@ func (mr *MockMutableStateMockRecorder) IsWorkflowExecutionRunning() *gomock.Cal
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowExecutionRunning", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowExecutionRunning))
 }
 
+// IsWorkflowPendingOnWorkflowTaskBackoff mocks base method.
+func (m *MockMutableState) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "IsWorkflowPendingOnWorkflowTaskBackoff")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// IsWorkflowPendingOnWorkflowTaskBackoff indicates an expected call of IsWorkflowPendingOnWorkflowTaskBackoff.
+func (mr *MockMutableStateMockRecorder) IsWorkflowPendingOnWorkflowTaskBackoff() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IsWorkflowPendingOnWorkflowTaskBackoff", reflect.TypeOf((*MockMutableState)(nil).IsWorkflowPendingOnWorkflowTaskBackoff))
+}
+
+// PopTasks mocks base method.
+func (m *MockMutableState) PopTasks() map[tasks.Category][]tasks.Task {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PopTasks")
+	ret0, _ := ret[0].(map[tasks.Category][]tasks.Task)
+	return ret0
+}
+
+// PopTasks indicates an expected call of PopTasks.
+func (mr *MockMutableStateMockRecorder) PopTasks() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PopTasks", reflect.TypeOf((*MockMutableState)(nil).PopTasks))
+}
+
 // ReplicateActivityInfo mocks base method.
 func (m *MockMutableState) ReplicateActivityInfo(arg0 *v18.SyncActivityRequest, arg1 bool) error {
 	m.ctrl.T.Helper()

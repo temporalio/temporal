@@ -1322,6 +1322,15 @@ func (e *MutableStateImpl) IsSignalRequested(
 	return false
 }
 
+func (e *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
+
+	workflowTaskBackoff := timestamp.TimeValue(e.executionInfo.GetExecutionTime()).After(timestamp.TimeValue(e.executionInfo.GetStartTime()))
+	if workflowTaskBackoff && !e.HasProcessedOrPendingWorkflowTask() {
+		return true
+	}
+	return false
+}
+
 func (e *MutableStateImpl) AddSignalRequested(
 	requestID string,
 ) {
