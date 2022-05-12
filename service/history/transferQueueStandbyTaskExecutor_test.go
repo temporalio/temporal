@@ -255,66 +255,35 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
+	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
-}
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending_PushToMatching() {
-
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
-	}
-	workflowType := "some random workflow type"
-	taskQueueName := "some random task queue"
-
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
-	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
-			},
-		},
-	)
-	s.Nil(err)
-
-	di := addWorkflowTaskScheduledEvent(mutableState)
-	event := addWorkflowTaskStartedEvent(mutableState, di.ScheduleID, taskQueueName, uuid.New())
-	di.StartedID = event.GetEventId()
-	event = addWorkflowTaskCompletedEvent(mutableState, di.ScheduleID, di.StartedID, "some random identity")
-
-	taskID := int64(59)
-	activityID := "activity-1"
-	activityType := "some random activity type"
-	event, _ = addActivityTaskScheduledEvent(mutableState, event.GetEventId(), activityID, activityType, taskQueueName, &commonpb.Payloads{}, 1*time.Second, 1*time.Second, 1*time.Second, 1*time.Second)
-
-	now := time.Now().UTC()
+	// resend history post action
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
-	transferTask := &tasks.ActivityTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		Version:             s.version,
-		VisibilityTimestamp: now,
-		TaskID:              taskID,
-		TaskQueue:           taskQueueName,
-		ScheduleID:          event.GetEventId(),
-	}
+	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
+		Namespace: s.namespaceEntry.Name().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: transferTask.WorkflowID,
+			RunId:      transferTask.RunID,
+		},
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
+	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		namespace.ID(transferTask.NamespaceID),
+		transferTask.WorkflowID,
+		transferTask.RunID,
+		event.GetEventId(),
+		s.version,
+		int64(0),
+		int64(0),
+	).Return(nil)
+	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrTaskRetry, err)
 
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, event.GetEventId(), event.GetVersion())
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	// push to matching post action
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
-
-	s.mockShard.SetCurrentTime(s.clusterName, now)
 	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
@@ -428,59 +397,35 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
+	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, now)
 	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
-}
 
-func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending_PushToMatching() {
-
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: "some random workflow ID",
-		RunId:      uuid.New(),
-	}
-	workflowType := "some random workflow type"
-	taskQueueName := "some random task queue"
-
-	mutableState := workflow.TestGlobalMutableState(s.mockShard, s.mockShard.GetEventsCache(), s.logger, s.version, execution.GetRunId())
-	_, err := mutableState.AddWorkflowExecutionStartedEvent(
-		execution,
-		&historyservice.StartWorkflowExecutionRequest{
-			Attempt:     1,
-			NamespaceId: s.namespaceID.String(),
-			StartRequest: &workflowservice.StartWorkflowExecutionRequest{
-				WorkflowType:             &commonpb.WorkflowType{Name: workflowType},
-				TaskQueue:                &taskqueuepb.TaskQueue{Name: taskQueueName},
-				WorkflowExecutionTimeout: timestamp.DurationPtr(2 * time.Second),
-				WorkflowTaskTimeout:      timestamp.DurationPtr(1 * time.Second),
-			},
-		},
-	)
-	s.Nil(err)
-
-	taskID := int64(59)
-	di := addWorkflowTaskScheduledEvent(mutableState)
-
-	now := time.Now().UTC()
+	// resend history post action
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
-	transferTask := &tasks.WorkflowTask{
-		WorkflowKey: definition.NewWorkflowKey(
-			s.namespaceID.String(),
-			execution.GetWorkflowId(),
-			execution.GetRunId(),
-		),
-		Version:             s.version,
-		VisibilityTimestamp: now,
-		TaskID:              taskID,
-		TaskQueue:           taskQueueName,
-		ScheduleID:          di.ScheduleID,
-	}
+	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
+		Namespace: s.namespaceEntry.Name().String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: transferTask.WorkflowID,
+			RunId:      transferTask.RunID,
+		},
+	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
+	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		namespace.ID(transferTask.NamespaceID),
+		transferTask.WorkflowID,
+		transferTask.RunID,
+		di.ScheduleID,
+		s.version,
+		int64(0),
+		int64(0),
+	).Return(nil)
+	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	s.Equal(consts.ErrTaskRetry, err)
 
-	persistenceMutableState := s.createPersistenceMutableState(mutableState, di.ScheduleID, di.Version)
-	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
+	// push to matching post action
+	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
-
-	s.mockShard.SetCurrentTime(s.clusterName, now)
 	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }

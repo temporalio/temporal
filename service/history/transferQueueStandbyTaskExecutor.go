@@ -133,7 +133,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		}
 
 		if activityInfo.StartedId == common.EmptyEventID {
-			return newPushActivityToMatchingInfo(*activityInfo.ScheduleToStartTimeout), nil
+			return newActivityTaskPostActionInfo(mutableState, *activityInfo.ScheduleToStartTimeout)
 		}
 
 		return nil, nil
@@ -149,7 +149,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.pushActivity,
+			t.fetchHistoryFromRemote,
 			t.pushActivity,
 		),
 	)
@@ -189,10 +189,11 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		}
 
 		if wtInfo.StartedID == common.EmptyEventID {
-			return newPushWorkflowTaskToMatchingInfo(
+			return newWorkflowTaskPostActionInfo(
+				mutableState,
 				taskScheduleToStartTimeoutSeconds,
 				*taskQueue,
-			), nil
+			)
 		}
 
 		return nil, nil
@@ -208,7 +209,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.pushWorkflowTask,
+			t.fetchHistoryFromRemote,
 			t.pushWorkflowTask,
 		),
 	)
@@ -517,7 +518,7 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
-	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
+	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
 	timeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
@@ -537,7 +538,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		return nil
 	}
 
-	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
+	pushwtInfo := postActionInfo.(*workflowTaskPostActionInfo)
 	timeout := pushwtInfo.workflowTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		ctx,
@@ -569,14 +570,22 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
-	log log.Logger,
+	logger log.Logger,
 ) error {
 
-	if postActionInfo == nil {
+	var resendInfo *historyResendInfo
+	switch postActionInfo := postActionInfo.(type) {
+	case nil:
 		return nil
+	case *historyResendInfo:
+		resendInfo = postActionInfo
+	case *activityTaskPostActionInfo:
+		resendInfo = postActionInfo.historyResendInfo
+	case *workflowTaskPostActionInfo:
+		resendInfo = postActionInfo.historyResendInfo
+	default:
+		logger.Fatal("unknown post action info for fetching remote history", tag.Value(postActionInfo))
 	}
-
-	resendInfo := postActionInfo.(*historyResendInfo)
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientRequests)
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientLatency)
