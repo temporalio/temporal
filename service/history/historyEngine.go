@@ -2844,8 +2844,10 @@ func (e *historyEngineImpl) ReapplyEvents(
 				Noop:               false,
 				CreateWorkflowTask: true,
 			}
-			// Do not create workflow task when the workflow is cron and the cron has not been started yet
-			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingWorkflowTask() {
+			executionInfo := mutableState.GetExecutionInfo()
+			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
+			workflowTaskBackoff := timestamp.TimeValue(executionInfo.GetExecutionTime()).After(timestamp.TimeValue(executionInfo.GetStartTime()))
+			if workflowTaskBackoff && !mutableState.HasProcessedOrPendingWorkflowTask() {
 				postActions.CreateWorkflowTask = false
 			}
 			reappliedEvents, err := e.eventsReapplier.reapplyEvents(
