@@ -248,6 +248,8 @@ func (ws *workerSet) refreshComponent(
 			}
 
 			ws.workers[cmp] = worker
+			ws.wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStarted, tag.WorkflowNamespace(ws.ns.Name().String()), tag.WorkerComponent(cmp))
+
 			return nil
 		} else {
 			ws.lock.Lock()
@@ -256,7 +258,9 @@ func (ws *workerSet) refreshComponent(
 			if worker, ok := ws.workers[cmp]; ok {
 				worker.stop()
 				delete(ws.workers, cmp)
+				ws.wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStopped, tag.WorkflowNamespace(ws.ns.Name().String()), tag.WorkerComponent(cmp))
 			}
+
 			return nil
 		}
 	}
