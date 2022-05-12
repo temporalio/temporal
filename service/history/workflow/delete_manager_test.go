@@ -47,6 +47,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tests"
 	"go.temporal.io/server/service/worker/archiver"
@@ -57,11 +58,12 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller         *gomock.Controller
-		mockCache          *MockCache
-		mockArchivalClient *archiver.MockClient
-		mockShardContext   *shard.MockContext
-		mockClock          *clock.EventTimeSource
+		controller            *gomock.Controller
+		mockCache             *MockCache
+		mockArchivalClient    *archiver.MockClient
+		mockShardContext      *shard.MockContext
+		mockClock             *clock.EventTimeSource
+		mockNamespaceRegistry *namespace.MockRegistry
 
 		deleteManager DeleteManager
 	}
@@ -87,10 +89,12 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 	s.mockCache = NewMockCache(s.controller)
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockClock = clock.NewEventTimeSource()
+	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
 
 	config := tests.NewDynamicConfig()
 	s.mockShardContext = shard.NewMockContext(s.controller)
 	s.mockShardContext.EXPECT().GetMetricsClient().Return(metrics.NoopClient).AnyTimes()
+	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceRegistry).AnyTimes()
 
 	s.deleteManager = NewDeleteManager(
 		s.mockShardContext,
@@ -225,6 +229,88 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecution_OpenWorkflow() 
 		true,
 	)
 	s.NoError(err)
+}
+
+func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
+	we := commonpb.WorkflowExecution{
+		WorkflowId: tests.WorkflowID,
+		RunId:      tests.RunID,
+	}
+	mockMutableState := NewMockMutableState(s.controller)
+	mockMutableState.EXPECT().GetCurrentVersion().Return(int64(1)).AnyTimes()
+	mockMutableState.EXPECT().GetWorkflowKey().Return(definition.NewWorkflowKey(tests.NamespaceID.String(), tests.WorkflowID, tests.RunID)).AnyTimes()
+	s.mockShardContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
+	s.mockShardContext.EXPECT().AddTasks(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
+
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   1000,
+		CloseVisibilityTaskId: 1001}).
+		Times(4)
+	err := s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		1000,
+		1001,
+	)
+	s.NoError(err)
+
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   0,
+		CloseVisibilityTaskId: 0}).
+		Times(2)
+	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		2000,
+		2000,
+	)
+	s.NoError(err)
+
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   1000,
+		CloseVisibilityTaskId: 0}).
+		Times(3)
+	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		1001,
+		2000,
+	)
+	s.NoError(err)
+
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   1000,
+		CloseVisibilityTaskId: 1001}).
+		Times(2)
+	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		200,
+		201,
+	)
+	s.ErrorIs(err, consts.ErrWorkflowNotReady)
+
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   1000,
+		CloseVisibilityTaskId: 1001}).
+		Times(4)
+	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		1000,
+		1000,
+	)
+	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_ArchivalNotInline() {
