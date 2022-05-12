@@ -69,7 +69,7 @@ message WorkflowExecutionInfo {
     string parent_namespace_id = 3;
     string parent_workflow_id = 4;
     string parent_run_id = 5;
-    int64 initiated_id = 6;
+    int64 parent_initiated_id = 6;
     int64 completion_event_batch_id = 7;
     reserved 8;
     string task_queue = 9;
@@ -130,6 +130,12 @@ message WorkflowExecutionInfo {
     // If continued-as-new, or retried, or cron, holds the new run id.
     string new_execution_run_id = 61;
     temporal.server.api.clock.v1.ShardClock parent_clock = 62;
+    // version of child execution initiated event in parent workflow
+    int64 parent_initiated_version = 63;
+    // Used to check if transfer close task is processed before deleting the workflow execution.
+    int64 close_transfer_task_id = 64;
+    // Used to check if visibility close task is processed before deleting the workflow execution.
+    int64 close_visibility_task_id = 65;
 }
 
 message ExecutionStats {
@@ -160,6 +166,9 @@ message TransferTaskInfo {
     int64 task_id = 12;
     google.protobuf.Timestamp visibility_time = 13 [(gogoproto.stdtime) = true];
     reserved 14;
+    // (-- api-linter: core::0140::prepositions=disabled
+    //     aip.dev/not-precedent: "after" is used to indicate sequence of actions. --)
+    bool delete_after_close = 15;
 }
 
 // replication column

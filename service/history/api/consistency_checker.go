@@ -31,10 +31,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -51,7 +52,7 @@ type (
 		) (string, error)
 		GetWorkflowContext(
 			ctx context.Context,
-			reqClock *clockpb.ShardClock,
+			reqClock *clockspb.ShardClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 		) (WorkflowContext, error)
@@ -96,7 +97,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 
 func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 	ctx context.Context,
-	reqClock *clockpb.ShardClock,
+	reqClock *clockspb.ShardClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 ) (WorkflowContext, error) {
@@ -131,7 +132,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	ctx context.Context,
-	reqClock *clockpb.ShardClock,
+	reqClock *clockspb.ShardClock,
 	workflowKey definition.WorkflowKey,
 ) (WorkflowContext, error) {
 	cmpResult, err := vclock.Compare(reqClock, c.shardContext.CurrentVectorClock())
@@ -324,4 +325,23 @@ func FailMutableStateConsistencyPredicate(
 	mutableState workflow.MutableState,
 ) bool {
 	return false
+}
+
+func HistoryEventConsistencyPredicate(
+	eventID int64,
+	eventVersion int64,
+) MutableStateConsistencyPredicate {
+	return func(mutableState workflow.MutableState) bool {
+		if eventVersion != 0 {
+			_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+				mutableState.GetExecutionInfo().GetVersionHistories(),
+				versionhistory.NewVersionHistoryItem(eventID, eventVersion),
+			)
+			return err == nil
+		}
+		// if initiated version is 0, it means the namespace is local or
+		// the caller has old version and does not sent the info.
+		// in either case, fallback to comparing next eventID
+		return eventID < mutableState.GetNextEventID()
+	}
 }

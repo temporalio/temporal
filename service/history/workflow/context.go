@@ -908,6 +908,7 @@ func (c *ContextImpl) enforceSizeCheck(
 			common.FailureReasonSizeExceedsLimit,
 			nil,
 			consts.IdentityHistoryService,
+			false,
 		); err != nil {
 			return false, err
 		}

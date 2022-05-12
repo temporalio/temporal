@@ -164,9 +164,27 @@ service HistoryService {
     rpc ScheduleWorkflowTask (ScheduleWorkflowTaskRequest) returns (ScheduleWorkflowTaskResponse) {
     }
 
+    // VerifyFirstWorkflowTaskScheduled checks if workflow has its first workflow task scheduled.
+    // This is only used by standby transfer start child workflow task logic to make sure parent workflow has  
+    // scheduled first workflow task in child after recording child started in its mutable state; otherwise,
+    // during namespace failover, it's possible that none of the clusters will schedule the first workflow task.
+    // NOTE: This is an experimental API. If later we found there are more verification API and there's a clear pattern
+    // of how verification is done, we may unify them into one generic verfication API.
+    rpc VerifyFirstWorkflowTaskScheduled (VerifyFirstWorkflowTaskScheduledRequest) returns (VerifyFirstWorkflowTaskScheduledResponse) {
+    }
+
     // RecordChildExecutionCompleted is used for reporting the completion of child workflow execution to parent.
     // This is mainly called by transfer queue processor during the processing of DeleteExecution task.
     rpc RecordChildExecutionCompleted (RecordChildExecutionCompletedRequest) returns (RecordChildExecutionCompletedResponse) {
+    }
+
+    // VerifyChildExecutionCompletionRecorded checks if child completion result is recorded in parent workflow.
+    // This is only used by standby transfer close execution logic to make sure parent workflow has the result 
+    // recorded before completing the task, otherwise during namespace failover, it's possible that none of the 
+    // clusters will record the child result in parent workflow.
+    // NOTE: This is an experimental API. If later we found there are more verification API and there's a clear pattern
+    // of how verification is done, we may unify them into one generic verfication API.
+    rpc VerifyChildExecutionCompletionRecorded (VerifyChildExecutionCompletionRecordedRequest) returns (VerifyChildExecutionCompletionRecordedResponse) {
     }
 
     // DescribeWorkflowExecution returns information about the specified workflow execution.

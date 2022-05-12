@@ -37,9 +37,12 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	historyspb "go.temporal.io/server/api/history/v1"
+	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 )
@@ -346,4 +349,74 @@ func (s *workflowConsistencyCheckerSuite) TestAssertShardOwnership_Dedup() {
 
 	err := assertShardOwnership(ctx, s.shardContext, &shardOwnershipAsserted)
 	s.NoError(err)
+}
+
+func (s *workflowConsistencyCheckerSuite) TestHistoryEventConsistencyPredicate() {
+	eventID := int64(400)
+	eventVersion := int64(200)
+	predicate := HistoryEventConsistencyPredicate(eventID, eventVersion)
+
+	testCases := []struct {
+		name             string
+		versionHistories *historyspb.VersionHistories
+		pass             bool
+	}{
+		{
+			name: "Pass_OnCurrentBranch",
+			versionHistories: versionhistory.NewVersionHistories(
+				&historyspb.VersionHistory{
+					BranchToken: []byte{1, 2, 3},
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 123, Version: 100},
+						{EventId: 456, Version: 200},
+					},
+				},
+			),
+			pass: true,
+		},
+		{
+			name: "Pass_OnNonCurrentBranch",
+			versionHistories: &historyspb.VersionHistories{
+				CurrentVersionHistoryIndex: 0,
+				Histories: []*historyspb.VersionHistory{
+					{
+						BranchToken: []byte{1, 2, 3},
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 123, Version: 100},
+						},
+					},
+					{
+						BranchToken: []byte{4, 5, 6},
+						Items: []*historyspb.VersionHistoryItem{
+							{EventId: 123, Version: 100},
+							{EventId: 456, Version: 200},
+						},
+					},
+				},
+			},
+			pass: true,
+		},
+		{
+			name: "Fail_NotFound",
+			versionHistories: versionhistory.NewVersionHistories(
+				&historyspb.VersionHistory{
+					BranchToken: []byte{1, 2, 3},
+					Items: []*historyspb.VersionHistoryItem{
+						{EventId: 123, Version: 100},
+					},
+				},
+			),
+			pass: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		s.Run(tc.name, func() {
+			mockMutableState := workflow.NewMockMutableState(s.controller)
+			mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+				VersionHistories: tc.versionHistories,
+			})
+			s.Equal(tc.pass, predicate(mockMutableState))
+		})
+	}
 }

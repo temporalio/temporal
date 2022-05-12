@@ -185,6 +185,7 @@ func (b *HistoryBuilder) AddWorkflowExecutionStartedEvent(
 		attributes.ParentWorkflowNamespace = parentInfo.Namespace
 		attributes.ParentWorkflowExecution = parentInfo.Execution
 		attributes.ParentInitiatedEventId = parentInfo.InitiatedId
+		attributes.ParentInitiatedEventVersion = parentInfo.InitiatedVersion
 	}
 	event.Attributes = &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
 		WorkflowExecutionStartedEventAttributes: attributes,

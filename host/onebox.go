@@ -765,6 +765,10 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
+
+	// For DeleteWorkflowExecution tests
+	client.OverrideValue(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
+	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
 }
 
 func (c *temporalImpl) RefreshNamespaceCache() {

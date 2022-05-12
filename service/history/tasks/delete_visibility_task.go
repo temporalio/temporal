@@ -39,8 +39,10 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
-		StartTime           *time.Time
-		CloseTime           *time.Time
+		// These two fields are needed for cassandra standard visibility.
+		// TODO (alex): Remove them when cassandra standard visibility is removed.
+		StartTime *time.Time
+		CloseTime *time.Time
 	}
 )
 

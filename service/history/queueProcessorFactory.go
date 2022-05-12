@@ -31,12 +31,14 @@ import (
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	ctasks "go.temporal.io/server/common/tasks"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
+	"go.temporal.io/server/service/history/replication"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
@@ -55,6 +57,10 @@ var QueueProcessorModule = fx.Options(
 		fx.Annotated{
 			Group:  queues.ProcessorFactoryFxGroup,
 			Target: NewVisibilityQueueProcessorFactory,
+		},
+		fx.Annotated{
+			Group:  queues.ProcessorFactoryFxGroup,
+			Target: NewReplicationQueueProcessorFactory,
 		},
 	),
 )
@@ -98,6 +104,15 @@ type (
 		VisibilityMgr manager.VisibilityManager
 	}
 
+	replicationQueueProcessorFactoryParams struct {
+		fx.In
+
+		Config             *configs.Config
+		ArchivalClient     archiver.Client
+		EventSerializer    serialization.Serializer
+		TaskFetcherFactory replication.TaskFetcherFactory
+	}
+
 	transferQueueProcessorFactory struct {
 		transferQueueProcessorFactoryParams
 
@@ -114,6 +129,10 @@ type (
 		visibilityQueueProcessorFactoryParams
 
 		scheduler queues.Scheduler
+	}
+
+	replicationQueueProcessorFactory struct {
+		replicationQueueProcessorFactoryParams
 	}
 )
 
@@ -261,5 +280,30 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 		workflowCache,
 		f.scheduler,
 		f.VisibilityMgr,
+	)
+}
+
+func NewReplicationQueueProcessorFactory(
+	params replicationQueueProcessorFactoryParams,
+) queues.ProcessorFactory {
+
+	return &replicationQueueProcessorFactory{
+		replicationQueueProcessorFactoryParams: params,
+	}
+}
+
+func (f *replicationQueueProcessorFactory) CreateProcessor(
+	shard shard.Context,
+	engine shard.Engine,
+	workflowCache workflow.Cache,
+) queues.Processor {
+	return replication.NewTaskProcessorFactory(
+		f.ArchivalClient,
+		f.Config,
+		engine,
+		f.EventSerializer,
+		shard,
+		f.TaskFetcherFactory,
+		workflowCache,
 	)
 }

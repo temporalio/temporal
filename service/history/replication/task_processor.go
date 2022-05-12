@@ -22,17 +22,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskProcessor_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_processor_mock.go
 
-package history
+package replication
 
 import (
 	"context"
 	"fmt"
 	"sync/atomic"
 	"time"
-
-	"go.temporal.io/server/common/persistence/serialization"
 
 	"go.temporal.io/api/serviceerror"
 
@@ -48,6 +46,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/quotas"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
@@ -67,8 +66,13 @@ var (
 )
 
 type (
-	// ReplicationTaskProcessorImpl is responsible for processing replication tasks for a shard.
-	ReplicationTaskProcessorImpl struct {
+	// TaskProcessor is the interface for task processor
+	TaskProcessor interface {
+		common.Daemon
+	}
+
+	// taskProcessorImpl is responsible for processing replication tasks for a shard.
+	taskProcessorImpl struct {
 		currentCluster          string
 		sourceCluster           string
 		status                  int32
@@ -78,7 +82,7 @@ type (
 		config                  *configs.Config
 		metricsClient           metrics.Client
 		logger                  log.Logger
-		replicationTaskExecutor replicationTaskExecutor
+		replicationTaskExecutor TaskExecutor
 
 		rateLimiter quotas.RateLimiter
 
@@ -98,27 +102,22 @@ type (
 		shutdownChan  chan struct{}
 	}
 
-	// ReplicationTaskProcessor is responsible for processing replication tasks for a shard.
-	ReplicationTaskProcessor interface {
-		common.Daemon
-	}
-
 	replicationTaskRequest struct {
 		token    *replicationspb.ReplicationToken
 		respChan chan<- *replicationspb.ReplicationMessages
 	}
 )
 
-// NewReplicationTaskProcessor creates a new replication task processor.
-func NewReplicationTaskProcessor(
+// NewTaskProcessor creates a new replication task processor.
+func NewTaskProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	config *configs.Config,
 	metricsClient metrics.Client,
-	replicationTaskFetcher ReplicationTaskFetcher,
-	replicationTaskExecutor replicationTaskExecutor,
+	replicationTaskFetcher taskFetcher,
+	replicationTaskExecutor TaskExecutor,
 	eventSerializer serialization.Serializer,
-) *ReplicationTaskProcessorImpl {
+) TaskProcessor {
 	shardID := shard.GetShardID()
 	taskRetryPolicy := backoff.NewExponentialRetryPolicy(config.ReplicationTaskProcessorErrorRetryWait(shardID))
 	taskRetryPolicy.SetBackoffCoefficient(config.ReplicationTaskProcessorErrorRetryBackoffCoefficient(shardID))
@@ -132,9 +131,9 @@ func NewReplicationTaskProcessor(
 	dlqRetryPolicy.SetMaximumAttempts(config.ReplicationTaskProcessorErrorRetryMaxAttempts(shardID))
 	dlqRetryPolicy.SetExpirationInterval(config.ReplicationTaskProcessorErrorRetryExpiration(shardID))
 
-	return &ReplicationTaskProcessorImpl{
+	return &taskProcessorImpl{
 		currentCluster:          shard.GetClusterMetadata().GetCurrentClusterName(),
-		sourceCluster:           replicationTaskFetcher.GetSourceCluster(),
+		sourceCluster:           replicationTaskFetcher.getSourceCluster(),
 		status:                  common.DaemonStatusInitialized,
 		shard:                   shard,
 		historyEngine:           historyEngine,
@@ -147,10 +146,10 @@ func NewReplicationTaskProcessor(
 			quotas.NewDefaultOutgoingRateLimiter(
 				func() float64 { return config.ReplicationTaskProcessorShardQPS() },
 			),
-			replicationTaskFetcher.GetRateLimiter(),
+			replicationTaskFetcher.getRateLimiter(),
 		}),
 		taskRetryPolicy:      taskRetryPolicy,
-		requestChan:          replicationTaskFetcher.GetRequestChan(),
+		requestChan:          replicationTaskFetcher.getRequestChan(),
 		syncShardChan:        make(chan *replicationspb.SyncShardStatus, 1),
 		shutdownChan:         make(chan struct{}),
 		minTxAckedTaskID:     persistence.EmptyQueueMessageID,
@@ -160,7 +159,7 @@ func NewReplicationTaskProcessor(
 }
 
 // Start starts the processor
-func (p *ReplicationTaskProcessorImpl) Start() {
+func (p *taskProcessorImpl) Start() {
 	if !atomic.CompareAndSwapInt32(
 		&p.status,
 		common.DaemonStatusInitialized,
@@ -175,7 +174,7 @@ func (p *ReplicationTaskProcessorImpl) Start() {
 }
 
 // Stop stops the processor
-func (p *ReplicationTaskProcessorImpl) Stop() {
+func (p *taskProcessorImpl) Stop() {
 	if !atomic.CompareAndSwapInt32(
 		&p.status,
 		common.DaemonStatusStarted,
@@ -189,7 +188,7 @@ func (p *ReplicationTaskProcessorImpl) Stop() {
 	p.logger.Info("ReplicationTaskProcessor shutting down.")
 }
 
-func (p *ReplicationTaskProcessorImpl) eventLoop() {
+func (p *taskProcessorImpl) eventLoop() {
 	shardID := p.shard.GetShardID()
 
 	syncShardTimer := time.NewTimer(backoff.JitDuration(
@@ -244,7 +243,7 @@ func (p *ReplicationTaskProcessorImpl) eventLoop() {
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError error) {
+func (p *taskProcessorImpl) pollProcessReplicationTasks() (retError error) {
 	defer func() {
 		if retError != nil {
 			p.maxRxReceivedTaskID = p.maxRxProcessedTaskID
@@ -285,7 +284,7 @@ func (p *ReplicationTaskProcessorImpl) pollProcessReplicationTasks() (retError e
 	return nil
 }
 
-func (p *ReplicationTaskProcessorImpl) applyReplicationTask(
+func (p *taskProcessorImpl) applyReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
 	err := p.handleReplicationTask(replicationTask)
@@ -309,7 +308,7 @@ func (p *ReplicationTaskProcessorImpl) applyReplicationTask(
 	return nil
 }
 
-func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
+func (p *taskProcessorImpl) handleSyncShardStatus(
 	status *replicationspb.SyncShardStatus,
 ) error {
 
@@ -330,20 +329,20 @@ func (p *ReplicationTaskProcessorImpl) handleSyncShardStatus(
 	})
 }
 
-func (p *ReplicationTaskProcessorImpl) handleReplicationTask(
+func (p *taskProcessorImpl) handleReplicationTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) error {
 	_ = p.rateLimiter.Wait(context.Background())
 
 	operation := func() error {
-		scope, err := p.replicationTaskExecutor.execute(replicationTask, false)
+		scope, err := p.replicationTaskExecutor.Execute(replicationTask, false)
 		p.emitTaskMetrics(scope, err)
 		return err
 	}
 	return backoff.Retry(operation, p.taskRetryPolicy, p.isRetryableError)
 }
 
-func (p *ReplicationTaskProcessorImpl) handleReplicationDLQTask(
+func (p *taskProcessorImpl) handleReplicationDLQTask(
 	request *persistence.PutReplicationTaskToDLQRequest,
 ) error {
 
@@ -375,7 +374,7 @@ func (p *ReplicationTaskProcessorImpl) handleReplicationDLQTask(
 	}, p.dlqRetryPolicy, p.isRetryableError)
 }
 
-func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
+func (p *taskProcessorImpl) convertTaskToDLQTask(
 	replicationTask *replicationspb.ReplicationTask,
 ) (*persistence.PutReplicationTaskToDLQRequest, error) {
 	switch replicationTask.TaskType {
@@ -432,7 +431,7 @@ func (p *ReplicationTaskProcessorImpl) convertTaskToDLQTask(
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
+func (p *taskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []byte, error) {
 	respChan := make(chan *replicationspb.ReplicationMessages, 1)
 	p.requestChan <- &replicationTaskRequest{
 		token: &replicationspb.ReplicationToken{
@@ -475,7 +474,7 @@ func (p *ReplicationTaskProcessorImpl) paginationFn(_ []byte) ([]interface{}, []
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
+func (p *taskProcessorImpl) cleanupReplicationTasks() error {
 
 	clusterMetadata := p.shard.GetClusterMetadata()
 	currentCluster := clusterMetadata.GetCurrentClusterName()
@@ -519,7 +518,7 @@ func (p *ReplicationTaskProcessorImpl) cleanupReplicationTasks() error {
 	return err
 }
 
-func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, err error) {
+func (p *taskProcessorImpl) emitTaskMetrics(scope int, err error) {
 	metricsScope := p.metricsClient.Scope(scope)
 	if common.IsContextDeadlineExceededErr(err) || common.IsContextCanceledErr(err) {
 		metricsScope.IncCounter(metrics.ServiceErrContextTimeoutCounter)
@@ -556,11 +555,11 @@ func (p *ReplicationTaskProcessorImpl) emitTaskMetrics(scope int, err error) {
 	}
 }
 
-func (p *ReplicationTaskProcessorImpl) isStopped() bool {
+func (p *taskProcessorImpl) isStopped() bool {
 	return atomic.LoadInt32(&p.status) == common.DaemonStatusStopped
 }
 
-func (p *ReplicationTaskProcessorImpl) isRetryableError(
+func (p *taskProcessorImpl) isRetryableError(
 	err error,
 ) bool {
 	if p.isStopped() {

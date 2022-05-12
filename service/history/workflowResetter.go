@@ -584,6 +584,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 		terminateReason,
 		nil,
 		consts.IdentityHistoryService,
+		false,
 	)
 }
 

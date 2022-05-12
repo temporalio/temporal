@@ -25,9 +25,9 @@
 package history
 
 import (
-	"go.temporal.io/server/api/historyservice/v1"
+	"go.uber.org/fx"
+
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/configs"
@@ -36,20 +36,16 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
 	"go.temporal.io/server/service/worker/archiver"
-	"go.uber.org/fx"
 )
 
 type (
 	HistoryEngineFactoryParams struct {
 		fx.In
 
-		VisibilityMgr           manager.VisibilityManager
 		MatchingClient          resource.MatchingClient
-		HistoryClient           historyservice.HistoryServiceClient
 		SdkClientFactory        sdk.ClientFactory
 		EventNotifier           events.Notifier
 		Config                  *configs.Config
-		ReplicationTaskFetchers ReplicationTaskFetchers
 		RawMatchingClient       resource.MatchingRawClient
 		NewCacheFn              workflow.NewCacheFn
 		ArchivalClient          archiver.Client
@@ -67,13 +63,10 @@ func (f *historyEngineFactory) CreateEngine(
 ) shard.Engine {
 	return NewEngineWithShardContext(
 		context,
-		f.VisibilityMgr,
 		f.MatchingClient,
-		f.HistoryClient,
 		f.SdkClientFactory,
 		f.EventNotifier,
 		f.Config,
-		f.ReplicationTaskFetchers,
 		f.RawMatchingClient,
 		f.NewCacheFn,
 		f.ArchivalClient,
