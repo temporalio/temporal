@@ -423,7 +423,7 @@ start-cdc-other: temporal-server
 	./temporal-server --zone other start
 
 ##### Mocks #####
-AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go" go.mod))
+AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go v1" go.mod))
 external-mocks:
 	@printf $(COLOR) "Generate external libraries mocks..."
 	@mockgen -copyright_file ./LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
