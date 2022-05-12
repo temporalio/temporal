@@ -28,6 +28,7 @@ package history
 
 import (
 	"context"
+
 	"go.temporal.io/server/common/primitives/timestamp"
 
 	enumspb "go.temporal.io/api/enums/v1"
