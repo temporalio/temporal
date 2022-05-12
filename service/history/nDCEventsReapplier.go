@@ -28,6 +28,7 @@ package history
 
 import (
 	"context"
+	"go.temporal.io/server/common/primitives/timestamp"
 
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -67,7 +68,7 @@ func newNDCEventsReapplier(
 }
 
 func (r *nDCEventsReapplierImpl) reapplyEvents(
-	_ context.Context,
+	ctx context.Context,
 	msBuilder workflow.MutableState,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
@@ -110,8 +111,10 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 	}
 
 	// After reapply event, checking if we should schedule a workflow task
-	// Do not create workflow task when the workflow is cron and the cron has not been started yet
-	if msBuilder.GetExecutionInfo().CronSchedule != "" && !msBuilder.HasProcessedOrPendingWorkflowTask() {
+	// Do not create workflow task when the workflow has back off and the cron has not been started yet
+	executionInfo := msBuilder.GetExecutionInfo()
+	workflowTaskBackoff := timestamp.TimeValue(executionInfo.GetExecutionTime()).After(timestamp.TimeValue(executionInfo.GetStartTime()))
+	if workflowTaskBackoff && !msBuilder.HasProcessedOrPendingWorkflowTask() {
 		return reappliedEvents, nil
 	}
 	if !msBuilder.HasPendingWorkflowTask() {
