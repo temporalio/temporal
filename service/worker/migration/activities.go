@@ -134,6 +134,9 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
 				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
 				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
+				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
+				tag.NewTimeTag("ShardLocalTime", *shard.ShardLocalTime),
+				tag.NewTimeTag("AckedTaskVisibilityTime", *clusterInfo.AckedTaskVisibilityTime),
 			)
 		}
 	}
@@ -206,6 +209,7 @@ func (a *activities) checkHandoverOnce(ctx context.Context, waitRequest waitHand
 					tag.NewInt64("HandoverTaskId", handoverInfo.HandoverReplicationTaskId),
 					tag.NewStringTag("Namespace", waitRequest.Namespace),
 					tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
+					tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
 				)
 			}
 		}
@@ -317,7 +321,7 @@ func (a *activities) ListWorkflows(ctx context.Context, request *workflowservice
 }
 
 func (a *activities) GenerateReplicationTasks(ctx context.Context, request *generateReplicationTasksRequest) error {
-	rateLimiter := quotas.NewRateLimiter(float64(request.RPS), int(math.Ceil(request.RPS)))
+	rateLimiter := quotas.NewRateLimiter(request.RPS, int(math.Ceil(request.RPS)))
 
 	startIndex := 0
 	if activity.HasHeartbeatDetails(ctx) {
@@ -328,7 +332,9 @@ func (a *activities) GenerateReplicationTasks(ctx context.Context, request *gene
 	}
 
 	for i := startIndex; i < len(request.Executions); i++ {
-		rateLimiter.Wait(ctx)
+		if err := rateLimiter.Wait(ctx); err != nil {
+			return err
+		}
 		we := request.Executions[i]
 		err := a.generateWorkflowReplicationTask(ctx, definition.NewWorkflowKey(request.NamespaceID, we.WorkflowId, we.RunId))
 		if err != nil {
