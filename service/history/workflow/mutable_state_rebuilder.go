@@ -527,6 +527,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -541,6 +542,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -555,6 +557,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -569,6 +572,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -583,6 +587,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}
@@ -628,6 +633,7 @@ func (b *MutableStateRebuilderImpl) ApplyEvents(
 
 			if err := taskGenerator.GenerateWorkflowCloseTasks(
 				timestamp.TimeValue(event.GetEventTime()),
+				false,
 			); err != nil {
 				return nil, err
 			}

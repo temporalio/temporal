@@ -570,6 +570,7 @@ func (handler *workflowTaskHandlerCallbacksImpl) handleWorkflowTaskCompleted(
 				common.FailureReasonTransactionSizeExceedsLimit,
 				payloads.EncodeString(updateErr.Error()),
 				consts.IdentityHistoryService,
+				false,
 			); err != nil {
 				return nil, err
 			}
