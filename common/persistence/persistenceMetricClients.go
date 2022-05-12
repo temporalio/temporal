@@ -27,7 +27,6 @@ package persistence
 import (
 	"context"
 	"fmt"
-
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
@@ -250,6 +249,7 @@ func (p *executionPersistenceClient) SetWorkflowExecution(
 ) (*SetWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceSetWorkflowExecutionScope, metrics.PersistenceRequests)
 
+	p.emitPerCategoryTaskMetrics(metrics.PersistenceSetWorkflowExecutionScope, &request.SetWorkflowSnapshot.Tasks)
 	sw := p.metricClient.StartTimer(metrics.PersistenceSetWorkflowExecutionScope, metrics.PersistenceLatency)
 	response, err := p.persistence.SetWorkflowExecution(ctx, request)
 	sw.Stop()
@@ -267,6 +267,7 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(
 ) (*UpdateWorkflowExecutionResponse, error) {
 	p.metricClient.IncCounter(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceRequests)
 
+	p.emitPerCategoryTaskMetrics(metrics.PersistenceUpdateWorkflowExecutionScope, &request.UpdateWorkflowMutation.Tasks)
 	sw := p.metricClient.StartTimer(metrics.PersistenceUpdateWorkflowExecutionScope, metrics.PersistenceLatency)
 	resp, err := p.persistence.UpdateWorkflowExecution(ctx, request)
 	sw.Stop()
@@ -276,6 +277,12 @@ func (p *executionPersistenceClient) UpdateWorkflowExecution(
 	}
 
 	return resp, err
+}
+
+func (p *executionPersistenceClient) emitPerCategoryTaskMetrics(scope int, t *map[tasks.Category][]tasks.Task) {
+	for k, v := range *t {
+		p.metricClient.Scope(scope, metrics.TaskCategoryTag(k.Name())).RecordDistribution(metrics.PersistenceTaskCount, len(v))
+	}
 }
 
 func (p *executionPersistenceClient) ConflictResolveWorkflowExecution(
