@@ -31,8 +31,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"go.temporal.io/server/common/headers"
 	"go.temporal.io/version/check"
+
+	"go.temporal.io/server/common/headers"
 )
 
 func TestSDKVersionRecorder(t *testing.T) {

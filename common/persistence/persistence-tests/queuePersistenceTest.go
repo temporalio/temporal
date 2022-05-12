@@ -75,7 +75,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	numMessages := 100
 	concurrentSenders := 10
 
-	messageChan := make(chan interface{})
+	messageChan := make(chan *replicationspb.ReplicationTask)
 
 	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
@@ -96,13 +96,14 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationQueue() {
 	wg.Add(concurrentSenders)
 
 	for i := 0; i < concurrentSenders; i++ {
-		go func() {
+		go func(senderNum int) {
 			defer wg.Done()
 			for message := range messageChan {
 				err := s.Publish(s.ctx, message)
-				s.Nil(err, "Enqueue message failed.")
+				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
+				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
-		}()
+		}(i)
 	}
 
 	wg.Wait()
@@ -151,7 +152,7 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	numMessages := 100
 	concurrentSenders := 10
 
-	messageChan := make(chan interface{})
+	messageChan := make(chan *replicationspb.ReplicationTask)
 
 	taskType := enumsspb.REPLICATION_TASK_TYPE_NAMESPACE_TASK
 	go func() {
@@ -172,13 +173,14 @@ func (s *QueuePersistenceSuite) TestNamespaceReplicationDLQ() {
 	wg.Add(concurrentSenders)
 
 	for i := 0; i < concurrentSenders; i++ {
-		go func() {
+		go func(senderNum int) {
 			defer wg.Done()
 			for message := range messageChan {
 				err := s.PublishToNamespaceDLQ(s.ctx, message)
-				s.Nil(err, "Enqueue message failed.")
+				id := message.Attributes.(*replicationspb.ReplicationTask_NamespaceTaskAttributes).NamespaceTaskAttributes.Id
+				s.Nil(err, "Enqueue message failed when sender %d tried to send %s", senderNum, id)
 			}
-		}()
+		}(i)
 	}
 
 	wg.Wait()

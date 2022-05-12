@@ -29,6 +29,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
+
 	"go.temporal.io/server/common/primitives"
 )
 
@@ -125,5 +126,13 @@ func (s *MetricTestSuiteBase) TestScopeReportHistogram() {
 	s.testClient.Scope(TestScope1).RecordDistribution(TestDimensionlessHistogramMetric1, 66)
 	testDef := MetricDefs[UnitTestService][TestDimensionlessHistogramMetric1]
 	assert.NoError(s.T(), s.metricTestUtility.ContainsHistogram(testDef.metricName, map[string]string{namespace: namespaceAllValue, OperationTagName: ScopeDefs[UnitTestService][TestScope1].operation, serviceName: primitives.UnitTestService}, 66))
+	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
+}
+
+func (s *MetricTestSuiteBase) TestUserScopeReportHistogram() {
+	userScopeMetrics := "test_user_scope_metrics"
+	tags := map[string]string{OperationTagName: "user_scope_operation"}
+	s.testClient.UserScope().Tagged(tags).RecordDistribution(userScopeMetrics, Dimensionless, 66)
+	assert.NoError(s.T(), s.metricTestUtility.ContainsHistogram(MetricName(userScopeMetrics), map[string]string{namespace: namespaceAllValue, OperationTagName: "user_scope_operation", serviceName: primitives.UnitTestService}, 66))
 	assert.Equal(s.T(), 1, s.metricTestUtility.CollectionSize())
 }

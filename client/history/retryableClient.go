@@ -482,6 +482,23 @@ func (c *retryableClient) ScheduleWorkflowTask(
 	return resp, err
 }
 
+func (c *retryableClient) VerifyFirstWorkflowTaskScheduled(
+	ctx context.Context,
+	request *historyservice.VerifyFirstWorkflowTaskScheduledRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.VerifyFirstWorkflowTaskScheduledResponse, error) {
+
+	var resp *historyservice.VerifyFirstWorkflowTaskScheduledResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.VerifyFirstWorkflowTaskScheduled(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
 func (c *retryableClient) RecordChildExecutionCompleted(
 	ctx context.Context,
 	request *historyservice.RecordChildExecutionCompletedRequest,
@@ -491,6 +508,23 @@ func (c *retryableClient) RecordChildExecutionCompleted(
 	op := func() error {
 		var err error
 		resp, err = c.client.RecordChildExecutionCompleted(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) VerifyChildExecutionCompletionRecorded(
+	ctx context.Context,
+	request *historyservice.VerifyChildExecutionCompletionRecordedRequest,
+	opts ...grpc.CallOption,
+) (*historyservice.VerifyChildExecutionCompletionRecordedResponse, error) {
+
+	var resp *historyservice.VerifyChildExecutionCompletionRecordedResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.VerifyChildExecutionCompletionRecorded(ctx, request, opts...)
 		return err
 	}
 

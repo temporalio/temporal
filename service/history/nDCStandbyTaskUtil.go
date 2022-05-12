@@ -42,13 +42,14 @@ import (
 )
 
 type (
-	standbyActionFn     func(workflow.Context, workflow.MutableState) (interface{}, error)
-	standbyPostActionFn func(tasks.Task, interface{}, log.Logger) error
+	standbyActionFn     func(context.Context, workflow.Context, workflow.MutableState) (interface{}, error)
+	standbyPostActionFn func(context.Context, tasks.Task, interface{}, log.Logger) error
 
 	standbyCurrentTimeFn func() time.Time
 )
 
 func standbyTaskPostActionNoOp(
+	_ context.Context,
 	_ tasks.Task,
 	postActionInfo interface{},
 	_ log.Logger,
@@ -63,6 +64,7 @@ func standbyTaskPostActionNoOp(
 }
 
 func standbyTransferTaskPostActionTaskDiscarded(
+	_ context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
 	logger log.Logger,
@@ -77,6 +79,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 }
 
 func standbyTimerTaskPostActionTaskDiscarded(
+	_ context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
 	logger log.Logger,
@@ -98,15 +101,31 @@ type (
 		lastEventVersion int64
 	}
 
-	pushActivityTaskToMatchingInfo struct {
+	activityTaskPostActionInfo struct {
+		*historyResendInfo
+
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
 	}
 
-	pushWorkflowTaskToMatchingInfo struct {
+	workflowTaskPostActionInfo struct {
+		*historyResendInfo
+
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
 	}
+
+	startChildExecutionPostActionInfo struct {
+		*historyResendInfo
+	}
+)
+
+var (
+	// verifyChildCompletionRecordedInfo is the post action info returned by
+	// standby close execution task action func. The actual content of the
+	// struct doesn't matter. We just need a non-nil pointer to to indicate
+	// that the verification has failed.
+	verifyChildCompletionRecordedInfo = &struct{}{}
 )
 
 func newHistoryResendInfo(
@@ -119,35 +138,53 @@ func newHistoryResendInfo(
 	}
 }
 
-func newPushActivityToMatchingInfo(
+func newActivityTaskPostActionInfo(
+	mutableState workflow.MutableState,
 	activityScheduleToStartTimeout time.Duration,
-) *pushActivityTaskToMatchingInfo {
-
-	return &pushActivityTaskToMatchingInfo{
-		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+) (*activityTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
 	}
+
+	return &activityTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
+		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+	}, nil
 }
 
-func newActivityRetryTimerToMatchingInfo(
+func newActivityRetryTimePostActionInfo(
+	mutableState workflow.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
-) *pushActivityTaskToMatchingInfo {
+) (*activityTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
+	}
 
-	return &pushActivityTaskToMatchingInfo{
+	return &activityTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-	}
+	}, nil
 }
 
-func newPushWorkflowTaskToMatchingInfo(
+func newWorkflowTaskPostActionInfo(
+	mutableState workflow.MutableState,
 	workflowTaskScheduleToStartTimeout int64,
 	taskqueue taskqueuepb.TaskQueue,
-) *pushWorkflowTaskToMatchingInfo {
+) (*workflowTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
+	}
 
-	return &pushWorkflowTaskToMatchingInfo{
+	return &workflowTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
-	}
+	}, nil
 }
 
 func getHistoryResendInfo(
@@ -195,6 +232,7 @@ func getStandbyPostActionFn(
 }
 
 func refreshTasks(
+	ctx context.Context,
 	adminClient adminservice.AdminServiceClient,
 	namespaceRegistry namespace.Registry,
 	namespaceID namespace.ID,
@@ -205,9 +243,6 @@ func refreshTasks(
 	if err != nil {
 		return err
 	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), refreshTaskTimeout)
-	defer cancel()
 
 	_, err = adminClient.RefreshWorkflowTasks(ctx, &adminservice.RefreshWorkflowTasksRequest{
 		Namespace: namespaceEntry.Name().String(),

@@ -385,7 +385,7 @@ func (adh *AdminHandler) getSearchAttributes(ctx context.Context, indexName stri
 	var wfInfo *workflowpb.WorkflowExecutionInfo
 	if err != nil {
 		// NotFound can happen when no search attributes were added and the workflow has never been executed.
-		if _, notFound := err.(*serviceerror.NotFound); !notFound {
+		if _, isNotFound := err.(*serviceerror.NotFound); !isNotFound {
 			lastErr = serviceerror.NewUnavailable(fmt.Sprintf("unable to get %s workflow state: %v", addsearchattributes.WorkflowName, err))
 			adh.logger.Error("getSearchAttributes error", tag.Error(lastErr))
 		}
@@ -753,7 +753,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 		ShardID:       shardID,
 	})
 	if err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
+		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// when no events can be returned from DB, DB layer will return
 			// EntityNotExistsError, this API shall return empty response
 			return &adminservice.GetWorkflowExecutionRawHistoryV2Response{
@@ -770,14 +770,14 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	// N.B. - Dual emit is required here so that we can see aggregate timer stats across all
 	// namespaces along with the individual namespaces stats
 	adh.metricsClient.
-		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope, metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
+		Scope(metrics.AdminGetWorkflowExecutionRawHistoryScope).
 		RecordDistribution(metrics.HistorySize, size)
-	scope.Tagged(metrics.StatsTypeTag(metrics.SizeStatsTypeTagValue)).
-		RecordDistribution(metrics.HistorySize, size)
+	scope.RecordDistribution(metrics.HistorySize, size)
 
 	result := &adminservice.GetWorkflowExecutionRawHistoryV2Response{
 		HistoryBatches: rawHistoryResponse.HistoryEventBlobs,
 		VersionHistory: targetVersionHistory,
+		HistoryNodeIds: rawHistoryResponse.NodeIDs,
 	}
 	if len(pageToken.PersistenceToken) == 0 {
 		result.NextPageToken = nil
@@ -1641,7 +1641,7 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	case *serviceerror.ResourceExhausted:
 		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)
 		return err
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return err
 	}
 

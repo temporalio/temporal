@@ -298,7 +298,7 @@ func (s *nDCWorkflowSuite) TestSuppressWorkflowBy_Terminate() {
 	s.mockMutableState.EXPECT().FlushBufferedEvents()
 
 	s.mockMutableState.EXPECT().AddWorkflowExecutionTerminatedEvent(
-		lastEventID+1, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity,
+		lastEventID+1, workflowTerminationReason, gomock.Any(), workflowTerminationIdentity, false,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	// if workflow is in zombie or finished state, keep as is

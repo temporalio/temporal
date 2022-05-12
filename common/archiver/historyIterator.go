@@ -172,7 +172,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*historypb.H
 	newIterState := historyIteratorState{}
 	for size < targetSize {
 		currHistoryBatches, err := i.readHistory(firstEventID)
-		if _, ok := err.(*serviceerror.NotFound); ok && firstEventID != common.FirstEventID {
+		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound && firstEventID != common.FirstEventID {
 			newIterState.FinishedIteration = true
 			return historyBatches, newIterState, nil
 		}
@@ -201,7 +201,7 @@ func (i *historyIterator) readHistoryBatches(firstEventID int64) ([]*historypb.H
 	// If you are here, it means the target size is met after adding the last batch of read history.
 	// We need to check if there's more history batches.
 	_, err := i.readHistory(firstEventID)
-	if _, ok := err.(*serviceerror.NotFound); ok && firstEventID != common.FirstEventID {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound && firstEventID != common.FirstEventID {
 		newIterState.FinishedIteration = true
 		return historyBatches, newIterState, nil
 	}

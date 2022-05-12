@@ -71,11 +71,12 @@ var (
 	testWorkflowID    = "test workflow ID"
 	testRunID         = uuid.New()
 
-	testParentNamespaceID   = uuid.New()
-	testParentNamespaceName = "test parent namespace"
-	testParentWorkflowID    = "test parent workflow ID"
-	testParentRunID         = uuid.New()
-	testParentInitiatedID   = rand.Int63()
+	testParentNamespaceID      = uuid.New()
+	testParentNamespaceName    = "test parent namespace"
+	testParentWorkflowID       = "test parent workflow ID"
+	testParentRunID            = uuid.New()
+	testParentInitiatedID      = rand.Int63()
+	testParentInitiatedVersion = rand.Int63()
 
 	testIdentity  = "test identity"
 	testRequestID = uuid.New()
@@ -185,7 +186,8 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 				WorkflowId: testParentWorkflowID,
 				RunId:      testParentRunID,
 			},
-			InitiatedId: testParentInitiatedID,
+			InitiatedId:      testParentInitiatedID,
+			InitiatedVersion: testParentInitiatedVersion,
 		},
 		Attempt:                         attempt,
 		WorkflowExecutionExpirationTime: workflowExecutionExpirationTime,
@@ -259,7 +261,8 @@ func (s *historyBuilderSuite) TestWorkflowExecutionStarted() {
 					WorkflowId: testParentWorkflowID,
 					RunId:      testParentRunID,
 				},
-				ParentInitiatedEventId: testParentInitiatedID,
+				ParentInitiatedEventId:      testParentInitiatedID,
+				ParentInitiatedEventVersion: testParentInitiatedVersion,
 			},
 		},
 	}, event)

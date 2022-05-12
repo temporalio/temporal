@@ -87,7 +87,7 @@ func (t *TransactionImpl) CreateWorkflowExecution(
 		NewWorkflowSnapshot: *newWorkflowSnapshot,
 		NewWorkflowEvents:   newWorkflowEventsSeq,
 	})
-	if operationPossiblySucceeded(err) {
+	if shard.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
 	}
 	if err != nil {
@@ -129,7 +129,7 @@ func (t *TransactionImpl) ConflictResolveWorkflowExecution(
 		CurrentWorkflowMutation: currentWorkflowMutation,
 		CurrentWorkflowEvents:   currentWorkflowEventsSeq,
 	})
-	if operationPossiblySucceeded(err) {
+	if shard.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, resetWorkflowSnapshot, clusterName)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, clusterName)
@@ -182,7 +182,7 @@ func (t *TransactionImpl) UpdateWorkflowExecution(
 		NewWorkflowSnapshot:    newWorkflowSnapshot,
 		NewWorkflowEvents:      newWorkflowEventsSeq,
 	})
-	if operationPossiblySucceeded(err) {
+	if shard.OperationPossiblySucceeded(err) {
 		NotifyWorkflowMutationTasks(engine, currentWorkflowMutation, clusterName)
 		NotifyWorkflowSnapshotTasks(engine, newWorkflowSnapshot, clusterName)
 	}
@@ -219,7 +219,7 @@ func (t *TransactionImpl) SetWorkflowExecution(
 		// RangeID , this is set by shard context
 		SetWorkflowSnapshot: *workflowSnapshot,
 	})
-	if operationPossiblySucceeded(err) {
+	if shard.OperationPossiblySucceeded(err) {
 		NotifyWorkflowSnapshotTasks(engine, workflowSnapshot, clusterName)
 	}
 	if err != nil {
@@ -326,13 +326,14 @@ func appendHistoryV2EventsWithRetry(
 ) (int64, error) {
 
 	resp := 0
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = shard.AppendHistoryEvents(ctx, request, namespaceID, execution)
 		return err
 	}
 
-	err := backoff.Retry(
+	err := backoff.RetryContext(
+		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,
@@ -347,13 +348,14 @@ func createWorkflowExecutionWithRetry(
 ) (*persistence.CreateWorkflowExecutionResponse, error) {
 
 	var resp *persistence.CreateWorkflowExecutionResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = shard.CreateWorkflowExecution(ctx, request)
 		return err
 	}
 
-	err := backoff.Retry(
+	err := backoff.RetryContext(
+		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,
@@ -396,13 +398,14 @@ func conflictResolveWorkflowExecutionWithRetry(
 ) (*persistence.ConflictResolveWorkflowExecutionResponse, error) {
 
 	var resp *persistence.ConflictResolveWorkflowExecutionResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
 		resp, err = shard.ConflictResolveWorkflowExecution(ctx, request)
 		return err
 	}
 
-	err := backoff.Retry(
+	err := backoff.RetryContext(
+		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,
@@ -448,19 +451,21 @@ func conflictResolveWorkflowExecutionWithRetry(
 }
 
 func getWorkflowExecutionWithRetry(
+	ctx context.Context,
 	shard shard.Context,
 	request *persistence.GetWorkflowExecutionRequest,
 ) (*persistence.GetWorkflowExecutionResponse, error) {
 
 	var resp *persistence.GetWorkflowExecutionResponse
-	op := func() error {
+	op := func(ctx context.Context) error {
 		var err error
-		resp, err = shard.GetWorkflowExecution(context.TODO(), request)
+		resp, err = shard.GetWorkflowExecution(ctx, request)
 
 		return err
 	}
 
-	err := backoff.Retry(
+	err := backoff.RetryContext(
+		ctx,
 		op,
 		PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,
@@ -501,13 +506,15 @@ func updateWorkflowExecutionWithRetry(
 
 	var resp *persistence.UpdateWorkflowExecutionResponse
 	var err error
-	op := func() error {
+	op := func(ctx context.Context) error {
 		resp, err = shard.UpdateWorkflowExecution(ctx, request)
 		return err
 	}
 
-	err = backoff.Retry(
-		op, PersistenceOperationRetryPolicy,
+	err = backoff.RetryContext(
+		ctx,
+		op,
+		PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,
 	)
 	if err != nil {
@@ -558,13 +565,15 @@ func setWorkflowExecutionWithRetry(
 
 	var resp *persistence.SetWorkflowExecutionResponse
 	var err error
-	op := func() error {
+	op := func(ctx context.Context) error {
 		resp, err = shard.SetWorkflowExecution(ctx, request)
 		return err
 	}
 
-	err = backoff.Retry(
-		op, PersistenceOperationRetryPolicy,
+	err = backoff.RetryContext(
+		ctx,
+		op,
+		PersistenceOperationRetryPolicy,
 		common.IsPersistenceTransientError,
 	)
 	if err != nil {
@@ -709,8 +718,7 @@ func emitMutationMetrics(
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.SessionSizeStatsScope, metrics.NamespaceTag(namespaceName.String())),
-			metricsClient.Scope(metrics.SessionCountStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsClient.Scope(metrics.SessionStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -725,8 +733,7 @@ func emitGetMetrics(
 	namespaceName := namespace.Name()
 	for _, stat := range stats {
 		emitMutableStateStatus(
-			metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespaceName.String())),
-			metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespaceName.String())),
+			metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespaceName.String())),
 			stat,
 		)
 	}
@@ -777,26 +784,4 @@ func emitCompletionMetrics(
 			completionMetric.status,
 		)
 	}
-}
-
-func operationPossiblySucceeded(err error) bool {
-	if err == consts.ErrConflict {
-		return false
-	}
-
-	switch err.(type) {
-	case *persistence.CurrentWorkflowConditionFailedError,
-		*persistence.WorkflowConditionFailedError,
-		*persistence.ConditionFailedError,
-		*persistence.ShardOwnershipLostError,
-		*persistence.InvalidPersistenceRequestError,
-		*persistence.TransactionSizeLimitError,
-		*serviceerror.ResourceExhausted,
-		*serviceerror.NotFound:
-		// Persistence failure that means that write was definitely not committed.
-		return false
-	default:
-		return true
-	}
-
 }

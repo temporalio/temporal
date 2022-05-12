@@ -176,7 +176,7 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 		RPCPort:      123,
 		Role:         p.Frontend,
 		SessionStart: now,
-		RecordExpiry: time.Second * 2,
+		RecordExpiry: time.Second * 4,
 	}
 
 	err := s.ClusterMetadataManager.UpsertClusterMembership(s.ctx, req)
@@ -224,6 +224,9 @@ func (s *ClusterMetadataManagerSuite) TestClusterMembershipReadFiltersCorrectly(
 
 	s.validateUpsert(req, resp, err)
 
+	time.Sleep(time.Second * 3)
+	err = s.ClusterMetadataManager.PruneClusterMembership(s.ctx, &p.PruneClusterMembershipRequest{MaxRecordsPruned: 1000})
+	s.NoError(err)
 }
 
 // TestClusterMembershipUpsertExpiresCorrectly verifies RecordExpiry functions properly for ClusterMembership records

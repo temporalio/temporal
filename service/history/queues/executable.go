@@ -32,6 +32,7 @@ import (
 	time "time"
 
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/common"
 	backoff "go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -51,6 +52,7 @@ type (
 
 		Attempt() int
 		Logger() log.Logger
+		GetTask() tasks.Task
 
 		QueueType() QueueType
 	}
@@ -121,15 +123,20 @@ func NewExecutable(
 	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
 ) Executable {
 	return &executableImpl{
-		Task:                          task,
-		state:                         ctasks.TaskStatePending,
-		attempt:                       1,
-		executor:                      executor,
-		scheduler:                     scheduler,
-		rescheduler:                   rescheduler,
-		timeSource:                    timeSource,
-		loadTime:                      timeSource.Now(),
-		logger:                        tasks.InitializeLogger(task, logger),
+		Task:        task,
+		state:       ctasks.TaskStatePending,
+		attempt:     1,
+		executor:    executor,
+		scheduler:   scheduler,
+		rescheduler: rescheduler,
+		timeSource:  timeSource,
+		loadTime:    timeSource.Now(),
+		logger: log.NewLazyLogger(
+			logger,
+			func() []tag.Tag {
+				return tasks.Tags(task)
+			},
+		),
 		scope:                         scope,
 		queueType:                     queueType,
 		criticalRetryAttempt:          criticalRetryAttempt,
@@ -179,12 +186,22 @@ func (e *executableImpl) HandleErr(err error) (retErr error) {
 		return nil
 	}
 
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
+		return nil
+	}
+
+	// This means that namespace is deleted, and it is safe to drop the task (=ignore the error).
+	if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
 		return nil
 	}
 
 	if err == consts.ErrTaskRetry {
 		e.scope.IncCounter(metrics.TaskStandbyRetryCounter)
+		return err
+	}
+
+	if err == consts.ErrWorkflowBusy {
+		e.scope.IncCounter(metrics.TaskWorkflowBusyCounter)
 		return err
 	}
 
@@ -223,7 +240,7 @@ func (e *executableImpl) IsRetryableError(err error) bool {
 	// ErrTaskRetry means mutable state is not ready for standby task processing
 	// there's no point for retrying the task immediately which will hold the worker corouinte
 	// TODO: change ErrTaskRetry to a better name
-	return err != consts.ErrTaskRetry
+	return err != consts.ErrTaskRetry && err != consts.ErrWorkflowBusy
 }
 
 func (e *executableImpl) RetryPolicy() backoff.RetryPolicy {
@@ -299,6 +316,10 @@ func (e *executableImpl) Logger() log.Logger {
 	return e.logger
 }
 
+func (e *executableImpl) GetTask() tasks.Task {
+	return e.Task
+}
+
 func (e *executableImpl) QueueType() QueueType {
 	return e.queueType
 }
@@ -307,7 +328,7 @@ func (e *executableImpl) shouldResubmitOnNack(attempt int, err error) bool {
 	// this is an optimization for skipping rescheduler and retry the task sooner
 	// this can be useful for errors like unable to get workflow lock, which doesn't
 	// have to backoff for a long time and wait for the periodic rescheduling.
-	return e.IsRetryableError(err) && e.Attempt() < resubmitMaxAttempts
+	return (err == consts.ErrWorkflowBusy || e.IsRetryableError(err)) && e.Attempt() < resubmitMaxAttempts
 }
 
 func (e *executableImpl) rescheduleBackoff(attempt int) time.Duration {

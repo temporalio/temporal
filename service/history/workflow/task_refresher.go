@@ -220,6 +220,7 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowClose(
 	if executionState.Status != enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 		return taskGenerator.GenerateWorkflowCloseTasks(
 			now,
+			false,
 		)
 	}
 

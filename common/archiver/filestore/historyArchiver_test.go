@@ -33,6 +33,7 @@ import (
 	"time"
 
 	enumspb "go.temporal.io/api/enums/v1"
+
 	"go.temporal.io/server/tests/testhelper"
 
 	"github.com/golang/mock/gomock"
@@ -294,7 +295,7 @@ func (s *historyArchiverSuite) TestArchive_Skip() {
 		historyIterator.EXPECT().HasNext().Return(true),
 		historyIterator.EXPECT().Next().Return(historyBlob, nil),
 		historyIterator.EXPECT().HasNext().Return(true),
-		historyIterator.EXPECT().Next().Return(nil, &serviceerror.NotFound{Message: "workflow not found"}),
+		historyIterator.EXPECT().Next().Return(nil, serviceerror.NewNotFound("workflow not found")),
 	)
 
 	historyArchiver := s.newTestHistoryArchiver(historyIterator)

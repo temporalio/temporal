@@ -118,3 +118,36 @@ func (s *MetricsSuite) TestNoop() {
 	scope := NewScope(log.NewNoopLogger(), config)
 	s.Equal(tally.NoopScope, scope)
 }
+
+func (s *MetricsSuite) TestSetDefaultPerUnitHistogramBoundaries() {
+	type histogramTest struct {
+		input        map[string][]float64
+		expectResult map[string][]float64
+	}
+
+	customizedBoundaries := map[string][]float64{
+		Dimensionless: {1},
+		"notDefine":   {1},
+		Milliseconds:  defaultPerUnitHistogramBoundaries[Milliseconds],
+		Bytes:         defaultPerUnitHistogramBoundaries[Bytes],
+	}
+	testCases := []histogramTest{
+		{
+			nil,
+			defaultPerUnitHistogramBoundaries,
+		},
+		{
+			map[string][]float64{
+				Dimensionless: {1},
+				"notDefine":   {1},
+			},
+			customizedBoundaries,
+		},
+	}
+
+	for _, test := range testCases {
+		config := &ClientConfig{PerUnitHistogramBoundaries: test.input}
+		setDefaultPerUnitHistogramBoundaries(config)
+		s.Equal(test.expectResult, config.PerUnitHistogramBoundaries)
+	}
+}

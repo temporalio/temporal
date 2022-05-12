@@ -22,7 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination ack_manager_mock.go
+
+package replication
 
 import (
 	"context"
@@ -54,9 +56,14 @@ import (
 )
 
 type (
-	// TODO: define a new interface for replication queue processor in queues/queue.go
+	AckManager interface {
+		NotifyNewTasks(tasks []tasks.Task)
+		GetMaxTaskID() int64
+		GetTasks(ctx context.Context, pollingCluster string, queryMessageID int64) (*replicationspb.ReplicationMessages, error)
+		GetTask(ctx context.Context, taskInfo *replicationspb.ReplicationTaskInfo) (*replicationspb.ReplicationTask, error)
+	}
 
-	replicatorQueueProcessorImpl struct {
+	ackMgrImpl struct {
 		currentClusterName string
 		shard              shard.Context
 		config             *configs.Config
@@ -78,12 +85,12 @@ var (
 	errUnknownReplicationTask = serviceerror.NewInternal("unknown replication task")
 )
 
-func newReplicatorQueueProcessor(
+func NewAckManager(
 	shard shard.Context,
 	historyCache workflow.Cache,
 	executionMgr persistence.ExecutionManager,
 	logger log.Logger,
-) *replicatorQueueProcessorImpl {
+) AckManager {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
@@ -92,7 +99,7 @@ func newReplicatorQueueProcessor(
 	retryPolicy.SetMaximumAttempts(10)
 	retryPolicy.SetBackoffCoefficient(1)
 
-	return &replicatorQueueProcessorImpl{
+	return &ackMgrImpl{
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		config:             shard.GetConfig(),
@@ -108,7 +115,7 @@ func newReplicatorQueueProcessor(
 	}
 }
 
-func (p *replicatorQueueProcessorImpl) NotifyNewTasks(
+func (p *ackMgrImpl) NotifyNewTasks(
 	tasks []tasks.Task,
 ) {
 
@@ -129,7 +136,7 @@ func (p *replicatorQueueProcessorImpl) NotifyNewTasks(
 	}
 }
 
-func (p *replicatorQueueProcessorImpl) GetMaxReplicationTaskID() int64 {
+func (p *ackMgrImpl) GetMaxTaskID() int64 {
 	p.Lock()
 	defer p.Unlock()
 
@@ -144,7 +151,43 @@ func (p *replicatorQueueProcessorImpl) GetMaxReplicationTaskID() int64 {
 	return *p.maxTaskID
 }
 
-func (p *replicatorQueueProcessorImpl) paginateTasks(
+func (p *ackMgrImpl) GetTask(
+	ctx context.Context,
+	taskInfo *replicationspb.ReplicationTaskInfo,
+) (*replicationspb.ReplicationTask, error) {
+
+	switch taskInfo.TaskType {
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
+		return p.taskInfoToTask(ctx, &tasks.SyncActivityTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+			TaskID:              taskInfo.TaskId,
+			Version:             taskInfo.Version,
+			ScheduledID:         taskInfo.ScheduledId,
+		})
+	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
+		return p.taskInfoToTask(ctx, &tasks.HistoryReplicationTask{
+			WorkflowKey: definition.NewWorkflowKey(
+				taskInfo.GetNamespaceId(),
+				taskInfo.GetWorkflowId(),
+				taskInfo.GetRunId(),
+			),
+			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
+			TaskID:              taskInfo.TaskId,
+			Version:             taskInfo.Version,
+			FirstEventID:        taskInfo.FirstEventId,
+			NextEventID:         taskInfo.NextEventId,
+		})
+	default:
+		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
+	}
+}
+
+func (p *ackMgrImpl) GetTasks(
 	ctx context.Context,
 	pollingCluster string,
 	queryMessageID int64,
@@ -192,7 +235,7 @@ func (p *replicatorQueueProcessorImpl) paginateTasks(
 	}, nil
 }
 
-func (p *replicatorQueueProcessorImpl) getTasks(
+func (p *ackMgrImpl) getTasks(
 	ctx context.Context,
 	minTaskID int64,
 	maxTaskID int64,
@@ -252,43 +295,7 @@ func (p *replicatorQueueProcessorImpl) getTasks(
 	return replicationTasks, replicationTasks[len(replicationTasks)-1].GetSourceTaskId(), nil
 }
 
-func (p *replicatorQueueProcessorImpl) getTask(
-	ctx context.Context,
-	taskInfo *replicationspb.ReplicationTaskInfo,
-) (*replicationspb.ReplicationTask, error) {
-
-	switch taskInfo.TaskType {
-	case enumsspb.TASK_TYPE_REPLICATION_SYNC_ACTIVITY:
-		return p.taskInfoToTask(ctx, &tasks.SyncActivityTask{
-			WorkflowKey: definition.NewWorkflowKey(
-				taskInfo.GetNamespaceId(),
-				taskInfo.GetWorkflowId(),
-				taskInfo.GetRunId(),
-			),
-			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
-			TaskID:              taskInfo.TaskId,
-			Version:             taskInfo.Version,
-			ScheduledID:         taskInfo.ScheduledId,
-		})
-	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
-		return p.taskInfoToTask(ctx, &tasks.HistoryReplicationTask{
-			WorkflowKey: definition.NewWorkflowKey(
-				taskInfo.GetNamespaceId(),
-				taskInfo.GetWorkflowId(),
-				taskInfo.GetRunId(),
-			),
-			VisibilityTimestamp: time.Unix(0, 0), // TODO add the missing attribute to proto definition
-			TaskID:              taskInfo.TaskId,
-			Version:             taskInfo.Version,
-			FirstEventID:        taskInfo.FirstEventId,
-			NextEventID:         taskInfo.NextEventId,
-		})
-	default:
-		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", taskInfo.TaskType))
-	}
-}
-
-func (p *replicatorQueueProcessorImpl) taskInfoToTask(
+func (p *ackMgrImpl) taskInfoToTask(
 	ctx context.Context,
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
@@ -305,7 +312,7 @@ func (p *replicatorQueueProcessorImpl) taskInfoToTask(
 	return replicationTask, nil
 }
 
-func (p *replicatorQueueProcessorImpl) taskIDsRange(
+func (p *ackMgrImpl) taskIDsRange(
 	lastReadMessageID int64,
 ) (minTaskID int64, maxTaskID int64) {
 	minTaskID = lastReadMessageID
@@ -331,7 +338,7 @@ func (p *replicatorQueueProcessorImpl) taskIDsRange(
 	return minTaskID, maxTaskID
 }
 
-func (p *replicatorQueueProcessorImpl) toReplicationTask(
+func (p *ackMgrImpl) toReplicationTask(
 	ctx context.Context,
 	task tasks.Task,
 ) (*replicationspb.ReplicationTask, error) {
@@ -348,7 +355,7 @@ func (p *replicatorQueueProcessorImpl) toReplicationTask(
 	}
 }
 
-func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
+func (p *ackMgrImpl) generateSyncActivityTask(
 	ctx context.Context,
 	taskInfo *tasks.SyncActivityTask,
 ) (*replicationspb.ReplicationTask, error) {
@@ -413,7 +420,7 @@ func (p *replicatorQueueProcessorImpl) generateSyncActivityTask(
 	)
 }
 
-func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
+func (p *ackMgrImpl) generateHistoryReplicationTask(
 	ctx context.Context,
 	taskInfo *tasks.HistoryReplicationTask,
 ) (*replicationspb.ReplicationTask, error) {
@@ -428,7 +435,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 		workflowID,
 		runID,
 		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
-			versionHistoryItems, branchToken, err := p.getVersionHistoryItems(
+			versionHistoryItems, branchToken, err := getVersionHistoryItems(
 				mutableState,
 				taskInfo.FirstEventID,
 				taskInfo.Version,
@@ -486,7 +493,7 @@ func (p *replicatorQueueProcessorImpl) generateHistoryReplicationTask(
 	)
 }
 
-func (p *replicatorQueueProcessorImpl) getEventsBlob(
+func (p *ackMgrImpl) getEventsBlob(
 	ctx context.Context,
 	branchToken []byte,
 	firstEventID int64,
@@ -525,32 +532,7 @@ func (p *replicatorQueueProcessorImpl) getEventsBlob(
 	return eventBatchBlobs[0], nil
 }
 
-func (p *replicatorQueueProcessorImpl) getVersionHistoryItems(
-	mutableState workflow.MutableState,
-	eventID int64,
-	version int64,
-) ([]*historyspb.VersionHistoryItem, []byte, error) {
-
-	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
-	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
-		versionHistories,
-		versionhistory.NewVersionHistoryItem(
-			eventID,
-			version,
-		),
-	)
-	if err != nil {
-		return nil, nil, err
-	}
-
-	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
-	if err != nil {
-		return nil, nil, err
-	}
-	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
-}
-
-func (p *replicatorQueueProcessorImpl) processReplication(
+func (p *ackMgrImpl) processReplication(
 	ctx context.Context,
 	processTaskIfClosed bool,
 	namespaceID namespace.ID,
@@ -588,4 +570,29 @@ func (p *replicatorQueueProcessorImpl) processReplication(
 	default:
 		return nil, err
 	}
+}
+
+func getVersionHistoryItems(
+	mutableState workflow.MutableState,
+	eventID int64,
+	version int64,
+) ([]*historyspb.VersionHistoryItem, []byte, error) {
+
+	versionHistories := mutableState.GetExecutionInfo().GetVersionHistories()
+	versionHistoryIndex, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+		versionHistories,
+		versionhistory.NewVersionHistoryItem(
+			eventID,
+			version,
+		),
+	)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	versionHistoryBranch, err := versionhistory.GetVersionHistory(versionHistories, versionHistoryIndex)
+	if err != nil {
+		return nil, nil, err
+	}
+	return versionhistory.CopyVersionHistory(versionHistoryBranch).GetItems(), versionHistoryBranch.GetBranchToken(), nil
 }

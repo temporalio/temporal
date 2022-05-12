@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -49,7 +50,9 @@ import (
 )
 
 const (
-	transferActiveTaskDefaultTimeout = 20 * time.Second
+	taskTimeout             = time.Second * 3
+	taskGetExecutionTimeout = 500 * time.Millisecond
+	taskHistoryOpTimeout    = 20 * time.Second
 )
 
 type (
@@ -92,24 +95,11 @@ func newTransferQueueTaskExecutorBase(
 	}
 }
 
-func (t *transferQueueTaskExecutorBase) getNamespaceIDAndWorkflowExecution(
-	task tasks.Task,
-) (namespace.ID, commonpb.WorkflowExecution) {
-
-	return namespace.ID(task.GetNamespaceID()), commonpb.WorkflowExecution{
-		WorkflowId: task.GetWorkflowID(),
-		RunId:      task.GetRunID(),
-	}
-}
-
 func (t *transferQueueTaskExecutorBase) pushActivity(
+	ctx context.Context,
 	task *tasks.ActivityTask,
 	activityScheduleToStartTimeout *time.Duration,
 ) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
 	_, err := t.matchingClient.AddActivityTask(ctx, &matchingservice.AddActivityTaskRequest{
 		NamespaceId:       task.NamespaceID,
 		SourceNamespaceId: task.NamespaceID,
@@ -125,7 +115,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
 		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddActivityTask", tag.Error(err))
@@ -135,14 +125,11 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 }
 
 func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
+	ctx context.Context,
 	task *tasks.WorkflowTask,
 	taskqueue *taskqueuepb.TaskQueue,
 	workflowTaskScheduleToStartTimeout *time.Duration,
 ) error {
-
-	ctx, cancel := context.WithTimeout(context.Background(), transferActiveTaskDefaultTimeout)
-	defer cancel()
-
 	_, err := t.matchingClient.AddWorkflowTask(ctx, &matchingservice.AddWorkflowTaskRequest{
 		NamespaceId: task.NamespaceID,
 		Execution: &commonpb.WorkflowExecution{
@@ -154,7 +141,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
 	})
-	if _, ok := err.(*serviceerror.NotFound); ok {
+	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
 		// but will be ignored by task error handling logic, so log it here
 		tasks.InitializeLogger(task, t.logger).Error("Matching returned not found error for AddWorkflowTask", tag.Error(err))
@@ -163,7 +150,8 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
+func (t *transferQueueTaskExecutorBase) archiveVisibility(
+	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -190,7 +178,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 		return nil
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), t.config.TransferProcessorVisibilityArchivalTimeLimit())
+	ctx, cancel := context.WithTimeout(ctx, t.config.TransferProcessorVisibilityArchivalTimeLimit())
 	defer cancel()
 
 	saTypeMap, err := t.searchAttributesProvider.GetSearchAttributes(t.config.DefaultVisibilityIndexName, false)
@@ -231,6 +219,14 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	ctx context.Context,
 	task *tasks.DeleteExecutionTask,
+) error {
+	return t.deleteExecution(ctx, task, false)
+}
+
+func (t *transferQueueTaskExecutorBase) deleteExecution(
+	ctx context.Context,
+	task tasks.Task,
+	deleteFromOpenVisibility bool,
 ) (retError error) {
 
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
@@ -257,11 +253,24 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		return err
 	}
 
+	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		ns, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+		if err != nil {
+			return err
+		}
+		if ns.ActiveInCluster(t.shard.GetClusterMetadata().GetCurrentClusterName()) {
+			// DeleteExecutionTask transfer task is created only if workflow is not running.
+			// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
+			// workflow should not be deleted.
+			return nil
+		}
+	}
+
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()
 	if err != nil {
 		return err
 	}
-	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
 	if !ok {
 		return nil
 	}
@@ -273,5 +282,6 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		weCtx,
 		mutableState,
 		task.GetVersion(),
+		deleteFromOpenVisibility,
 	)
 }

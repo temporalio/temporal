@@ -34,6 +34,7 @@ import (
 
 	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
+	"go.temporal.io/api/operatorservice/v1"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
@@ -101,6 +102,7 @@ type (
 
 		adminClient                      adminservice.AdminServiceClient
 		frontendClient                   workflowservice.WorkflowServiceClient
+		operatorClient                   operatorservice.OperatorServiceClient
 		historyClient                    historyservice.HistoryServiceClient
 		logger                           log.Logger
 		clusterMetadataConfig            *cluster.Config
@@ -358,6 +360,10 @@ func (c *temporalImpl) GetAdminClient() adminservice.AdminServiceClient {
 	return c.adminClient
 }
 
+func (c *temporalImpl) GetOperatorClient() operatorservice.OperatorServiceClient {
+	return c.operatorClient
+}
+
 func (c *temporalImpl) GetFrontendClient() workflowservice.WorkflowServiceClient {
 	return c.frontendClient
 }
@@ -457,6 +463,7 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 	connection := rpcFactory.CreateFrontendGRPCConnection(c.FrontendGRPCAddress())
 	c.frontendClient = NewFrontendClient(connection)
 	c.adminClient = NewAdminClient(connection)
+	c.operatorClient = operatorservice.NewOperatorServiceClient(connection)
 
 	feApp.Start(context.Background())
 
@@ -758,6 +765,10 @@ func (c *temporalImpl) overrideHistoryDynamicConfig(client *dynamicClient) {
 	if c.historyConfig.HistoryCountLimitError != 0 {
 		client.OverrideValue(dynamicconfig.HistoryCountLimitError, c.historyConfig.HistoryCountLimitError)
 	}
+
+	// For DeleteWorkflowExecution tests
+	client.OverrideValue(dynamicconfig.TransferProcessorUpdateAckInterval, 1*time.Second)
+	client.OverrideValue(dynamicconfig.VisibilityProcessorUpdateAckInterval, 1*time.Second)
 }
 
 func (c *temporalImpl) RefreshNamespaceCache() {

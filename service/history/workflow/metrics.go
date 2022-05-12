@@ -39,47 +39,44 @@ func emitWorkflowHistoryStats(
 	historyCount int,
 ) {
 
-	sizeScope := metricsClient.Scope(metrics.ExecutionSizeStatsScope, metrics.NamespaceTag(namespace.String()))
-	countScope := metricsClient.Scope(metrics.ExecutionCountStatsScope, metrics.NamespaceTag(namespace.String()))
-
-	sizeScope.RecordDistribution(metrics.HistorySize, historySize)
-	countScope.RecordDistribution(metrics.HistoryCount, historyCount)
+	executionScope := metricsClient.Scope(metrics.ExecutionStatsScope, metrics.NamespaceTag(namespace.String()))
+	executionScope.RecordDistribution(metrics.HistorySize, historySize)
+	executionScope.RecordDistribution(metrics.HistoryCount, historyCount)
 }
 
 func emitMutableStateStatus(
-	sizeScope metrics.Scope,
-	countScope metrics.Scope,
+	scope metrics.Scope,
 	stats *persistence.MutableStateStatistics,
 ) {
 	if stats == nil {
 		return
 	}
 
-	sizeScope.RecordDistribution(metrics.MutableStateSize, stats.TotalSize)
-	sizeScope.RecordDistribution(metrics.ExecutionInfoSize, stats.ExecutionInfoSize)
-	sizeScope.RecordDistribution(metrics.ExecutionStateSize, stats.ExecutionStateSize)
+	scope.RecordDistribution(metrics.MutableStateSize, stats.TotalSize)
+	scope.RecordDistribution(metrics.ExecutionInfoSize, stats.ExecutionInfoSize)
+	scope.RecordDistribution(metrics.ExecutionStateSize, stats.ExecutionStateSize)
 
-	sizeScope.RecordDistribution(metrics.ActivityInfoSize, stats.ActivityInfoSize)
-	countScope.RecordDistribution(metrics.ActivityInfoCount, stats.ActivityInfoCount)
+	scope.RecordDistribution(metrics.ActivityInfoSize, stats.ActivityInfoSize)
+	scope.RecordDistribution(metrics.ActivityInfoCount, stats.ActivityInfoCount)
 
-	sizeScope.RecordDistribution(metrics.TimerInfoSize, stats.TimerInfoSize)
-	countScope.RecordDistribution(metrics.TimerInfoCount, stats.TimerInfoCount)
+	scope.RecordDistribution(metrics.TimerInfoSize, stats.TimerInfoSize)
+	scope.RecordDistribution(metrics.TimerInfoCount, stats.TimerInfoCount)
 
-	sizeScope.RecordDistribution(metrics.ChildInfoSize, stats.ChildInfoSize)
-	countScope.RecordDistribution(metrics.ChildInfoCount, stats.ChildInfoCount)
+	scope.RecordDistribution(metrics.ChildInfoSize, stats.ChildInfoSize)
+	scope.RecordDistribution(metrics.ChildInfoCount, stats.ChildInfoCount)
 
-	sizeScope.RecordDistribution(metrics.RequestCancelInfoSize, stats.RequestCancelInfoSize)
-	countScope.RecordDistribution(metrics.RequestCancelInfoCount, stats.RequestCancelInfoCount)
+	scope.RecordDistribution(metrics.RequestCancelInfoSize, stats.RequestCancelInfoSize)
+	scope.RecordDistribution(metrics.RequestCancelInfoCount, stats.RequestCancelInfoCount)
 
-	sizeScope.RecordDistribution(metrics.SignalInfoSize, stats.SignalInfoSize)
-	countScope.RecordDistribution(metrics.SignalInfoCount, stats.SignalInfoCount)
+	scope.RecordDistribution(metrics.SignalInfoSize, stats.SignalInfoSize)
+	scope.RecordDistribution(metrics.SignalInfoCount, stats.SignalInfoCount)
 
-	sizeScope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
-	countScope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
+	scope.RecordDistribution(metrics.BufferedEventsSize, stats.BufferedEventsSize)
+	scope.RecordDistribution(metrics.BufferedEventsCount, stats.BufferedEventsCount)
 
 	if stats.HistoryStatistics != nil {
-		sizeScope.RecordDistribution(metrics.HistorySize, stats.HistoryStatistics.SizeDiff)
-		countScope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
+		scope.RecordDistribution(metrics.HistorySize, stats.HistoryStatistics.SizeDiff)
+		scope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
 	}
 }
 

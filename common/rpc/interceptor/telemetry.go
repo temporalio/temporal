@@ -159,6 +159,10 @@ func (ti *TelemetryInterceptor) handleError(
 	}
 
 	switch err := err.(type) {
+	case *serviceerror.WorkflowNotReady,
+		*serviceerrors.StickyWorkerUnavailable:
+		// we emit service_errors_with_type metrics, no need to emit specific metric for this error type.
+		// TODO deprecate all metrics below
 	case *serviceerrors.ShardOwnershipLost:
 		scope.IncCounter(metrics.ServiceErrShardOwnershipLostCounter)
 	case *serviceerrors.TaskAlreadyStarted:
@@ -169,7 +173,7 @@ func (ti *TelemetryInterceptor) handleError(
 		scope.IncCounter(metrics.ServiceErrNamespaceNotActiveCounter)
 	case *serviceerror.WorkflowExecutionAlreadyStarted:
 		scope.IncCounter(metrics.ServiceErrExecutionAlreadyStartedCounter)
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		scope.IncCounter(metrics.ServiceErrNotFoundCounter)
 	case *serviceerror.ResourceExhausted:
 		scope.Tagged(metrics.ResourceExhaustedCauseTag(err.Cause)).IncCounter(metrics.ServiceErrResourceExhaustedCounter)

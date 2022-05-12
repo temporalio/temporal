@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package replication
 
 import (
 	"context"
@@ -57,7 +57,7 @@ import (
 )
 
 type (
-	replicatorQueueProcessorSuite struct {
+	ackManagerSuite struct {
 		suite.Suite
 		*require.Assertions
 
@@ -71,24 +71,24 @@ type (
 
 		logger log.Logger
 
-		replicatorQueueProcessor *replicatorQueueProcessorImpl
+		replicationAckManager *ackMgrImpl
 	}
 )
 
-func TestReplicatorQueueProcessorSuite(t *testing.T) {
-	s := new(replicatorQueueProcessorSuite)
+func TestAckManagerSuite(t *testing.T) {
+	s := new(ackManagerSuite)
 	suite.Run(t, s)
 }
 
-func (s *replicatorQueueProcessorSuite) SetupSuite() {
+func (s *ackManagerSuite) SetupSuite() {
 
 }
 
-func (s *replicatorQueueProcessorSuite) TearDownSuite() {
+func (s *ackManagerSuite) TearDownSuite() {
 
 }
 
-func (s *replicatorQueueProcessorSuite) SetupTest() {
+func (s *ackManagerSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 
 	s.controller = gomock.NewController(s.T())
@@ -114,100 +114,100 @@ func (s *replicatorQueueProcessorSuite) SetupTest() {
 	s.logger = s.mockShard.GetLogger()
 	historyCache := workflow.NewCache(s.mockShard)
 
-	s.replicatorQueueProcessor = newReplicatorQueueProcessor(
+	s.replicationAckManager = NewAckManager(
 		s.mockShard, historyCache, s.mockExecutionMgr, s.logger,
-	)
+	).(*ackMgrImpl)
 }
 
-func (s *replicatorQueueProcessorSuite) TearDownTest() {
+func (s *ackManagerSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_NotInitialized() {
-	s.replicatorQueueProcessor.maxTaskID = nil
+func (s *ackManagerSuite) TestNotifyNewTasks_NotInitialized() {
+	s.replicationAckManager.maxTaskID = nil
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]tasks.Task{
+	s.replicationAckManager.NotifyNewTasks([]tasks.Task{
 		&tasks.HistoryReplicationTask{TaskID: 456},
 		&tasks.HistoryReplicationTask{TaskID: 123},
 	})
 
-	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(456))
+	s.Equal(*s.replicationAckManager.maxTaskID, int64(456))
 }
 
-func (s *replicatorQueueProcessorSuite) TestNotifyNewTasks_Initialized() {
-	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(123)
+func (s *ackManagerSuite) TestNotifyNewTasks_Initialized() {
+	s.replicationAckManager.maxTaskID = convert.Int64Ptr(123)
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]tasks.Task{
+	s.replicationAckManager.NotifyNewTasks([]tasks.Task{
 		&tasks.HistoryReplicationTask{TaskID: 100},
 	})
-	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(123))
+	s.Equal(*s.replicationAckManager.maxTaskID, int64(123))
 
-	s.replicatorQueueProcessor.NotifyNewTasks([]tasks.Task{
+	s.replicationAckManager.NotifyNewTasks([]tasks.Task{
 		&tasks.HistoryReplicationTask{TaskID: 234},
 	})
-	s.Equal(*s.replicatorQueueProcessor.maxTaskID, int64(234))
+	s.Equal(*s.replicationAckManager.maxTaskID, int64(234))
 }
 
-func (s *replicatorQueueProcessorSuite) TestTaskIDRange_NotInitialized() {
-	s.replicatorQueueProcessor.sanityCheckTime = time.Time{}
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID
+func (s *ackManagerSuite) TestTaskIDRange_NotInitialized() {
+	s.replicationAckManager.sanityCheckTime = time.Time{}
+	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
 	expectMinTaskID := expectMaxTaskID - 100
-	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(expectMinTaskID - 100)
+	s.replicationAckManager.maxTaskID = convert.Int64Ptr(expectMinTaskID - 100)
 
-	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
+	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
 	s.Equal(expectMaxTaskID, maxTaskID)
-	s.NotEqual(time.Time{}, s.replicatorQueueProcessor.sanityCheckTime)
-	s.Equal(expectMaxTaskID, *s.replicatorQueueProcessor.maxTaskID)
+	s.NotEqual(time.Time{}, s.replicationAckManager.sanityCheckTime)
+	s.Equal(expectMaxTaskID, *s.replicationAckManager.maxTaskID)
 }
 
-func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_UseHighestReplicationTaskID() {
+func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestReplicationTaskID() {
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
-	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 50
-	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(expectMaxTaskID)
+	s.replicationAckManager.sanityCheckTime = sanityCheckTime
+	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50
+	s.replicationAckManager.maxTaskID = convert.Int64Ptr(expectMaxTaskID)
 
-	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
+	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
 	s.Equal(expectMaxTaskID, maxTaskID)
-	s.Equal(sanityCheckTime, s.replicatorQueueProcessor.sanityCheckTime)
-	s.Equal(expectMaxTaskID, *s.replicatorQueueProcessor.maxTaskID)
+	s.Equal(sanityCheckTime, s.replicationAckManager.sanityCheckTime)
+	s.Equal(expectMaxTaskID, *s.replicationAckManager.maxTaskID)
 }
 
-func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_NoHighestReplicationTaskID() {
+func (s *ackManagerSuite) TestTaskIDRange_Initialized_NoHighestReplicationTaskID() {
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(2 * time.Minute)
-	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID
-	s.replicatorQueueProcessor.maxTaskID = nil
+	s.replicationAckManager.sanityCheckTime = sanityCheckTime
+	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
+	s.replicationAckManager.maxTaskID = nil
 
-	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
+	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
 	s.Equal(expectMaxTaskID, maxTaskID)
-	s.Equal(sanityCheckTime, s.replicatorQueueProcessor.sanityCheckTime)
-	s.Equal(expectMaxTaskID, *s.replicatorQueueProcessor.maxTaskID)
+	s.Equal(sanityCheckTime, s.replicationAckManager.sanityCheckTime)
+	s.Equal(expectMaxTaskID, *s.replicationAckManager.maxTaskID)
 }
 
-func (s *replicatorQueueProcessorSuite) TestTaskIDRange_Initialized_UseHighestTransferTaskID() {
+func (s *ackManagerSuite) TestTaskIDRange_Initialized_UseHighestTransferTaskID() {
 	now := time.Now().UTC()
 	sanityCheckTime := now.Add(-2 * time.Minute)
-	s.replicatorQueueProcessor.sanityCheckTime = sanityCheckTime
-	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 100
-	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID
-	s.replicatorQueueProcessor.maxTaskID = convert.Int64Ptr(s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicatorQueueProcessor.currentClusterName).TaskID - 50)
+	s.replicationAckManager.sanityCheckTime = sanityCheckTime
+	expectMinTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 100
+	expectMaxTaskID := s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID
+	s.replicationAckManager.maxTaskID = convert.Int64Ptr(s.mockShard.GetQueueMaxReadLevel(tasks.CategoryReplication, s.replicationAckManager.currentClusterName).TaskID - 50)
 
-	minTaskID, maxTaskID := s.replicatorQueueProcessor.taskIDsRange(expectMinTaskID)
+	minTaskID, maxTaskID := s.replicationAckManager.taskIDsRange(expectMinTaskID)
 	s.Equal(expectMinTaskID, minTaskID)
 	s.Equal(expectMaxTaskID, maxTaskID)
-	s.NotEqual(sanityCheckTime, s.replicatorQueueProcessor.sanityCheckTime)
-	s.Equal(expectMaxTaskID, *s.replicatorQueueProcessor.maxTaskID)
+	s.NotEqual(sanityCheckTime, s.replicationAckManager.sanityCheckTime)
+	s.Equal(expectMaxTaskID, *s.replicationAckManager.maxTaskID)
 }
 
-func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
+func (s *ackManagerSuite) TestSyncActivity_WorkflowMissing() {
 	ctx := context.Background()
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
@@ -246,12 +246,12 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowMissing() {
 		1234,
 	), nil).AnyTimes()
 
-	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	result, err := s.replicationAckManager.generateSyncActivityTask(ctx, task)
 	s.NoError(err)
 	s.Nil(result)
 }
 
-func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
+func (s *ackManagerSuite) TestSyncActivity_WorkflowCompleted() {
 	ctx := context.Background()
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
@@ -272,7 +272,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		ScheduledID:         scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
+	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
@@ -298,12 +298,12 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_WorkflowCompleted() {
 		version,
 	), nil).AnyTimes()
 
-	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	result, err := s.replicationAckManager.generateSyncActivityTask(ctx, task)
 	s.NoError(err)
 	s.Nil(result)
 }
 
-func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
+func (s *ackManagerSuite) TestSyncActivity_ActivityCompleted() {
 	ctx := context.Background()
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
@@ -324,7 +324,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		ScheduledID:         scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
+	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
@@ -352,12 +352,12 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityCompleted() {
 		version,
 	), nil).AnyTimes()
 
-	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	result, err := s.replicationAckManager.generateSyncActivityTask(ctx, task)
 	s.NoError(err)
 	s.Nil(result)
 }
 
-func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
+func (s *ackManagerSuite) TestSyncActivity_ActivityRetry() {
 	ctx := context.Background()
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
@@ -379,7 +379,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		ScheduledID:         scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
+	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
@@ -443,7 +443,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 		version,
 	), nil).AnyTimes()
 
-	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	result, err := s.replicationAckManager.generateSyncActivityTask(ctx, task)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
@@ -470,7 +470,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRetry() {
 	}, result)
 }
 
-func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
+func (s *ackManagerSuite) TestSyncActivity_ActivityRunning() {
 	ctx := context.Background()
 	namespaceName := namespace.Name("some random namespace name")
 	namespaceID := tests.NamespaceID
@@ -492,7 +492,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		ScheduledID:         scheduleID,
 	}
 
-	context, release, _ := s.replicatorQueueProcessor.historyCache.GetOrCreateWorkflowExecution(
+	context, release, _ := s.replicationAckManager.historyCache.GetOrCreateWorkflowExecution(
 		ctx,
 		namespaceID,
 		commonpb.WorkflowExecution{
@@ -558,7 +558,7 @@ func (s *replicatorQueueProcessorSuite) TestSyncActivity_ActivityRunning() {
 		version,
 	), nil).AnyTimes()
 
-	result, err := s.replicatorQueueProcessor.generateSyncActivityTask(ctx, task)
+	result, err := s.replicationAckManager.generateSyncActivityTask(ctx, task)
 	s.NoError(err)
 	s.Equal(&replicationspb.ReplicationTask{
 		SourceTaskId: taskID,

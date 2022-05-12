@@ -316,6 +316,15 @@ message ScheduleWorkflowTaskRequest {
 message ScheduleWorkflowTaskResponse {
 }
 
+message VerifyFirstWorkflowTaskScheduledRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
+    temporal.server.api.clock.v1.ShardClock clock = 3;
+}
+
+message VerifyFirstWorkflowTaskScheduledResponse {
+}
+
 /**
 * RecordChildExecutionCompletedRequest is used for reporting the completion of child execution to parent workflow
 * execution which started it.  When a child execution is completed it creates this request and calls the
@@ -326,13 +335,26 @@ message ScheduleWorkflowTaskResponse {
 message RecordChildExecutionCompletedRequest {
     string namespace_id = 1;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
-    int64 initiated_id = 3;
+    int64 parent_initiated_id = 3;
     temporal.api.common.v1.WorkflowExecution completed_execution = 4;
     temporal.api.history.v1.HistoryEvent completion_event = 5;
     temporal.server.api.clock.v1.ShardClock clock = 6;
+    int64 parent_initiated_version = 7;
 }
 
 message RecordChildExecutionCompletedResponse {
+}
+
+message VerifyChildExecutionCompletionRecordedRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution parent_execution = 2;
+    temporal.api.common.v1.WorkflowExecution child_execution = 3;
+    int64 parent_initiated_id = 4;
+    int64 parent_initiated_version = 5;
+    temporal.server.api.clock.v1.ShardClock clock = 6;
+}
+
+message VerifyChildExecutionCompletionRecordedResponse {
 }
 
 message DescribeWorkflowExecutionRequest {

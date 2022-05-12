@@ -879,7 +879,7 @@ func (d *MutableStateStore) assertNotCurrentExecution(
 		NamespaceID: namespaceID,
 		WorkflowID:  workflowID,
 	}); err != nil {
-		if _, ok := err.(*serviceerror.NotFound); ok {
+		if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 			// allow bypassing no current record
 			return nil
 		}

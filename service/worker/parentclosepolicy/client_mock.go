@@ -29,6 +29,7 @@
 package parentclosepolicy
 
 import (
+	context "context"
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
@@ -58,15 +59,15 @@ func (m *MockClient) EXPECT() *MockClientMockRecorder {
 }
 
 // SendParentClosePolicyRequest mocks base method.
-func (m *MockClient) SendParentClosePolicyRequest(arg0 Request) error {
+func (m *MockClient) SendParentClosePolicyRequest(arg0 context.Context, arg1 Request) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "SendParentClosePolicyRequest", arg0)
+	ret := m.ctrl.Call(m, "SendParentClosePolicyRequest", arg0, arg1)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // SendParentClosePolicyRequest indicates an expected call of SendParentClosePolicyRequest.
-func (mr *MockClientMockRecorder) SendParentClosePolicyRequest(arg0 interface{}) *gomock.Call {
+func (mr *MockClientMockRecorder) SendParentClosePolicyRequest(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendParentClosePolicyRequest", reflect.TypeOf((*MockClient)(nil).SendParentClosePolicyRequest), arg0)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "SendParentClosePolicyRequest", reflect.TypeOf((*MockClient)(nil).SendParentClosePolicyRequest), arg0, arg1)
 }

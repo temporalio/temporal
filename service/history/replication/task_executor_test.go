@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package replication
 
 import (
 	"fmt"
@@ -56,7 +56,7 @@ import (
 )
 
 type (
-	replicationTaskExecutorSuite struct {
+	taskExecutorSuite struct {
 		suite.Suite
 		*require.Assertions
 		controller *gomock.Controller
@@ -73,24 +73,24 @@ type (
 		clusterMetadata    *cluster.MockMetadata
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
-		replicationTaskHandler *replicationTaskExecutorImpl
+		replicationTaskExecutor *taskExecutorImpl
 	}
 )
 
-func TestReplicationTaskExecutorSuite(t *testing.T) {
-	s := new(replicationTaskExecutorSuite)
+func TestTaskExecutorSuite(t *testing.T) {
+	s := new(taskExecutorSuite)
 	suite.Run(t, s)
 }
 
-func (s *replicationTaskExecutorSuite) SetupSuite() {
+func (s *taskExecutorSuite) SetupSuite() {
 
 }
 
-func (s *replicationTaskExecutorSuite) TearDownSuite() {
+func (s *taskExecutorSuite) TearDownSuite() {
 
 }
 
-func (s *replicationTaskExecutorSuite) SetupTest() {
+func (s *taskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
 	s.currentCluster = cluster.TestCurrentClusterName
@@ -121,7 +121,7 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 	metricsClient := metrics.NoopClient
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
-	s.replicationTaskHandler = newReplicationTaskExecutor(
+	s.replicationTaskExecutor = NewTaskExecutor(
 		s.mockShard,
 		s.mockNamespaceCache,
 		s.nDCHistoryResender,
@@ -130,15 +130,15 @@ func (s *replicationTaskExecutorSuite) SetupTest() {
 		workflow.NewMockCache(s.controller),
 		metricsClient,
 		s.mockShard.GetLogger(),
-	).(*replicationTaskExecutorImpl)
+	).(*taskExecutorImpl)
 }
 
-func (s *replicationTaskExecutorSuite) TearDownTest() {
+func (s *taskExecutorSuite) TearDownTest() {
 	s.controller.Finish()
 	s.mockShard.StopForTest()
 }
 
-func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
+func (s *taskExecutorSuite) TestFilterTask_Apply() {
 	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
@@ -151,12 +151,12 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_Apply() {
 			}},
 			0,
 		), nil)
-	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
 	s.NoError(err)
 	s.True(ok)
 }
 
-func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
+func (s *taskExecutorSuite) TestFilterTask_NotApply() {
 	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
@@ -166,29 +166,29 @@ func (s *replicationTaskExecutorSuite) TestFilterTask_NotApply() {
 			&persistencespb.NamespaceReplicationConfig{Clusters: []string{cluster.TestAlternativeClusterName}},
 			0,
 		), nil)
-	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
 	s.NoError(err)
 	s.False(ok)
 }
 
-func (s *replicationTaskExecutorSuite) TestFilterTask_Error() {
+func (s *taskExecutorSuite) TestFilterTask_Error() {
 	namespaceID := namespace.ID(uuid.New())
 	s.mockNamespaceCache.EXPECT().
 		GetNamespaceByID(namespaceID).
 		Return(nil, fmt.Errorf("random error"))
-	ok, err := s.replicationTaskHandler.filterTask(namespaceID, false)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, false)
 	s.Error(err)
 	s.False(ok)
 }
 
-func (s *replicationTaskExecutorSuite) TestFilterTask_EnforceApply() {
+func (s *taskExecutorSuite) TestFilterTask_EnforceApply() {
 	namespaceID := namespace.ID(uuid.New())
-	ok, err := s.replicationTaskHandler.filterTask(namespaceID, true)
+	ok, err := s.replicationTaskExecutor.filterTask(namespaceID, true)
 	s.NoError(err)
 	s.True(ok)
 }
 
-func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
+func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask() {
 	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
 	runID := uuid.New()
@@ -227,11 +227,11 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 	}
 
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskHandler.execute(task, true)
+	_, err := s.replicationTaskExecutor.Execute(task, true)
 	s.NoError(err)
 }
 
-func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Resend() {
+func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Resend() {
 	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
 	runID := uuid.New()
@@ -290,11 +290,11 @@ func (s *replicationTaskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicati
 		int64(456),
 	)
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskHandler.execute(task, true)
+	_, err := s.replicationTaskExecutor.Execute(task, true)
 	s.NoError(err)
 }
 
-func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
+func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask() {
 	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
 	runID := uuid.New()
@@ -323,11 +323,11 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask() {
 	}
 
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskHandler.execute(task, true)
+	_, err := s.replicationTaskExecutor.Execute(task, true)
 	s.NoError(err)
 }
 
-func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
+func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 	namespaceID := namespace.ID(uuid.New())
 	workflowID := uuid.New()
 	runID := uuid.New()
@@ -376,6 +376,6 @@ func (s *replicationTaskExecutorSuite) TestProcess_HistoryReplicationTask_Resend
 		int64(456),
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
-	_, err := s.replicationTaskHandler.execute(task, true)
+	_, err := s.replicationTaskExecutor.Execute(task, true)
 	s.NoError(err)
 }

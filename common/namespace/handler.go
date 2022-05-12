@@ -146,7 +146,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	case nil:
 		// namespace already exists, cannot proceed
 		return nil, serviceerror.NewNamespaceAlreadyExists("Namespace already exists.")
-	case *serviceerror.NotFound:
+	case *serviceerror.NamespaceNotFound:
 		// namespace does not exists, proceeds
 	default:
 		// other err

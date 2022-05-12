@@ -48,7 +48,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -69,6 +69,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/consts"
 	"go.temporal.io/server/service/history/events"
@@ -199,7 +200,7 @@ func (s *engineSuite) SetupTest() {
 		},
 		eventsReapplier:            s.mockEventsReapplier,
 		workflowResetter:           s.mockWorkflowResetter,
-		workflowConsistencyChecker: newWorkflowConsistencyChecker(s.mockShard, historyCache),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, historyCache),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -272,7 +273,7 @@ func (s *engineSuite) TestGetMutableState_EmptyRunID() {
 		NamespaceId: tests.NamespaceID.String(),
 		Execution:   &execution,
 	})
-	s.Equal(&serviceerror.NotFound{}, err)
+	s.IsType(&serviceerror.NotFound{}, err)
 }
 
 func (s *engineSuite) TestGetMutableStateLongPoll() {
@@ -1079,7 +1080,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		Identity:                 "identity",
 	}
 	err := s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		context.Background(), startRequest, tests.LocalNamespaceEntry.Name(), "SignalWithStartWorkflowExecution")
+		context.Background(), startRequest, tests.LocalNamespaceEntry, "SignalWithStartWorkflowExecution")
 	s.Error(err, "startRequest doesn't have request id, it should error out")
 
 	startRequest.RequestId = "request-id"
@@ -1087,7 +1088,7 @@ func (s *engineSuite) TestValidateSignalRequest() {
 		"data": payload.EncodeBytes(make([]byte, 4*1024*1024)),
 	}}
 	err = s.mockHistoryEngine.validateStartWorkflowExecutionRequest(
-		context.Background(), startRequest, tests.LocalNamespaceEntry.Name(), "SignalWithStartWorkflowExecution")
+		context.Background(), startRequest, tests.LocalNamespaceEntry, "SignalWithStartWorkflowExecution")
 	s.Error(err, "memo should be too big")
 }
 
@@ -5396,10 +5397,16 @@ func addSignaledEvent(builder workflow.MutableState, initiatedID int64, namespac
 	return event
 }
 
-func addStartChildWorkflowExecutionInitiatedEvent(builder workflow.MutableState, workflowTaskCompletedID int64,
-	createRequestID string, namespace namespace.Name, workflowID, workflowType, taskQueue string, input *commonpb.Payloads,
-	executionTimeout, runTimeout, taskTimeout time.Duration) (*historypb.HistoryEvent,
-	*persistencespb.ChildExecutionInfo) {
+func addStartChildWorkflowExecutionInitiatedEvent(
+	builder workflow.MutableState,
+	workflowTaskCompletedID int64,
+	createRequestID string,
+	namespace namespace.Name,
+	workflowID, workflowType, taskQueue string,
+	input *commonpb.Payloads,
+	executionTimeout, runTimeout, taskTimeout time.Duration,
+	parentClosePolicy enumspb.ParentClosePolicy,
+) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo) {
 
 	event, cei, _ := builder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedID, createRequestID,
 		&commandpb.StartChildWorkflowExecutionCommandAttributes{
@@ -5412,12 +5419,13 @@ func addStartChildWorkflowExecutionInitiatedEvent(builder workflow.MutableState,
 			WorkflowRunTimeout:       &runTimeout,
 			WorkflowTaskTimeout:      &taskTimeout,
 			Control:                  "",
+			ParentClosePolicy:        parentClosePolicy,
 		})
 	return event, cei
 }
 
 func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, workflowID, runID string,
-	workflowType string, clock *clockpb.ShardClock) *historypb.HistoryEvent {
+	workflowType string, clock *clockspb.ShardClock) *historypb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
 		namespace,
 		&commonpb.WorkflowExecution{

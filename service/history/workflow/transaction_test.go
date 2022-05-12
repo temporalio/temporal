@@ -33,6 +33,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/api/serviceerror"
+
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
@@ -97,6 +98,7 @@ func (s *transactionSuite) TestOperationMayApplied() {
 		{err: &persistence.TransactionSizeLimitError{}, mayApplied: false},
 		{err: &serviceerror.ResourceExhausted{}, mayApplied: false},
 		{err: &serviceerror.NotFound{}, mayApplied: false},
+		{err: &serviceerror.NamespaceNotFound{}, mayApplied: false},
 		{err: nil, mayApplied: true},
 		{err: &persistence.TimeoutError{}, mayApplied: true},
 		{err: &serviceerror.Unavailable{}, mayApplied: true},
@@ -104,13 +106,13 @@ func (s *transactionSuite) TestOperationMayApplied() {
 	}
 
 	for _, tc := range testCases {
-		s.Equal(tc.mayApplied, operationPossiblySucceeded(tc.err))
+		s.Equal(tc.mayApplied, shard.OperationPossiblySucceeded(tc.err))
 	}
 }
 
 func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(operationPossiblySucceeded(timeoutErr))
+	s.True(shard.OperationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().CreateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification()
@@ -135,7 +137,7 @@ func (s *transactionSuite) TestCreateWorkflowExecution_NotifyTaskWhenFailed() {
 
 func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(operationPossiblySucceeded(timeoutErr))
+	s.True(shard.OperationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().UpdateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification() // for current workflow mutation
@@ -163,7 +165,7 @@ func (s *transactionSuite) TestUpdateWorkflowExecution_NotifyTaskWhenFailed() {
 
 func (s *transactionSuite) TestConflictResolveWorkflowExecution_NotifyTaskWhenFailed() {
 	timeoutErr := &persistence.TimeoutError{}
-	s.True(operationPossiblySucceeded(timeoutErr))
+	s.True(shard.OperationPossiblySucceeded(timeoutErr))
 
 	s.mockShard.EXPECT().ConflictResolveWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, timeoutErr)
 	s.setupMockForTaskNotification() // for reset workflow snapshot

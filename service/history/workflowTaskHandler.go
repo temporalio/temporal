@@ -49,6 +49,7 @@ import (
 	"go.temporal.io/server/common/payloads"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/service/history/api"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/workflow"
@@ -638,7 +639,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to cancel workflow across namespace: %v.", attr.GetNamespace()))
+			return err
 		}
 		targetNamespaceID = targetNamespaceEntry.ID()
 	}
@@ -815,7 +816,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to schedule child execution across namespace %v.", attr.GetNamespace()))
+			return err
 		}
 		targetNamespace = targetNamespaceEntry.Name()
 		targetNamespaceID = targetNamespaceEntry.ID()
@@ -910,7 +911,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 	if attr.GetNamespace() != "" {
 		targetNamespaceEntry, err := handler.namespaceRegistry.GetNamespace(namespace.Name(attr.GetNamespace()))
 		if err != nil {
-			return serviceerror.NewUnavailable(fmt.Sprintf("Unable to signal workflow across namespace: %v.", attr.GetNamespace()))
+			return err
 		}
 		targetNamespaceID = targetNamespaceEntry.ID()
 	}
@@ -1031,7 +1032,7 @@ func (handler *workflowTaskHandlerImpl) handleRetry(
 	}
 	startAttr := startEvent.GetWorkflowExecutionStartedEventAttributes()
 
-	newStateBuilder, err := createMutableState(
+	newStateBuilder, err := api.CreateMutableState(
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,
@@ -1075,7 +1076,7 @@ func (handler *workflowTaskHandlerImpl) handleCron(
 		lastCompletionResult = startAttr.LastCompletionResult
 	}
 
-	newStateBuilder, err := createMutableState(
+	newStateBuilder, err := api.CreateMutableState(
 		handler.shard,
 		handler.mutableState.GetNamespaceEntry(),
 		newRunID,

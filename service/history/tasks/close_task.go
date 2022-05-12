@@ -39,6 +39,7 @@ type (
 		VisibilityTimestamp time.Time
 		TaskID              int64
 		Version             int64
+		DeleteAfterClose    bool
 	}
 )
 

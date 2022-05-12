@@ -22,8 +22,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination timerQueueProcessor_mock.go
-
 package history
 
 import (
@@ -69,6 +67,7 @@ type (
 		config                     *configs.Config
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
+		scheduler                  queues.Scheduler
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
 		logger                     log.Logger
@@ -86,6 +85,7 @@ func newTimerQueueProcessor(
 	shard shard.Context,
 	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
+	scheduler queues.Scheduler,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Processor {
@@ -111,6 +111,7 @@ func newTimerQueueProcessor(
 		config:                   config,
 		metricsClient:            shard.GetMetricsClient(),
 		workflowCache:            workflowCache,
+		scheduler:                scheduler,
 		workflowDeleteManager:    workflowDeleteManager,
 		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTimer),
 		logger:                   logger,
@@ -120,6 +121,7 @@ func newTimerQueueProcessor(
 		activeTimerProcessor: newTimerQueueActiveProcessor(
 			shard,
 			workflowCache,
+			scheduler,
 			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
@@ -179,7 +181,6 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	}
 	standbyTimerProcessor.setCurrentTime(t.shard.GetCurrentTime(clusterName))
 	standbyTimerProcessor.notifyNewTimers(timerTasks)
-	standbyTimerProcessor.retryTasks()
 }
 
 func (t *timerQueueProcessorImpl) FailoverNamespace(
@@ -215,6 +216,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 	updateShardAckLevel, failoverTimerProcessor := newTimerQueueFailoverProcessor(
 		t.shard,
 		t.workflowCache,
+		t.scheduler,
 		t.workflowDeleteManager,
 		namespaceIDs,
 		standbyClusterName,
@@ -224,12 +226,6 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		t.taskAllocator,
 		t.logger,
 	)
-
-	t.standbyTimerProcessorsLock.RLock()
-	for _, standbyTimerProcessor := range t.standbyTimerProcessors {
-		standbyTimerProcessor.retryTasks()
-	}
-	t.standbyTimerProcessorsLock.RUnlock()
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
@@ -374,6 +370,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 			processor := newTimerQueueStandbyProcessor(
 				t.shard,
 				t.workflowCache,
+				t.scheduler,
 				t.workflowDeleteManager,
 				t.matchingClient,
 				clusterName,

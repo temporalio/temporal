@@ -22,7 +22,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package history
+package api
 
 import (
 	"context"
@@ -31,10 +31,11 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
-	clockpb "go.temporal.io/server/api/clock/v1"
+	clockspb "go.temporal.io/server/api/clock/v1"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/vclock"
 	"go.temporal.io/server/service/history/workflow"
@@ -51,10 +52,10 @@ type (
 		) (string, error)
 		GetWorkflowContext(
 			ctx context.Context,
-			reqClock *clockpb.ShardClock,
+			reqClock *clockspb.ShardClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
-		) (workflowContext, error)
+		) (WorkflowContext, error)
 	}
 
 	WorkflowConsistencyCheckerImpl struct {
@@ -63,7 +64,7 @@ type (
 	}
 )
 
-func newWorkflowConsistencyChecker(
+func NewWorkflowConsistencyChecker(
 	shardContext shard.Context,
 	workflowCache workflow.Cache,
 ) *WorkflowConsistencyCheckerImpl {
@@ -96,10 +97,10 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 
 func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 	ctx context.Context,
-	reqClock *clockpb.ShardClock,
+	reqClock *clockspb.ShardClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-) (workflowContext, error) {
+) (WorkflowContext, error) {
 	if reqClock != nil {
 		return c.getWorkflowContextValidatedByClock(
 			ctx,
@@ -131,9 +132,9 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	ctx context.Context,
-	reqClock *clockpb.ShardClock,
+	reqClock *clockspb.ShardClock,
 	workflowKey definition.WorkflowKey,
-) (workflowContext, error) {
+) (WorkflowContext, error) {
 	cmpResult, err := vclock.Compare(reqClock, c.shardContext.CurrentVectorClock())
 	if err != nil {
 		return nil, err
@@ -165,7 +166,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 		release(err)
 		return nil, err
 	}
-	return newWorkflowContext(wfContext, release, mutableState), nil
+	return NewWorkflowContext(wfContext, release, mutableState), nil
 }
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
@@ -173,7 +174,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 	shardOwnershipAsserted *bool,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
-) (workflowContext, error) {
+) (WorkflowContext, error) {
 	if len(workflowKey.RunID) == 0 {
 		return nil, serviceerror.NewInternal(fmt.Sprintf(
 			"loadWorkflowContext encountered empty run ID: %v", workflowKey,
@@ -197,7 +198,7 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 	switch err.(type) {
 	case nil:
 		if consistencyPredicate(mutableState) {
-			return newWorkflowContext(wfContext, release, mutableState), nil
+			return NewWorkflowContext(wfContext, release, mutableState), nil
 		}
 		wfContext.Clear()
 
@@ -206,8 +207,8 @@ func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByCheck(
 			release(err)
 			return nil, err
 		}
-		return newWorkflowContext(wfContext, release, mutableState), nil
-	case *serviceerror.NotFound:
+		return NewWorkflowContext(wfContext, release, mutableState), nil
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		release(err)
 		if err := assertShardOwnership(
 			ctx,
@@ -229,7 +230,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 	consistencyPredicate MutableStateConsistencyPredicate,
 	namespaceID string,
 	workflowID string,
-) (workflowContext, error) {
+) (WorkflowContext, error) {
 	for attempt := 1; attempt <= conditionalRetryCount; attempt++ {
 		runID, err := c.getCurrentRunID(
 			ctx,
@@ -249,7 +250,7 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 		if err != nil {
 			return nil, err
 		}
-		if wfContext.getMutableState().IsWorkflowExecutionRunning() {
+		if wfContext.GetMutableState().IsWorkflowExecutionRunning() {
 			return wfContext, nil
 		}
 
@@ -260,13 +261,13 @@ func (c *WorkflowConsistencyCheckerImpl) getCurrentWorkflowContext(
 			workflowID,
 		)
 		if err != nil {
-			wfContext.getReleaseFn()(err)
+			wfContext.GetReleaseFn()(err)
 			return nil, err
 		}
-		if currentRunID == wfContext.getRunID() {
+		if currentRunID == wfContext.GetRunID() {
 			return wfContext, nil
 		}
-		wfContext.getReleaseFn()(nil)
+		wfContext.GetReleaseFn()(nil)
 	}
 	return nil, serviceerror.NewUnavailable("unable to locate current workflow execution")
 }
@@ -324,4 +325,23 @@ func FailMutableStateConsistencyPredicate(
 	mutableState workflow.MutableState,
 ) bool {
 	return false
+}
+
+func HistoryEventConsistencyPredicate(
+	eventID int64,
+	eventVersion int64,
+) MutableStateConsistencyPredicate {
+	return func(mutableState workflow.MutableState) bool {
+		if eventVersion != 0 {
+			_, err := versionhistory.FindFirstVersionHistoryIndexByVersionHistoryItem(
+				mutableState.GetExecutionInfo().GetVersionHistories(),
+				versionhistory.NewVersionHistoryItem(eventID, eventVersion),
+			)
+			return err == nil
+		}
+		// if initiated version is 0, it means the namespace is local or
+		// the caller has old version and does not sent the info.
+		// in either case, fallback to comparing next eventID
+		return eventID < mutableState.GetNextEventID()
+	}
 }

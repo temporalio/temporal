@@ -22,9 +22,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-//go:generate mockgen -copyright_file ../../LICENSE -package $GOPACKAGE -source $GOFILE -destination replicationTaskExecutor_mock.go
+//go:generate mockgen -copyright_file ../../../LICENSE -package $GOPACKAGE -source $GOFILE -destination task_executor_mock.go
 
-package history
+package replication
 
 import (
 	"context"
@@ -46,11 +46,11 @@ import (
 )
 
 type (
-	replicationTaskExecutor interface {
-		execute(replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
+	TaskExecutor interface {
+		Execute(replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
 	}
 
-	replicationTaskExecutorImpl struct {
+	taskExecutorImpl struct {
 		currentCluster     string
 		shard              shard.Context
 		namespaceRegistry  namespace.Registry
@@ -63,9 +63,9 @@ type (
 	}
 )
 
-// newReplicationTaskExecutor creates an replication task executor
+// NewTaskExecutor creates a replication task executor
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
-func newReplicationTaskExecutor(
+func NewTaskExecutor(
 	shard shard.Context,
 	namespaceRegistry namespace.Registry,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -74,8 +74,8 @@ func newReplicationTaskExecutor(
 	workflowCache workflow.Cache,
 	metricsClient metrics.Client,
 	logger log.Logger,
-) replicationTaskExecutor {
-	return &replicationTaskExecutorImpl{
+) TaskExecutor {
+	return &taskExecutorImpl{
 		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              shard,
 		namespaceRegistry:  namespaceRegistry,
@@ -88,7 +88,7 @@ func newReplicationTaskExecutor(
 	}
 }
 
-func (e *replicationTaskExecutorImpl) execute(
+func (e *taskExecutorImpl) Execute(
 	replicationTask *replicationspb.ReplicationTask,
 	forceApply bool,
 ) (int, error) {
@@ -117,7 +117,7 @@ func (e *replicationTaskExecutorImpl) execute(
 	return scope, err
 }
 
-func (e *replicationTaskExecutorImpl) handleActivityTask(
+func (e *taskExecutorImpl) handleActivityTask(
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
@@ -174,7 +174,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
-			//no-op
+			// no-op
 		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
@@ -186,7 +186,7 @@ func (e *replicationTaskExecutorImpl) handleActivityTask(
 	}
 }
 
-func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
+func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	task *replicationspb.ReplicationTask,
 	forceApply bool,
 ) error {
@@ -238,7 +238,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
-			//no-op
+			// no-op
 		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
@@ -251,7 +251,7 @@ func (e *replicationTaskExecutorImpl) handleHistoryReplicationTask(
 	}
 }
 
-func (e *replicationTaskExecutorImpl) filterTask(
+func (e *taskExecutorImpl) filterTask(
 	namespaceID namespace.ID,
 	forceApply bool,
 ) (bool, error) {
@@ -276,7 +276,7 @@ FilterLoop:
 	return shouldProcessTask, nil
 }
 
-func (e *replicationTaskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespaceID string, workflowID string, runID string) (retErr error) {
+func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespaceID string, workflowID string, runID string) (retErr error) {
 	nsID := namespace.ID(namespaceID)
 	ex := commonpb.WorkflowExecution{
 		WorkflowId: workflowID,
@@ -295,12 +295,14 @@ func (e *replicationTaskExecutorImpl) cleanupWorkflowExecution(ctx context.Conte
 	if err != nil {
 		return err
 	}
-	return e.deleteManager.DeleteWorkflowExecutionByReplication(
+
+	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
 		nsID,
 		ex,
 		wfCtx,
 		mutableState,
 		lastWriteVersion,
+		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
 	)
 }

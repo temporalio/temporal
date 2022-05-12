@@ -102,8 +102,8 @@ update-checkers:
 	@go install golang.org/x/tools/cmd/goimports@latest
 	@go install honnef.co/go/tools/cmd/staticcheck@master # TODO: Set concrete version above 0.2.2 here.
 	@go install github.com/kisielk/errcheck@v1.6.0
-	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.29.4
-	@go install github.com/bufbuild/buf/cmd/buf@v0.56.0
+	@go install github.com/googleapis/api-linter/cmd/api-linter@v1.31.0
+	@go install github.com/bufbuild/buf/cmd/buf@v1.4.0
 
 update-mockgen:
 	@printf $(COLOR) "Install/update mockgen tool..."
