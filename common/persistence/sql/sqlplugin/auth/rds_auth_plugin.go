@@ -23,6 +23,7 @@ package auth
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"sync"
@@ -129,20 +130,28 @@ func (plugin *RDSAuthPlugin) GetConfig(ctx context.Context, cfg *config.SQL) (*c
 	// if TLS is not configured, we default to the RDS CA
 	// this is required for mysql to send cleartext passwords
 	if cfg.TLS == nil {
+		var fetchErr error
 		plugin.initRdsPemBundle.Do(func() {
 			ca, err := fetchRdsCA(ctx)
 			if err != nil {
+				fetchErr = err
 				return
 			}
 
 			plugin.rdsPemBundle = ca
 		})
 
-		if plugin.rdsPemBundle != "" {
-			cfg.TLS = &auth.TLS{
-				Enabled: true,
-				CaData:  plugin.rdsPemBundle,
-			}
+		if fetchErr != nil {
+			return nil, fetchErr
+		}
+
+		if plugin.rdsPemBundle == "" {
+			return nil, errors.New("rds_auth_plugin: unable to retrieve rds ca certificates")
+		}
+
+		cfg.TLS = &auth.TLS{
+			Enabled: true,
+			CaData:  plugin.rdsPemBundle,
 		}
 	}
 
