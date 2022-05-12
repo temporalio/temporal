@@ -117,7 +117,7 @@ func ForceReplicationWorkflow(ctx workflow.Context, params ForceReplicationParam
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		listWorkflowsErr = listWorkflowsForReplication(ctx, workflowExecutionsCh, &params)
 
-		// enqueueReplicationTasks only returns when listWorkflowCh is closed (or if it encounters an error).
+		// enqueueReplicationTasks only returns when workflowExecutionsCh is closed (or if it encounters an error).
 		// Therefore, listWorkflowsErr will be set prior to their use and params will be updated.
 		workflowExecutionsCh.Close()
 	})

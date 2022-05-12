@@ -111,7 +111,7 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 	for _, shard := range resp.Shards {
 		clusterInfo, hasClusterInfo := shard.RemoteClusters[waitRequest.RemoteCluster]
 		if hasClusterInfo {
-			if clusterInfo.AckedTaskId == shard.MaxReplicationTaskId ||
+			if shard.MaxReplicationTaskId-clusterInfo.AckedTaskId <= waitRequest.AllowedLaggingTasks ||
 				(clusterInfo.AckedTaskId >= waitRequest.WaitForTaskIds[shard.ShardId] &&
 					shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime) <= waitRequest.AllowedLagging) {
 				readyShardCount++
@@ -129,14 +129,16 @@ func (a *activities) checkReplicationOnce(ctx context.Context, waitRequest waitR
 			}
 			a.logger.Info("Wait catchup not ready",
 				tag.NewInt32("ShardId", shard.ShardId),
+				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
 				tag.NewInt64("AckedTaskId", clusterInfo.AckedTaskId),
 				tag.NewInt64("WaitForTaskId", waitRequest.WaitForTaskIds[shard.ShardId]),
 				tag.NewDurationTag("AllowedLagging", waitRequest.AllowedLagging),
 				tag.NewDurationTag("ActualLagging", shard.ShardLocalTime.Sub(*clusterInfo.AckedTaskVisibilityTime)),
-				tag.NewStringTag("RemoteCluster", waitRequest.RemoteCluster),
 				tag.NewInt64("MaxReplicationTaskId", shard.MaxReplicationTaskId),
 				tag.NewTimeTag("ShardLocalTime", *shard.ShardLocalTime),
 				tag.NewTimeTag("AckedTaskVisibilityTime", *clusterInfo.AckedTaskVisibilityTime),
+				tag.NewInt64("AllowedLaggingTasks", waitRequest.AllowedLaggingTasks),
+				tag.NewInt64("ActualLaggingTasks", shard.MaxReplicationTaskId-clusterInfo.AckedTaskId),
 			)
 		}
 	}
