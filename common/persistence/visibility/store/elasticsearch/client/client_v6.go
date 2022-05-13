@@ -264,13 +264,20 @@ func (c *clientV6) Delete(ctx context.Context, indexName string, docID string, v
 	return err
 }
 
-func (c *clientV6) Ping(ctx context.Context) (bool, error) {
-	_, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
+func (c *clientV6) Ping(ctx context.Context) (*elastic.PingResult, error) {
+	res, int, err := c.esClient.Ping(c.url.String()).Do(ctx)
 	if err != nil {
-		return false, convertV6ErrorToV7(err)
+		return nil, convertV6ErrorToV7(err)
 	}
 
-	return true, nil
+	// ES Ping service doesn't error on 403s
+	if int != 200 {
+		return nil, convertV6ErrorToV7(&elastic6.Error{
+			Status: int,
+		})
+	}
+
+	return convertV6PingResponseToV7(res), nil
 }
 
 // Patching the missing ClusterPutSettings method in esclient library
@@ -627,6 +634,39 @@ func convertV6IndicesGetSettingsResponseToV7(response *elastic6.IndicesGetSettin
 	}
 	return &elastic.IndicesGetSettingsResponse{
 		Settings: response.Settings,
+	}
+}
+
+func convertV6PingResponseToV7(response *elastic6.PingResult) *elastic.PingResult {
+	if response == nil {
+		return nil
+	}
+
+	return &elastic.PingResult{
+		Name:        response.Name,
+		ClusterName: response.ClusterName,
+		Version: struct {
+			Number                           string `json:"number"`                              // e.g. "7.0.0"
+			BuildFlavor                      string `json:"build_flavor"`                        // e.g. "oss" or "default"
+			BuildType                        string `json:"build_type"`                          // e.g. "docker"
+			BuildHash                        string `json:"build_hash"`                          // e.g. "b7e28a7"
+			BuildDate                        string `json:"build_date"`                          // e.g. "2019-04-05T22:55:32.697037Z"
+			BuildSnapshot                    bool   `json:"build_snapshot"`                      // e.g. false
+			LuceneVersion                    string `json:"lucene_version"`                      // e.g. "8.0.0"
+			MinimumWireCompatibilityVersion  string `json:"minimum_wire_compatibility_version"`  // e.g. "6.7.0"
+			MinimumIndexCompatibilityVersion string `json:"minimum_index_compatibility_version"` // e.g. "6.0.0-beta1"
+		}{
+			Number:                           response.Version.Number,
+			BuildFlavor:                      "",
+			BuildType:                        "",
+			BuildHash:                        response.Version.BuildHash,
+			BuildDate:                        response.Version.BuildTimestamp,
+			BuildSnapshot:                    response.Version.BuildSnapshot,
+			LuceneVersion:                    response.Version.LuceneVersion,
+			MinimumWireCompatibilityVersion:  "",
+			MinimumIndexCompatibilityVersion: "",
+		},
+		TagLine: response.TagLine,
 	}
 }
 

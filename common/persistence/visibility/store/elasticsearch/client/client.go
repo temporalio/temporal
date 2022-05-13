@@ -72,7 +72,7 @@ type (
 		ClusterPutSettings(ctx context.Context, bodyString string) (bool, error)
 		CreateIndex(ctx context.Context, index string) (bool, error)
 		IndexPutTemplate(ctx context.Context, templateName string, bodyString string) (bool, error)
-		Ping(ctx context.Context) (bool, error)
+		Ping(ctx context.Context) (*elastic.PingResult, error)
 	}
 
 	IntegrationTestsClient interface {

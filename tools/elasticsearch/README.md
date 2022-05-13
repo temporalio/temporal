@@ -15,7 +15,7 @@ VERSION:
 
 COMMANDS:
    setup-schema, setup  setup initial version of elasticsearch schema and index
-   ping                 continuously pings the elasticsearch host until a successful response is received
+   ping                 pings the elasticsearch host
    help, h              Shows a list of commands or help for one command
 
 GLOBAL OPTIONS:

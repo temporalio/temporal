@@ -28,7 +28,6 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"time"
 
 	"github.com/urfave/cli"
 
@@ -82,7 +81,7 @@ func setup(cli *cli.Context, logger log.Logger) error {
 	return task.Run()
 }
 
-// ping continuously pings the elasticsearch host and returns on a response
+// ping the elasticsearch host and return the json response
 func ping(cli *cli.Context, logger log.Logger) error {
 	client, err := createClient(cli, logger)
 	if err != nil {
@@ -90,16 +89,14 @@ func ping(cli *cli.Context, logger log.Logger) error {
 		return err
 	}
 
-	for {
-		success, err := client.Ping(context.TODO())
-		if err == nil && success {
-			logger.Info("Received response from ES server")
-			return nil
-		}
-
-		time.Sleep(1 * time.Second)
+	res, err := client.Ping(context.TODO())
+	if err != nil {
+		logger.Error("Ping failed", tag.Error(err))
+		return err
 	}
 
+	logger.Info("Pong", tag.NewAnyTag("response", res))
+	return nil
 }
 
 func parseElasticConfig(cli *cli.Context) (*esclient.Config, error) {

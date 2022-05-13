@@ -319,13 +319,20 @@ func (c *clientV7) Delete(ctx context.Context, indexName string, docID string, v
 	return err
 }
 
-func (c *clientV7) Ping(ctx context.Context) (bool, error) {
-	_, _, err := c.esClient.Ping(c.url.String()).Do(ctx)
+func (c *clientV7) Ping(ctx context.Context) (*elastic.PingResult, error) {
+	res, int, err := c.esClient.Ping(c.url.String()).Do(ctx)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 
-	return true, nil
+	// ES Ping service doesn't error on 403s
+	if int != 200 {
+		return nil, &elastic.Error{
+			Status: int,
+		}
+	}
+
+	return res, nil
 }
 
 // Patching the missing ClusterPutSettings method in esclient library

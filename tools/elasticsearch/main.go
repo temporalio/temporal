@@ -150,7 +150,7 @@ func BuildCLIOptions() *cli.App {
 		},
 		{
 			Name:  "ping",
-			Usage: "continuously pings the elasticsearch host until a successful response is received",
+			Usage: "pings the elasticsearch host",
 			Flags: []cli.Flag{},
 			Action: func(c *cli.Context) {
 				cliHandler(c, ping, logger)
