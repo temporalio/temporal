@@ -521,6 +521,13 @@ const (
 	FrontendClientGetSystemInfoScope
 	// FrontendClientListTaskQueuePartitionsScope tracks RPC calls to frontend service
 	FrontendClientListTaskQueuePartitionsScope
+	FrontendClientCreateScheduleScope
+	FrontendClientDescribeScheduleScope
+	FrontendClientUpdateScheduleScope
+	FrontendClientPatchScheduleScope
+	FrontendClientListScheduleMatchingTimesScope
+	FrontendClientDeleteScheduleScope
+	FrontendClientListSchedulesScope
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
 	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service

@@ -625,6 +625,111 @@ func (c *clientImpl) ListTaskQueuePartitions(
 	return client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *clientImpl) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.CreateScheduleResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.CreateSchedule(ctx, request, opts...)
+}
+
+func (c *clientImpl) DescribeSchedule(
+	ctx context.Context,
+	request *workflowservice.DescribeScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DescribeScheduleResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.DescribeSchedule(ctx, request, opts...)
+}
+
+func (c *clientImpl) UpdateSchedule(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateScheduleResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.UpdateSchedule(ctx, request, opts...)
+}
+
+func (c *clientImpl) PatchSchedule(
+	ctx context.Context,
+	request *workflowservice.PatchScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.PatchScheduleResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.PatchSchedule(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListScheduleMatchingTimes(
+	ctx context.Context,
+	request *workflowservice.ListScheduleMatchingTimesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListScheduleMatchingTimesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.ListScheduleMatchingTimes(ctx, request, opts...)
+}
+
+func (c *clientImpl) DeleteSchedule(
+	ctx context.Context,
+	request *workflowservice.DeleteScheduleRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.DeleteScheduleResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.DeleteSchedule(ctx, request, opts...)
+}
+
+func (c *clientImpl) ListSchedules(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.ListSchedulesResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.ListSchedules(ctx, request, opts...)
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }

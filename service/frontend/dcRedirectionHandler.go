@@ -1211,6 +1211,62 @@ func (handler *DCRedirectionHandlerImpl) GetSystemInfo(
 	return handler.frontendHandler.GetSystemInfo(ctx, request)
 }
 
+// CreateSchedule API call
+func (handler *DCRedirectionHandlerImpl) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+) (resp *workflowservice.CreateScheduleResponse, retError error) {
+	return handler.frontendHandler.CreateSchedule(ctx, request)
+}
+
+// DescribeSchedule API call
+func (handler *DCRedirectionHandlerImpl) DescribeSchedule(
+	ctx context.Context,
+	request *workflowservice.DescribeScheduleRequest,
+) (resp *workflowservice.DescribeScheduleResponse, retError error) {
+	return handler.frontendHandler.DescribeSchedule(ctx, request)
+}
+
+// UpdateSchedule API call
+func (handler *DCRedirectionHandlerImpl) UpdateSchedule(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+) (resp *workflowservice.UpdateScheduleResponse, retError error) {
+	return handler.frontendHandler.UpdateSchedule(ctx, request)
+}
+
+// PatchSchedule API call
+func (handler *DCRedirectionHandlerImpl) PatchSchedule(
+	ctx context.Context,
+	request *workflowservice.PatchScheduleRequest,
+) (resp *workflowservice.PatchScheduleResponse, retError error) {
+	return handler.frontendHandler.PatchSchedule(ctx, request)
+}
+
+// ListScheduleMatchingTimes API call
+func (handler *DCRedirectionHandlerImpl) ListScheduleMatchingTimes(
+	ctx context.Context,
+	request *workflowservice.ListScheduleMatchingTimesRequest,
+) (resp *workflowservice.ListScheduleMatchingTimesResponse, retError error) {
+	return handler.frontendHandler.ListScheduleMatchingTimes(ctx, request)
+}
+
+// DeleteSchedule API call
+func (handler *DCRedirectionHandlerImpl) DeleteSchedule(
+	ctx context.Context,
+	request *workflowservice.DeleteScheduleRequest,
+) (resp *workflowservice.DeleteScheduleResponse, retError error) {
+	return handler.frontendHandler.DeleteSchedule(ctx, request)
+}
+
+// ListSchedules API call
+func (handler *DCRedirectionHandlerImpl) ListSchedules(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+) (resp *workflowservice.ListSchedulesResponse, retError error) {
+	return handler.frontendHandler.ListSchedules(ctx, request)
+}
+
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	scope int,
 ) (metrics.Scope, time.Time) {
