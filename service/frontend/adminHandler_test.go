@@ -147,6 +147,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		health.NewServer(),
 		serialization.NewSerializer(),
 	}
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 	s.handler = NewAdminHandler(args)
 	s.handler.Start()
 }
@@ -767,7 +768,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordFound_Success() 
 	var clusterId = uuid.New()
 	var recordVersion int64 = 5
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -807,7 +807,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -844,17 +843,15 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_RecordNotFound_Success
 
 func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ClusterNameConflict() {
 	var rpcAddress = uuid.New()
-	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(clusterName)
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
 	)
 	s.mockAdminClient.EXPECT().DescribeCluster(gomock.Any(), &adminservice.DescribeClusterRequest{}).Return(
 		&adminservice.DescribeClusterResponse{
 			ClusterId:                clusterId,
-			ClusterName:              clusterName,
+			ClusterName:              s.mockMetadata.GetCurrentClusterName(),
 			HistoryShardCount:        0,
 			FailoverVersionIncrement: 0,
 			InitialFailoverVersion:   0,
@@ -870,7 +867,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Failov
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(1))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -894,7 +890,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_ShardC
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -918,7 +913,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Global
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
 		s.mockAdminClient,
@@ -942,7 +936,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_ValidationError_Initia
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(map[string]cluster.ClusterInformation{
 		uuid.New(): {InitialFailoverVersion: 0},
@@ -983,7 +976,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_GetClusterMetadata_Err
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -1011,7 +1003,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_Er
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -1051,7 +1042,6 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 	var clusterName = uuid.New()
 	var clusterId = uuid.New()
 
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New())
 	s.mockMetadata.EXPECT().GetFailoverVersionIncrement().Return(int64(0))
 	s.mockMetadata.EXPECT().GetAllClusterInfo().Return(make(map[string]cluster.ClusterInformation))
 	s.mockClientFactory.EXPECT().NewAdminClientWithTimeout(rpcAddress, gomock.Any(), gomock.Any()).Return(
@@ -1088,10 +1078,8 @@ func (s *adminHandlerSuite) Test_AddOrUpdateRemoteCluster_SaveClusterMetadata_No
 }
 
 func (s *adminHandlerSuite) Test_DescribeCluster_CurrentCluster_Success() {
-	var clusterName = uuid.New()
 	var clusterId = uuid.New()
-
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(clusterName)
+	clusterName := s.mockMetadata.GetCurrentClusterName()
 	s.mockResource.MembershipMonitor.EXPECT().WhoAmI().Return(&membership.HostInfo{}, nil)
 	s.mockResource.MembershipMonitor.EXPECT().GetReachableMembers().Return(nil, nil)
 	s.mockResource.HistoryServiceResolver.EXPECT().Members().Return([]*membership.HostInfo{})
