@@ -326,6 +326,11 @@ func WorkflowEventCount(eventCount int) ZapTag {
 	return NewInt("wf-event-count", eventCount)
 }
 
+// ScheduleID returns tag for ScheduleID
+func ScheduleID(scheduleID string) ZapTag {
+	return NewStringTag("schedule-id", scheduleID)
+}
+
 // ==========  System tags defined here:  ==========
 // Tags with pre-define values
 
