@@ -521,12 +521,19 @@ const (
 	FrontendClientGetSystemInfoScope
 	// FrontendClientListTaskQueuePartitionsScope tracks RPC calls to frontend service
 	FrontendClientListTaskQueuePartitionsScope
+	// FrontendClientCreateScheduleScope tracks RPC calls to frontend service
 	FrontendClientCreateScheduleScope
+	// FrontendClientDescribeScheduleScope tracks RPC calls to frontend service
 	FrontendClientDescribeScheduleScope
+	// FrontendClientUpdateScheduleScope tracks RPC calls to frontend service
 	FrontendClientUpdateScheduleScope
+	// FrontendClientPatchScheduleScope tracks RPC calls to frontend service
 	FrontendClientPatchScheduleScope
+	// FrontendClientListScheduleMatchingTimesScope tracks RPC calls to frontend service
 	FrontendClientListScheduleMatchingTimesScope
+	// FrontendClientDeleteScheduleScope tracks RPC calls to frontend service
 	FrontendClientDeleteScheduleScope
+	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
 	FrontendClientListSchedulesScope
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
@@ -899,6 +906,20 @@ const (
 	FrontendGetClusterInfoScope
 	// FrontendGetSystemInfoScope is the metric scope for frontend.GetSystemInfo
 	FrontendGetSystemInfoScope
+	// FrontendCreateScheduleScope is the metric scope for frontend.CreateScheduleScope
+	FrontendCreateScheduleScope
+	// FrontendDescribeScheduleScope is the metric scope for frontend.DescribeScheduleScope
+	FrontendDescribeScheduleScope
+	// FrontendUpdateScheduleScope is the metric scope for frontend.UpdateScheduleScope
+	FrontendUpdateScheduleScope
+	// FrontendPatchScheduleScope is the metric scope for frontend.PatchScheduleScope
+	FrontendPatchScheduleScope
+	// FrontendListScheduleMatchingTimesScope is the metric scope for frontend.ListScheduleMatchingTimesScope
+	FrontendListScheduleMatchingTimesScope
+	// FrontendDeleteScheduleScope is the metric scope for frontend.DeleteScheduleScope
+	FrontendDeleteScheduleScope
+	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope
+	FrontendListSchedulesScope
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
@@ -1428,29 +1449,35 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSystemInfoScope:                      {operation: "FrontendClientGetSystemInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListTaskQueuePartitionsScope:            {operation: "FrontendClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
-
-		AdminClientAddSearchAttributesScope:              {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientRemoveSearchAttributesScope:           {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetSearchAttributesScope:              {operation: "AdminClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientDescribeHistoryHostScope:              {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientRebuildMutableStateScope:              {operation: "AdminClientRebuildMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientDescribeMutableStateScope:             {operation: "AdminClientDescribeMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetWorkflowExecutionRawHistoryScope:   {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetWorkflowExecutionRawHistoryV2Scope: {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientDescribeClusterScope:                  {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientListClustersScope:                     {operation: "AdminClientListClusters", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientAddOrUpdateRemoteClusterScope:         {operation: "AdminClientAddOrUpdateRemoteCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientRemoveRemoteClusterScope:              {operation: "AdminClientRemoveRemoteCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientRefreshWorkflowTasksScope:             {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientResendReplicationTasksScope:           {operation: "AdminClientResendReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetTaskQueueTasksScope:                {operation: "AdminClientGetTaskQueueTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientListClusterMembersScope:               {operation: "AdminClientListClusterMembers", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientCloseShardScope:                       {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetShardScope:                         {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientListHistoryTasksScope:                 {operation: "AdminClientListHistoryTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientGetDLQMessagesScope:                   {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientPurgeDLQMessagesScope:                 {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
-		AdminClientMergeDLQMessagesScope:                 {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		FrontendClientCreateScheduleScope:                     {operation: "FrontendClientCreateSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeScheduleScope:                   {operation: "FrontendClientDescribeSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateScheduleScope:                     {operation: "FrontendClientUpdateSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientPatchScheduleScope:                      {operation: "FrontendClientPatchSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListScheduleMatchingTimesScope:          {operation: "FrontendClientListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDeleteScheduleScope:                     {operation: "FrontendClientDeleteSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListSchedulesScope:                      {operation: "FrontendClientListSchedules", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		AdminClientAddSearchAttributesScope:                   {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRemoveSearchAttributesScope:                {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetSearchAttributesScope:                   {operation: "AdminClientGetSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeHistoryHostScope:                   {operation: "AdminClientDescribeHistoryHost", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRebuildMutableStateScope:                   {operation: "AdminClientRebuildMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeMutableStateScope:                  {operation: "AdminClientDescribeMutableState", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetWorkflowExecutionRawHistoryScope:        {operation: "AdminClientGetWorkflowExecutionRawHistory", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetWorkflowExecutionRawHistoryV2Scope:      {operation: "AdminClientGetWorkflowExecutionRawHistoryV2", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDescribeClusterScope:                       {operation: "AdminClientDescribeCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListClustersScope:                          {operation: "AdminClientListClusters", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientAddOrUpdateRemoteClusterScope:              {operation: "AdminClientAddOrUpdateRemoteCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRemoveRemoteClusterScope:                   {operation: "AdminClientRemoveRemoteCluster", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientRefreshWorkflowTasksScope:                  {operation: "AdminClientRefreshWorkflowTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientResendReplicationTasksScope:                {operation: "AdminClientResendReplicationTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetTaskQueueTasksScope:                     {operation: "AdminClientGetTaskQueueTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListClusterMembersScope:                    {operation: "AdminClientListClusterMembers", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientCloseShardScope:                            {operation: "AdminClientCloseShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetShardScope:                              {operation: "AdminClientGetShard", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientListHistoryTasksScope:                      {operation: "AdminClientListHistoryTasks", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientGetDLQMessagesScope:                        {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientPurgeDLQMessagesScope:                      {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientMergeDLQMessagesScope:                      {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 
 		DCRedirectionDeprecateNamespaceScope:                 {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeNamespaceScope:                  {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1599,6 +1626,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
 		FrontendGetClusterInfoScope:                     {operation: "GetClusterInfo"},
 		FrontendGetSystemInfoScope:                      {operation: "GetSystemInfo"},
+		FrontendCreateScheduleScope:                     {operation: "CreateSchedule"},
+		FrontendDescribeScheduleScope:                   {operation: "DescribeSchedule"},
+		FrontendUpdateScheduleScope:                     {operation: "UpdateSchedule"},
+		FrontendPatchScheduleScope:                      {operation: "PatchSchedule"},
+		FrontendListScheduleMatchingTimesScope:          {operation: "ListScheduleMatchingTimes"},
+		FrontendDeleteScheduleScope:                     {operation: "DeleteSchedule"},
+		FrontendListSchedulesScope:                      {operation: "ListSchedules"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
 	},
