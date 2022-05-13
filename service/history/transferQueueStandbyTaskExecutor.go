@@ -493,7 +493,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() && !processTaskIfClosed {
-		// workflow already finished, no need to process the timer
+		// workflow already finished, no need to process transfer task.
 		return nil
 	}
 
