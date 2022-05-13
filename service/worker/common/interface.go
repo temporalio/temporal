@@ -24,13 +24,18 @@
 
 package common
 
-import sdkworker "go.temporal.io/sdk/worker"
+import (
+	sdkworker "go.temporal.io/sdk/worker"
+	"go.temporal.io/server/common/namespace"
+)
 
 type (
-	// WorkerComponent represent a type of work needed for worker role
+	// WorkerComponent represents a type of work needed for worker role
 	WorkerComponent interface {
-		// Register registers Workflow and Activity types provided by this worker component
-		Register(sdkworker.Worker)
+		// Register registers Workflow and Activity types provided by this worker component.
+		// Namespace is only provided for per-namespace worker components. For the system
+		// namespace it will be nil.
+		Register(sdkworker.Worker, *namespace.Namespace)
 		// DedicatedWorkerOptions returns a DedicatedWorkerOptions for this worker component.
 		// For regular (system namespace) components: return nil to use default worker instance.
 		// For per-namespace components: must not return nil.

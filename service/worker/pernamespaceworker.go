@@ -276,7 +276,7 @@ func (ws *workerSet) startWorker(wc workercommon.WorkerComponent) (*worker, erro
 
 	options := wc.DedicatedWorkerOptions()
 	sdkworker := sdkworker.New(client, options.TaskQueue, options.Options)
-	wc.Register(sdkworker)
+	wc.Register(sdkworker, ws.ns)
 	// TODO: use Run() and handle post-startup errors by recreating worker
 	// (after sdk supports returning post-startup errors from Run)
 	err = sdkworker.Start()

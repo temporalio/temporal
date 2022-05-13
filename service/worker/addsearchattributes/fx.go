@@ -31,6 +31,7 @@ import (
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/searchattribute"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -69,7 +70,7 @@ func NewResult(params initParams) fxResult {
 	}
 }
 
-func (wc *addSearchAttributes) Register(worker sdkworker.Worker) {
+func (wc *addSearchAttributes) Register(worker sdkworker.Worker, _ *namespace.Namespace) {
 	worker.RegisterWorkflowWithOptions(AddSearchAttributesWorkflow, workflow.RegisterOptions{Name: WorkflowName})
 	worker.RegisterActivity(wc.activities())
 }

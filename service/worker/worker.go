@@ -85,11 +85,11 @@ func (wm *workerManager) Start() {
 		workerOptions := wc.DedicatedWorkerOptions()
 		if workerOptions == nil {
 			// use default worker
-			wc.Register(defaultWorker)
+			wc.Register(defaultWorker, nil)
 		} else {
 			// this worker component requires a dedicated worker
 			dedicatedWorker := sdkworker.New(sdkClient, workerOptions.TaskQueue, workerOptions.Options)
-			wc.Register(dedicatedWorker)
+			wc.Register(dedicatedWorker, nil)
 			wm.workers = append(wm.workers, dedicatedWorker)
 		}
 	}
