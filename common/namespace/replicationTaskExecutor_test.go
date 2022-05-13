@@ -67,7 +67,7 @@ func (s *namespaceReplicationTaskExecutorSuite) SetupTest() {
 	s.TestBase = persistencetests.NewTestBaseWithCassandra(&persistencetests.TestBaseOptions{})
 	s.TestBase.Setup(nil)
 	logger := log.NewTestLogger()
-	s.namespaceReplicator = NewReplicationTaskExecutor(
+	s.namespaceReplicator = NewReplicationTaskExecutor("some random standby cluster name",
 		s.MetadataManager,
 		logger,
 	).(*namespaceReplicationTaskExecutorImpl)
@@ -128,6 +128,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_RegisterNamespaceTas
 		FailoverVersion: failoverVersion,
 	}
 
+	s.namespaceReplicator.currentCluster = clusterStandby
 	err := s.namespaceReplicator.Execute(context.Background(), task)
 	s.Nil(err)
 
@@ -410,6 +411,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
+	s.namespaceReplicator.currentCluster = updateClusterStandby
 	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})
@@ -538,6 +540,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
+	s.namespaceReplicator.currentCluster = updateClusterStandby
 	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})
@@ -662,6 +665,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 	metadata, err := s.MetadataManager.GetMetadata(context.Background())
 	s.Nil(err)
 	notificationVersion := metadata.NotificationVersion
+	s.namespaceReplicator.currentCluster = updateClusterStandby
 	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})
@@ -785,6 +789,7 @@ func (s *namespaceReplicationTaskExecutorSuite) TestExecute_UpdateNamespaceTask_
 		ConfigVersion:   updateConfigVersion,
 		FailoverVersion: updateFailoverVersion,
 	}
+	s.namespaceReplicator.currentCluster = updateClusterStandby
 	err = s.namespaceReplicator.Execute(context.Background(), updateTask)
 	s.Nil(err)
 	resp, err := s.MetadataManager.GetNamespace(context.Background(), &persistence.GetNamespaceRequest{Name: name})

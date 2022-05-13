@@ -158,8 +158,8 @@ var (
 func NewAdminHandler(
 	args NewAdminHandlerArgs,
 ) *AdminHandler {
-
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
+		args.ClusterMetadata.GetCurrentClusterName(),
 		args.PersistenceMetadataManager,
 		args.Logger,
 	)
