@@ -1254,6 +1254,46 @@ func (e *MutableStateImpl) GetInFlightWorkflowTask() (*WorkflowTaskInfo, bool) {
 	return e.workflowTaskManager.GetInFlightWorkflowTask()
 }
 
+func (e *MutableStateImpl) HasTransientWorkflowTask() bool {
+	workflowTask, ok := e.GetInFlightWorkflowTask()
+	if !ok {
+		return false
+	}
+	return workflowTask.ScheduleID >= e.GetNextEventID()
+}
+
+func (e *MutableStateImpl) ClearTransientWorkflowTask() error {
+	workflowTask, ok := e.GetInFlightWorkflowTask()
+	if !ok {
+		return serviceerror.NewInternal("cannot clear transient workflow task when task is missing")
+	}
+
+	if workflowTask.ScheduleID < e.GetNextEventID() {
+		return serviceerror.NewInternal("cannot clear transient workflow task when task is not transient")
+	}
+	// workflowTask.ScheduleID >= e.GetNextEventID()
+	// this is transient workflow
+	if e.HasBufferedEvents() {
+		return serviceerror.NewInternal("cannot clear transient workflow task when there are buffered events")
+	}
+	// no buffered event
+	resetWorkflowTaskInfo := &WorkflowTaskInfo{
+		Version:             common.EmptyVersion,
+		ScheduleID:          common.EmptyEventID,
+		StartedID:           common.EmptyEventID,
+		RequestID:           emptyUUID,
+		WorkflowTaskTimeout: timestamp.DurationFromSeconds(0),
+		Attempt:             1,
+		StartedTime:         timestamp.UnixOrZeroTimePtr(0),
+		ScheduledTime:       timestamp.UnixOrZeroTimePtr(0),
+
+		TaskQueue:             nil,
+		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
+	}
+	e.workflowTaskManager.UpdateWorkflowTask(resetWorkflowTaskInfo)
+	return nil
+}
+
 func (e *MutableStateImpl) HasBufferedEvents() bool {
 	return e.hBuilder.HasBufferEvents()
 }

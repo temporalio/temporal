@@ -795,6 +795,20 @@ func (mr *MockMutableStateMockRecorder) ClearStickyness() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyness", reflect.TypeOf((*MockMutableState)(nil).ClearStickyness))
 }
 
+// ClearTransientWorkflowTask mocks base method.
+func (m *MockMutableState) ClearTransientWorkflowTask() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearTransientWorkflowTask")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearTransientWorkflowTask indicates an expected call of ClearTransientWorkflowTask.
+func (mr *MockMutableStateMockRecorder) ClearTransientWorkflowTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).ClearTransientWorkflowTask))
+}
+
 // CloneToProto mocks base method.
 func (m *MockMutableState) CloneToProto() *v19.WorkflowMutableState {
 	m.ctrl.T.Helper()
@@ -1561,6 +1575,20 @@ func (m *MockMutableState) HasProcessedOrPendingWorkflowTask() bool {
 func (mr *MockMutableStateMockRecorder) HasProcessedOrPendingWorkflowTask() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasProcessedOrPendingWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasProcessedOrPendingWorkflowTask))
+}
+
+// HasTransientWorkflowTask mocks base method.
+func (m *MockMutableState) HasTransientWorkflowTask() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasTransientWorkflowTask")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasTransientWorkflowTask indicates an expected call of HasTransientWorkflowTask.
+func (mr *MockMutableStateMockRecorder) HasTransientWorkflowTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasTransientWorkflowTask))
 }
 
 // IsCancelRequested mocks base method.
