@@ -367,4 +367,5 @@ message DeleteWorkflowExecutionRequest {
 }
 
 message DeleteWorkflowExecutionResponse {
+    repeated string warnings = 1;
 }

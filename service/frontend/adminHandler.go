@@ -1510,6 +1510,11 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)
+	logger := log.With(adh.logger,
+		tag.WorkflowNamespace(request.Namespace),
+		tag.WorkflowID(execution.WorkflowId),
+		tag.WorkflowRunID(execution.RunId),
+	)
 
 	if execution.RunId == "" {
 		resp, err := adh.persistenceExecutionManager.GetCurrentExecution(ctx, &persistence.GetCurrentExecutionRequest{
@@ -1523,6 +1528,7 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		execution.RunId = resp.RunID
 	}
 
+	var warnings []string
 	var branchTokens [][]byte
 	var startTime, closeTime *time.Time
 	cassVisBackend := strings.Contains(adh.visibilityMgr.GetName(), cassandra.CassandraPersistenceName)
@@ -1538,8 +1544,10 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 			return nil, adh.error(err, scope)
 		}
 		// continue to deletion
-		adh.logger.Warn("Unable to load mutable state when deleting workflow execution, "+
-			"will skip deleting workflow history and cassandra visibility record", tag.Error(err))
+		warnMsg := "Unable to load mutable state when deleting workflow execution, " +
+			"will skip deleting workflow history and cassandra visibility record"
+		logger.Warn(warnMsg, tag.Error(err))
+		warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
 	} else {
 		// load necessary information from mutable state
 		executionInfo := resp.State.GetExecutionInfo()
@@ -1555,7 +1563,9 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 			} else {
 				completionEvent, err := adh.getWorkflowCompletionEvent(ctx, shardID, resp.State)
 				if err != nil {
-					adh.logger.Warn("Unable to load workflow completion event, will skip deleting visibility record", tag.Error(err))
+					warnMsg := "Unable to load workflow completion event, will skip deleting visibility record"
+					adh.logger.Warn(warnMsg, tag.Error(err))
+					warnings = append(warnings, fmt.Sprintf("%s. Error: %v", warnMsg, err.Error()))
 				} else {
 					closeTime = completionEvent.GetEventTime()
 				}
@@ -1567,7 +1577,8 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		// if using cass visibility, then either start or close time should be non-nil
 		// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
 		// we can't guarantee there's no update or record close request for this workflow since
-		// visibility queue processing is async.
+		// visibility queue processing is async. Operation can call this api again to delete again
+		// if this happens.
 		// For ES implementation, the TaskID will be used as version so no request will be applied
 		// after the deletion.
 		if err := adh.visibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
@@ -1605,11 +1616,15 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 			ShardID:     shardID,
 			BranchToken: branchToken,
 		}); err != nil {
-			adh.logger.Warn("Failed to delete history branch, skip", tag.Error(err), tag.WorkflowBranchID(string(branchToken)))
+			warnMsg := "Failed to delete history branch, skip"
+			adh.logger.Warn(warnMsg, tag.WorkflowBranchID(string(branchToken)), tag.Error(err))
+			warnings = append(warnings, fmt.Sprintf("%s. BranchToken: %v, Error: %v", warnMsg, branchToken, err.Error()))
 		}
 	}
 
-	return &adminservice.DeleteWorkflowExecutionResponse{}, nil
+	return &adminservice.DeleteWorkflowExecutionResponse{
+		Warnings: warnings,
+	}, nil
 }
 
 func (adh *AdminHandler) getWorkflowCompletionEvent(
