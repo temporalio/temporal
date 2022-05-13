@@ -434,23 +434,6 @@ go-generate:
 
 mocks: go-generate external-mocks
 
-##### Fossa #####
-fossa-install:
-	curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | bash
-
-fossa-analyze:
-	fossa analyze -b $${BUILDKITE_BRANCH:-$$(git branch --show-current)}
-
-fossa-delay:
-	echo "Fossa requested to add delay between analyze and test due to API race condition"
-	sleep 30
-	echo "Fossa wait complete"
-
-fossa-test:
-	fossa test --timeout 1800
-
-build-fossa: bins fossa-analyze fossa-delay fossa-test
-
 ##### Grafana #####
 update-dashboards:
 	@printf $(COLOR) "Update dashboards submodule from remote..."
