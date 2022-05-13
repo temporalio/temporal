@@ -454,6 +454,7 @@ func (s *Service) startScanner() {
 
 func (s *Service) startReplicator() {
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
+		s.clusterMetadata.GetCurrentClusterName(),
 		s.metadataManager,
 		s.logger,
 	)
