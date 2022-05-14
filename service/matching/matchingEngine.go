@@ -198,17 +198,24 @@ func (e *matchingEngineImpl) String() string {
 	return buf.String()
 }
 
+// Returns taskQueueManager for a task queue if it is already loaded.
+func (e *matchingEngineImpl) getTaskQueueManagerIfAlreadyLoaded(taskQueue *taskQueueID) taskQueueManager {
+	e.taskQueuesLock.RLock()
+	defer e.taskQueuesLock.RUnlock()
+	if result, ok := e.taskQueues[*taskQueue]; ok {
+		return result
+	}
+	return nil
+}
+
 // Returns taskQueueManager for a task queue. If not already cached gets new range from DB and
 // if successful creates one.
 func (e *matchingEngineImpl) getTaskQueueManager(taskQueue *taskQueueID, taskQueueKind enumspb.TaskQueueKind) (taskQueueManager, error) {
-	// The first check is an optimization so almost all requests will have a task queue manager
-	// and return avoiding the write lock
-	e.taskQueuesLock.RLock()
-	if result, ok := e.taskQueues[*taskQueue]; ok {
-		e.taskQueuesLock.RUnlock()
+	result := e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
+	if result != nil {
 		return result, nil
 	}
-	e.taskQueuesLock.RUnlock()
+
 	// If it gets here, write lock and check again in case a task queue is created between the two locks
 	e.taskQueuesLock.Lock()
 	defer e.taskQueuesLock.Unlock()
@@ -249,16 +256,17 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 	if err != nil {
 		return false, err
 	}
-
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
-	if err != nil {
-		return false, err
-	}
-
+	var tqm taskQueueManager
 	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
-		// check if sticky worker is gone, if so fail this request, caller should use original task queue
-		if !tlMgr.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
+		// do not load sticky task queue if it is not already loaded, which means it has no poller.
+		tqm = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
+		if tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
 			return false, serviceerrors.NewStickyWorkerUnavailable()
+		}
+	} else {
+		tqm, err = e.getTaskQueueManager(taskQueue, taskQueueKind)
+		if err != nil {
+			return false, err
 		}
 	}
 
@@ -281,7 +289,7 @@ func (e *matchingEngineImpl) AddWorkflowTask(
 		CreateTime:  now,
 	}
 
-	return tlMgr.AddTask(hCtx.Context, addTaskParams{
+	return tqm.AddTask(hCtx.Context, addTaskParams{
 		execution:     addRequest.Execution,
 		taskInfo:      taskInfo,
 		source:        addRequest.GetSource(),
@@ -541,19 +549,22 @@ func (e *matchingEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
-	tlMgr, err := e.getTaskQueueManager(taskQueue, taskQueueKind)
-	if err != nil {
-		return nil, err
-	}
+	var tqm taskQueueManager
 	if taskQueueKind == enumspb.TASK_QUEUE_KIND_STICKY {
-		// check if sticky worker is gone, if so fail this request, caller should use original task queue
-		if !tlMgr.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
+		// do not load sticky task queue if it is not already loaded, which means it has no poller.
+		tqm = e.getTaskQueueManagerIfAlreadyLoaded(taskQueue)
+		if tqm == nil || !tqm.HasPollerAfter(time.Now().Add(-stickyPollerUnavailableWindow)) {
 			return nil, serviceerrors.NewStickyWorkerUnavailable()
+		}
+	} else {
+		tqm, err = e.getTaskQueueManager(taskQueue, taskQueueKind)
+		if err != nil {
+			return nil, err
 		}
 	}
 
 	taskID := uuid.New()
-	resp, err := tlMgr.DispatchQueryTask(hCtx.Context, taskID, queryRequest)
+	resp, err := tqm.DispatchQueryTask(hCtx.Context, taskID, queryRequest)
 
 	// if get response or error it means that query task was handled by forwarding to another matching host
 	// this remote host's result can be returned directly
