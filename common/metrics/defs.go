@@ -60,9 +60,9 @@ type (
 
 // MetricUnit supported values
 const (
-	Dimensionless = "dimensionless"
-	Milliseconds  = "milliseconds"
-	Bytes         = "bytes"
+	Dimensionless = "1"
+	Milliseconds  = "ms"
+	Bytes         = "By"
 )
 
 // MetricTypes which are supported

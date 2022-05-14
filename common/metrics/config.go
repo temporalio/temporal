@@ -43,7 +43,7 @@ import (
 type (
 	// Config contains the config items for metrics subsystem
 	Config struct {
-		ClientConfig `yaml:"clientConfig,inline""`
+		ClientConfig `yaml:"clientConfig,inline"`
 
 		// M3 is the configuration for m3 metrics reporter
 		M3 *m3.Configuration `yaml:"m3"`
@@ -95,7 +95,7 @@ type (
 	// PrometheusConfig is a new format for config for prometheus metrics.
 	PrometheusConfig struct {
 		// Metric framework: Tally/OpenTelemetry
-		Framework string `yaml:framework`
+		Framework string `yaml:"framework"`
 		// Address for prometheus to serve metrics from.
 		ListenAddress string `yaml:"listenAddress"`
 		// DefaultHistogramBoundaries defines the default histogram bucket
@@ -388,7 +388,7 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	if err != nil {
 		logger.Fatal("error creating statsd client", tag.Error(err))
 	}
-	//NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
+	// NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
 	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
 	scopeOpts := tally.ScopeOptions{
