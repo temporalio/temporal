@@ -1854,6 +1854,8 @@ const (
 	ServiceErrUnauthorizedCounter
 	ServiceErrAuthorizeFailedCounter
 
+	ActionCounter
+
 	PersistenceRequests
 	PersistenceFailures
 	PersistenceLatency
@@ -2349,6 +2351,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrNonDeterministicCounter:                   NewCounterDef("service_errors_nondeterministic"),
 		ServiceErrUnauthorizedCounter:                       NewCounterDef("service_errors_unauthorized"),
 		ServiceErrAuthorizeFailedCounter:                    NewCounterDef("service_errors_authorize_failed"),
+		ActionCounter:                                       NewCounterDef("action"),
 		PersistenceRequests:                                 NewCounterDef("persistence_requests"),
 		PersistenceFailures:                                 NewCounterDef("persistence_errors"),
 		PersistenceLatency:                                  NewTimerDef("persistence_latency"),
