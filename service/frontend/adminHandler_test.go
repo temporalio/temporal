@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"testing"
 	"time"
 
@@ -1241,12 +1240,13 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_DeleteCurrentExecution()
 		WorkflowID:  execution.WorkflowId,
 		RunID:       runID,
 	}).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
-	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: s.namespaceID,
-		WorkflowID:  execution.WorkflowId,
-		RunID:       runID,
-		TaskID:      math.MaxInt64,
-	}).Return(nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId: s.namespaceID.String(),
+		Execution: &commonpb.WorkflowExecution{
+			WorkflowId: execution.WorkflowId,
+			RunId:      runID,
+		},
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), &persistence.DeleteCurrentWorkflowExecutionRequest{
 		ShardID:     shardID,
 		NamespaceID: s.namespaceID.String(),
@@ -1280,7 +1280,7 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_LoadMutableStateFailed()
 	s.mockVisibilityMgr.EXPECT().GetName().Return("elasticsearch").AnyTimes()
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, errors.New("some random error"))
-	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), gomock.Any()).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 
@@ -1331,13 +1331,11 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacke
 	}
 
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: mutableState}, nil)
-	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: s.namespaceID,
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
-		TaskID:      math.MaxInt64,
-		StartTime:   mutableState.ExecutionInfo.StartTime,
-	}).Return(nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId:       s.namespaceID.String(),
+		Execution:         &execution,
+		WorkflowStartTime: mutableState.ExecutionInfo.StartTime,
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))
@@ -1378,13 +1376,11 @@ func (s *adminHandlerSuite) TestDeleteWorkflowExecution_CassandraVisibilityBacke
 			},
 		},
 	}, nil)
-	s.mockVisibilityMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), &manager.VisibilityDeleteWorkflowExecutionRequest{
-		NamespaceID: s.namespaceID,
-		WorkflowID:  execution.WorkflowId,
-		RunID:       execution.RunId,
-		TaskID:      math.MaxInt64,
-		CloseTime:   timestamp.TimePtr(closeTime),
-	}).Return(nil)
+	s.mockHistoryClient.EXPECT().DeleteWorkflowVisibilityRecord(gomock.Any(), &historyservice.DeleteWorkflowVisibilityRecordRequest{
+		NamespaceId:       s.namespaceID.String(),
+		Execution:         &execution,
+		WorkflowCloseTime: timestamp.TimePtr(closeTime),
+	}).Return(&historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil)
 	s.mockExecutionMgr.EXPECT().DeleteCurrentWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil)
 	s.mockExecutionMgr.EXPECT().DeleteHistoryBranch(gomock.Any(), gomock.Any()).Times(len(mutableState.ExecutionInfo.VersionHistories.Histories))

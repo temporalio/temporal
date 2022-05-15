@@ -27,6 +27,8 @@ package history
 import (
 	"context"
 	"fmt"
+	"math"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -34,6 +36,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+	"go.uber.org/fx"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -54,7 +57,10 @@ import (
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 	"go.temporal.io/server/service/history/configs"
@@ -80,6 +86,7 @@ type (
 		throttledLogger               log.Logger
 		persistenceExecutionManager   persistence.ExecutionManager
 		persistenceShardManager       persistence.ShardManager
+		persistenceVisibilityManager  manager.VisibilityManager
 		historyServiceResolver        membership.ServiceResolver
 		metricsClient                 metrics.Client
 		payloadSerializer             serialization.Serializer
@@ -94,11 +101,14 @@ type (
 	}
 
 	NewHandlerArgs struct {
+		fx.In
+
 		Config                        *configs.Config
-		Logger                        log.Logger
-		ThrottledLogger               log.Logger
+		Logger                        resource.SnTaggedLogger
+		ThrottledLogger               resource.ThrottledLogger
 		PersistenceExecutionManager   persistence.ExecutionManager
 		PersistenceShardManager       persistence.ShardManager
+		PersistenceVisibilityManager  manager.VisibilityManager
 		HistoryServiceResolver        membership.ServiceResolver
 		MetricsClient                 metrics.Client
 		PayloadSerializer             serialization.Serializer
@@ -136,36 +146,6 @@ var (
 
 	errShuttingDown = serviceerror.NewUnavailable("Shutting down")
 )
-
-// NewHandler creates a thrift handler for the history service
-func NewHandler(args NewHandlerArgs) *Handler {
-	handler := &Handler{
-		status:                        common.DaemonStatusInitialized,
-		config:                        args.Config,
-		tokenSerializer:               common.NewProtoTaskTokenSerializer(),
-		logger:                        args.Logger,
-		throttledLogger:               args.ThrottledLogger,
-		persistenceExecutionManager:   args.PersistenceExecutionManager,
-		persistenceShardManager:       args.PersistenceShardManager,
-		historyServiceResolver:        args.HistoryServiceResolver,
-		metricsClient:                 args.MetricsClient,
-		payloadSerializer:             args.PayloadSerializer,
-		timeSource:                    args.TimeSource,
-		namespaceRegistry:             args.NamespaceRegistry,
-		saProvider:                    args.SaProvider,
-		saMapper:                      args.SaMapper,
-		clusterMetadata:               args.ClusterMetadata,
-		archivalMetadata:              args.ArchivalMetadata,
-		hostInfoProvider:              args.HostInfoProvider,
-		controller:                    args.ShardController,
-		eventNotifier:                 args.EventNotifier,
-		replicationTaskFetcherFactory: args.ReplicationTaskFetcherFactory,
-	}
-
-	// prevent us from trying to serve requests before shard controller is started and ready
-	handler.startWG.Add(1)
-	return handler
-}
 
 // Start starts the handler
 func (h *Handler) Start() {
@@ -1796,6 +1776,55 @@ func (h *Handler) GetReplicationStatus(
 		resp.Shards = append(resp.Shards, status)
 	}
 	return resp, nil
+}
+
+func (h *Handler) DeleteWorkflowVisibilityRecord(
+	ctx context.Context,
+	request *historyservice.DeleteWorkflowVisibilityRecordRequest,
+) (_ *historyservice.DeleteWorkflowVisibilityRecordResponse, retError error) {
+	defer log.CapturePanic(h.logger, &retError)
+	h.startWG.Wait()
+
+	if h.isStopped() {
+		return nil, errShuttingDown
+	}
+
+	namespaceID := namespace.ID(request.GetNamespaceId())
+	if namespaceID == "" {
+		return nil, h.convertError(errNamespaceNotSet)
+	}
+
+	if request.Execution == nil {
+		return nil, h.convertError(errWorkflowExecutionNotSet)
+	}
+
+	// if using cass visibility, then either start or close time should be non-nilv
+	cassVisBackend := strings.Contains(h.persistenceVisibilityManager.GetName(), cassandra.CassandraPersistenceName)
+	if cassVisBackend && request.WorkflowStartTime == nil && request.WorkflowCloseTime == nil {
+		return nil, &serviceerror.InvalidArgument{Message: "workflow start and close time not specified when deleting cassandra based visibility record"}
+	}
+
+	// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
+	// we can't guarantee there's no update or record close request for this workflow since
+	// visibility queue processing is async. Operator can call this api (through admin workflow
+	// delete) again to delete again if this happens.
+	// For ES implementation, we used max int64 as the TaskID (version) to make sure deletion is
+	// the last operation applied for this workflow
+	fmt.Println("history DeleteWorkflowVisibilityRecord ")
+
+	err := h.persistenceVisibilityManager.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
+		NamespaceID: namespaceID,
+		WorkflowID:  request.Execution.GetWorkflowId(),
+		RunID:       request.Execution.GetRunId(),
+		TaskID:      math.MaxInt64,
+		StartTime:   request.GetWorkflowStartTime(),
+		CloseTime:   request.GetWorkflowCloseTime(),
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &historyservice.DeleteWorkflowVisibilityRecordResponse{}, nil
 }
 
 // convertError is a helper method to convert ShardOwnershipLostError from persistence layer returned by various

@@ -411,6 +411,8 @@ const (
 	HistoryClientGenerateLastHistoryReplicationTasksScope
 	// HistoryClientGetReplicationStatusScope tracks RPC calls to history service
 	HistoryClientGetReplicationStatusScope
+	// HistoryClientDeleteWorkflowVisibilityRecordScope tracks RPC calls to history service
+	HistoryClientDeleteWorkflowVisibilityRecordScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
@@ -993,6 +995,8 @@ const (
 	HistoryReapplyEvents
 	// HistoryDescribeHistoryHost is the scope used by describe history host API
 	HistoryDescribeHistoryHost
+	// HistoryDeleteWorkflowVisibilityRecordScope is the scope used by delete workflow visibility record API
+	HistoryDeleteWorkflowVisibilityRecordScope
 	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
 	TaskPriorityAssignerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1368,6 +1372,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRefreshWorkflowTasksScope:                   {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGenerateLastHistoryReplicationTasksScope:    {operation: "HistoryClientGenerateLastHistoryReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationStatusScope:                   {operation: "HistoryClientGetReplicationStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDeleteWorkflowVisibilityRecordScope:         {operation: "HistoryClientDeleteWorkflowVisibilityRecordScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 
 		MatchingClientPollWorkflowTaskQueueScope:     {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollActivityTaskQueueScope:     {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
@@ -1650,6 +1655,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryResetStickyTaskQueue:                        {operation: "ResetStickyTaskQueue"},
 		HistoryReapplyEvents:                               {operation: "ReapplyEvents"},
 		HistoryDescribeHistoryHost:                         {operation: "DescribeHistoryHost"},
+		HistoryDeleteWorkflowVisibilityRecordScope:         {operation: "DeleteWorkflowVisibilityRecord"},
 
 		TaskPriorityAssignerScope:                   {operation: "TaskPriorityAssigner"},
 		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},

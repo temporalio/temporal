@@ -28,7 +28,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -1577,17 +1576,13 @@ func (adh *AdminHandler) DeleteWorkflowExecution(
 		// if using cass visibility, then either start or close time should be non-nil
 		// NOTE: the deletion is best effort, for sql and cassandra visibility implementation,
 		// we can't guarantee there's no update or record close request for this workflow since
-		// visibility queue processing is async. Operation can call this api again to delete again
-		// if this happens.
-		// For ES implementation, the TaskID will be used as version so no request will be applied
-		// after the deletion.
-		if err := adh.visibilityMgr.DeleteWorkflowExecution(ctx, &manager.VisibilityDeleteWorkflowExecutionRequest{
-			NamespaceID: namespaceID,
-			WorkflowID:  execution.WorkflowId,
-			RunID:       execution.RunId,
-			TaskID:      math.MaxInt64,
-			StartTime:   startTime,
-			CloseTime:   closeTime,
+		// visibility queue processing is async. Operator can call this api again to delete visibility
+		// record again if this happens.
+		if _, err := adh.historyClient.DeleteWorkflowVisibilityRecord(ctx, &historyservice.DeleteWorkflowVisibilityRecordRequest{
+			NamespaceId:       namespaceID.String(),
+			Execution:         execution,
+			WorkflowStartTime: startTime,
+			WorkflowCloseTime: closeTime,
 		}); err != nil {
 			return nil, adh.error(err, scope)
 		}
