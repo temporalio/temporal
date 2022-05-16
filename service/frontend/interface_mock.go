@@ -75,6 +75,36 @@ func (mr *MockHandlerMockRecorder) CountWorkflowExecutions(arg0, arg1 interface{
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CountWorkflowExecutions", reflect.TypeOf((*MockHandler)(nil).CountWorkflowExecutions), arg0, arg1)
 }
 
+// CreateSchedule mocks base method.
+func (m *MockHandler) CreateSchedule(arg0 context.Context, arg1 *v10.CreateScheduleRequest) (*v10.CreateScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "CreateSchedule", arg0, arg1)
+	ret0, _ := ret[0].(*v10.CreateScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// CreateSchedule indicates an expected call of CreateSchedule.
+func (mr *MockHandlerMockRecorder) CreateSchedule(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateSchedule", reflect.TypeOf((*MockHandler)(nil).CreateSchedule), arg0, arg1)
+}
+
+// DeleteSchedule mocks base method.
+func (m *MockHandler) DeleteSchedule(arg0 context.Context, arg1 *v10.DeleteScheduleRequest) (*v10.DeleteScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteSchedule", arg0, arg1)
+	ret0, _ := ret[0].(*v10.DeleteScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteSchedule indicates an expected call of DeleteSchedule.
+func (mr *MockHandlerMockRecorder) DeleteSchedule(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteSchedule", reflect.TypeOf((*MockHandler)(nil).DeleteSchedule), arg0, arg1)
+}
+
 // DeprecateNamespace mocks base method.
 func (m *MockHandler) DeprecateNamespace(arg0 context.Context, arg1 *v10.DeprecateNamespaceRequest) (*v10.DeprecateNamespaceResponse, error) {
 	m.ctrl.T.Helper()
@@ -103,6 +133,21 @@ func (m *MockHandler) DescribeNamespace(arg0 context.Context, arg1 *v10.Describe
 func (mr *MockHandlerMockRecorder) DescribeNamespace(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeNamespace", reflect.TypeOf((*MockHandler)(nil).DescribeNamespace), arg0, arg1)
+}
+
+// DescribeSchedule mocks base method.
+func (m *MockHandler) DescribeSchedule(arg0 context.Context, arg1 *v10.DescribeScheduleRequest) (*v10.DescribeScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DescribeSchedule", arg0, arg1)
+	ret0, _ := ret[0].(*v10.DescribeScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DescribeSchedule indicates an expected call of DescribeSchedule.
+func (mr *MockHandlerMockRecorder) DescribeSchedule(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DescribeSchedule", reflect.TypeOf((*MockHandler)(nil).DescribeSchedule), arg0, arg1)
 }
 
 // DescribeTaskQueue mocks base method.
@@ -284,6 +329,36 @@ func (mr *MockHandlerMockRecorder) ListOpenWorkflowExecutions(arg0, arg1 interfa
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListOpenWorkflowExecutions", reflect.TypeOf((*MockHandler)(nil).ListOpenWorkflowExecutions), arg0, arg1)
 }
 
+// ListScheduleMatchingTimes mocks base method.
+func (m *MockHandler) ListScheduleMatchingTimes(arg0 context.Context, arg1 *v10.ListScheduleMatchingTimesRequest) (*v10.ListScheduleMatchingTimesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListScheduleMatchingTimes", arg0, arg1)
+	ret0, _ := ret[0].(*v10.ListScheduleMatchingTimesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListScheduleMatchingTimes indicates an expected call of ListScheduleMatchingTimes.
+func (mr *MockHandlerMockRecorder) ListScheduleMatchingTimes(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListScheduleMatchingTimes", reflect.TypeOf((*MockHandler)(nil).ListScheduleMatchingTimes), arg0, arg1)
+}
+
+// ListSchedules mocks base method.
+func (m *MockHandler) ListSchedules(arg0 context.Context, arg1 *v10.ListSchedulesRequest) (*v10.ListSchedulesResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ListSchedules", arg0, arg1)
+	ret0, _ := ret[0].(*v10.ListSchedulesResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// ListSchedules indicates an expected call of ListSchedules.
+func (mr *MockHandlerMockRecorder) ListSchedules(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListSchedules", reflect.TypeOf((*MockHandler)(nil).ListSchedules), arg0, arg1)
+}
+
 // ListTaskQueuePartitions mocks base method.
 func (m *MockHandler) ListTaskQueuePartitions(arg0 context.Context, arg1 *v10.ListTaskQueuePartitionsRequest) (*v10.ListTaskQueuePartitionsResponse, error) {
 	m.ctrl.T.Helper()
@@ -312,6 +387,21 @@ func (m *MockHandler) ListWorkflowExecutions(arg0 context.Context, arg1 *v10.Lis
 func (mr *MockHandlerMockRecorder) ListWorkflowExecutions(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ListWorkflowExecutions", reflect.TypeOf((*MockHandler)(nil).ListWorkflowExecutions), arg0, arg1)
+}
+
+// PatchSchedule mocks base method.
+func (m *MockHandler) PatchSchedule(arg0 context.Context, arg1 *v10.PatchScheduleRequest) (*v10.PatchScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "PatchSchedule", arg0, arg1)
+	ret0, _ := ret[0].(*v10.PatchScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// PatchSchedule indicates an expected call of PatchSchedule.
+func (mr *MockHandlerMockRecorder) PatchSchedule(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PatchSchedule", reflect.TypeOf((*MockHandler)(nil).PatchSchedule), arg0, arg1)
 }
 
 // PollActivityTaskQueue mocks base method.
@@ -696,6 +786,21 @@ func (m *MockHandler) UpdateNamespace(arg0 context.Context, arg1 *v10.UpdateName
 func (mr *MockHandlerMockRecorder) UpdateNamespace(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateNamespace", reflect.TypeOf((*MockHandler)(nil).UpdateNamespace), arg0, arg1)
+}
+
+// UpdateSchedule mocks base method.
+func (m *MockHandler) UpdateSchedule(arg0 context.Context, arg1 *v10.UpdateScheduleRequest) (*v10.UpdateScheduleResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "UpdateSchedule", arg0, arg1)
+	ret0, _ := ret[0].(*v10.UpdateScheduleResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// UpdateSchedule indicates an expected call of UpdateSchedule.
+func (mr *MockHandlerMockRecorder) UpdateSchedule(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateSchedule", reflect.TypeOf((*MockHandler)(nil).UpdateSchedule), arg0, arg1)
 }
 
 // MockOperatorHandler is a mock of OperatorHandler interface.

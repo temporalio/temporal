@@ -521,6 +521,20 @@ const (
 	FrontendClientGetSystemInfoScope
 	// FrontendClientListTaskQueuePartitionsScope tracks RPC calls to frontend service
 	FrontendClientListTaskQueuePartitionsScope
+	// FrontendClientCreateScheduleScope tracks RPC calls to frontend service
+	FrontendClientCreateScheduleScope
+	// FrontendClientDescribeScheduleScope tracks RPC calls to frontend service
+	FrontendClientDescribeScheduleScope
+	// FrontendClientUpdateScheduleScope tracks RPC calls to frontend service
+	FrontendClientUpdateScheduleScope
+	// FrontendClientPatchScheduleScope tracks RPC calls to frontend service
+	FrontendClientPatchScheduleScope
+	// FrontendClientListScheduleMatchingTimesScope tracks RPC calls to frontend service
+	FrontendClientListScheduleMatchingTimesScope
+	// FrontendClientDeleteScheduleScope tracks RPC calls to frontend service
+	FrontendClientDeleteScheduleScope
+	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
+	FrontendClientListSchedulesScope
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
 	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
@@ -645,6 +659,20 @@ const (
 	DCRedirectionUpdateNamespaceScope
 	// DCRedirectionListTaskQueuePartitionsScope tracks RPC calls for dc redirection
 	DCRedirectionListTaskQueuePartitionsScope
+	// DCRedirectionCreateScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionCreateScheduleScope
+	// DCRedirectionDescribeScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeScheduleScope
+	// DCRedirectionUpdateScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateScheduleScope
+	// DCRedirectionPatchScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionPatchScheduleScope
+	// DCRedirectionListScheduleMatchingTimesScope tracks RPC calls for dc redirection
+	DCRedirectionListScheduleMatchingTimesScope
+	// DCRedirectionDeleteScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionDeleteScheduleScope
+	// DCRedirectionListSchedulesScope tracks RPC calls for dc redirection
+	DCRedirectionListSchedulesScope
 
 	// MessagingClientPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -892,6 +920,20 @@ const (
 	FrontendGetClusterInfoScope
 	// FrontendGetSystemInfoScope is the metric scope for frontend.GetSystemInfo
 	FrontendGetSystemInfoScope
+	// FrontendCreateScheduleScope is the metric scope for frontend.CreateScheduleScope
+	FrontendCreateScheduleScope
+	// FrontendDescribeScheduleScope is the metric scope for frontend.DescribeScheduleScope
+	FrontendDescribeScheduleScope
+	// FrontendUpdateScheduleScope is the metric scope for frontend.UpdateScheduleScope
+	FrontendUpdateScheduleScope
+	// FrontendPatchScheduleScope is the metric scope for frontend.PatchScheduleScope
+	FrontendPatchScheduleScope
+	// FrontendListScheduleMatchingTimesScope is the metric scope for frontend.ListScheduleMatchingTimesScope
+	FrontendListScheduleMatchingTimesScope
+	// FrontendDeleteScheduleScope is the metric scope for frontend.DeleteScheduleScope
+	FrontendDeleteScheduleScope
+	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope
+	FrontendListSchedulesScope
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
@@ -1421,6 +1463,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSystemInfoScope:                      {operation: "FrontendClientGetSystemInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListTaskQueuePartitionsScope:            {operation: "FrontendClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientCreateScheduleScope:                     {operation: "FrontendClientCreateSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeScheduleScope:                   {operation: "FrontendClientDescribeSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateScheduleScope:                     {operation: "FrontendClientUpdateSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientPatchScheduleScope:                      {operation: "FrontendClientPatchSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListScheduleMatchingTimesScope:          {operation: "FrontendClientListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDeleteScheduleScope:                     {operation: "FrontendClientDeleteSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListSchedulesScope:                      {operation: "FrontendClientListSchedules", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 
 		AdminClientAddSearchAttributesScope:              {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRemoveSearchAttributesScope:           {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1485,6 +1534,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionTerminateWorkflowExecutionScope:         {operation: "DCRedirectionTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionUpdateNamespaceScope:                    {operation: "DCRedirectionUpdateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListTaskQueuePartitionsScope:            {operation: "DCRedirectionListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionCreateScheduleScope:                     {operation: "DCRedirectionCreateSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeScheduleScope:                   {operation: "DCRedirectionDescribeSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateScheduleScope:                     {operation: "DCRedirectionUpdateSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPatchScheduleScope:                      {operation: "DCRedirectionPatchSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListScheduleMatchingTimesScope:          {operation: "DCRedirectionListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDeleteScheduleScope:                     {operation: "DCRedirectionDeleteSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListSchedulesScope:                      {operation: "DCRedirectionListSchedules", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1592,6 +1648,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
 		FrontendGetClusterInfoScope:                     {operation: "GetClusterInfo"},
 		FrontendGetSystemInfoScope:                      {operation: "GetSystemInfo"},
+		FrontendCreateScheduleScope:                     {operation: "CreateSchedule"},
+		FrontendDescribeScheduleScope:                   {operation: "DescribeSchedule"},
+		FrontendUpdateScheduleScope:                     {operation: "UpdateSchedule"},
+		FrontendPatchScheduleScope:                      {operation: "PatchSchedule"},
+		FrontendListScheduleMatchingTimesScope:          {operation: "ListScheduleMatchingTimes"},
+		FrontendDeleteScheduleScope:                     {operation: "DeleteSchedule"},
+		FrontendListSchedulesScope:                      {operation: "ListSchedules"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
 	},

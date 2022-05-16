@@ -1211,6 +1211,209 @@ func (handler *DCRedirectionHandlerImpl) GetSystemInfo(
 	return handler.frontendHandler.GetSystemInfo(ctx, request)
 }
 
+// CreateSchedule API call
+func (handler *DCRedirectionHandlerImpl) CreateSchedule(
+	ctx context.Context,
+	request *workflowservice.CreateScheduleRequest,
+) (resp *workflowservice.CreateScheduleResponse, retError error) {
+	var apiName = "CreateSchedule"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionCreateScheduleScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.CreateSchedule(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.CreateSchedule(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
+// DescribeSchedule API call
+func (handler *DCRedirectionHandlerImpl) DescribeSchedule(
+	ctx context.Context,
+	request *workflowservice.DescribeScheduleRequest,
+) (resp *workflowservice.DescribeScheduleResponse, retError error) {
+	var apiName = "DescribeSchedule"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDescribeScheduleScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.DescribeSchedule(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.DescribeSchedule(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
+// UpdateSchedule API call
+func (handler *DCRedirectionHandlerImpl) UpdateSchedule(
+	ctx context.Context,
+	request *workflowservice.UpdateScheduleRequest,
+) (resp *workflowservice.UpdateScheduleResponse, retError error) {
+	var apiName = "UpdateSchedule"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionUpdateScheduleScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.UpdateSchedule(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.UpdateSchedule(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
+// PatchSchedule API call
+func (handler *DCRedirectionHandlerImpl) PatchSchedule(
+	ctx context.Context,
+	request *workflowservice.PatchScheduleRequest,
+) (resp *workflowservice.PatchScheduleResponse, retError error) {
+	var apiName = "PatchSchedule"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionPatchScheduleScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.PatchSchedule(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.PatchSchedule(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
+// ListScheduleMatchingTimes API call
+func (handler *DCRedirectionHandlerImpl) ListScheduleMatchingTimes(
+	ctx context.Context,
+	request *workflowservice.ListScheduleMatchingTimesRequest,
+) (resp *workflowservice.ListScheduleMatchingTimesResponse, retError error) {
+	var apiName = "ListScheduleMatchingTimes"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListScheduleMatchingTimesScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ListScheduleMatchingTimes(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ListScheduleMatchingTimes(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
+// DeleteSchedule API call
+func (handler *DCRedirectionHandlerImpl) DeleteSchedule(
+	ctx context.Context,
+	request *workflowservice.DeleteScheduleRequest,
+) (resp *workflowservice.DeleteScheduleResponse, retError error) {
+	var apiName = "DeleteSchedule"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionDeleteScheduleScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.DeleteSchedule(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.DeleteSchedule(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
+// ListSchedules API call
+func (handler *DCRedirectionHandlerImpl) ListSchedules(
+	ctx context.Context,
+	request *workflowservice.ListSchedulesRequest,
+) (resp *workflowservice.ListSchedulesResponse, retError error) {
+	var apiName = "ListSchedules"
+	var err error
+	var cluster string
+
+	scope, startTime := handler.beforeCall(metrics.DCRedirectionListSchedulesScope)
+	defer func() {
+		handler.afterCall(scope, startTime, cluster, &retError)
+	}()
+
+	err = handler.redirectionPolicy.WithNamespaceRedirect(ctx, namespace.Name(request.GetNamespace()), apiName, func(targetDC string) error {
+		cluster = targetDC
+		switch {
+		case targetDC == handler.currentClusterName:
+			resp, err = handler.frontendHandler.ListSchedules(ctx, request)
+		default:
+			remoteClient := handler.clientBean.GetRemoteFrontendClient(targetDC)
+			resp, err = remoteClient.ListSchedules(ctx, request)
+		}
+		return err
+	})
+
+	return resp, err
+}
+
 func (handler *DCRedirectionHandlerImpl) beforeCall(
 	scope int,
 ) (metrics.Scope, time.Time) {

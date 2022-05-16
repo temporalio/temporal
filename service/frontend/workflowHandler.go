@@ -3009,6 +3009,41 @@ func (wh *WorkflowHandler) ListTaskQueuePartitions(ctx context.Context, request 
 	}, err
 }
 
+// Creates a new schedule.
+func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflowservice.CreateScheduleRequest) (_ *workflowservice.CreateScheduleResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
+// Returns the schedule description and current state of an existing schedule.
+func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workflowservice.DescribeScheduleRequest) (_ *workflowservice.DescribeScheduleResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
+// Changes the configuration or state of an existing schedule.
+func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflowservice.UpdateScheduleRequest) (_ *workflowservice.UpdateScheduleResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
+// Makes a specific change to a schedule or triggers an immediate action.
+func (wh *WorkflowHandler) PatchSchedule(ctx context.Context, request *workflowservice.PatchScheduleRequest) (_ *workflowservice.PatchScheduleResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
+// Lists matching times within a range.
+func (wh *WorkflowHandler) ListScheduleMatchingTimes(ctx context.Context, request *workflowservice.ListScheduleMatchingTimesRequest) (_ *workflowservice.ListScheduleMatchingTimesResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
+// Deletes a schedule, removing it from the system.
+func (wh *WorkflowHandler) DeleteSchedule(ctx context.Context, request *workflowservice.DeleteScheduleRequest) (_ *workflowservice.DeleteScheduleResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
+// List all schedules in a namespace.
+func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflowservice.ListSchedulesRequest) (_ *workflowservice.ListSchedulesResponse, retError error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
 func (wh *WorkflowHandler) getRawHistory(
 	ctx context.Context,
 	scope metrics.Scope,

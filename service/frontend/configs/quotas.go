@@ -103,6 +103,14 @@ var (
 		"DescribeNamespace":  0,
 		"ListNamespaces":     0,
 		"DeprecateNamespace": 0,
+
+		"CreateSchedule":            0,
+		"DescribeSchedule":          0,
+		"UpdateSchedule":            0,
+		"PatchSchedule":             0,
+		"ListScheduleMatchingTimes": 0,
+		"DeleteSchedule":            0,
+		"ListSchedules":             0,
 	}
 
 	OtherAPIPriorities = map[int]struct{}{
