@@ -220,7 +220,7 @@ func startAndSignalWithoutCurrentWorkflow(
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	if casPredicate != nil {
-		createMode = persistence.CreateWorkflowModeWorkflowIDReuse
+		createMode = persistence.CreateWorkflowModeUpdateCurrent
 		prevRunID = casPredicate.RunID
 		prevLastWriteVersion = casPredicate.LastWriteVersion
 		if err := api.NewWorkflowVersionCheck(shard, casPredicate.LastWriteVersion, newWorkflowContext.GetMutableState()); err != nil {

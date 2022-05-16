@@ -28,6 +28,12 @@ import (
 	"context"
 	"time"
 
+	commonpb "go.temporal.io/api/common/v1"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/api/adminservice/v1"
+	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/common/collection"
+
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence/serialization"
 
@@ -97,6 +103,10 @@ type (
 		ApplyEvents(
 			ctx context.Context,
 			request *historyservice.ReplicateEventsV2Request,
+		) error
+		ApplyWorkflowState(
+			ctx context.Context,
+			request *historyservice.ReplicateWorkflowStateRequest,
 		) error
 	}
 
@@ -201,7 +211,7 @@ func (r *nDCHistoryReplicatorImpl) ApplyEvents(
 	request *historyservice.ReplicateEventsV2Request,
 ) (retError error) {
 
-	startTime := time.Now().UTC()
+	startTime := r.shard.GetTimeSource().Now().UTC()
 	task, err := newNDCReplicationTask(
 		r.clusterMetadata,
 		r.historySerializer,
@@ -214,6 +224,101 @@ func (r *nDCHistoryReplicatorImpl) ApplyEvents(
 	}
 
 	return r.applyEvents(ctx, task)
+}
+
+func (r *nDCHistoryReplicatorImpl) ApplyWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+) (retError error) {
+	executionInfo := request.GetWorkflowState().GetExecutionInfo()
+	executionState := request.GetWorkflowState().GetExecutionState()
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
+	wid := executionInfo.GetWorkflowId()
+	rid := executionState.GetRunId()
+	if executionState.State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return serviceerror.NewInternal("Replicate non completed workflow state is not supported.")
+	}
+
+	wfCtx, releaseFn, err := r.historyCache.GetOrCreateWorkflowExecution(
+		ctx,
+		namespaceID,
+		commonpb.WorkflowExecution{
+			WorkflowId: wid,
+			RunId:      rid,
+		},
+		workflow.CallerTypeTask,
+	)
+	if err != nil {
+		return err
+	}
+	defer releaseFn(retError)
+
+	currentVersionHistory, err := versionhistory.GetCurrentVersionHistory(executionInfo.VersionHistories)
+	if err != nil {
+		return err
+	}
+	lastEventItem, err := versionhistory.GetLastVersionHistoryItem(currentVersionHistory)
+	if err != nil {
+		return err
+	}
+
+	ns, err := r.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+	historyIterator := collection.NewPagingIterator(r.getHistoryPaginationFn(
+		ctx,
+		request.GetRemoteCluster(),
+		ns.Name().String(),
+		wid,
+		rid,
+		lastEventItem.GetEventId(),
+		lastEventItem.GetVersion()))
+
+	var histories [][]*historypb.HistoryEvent
+	var lastEventTime time.Time
+	for historyIterator.HasNext() {
+		rawHistory, err := historyIterator.Next()
+		if err != nil {
+			return err
+		}
+		events, _ := serialization.NewSerializer().DeserializeEvents(rawHistory)
+		if len(events) > 0 {
+			lastEventTime = timestamp.TimeValue(events[len(events)-1].EventTime)
+		}
+		histories = append(histories, events)
+	}
+	historyBuilder := workflow.NewImmutableHistoriesBuilder(
+		histories,
+	)
+	mutableState, err := workflow.NewSanitizedMutableState(
+		r.shard,
+		r.shard.GetEventsCache(),
+		r.logger,
+		ns,
+		request.GetWorkflowState(),
+		historyBuilder,
+	)
+	if err != nil {
+		return err
+	}
+	taskGen := workflow.NewTaskGenerator(r.namespaceRegistry, mutableState)
+	err = taskGen.GenerateWorkflowCloseTasks(lastEventTime)
+	if err != nil {
+		return err
+	}
+	return r.transactionMgr.createWorkflow(
+		ctx,
+		lastEventTime,
+		newNDCWorkflow(
+			ctx,
+			r.namespaceRegistry,
+			r.clusterMetadata,
+			wfCtx,
+			mutableState,
+			releaseFn,
+		),
+	)
 }
 
 func (r *nDCHistoryReplicatorImpl) applyEvents(
@@ -721,4 +826,36 @@ func (r *nDCHistoryReplicatorImpl) notify(
 	}
 	now = now.Add(-r.shard.GetConfig().StandbyClusterDelay())
 	r.shard.SetCurrentTime(clusterName, now)
+}
+
+func (r *nDCHistoryReplicatorImpl) getHistoryPaginationFn(
+	ctx context.Context,
+	remoteClusterName string,
+	namespace string,
+	workflowID string,
+	runID string,
+	endEventID int64,
+	endEventVersion int64,
+) collection.PaginationFn[*commonpb.DataBlob] {
+
+	return func(paginationToken []byte) ([]*commonpb.DataBlob, []byte, error) {
+
+		response, err := r.shard.GetRemoteAdminClient(remoteClusterName).GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+			Namespace:       namespace,
+			Execution:       &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
+			EndEventId:      endEventID + 1,
+			EndEventVersion: endEventVersion,
+			MaximumPageSize: 1000,
+			NextPageToken:   paginationToken,
+		})
+		if err != nil {
+			return nil, nil, err
+		}
+
+		batches := make([]*commonpb.DataBlob, 0, len(response.GetHistoryBatches()))
+		for _, blob := range response.GetHistoryBatches() {
+			batches = append(batches, blob)
+		}
+		return batches, response.NextPageToken, nil
+	}
 }

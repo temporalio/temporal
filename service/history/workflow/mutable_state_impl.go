@@ -362,6 +362,43 @@ func newMutableStateBuilderFromDB(
 	return mutableState, nil
 }
 
+func NewSanitizedMutableState(
+	shard shard.Context,
+	eventsCache events.Cache,
+	logger log.Logger,
+	namespaceEntry *namespace.Namespace,
+	mutableStateRecord *persistencespb.WorkflowMutableState,
+	historyBuilder *HistoryBuilder,
+) (*MutableStateImpl, error) {
+
+	// startTime will be overridden by DB record
+	startTime := time.Time{}
+	mutableState := NewMutableState(shard, eventsCache, logger, namespaceEntry, startTime)
+
+	// sanitize data
+	mutableStateRecord.ExecutionInfo.LastFirstEventTxnId = common.EmptyVersion
+	// TODO: after adding cluster to clock info, no need to reset clock here
+	mutableStateRecord.ExecutionInfo.ParentClock = nil
+	if mutableStateRecord.ChildExecutionInfos != nil {
+		mutableState.pendingChildExecutionInfoIDs = mutableStateRecord.ChildExecutionInfos
+	}
+	for _, childExecutionInfo := range mutableState.pendingChildExecutionInfoIDs {
+		childExecutionInfo.Clock = nil
+	}
+
+	mutableState.executionState = mutableStateRecord.ExecutionState
+	mutableState.executionInfo = mutableStateRecord.ExecutionInfo
+	mutableState.hBuilder = historyBuilder
+	mutableState.currentVersion = common.EmptyVersion
+	mutableState.bufferEventsInDB = mutableStateRecord.BufferedEvents
+	mutableState.stateInDB = mutableStateRecord.ExecutionState.State
+	mutableState.nextEventIDInDB = mutableStateRecord.NextEventId
+	mutableState.dbRecordVersion = 1
+	mutableState.checksum = mutableStateRecord.Checksum
+
+	return mutableState, nil
+}
+
 func (e *MutableStateImpl) CloneToProto() *persistencespb.WorkflowMutableState {
 	ms := &persistencespb.WorkflowMutableState{
 		ActivityInfos:       e.pendingActivityInfoIDs,

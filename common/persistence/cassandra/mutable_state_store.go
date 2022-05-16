@@ -388,10 +388,10 @@ func (d *MutableStateStore) CreateWorkflowExecution(
 	var requestCurrentRunID string
 
 	switch request.Mode {
-	case p.CreateWorkflowModeZombie:
+	case p.CreateWorkflowModeBypassCurrent:
 		// noop
 
-	case p.CreateWorkflowModeWorkflowIDReuse:
+	case p.CreateWorkflowModeUpdateCurrent:
 		batch.Query(templateUpdateCurrentWorkflowExecutionForNewQuery,
 			runID,
 			newWorkflow.ExecutionStateBlob.Data,
@@ -1001,7 +1001,7 @@ func (d *MutableStateStore) SetWorkflowExecution(
 	conflictRecord := make(map[string]interface{})
 	applied, conflictIter, err := d.Session.MapExecuteBatchCAS(batch, conflictRecord)
 	if err != nil {
-		return gocql.ConvertError("ConflictResolveWorkflowExecution", err)
+		return gocql.ConvertError("SetWorkflowExecution", err)
 	}
 	defer func() {
 		_ = conflictIter.Close()
