@@ -134,4 +134,3 @@ publicClient:
 dynamicConfigClient:
   filepath: "config/dynamicconfig/development_sql.yaml"
   pollInterval: "10s"
-

@@ -99,4 +99,3 @@ publicClient:
 dynamicConfigClient:
   filepath: "./config/dynamicconfig/development_cass.yaml"
   pollInterval: "10s"
-
