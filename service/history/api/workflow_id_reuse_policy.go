@@ -71,6 +71,7 @@ func ApplyWorkflowIDReusePolicy(
 						fmt.Sprintf("terminated by new runID: %s", runID),
 					),
 					consts.IdentityHistoryService,
+					false,
 				)
 			}, nil
 		}

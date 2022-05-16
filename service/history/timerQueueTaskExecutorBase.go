@@ -31,6 +31,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -108,6 +109,13 @@ func (t *timerQueueTaskExecutorBase) executeDeleteHistoryEventTask(
 		return t.deleteHistoryBranch(task.BranchToken)
 	default:
 		return err
+	}
+
+	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		// If workflow is running then just ignore DeleteHistoryEventTask timer task.
+		// This should almost never happen because DeleteHistoryEventTask is created only for closed workflows.
+		// But cross DC replication can resurrect workflow and therefore DeleteHistoryEventTask should be ignored.
+		return nil
 	}
 
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()

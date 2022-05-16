@@ -67,7 +67,7 @@ func newNDCEventsReapplier(
 }
 
 func (r *nDCEventsReapplierImpl) reapplyEvents(
-	_ context.Context,
+	ctx context.Context,
 	msBuilder workflow.MutableState,
 	historyEvents []*historypb.HistoryEvent,
 	runID string,
@@ -107,6 +107,19 @@ func (r *nDCEventsReapplierImpl) reapplyEvents(
 		}
 		deDupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 		msBuilder.UpdateDuplicatedResource(deDupResource)
+	}
+
+	// After reapply event, checking if we should schedule a workflow task
+	if msBuilder.IsWorkflowPendingOnWorkflowTaskBackoff() {
+		// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
+		return reappliedEvents, nil
+	}
+	if !msBuilder.HasPendingWorkflowTask() {
+		if _, err := msBuilder.AddWorkflowTaskScheduledEvent(
+			false,
+		); err != nil {
+			return nil, err
+		}
 	}
 	return reappliedEvents, nil
 }

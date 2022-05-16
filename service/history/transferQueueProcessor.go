@@ -208,6 +208,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 	updateShardAckLevel, failoverTaskProcessor := newTransferQueueFailoverProcessor(
 		t.shard,
 		t.workflowCache,
+		t.scheduler,
 		t.archivalClient,
 		t.sdkClientFactory,
 		t.matchingClient,

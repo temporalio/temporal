@@ -1353,6 +1353,15 @@ func (e *MutableStateImpl) IsSignalRequested(
 	return false
 }
 
+func (e *MutableStateImpl) IsWorkflowPendingOnWorkflowTaskBackoff() bool {
+
+	workflowTaskBackoff := timestamp.TimeValue(e.executionInfo.GetExecutionTime()).After(timestamp.TimeValue(e.executionInfo.GetStartTime()))
+	if workflowTaskBackoff && !e.HasProcessedOrPendingWorkflowTask() {
+		return true
+	}
+	return false
+}
+
 func (e *MutableStateImpl) AddSignalRequested(
 	requestID string,
 ) {
@@ -2366,6 +2375,7 @@ func (e *MutableStateImpl) AddCompletedWorkflowEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	); err != nil {
 		return nil, err
 	}
@@ -2409,6 +2419,7 @@ func (e *MutableStateImpl) AddFailWorkflowEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	); err != nil {
 		return nil, err
 	}
@@ -2451,6 +2462,7 @@ func (e *MutableStateImpl) AddTimeoutWorkflowEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	); err != nil {
 		return nil, err
 	}
@@ -2530,6 +2542,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionCanceledEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	); err != nil {
 		return nil, err
 	}
@@ -3036,6 +3049,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	reason string,
 	details *commonpb.Payloads,
 	identity string,
+	deleteAfterTerminate bool,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionWorkflowTerminated
@@ -3050,6 +3064,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionTerminatedEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		deleteAfterTerminate,
 	); err != nil {
 		return nil, err
 	}
@@ -3179,6 +3194,7 @@ func (e *MutableStateImpl) AddContinueAsNewEvent(
 	// TODO merge active & passive task generation
 	if err := e.taskGenerator.GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
+		false,
 	); err != nil {
 		return nil, nil, err
 	}
@@ -3754,8 +3770,6 @@ func (e *MutableStateImpl) StartTransaction(
 		return false, err
 	}
 
-	e.startTransactionHandleWorkflowTaskTTL()
-
 	return flushBeforeReady, nil
 }
 
@@ -4208,18 +4222,6 @@ func (e *MutableStateImpl) validateNoEventsAfterWorkflowFinish(
 			tag.WorkflowRunID(e.executionState.RunId),
 		)
 		return consts.ErrEventsAterWorkflowFinish
-	}
-}
-
-func (e *MutableStateImpl) startTransactionHandleWorkflowTaskTTL() {
-	if e.executionInfo.StickyTaskQueue == "" {
-		return
-	}
-
-	ttl := e.config.StickyTTL(e.GetNamespaceEntry().Name().String())
-	expired := e.timeSource.Now().After(timestamp.TimeValue(e.executionInfo.LastUpdateTime).Add(ttl))
-	if expired && !e.HasPendingWorkflowTask() {
-		e.ClearStickyness()
 	}
 }
 

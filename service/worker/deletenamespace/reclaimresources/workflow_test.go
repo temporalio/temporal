@@ -67,7 +67,7 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	}, nil).Once()
 
 	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything).Return(true, nil).Once()
-	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
+	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).Return(nil).Once()
 
 	env.OnActivity(a.DeleteNamespaceActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace")).Return(nil).Once()
 

@@ -54,8 +54,6 @@ var (
 	ErrActivityTaskNotCancelRequested = serviceerror.NewInvalidArgument("unable to mark activity as canceled without activity being request canceled first")
 	// ErrWorkflowCompleted is the error to indicate workflow execution already completed
 	ErrWorkflowCompleted = serviceerror.NewNotFound("workflow execution already completed")
-	// ErrWorkflowNotCompleted is the error to indicate workflow execution is not completed.
-	ErrWorkflowNotCompleted = serviceerror.NewNotFound("workflow execution is not completed")
 	// ErrWorkflowExecutionNotFound is the error to indicate workflow execution does not exist
 	ErrWorkflowExecutionNotFound = serviceerror.NewNotFound("workflow execution not found")
 	// ErrWorkflowParent is the error to parent execution is given and mismatch
@@ -84,6 +82,8 @@ var (
 	ErrChildExecutionNotFound = serviceerror.NewNotFound("Pending child execution not found.")
 	// ErrWorkflowNotReady is error indicating workflow mutable state is missing necessary information for handling the request
 	ErrWorkflowNotReady = serviceerror.NewWorkflowNotReady("Workflow state is not ready to handle the request.")
+	// ErrWorkflowTaskNotScheduled is error indicating workflow task is not scheduled yet.
+	ErrWorkflowTaskNotScheduled = serviceerror.NewWorkflowNotReady("Workflow task is not scheduled yet.")
 
 	// FailedWorkflowStatuses is a set of failed workflow close states, used for start workflow policy
 	// for start workflow execution API

@@ -97,6 +97,7 @@ message GetMutableStateResponse {
     temporal.server.api.history.v1.VersionHistories version_histories = 17;
     bool is_sticky_task_queue_enabled = 18;
     int64 last_first_event_txn_id = 19;
+    string first_execution_run_id = 20;
 }
 
 message PollMutableStateRequest {
@@ -126,6 +127,7 @@ message PollMutableStateResponse {
     temporal.server.api.enums.v1.WorkflowExecutionState workflow_state = 15;
     temporal.api.enums.v1.WorkflowExecutionStatus workflow_status = 16;
     int64 last_first_event_txn_id = 17;
+    string first_execution_run_id = 18;
 }
 
 message ResetStickyTaskQueueRequest {

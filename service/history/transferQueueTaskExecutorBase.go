@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -149,7 +150,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
+func (t *transferQueueTaskExecutorBase) archiveVisibility(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -218,6 +219,14 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	ctx context.Context,
 	task *tasks.DeleteExecutionTask,
+) error {
+	return t.deleteExecution(ctx, task, false)
+}
+
+func (t *transferQueueTaskExecutorBase) deleteExecution(
+	ctx context.Context,
+	task tasks.Task,
+	deleteFromOpenVisibility bool,
 ) (retError error) {
 
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
@@ -244,11 +253,24 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		return err
 	}
 
+	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		ns, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+		if err != nil {
+			return err
+		}
+		if ns.ActiveInCluster(t.shard.GetClusterMetadata().GetCurrentClusterName()) {
+			// DeleteExecutionTask transfer task is created only if workflow is not running.
+			// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
+			// workflow should not be deleted.
+			return nil
+		}
+	}
+
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()
 	if err != nil {
 		return err
 	}
-	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
 	if !ok {
 		return nil
 	}
@@ -260,5 +282,6 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		weCtx,
 		mutableState,
 		task.GetVersion(),
+		deleteFromOpenVisibility,
 	)
 }

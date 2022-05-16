@@ -159,7 +159,9 @@ func (ti *TelemetryInterceptor) handleError(
 	}
 
 	switch err := err.(type) {
-	case *serviceerrors.StickyWorkerUnavailable:
+	case *serviceerror.WorkflowNotReady,
+		*serviceerrors.StickyWorkerUnavailable,
+		*serviceerror.NamespaceInvalidState:
 		// we emit service_errors_with_type metrics, no need to emit specific metric for this error type.
 		// TODO deprecate all metrics below
 	case *serviceerrors.ShardOwnershipLost:

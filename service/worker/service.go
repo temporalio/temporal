@@ -94,7 +94,8 @@ type (
 		esClient         esclient.Client
 		config           *Config
 
-		manager *workerManager
+		workerManager             *workerManager
+		perNamespaceWorkerManager *perNamespaceWorkerManager
 	}
 
 	// Config contains all the service config for worker
@@ -138,7 +139,8 @@ func NewService(
 	metadataManager persistence.MetadataManager,
 	taskManager persistence.TaskManager,
 	historyClient historyservice.HistoryServiceClient,
-	manager *workerManager,
+	workerManager *workerManager,
+	perNamespaceWorkerManager *perNamespaceWorkerManager,
 	visibilityManager manager.VisibilityManager,
 ) (*Service, error) {
 	workerServiceResolver, err := membershipMonitor.GetResolver(common.WorkerServiceName)
@@ -171,7 +173,8 @@ func NewService(
 		historyClient:             historyClient,
 		visibilityManager:         visibilityManager,
 
-		manager: manager,
+		workerManager:             workerManager,
+		perNamespaceWorkerManager: perNamespaceWorkerManager,
 	}, nil
 }
 
@@ -367,7 +370,12 @@ func (s *Service) Start() {
 		s.startParentClosePolicyProcessor()
 	}
 
-	s.manager.Start()
+	s.workerManager.Start()
+	s.perNamespaceWorkerManager.Start(
+		// TODO: get these from fx instead of passing through Start
+		s.hostInfo,
+		s.workerServiceResolver,
+	)
 
 	s.logger.Info(
 		"worker service started",
@@ -389,7 +397,8 @@ func (s *Service) Stop() {
 
 	close(s.stopC)
 
-	s.manager.Stop()
+	s.perNamespaceWorkerManager.Stop()
+	s.workerManager.Stop()
 	s.namespaceRegistry.Stop()
 	s.membershipMonitor.Stop()
 	s.clusterMetadata.Stop()
@@ -454,6 +463,7 @@ func (s *Service) startScanner() {
 
 func (s *Service) startReplicator() {
 	namespaceReplicationTaskExecutor := namespace.NewReplicationTaskExecutor(
+		s.clusterMetadata.GetCurrentClusterName(),
 		s.metadataManager,
 		s.logger,
 	)

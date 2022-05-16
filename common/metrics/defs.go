@@ -2226,8 +2226,6 @@ const (
 	RenameNamespaceFailuresCount
 	ReadNamespaceFailuresCount
 	ListExecutionsFailuresCount
-	TerminateExecutionFailuresCount
-	TerminateExecutionNotFoundCount
 	DeleteExecutionFailuresCount
 	DeleteExecutionNotFoundCount
 	RateLimiterFailuresCount
@@ -2454,7 +2452,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		EmptyCompletionCommandsCounter:                    NewCounterDef("empty_completion_commands"),
 		MultipleCompletionCommandsCounter:                 NewCounterDef("multiple_completion_commands"),
 		FailedWorkflowTasksCounter:                        NewCounterDef("failed_workflow_tasks"),
-		WorkflowTaskAttempt:                               NewDimensionlessHistogramDef("worrkflow_task_attempt"),
+		WorkflowTaskAttempt:                               NewDimensionlessHistogramDef("workflow_task_attempt"),
 		StaleMutableStateCounter:                          NewCounterDef("stale_mutable_state"),
 		AutoResetPointsLimitExceededCounter:               NewCounterDef("auto_reset_points_exceed_limit"),
 		AutoResetPointCorruptionCounter:                   NewCounterDef("auto_reset_point_corruption"),
@@ -2690,19 +2688,17 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CatchUpReadyShardCountGauge:                   NewGaugeDef("catchup_ready_shard_count"),
 		HandoverReadyShardCountGauge:                  NewGaugeDef("handover_ready_shard_count"),
 
-		DeleteNamespaceSuccessCount:     NewCounterDef("delete_namespace_success"),
-		RenameNamespaceSuccessCount:     NewCounterDef("rename_namespace_success"),
-		DeleteExecutionsSuccessCount:    NewCounterDef("delete_executions_success"),
-		DeleteNamespaceFailuresCount:    NewCounterDef("delete_namespace_failures"),
-		UpdateNamespaceFailuresCount:    NewCounterDef("update_namespace_failures"),
-		RenameNamespaceFailuresCount:    NewCounterDef("rename_namespace_failures"),
-		ReadNamespaceFailuresCount:      NewCounterDef("read_namespace_failures"),
-		ListExecutionsFailuresCount:     NewCounterDef("list_executions_failures"),
-		TerminateExecutionFailuresCount: NewCounterDef("terminate_executions_failures"),
-		TerminateExecutionNotFoundCount: NewCounterDef("terminate_executions_not_found"),
-		DeleteExecutionFailuresCount:    NewCounterDef("delete_execution_failures"),
-		DeleteExecutionNotFoundCount:    NewCounterDef("delete_execution_not_found"),
-		RateLimiterFailuresCount:        NewCounterDef("rate_limiter_failures"),
+		DeleteNamespaceSuccessCount:  NewCounterDef("delete_namespace_success"),
+		RenameNamespaceSuccessCount:  NewCounterDef("rename_namespace_success"),
+		DeleteExecutionsSuccessCount: NewCounterDef("delete_executions_success"),
+		DeleteNamespaceFailuresCount: NewCounterDef("delete_namespace_failures"),
+		UpdateNamespaceFailuresCount: NewCounterDef("update_namespace_failures"),
+		RenameNamespaceFailuresCount: NewCounterDef("rename_namespace_failures"),
+		ReadNamespaceFailuresCount:   NewCounterDef("read_namespace_failures"),
+		ListExecutionsFailuresCount:  NewCounterDef("list_executions_failures"),
+		DeleteExecutionFailuresCount: NewCounterDef("delete_execution_failures"),
+		DeleteExecutionNotFoundCount: NewCounterDef("delete_execution_not_found"),
+		RateLimiterFailuresCount:     NewCounterDef("rate_limiter_failures"),
 	},
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),

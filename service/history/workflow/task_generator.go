@@ -50,6 +50,7 @@ type (
 		) error
 		GenerateWorkflowCloseTasks(
 			now time.Time,
+			deleteAfterClose bool,
 		) error
 		GenerateDeleteExecutionTask(
 			now time.Time,
@@ -161,6 +162,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	now time.Time,
+	deleteAfterClose bool,
 ) error {
 
 	currentVersion := r.mutableState.GetCurrentVersion()
@@ -180,28 +182,38 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	if err != nil {
 		return err
 	}
-	r.mutableState.AddTasks(
+	closeTasks := []tasks.Task{
 		&tasks.CloseExecutionTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: now,
 			Version:             currentVersion,
+			DeleteAfterClose:    deleteAfterClose,
 		},
-		&tasks.CloseExecutionVisibilityTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: now,
-			Version:             currentVersion,
-		},
-		&tasks.DeleteHistoryEventTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: now.Add(retention),
-			Version:             currentVersion,
-			BranchToken:         branchToken,
-		},
-	)
+	}
 
+	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
+	// Also, there is no reason to schedule history retention task if workflow executions in about to be deleted.
+	// This will also save one call to visibility storage and one timer task creation.
+	if !deleteAfterClose {
+		closeTasks = append(closeTasks,
+			&tasks.CloseExecutionVisibilityTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: now,
+				Version:             currentVersion,
+			},
+			&tasks.DeleteHistoryEventTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: now.Add(retention),
+				Version:             currentVersion,
+				BranchToken:         branchToken,
+			},
+		)
+	}
+
+	r.mutableState.AddTasks(closeTasks...)
 	return nil
 }
 

@@ -289,6 +289,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTimedOut()
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -320,6 +321,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionTerminated
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 	_, err := s.stateRebuilder.ApplyEvents(tests.NamespaceID, requestID, execution, s.toHistory(event), nil)
@@ -350,6 +352,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionFailed() {
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -381,6 +384,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCompleted(
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -412,6 +416,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionCanceled()
 	s.mockUpdateVersion(event)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(event.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -508,6 +513,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 
@@ -571,6 +577,7 @@ func (s *stateBuilderSuite) TestApplyEvents_EventTypeWorkflowExecutionContinuedA
 	s.mockUpdateVersion(continueAsNewEvent)
 	s.mockTaskGenerator.EXPECT().GenerateWorkflowCloseTasks(
 		timestamp.TimeValue(continueAsNewEvent.GetEventTime()),
+		false,
 	).Return(nil)
 	s.mockMutableState.EXPECT().ClearStickyness()
 

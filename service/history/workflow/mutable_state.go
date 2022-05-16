@@ -129,7 +129,7 @@ type (
 		AddWorkflowExecutionSignaled(signalName string, input *commonpb.Payloads, identity string, header *commonpb.Header) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEvent(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest) (*historypb.HistoryEvent, error)
 		AddWorkflowExecutionStartedEventWithOptions(commonpb.WorkflowExecution, *historyservice.StartWorkflowExecutionRequest, namespace.ID, *workflowpb.ResetPoints, string, string) (*historypb.HistoryEvent, error)
-		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string) (*historypb.HistoryEvent, error)
+		AddWorkflowExecutionTerminatedEvent(firstEventID int64, reason string, details *commonpb.Payloads, identity string, deleteAfterTerminate bool) (*historypb.HistoryEvent, error)
 		ClearStickyness()
 		CheckResettable() error
 		CloneToProto() *persistencespb.WorkflowMutableState
@@ -188,6 +188,7 @@ type (
 		IsStickyTaskQueueEnabled() bool
 		IsWorkflowExecutionRunning() bool
 		IsResourceDuplicated(resourceDedupKey definition.DeduplicationID) bool
+		IsWorkflowPendingOnWorkflowTaskBackoff() bool
 		UpdateDuplicatedResource(resourceDedupKey definition.DeduplicationID)
 		ReplicateActivityInfo(*historyservice.SyncActivityRequest, bool) error
 		ReplicateActivityTaskCancelRequestedEvent(*historypb.HistoryEvent) error

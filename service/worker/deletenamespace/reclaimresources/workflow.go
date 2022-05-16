@@ -163,12 +163,13 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 			logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
 			return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
 		}
+		// Accumulate total success count but only last error count to avoid double counting errors from the same workflow executions.
 		result.SuccessCount += der.SuccessCount
-		result.ErrorCount += der.ErrorCount
+		result.ErrorCount = der.ErrorCount
 
 		if isAdvancedVisibility {
 			ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
-			err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
+			err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsAdvVisibilityActivity, params.NamespaceID, params.Namespace, der.ErrorCount).Get(ctx, nil)
 		} else {
 			ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsStdVisibilityOptionsActivity)
 			err = workflow.ExecuteActivity(ctx3, a.EnsureNoExecutionsStdVisibilityActivity, params.NamespaceID, params.Namespace).Get(ctx, nil)
@@ -181,7 +182,7 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		var appErr *temporal.ApplicationError
 		if stderrors.As(err, &appErr) {
 			switch appErr.Type() {
-			case errors.ExecutionsStillExistErrType, errors.NoProgressErrType:
+			case errors.ExecutionsStillExistErrType, errors.NoProgressErrType, errors.NotDeletedExecutionsStillExistErrType:
 				logger.Info("Unable to delete workflow executions. Will try again.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount), tag.Attempt(deleteAttempt))
 				continue
 			}

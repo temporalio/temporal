@@ -542,6 +542,7 @@ func (s *workflowResetterSuite) TestTerminateWorkflow() {
 		terminateReason,
 		nil,
 		consts.IdentityHistoryService,
+		false,
 	).Return(&historypb.HistoryEvent{}, nil)
 
 	err := s.workflowResetter.terminateWorkflow(mutableState, terminateReason)

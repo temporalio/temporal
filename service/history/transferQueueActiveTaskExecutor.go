@@ -288,6 +288,10 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return nil
 	}
 
+	workflowExecution := commonpb.WorkflowExecution{
+		WorkflowId: task.GetWorkflowID(),
+		RunId:      task.GetRunID(),
+	}
 	executionInfo := mutableState.GetExecutionInfo()
 	executionState := mutableState.GetExecutionState()
 	replyToParentWorkflow := mutableState.HasParentExecution() && executionInfo.NewExecutionRunId == ""
@@ -319,11 +323,12 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	namespaceName := mutableState.GetNamespaceEntry().Name()
 	children := copyChildWorkflowInfos(mutableState.GetPendingChildExecutionInfos())
 
-	// NOTE: do not access anything related mutable state after this lock release
-	// release the context lock since we no longer need mutable state builder and
-	// the rest of logic is making RPC call, which takes time.
+	// NOTE: do not access anything related mutable state after this lock release.
+	// Release lock immediately since mutable state builder is not needed
+	// and the rest of logic is RPC calls, which can take time.
 	release(nil)
-	err = t.recordWorkflowClosed(
+
+	err = t.archiveVisibility(
 		ctx,
 		namespace.ID(task.NamespaceID),
 		task.WorkflowID,
@@ -351,12 +356,9 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 			},
 			ParentInitiatedId:      parentInitiatedID,
 			ParentInitiatedVersion: parentInitiatedVersion,
-			CompletedExecution: &commonpb.WorkflowExecution{
-				WorkflowId: task.WorkflowID,
-				RunId:      task.RunID,
-			},
-			Clock:           parentClock,
-			CompletionEvent: completionEvent,
+			CompletedExecution:     &workflowExecution,
+			Clock:                  parentClock,
+			CompletionEvent:        completionEvent,
 		})
 		switch err.(type) {
 		case nil:
@@ -372,10 +374,7 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		ctx,
 		task.GetNamespaceID(),
 		namespaceName.String(),
-		commonpb.WorkflowExecution{
-			WorkflowId: task.GetWorkflowID(),
-			RunId:      task.GetRunID(),
-		},
+		workflowExecution,
 		children,
 	)
 
@@ -384,7 +383,15 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 		return err
 	}
 
-	return nil
+	if task.DeleteAfterClose {
+		err = t.deleteExecution(
+			ctx,
+			task,
+			// Visibility is not updated (to avoid race condition for visibility tasks) and workflow execution is still open there
+			true)
+	}
+
+	return err
 }
 
 func (t *transferQueueActiveTaskExecutor) processCancelExecution(
