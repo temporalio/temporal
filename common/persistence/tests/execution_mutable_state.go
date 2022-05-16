@@ -197,7 +197,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeWorkflowIDReuse,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
 
 		PreviousRunID:            prevSnapshot.ExecutionState.RunId,
 		PreviousLastWriteVersion: prevLastWriteVersion,
@@ -222,7 +222,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Reuse_CurrentConflict() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeWorkflowIDReuse,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
 
 		PreviousRunID:            uuid.New().String(),
 		PreviousLastWriteVersion: rand.Int63(),
@@ -267,7 +267,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Zombie() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -292,7 +292,7 @@ func (s *ExecutionMutableStateSuite) TestCreate_Conflict() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeWorkflowIDReuse,
+		Mode:    p.CreateWorkflowModeUpdateCurrent,
 
 		PreviousRunID:            newSnapshot.ExecutionState.RunId,
 		PreviousLastWriteVersion: lastWriteVersion,
@@ -469,7 +469,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -557,7 +557,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_Conflict() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -612,7 +612,7 @@ func (s *ExecutionMutableStateSuite) TestUpdate_Zombie_WithNew() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -678,7 +678,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -747,7 +747,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Current
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -816,7 +816,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -885,7 +885,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_Conflic
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -954,7 +954,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_SuppressCurrent_WithNew
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -1068,7 +1068,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_ResetCurrent_CurrentCon
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -1208,7 +1208,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -1302,7 +1302,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_Conflict() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -1360,7 +1360,7 @@ func (s *ExecutionMutableStateSuite) TestConflictResolve_Zombie_WithNew() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -1525,7 +1525,7 @@ func (s *ExecutionMutableStateSuite) TestDeleteCurrent_NotCurrent() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,
@@ -1567,7 +1567,7 @@ func (s *ExecutionMutableStateSuite) TestDelete_Exists() {
 	_, err := s.ExecutionManager.CreateWorkflowExecution(s.Ctx, &p.CreateWorkflowExecutionRequest{
 		ShardID: s.ShardID,
 		RangeID: s.RangeID,
-		Mode:    p.CreateWorkflowModeZombie,
+		Mode:    p.CreateWorkflowModeBypassCurrent,
 
 		PreviousRunID:            "",
 		PreviousLastWriteVersion: 0,

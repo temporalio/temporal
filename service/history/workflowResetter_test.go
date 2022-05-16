@@ -261,7 +261,7 @@ func (s *workflowResetterSuite) TestPersistToDB_CurrentNotTerminated() {
 	resetContext.EXPECT().CreateWorkflowExecution(
 		gomock.Any(),
 		gomock.Any(),
-		persistence.CreateWorkflowModeWorkflowIDReuse,
+		persistence.CreateWorkflowModeUpdateCurrent,
 		s.currentRunID,
 		currentLastWriteVersion,
 		resetMutableState,

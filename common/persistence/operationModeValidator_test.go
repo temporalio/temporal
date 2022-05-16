@@ -71,7 +71,7 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_UpdateCurrent()
 
 	creatModes := []CreateWorkflowMode{
 		CreateWorkflowModeBrandNew,
-		CreateWorkflowModeWorkflowIDReuse,
+		CreateWorkflowModeUpdateCurrent,
 	}
 
 	for state, expectError := range stateToError {
@@ -98,7 +98,7 @@ func (s *validateOperationWorkflowModeStateSuite) TestCreateMode_BypassCurrent()
 
 	for state, expectError := range stateToError {
 		testSnapshot := s.newTestWorkflowSnapshot(state)
-		err := ValidateCreateWorkflowModeState(CreateWorkflowModeZombie, testSnapshot)
+		err := ValidateCreateWorkflowModeState(CreateWorkflowModeBypassCurrent, testSnapshot)
 		if !expectError {
 			s.NoError(err, err)
 		} else {
