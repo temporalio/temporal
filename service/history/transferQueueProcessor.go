@@ -173,7 +173,9 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 		return
 	}
 
+	t.standbyTaskProcessorsLock.RLock()
 	standbyTaskProcessor, ok := t.standbyTaskProcessors[clusterName]
+	t.standbyTaskProcessorsLock.RUnlock()
 	if !ok {
 		panic(fmt.Sprintf("Cannot find transfer processor for %s.", clusterName))
 	}
