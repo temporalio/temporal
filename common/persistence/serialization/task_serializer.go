@@ -265,6 +265,8 @@ func (s *TaskSerializer) serializeReplicationTask(
 		replicationTask = s.replicationActivityTaskToProto(task)
 	case *tasks.HistoryReplicationTask:
 		replicationTask = s.replicationHistoryTaskToProto(task)
+	case *tasks.SyncWorkflowStateTask:
+		replicationTask = s.replicationSyncWorkflowStateTaskToProto(task)
 	default:
 		return commonpb.DataBlob{}, serviceerror.NewInternal(fmt.Sprintf("Unknown repication task type: %v", task))
 	}
@@ -289,6 +291,8 @@ func (s *TaskSerializer) deserializeReplicationTasks(
 		replication = s.replicationActivityTaskFromProto(replicationTask)
 	case enumsspb.TASK_TYPE_REPLICATION_HISTORY:
 		replication = s.replicationHistoryTaskFromProto(replicationTask)
+	case enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE:
+		replication = s.replicationSyncWorkflowStateTaskFromProto(replicationTask)
 	default:
 		return nil, serviceerror.NewInternal(fmt.Sprintf("Unknown replication task type: %v", replicationTask.TaskType))
 	}
@@ -1028,5 +1032,38 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 		Version:             historyTask.Version,
 		BranchToken:         historyTask.BranchToken,
 		NewRunBranchToken:   historyTask.NewRunBranchToken,
+	}
+}
+
+func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
+	closedWorkflowTask *tasks.SyncWorkflowStateTask,
+) *persistencespb.ReplicationTaskInfo {
+	return &persistencespb.ReplicationTaskInfo{
+		NamespaceId:    closedWorkflowTask.WorkflowKey.NamespaceID,
+		WorkflowId:     closedWorkflowTask.WorkflowKey.WorkflowID,
+		RunId:          closedWorkflowTask.WorkflowKey.RunID,
+		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
+		TaskId:         closedWorkflowTask.TaskID,
+		Version:        closedWorkflowTask.Version,
+		VisibilityTime: &closedWorkflowTask.VisibilityTimestamp,
+	}
+}
+
+func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
+	closedWorkflowTask *persistencespb.ReplicationTaskInfo,
+) *tasks.SyncWorkflowStateTask {
+	visibilityTimestamp := time.Unix(0, 0)
+	if closedWorkflowTask.VisibilityTime != nil {
+		visibilityTimestamp = *closedWorkflowTask.VisibilityTime
+	}
+	return &tasks.SyncWorkflowStateTask{
+		WorkflowKey: definition.NewWorkflowKey(
+			closedWorkflowTask.NamespaceId,
+			closedWorkflowTask.WorkflowId,
+			closedWorkflowTask.RunId,
+		),
+		VisibilityTimestamp: visibilityTimestamp,
+		Version:             closedWorkflowTask.Version,
+		TaskID:              closedWorkflowTask.TaskId,
 	}
 }

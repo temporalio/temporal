@@ -28,6 +28,10 @@ import (
 	"fmt"
 	"testing"
 
+	"go.temporal.io/api/serviceerror"
+	"go.temporal.io/server/common/definition"
+	"go.temporal.io/server/common/log"
+
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -71,6 +75,7 @@ type (
 		mockClientBean     *client.MockBean
 		adminClient        *adminservicemock.MockAdminServiceClient
 		clusterMetadata    *cluster.MockMetadata
+		workflowCache      *workflow.MockCache
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskExecutor *taskExecutorImpl
@@ -120,14 +125,15 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	metricsClient := metrics.NoopClient
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-
+	s.workflowCache = workflow.NewMockCache(s.controller)
 	s.replicationTaskExecutor = NewTaskExecutor(
+		cluster.TestAlternativeClusterName,
 		s.mockShard,
 		s.mockNamespaceCache,
 		s.nDCHistoryResender,
 		s.mockEngine,
 		workflow.NewMockDeleteManager(s.controller),
-		workflow.NewMockCache(s.controller),
+		s.workflowCache,
 		metricsClient,
 		s.mockShard.GetLogger(),
 	).(*taskExecutorImpl)
@@ -376,6 +382,44 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 		int64(456),
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
+	_, err := s.replicationTaskExecutor.Execute(task, true)
+	s.NoError(err)
+}
+
+func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
+	namespaceID := namespace.ID(uuid.New())
+	workflowID := uuid.New()
+	runID := uuid.New()
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
+			SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
+				//NamespaceId: namespaceID.String(),
+				//WorkflowId:  workflowID,
+				//RunId:       runID,
+			},
+		},
+	}
+
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(namespace.NewGlobalNamespaceForTest(
+			nil,
+			nil,
+			&persistencespb.NamespaceReplicationConfig{Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			}},
+			0,
+		), nil).AnyTimes()
+	s.mockResource.ExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	mockWeCtx := workflow.NewContext(s.mockShard, definition.WorkflowKey{
+		NamespaceID: namespaceID.String(),
+		WorkflowID:  workflowID,
+		RunID:       runID,
+	}, log.NewNoopLogger())
+	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+
 	_, err := s.replicationTaskExecutor.Execute(task, true)
 	s.NoError(err)
 }

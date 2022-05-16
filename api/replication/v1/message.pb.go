@@ -40,13 +40,14 @@ import (
 	proto "github.com/gogo/protobuf/proto"
 	_ "github.com/gogo/protobuf/types"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
-	v14 "go.temporal.io/api/common/v1"
-	v15 "go.temporal.io/api/failure/v1"
-	v13 "go.temporal.io/api/history/v1"
+	v13 "go.temporal.io/api/common/v1"
+	v14 "go.temporal.io/api/failure/v1"
+	_ "go.temporal.io/api/history/v1"
 	v11 "go.temporal.io/api/namespace/v1"
 	v12 "go.temporal.io/api/replication/v1"
 	v1 "go.temporal.io/server/api/enums/v1"
-	v16 "go.temporal.io/server/api/history/v1"
+	v15 "go.temporal.io/server/api/history/v1"
+	v16 "go.temporal.io/server/api/persistence/v1"
 )
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -66,11 +67,10 @@ type ReplicationTask struct {
 	SourceTaskId int64                  `protobuf:"varint,2,opt,name=source_task_id,json=sourceTaskId,proto3" json:"source_task_id,omitempty"`
 	// Types that are valid to be assigned to Attributes:
 	//	*ReplicationTask_NamespaceTaskAttributes
-	//	*ReplicationTask_HistoryTaskAttributes
 	//	*ReplicationTask_SyncShardStatusTaskAttributes
 	//	*ReplicationTask_SyncActivityTaskAttributes
-	//	*ReplicationTask_HistoryMetadataTaskAttributes
 	//	*ReplicationTask_HistoryTaskV2Attributes
+	//	*ReplicationTask_SyncWorkflowStateTaskAttributes
 	Attributes     isReplicationTask_Attributes `protobuf_oneof:"attributes"`
 	VisibilityTime *time.Time                   `protobuf:"bytes,9,opt,name=visibility_time,json=visibilityTime,proto3,stdtime" json:"visibility_time,omitempty"`
 }
@@ -117,28 +117,24 @@ type isReplicationTask_Attributes interface {
 type ReplicationTask_NamespaceTaskAttributes struct {
 	NamespaceTaskAttributes *NamespaceTaskAttributes `protobuf:"bytes,3,opt,name=namespace_task_attributes,json=namespaceTaskAttributes,proto3,oneof" json:"namespace_task_attributes,omitempty"`
 }
-type ReplicationTask_HistoryTaskAttributes struct {
-	HistoryTaskAttributes *HistoryTaskAttributes `protobuf:"bytes,4,opt,name=history_task_attributes,json=historyTaskAttributes,proto3,oneof" json:"history_task_attributes,omitempty"`
-}
 type ReplicationTask_SyncShardStatusTaskAttributes struct {
 	SyncShardStatusTaskAttributes *SyncShardStatusTaskAttributes `protobuf:"bytes,5,opt,name=sync_shard_status_task_attributes,json=syncShardStatusTaskAttributes,proto3,oneof" json:"sync_shard_status_task_attributes,omitempty"`
 }
 type ReplicationTask_SyncActivityTaskAttributes struct {
 	SyncActivityTaskAttributes *SyncActivityTaskAttributes `protobuf:"bytes,6,opt,name=sync_activity_task_attributes,json=syncActivityTaskAttributes,proto3,oneof" json:"sync_activity_task_attributes,omitempty"`
 }
-type ReplicationTask_HistoryMetadataTaskAttributes struct {
-	HistoryMetadataTaskAttributes *HistoryMetadataTaskAttributes `protobuf:"bytes,7,opt,name=history_metadata_task_attributes,json=historyMetadataTaskAttributes,proto3,oneof" json:"history_metadata_task_attributes,omitempty"`
-}
 type ReplicationTask_HistoryTaskV2Attributes struct {
 	HistoryTaskV2Attributes *HistoryTaskV2Attributes `protobuf:"bytes,8,opt,name=history_task_v2_attributes,json=historyTaskV2Attributes,proto3,oneof" json:"history_task_v2_attributes,omitempty"`
 }
+type ReplicationTask_SyncWorkflowStateTaskAttributes struct {
+	SyncWorkflowStateTaskAttributes *SyncWorkflowStateTaskAttributes `protobuf:"bytes,10,opt,name=sync_workflow_state_task_attributes,json=syncWorkflowStateTaskAttributes,proto3,oneof" json:"sync_workflow_state_task_attributes,omitempty"`
+}
 
-func (*ReplicationTask_NamespaceTaskAttributes) isReplicationTask_Attributes()       {}
-func (*ReplicationTask_HistoryTaskAttributes) isReplicationTask_Attributes()         {}
-func (*ReplicationTask_SyncShardStatusTaskAttributes) isReplicationTask_Attributes() {}
-func (*ReplicationTask_SyncActivityTaskAttributes) isReplicationTask_Attributes()    {}
-func (*ReplicationTask_HistoryMetadataTaskAttributes) isReplicationTask_Attributes() {}
-func (*ReplicationTask_HistoryTaskV2Attributes) isReplicationTask_Attributes()       {}
+func (*ReplicationTask_NamespaceTaskAttributes) isReplicationTask_Attributes()         {}
+func (*ReplicationTask_SyncShardStatusTaskAttributes) isReplicationTask_Attributes()   {}
+func (*ReplicationTask_SyncActivityTaskAttributes) isReplicationTask_Attributes()      {}
+func (*ReplicationTask_HistoryTaskV2Attributes) isReplicationTask_Attributes()         {}
+func (*ReplicationTask_SyncWorkflowStateTaskAttributes) isReplicationTask_Attributes() {}
 
 func (m *ReplicationTask) GetAttributes() isReplicationTask_Attributes {
 	if m != nil {
@@ -168,13 +164,6 @@ func (m *ReplicationTask) GetNamespaceTaskAttributes() *NamespaceTaskAttributes 
 	return nil
 }
 
-func (m *ReplicationTask) GetHistoryTaskAttributes() *HistoryTaskAttributes {
-	if x, ok := m.GetAttributes().(*ReplicationTask_HistoryTaskAttributes); ok {
-		return x.HistoryTaskAttributes
-	}
-	return nil
-}
-
 func (m *ReplicationTask) GetSyncShardStatusTaskAttributes() *SyncShardStatusTaskAttributes {
 	if x, ok := m.GetAttributes().(*ReplicationTask_SyncShardStatusTaskAttributes); ok {
 		return x.SyncShardStatusTaskAttributes
@@ -189,16 +178,16 @@ func (m *ReplicationTask) GetSyncActivityTaskAttributes() *SyncActivityTaskAttri
 	return nil
 }
 
-func (m *ReplicationTask) GetHistoryMetadataTaskAttributes() *HistoryMetadataTaskAttributes {
-	if x, ok := m.GetAttributes().(*ReplicationTask_HistoryMetadataTaskAttributes); ok {
-		return x.HistoryMetadataTaskAttributes
+func (m *ReplicationTask) GetHistoryTaskV2Attributes() *HistoryTaskV2Attributes {
+	if x, ok := m.GetAttributes().(*ReplicationTask_HistoryTaskV2Attributes); ok {
+		return x.HistoryTaskV2Attributes
 	}
 	return nil
 }
 
-func (m *ReplicationTask) GetHistoryTaskV2Attributes() *HistoryTaskV2Attributes {
-	if x, ok := m.GetAttributes().(*ReplicationTask_HistoryTaskV2Attributes); ok {
-		return x.HistoryTaskV2Attributes
+func (m *ReplicationTask) GetSyncWorkflowStateTaskAttributes() *SyncWorkflowStateTaskAttributes {
+	if x, ok := m.GetAttributes().(*ReplicationTask_SyncWorkflowStateTaskAttributes); ok {
+		return x.SyncWorkflowStateTaskAttributes
 	}
 	return nil
 }
@@ -214,11 +203,10 @@ func (m *ReplicationTask) GetVisibilityTime() *time.Time {
 func (*ReplicationTask) XXX_OneofWrappers() []interface{} {
 	return []interface{}{
 		(*ReplicationTask_NamespaceTaskAttributes)(nil),
-		(*ReplicationTask_HistoryTaskAttributes)(nil),
 		(*ReplicationTask_SyncShardStatusTaskAttributes)(nil),
 		(*ReplicationTask_SyncActivityTaskAttributes)(nil),
-		(*ReplicationTask_HistoryMetadataTaskAttributes)(nil),
 		(*ReplicationTask_HistoryTaskV2Attributes)(nil),
+		(*ReplicationTask_SyncWorkflowStateTaskAttributes)(nil),
 	}
 }
 
@@ -603,204 +591,6 @@ func (m *NamespaceTaskAttributes) GetFailoverVersion() int64 {
 	return 0
 }
 
-type HistoryTaskAttributes struct {
-	TargetClusters []string     `protobuf:"bytes,1,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
-	NamespaceId    string       `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId     string       `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId          string       `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	FirstEventId   int64        `protobuf:"varint,5,opt,name=first_event_id,json=firstEventId,proto3" json:"first_event_id,omitempty"`
-	NextEventId    int64        `protobuf:"varint,6,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	Version        int64        `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
-	History        *v13.History `protobuf:"bytes,9,opt,name=history,proto3" json:"history,omitempty"`
-	NewRunHistory  *v13.History `protobuf:"bytes,10,opt,name=new_run_history,json=newRunHistory,proto3" json:"new_run_history,omitempty"`
-}
-
-func (m *HistoryTaskAttributes) Reset()      { *m = HistoryTaskAttributes{} }
-func (*HistoryTaskAttributes) ProtoMessage() {}
-func (*HistoryTaskAttributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_edd9fae2af6b0532, []int{6}
-}
-func (m *HistoryTaskAttributes) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *HistoryTaskAttributes) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_HistoryTaskAttributes.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *HistoryTaskAttributes) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HistoryTaskAttributes.Merge(m, src)
-}
-func (m *HistoryTaskAttributes) XXX_Size() int {
-	return m.Size()
-}
-func (m *HistoryTaskAttributes) XXX_DiscardUnknown() {
-	xxx_messageInfo_HistoryTaskAttributes.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_HistoryTaskAttributes proto.InternalMessageInfo
-
-func (m *HistoryTaskAttributes) GetTargetClusters() []string {
-	if m != nil {
-		return m.TargetClusters
-	}
-	return nil
-}
-
-func (m *HistoryTaskAttributes) GetNamespaceId() string {
-	if m != nil {
-		return m.NamespaceId
-	}
-	return ""
-}
-
-func (m *HistoryTaskAttributes) GetWorkflowId() string {
-	if m != nil {
-		return m.WorkflowId
-	}
-	return ""
-}
-
-func (m *HistoryTaskAttributes) GetRunId() string {
-	if m != nil {
-		return m.RunId
-	}
-	return ""
-}
-
-func (m *HistoryTaskAttributes) GetFirstEventId() int64 {
-	if m != nil {
-		return m.FirstEventId
-	}
-	return 0
-}
-
-func (m *HistoryTaskAttributes) GetNextEventId() int64 {
-	if m != nil {
-		return m.NextEventId
-	}
-	return 0
-}
-
-func (m *HistoryTaskAttributes) GetVersion() int64 {
-	if m != nil {
-		return m.Version
-	}
-	return 0
-}
-
-func (m *HistoryTaskAttributes) GetHistory() *v13.History {
-	if m != nil {
-		return m.History
-	}
-	return nil
-}
-
-func (m *HistoryTaskAttributes) GetNewRunHistory() *v13.History {
-	if m != nil {
-		return m.NewRunHistory
-	}
-	return nil
-}
-
-type HistoryMetadataTaskAttributes struct {
-	TargetClusters []string `protobuf:"bytes,1,rep,name=target_clusters,json=targetClusters,proto3" json:"target_clusters,omitempty"`
-	NamespaceId    string   `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId     string   `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId          string   `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	FirstEventId   int64    `protobuf:"varint,5,opt,name=first_event_id,json=firstEventId,proto3" json:"first_event_id,omitempty"`
-	NextEventId    int64    `protobuf:"varint,6,opt,name=next_event_id,json=nextEventId,proto3" json:"next_event_id,omitempty"`
-	Version        int64    `protobuf:"varint,7,opt,name=version,proto3" json:"version,omitempty"`
-}
-
-func (m *HistoryMetadataTaskAttributes) Reset()      { *m = HistoryMetadataTaskAttributes{} }
-func (*HistoryMetadataTaskAttributes) ProtoMessage() {}
-func (*HistoryMetadataTaskAttributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_edd9fae2af6b0532, []int{7}
-}
-func (m *HistoryMetadataTaskAttributes) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *HistoryMetadataTaskAttributes) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_HistoryMetadataTaskAttributes.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *HistoryMetadataTaskAttributes) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_HistoryMetadataTaskAttributes.Merge(m, src)
-}
-func (m *HistoryMetadataTaskAttributes) XXX_Size() int {
-	return m.Size()
-}
-func (m *HistoryMetadataTaskAttributes) XXX_DiscardUnknown() {
-	xxx_messageInfo_HistoryMetadataTaskAttributes.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_HistoryMetadataTaskAttributes proto.InternalMessageInfo
-
-func (m *HistoryMetadataTaskAttributes) GetTargetClusters() []string {
-	if m != nil {
-		return m.TargetClusters
-	}
-	return nil
-}
-
-func (m *HistoryMetadataTaskAttributes) GetNamespaceId() string {
-	if m != nil {
-		return m.NamespaceId
-	}
-	return ""
-}
-
-func (m *HistoryMetadataTaskAttributes) GetWorkflowId() string {
-	if m != nil {
-		return m.WorkflowId
-	}
-	return ""
-}
-
-func (m *HistoryMetadataTaskAttributes) GetRunId() string {
-	if m != nil {
-		return m.RunId
-	}
-	return ""
-}
-
-func (m *HistoryMetadataTaskAttributes) GetFirstEventId() int64 {
-	if m != nil {
-		return m.FirstEventId
-	}
-	return 0
-}
-
-func (m *HistoryMetadataTaskAttributes) GetNextEventId() int64 {
-	if m != nil {
-		return m.NextEventId
-	}
-	return 0
-}
-
-func (m *HistoryMetadataTaskAttributes) GetVersion() int64 {
-	if m != nil {
-		return m.Version
-	}
-	return 0
-}
-
 type SyncShardStatusTaskAttributes struct {
 	SourceCluster string     `protobuf:"bytes,1,opt,name=source_cluster,json=sourceCluster,proto3" json:"source_cluster,omitempty"`
 	ShardId       int32      `protobuf:"varint,2,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
@@ -810,7 +600,7 @@ type SyncShardStatusTaskAttributes struct {
 func (m *SyncShardStatusTaskAttributes) Reset()      { *m = SyncShardStatusTaskAttributes{} }
 func (*SyncShardStatusTaskAttributes) ProtoMessage() {}
 func (*SyncShardStatusTaskAttributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_edd9fae2af6b0532, []int{8}
+	return fileDescriptor_edd9fae2af6b0532, []int{6}
 }
 func (m *SyncShardStatusTaskAttributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -870,17 +660,17 @@ type SyncActivityTaskAttributes struct {
 	StartedId          int64               `protobuf:"varint,7,opt,name=started_id,json=startedId,proto3" json:"started_id,omitempty"`
 	StartedTime        *time.Time          `protobuf:"bytes,8,opt,name=started_time,json=startedTime,proto3,stdtime" json:"started_time,omitempty"`
 	LastHeartbeatTime  *time.Time          `protobuf:"bytes,9,opt,name=last_heartbeat_time,json=lastHeartbeatTime,proto3,stdtime" json:"last_heartbeat_time,omitempty"`
-	Details            *v14.Payloads       `protobuf:"bytes,10,opt,name=details,proto3" json:"details,omitempty"`
+	Details            *v13.Payloads       `protobuf:"bytes,10,opt,name=details,proto3" json:"details,omitempty"`
 	Attempt            int32               `protobuf:"varint,11,opt,name=attempt,proto3" json:"attempt,omitempty"`
-	LastFailure        *v15.Failure        `protobuf:"bytes,12,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
+	LastFailure        *v14.Failure        `protobuf:"bytes,12,opt,name=last_failure,json=lastFailure,proto3" json:"last_failure,omitempty"`
 	LastWorkerIdentity string              `protobuf:"bytes,13,opt,name=last_worker_identity,json=lastWorkerIdentity,proto3" json:"last_worker_identity,omitempty"`
-	VersionHistory     *v16.VersionHistory `protobuf:"bytes,14,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
+	VersionHistory     *v15.VersionHistory `protobuf:"bytes,14,opt,name=version_history,json=versionHistory,proto3" json:"version_history,omitempty"`
 }
 
 func (m *SyncActivityTaskAttributes) Reset()      { *m = SyncActivityTaskAttributes{} }
 func (*SyncActivityTaskAttributes) ProtoMessage() {}
 func (*SyncActivityTaskAttributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_edd9fae2af6b0532, []int{9}
+	return fileDescriptor_edd9fae2af6b0532, []int{7}
 }
 func (m *SyncActivityTaskAttributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -972,7 +762,7 @@ func (m *SyncActivityTaskAttributes) GetLastHeartbeatTime() *time.Time {
 	return nil
 }
 
-func (m *SyncActivityTaskAttributes) GetDetails() *v14.Payloads {
+func (m *SyncActivityTaskAttributes) GetDetails() *v13.Payloads {
 	if m != nil {
 		return m.Details
 	}
@@ -986,7 +776,7 @@ func (m *SyncActivityTaskAttributes) GetAttempt() int32 {
 	return 0
 }
 
-func (m *SyncActivityTaskAttributes) GetLastFailure() *v15.Failure {
+func (m *SyncActivityTaskAttributes) GetLastFailure() *v14.Failure {
 	if m != nil {
 		return m.LastFailure
 	}
@@ -1000,7 +790,7 @@ func (m *SyncActivityTaskAttributes) GetLastWorkerIdentity() string {
 	return ""
 }
 
-func (m *SyncActivityTaskAttributes) GetVersionHistory() *v16.VersionHistory {
+func (m *SyncActivityTaskAttributes) GetVersionHistory() *v15.VersionHistory {
 	if m != nil {
 		return m.VersionHistory
 	}
@@ -1011,16 +801,16 @@ type HistoryTaskV2Attributes struct {
 	NamespaceId         string                    `protobuf:"bytes,2,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
 	WorkflowId          string                    `protobuf:"bytes,3,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
 	RunId               string                    `protobuf:"bytes,4,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	VersionHistoryItems []*v16.VersionHistoryItem `protobuf:"bytes,5,rep,name=version_history_items,json=versionHistoryItems,proto3" json:"version_history_items,omitempty"`
-	Events              *v14.DataBlob             `protobuf:"bytes,6,opt,name=events,proto3" json:"events,omitempty"`
+	VersionHistoryItems []*v15.VersionHistoryItem `protobuf:"bytes,5,rep,name=version_history_items,json=versionHistoryItems,proto3" json:"version_history_items,omitempty"`
+	Events              *v13.DataBlob             `protobuf:"bytes,6,opt,name=events,proto3" json:"events,omitempty"`
 	// New run events does not need version history since there is no prior events.
-	NewRunEvents *v14.DataBlob `protobuf:"bytes,7,opt,name=new_run_events,json=newRunEvents,proto3" json:"new_run_events,omitempty"`
+	NewRunEvents *v13.DataBlob `protobuf:"bytes,7,opt,name=new_run_events,json=newRunEvents,proto3" json:"new_run_events,omitempty"`
 }
 
 func (m *HistoryTaskV2Attributes) Reset()      { *m = HistoryTaskV2Attributes{} }
 func (*HistoryTaskV2Attributes) ProtoMessage() {}
 func (*HistoryTaskV2Attributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_edd9fae2af6b0532, []int{10}
+	return fileDescriptor_edd9fae2af6b0532, []int{8}
 }
 func (m *HistoryTaskV2Attributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1070,23 +860,66 @@ func (m *HistoryTaskV2Attributes) GetRunId() string {
 	return ""
 }
 
-func (m *HistoryTaskV2Attributes) GetVersionHistoryItems() []*v16.VersionHistoryItem {
+func (m *HistoryTaskV2Attributes) GetVersionHistoryItems() []*v15.VersionHistoryItem {
 	if m != nil {
 		return m.VersionHistoryItems
 	}
 	return nil
 }
 
-func (m *HistoryTaskV2Attributes) GetEvents() *v14.DataBlob {
+func (m *HistoryTaskV2Attributes) GetEvents() *v13.DataBlob {
 	if m != nil {
 		return m.Events
 	}
 	return nil
 }
 
-func (m *HistoryTaskV2Attributes) GetNewRunEvents() *v14.DataBlob {
+func (m *HistoryTaskV2Attributes) GetNewRunEvents() *v13.DataBlob {
 	if m != nil {
 		return m.NewRunEvents
+	}
+	return nil
+}
+
+type SyncWorkflowStateTaskAttributes struct {
+	WorkflowState *v16.WorkflowMutableState `protobuf:"bytes,1,opt,name=workflow_state,json=workflowState,proto3" json:"workflow_state,omitempty"`
+}
+
+func (m *SyncWorkflowStateTaskAttributes) Reset()      { *m = SyncWorkflowStateTaskAttributes{} }
+func (*SyncWorkflowStateTaskAttributes) ProtoMessage() {}
+func (*SyncWorkflowStateTaskAttributes) Descriptor() ([]byte, []int) {
+	return fileDescriptor_edd9fae2af6b0532, []int{9}
+}
+func (m *SyncWorkflowStateTaskAttributes) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SyncWorkflowStateTaskAttributes) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SyncWorkflowStateTaskAttributes.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SyncWorkflowStateTaskAttributes) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SyncWorkflowStateTaskAttributes.Merge(m, src)
+}
+func (m *SyncWorkflowStateTaskAttributes) XXX_Size() int {
+	return m.Size()
+}
+func (m *SyncWorkflowStateTaskAttributes) XXX_DiscardUnknown() {
+	xxx_messageInfo_SyncWorkflowStateTaskAttributes.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SyncWorkflowStateTaskAttributes proto.InternalMessageInfo
+
+func (m *SyncWorkflowStateTaskAttributes) GetWorkflowState() *v16.WorkflowMutableState {
+	if m != nil {
+		return m.WorkflowState
 	}
 	return nil
 }
@@ -1098,11 +931,10 @@ func init() {
 	proto.RegisterType((*ReplicationMessages)(nil), "temporal.server.api.replication.v1.ReplicationMessages")
 	proto.RegisterType((*ReplicationTaskInfo)(nil), "temporal.server.api.replication.v1.ReplicationTaskInfo")
 	proto.RegisterType((*NamespaceTaskAttributes)(nil), "temporal.server.api.replication.v1.NamespaceTaskAttributes")
-	proto.RegisterType((*HistoryTaskAttributes)(nil), "temporal.server.api.replication.v1.HistoryTaskAttributes")
-	proto.RegisterType((*HistoryMetadataTaskAttributes)(nil), "temporal.server.api.replication.v1.HistoryMetadataTaskAttributes")
 	proto.RegisterType((*SyncShardStatusTaskAttributes)(nil), "temporal.server.api.replication.v1.SyncShardStatusTaskAttributes")
 	proto.RegisterType((*SyncActivityTaskAttributes)(nil), "temporal.server.api.replication.v1.SyncActivityTaskAttributes")
 	proto.RegisterType((*HistoryTaskV2Attributes)(nil), "temporal.server.api.replication.v1.HistoryTaskV2Attributes")
+	proto.RegisterType((*SyncWorkflowStateTaskAttributes)(nil), "temporal.server.api.replication.v1.SyncWorkflowStateTaskAttributes")
 }
 
 func init() {
@@ -1110,104 +942,99 @@ func init() {
 }
 
 var fileDescriptor_edd9fae2af6b0532 = []byte{
-	// 1537 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe4, 0x58, 0x4f, 0x6f, 0x1b, 0x45,
-	0x14, 0xcf, 0xda, 0x8e, 0xff, 0x3c, 0xff, 0xed, 0x84, 0x10, 0xc7, 0x28, 0x6e, 0x62, 0xb5, 0x34,
-	0x45, 0xc8, 0x6e, 0x92, 0x03, 0xb4, 0x45, 0x48, 0x49, 0xa1, 0xc4, 0x91, 0x5a, 0xaa, 0x6d, 0xd4,
-	0x4a, 0x5c, 0x96, 0x89, 0x77, 0x6c, 0xaf, 0x62, 0xef, 0x5a, 0x33, 0x63, 0x07, 0x73, 0x42, 0xe2,
-	0x80, 0x84, 0x40, 0xea, 0x77, 0x80, 0x03, 0x27, 0x3e, 0x47, 0x8f, 0xbd, 0x20, 0x95, 0x13, 0x34,
-	0xe5, 0xc0, 0xb1, 0x7c, 0x03, 0x34, 0xb3, 0xb3, 0xf6, 0xae, 0xd7, 0x76, 0xdd, 0xa2, 0x9e, 0xb8,
-	0x79, 0xde, 0x7b, 0xbf, 0xdf, 0x9b, 0x79, 0xf3, 0xfe, 0xcc, 0x1a, 0xae, 0x71, 0xd2, 0xed, 0x39,
-	0x14, 0x77, 0x6a, 0x8c, 0xd0, 0x01, 0xa1, 0x35, 0xdc, 0xb3, 0x6a, 0x94, 0xf4, 0x3a, 0x56, 0x03,
-	0x73, 0xcb, 0xb1, 0x6b, 0x83, 0x9d, 0x5a, 0x97, 0x30, 0x86, 0x5b, 0xa4, 0xda, 0xa3, 0x0e, 0x77,
-	0x50, 0xc5, 0x43, 0x54, 0x5d, 0x44, 0x15, 0xf7, 0xac, 0xaa, 0x0f, 0x51, 0x1d, 0xec, 0x94, 0x2e,
-	0xb6, 0x1c, 0xa7, 0xd5, 0x21, 0x35, 0x89, 0x38, 0xe9, 0x37, 0x6b, 0xdc, 0xea, 0x12, 0xc6, 0x71,
-	0xb7, 0xe7, 0x92, 0x94, 0xb6, 0x4c, 0xd2, 0x23, 0xb6, 0x49, 0xec, 0x86, 0x45, 0x58, 0xad, 0xe5,
-	0xb4, 0x1c, 0x29, 0x97, 0xbf, 0x94, 0x49, 0x75, 0xda, 0xce, 0x88, 0xdd, 0xef, 0x32, 0xb1, 0x27,
-	0xbf, 0x43, 0xd7, 0xfe, 0xca, 0x5c, 0x7b, 0x8e, 0xd9, 0xa9, 0x32, 0x7c, 0x7f, 0x9a, 0x61, 0xdb,
-	0x62, 0xdc, 0xa1, 0xc3, 0xd0, 0x71, 0x4b, 0x97, 0x46, 0xd6, 0xc2, 0xac, 0xe1, 0x74, 0xbb, 0x53,
-	0x82, 0xe2, 0x73, 0x2e, 0xac, 0x6c, 0xdc, 0x25, 0xac, 0x87, 0x1b, 0x24, 0x6c, 0x78, 0x35, 0x60,
-	0x38, 0x2f, 0xd0, 0xa5, 0xcb, 0x01, 0xd3, 0x99, 0x1b, 0x0c, 0x9a, 0x35, 0xb1, 0xd5, 0xe9, 0xd3,
-	0xb0, 0xe3, 0xca, 0x3f, 0x09, 0xc8, 0xeb, 0x63, 0x77, 0xc7, 0x98, 0x9d, 0xa2, 0xbb, 0x90, 0x12,
-	0x71, 0x31, 0xf8, 0xb0, 0x47, 0x8a, 0xda, 0xa6, 0xb6, 0x9d, 0xdb, 0xdd, 0xa9, 0x4e, 0xbb, 0x5e,
-	0x19, 0xc6, 0xea, 0x60, 0xa7, 0x3a, 0xc1, 0x70, 0x3c, 0xec, 0x11, 0x3d, 0xc9, 0xd5, 0x2f, 0x74,
-	0x09, 0x72, 0xcc, 0xe9, 0xd3, 0x06, 0x31, 0x24, 0xad, 0x65, 0x16, 0x23, 0x9b, 0xda, 0x76, 0x54,
-	0xcf, 0xb8, 0x52, 0x81, 0xa8, 0x9b, 0x68, 0x08, 0xeb, 0xa3, 0x00, 0xb9, 0x86, 0x98, 0x73, 0x6a,
-	0x9d, 0xf4, 0x39, 0x61, 0xc5, 0xe8, 0xa6, 0xb6, 0x9d, 0xde, 0xbd, 0x59, 0x7d, 0x79, 0x92, 0x55,
-	0xef, 0x7a, 0x24, 0x82, 0x77, 0x7f, 0x44, 0x71, 0xb8, 0xa4, 0xaf, 0xd9, 0xd3, 0x55, 0x88, 0xc1,
-	0x9a, 0x8a, 0x63, 0xc8, 0x71, 0x4c, 0x3a, 0xbe, 0xbe, 0x88, 0xe3, 0x43, 0x97, 0x22, 0xe4, 0x76,
-	0xb5, 0x3d, 0x4d, 0x81, 0x7e, 0xd4, 0x60, 0x8b, 0x0d, 0xed, 0x86, 0xc1, 0xda, 0x98, 0x9a, 0x06,
-	0xe3, 0x98, 0xf7, 0x59, 0xc8, 0xff, 0xb2, 0xf4, 0xbf, 0xbf, 0x88, 0xff, 0xfb, 0x43, 0xbb, 0x71,
-	0x5f, 0x70, 0xdd, 0x97, 0x54, 0xa1, 0x7d, 0x6c, 0xb0, 0x79, 0x06, 0xe8, 0x5b, 0x0d, 0xa4, 0x85,
-	0x81, 0x1b, 0xdc, 0x1a, 0x58, 0x3c, 0x1c, 0x8b, 0xb8, 0xdc, 0xcb, 0xc7, 0x8b, 0xee, 0x65, 0x5f,
-	0xf1, 0x84, 0x36, 0x52, 0x62, 0x33, 0xb5, 0xe8, 0x07, 0x0d, 0x36, 0xbd, 0xbb, 0xe8, 0x12, 0x8e,
-	0x4d, 0xcc, 0x71, 0x68, 0x23, 0x89, 0xc5, 0x83, 0xa2, 0x2e, 0xe5, 0x8e, 0xa2, 0x0a, 0x07, 0xa5,
-	0x3d, 0xcf, 0x00, 0x7d, 0x0d, 0xa5, 0x40, 0x66, 0x0c, 0x76, 0xfd, 0xfb, 0x48, 0x2e, 0x9e, 0x95,
-	0xbe, 0xe4, 0x78, 0xb0, 0x1b, 0xcc, 0xca, 0xf6, 0x74, 0x15, 0xaa, 0x43, 0x7e, 0x60, 0x31, 0xeb,
-	0xc4, 0xea, 0xc8, 0xcb, 0xb0, 0xba, 0xa4, 0x98, 0x92, 0x0e, 0x4b, 0x55, 0xb7, 0x8f, 0x56, 0xbd,
-	0x3e, 0x5a, 0x3d, 0xf6, 0xfa, 0xe8, 0x41, 0xec, 0xd1, 0x1f, 0x17, 0x35, 0x3d, 0x37, 0x06, 0x0a,
-	0xd5, 0x41, 0x06, 0x60, 0xbc, 0xed, 0xca, 0xf7, 0x11, 0x28, 0xf8, 0x2b, 0xd6, 0x39, 0x25, 0x36,
-	0x5a, 0x87, 0xa4, 0x9b, 0x88, 0x96, 0x29, 0x6b, 0x7e, 0x59, 0x4f, 0xc8, 0x75, 0xdd, 0x44, 0xd7,
-	0x61, 0xbd, 0x83, 0x19, 0x37, 0x28, 0xe1, 0xd4, 0x22, 0x03, 0x62, 0x1a, 0xaa, 0x87, 0x8c, 0x4b,
-	0xf9, 0x6d, 0x61, 0xa0, 0x7b, 0xfa, 0x3b, 0xae, 0xda, 0x07, 0xed, 0x51, 0xa7, 0x41, 0x18, 0x0b,
-	0x42, 0xa3, 0x63, 0xe8, 0x3d, 0x4f, 0x3f, 0x86, 0x12, 0x28, 0x4f, 0x40, 0x27, 0xa3, 0x11, 0x5b,
-	0x30, 0x1a, 0xef, 0x04, 0x3c, 0x3c, 0x08, 0x84, 0xa6, 0x72, 0x0c, 0xf9, 0x89, 0xc2, 0x41, 0xfb,
-	0x90, 0xf6, 0xaa, 0x51, 0xb8, 0xd1, 0x16, 0x74, 0x03, 0x2e, 0x48, 0xb2, 0xfe, 0x1a, 0x81, 0x15,
-	0x5f, 0x88, 0xd5, 0xa9, 0x18, 0xfa, 0x12, 0x2e, 0xf8, 0x12, 0x43, 0xe6, 0x14, 0x2b, 0x6a, 0x9b,
-	0xd1, 0xed, 0xf4, 0xee, 0xde, 0x22, 0x69, 0x34, 0xd1, 0x68, 0xf5, 0x02, 0x0d, 0x0a, 0xd8, 0x7f,
-	0xb9, 0xac, 0x75, 0x48, 0xb6, 0x31, 0x33, 0xba, 0x0e, 0x25, 0xf2, 0x6e, 0x92, 0x7a, 0xa2, 0x8d,
-	0xd9, 0x1d, 0x87, 0x12, 0x64, 0xc0, 0x85, 0x50, 0xaf, 0x52, 0xf1, 0xdf, 0x7b, 0x8d, 0xde, 0xa4,
-	0xe7, 0x27, 0x7a, 0x51, 0xe5, 0xb7, 0x60, 0xc0, 0xe4, 0x4c, 0xb0, 0x9b, 0x0e, 0xda, 0x82, 0xcc,
-	0x78, 0x2a, 0xa8, 0xd4, 0x4c, 0xe9, 0xe9, 0x91, 0xac, 0x6e, 0xa2, 0x8b, 0x90, 0x3e, 0x73, 0xe8,
-	0x69, 0xb3, 0xe3, 0x9c, 0x79, 0x67, 0x4c, 0xe9, 0xe0, 0x89, 0xea, 0x26, 0x5a, 0x85, 0x38, 0xed,
-	0xdb, 0x5e, 0xc6, 0xa5, 0xf4, 0x65, 0xda, 0xb7, 0xeb, 0x26, 0xba, 0xe5, 0x1f, 0x73, 0x31, 0x39,
-	0xe6, 0xde, 0x9d, 0x3f, 0xe6, 0xa6, 0xcc, 0xb6, 0x35, 0x48, 0x78, 0x43, 0x6d, 0x59, 0x06, 0x37,
-	0xce, 0xdd, 0x71, 0x56, 0x84, 0xc4, 0x80, 0x50, 0x66, 0x39, 0xb6, 0xec, 0x9b, 0x51, 0xdd, 0x5b,
-	0x8a, 0x71, 0xd8, 0xb4, 0x28, 0xe3, 0x06, 0x19, 0x10, 0x9b, 0x0b, 0x64, 0xc2, 0x1d, 0x87, 0x52,
-	0xfa, 0xa9, 0x10, 0xd6, 0x4d, 0x54, 0x81, 0xac, 0x4d, 0xbe, 0xf2, 0x19, 0x25, 0xa5, 0x51, 0x5a,
-	0x08, 0x3d, 0x9b, 0x2d, 0xc8, 0xb0, 0x46, 0x9b, 0x98, 0xfd, 0x0e, 0x91, 0x75, 0x9b, 0x72, 0x4d,
-	0x46, 0xb2, 0xba, 0x59, 0x79, 0x1c, 0x85, 0xb5, 0x19, 0x13, 0x11, 0x61, 0x58, 0x19, 0xc7, 0xd6,
-	0xe9, 0x11, 0x2a, 0x43, 0xaf, 0x26, 0xfe, 0xb5, 0xf9, 0xa1, 0x18, 0x71, 0x7e, 0xee, 0xe1, 0x74,
-	0x64, 0x87, 0x64, 0x28, 0x07, 0x91, 0xd1, 0x95, 0x44, 0x2c, 0x13, 0x7d, 0x04, 0x31, 0xcb, 0x6e,
-	0x3a, 0x6a, 0x9e, 0x6f, 0x8f, 0x7d, 0x08, 0xf2, 0x11, 0x3e, 0xe0, 0x40, 0xa4, 0x81, 0x2e, 0x51,
-	0xe8, 0x00, 0xe2, 0x0d, 0xc7, 0x6e, 0x5a, 0x2d, 0x95, 0x7a, 0xef, 0x2d, 0x82, 0xbf, 0x25, 0x11,
-	0xba, 0x42, 0xa2, 0x26, 0x20, 0x7f, 0x05, 0x2a, 0x3e, 0x77, 0xcc, 0x7e, 0x10, 0xe4, 0x9b, 0xf5,
-	0xb0, 0xf0, 0xe5, 0xa9, 0x22, 0xf7, 0x17, 0xb5, 0x2b, 0x42, 0x97, 0x21, 0xe7, 0x72, 0x1b, 0xc1,
-	0x34, 0xc8, 0xba, 0xd2, 0x07, 0x2a, 0x19, 0xae, 0x42, 0x41, 0xbc, 0xcd, 0x9c, 0x01, 0xa1, 0x23,
-	0x43, 0x37, 0x1d, 0xf2, 0x9e, 0x5c, 0x99, 0x56, 0x7e, 0x8a, 0xc2, 0xea, 0xd4, 0x37, 0x06, 0xba,
-	0x02, 0x79, 0x8e, 0x69, 0x8b, 0x70, 0xa3, 0xd1, 0xe9, 0x33, 0x4e, 0xa8, 0xdb, 0x53, 0x52, 0x7a,
-	0xce, 0x15, 0xdf, 0x52, 0xd2, 0x50, 0x35, 0x45, 0x5e, 0x5a, 0x4d, 0xd1, 0x39, 0xd5, 0x14, 0xf3,
-	0x57, 0x53, 0x38, 0xab, 0x97, 0x17, 0xc9, 0xea, 0x78, 0x38, 0xab, 0x7d, 0x95, 0x93, 0x08, 0x56,
-	0xce, 0x0d, 0x48, 0xa8, 0x61, 0xa9, 0x26, 0xe1, 0x66, 0xf0, 0xc2, 0x94, 0xd2, 0x37, 0x6f, 0x75,
-	0x0f, 0x80, 0x0e, 0x21, 0x6f, 0x93, 0x33, 0x43, 0x6c, 0xdd, 0xe3, 0x80, 0x05, 0x39, 0xb2, 0x36,
-	0x39, 0xd3, 0xfb, 0xb6, 0x5a, 0x1e, 0xc5, 0x92, 0xc9, 0x42, 0xea, 0x28, 0x96, 0x4c, 0x17, 0x32,
-	0x47, 0xb1, 0x64, 0xa6, 0x90, 0x3d, 0x8a, 0x25, 0xb3, 0x85, 0xdc, 0x51, 0x2c, 0x99, 0x2b, 0xe4,
-	0x2b, 0xdf, 0x45, 0x60, 0x63, 0xee, 0xa3, 0xe3, 0xff, 0x72, 0x5b, 0x95, 0x9f, 0x35, 0xd8, 0x98,
-	0xfb, 0x26, 0x15, 0x35, 0xa2, 0x3e, 0x0c, 0x54, 0x24, 0x54, 0x7b, 0xcf, 0xba, 0x52, 0x15, 0x88,
-	0xc0, 0xd3, 0x24, 0x12, 0x7c, 0x9a, 0x4c, 0x8c, 0xea, 0xe8, 0x6b, 0x8c, 0xea, 0xdf, 0x97, 0xa1,
-	0x34, 0xfb, 0xb9, 0xfa, 0x26, 0x07, 0x90, 0x2f, 0x74, 0xb1, 0x60, 0xa2, 0x4f, 0x36, 0xf6, 0xe5,
-	0x50, 0x63, 0x47, 0x9f, 0x41, 0x6e, 0x6c, 0x22, 0x0f, 0x1f, 0x5f, 0xf0, 0xf0, 0xd9, 0x11, 0x4e,
-	0x68, 0xd0, 0x06, 0x88, 0x68, 0x50, 0xee, 0x7a, 0x72, 0xef, 0x30, 0xa5, 0x24, 0x72, 0x4a, 0x66,
-	0x3c, 0xb5, 0xf4, 0x92, 0x5c, 0xd0, 0x4b, 0x5a, 0xa1, 0xa4, 0x8f, 0x7b, 0xb0, 0x22, 0x1f, 0x25,
-	0x6d, 0x82, 0x29, 0x3f, 0x21, 0x98, 0xbf, 0xda, 0x73, 0xf6, 0x82, 0x00, 0x1f, 0x7a, 0x58, 0xc9,
-	0x78, 0x03, 0x12, 0x26, 0xe1, 0xd8, 0xea, 0xb0, 0xe9, 0x65, 0xec, 0x7e, 0x91, 0x8b, 0x2a, 0xbe,
-	0x87, 0x87, 0x1d, 0x07, 0x9b, 0x4c, 0xf7, 0x00, 0x22, 0xee, 0x98, 0x0b, 0x6b, 0x5e, 0x4c, 0xbb,
-	0xe9, 0xa4, 0x96, 0xe2, 0xb0, 0x72, 0x9f, 0xea, 0x73, 0xb9, 0x98, 0x99, 0x46, 0xad, 0x94, 0x82,
-	0xfb, 0xb6, 0xfb, 0x53, 0x4f, 0x0b, 0x94, 0x5a, 0xa0, 0x6b, 0xf0, 0x96, 0x24, 0x11, 0x09, 0x40,
-	0xa8, 0x61, 0x99, 0xc4, 0xe6, 0x16, 0x1f, 0x16, 0xb3, 0xf2, 0xee, 0x91, 0xd0, 0x3d, 0x94, 0xaa,
-	0xba, 0xd2, 0xa0, 0x87, 0x90, 0x57, 0x37, 0x3f, 0xea, 0x4d, 0x39, 0xe9, 0xb9, 0x3a, 0x75, 0x08,
-	0xfb, 0x5a, 0x94, 0x9a, 0x0d, 0x5e, 0xa7, 0xca, 0x0d, 0x02, 0xeb, 0xca, 0x5f, 0x11, 0x58, 0x9b,
-	0xf1, 0xe5, 0xf1, 0x26, 0xbb, 0x4b, 0x13, 0x56, 0x27, 0xce, 0x63, 0x58, 0x9c, 0x74, 0xc5, 0xd7,
-	0xac, 0x78, 0xe9, 0xee, 0xbe, 0xda, 0xa9, 0xea, 0x9c, 0x74, 0xf5, 0x95, 0x41, 0x48, 0xc6, 0xd0,
-	0x87, 0x10, 0x97, 0xad, 0xc9, 0xfb, 0x34, 0x9d, 0x99, 0x03, 0x9f, 0x60, 0x8e, 0x0f, 0x3a, 0xce,
-	0x89, 0xae, 0xec, 0xd1, 0x6d, 0xc8, 0x79, 0xd3, 0x40, 0x31, 0x24, 0x16, 0x64, 0xc8, 0xb8, 0xc3,
-	0x40, 0xb6, 0x3f, 0x76, 0x14, 0x4b, 0x6a, 0x85, 0xc8, 0x81, 0xf5, 0xe4, 0x59, 0x79, 0xe9, 0xe9,
-	0xb3, 0xf2, 0xd2, 0x8b, 0x67, 0x65, 0xed, 0x9b, 0xf3, 0xb2, 0xf6, 0xcb, 0x79, 0x59, 0x7b, 0x7c,
-	0x5e, 0xd6, 0x9e, 0x9c, 0x97, 0xb5, 0x3f, 0xcf, 0xcb, 0xda, 0xdf, 0xe7, 0xe5, 0xa5, 0x17, 0xe7,
-	0x65, 0xed, 0xd1, 0xf3, 0xf2, 0xd2, 0x93, 0xe7, 0xe5, 0xa5, 0xa7, 0xcf, 0xcb, 0x4b, 0x5f, 0xec,
-	0xb5, 0x9c, 0xb1, 0x37, 0xcb, 0x99, 0xfd, 0x4f, 0xdb, 0x4d, 0x4a, 0x7a, 0x6a, 0x75, 0x12, 0x97,
-	0x45, 0xb2, 0xf7, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xa0, 0xdf, 0x1d, 0x36, 0xa1, 0x13, 0x00,
-	0x00,
+	// 1470 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xb4, 0x58, 0xcd, 0x6f, 0x1b, 0x45,
+	0x14, 0xcf, 0xda, 0x89, 0x3f, 0xc6, 0x8e, 0x93, 0x4e, 0x28, 0x71, 0x8c, 0xba, 0x49, 0x4c, 0x0b,
+	0x29, 0x42, 0xeb, 0x26, 0x39, 0x50, 0x28, 0x02, 0x25, 0x81, 0x52, 0x23, 0xb5, 0x54, 0xdb, 0xa8,
+	0x95, 0xb8, 0x2c, 0x63, 0xef, 0xd8, 0x1e, 0xc5, 0xde, 0x5d, 0xcd, 0x8c, 0x1d, 0xcc, 0x09, 0xd1,
+	0x1b, 0x12, 0x52, 0x25, 0xfe, 0x05, 0x0e, 0x9c, 0xf8, 0x3b, 0x7a, 0xec, 0x05, 0xa9, 0x9c, 0xa0,
+	0x2e, 0x07, 0x8e, 0xfd, 0x13, 0xd0, 0x7c, 0xac, 0xbd, 0xeb, 0xaf, 0xba, 0x45, 0xdc, 0x3c, 0x6f,
+	0xde, 0xef, 0xf7, 0xde, 0xbc, 0x79, 0x1f, 0xb3, 0x06, 0xd7, 0x38, 0xee, 0x04, 0x3e, 0x45, 0xed,
+	0x0a, 0xc3, 0xb4, 0x87, 0x69, 0x05, 0x05, 0xa4, 0x42, 0x71, 0xd0, 0x26, 0x75, 0xc4, 0x89, 0xef,
+	0x55, 0x7a, 0xfb, 0x95, 0x0e, 0x66, 0x0c, 0x35, 0xb1, 0x15, 0x50, 0x9f, 0xfb, 0xb0, 0x1c, 0x22,
+	0x2c, 0x85, 0xb0, 0x50, 0x40, 0xac, 0x08, 0xc2, 0xea, 0xed, 0x97, 0xb6, 0x9b, 0xbe, 0xdf, 0x6c,
+	0xe3, 0x8a, 0x44, 0xd4, 0xba, 0x8d, 0x0a, 0x27, 0x1d, 0xcc, 0x38, 0xea, 0x04, 0x8a, 0xa4, 0xb4,
+	0xeb, 0xe2, 0x00, 0x7b, 0x2e, 0xf6, 0xea, 0x04, 0xb3, 0x4a, 0xd3, 0x6f, 0xfa, 0x52, 0x2e, 0x7f,
+	0x69, 0x15, 0x6b, 0x9a, 0x67, 0xd8, 0xeb, 0x76, 0x98, 0xf0, 0x29, 0x6a, 0x50, 0xe9, 0xbf, 0x3b,
+	0x57, 0x9f, 0x23, 0x76, 0xa6, 0x15, 0xdf, 0x9f, 0xa6, 0xd8, 0x22, 0x8c, 0xfb, 0xb4, 0x3f, 0x71,
+	0xdc, 0xd2, 0xa7, 0xd3, 0xb4, 0x03, 0x4c, 0x19, 0x61, 0x1c, 0x7b, 0x75, 0x2c, 0x10, 0xe7, 0x3e,
+	0x3d, 0x6b, 0xb4, 0xfd, 0x73, 0xa7, 0xd3, 0xe5, 0xa8, 0xd6, 0xc6, 0x0e, 0xe3, 0x88, 0x87, 0x04,
+	0x97, 0x87, 0x04, 0x02, 0x59, 0xf7, 0x3b, 0x9d, 0x29, 0x51, 0x8d, 0x78, 0x2f, 0xb4, 0x3c, 0xd4,
+	0xc1, 0x2c, 0x40, 0x8a, 0x3d, 0xae, 0x78, 0x35, 0xa6, 0x38, 0xef, 0xa6, 0x4a, 0x57, 0x62, 0xaa,
+	0x33, 0x4f, 0x18, 0x57, 0x6b, 0x20, 0xd2, 0xee, 0xd2, 0x49, 0xc3, 0xe5, 0x87, 0x69, 0xb0, 0x66,
+	0x8f, 0xcc, 0x9d, 0x22, 0x76, 0x06, 0xef, 0x80, 0xac, 0x08, 0xac, 0xc3, 0xfb, 0x01, 0x2e, 0x1a,
+	0x3b, 0xc6, 0x5e, 0xe1, 0x60, 0xdf, 0x9a, 0x96, 0x1f, 0xf2, 0x1e, 0xac, 0xde, 0xbe, 0x35, 0xc6,
+	0x70, 0xda, 0x0f, 0xb0, 0x9d, 0xe1, 0xfa, 0x17, 0xbc, 0x0c, 0x0a, 0xcc, 0xef, 0xd2, 0x3a, 0x76,
+	0x24, 0x2d, 0x71, 0x8b, 0x89, 0x1d, 0x63, 0x2f, 0x69, 0xe7, 0x95, 0x54, 0x20, 0xaa, 0x2e, 0xec,
+	0x83, 0xad, 0x61, 0x80, 0x94, 0x22, 0xe2, 0x9c, 0x92, 0x5a, 0x97, 0x63, 0x56, 0x4c, 0xee, 0x18,
+	0x7b, 0xb9, 0x83, 0x1b, 0xd6, 0xcb, 0xb3, 0xd4, 0xba, 0x13, 0x92, 0x08, 0xde, 0xa3, 0x21, 0xc5,
+	0xad, 0x25, 0x7b, 0xd3, 0x9b, 0xbe, 0x05, 0x7f, 0x32, 0xc0, 0x2e, 0xeb, 0x7b, 0x75, 0x87, 0xb5,
+	0x10, 0x75, 0xe5, 0x3d, 0x77, 0xd9, 0x84, 0x0f, 0x2b, 0xd2, 0x87, 0xa3, 0x45, 0x7c, 0xb8, 0xd7,
+	0xf7, 0xea, 0xf7, 0x04, 0xd7, 0x3d, 0x49, 0x35, 0xe1, 0xc9, 0x25, 0x36, 0x4f, 0x01, 0x3e, 0x34,
+	0x80, 0xd4, 0x70, 0x50, 0x9d, 0x93, 0x1e, 0xe1, 0xfd, 0x09, 0x5f, 0x52, 0xd2, 0x97, 0x4f, 0x16,
+	0xf5, 0xe5, 0x48, 0xf3, 0x4c, 0x38, 0x52, 0x62, 0x33, 0x77, 0xe1, 0x77, 0xa0, 0xa4, 0xb3, 0x4b,
+	0x99, 0xef, 0x1d, 0x44, 0x3d, 0xc8, 0x2c, 0x7e, 0x23, 0xb7, 0x14, 0x8b, 0xa0, 0xbf, 0x7f, 0x10,
+	0xbf, 0x91, 0xd6, 0xf4, 0x2d, 0xf8, 0xb3, 0x01, 0xde, 0x96, 0x11, 0x18, 0x16, 0xa1, 0x2c, 0xbe,
+	0x89, 0x38, 0x00, 0xe9, 0xc5, 0xc9, 0xa2, 0x71, 0x78, 0xa0, 0xd9, 0x44, 0xd4, 0x27, 0xf3, 0x63,
+	0x9b, 0xcd, 0x57, 0x81, 0x55, 0xb0, 0xd6, 0x23, 0x8c, 0xd4, 0x48, 0x5b, 0xde, 0x09, 0xe9, 0xe0,
+	0x62, 0x56, 0x3a, 0x50, 0xb2, 0x54, 0x6b, 0xb4, 0xc2, 0xd6, 0x68, 0x9d, 0x86, 0xad, 0xf1, 0x78,
+	0xf9, 0xd1, 0x9f, 0xdb, 0x86, 0x5d, 0x18, 0x01, 0xc5, 0xd6, 0x71, 0x1e, 0x80, 0xd1, 0x31, 0xca,
+	0x3f, 0x26, 0xc0, 0x7a, 0xb4, 0x86, 0xfc, 0x33, 0xec, 0xc1, 0x2d, 0x90, 0x51, 0xf9, 0x48, 0x5c,
+	0x59, 0x85, 0x2b, 0x76, 0x5a, 0xae, 0xab, 0x2e, 0xfc, 0x10, 0x6c, 0xb5, 0x11, 0xe3, 0x0e, 0xc5,
+	0x9c, 0x12, 0xdc, 0xc3, 0xae, 0xa3, 0xab, 0x7a, 0x54, 0x5c, 0x6f, 0x0a, 0x05, 0x3b, 0xdc, 0xbf,
+	0xad, 0xb6, 0x23, 0xd0, 0x80, 0xfa, 0x75, 0xcc, 0x58, 0x1c, 0x9a, 0x1c, 0x41, 0xef, 0x86, 0xfb,
+	0x23, 0x28, 0x06, 0xe6, 0x18, 0x74, 0x3c, 0x1a, 0xcb, 0x0b, 0x46, 0xe3, 0xad, 0x98, 0x85, 0xfb,
+	0xb1, 0xd0, 0x94, 0x4f, 0xc1, 0xda, 0x58, 0xfd, 0xc0, 0x23, 0x90, 0x0b, 0x8b, 0x52, 0x98, 0x31,
+	0x16, 0x34, 0x03, 0x14, 0x48, 0xb2, 0xfe, 0x96, 0x00, 0x1b, 0x91, 0x10, 0xeb, 0x53, 0x31, 0xf8,
+	0x0d, 0xb8, 0x10, 0x49, 0x14, 0x99, 0x60, 0xac, 0x68, 0xec, 0x24, 0xf7, 0x72, 0x07, 0x87, 0x8b,
+	0xa4, 0xd5, 0x58, 0xeb, 0xb3, 0xd7, 0x69, 0x5c, 0xc0, 0xfe, 0xcb, 0x65, 0x6d, 0x81, 0x4c, 0x0b,
+	0x31, 0xa7, 0xe3, 0x53, 0x2c, 0xef, 0x26, 0x63, 0xa7, 0x5b, 0x88, 0xdd, 0xf6, 0x29, 0x86, 0x0e,
+	0xb8, 0x30, 0xd1, 0xb2, 0x74, 0xfc, 0x0f, 0x5f, 0xa3, 0x45, 0xd9, 0x6b, 0x63, 0x2d, 0xa9, 0xfc,
+	0x7b, 0x3c, 0x60, 0xb2, 0x4b, 0x7b, 0x0d, 0x1f, 0xee, 0x82, 0xfc, 0xa8, 0x4f, 0xeb, 0xd4, 0xcc,
+	0xda, 0xb9, 0xa1, 0xac, 0xea, 0xc2, 0x6d, 0x90, 0x1b, 0xd6, 0xad, 0x3e, 0x63, 0xd6, 0x06, 0xa1,
+	0xa8, 0xea, 0xc2, 0x8b, 0x20, 0x45, 0xbb, 0x5e, 0x98, 0x71, 0x59, 0x7b, 0x85, 0x76, 0xbd, 0xaa,
+	0x0b, 0x4f, 0xa2, 0x83, 0x67, 0x59, 0x0e, 0x9e, 0x77, 0xe6, 0x0f, 0x9e, 0x29, 0xd3, 0x66, 0x13,
+	0xa4, 0xc3, 0x31, 0xb3, 0x22, 0x83, 0x9b, 0xe2, 0x6a, 0xc0, 0x14, 0x41, 0xba, 0x27, 0x26, 0xbc,
+	0xef, 0xc9, 0xf6, 0x99, 0xb4, 0xc3, 0xa5, 0x18, 0x50, 0x0d, 0x42, 0x19, 0x77, 0x70, 0x0f, 0x7b,
+	0x5c, 0x20, 0xd3, 0x6a, 0x40, 0x49, 0xe9, 0xe7, 0x42, 0x58, 0x75, 0x61, 0x19, 0xac, 0x7a, 0xf8,
+	0xdb, 0x88, 0x52, 0x46, 0x2a, 0xe5, 0x84, 0x30, 0xd4, 0xd9, 0x05, 0x79, 0x56, 0x6f, 0x61, 0xb7,
+	0xdb, 0xc6, 0xb2, 0x6e, 0xb3, 0x4a, 0x65, 0x28, 0xab, 0xba, 0xe5, 0xc7, 0x49, 0xb0, 0x39, 0x63,
+	0x46, 0x41, 0x04, 0x36, 0x46, 0xb1, 0xf5, 0x03, 0x4c, 0x65, 0xe8, 0xf5, 0x0c, 0xbe, 0x36, 0x3f,
+	0x14, 0x43, 0xce, 0xaf, 0x42, 0x9c, 0x0d, 0xbd, 0x09, 0x19, 0x2c, 0x80, 0xc4, 0xf0, 0x4a, 0x12,
+	0xc4, 0x85, 0x1f, 0x83, 0x65, 0xe2, 0x35, 0x7c, 0x3d, 0x61, 0xf7, 0x46, 0x36, 0x04, 0xf9, 0x10,
+	0x1f, 0x33, 0x20, 0xd2, 0xc0, 0x96, 0x28, 0x78, 0x0c, 0x52, 0x75, 0xdf, 0x6b, 0x90, 0xa6, 0x4e,
+	0xbd, 0xf7, 0x16, 0xc1, 0x9f, 0x48, 0x84, 0xad, 0x91, 0xb0, 0x01, 0x60, 0xb4, 0x02, 0x35, 0x9f,
+	0x9a, 0xb6, 0x1f, 0xc4, 0xf9, 0x66, 0x8d, 0xfa, 0x48, 0x9e, 0x6a, 0xf2, 0x68, 0x51, 0x2b, 0x11,
+	0xbc, 0x02, 0x0a, 0x8a, 0xdb, 0x89, 0xa7, 0xc1, 0xaa, 0x92, 0xde, 0xd7, 0xc9, 0x70, 0x15, 0xac,
+	0x8b, 0xd7, 0x92, 0xdf, 0xc3, 0x74, 0xa8, 0xa8, 0xd2, 0x61, 0x2d, 0x94, 0x6b, 0xd5, 0xf2, 0x2f,
+	0x06, 0xb8, 0x34, 0x77, 0xd4, 0x0b, 0x9b, 0xfa, 0xe9, 0x53, 0x6f, 0x77, 0x19, 0xc7, 0x54, 0x97,
+	0xcb, 0xaa, 0x92, 0x9e, 0x28, 0x61, 0xac, 0xd5, 0x27, 0xe2, 0xad, 0x7e, 0xac, 0xf5, 0x25, 0x5f,
+	0xa3, 0xf5, 0xfd, 0xb1, 0x02, 0x4a, 0xb3, 0x5f, 0x01, 0xff, 0x67, 0x41, 0x47, 0x4a, 0x6e, 0x39,
+	0x5e, 0x72, 0xe3, 0x85, 0xb2, 0x32, 0x51, 0x28, 0xf0, 0x0b, 0x50, 0x18, 0xa9, 0xc8, 0xc3, 0xa7,
+	0x16, 0x3c, 0xfc, 0xea, 0x10, 0x27, 0x76, 0xe0, 0x25, 0x20, 0xa2, 0x41, 0xb9, 0xb2, 0xa4, 0xee,
+	0x32, 0xab, 0x25, 0xb2, 0xeb, 0xe4, 0xc3, 0x6d, 0x69, 0x25, 0xb3, 0xa0, 0x95, 0x9c, 0x46, 0x49,
+	0x1b, 0x77, 0xc1, 0x86, 0x6c, 0xf2, 0x2d, 0x8c, 0x28, 0xaf, 0x61, 0xc4, 0x5f, 0xed, 0x79, 0x70,
+	0x41, 0x80, 0x6f, 0x85, 0x58, 0xc9, 0xf8, 0x11, 0x48, 0xbb, 0x98, 0x23, 0xd2, 0x0e, 0x5f, 0x39,
+	0x3b, 0xf1, 0x5a, 0x50, 0xdf, 0x1c, 0xa2, 0x0c, 0xee, 0xa2, 0x7e, 0xdb, 0x47, 0x2e, 0xb3, 0x43,
+	0x80, 0x88, 0x3b, 0xe2, 0x42, 0x9b, 0x17, 0x73, 0x2a, 0x9d, 0xf4, 0x52, 0x1c, 0x56, 0xfa, 0xa9,
+	0x3f, 0x08, 0x8a, 0xf9, 0x69, 0xd4, 0x7a, 0x53, 0x70, 0xdf, 0x54, 0x3f, 0xed, 0x9c, 0x40, 0xe9,
+	0x05, 0xbc, 0x06, 0xde, 0x90, 0x24, 0x22, 0x01, 0x30, 0x75, 0x88, 0x8b, 0x3d, 0x4e, 0x78, 0xbf,
+	0xb8, 0x2a, 0xef, 0x1e, 0x8a, 0xbd, 0x07, 0x72, 0xab, 0xaa, 0x77, 0xe0, 0x03, 0xb0, 0xa6, 0x6f,
+	0xde, 0xd1, 0x4f, 0xbe, 0x62, 0x41, 0x5a, 0xb6, 0xa6, 0x36, 0x35, 0xad, 0x23, 0x1c, 0xd0, 0xb5,
+	0xa6, 0xdf, 0x90, 0x76, 0xa1, 0x17, 0x5b, 0x97, 0xff, 0x4e, 0x80, 0xcd, 0x19, 0xef, 0xcb, 0x89,
+	0xc4, 0x4e, 0xbc, 0x34, 0xb1, 0x93, 0x73, 0x12, 0x7b, 0x39, 0x9a, 0xd8, 0x0d, 0x70, 0x71, 0xec,
+	0x3c, 0x0e, 0xe1, 0xb8, 0x23, 0x3e, 0x12, 0xc4, 0xcb, 0xe1, 0xe0, 0xd5, 0x4e, 0x55, 0xe5, 0xb8,
+	0x63, 0x6f, 0xf4, 0x26, 0x64, 0x0c, 0x5e, 0x07, 0x29, 0x39, 0x6e, 0xc2, 0x17, 0xff, 0xcc, 0x1c,
+	0xf8, 0x0c, 0x71, 0x74, 0xdc, 0xf6, 0x6b, 0xb6, 0xd6, 0x87, 0x37, 0x41, 0xc1, 0xc3, 0xe7, 0x8e,
+	0x70, 0x5e, 0x33, 0xa4, 0x17, 0x64, 0xc8, 0x7b, 0xf8, 0xdc, 0xee, 0x7a, 0x72, 0xa4, 0xb1, 0x2f,
+	0x97, 0x33, 0xc6, 0x7a, 0xa2, 0xfc, 0x83, 0x01, 0xb6, 0x5f, 0xf2, 0x80, 0x86, 0x0e, 0x28, 0xc4,
+	0x5f, 0xeb, 0xfa, 0x9d, 0x76, 0x7d, 0x6a, 0x30, 0x22, 0x1f, 0xdb, 0xc2, 0x7a, 0x48, 0x7c, 0x5b,
+	0x7d, 0x6b, 0x4b, 0x7e, 0x7b, 0xf5, 0x3c, 0x6a, 0xee, 0x98, 0x3c, 0x79, 0x66, 0x2e, 0x3d, 0x7d,
+	0x66, 0x2e, 0xbd, 0x78, 0x66, 0x1a, 0xdf, 0x0f, 0x4c, 0xe3, 0xd7, 0x81, 0x69, 0x3c, 0x1e, 0x98,
+	0xc6, 0x93, 0x81, 0x69, 0xfc, 0x35, 0x30, 0x8d, 0x7f, 0x06, 0xe6, 0xd2, 0x8b, 0x81, 0x69, 0x3c,
+	0x7a, 0x6e, 0x2e, 0x3d, 0x79, 0x6e, 0x2e, 0x3d, 0x7d, 0x6e, 0x2e, 0x7d, 0x7d, 0xd8, 0xf4, 0x47,
+	0x0e, 0x10, 0x7f, 0xf6, 0x3f, 0x22, 0x37, 0x28, 0x0e, 0xf4, 0xaa, 0x96, 0x92, 0x95, 0x7a, 0xf8,
+	0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xb6, 0x40, 0x3f, 0xdf, 0x49, 0x11, 0x00, 0x00,
 }
 
 func (this *ReplicationTask) Equal(that interface{}) bool {
@@ -1277,30 +1104,6 @@ func (this *ReplicationTask_NamespaceTaskAttributes) Equal(that interface{}) boo
 	}
 	return true
 }
-func (this *ReplicationTask_HistoryTaskAttributes) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ReplicationTask_HistoryTaskAttributes)
-	if !ok {
-		that2, ok := that.(ReplicationTask_HistoryTaskAttributes)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.HistoryTaskAttributes.Equal(that1.HistoryTaskAttributes) {
-		return false
-	}
-	return true
-}
 func (this *ReplicationTask_SyncShardStatusTaskAttributes) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -1349,30 +1152,6 @@ func (this *ReplicationTask_SyncActivityTaskAttributes) Equal(that interface{}) 
 	}
 	return true
 }
-func (this *ReplicationTask_HistoryMetadataTaskAttributes) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*ReplicationTask_HistoryMetadataTaskAttributes)
-	if !ok {
-		that2, ok := that.(ReplicationTask_HistoryMetadataTaskAttributes)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if !this.HistoryMetadataTaskAttributes.Equal(that1.HistoryMetadataTaskAttributes) {
-		return false
-	}
-	return true
-}
 func (this *ReplicationTask_HistoryTaskV2Attributes) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -1393,6 +1172,30 @@ func (this *ReplicationTask_HistoryTaskV2Attributes) Equal(that interface{}) boo
 		return false
 	}
 	if !this.HistoryTaskV2Attributes.Equal(that1.HistoryTaskV2Attributes) {
+		return false
+	}
+	return true
+}
+func (this *ReplicationTask_SyncWorkflowStateTaskAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ReplicationTask_SyncWorkflowStateTaskAttributes)
+	if !ok {
+		that2, ok := that.(ReplicationTask_SyncWorkflowStateTaskAttributes)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.SyncWorkflowStateTaskAttributes.Equal(that1.SyncWorkflowStateTaskAttributes) {
 		return false
 	}
 	return true
@@ -1590,106 +1393,6 @@ func (this *NamespaceTaskAttributes) Equal(that interface{}) bool {
 	}
 	return true
 }
-func (this *HistoryTaskAttributes) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HistoryTaskAttributes)
-	if !ok {
-		that2, ok := that.(HistoryTaskAttributes)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if len(this.TargetClusters) != len(that1.TargetClusters) {
-		return false
-	}
-	for i := range this.TargetClusters {
-		if this.TargetClusters[i] != that1.TargetClusters[i] {
-			return false
-		}
-	}
-	if this.NamespaceId != that1.NamespaceId {
-		return false
-	}
-	if this.WorkflowId != that1.WorkflowId {
-		return false
-	}
-	if this.RunId != that1.RunId {
-		return false
-	}
-	if this.FirstEventId != that1.FirstEventId {
-		return false
-	}
-	if this.NextEventId != that1.NextEventId {
-		return false
-	}
-	if this.Version != that1.Version {
-		return false
-	}
-	if !this.History.Equal(that1.History) {
-		return false
-	}
-	if !this.NewRunHistory.Equal(that1.NewRunHistory) {
-		return false
-	}
-	return true
-}
-func (this *HistoryMetadataTaskAttributes) Equal(that interface{}) bool {
-	if that == nil {
-		return this == nil
-	}
-
-	that1, ok := that.(*HistoryMetadataTaskAttributes)
-	if !ok {
-		that2, ok := that.(HistoryMetadataTaskAttributes)
-		if ok {
-			that1 = &that2
-		} else {
-			return false
-		}
-	}
-	if that1 == nil {
-		return this == nil
-	} else if this == nil {
-		return false
-	}
-	if len(this.TargetClusters) != len(that1.TargetClusters) {
-		return false
-	}
-	for i := range this.TargetClusters {
-		if this.TargetClusters[i] != that1.TargetClusters[i] {
-			return false
-		}
-	}
-	if this.NamespaceId != that1.NamespaceId {
-		return false
-	}
-	if this.WorkflowId != that1.WorkflowId {
-		return false
-	}
-	if this.RunId != that1.RunId {
-		return false
-	}
-	if this.FirstEventId != that1.FirstEventId {
-		return false
-	}
-	if this.NextEventId != that1.NextEventId {
-		return false
-	}
-	if this.Version != that1.Version {
-		return false
-	}
-	return true
-}
 func (this *SyncShardStatusTaskAttributes) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
@@ -1843,11 +1546,35 @@ func (this *HistoryTaskV2Attributes) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *SyncWorkflowStateTaskAttributes) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*SyncWorkflowStateTaskAttributes)
+	if !ok {
+		that2, ok := that.(SyncWorkflowStateTaskAttributes)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.WorkflowState.Equal(that1.WorkflowState) {
+		return false
+	}
+	return true
+}
 func (this *ReplicationTask) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 13)
+	s := make([]string, 0, 12)
 	s = append(s, "&repication.ReplicationTask{")
 	s = append(s, "TaskType: "+fmt.Sprintf("%#v", this.TaskType)+",\n")
 	s = append(s, "SourceTaskId: "+fmt.Sprintf("%#v", this.SourceTaskId)+",\n")
@@ -1866,14 +1593,6 @@ func (this *ReplicationTask_NamespaceTaskAttributes) GoString() string {
 		`NamespaceTaskAttributes:` + fmt.Sprintf("%#v", this.NamespaceTaskAttributes) + `}`}, ", ")
 	return s
 }
-func (this *ReplicationTask_HistoryTaskAttributes) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&repication.ReplicationTask_HistoryTaskAttributes{` +
-		`HistoryTaskAttributes:` + fmt.Sprintf("%#v", this.HistoryTaskAttributes) + `}`}, ", ")
-	return s
-}
 func (this *ReplicationTask_SyncShardStatusTaskAttributes) GoString() string {
 	if this == nil {
 		return "nil"
@@ -1890,20 +1609,20 @@ func (this *ReplicationTask_SyncActivityTaskAttributes) GoString() string {
 		`SyncActivityTaskAttributes:` + fmt.Sprintf("%#v", this.SyncActivityTaskAttributes) + `}`}, ", ")
 	return s
 }
-func (this *ReplicationTask_HistoryMetadataTaskAttributes) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&repication.ReplicationTask_HistoryMetadataTaskAttributes{` +
-		`HistoryMetadataTaskAttributes:` + fmt.Sprintf("%#v", this.HistoryMetadataTaskAttributes) + `}`}, ", ")
-	return s
-}
 func (this *ReplicationTask_HistoryTaskV2Attributes) GoString() string {
 	if this == nil {
 		return "nil"
 	}
 	s := strings.Join([]string{`&repication.ReplicationTask_HistoryTaskV2Attributes{` +
 		`HistoryTaskV2Attributes:` + fmt.Sprintf("%#v", this.HistoryTaskV2Attributes) + `}`}, ", ")
+	return s
+}
+func (this *ReplicationTask_SyncWorkflowStateTaskAttributes) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&repication.ReplicationTask_SyncWorkflowStateTaskAttributes{` +
+		`SyncWorkflowStateTaskAttributes:` + fmt.Sprintf("%#v", this.SyncWorkflowStateTaskAttributes) + `}`}, ", ")
 	return s
 }
 func (this *ReplicationToken) GoString() string {
@@ -1986,44 +1705,6 @@ func (this *NamespaceTaskAttributes) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
-func (this *HistoryTaskAttributes) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 13)
-	s = append(s, "&repication.HistoryTaskAttributes{")
-	s = append(s, "TargetClusters: "+fmt.Sprintf("%#v", this.TargetClusters)+",\n")
-	s = append(s, "NamespaceId: "+fmt.Sprintf("%#v", this.NamespaceId)+",\n")
-	s = append(s, "WorkflowId: "+fmt.Sprintf("%#v", this.WorkflowId)+",\n")
-	s = append(s, "RunId: "+fmt.Sprintf("%#v", this.RunId)+",\n")
-	s = append(s, "FirstEventId: "+fmt.Sprintf("%#v", this.FirstEventId)+",\n")
-	s = append(s, "NextEventId: "+fmt.Sprintf("%#v", this.NextEventId)+",\n")
-	s = append(s, "Version: "+fmt.Sprintf("%#v", this.Version)+",\n")
-	if this.History != nil {
-		s = append(s, "History: "+fmt.Sprintf("%#v", this.History)+",\n")
-	}
-	if this.NewRunHistory != nil {
-		s = append(s, "NewRunHistory: "+fmt.Sprintf("%#v", this.NewRunHistory)+",\n")
-	}
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
-func (this *HistoryMetadataTaskAttributes) GoString() string {
-	if this == nil {
-		return "nil"
-	}
-	s := make([]string, 0, 11)
-	s = append(s, "&repication.HistoryMetadataTaskAttributes{")
-	s = append(s, "TargetClusters: "+fmt.Sprintf("%#v", this.TargetClusters)+",\n")
-	s = append(s, "NamespaceId: "+fmt.Sprintf("%#v", this.NamespaceId)+",\n")
-	s = append(s, "WorkflowId: "+fmt.Sprintf("%#v", this.WorkflowId)+",\n")
-	s = append(s, "RunId: "+fmt.Sprintf("%#v", this.RunId)+",\n")
-	s = append(s, "FirstEventId: "+fmt.Sprintf("%#v", this.FirstEventId)+",\n")
-	s = append(s, "NextEventId: "+fmt.Sprintf("%#v", this.NextEventId)+",\n")
-	s = append(s, "Version: "+fmt.Sprintf("%#v", this.Version)+",\n")
-	s = append(s, "}")
-	return strings.Join(s, "")
-}
 func (this *SyncShardStatusTaskAttributes) GoString() string {
 	if this == nil {
 		return "nil"
@@ -2086,6 +1767,18 @@ func (this *HistoryTaskV2Attributes) GoString() string {
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
+func (this *SyncWorkflowStateTaskAttributes) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 5)
+	s = append(s, "&repication.SyncWorkflowStateTaskAttributes{")
+	if this.WorkflowState != nil {
+		s = append(s, "WorkflowState: "+fmt.Sprintf("%#v", this.WorkflowState)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
 func valueToGoStringMessage(v interface{}, typ string) string {
 	rv := reflect.ValueOf(v)
 	if rv.IsNil() {
@@ -2114,6 +1807,15 @@ func (m *ReplicationTask) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.Attributes != nil {
+		{
+			size := m.Attributes.Size()
+			i -= size
+			if _, err := m.Attributes.MarshalTo(dAtA[i:]); err != nil {
+				return 0, err
+			}
+		}
+	}
 	if m.VisibilityTime != nil {
 		n1, err1 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.VisibilityTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.VisibilityTime):])
 		if err1 != nil {
@@ -2123,15 +1825,6 @@ func (m *ReplicationTask) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintMessage(dAtA, i, uint64(n1))
 		i--
 		dAtA[i] = 0x4a
-	}
-	if m.Attributes != nil {
-		{
-			size := m.Attributes.Size()
-			i -= size
-			if _, err := m.Attributes.MarshalTo(dAtA[i:]); err != nil {
-				return 0, err
-			}
-		}
 	}
 	if m.SourceTaskId != 0 {
 		i = encodeVarintMessage(dAtA, i, uint64(m.SourceTaskId))
@@ -2164,27 +1857,6 @@ func (m *ReplicationTask_NamespaceTaskAttributes) MarshalToSizedBuffer(dAtA []by
 		}
 		i--
 		dAtA[i] = 0x1a
-	}
-	return len(dAtA) - i, nil
-}
-func (m *ReplicationTask_HistoryTaskAttributes) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ReplicationTask_HistoryTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.HistoryTaskAttributes != nil {
-		{
-			size, err := m.HistoryTaskAttributes.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintMessage(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x22
 	}
 	return len(dAtA) - i, nil
 }
@@ -2230,27 +1902,6 @@ func (m *ReplicationTask_SyncActivityTaskAttributes) MarshalToSizedBuffer(dAtA [
 	}
 	return len(dAtA) - i, nil
 }
-func (m *ReplicationTask_HistoryMetadataTaskAttributes) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *ReplicationTask_HistoryMetadataTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.HistoryMetadataTaskAttributes != nil {
-		{
-			size, err := m.HistoryMetadataTaskAttributes.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintMessage(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x3a
-	}
-	return len(dAtA) - i, nil
-}
 func (m *ReplicationTask_HistoryTaskV2Attributes) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
@@ -2269,6 +1920,27 @@ func (m *ReplicationTask_HistoryTaskV2Attributes) MarshalToSizedBuffer(dAtA []by
 		}
 		i--
 		dAtA[i] = 0x42
+	}
+	return len(dAtA) - i, nil
+}
+func (m *ReplicationTask_SyncWorkflowStateTaskAttributes) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ReplicationTask_SyncWorkflowStateTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	if m.SyncWorkflowStateTaskAttributes != nil {
+		{
+			size, err := m.SyncWorkflowStateTaskAttributes.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMessage(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x52
 	}
 	return len(dAtA) - i, nil
 }
@@ -2293,12 +1965,12 @@ func (m *ReplicationToken) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.LastProcessedVisibilityTime != nil {
-		n8, err8 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastProcessedVisibilityTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastProcessedVisibilityTime):])
-		if err8 != nil {
-			return 0, err8
+		n7, err7 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastProcessedVisibilityTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastProcessedVisibilityTime):])
+		if err7 != nil {
+			return 0, err7
 		}
-		i -= n8
-		i = encodeVarintMessage(dAtA, i, uint64(n8))
+		i -= n7
+		i = encodeVarintMessage(dAtA, i, uint64(n7))
 		i--
 		dAtA[i] = 0x22
 	}
@@ -2341,12 +2013,12 @@ func (m *SyncShardStatus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	var l int
 	_ = l
 	if m.StatusTime != nil {
-		n9, err9 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.StatusTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.StatusTime):])
-		if err9 != nil {
-			return 0, err9
+		n8, err8 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.StatusTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.StatusTime):])
+		if err8 != nil {
+			return 0, err8
 		}
-		i -= n9
-		i = encodeVarintMessage(dAtA, i, uint64(n9))
+		i -= n8
+		i = encodeVarintMessage(dAtA, i, uint64(n8))
 		i--
 		dAtA[i] = 0xa
 	}
@@ -2572,166 +2244,6 @@ func (m *NamespaceTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	return len(dAtA) - i, nil
 }
 
-func (m *HistoryTaskAttributes) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *HistoryTaskAttributes) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *HistoryTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.NewRunHistory != nil {
-		{
-			size, err := m.NewRunHistory.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintMessage(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x52
-	}
-	if m.History != nil {
-		{
-			size, err := m.History.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintMessage(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x4a
-	}
-	if m.Version != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.Version))
-		i--
-		dAtA[i] = 0x38
-	}
-	if m.NextEventId != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.NextEventId))
-		i--
-		dAtA[i] = 0x30
-	}
-	if m.FirstEventId != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.FirstEventId))
-		i--
-		dAtA[i] = 0x28
-	}
-	if len(m.RunId) > 0 {
-		i -= len(m.RunId)
-		copy(dAtA[i:], m.RunId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.RunId)))
-		i--
-		dAtA[i] = 0x22
-	}
-	if len(m.WorkflowId) > 0 {
-		i -= len(m.WorkflowId)
-		copy(dAtA[i:], m.WorkflowId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.WorkflowId)))
-		i--
-		dAtA[i] = 0x1a
-	}
-	if len(m.NamespaceId) > 0 {
-		i -= len(m.NamespaceId)
-		copy(dAtA[i:], m.NamespaceId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.NamespaceId)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.TargetClusters) > 0 {
-		for iNdEx := len(m.TargetClusters) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.TargetClusters[iNdEx])
-			copy(dAtA[i:], m.TargetClusters[iNdEx])
-			i = encodeVarintMessage(dAtA, i, uint64(len(m.TargetClusters[iNdEx])))
-			i--
-			dAtA[i] = 0xa
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *HistoryMetadataTaskAttributes) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *HistoryMetadataTaskAttributes) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *HistoryMetadataTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.Version != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.Version))
-		i--
-		dAtA[i] = 0x38
-	}
-	if m.NextEventId != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.NextEventId))
-		i--
-		dAtA[i] = 0x30
-	}
-	if m.FirstEventId != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.FirstEventId))
-		i--
-		dAtA[i] = 0x28
-	}
-	if len(m.RunId) > 0 {
-		i -= len(m.RunId)
-		copy(dAtA[i:], m.RunId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.RunId)))
-		i--
-		dAtA[i] = 0x22
-	}
-	if len(m.WorkflowId) > 0 {
-		i -= len(m.WorkflowId)
-		copy(dAtA[i:], m.WorkflowId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.WorkflowId)))
-		i--
-		dAtA[i] = 0x1a
-	}
-	if len(m.NamespaceId) > 0 {
-		i -= len(m.NamespaceId)
-		copy(dAtA[i:], m.NamespaceId)
-		i = encodeVarintMessage(dAtA, i, uint64(len(m.NamespaceId)))
-		i--
-		dAtA[i] = 0x12
-	}
-	if len(m.TargetClusters) > 0 {
-		for iNdEx := len(m.TargetClusters) - 1; iNdEx >= 0; iNdEx-- {
-			i -= len(m.TargetClusters[iNdEx])
-			copy(dAtA[i:], m.TargetClusters[iNdEx])
-			i = encodeVarintMessage(dAtA, i, uint64(len(m.TargetClusters[iNdEx])))
-			i--
-			dAtA[i] = 0xa
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
 func (m *SyncShardStatusTaskAttributes) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -2753,12 +2265,12 @@ func (m *SyncShardStatusTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, 
 	var l int
 	_ = l
 	if m.StatusTime != nil {
-		n16, err16 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.StatusTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.StatusTime):])
-		if err16 != nil {
-			return 0, err16
+		n13, err13 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.StatusTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.StatusTime):])
+		if err13 != nil {
+			return 0, err13
 		}
-		i -= n16
-		i = encodeVarintMessage(dAtA, i, uint64(n16))
+		i -= n13
+		i = encodeVarintMessage(dAtA, i, uint64(n13))
 		i--
 		dAtA[i] = 0x1a
 	}
@@ -2846,22 +2358,22 @@ func (m *SyncActivityTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, err
 		dAtA[i] = 0x52
 	}
 	if m.LastHeartbeatTime != nil {
-		n20, err20 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastHeartbeatTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastHeartbeatTime):])
-		if err20 != nil {
-			return 0, err20
+		n17, err17 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastHeartbeatTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastHeartbeatTime):])
+		if err17 != nil {
+			return 0, err17
 		}
-		i -= n20
-		i = encodeVarintMessage(dAtA, i, uint64(n20))
+		i -= n17
+		i = encodeVarintMessage(dAtA, i, uint64(n17))
 		i--
 		dAtA[i] = 0x4a
 	}
 	if m.StartedTime != nil {
-		n21, err21 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.StartedTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.StartedTime):])
-		if err21 != nil {
-			return 0, err21
+		n18, err18 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.StartedTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.StartedTime):])
+		if err18 != nil {
+			return 0, err18
 		}
-		i -= n21
-		i = encodeVarintMessage(dAtA, i, uint64(n21))
+		i -= n18
+		i = encodeVarintMessage(dAtA, i, uint64(n18))
 		i--
 		dAtA[i] = 0x42
 	}
@@ -2871,12 +2383,12 @@ func (m *SyncActivityTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, err
 		dAtA[i] = 0x38
 	}
 	if m.ScheduledTime != nil {
-		n22, err22 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.ScheduledTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.ScheduledTime):])
-		if err22 != nil {
-			return 0, err22
+		n19, err19 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.ScheduledTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.ScheduledTime):])
+		if err19 != nil {
+			return 0, err19
 		}
-		i -= n22
-		i = encodeVarintMessage(dAtA, i, uint64(n22))
+		i -= n19
+		i = encodeVarintMessage(dAtA, i, uint64(n19))
 		i--
 		dAtA[i] = 0x32
 	}
@@ -2996,6 +2508,41 @@ func (m *HistoryTaskV2Attributes) MarshalToSizedBuffer(dAtA []byte) (int, error)
 	return len(dAtA) - i, nil
 }
 
+func (m *SyncWorkflowStateTaskAttributes) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SyncWorkflowStateTaskAttributes) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SyncWorkflowStateTaskAttributes) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.WorkflowState != nil {
+		{
+			size, err := m.WorkflowState.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintMessage(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintMessage(dAtA []byte, offset int, v uint64) int {
 	offset -= sovMessage(v)
 	base := offset
@@ -3041,18 +2588,6 @@ func (m *ReplicationTask_NamespaceTaskAttributes) Size() (n int) {
 	}
 	return n
 }
-func (m *ReplicationTask_HistoryTaskAttributes) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.HistoryTaskAttributes != nil {
-		l = m.HistoryTaskAttributes.Size()
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	return n
-}
 func (m *ReplicationTask_SyncShardStatusTaskAttributes) Size() (n int) {
 	if m == nil {
 		return 0
@@ -3077,18 +2612,6 @@ func (m *ReplicationTask_SyncActivityTaskAttributes) Size() (n int) {
 	}
 	return n
 }
-func (m *ReplicationTask_HistoryMetadataTaskAttributes) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.HistoryMetadataTaskAttributes != nil {
-		l = m.HistoryMetadataTaskAttributes.Size()
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	return n
-}
 func (m *ReplicationTask_HistoryTaskV2Attributes) Size() (n int) {
 	if m == nil {
 		return 0
@@ -3097,6 +2620,18 @@ func (m *ReplicationTask_HistoryTaskV2Attributes) Size() (n int) {
 	_ = l
 	if m.HistoryTaskV2Attributes != nil {
 		l = m.HistoryTaskV2Attributes.Size()
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
+func (m *ReplicationTask_SyncWorkflowStateTaskAttributes) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.SyncWorkflowStateTaskAttributes != nil {
+		l = m.SyncWorkflowStateTaskAttributes.Size()
 		n += 1 + l + sovMessage(uint64(l))
 	}
 	return n
@@ -3234,86 +2769,6 @@ func (m *NamespaceTaskAttributes) Size() (n int) {
 	return n
 }
 
-func (m *HistoryTaskAttributes) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if len(m.TargetClusters) > 0 {
-		for _, s := range m.TargetClusters {
-			l = len(s)
-			n += 1 + l + sovMessage(uint64(l))
-		}
-	}
-	l = len(m.NamespaceId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	l = len(m.WorkflowId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	l = len(m.RunId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	if m.FirstEventId != 0 {
-		n += 1 + sovMessage(uint64(m.FirstEventId))
-	}
-	if m.NextEventId != 0 {
-		n += 1 + sovMessage(uint64(m.NextEventId))
-	}
-	if m.Version != 0 {
-		n += 1 + sovMessage(uint64(m.Version))
-	}
-	if m.History != nil {
-		l = m.History.Size()
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	if m.NewRunHistory != nil {
-		l = m.NewRunHistory.Size()
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	return n
-}
-
-func (m *HistoryMetadataTaskAttributes) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if len(m.TargetClusters) > 0 {
-		for _, s := range m.TargetClusters {
-			l = len(s)
-			n += 1 + l + sovMessage(uint64(l))
-		}
-	}
-	l = len(m.NamespaceId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	l = len(m.WorkflowId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	l = len(m.RunId)
-	if l > 0 {
-		n += 1 + l + sovMessage(uint64(l))
-	}
-	if m.FirstEventId != 0 {
-		n += 1 + sovMessage(uint64(m.FirstEventId))
-	}
-	if m.NextEventId != 0 {
-		n += 1 + sovMessage(uint64(m.NextEventId))
-	}
-	if m.Version != 0 {
-		n += 1 + sovMessage(uint64(m.Version))
-	}
-	return n
-}
-
 func (m *SyncShardStatusTaskAttributes) Size() (n int) {
 	if m == nil {
 		return 0
@@ -3430,6 +2885,19 @@ func (m *HistoryTaskV2Attributes) Size() (n int) {
 	return n
 }
 
+func (m *SyncWorkflowStateTaskAttributes) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.WorkflowState != nil {
+		l = m.WorkflowState.Size()
+		n += 1 + l + sovMessage(uint64(l))
+	}
+	return n
+}
+
 func sovMessage(x uint64) (n int) {
 	return (math_bits.Len64(x|1) + 6) / 7
 }
@@ -3459,16 +2927,6 @@ func (this *ReplicationTask_NamespaceTaskAttributes) String() string {
 	}, "")
 	return s
 }
-func (this *ReplicationTask_HistoryTaskAttributes) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&ReplicationTask_HistoryTaskAttributes{`,
-		`HistoryTaskAttributes:` + strings.Replace(fmt.Sprintf("%v", this.HistoryTaskAttributes), "HistoryTaskAttributes", "HistoryTaskAttributes", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
 func (this *ReplicationTask_SyncShardStatusTaskAttributes) String() string {
 	if this == nil {
 		return "nil"
@@ -3489,22 +2947,22 @@ func (this *ReplicationTask_SyncActivityTaskAttributes) String() string {
 	}, "")
 	return s
 }
-func (this *ReplicationTask_HistoryMetadataTaskAttributes) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&ReplicationTask_HistoryMetadataTaskAttributes{`,
-		`HistoryMetadataTaskAttributes:` + strings.Replace(fmt.Sprintf("%v", this.HistoryMetadataTaskAttributes), "HistoryMetadataTaskAttributes", "HistoryMetadataTaskAttributes", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
 func (this *ReplicationTask_HistoryTaskV2Attributes) String() string {
 	if this == nil {
 		return "nil"
 	}
 	s := strings.Join([]string{`&ReplicationTask_HistoryTaskV2Attributes{`,
 		`HistoryTaskV2Attributes:` + strings.Replace(fmt.Sprintf("%v", this.HistoryTaskV2Attributes), "HistoryTaskV2Attributes", "HistoryTaskV2Attributes", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *ReplicationTask_SyncWorkflowStateTaskAttributes) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&ReplicationTask_SyncWorkflowStateTaskAttributes{`,
+		`SyncWorkflowStateTaskAttributes:` + strings.Replace(fmt.Sprintf("%v", this.SyncWorkflowStateTaskAttributes), "SyncWorkflowStateTaskAttributes", "SyncWorkflowStateTaskAttributes", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3584,40 +3042,6 @@ func (this *NamespaceTaskAttributes) String() string {
 	}, "")
 	return s
 }
-func (this *HistoryTaskAttributes) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&HistoryTaskAttributes{`,
-		`TargetClusters:` + fmt.Sprintf("%v", this.TargetClusters) + `,`,
-		`NamespaceId:` + fmt.Sprintf("%v", this.NamespaceId) + `,`,
-		`WorkflowId:` + fmt.Sprintf("%v", this.WorkflowId) + `,`,
-		`RunId:` + fmt.Sprintf("%v", this.RunId) + `,`,
-		`FirstEventId:` + fmt.Sprintf("%v", this.FirstEventId) + `,`,
-		`NextEventId:` + fmt.Sprintf("%v", this.NextEventId) + `,`,
-		`Version:` + fmt.Sprintf("%v", this.Version) + `,`,
-		`History:` + strings.Replace(fmt.Sprintf("%v", this.History), "History", "v13.History", 1) + `,`,
-		`NewRunHistory:` + strings.Replace(fmt.Sprintf("%v", this.NewRunHistory), "History", "v13.History", 1) + `,`,
-		`}`,
-	}, "")
-	return s
-}
-func (this *HistoryMetadataTaskAttributes) String() string {
-	if this == nil {
-		return "nil"
-	}
-	s := strings.Join([]string{`&HistoryMetadataTaskAttributes{`,
-		`TargetClusters:` + fmt.Sprintf("%v", this.TargetClusters) + `,`,
-		`NamespaceId:` + fmt.Sprintf("%v", this.NamespaceId) + `,`,
-		`WorkflowId:` + fmt.Sprintf("%v", this.WorkflowId) + `,`,
-		`RunId:` + fmt.Sprintf("%v", this.RunId) + `,`,
-		`FirstEventId:` + fmt.Sprintf("%v", this.FirstEventId) + `,`,
-		`NextEventId:` + fmt.Sprintf("%v", this.NextEventId) + `,`,
-		`Version:` + fmt.Sprintf("%v", this.Version) + `,`,
-		`}`,
-	}, "")
-	return s
-}
 func (this *SyncShardStatusTaskAttributes) String() string {
 	if this == nil {
 		return "nil"
@@ -3644,11 +3068,11 @@ func (this *SyncActivityTaskAttributes) String() string {
 		`StartedId:` + fmt.Sprintf("%v", this.StartedId) + `,`,
 		`StartedTime:` + strings.Replace(fmt.Sprintf("%v", this.StartedTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`LastHeartbeatTime:` + strings.Replace(fmt.Sprintf("%v", this.LastHeartbeatTime), "Timestamp", "types.Timestamp", 1) + `,`,
-		`Details:` + strings.Replace(fmt.Sprintf("%v", this.Details), "Payloads", "v14.Payloads", 1) + `,`,
+		`Details:` + strings.Replace(fmt.Sprintf("%v", this.Details), "Payloads", "v13.Payloads", 1) + `,`,
 		`Attempt:` + fmt.Sprintf("%v", this.Attempt) + `,`,
-		`LastFailure:` + strings.Replace(fmt.Sprintf("%v", this.LastFailure), "Failure", "v15.Failure", 1) + `,`,
+		`LastFailure:` + strings.Replace(fmt.Sprintf("%v", this.LastFailure), "Failure", "v14.Failure", 1) + `,`,
 		`LastWorkerIdentity:` + fmt.Sprintf("%v", this.LastWorkerIdentity) + `,`,
-		`VersionHistory:` + strings.Replace(fmt.Sprintf("%v", this.VersionHistory), "VersionHistory", "v16.VersionHistory", 1) + `,`,
+		`VersionHistory:` + strings.Replace(fmt.Sprintf("%v", this.VersionHistory), "VersionHistory", "v15.VersionHistory", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3659,7 +3083,7 @@ func (this *HistoryTaskV2Attributes) String() string {
 	}
 	repeatedStringForVersionHistoryItems := "[]*VersionHistoryItem{"
 	for _, f := range this.VersionHistoryItems {
-		repeatedStringForVersionHistoryItems += strings.Replace(fmt.Sprintf("%v", f), "VersionHistoryItem", "v16.VersionHistoryItem", 1) + ","
+		repeatedStringForVersionHistoryItems += strings.Replace(fmt.Sprintf("%v", f), "VersionHistoryItem", "v15.VersionHistoryItem", 1) + ","
 	}
 	repeatedStringForVersionHistoryItems += "}"
 	s := strings.Join([]string{`&HistoryTaskV2Attributes{`,
@@ -3667,8 +3091,18 @@ func (this *HistoryTaskV2Attributes) String() string {
 		`WorkflowId:` + fmt.Sprintf("%v", this.WorkflowId) + `,`,
 		`RunId:` + fmt.Sprintf("%v", this.RunId) + `,`,
 		`VersionHistoryItems:` + repeatedStringForVersionHistoryItems + `,`,
-		`Events:` + strings.Replace(fmt.Sprintf("%v", this.Events), "DataBlob", "v14.DataBlob", 1) + `,`,
-		`NewRunEvents:` + strings.Replace(fmt.Sprintf("%v", this.NewRunEvents), "DataBlob", "v14.DataBlob", 1) + `,`,
+		`Events:` + strings.Replace(fmt.Sprintf("%v", this.Events), "DataBlob", "v13.DataBlob", 1) + `,`,
+		`NewRunEvents:` + strings.Replace(fmt.Sprintf("%v", this.NewRunEvents), "DataBlob", "v13.DataBlob", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *SyncWorkflowStateTaskAttributes) String() string {
+	if this == nil {
+		return "nil"
+	}
+	s := strings.Join([]string{`&SyncWorkflowStateTaskAttributes{`,
+		`WorkflowState:` + strings.Replace(fmt.Sprintf("%v", this.WorkflowState), "WorkflowMutableState", "v16.WorkflowMutableState", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -3783,41 +3217,6 @@ func (m *ReplicationTask) Unmarshal(dAtA []byte) error {
 			}
 			m.Attributes = &ReplicationTask_NamespaceTaskAttributes{v}
 			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HistoryTaskAttributes", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &HistoryTaskAttributes{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Attributes = &ReplicationTask_HistoryTaskAttributes{v}
-			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field SyncShardStatusTaskAttributes", wireType)
@@ -3887,41 +3286,6 @@ func (m *ReplicationTask) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			m.Attributes = &ReplicationTask_SyncActivityTaskAttributes{v}
-			iNdEx = postIndex
-		case 7:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field HistoryMetadataTaskAttributes", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &HistoryMetadataTaskAttributes{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Attributes = &ReplicationTask_HistoryMetadataTaskAttributes{v}
 			iNdEx = postIndex
 		case 8:
 			if wireType != 2 {
@@ -3993,6 +3357,41 @@ func (m *ReplicationTask) Unmarshal(dAtA []byte) error {
 			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.VisibilityTime, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
+			iNdEx = postIndex
+		case 10:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field SyncWorkflowStateTaskAttributes", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			v := &SyncWorkflowStateTaskAttributes{}
+			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			m.Attributes = &ReplicationTask_SyncWorkflowStateTaskAttributes{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
@@ -4928,554 +4327,6 @@ func (m *NamespaceTaskAttributes) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *HistoryTaskAttributes) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMessage
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: HistoryTaskAttributes: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: HistoryTaskAttributes: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TargetClusters", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.TargetClusters = append(m.TargetClusters, string(dAtA[iNdEx:postIndex]))
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NamespaceId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NamespaceId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.WorkflowId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RunId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.RunId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FirstEventId", wireType)
-			}
-			m.FirstEventId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.FirstEventId |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextEventId", wireType)
-			}
-			m.NextEventId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.NextEventId |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
-			}
-			m.Version = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Version |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 9:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field History", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.History == nil {
-				m.History = &v13.History{}
-			}
-			if err := m.History.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		case 10:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NewRunHistory", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			if m.NewRunHistory == nil {
-				m.NewRunHistory = &v13.History{}
-			}
-			if err := m.NewRunHistory.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMessage(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *HistoryMetadataTaskAttributes) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowMessage
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: HistoryMetadataTaskAttributes: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: HistoryMetadataTaskAttributes: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field TargetClusters", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.TargetClusters = append(m.TargetClusters, string(dAtA[iNdEx:postIndex]))
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NamespaceId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.NamespaceId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.WorkflowId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field RunId", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= uint64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthMessage
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.RunId = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 5:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field FirstEventId", wireType)
-			}
-			m.FirstEventId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.FirstEventId |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 6:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NextEventId", wireType)
-			}
-			m.NextEventId = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.NextEventId |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		case 7:
-			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
-			}
-			m.Version = 0
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowMessage
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				m.Version |= int64(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipMessage(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if (iNdEx + skippy) < 0 {
-				return ErrInvalidLengthMessage
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func (m *SyncShardStatusTaskAttributes) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
@@ -5936,7 +4787,7 @@ func (m *SyncActivityTaskAttributes) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Details == nil {
-				m.Details = &v14.Payloads{}
+				m.Details = &v13.Payloads{}
 			}
 			if err := m.Details.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -5991,7 +4842,7 @@ func (m *SyncActivityTaskAttributes) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.LastFailure == nil {
-				m.LastFailure = &v15.Failure{}
+				m.LastFailure = &v14.Failure{}
 			}
 			if err := m.LastFailure.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -6059,7 +4910,7 @@ func (m *SyncActivityTaskAttributes) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.VersionHistory == nil {
-				m.VersionHistory = &v16.VersionHistory{}
+				m.VersionHistory = &v15.VersionHistory{}
 			}
 			if err := m.VersionHistory.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -6243,7 +5094,7 @@ func (m *HistoryTaskV2Attributes) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.VersionHistoryItems = append(m.VersionHistoryItems, &v16.VersionHistoryItem{})
+			m.VersionHistoryItems = append(m.VersionHistoryItems, &v15.VersionHistoryItem{})
 			if err := m.VersionHistoryItems[len(m.VersionHistoryItems)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
@@ -6278,7 +5129,7 @@ func (m *HistoryTaskV2Attributes) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Events == nil {
-				m.Events = &v14.DataBlob{}
+				m.Events = &v13.DataBlob{}
 			}
 			if err := m.Events.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -6314,9 +5165,98 @@ func (m *HistoryTaskV2Attributes) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.NewRunEvents == nil {
-				m.NewRunEvents = &v14.DataBlob{}
+				m.NewRunEvents = &v13.DataBlob{}
 			}
 			if err := m.NewRunEvents.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipMessage(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SyncWorkflowStateTaskAttributes) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowMessage
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SyncWorkflowStateTaskAttributes: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SyncWorkflowStateTaskAttributes: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field WorkflowState", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthMessage
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthMessage
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.WorkflowState == nil {
+				m.WorkflowState = &v16.WorkflowMutableState{}
+			}
+			if err := m.WorkflowState.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

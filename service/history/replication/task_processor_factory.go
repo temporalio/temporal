@@ -200,6 +200,7 @@ func (r *taskProcessorFactoryImpl) handleClusterMetadataUpdate(
 				r.shard.GetLogger(),
 			)
 			replicationTaskExecutor := NewTaskExecutor(
+				clusterName,
 				r.shard,
 				r.shard.GetNamespaceRegistry(),
 				nDCHistoryResender,

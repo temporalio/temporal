@@ -334,6 +334,7 @@ func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecut
 		r.shard.GetLogger(),
 	)
 	taskExecutor := NewTaskExecutor(
+		clusterName,
 		r.shard,
 		r.shard.GetNamespaceRegistry(),
 		resender,

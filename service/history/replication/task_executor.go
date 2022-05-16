@@ -31,7 +31,6 @@ import (
 
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -52,6 +51,7 @@ type (
 
 	taskExecutorImpl struct {
 		currentCluster     string
+		remoteCluster      string
 		shard              shard.Context
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
@@ -60,12 +60,15 @@ type (
 		workflowCache      workflow.Cache
 		metricsClient      metrics.Client
 		logger             log.Logger
+
+		resenderFn func(ctx context.Context, namespaceID string, workflowID string, runID string, endEventID int64, endEventVersion int64)
 	}
 )
 
 // NewTaskExecutor creates a replication task executor
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
+	remoteCluster string,
 	shard shard.Context,
 	namespaceRegistry namespace.Registry,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -77,6 +80,7 @@ func NewTaskExecutor(
 ) TaskExecutor {
 	return &taskExecutorImpl{
 		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
+		remoteCluster:      remoteCluster,
 		shard:              shard,
 		namespaceRegistry:  namespaceRegistry,
 		nDCHistoryResender: nDCHistoryResender,
@@ -92,7 +96,6 @@ func (e *taskExecutorImpl) Execute(
 	replicationTask *replicationspb.ReplicationTask,
 	forceApply bool,
 ) (int, error) {
-
 	var err error
 	var scope int
 	switch replicationTask.GetTaskType() {
@@ -108,6 +111,9 @@ func (e *taskExecutorImpl) Execute(
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
 		scope = metrics.HistoryReplicationTaskScope
 		err = e.handleHistoryReplicationTask(replicationTask, forceApply)
+	case enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK:
+		scope = metrics.SyncWorkflowStateTaskScope
+		err = e.handleSyncWorkflowStateTask(replicationTask, forceApply)
 	default:
 		e.logger.Error("Unknown task type.")
 		scope = metrics.ReplicatorScope
@@ -249,6 +255,31 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	default:
 		return err
 	}
+}
+
+func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
+	task *replicationspb.ReplicationTask,
+	forceApply bool,
+) (retErr error) {
+
+	attr := task.GetSyncWorkflowStateTaskAttributes()
+	executionInfo := attr.GetWorkflowState().GetExecutionInfo()
+	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
+	//wid := executionInfo.GetWorkflowId()
+	//rid := attr.GetExecutionState().GetRunId()
+
+	doContinue, err := e.filterTask(namespaceID, forceApply)
+	if err != nil || !doContinue {
+		return err
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), replicationTimeout)
+	defer cancel()
+
+	return e.historyEngine.ReplicateWorkflowState(ctx, &historyservice.ReplicateWorkflowStateRequest{
+		WorkflowState: attr.GetWorkflowState(),
+		RemoteCluster: e.remoteCluster,
+	})
 }
 
 func (e *taskExecutorImpl) filterTask(

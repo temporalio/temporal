@@ -1159,6 +1159,8 @@ const (
 	NamespaceReplicationTaskScope
 	// HistoryReplicationTaskScope is the scope used by history task replication processing
 	HistoryReplicationTaskScope
+	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
+	SyncWorkflowStateTaskScope
 	// HistoryMetadataReplicationTaskScope is the scope used by history metadata task replication processing
 	HistoryMetadataReplicationTaskScope
 	// SyncShardTaskScope is the scope used by sync shrad information processing
@@ -1711,6 +1713,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		SyncActivityTaskScope:                     {operation: "SyncActivityTask"},
 		HistoryMetadataReplicationTaskScope:       {operation: "HistoryMetadataReplicationTask"},
 		HistoryReplicationTaskScope:               {operation: "HistoryReplicationTask"},
+		SyncWorkflowStateTaskScope:                {operation: "SyncWorkflowStateTask"},
 		ReplicatorScope:                           {operation: "Replicator"},
 	},
 	// Matching Scope Names
