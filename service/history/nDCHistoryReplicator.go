@@ -303,7 +303,7 @@ func (r *nDCHistoryReplicatorImpl) ApplyWorkflowState(
 		return err
 	}
 	taskGen := workflow.NewTaskGenerator(r.namespaceRegistry, mutableState)
-	err = taskGen.GenerateWorkflowCloseTasks(lastEventTime)
+	err = taskGen.GenerateWorkflowCloseTasks(lastEventTime, false)
 	if err != nil {
 		return err
 	}
