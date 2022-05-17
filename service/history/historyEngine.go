@@ -345,11 +345,16 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
 			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
-			if newNotificationVersion <= shardNotificationVersion {
-				// skip if this is known version. this could happen once after shard reload because we use
-				// 0 as initialNotificationVersion when RegisterNamespaceChangeCallback.
-				return
-			}
+
+			// 1. We can't return when newNotificationVersion == shardNotificationVersion
+			// since we don't know if the previous failover queue processing has finished or not
+			// 2. We can return when newNotificationVersion < shardNotificationVersion. But the check
+			// is basically the same as the check in failover predicate. Because
+			// failover notification version <= NotificationVersion,
+			// there's no notification version that can make
+			// newNotificationVersion < shardNotificationVersion and
+			// failoverNotificationVersion >= shardNotificationVersion are true at the same time
+			// Meaning if the check decides to return, no namespace will pass the failover predicate.
 
 			failoverNamespaceIDs := map[string]struct{}{}
 			for _, nextNamespace := range nextNamespaces {
