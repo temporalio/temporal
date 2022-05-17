@@ -189,6 +189,25 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 	s.Equal(expectedValue, v)
 }
 
+func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchWithoutType() {
+	cln := NewCollection(s.client, log.NewNoopLogger())
+	expectedValue := 1003
+	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
+	// 5 is nonsense value that doesn't match either Workflow or Activity
+	v := f("global-samples-namespace", "test-tq", 5)
+	s.Equal(expectedValue, v)
+}
+
+func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
+	cln := NewCollection(s.client, log.NewNoopLogger())
+	// should return 1001 as the most specific match
+	f1 := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 1001)
+	v1 := f1("global-samples-namespace", "test-tq", 1)
+	f2 := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
+	v2 := f2("global-samples-namespace", "test-tq", 1)
+	s.Equal(v1, v2)
+}
+
 func (s *fileBasedClientSuite) TestGetFloatValue() {
 	v, err := s.client.GetFloatValue(testGetFloat64PropertyKey, nil, 1)
 	s.NoError(err)
