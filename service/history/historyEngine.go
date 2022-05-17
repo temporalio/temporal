@@ -2031,11 +2031,11 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 
 	// Close workflow execution is deleted using DeleteExecutionTask.
 
-	// DeleteWorkflowExecution is not replicated automatically. Workflow execution must be deleted separately in each cluster.
-	// Although running workflows in active cluster are terminated first and the termination is replicated.
-	// In passive cluster, workflow executions are just deleted in regardless of its status.
+	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
+	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
+	// In passive cluster, workflow executions are just deleted in regardless of its state.
 
-	if weCtx.GetMutableState().GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
 		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 		if err != nil {
 			return err
@@ -2072,8 +2072,10 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
 		weCtx.GetMutableState(),
+		// Use cluster ack level for transfer queue ack level because it gets updated more often.
 		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
-		e.shard.GetQueueClusterAckLevel(tasks.CategoryVisibility, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
+		// Use global ack level visibility queue ack level because cluster level is not updated.
+		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
 	)
 }
 

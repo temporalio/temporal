@@ -33,6 +33,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
@@ -50,7 +51,7 @@ import (
 type (
 	DeleteManager interface {
 		AddDeleteWorkflowExecutionTask(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, ms MutableState, transferQueueAckLevel int64, visibilityQueueAckLevel int64) error
-		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64, deleteFromOpenVisibility bool) error
+		DeleteWorkflowExecution(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64, forceDeleteFromOpenVisibility bool) error
 		DeleteWorkflowExecutionByRetention(ctx context.Context, nsID namespace.ID, we commonpb.WorkflowExecution, weCtx Context, ms MutableState, sourceTaskVersion int64) error
 	}
 
@@ -132,7 +133,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 	weCtx Context,
 	ms MutableState,
 	sourceTaskVersion int64,
-	deleteFromOpenVisibility bool,
+	forceDeleteFromOpenVisibility bool,
 ) error {
 
 	return m.deleteWorkflowExecutionInternal(
@@ -143,7 +144,7 @@ func (m *DeleteManagerImpl) DeleteWorkflowExecution(
 		ms,
 		sourceTaskVersion,
 		false,
-		deleteFromOpenVisibility,
+		forceDeleteFromOpenVisibility,
 		m.metricsClient.Scope(metrics.HistoryDeleteWorkflowExecutionScope),
 	)
 }
@@ -178,7 +179,7 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	ms MutableState,
 	newTaskVersion int64,
 	archiveIfEnabled bool,
-	deleteFromOpenVisibility bool,
+	forceDeleteFromOpenVisibility bool,
 	scope metrics.Scope,
 ) error {
 
@@ -206,8 +207,8 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	var closeTime *time.Time
 	// There are cases when workflow execution is closed but visibility is not updated and still open.
 	// This happens, for example, when workflow execution is deleted right from CloseExecutionTask.
-	// Therefore, deleteFromOpenVisibility can't be automatically calculated and needs to be passed as parameter.
-	if deleteFromOpenVisibility {
+	// Therefore, force to delete from open visibility regardless of execution state.
+	if forceDeleteFromOpenVisibility || ms.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		startTime = ms.GetExecutionInfo().GetStartTime()
 	} else {
 		completionEvent, err := ms.GetCompletionEvent(ctx)
