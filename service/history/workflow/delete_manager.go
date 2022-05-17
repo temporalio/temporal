@@ -95,16 +95,25 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	visibilityQueueAckLevel int64,
 ) error {
 
-	// Create delete workflow execution task only if workflow is closed successfully and all pending tasks are completed (if in active cluster).
-	// Otherwise, mutable state might be deleted before close tasks are executed.
-	// Unfortunately, queue ack levels are updated with delay (default 30s),
-	// therefore this API will return error if workflow is deleted within 30 seconds after close.
-	// The check is on API call side, not on task processor side because visibility delete task doesn't have access to mutable state.
+	// Create `DeleteWorkflowExecutionTask` only if workflow is closed successfully and all pending tasks are completed (if in active cluster).
+	// Otherwise, mutable state might be deleted before close tasks are executed (race condition between close and delete tasks).
+	// Unfortunately, queue ack levels are updated with delay (default 60s),
+	// therefore this API will return error if workflow is deleted within 60 seconds after close.
+	// The check is on API call side, not on task processor side, because delete visibility task doesn't have access to mutable state.
 	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // Workflow execution still might be running in passive cluster.
 		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel) || // Transfer close task wasn't executed.
 		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // Workflow execution still might be running in passive cluster.
 			ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) {
-		return consts.ErrWorkflowNotReady
+
+		namespaceRegistryEntry, err := m.shard.GetNamespaceRegistry().GetNamespaceByID(nsID)
+		if err != nil {
+			return err
+		}
+		// The logic above is only for active cluster. Standby cluster bypasses ack level check,
+		// because race condition doesn't break anything there.
+		if namespaceRegistryEntry.ActiveInCluster(m.shard.GetClusterMetadata().GetCurrentClusterName()) {
+			return consts.ErrWorkflowNotReady
+		}
 	}
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(m.shard, ms)
