@@ -211,17 +211,22 @@ func (ws *workerSet) refreshComponent(
 	nsExists bool,
 ) {
 	op := func() error {
-		// we should run only if all three are true:
+		// we should run only if all four are true:
 		// 1. perNamespaceWorkerManager is running
 		// 2. this namespace exists
-		// 3. we are responsible for this namespace
+		// 3. the component says we should be (can filter by namespace)
+		// 4. we are responsible for this namespace
 		shouldBeRunning := ws.wm.Running() && nsExists
 		if shouldBeRunning {
-			options := cmp.DedicatedWorkerOptions()
-			var err error
-			shouldBeRunning, err = ws.wm.responsibleForNamespace(ws.ns, options.TaskQueue, options.NumWorkers)
-			if err != nil {
-				return err
+			options := cmp.DedicatedWorkerOptions(ws.ns)
+			if !options.Enabled {
+				shouldBeRunning = false
+			} else {
+				var err error
+				shouldBeRunning, err = ws.wm.responsibleForNamespace(ws.ns, options.TaskQueue, options.NumWorkers)
+				if err != nil {
+					return err
+				}
 			}
 		}
 
@@ -274,7 +279,7 @@ func (ws *workerSet) startWorker(wc workercommon.PerNSWorkerComponent) (*worker,
 		return nil, err
 	}
 
-	options := wc.DedicatedWorkerOptions()
+	options := wc.DedicatedWorkerOptions(ws.ns)
 	sdkworker := sdkworker.New(client, options.TaskQueue, options.Options)
 	wc.Register(sdkworker, ws.ns)
 	// TODO: use Run() and handle post-startup errors by recreating worker
