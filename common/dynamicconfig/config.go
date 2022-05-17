@@ -141,7 +141,7 @@ func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
 	}
 }
 
-func getFilterMap(opts ...FilterOption) map[Filter]interface{} {
+func getOneFilterMap(opts ...FilterOption) map[Filter]interface{} {
 	if len(opts) == 0 {
 		return nil
 	}
@@ -152,12 +152,16 @@ func getFilterMap(opts ...FilterOption) map[Filter]interface{} {
 	return m
 }
 
+func getFilterMap(opts ...FilterOption) []map[Filter]interface{} {
+	return []map[Filter]interface{}{getOneFilterMap(opts...)}
+}
+
 func getFilterMapsForTaskQueue(namespace string, taskQueue string, taskType enumspb.TaskQueueType) []map[Filter]interface{} {
 	return []map[Filter]interface{}{
-		getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
-		getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue)),
-		getFilterMap(NamespaceFilter(namespace)),
-		getFilterMap(TaskQueueFilter(taskQueue)),
+		getOneFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
+		getOneFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue)),
+		getOneFilterMap(NamespaceFilter(namespace)),
+		getOneFilterMap(TaskQueueFilter(taskQueue)),
 	}
 }
 
@@ -188,24 +192,13 @@ func (c *Collection) GetIntPropertyFilteredByNamespace(key Key, defaultValue int
 // GetIntPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an integer
 func (c *Collection) GetIntPropertyFilteredByTaskQueueInfo(key Key, defaultValue int) IntPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) int {
-		val := defaultValue
-		var err error
-
-		filterMaps := getFilterMapsForTaskQueue(namespace, taskQueue, taskType)
-
-		for _, filterMap := range filterMaps {
-			val, err = c.client.GetIntValue(
-				key,
-				filterMap,
-				defaultValue,
-			)
-			if err != nil {
-				c.logError(key, err)
-			}
-
-			if val != defaultValue {
-				break
-			}
+		val, err := c.client.GetIntValue(
+			key,
+			getFilterMapsForTaskQueue(namespace, taskQueue, taskType),
+			defaultValue,
+		)
+		if err != nil {
+			c.logError(key, err)
 		}
 
 		return val
@@ -271,24 +264,13 @@ func (c *Collection) GetFloatPropertyFilteredByNamespace(key Key, defaultValue f
 // GetFloatPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an integer
 func (c *Collection) GetFloatPropertyFilteredByTaskQueueInfo(key Key, defaultValue float64) FloatPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) float64 {
-		val := defaultValue
-		var err error
-
-		filterMaps := getFilterMapsForTaskQueue(namespace, taskQueue, taskType)
-
-		for _, filterMap := range filterMaps {
-			val, err = c.client.GetFloatValue(
-				key,
-				filterMap,
-				defaultValue,
-			)
-			if err != nil {
-				c.logError(key, err)
-			}
-
-			if val != defaultValue {
-				break
-			}
+		val, err := c.client.GetFloatValue(
+			key,
+			getFilterMapsForTaskQueue(namespace, taskQueue, taskType),
+			defaultValue,
+		)
+		if err != nil {
+			c.logError(key, err)
 		}
 
 		return val
@@ -334,24 +316,13 @@ func (c *Collection) GetDurationPropertyFilteredByNamespaceID(key Key, defaultVa
 // GetDurationPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's a duration
 func (c *Collection) GetDurationPropertyFilteredByTaskQueueInfo(key Key, defaultValue time.Duration) DurationPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) time.Duration {
-		val := defaultValue
-		var err error
-
-		filterMaps := getFilterMapsForTaskQueue(namespace, taskQueue, taskType)
-
-		for _, filterMap := range filterMaps {
-			val, err = c.client.GetDurationValue(
-				key,
-				filterMap,
-				defaultValue,
-			)
-			if err != nil {
-				c.logError(key, err)
-			}
-
-			if val != defaultValue {
-				break
-			}
+		val, err := c.client.GetDurationValue(
+			key,
+			getFilterMapsForTaskQueue(namespace, taskQueue, taskType),
+			defaultValue,
+		)
+		if err != nil {
+			c.logError(key, err)
 		}
 
 		return val
@@ -461,24 +432,13 @@ func (c *Collection) GetBoolPropertyFnWithNamespaceIDFilter(key Key, defaultValu
 // GetBoolPropertyFilteredByTaskQueueInfo gets property with taskQueueInfo as filters and asserts that it's an bool
 func (c *Collection) GetBoolPropertyFilteredByTaskQueueInfo(key Key, defaultValue bool) BoolPropertyFnWithTaskQueueInfoFilters {
 	return func(namespace string, taskQueue string, taskType enumspb.TaskQueueType) bool {
-		val := defaultValue
-		var err error
-
-		filterMaps := getFilterMapsForTaskQueue(namespace, taskQueue, taskType)
-
-		for _, filterMap := range filterMaps {
-			val, err = c.client.GetBoolValue(
-				key,
-				filterMap,
-				defaultValue,
-			)
-			if err != nil {
-				c.logError(key, err)
-			}
-
-			if val != defaultValue {
-				break
-			}
+		val, err := c.client.GetBoolValue(
+			key,
+			getFilterMapsForTaskQueue(namespace, taskQueue, taskType),
+			defaultValue,
+		)
+		if err != nil {
+			c.logError(key, err)
 		}
 
 		return val
