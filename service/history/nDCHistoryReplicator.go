@@ -282,26 +282,24 @@ func (r *nDCHistoryReplicatorImpl) ApplyWorkflowState(
 		if err != nil {
 			return err
 		}
-		events, _ := serialization.NewSerializer().DeserializeEvents(rawHistory)
+		events, _ := r.historySerializer.DeserializeEvents(rawHistory)
 		if len(events) > 0 {
 			lastEventTime = timestamp.TimeValue(events[len(events)-1].EventTime)
 		}
 		histories = append(histories, events)
 	}
-	historyBuilder := workflow.NewImmutableHistoriesBuilder(
-		histories,
-	)
+	historyBuilder := workflow.NewImmutableHistoriesBuilder(histories)
 	mutableState, err := workflow.NewSanitizedMutableState(
 		r.shard,
 		r.shard.GetEventsCache(),
 		r.logger,
 		ns,
 		request.GetWorkflowState(),
-		historyBuilder,
 	)
 	if err != nil {
 		return err
 	}
+	mutableState.SetHistoryBuilder(historyBuilder)
 	taskGen := workflow.NewTaskGenerator(r.namespaceRegistry, mutableState)
 	err = taskGen.GenerateWorkflowCloseTasks(lastEventTime, false)
 	if err != nil {

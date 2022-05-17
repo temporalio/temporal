@@ -145,25 +145,12 @@ func NewImmutableHistoryBuilder(
 func NewImmutableHistoriesBuilder(
 	histories [][]*historypb.HistoryEvent,
 ) *HistoryBuilder {
-
-	lastBatch := histories[len(histories)-1]
-	lastEvent := lastBatch[len(lastBatch)-1]
 	return &HistoryBuilder{
-		state:           HistoryBuilderStateImmutable,
-		timeSource:      nil,
-		taskIDGenerator: nil,
-
-		version:     lastEvent.GetVersion(),
-		nextEventID: lastEvent.GetEventId() + 1,
+		state: HistoryBuilderStateImmutable,
 
 		workflowFinished: true,
-
-		dbBufferBatch:         nil,
-		dbClearBuffer:         false,
-		memEventsBatches:      histories,
-		memLatestBatch:        nil,
-		memBufferBatch:        nil,
-		scheduleIDToStartedID: nil,
+		dbClearBuffer:    false,
+		memEventsBatches: histories,
 	}
 }
 

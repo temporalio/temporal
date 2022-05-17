@@ -64,10 +64,10 @@ const (
 	// CreateWorkflowModeBrandNew fail if current record exists
 	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeBrandNew CreateWorkflowMode = iota
-	// CreateWorkflowModeWorkflowIDReuse update current record only if workflow is closed
+	// CreateWorkflowModeUpdateCurrent update current record only if workflow is closed
 	// Only applicable for CreateWorkflowExecution
 	CreateWorkflowModeUpdateCurrent
-	// CreateWorkflowModeZombie do not update current record since workflow is in zombie state
+	// CreateWorkflowModeBypassCurrent do not update current record since workflow is in zombie state
 	// applicable for CreateWorkflowExecution, UpdateWorkflowExecution
 	CreateWorkflowModeBypassCurrent
 )
