@@ -324,11 +324,17 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
 			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
-			if newNotificationVersion <= shardNotificationVersion {
-				// skip if this is known version. this could happen once after shard reload because we use
-				// 0 as initialNotificationVersion when RegisterNamespaceChangeCallback.
-				return
-			}
+
+			// failover notification version <= NotificationVersion
+			// there's no newNotificationVersion such that
+			// newNotificationVersion < shardNotificationVersion &&
+			// FailoverNotificationVersion >= shardNotificationVersion
+
+			// if newNotificationVersion < shardNotificationVersion {
+			// 	// skip if this is known version. this could happen once after shard reload because we use
+			// 	// 0 as initialNotificationVersion when RegisterNamespaceChangeCallback.
+			// 	return
+			// }
 
 			failoverNamespaceIDs := map[string]struct{}{}
 			for _, nextNamespace := range nextNamespaces {
