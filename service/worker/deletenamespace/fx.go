@@ -32,7 +32,6 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	workercommon "go.temporal.io/server/service/worker/common"
@@ -77,7 +76,7 @@ func newComponent(
 		}}
 }
 
-func (wc *deleteNamespaceComponent) Register(worker sdkworker.Worker, _ *namespace.Namespace) {
+func (wc *deleteNamespaceComponent) Register(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(DeleteNamespaceWorkflow, workflow.RegisterOptions{Name: WorkflowName})
 	worker.RegisterActivity(wc.deleteNamespaceActivities())
 

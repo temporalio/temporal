@@ -74,7 +74,7 @@ func NewResult(params initParams) fxResult {
 	}
 }
 
-func (wc *replicationWorkerComponent) Register(worker sdkworker.Worker, _ *namespace.Namespace) {
+func (wc *replicationWorkerComponent) Register(worker sdkworker.Worker) {
 	worker.RegisterWorkflowWithOptions(ForceReplicationWorkflow, workflow.RegisterOptions{Name: forceReplicationWorkflowName})
 	worker.RegisterWorkflowWithOptions(NamespaceHandoverWorkflow, workflow.RegisterOptions{Name: namespaceHandoverWorkflowName})
 	worker.RegisterActivity(wc.activities())

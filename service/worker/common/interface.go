@@ -33,18 +33,32 @@ type (
 	// WorkerComponent represents a type of work needed for worker role
 	WorkerComponent interface {
 		// Register registers Workflow and Activity types provided by this worker component.
-		// Namespace is only provided for per-namespace worker components. For the system
-		// namespace it will be nil.
-		Register(sdkworker.Worker, *namespace.Namespace)
+		Register(sdkworker.Worker)
 		// DedicatedWorkerOptions returns a DedicatedWorkerOptions for this worker component.
-		// For regular (system namespace) components: return nil to use default worker instance.
-		// For per-namespace components: must not return nil.
+		// Return nil to use default worker instance.
 		DedicatedWorkerOptions() *DedicatedWorkerOptions
 	}
 
 	DedicatedWorkerOptions struct {
-		// For regular (system namespace) components: TaskQueue is optional
-		// For per-namespace components: TaskQueue is required
+		// TaskQueue is optional
+		TaskQueue string
+		// How many worker nodes should run a worker per namespace
+		NumWorkers int
+		// Other worker options
+		Options sdkworker.Options
+	}
+
+	// PerNSWorkerComponent represents a per-namespace worker needed for worker role
+	PerNSWorkerComponent interface {
+		// Register registers Workflow and Activity types provided by this worker component.
+		// The namespace that this worker is running in is also provided.
+		Register(sdkworker.Worker, *namespace.Namespace)
+		// DedicatedWorkerOptions returns a DedicatedWorkerOptions for this worker component.
+		DedicatedWorkerOptions() *PerNSDedicatedWorkerOptions
+	}
+
+	PerNSDedicatedWorkerOptions struct {
+		// TaskQueue is required
 		TaskQueue string
 		// How many worker nodes should run a worker per namespace
 		NumWorkers int
