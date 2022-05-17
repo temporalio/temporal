@@ -89,6 +89,7 @@ func loadMutableStateForTransferTask(
 		// mutable state might be already deleted by active task executor and NotFound is a valid case which shouldn't be logged.
 		// Unfortunately, this will also skip logging of actual errors that might happen due to serious bugs,
 		// but these errors, most likely, will happen for other task types too, and will be logged.
+		// TODO: remove this logic multi-cursor is implemented and only one task processor is running in each cluster.
 		skipNotFoundLog :=
 			transferTask.GetType() == enumsspb.TASK_TYPE_TRANSFER_CLOSE_EXECUTION ||
 				transferTask.GetType() == enumsspb.TASK_TYPE_TRANSFER_DELETE_EXECUTION

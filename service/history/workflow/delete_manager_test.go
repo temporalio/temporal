@@ -39,6 +39,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
 
+	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
@@ -118,6 +119,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
 		EventId:   int64(1),
@@ -161,6 +163,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	mockWeCtx := NewMockContext(s.controller)
 	mockMutableState := NewMockMutableState(s.controller)
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
 		EventId:   int64(1),
@@ -323,6 +326,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState := NewMockMutableState(s.controller)
 
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
+	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
 	completionEvent := &historypb.HistoryEvent{
 		EventId:   int64(1),
