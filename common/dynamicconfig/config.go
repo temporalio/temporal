@@ -142,8 +142,10 @@ func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
 }
 
 func getFilterMap(opts ...FilterOption) map[Filter]interface{} {
-	l := len(opts)
-	m := make(map[Filter]interface{}, l)
+	if len(opts) == 0 {
+		return nil
+	}
+	m := make(map[Filter]interface{}, len(opts))
 	for _, opt := range opts {
 		opt(m)
 	}
