@@ -120,6 +120,26 @@ func (mr *MockAdminServiceClientMockRecorder) CloseShard(ctx, in interface{}, op
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockAdminServiceClient)(nil).CloseShard), varargs...)
 }
 
+// DeleteWorkflowExecution mocks base method.
+func (m *MockAdminServiceClient) DeleteWorkflowExecution(ctx context.Context, in *adminservice.DeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*adminservice.DeleteWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", varargs...)
+	ret0, _ := ret[0].(*adminservice.DeleteWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
+func (mr *MockAdminServiceClientMockRecorder) DeleteWorkflowExecution(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockAdminServiceClient)(nil).DeleteWorkflowExecution), varargs...)
+}
+
 // DescribeCluster mocks base method.
 func (m *MockAdminServiceClient) DescribeCluster(ctx context.Context, in *adminservice.DescribeClusterRequest, opts ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
 	m.ctrl.T.Helper()
@@ -646,6 +666,21 @@ func (m *MockAdminServiceServer) CloseShard(arg0 context.Context, arg1 *adminser
 func (mr *MockAdminServiceServerMockRecorder) CloseShard(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CloseShard", reflect.TypeOf((*MockAdminServiceServer)(nil).CloseShard), arg0, arg1)
+}
+
+// DeleteWorkflowExecution mocks base method.
+func (m *MockAdminServiceServer) DeleteWorkflowExecution(arg0 context.Context, arg1 *adminservice.DeleteWorkflowExecutionRequest) (*adminservice.DeleteWorkflowExecutionResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", arg0, arg1)
+	ret0, _ := ret[0].(*adminservice.DeleteWorkflowExecutionResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkflowExecution indicates an expected call of DeleteWorkflowExecution.
+func (mr *MockAdminServiceServerMockRecorder) DeleteWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockAdminServiceServer)(nil).DeleteWorkflowExecution), arg0, arg1)
 }
 
 // DescribeCluster mocks base method.

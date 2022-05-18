@@ -592,3 +592,13 @@ message RebuildMutableStateRequest {
 
 message RebuildMutableStateResponse {
 }
+
+message DeleteWorkflowVisibilityRecordRequest {
+    string namespace_id = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+    google.protobuf.Timestamp workflow_start_time = 3 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp workflow_close_time = 4 [(gogoproto.stdtime) = true];
+}
+
+message DeleteWorkflowVisibilityRecordResponse {
+}

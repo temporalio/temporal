@@ -411,6 +411,8 @@ const (
 	HistoryClientGenerateLastHistoryReplicationTasksScope
 	// HistoryClientGetReplicationStatusScope tracks RPC calls to history service
 	HistoryClientGetReplicationStatusScope
+	// HistoryClientDeleteWorkflowVisibilityRecordScope tracks RPC calls to history service
+	HistoryClientDeleteWorkflowVisibilityRecordScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
@@ -579,6 +581,8 @@ const (
 	AdminClientResendReplicationTasksScope
 	// AdminClientGetTaskQueueTasksScope tracks RPC calls to admin service
 	AdminClientGetTaskQueueTasksScope
+	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
+	AdminClientDeleteWorkflowExecutionScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -815,6 +819,8 @@ const (
 	AdminAddOrUpdateRemoteClusterScope
 	// AdminRemoveRemoteClusterScope is the metric scope for admin.AdminRemoveRemoteClusterScope
 	AdminRemoveRemoteClusterScope
+	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecutionScope
+	AdminDeleteWorkflowExecutionScope
 
 	NumAdminScopes
 )
@@ -1031,6 +1037,8 @@ const (
 	HistoryReapplyEvents
 	// HistoryDescribeHistoryHost is the scope used by describe history host API
 	HistoryDescribeHistoryHost
+	// HistoryDeleteWorkflowVisibilityRecordScope is the scope used by delete workflow visibility record API
+	HistoryDeleteWorkflowVisibilityRecordScope
 	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
 	TaskPriorityAssignerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1406,6 +1414,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRefreshWorkflowTasksScope:                   {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGenerateLastHistoryReplicationTasksScope:    {operation: "HistoryClientGenerateLastHistoryReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationStatusScope:                   {operation: "HistoryClientGetReplicationStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDeleteWorkflowVisibilityRecordScope:         {operation: "HistoryClientDeleteWorkflowVisibilityRecordScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 
 		MatchingClientPollWorkflowTaskQueueScope:     {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollActivityTaskQueueScope:     {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
@@ -1493,6 +1502,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientGetDLQMessagesScope:                   {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                 {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                 {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDeleteWorkflowExecutionScope:          {operation: "AdminClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 
 		DCRedirectionDeprecateNamespaceScope:                 {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeNamespaceScope:                  {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1601,6 +1611,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminListClustersScope:                          {operation: "AdminListClusters"},
 		AdminAddOrUpdateRemoteClusterScope:              {operation: "AdminAddOrUpdateRemoteCluster"},
 		AdminRemoveRemoteClusterScope:                   {operation: "AdminRemoveRemoteCluster"},
+		AdminDeleteWorkflowExecutionScope:               {operation: "AdminDeleteWorkflowExecution"},
 		OperatorAddSearchAttributesScope:                {operation: "OperatorAddSearchAttributes"},
 		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
 		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
@@ -1707,6 +1718,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryResetStickyTaskQueue:                        {operation: "ResetStickyTaskQueue"},
 		HistoryReapplyEvents:                               {operation: "ReapplyEvents"},
 		HistoryDescribeHistoryHost:                         {operation: "DescribeHistoryHost"},
+		HistoryDeleteWorkflowVisibilityRecordScope:         {operation: "DeleteWorkflowVisibilityRecord"},
 
 		TaskPriorityAssignerScope:                   {operation: "TaskPriorityAssigner"},
 		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},
