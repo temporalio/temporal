@@ -33,15 +33,14 @@ import (
 
 	"go.temporal.io/api/serviceerror"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -62,7 +61,6 @@ type (
 		isGlobalNamespaceEnabled   bool
 		currentClusterName         string
 		shard                      shard.Context
-		historyEngine              shard.Engine
 		taskAllocator              taskAllocator
 		config                     *configs.Config
 		metricsClient              metrics.Client
@@ -71,6 +69,7 @@ type (
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
 		logger                     log.Logger
+		clientBean                 client.Bean
 		matchingClient             matchingservice.MatchingServiceClient
 		status                     int32
 		shutdownChan               chan struct{}
@@ -83,9 +82,9 @@ type (
 
 func newTimerQueueProcessor(
 	shard shard.Context,
-	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Processor {
@@ -106,7 +105,6 @@ func newTimerQueueProcessor(
 		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
-		historyEngine:            historyEngine,
 		taskAllocator:            taskAllocator,
 		config:                   config,
 		metricsClient:            shard.GetMetricsClient(),
@@ -115,6 +113,7 @@ func newTimerQueueProcessor(
 		workflowDeleteManager:    workflowDeleteManager,
 		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTimer),
 		logger:                   logger,
+		clientBean:               clientBean,
 		matchingClient:           matchingClient,
 		status:                   common.DaemonStatusInitialized,
 		shutdownChan:             make(chan struct{}),
@@ -357,16 +356,6 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 		}
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 			// Case 2 and Case 3
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				t.shard.GetNamespaceRegistry(),
-				t.shard.GetRemoteAdminClient(clusterName),
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return t.historyEngine.ReplicateEventsV2(ctx, request)
-				},
-				t.shard.GetPayloadSerializer(),
-				t.config.StandbyTaskReReplicationContextTimeout,
-				t.logger,
-			)
 			processor := newTimerQueueStandbyProcessor(
 				t.shard,
 				t.workflowCache,
@@ -375,7 +364,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.matchingClient,
 				clusterName,
 				t.taskAllocator,
-				nDCHistoryResender,
+				t.clientBean,
 				t.logger,
 			)
 			processor.Start()
