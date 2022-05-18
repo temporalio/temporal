@@ -44,6 +44,7 @@ import (
 	"go.temporal.io/server/common"
 	carchiver "go.temporal.io/server/common/archiver"
 	"go.temporal.io/server/common/clock"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -65,6 +66,7 @@ type (
 		mockShardContext      *shard.MockContext
 		mockClock             *clock.EventTimeSource
 		mockNamespaceRegistry *namespace.MockRegistry
+		mockMetadata          *cluster.MockMetadata
 
 		deleteManager DeleteManager
 	}
@@ -91,11 +93,13 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 	s.mockArchivalClient = archiver.NewMockClient(s.controller)
 	s.mockClock = clock.NewEventTimeSource()
 	s.mockNamespaceRegistry = namespace.NewMockRegistry(s.controller)
+	s.mockMetadata = cluster.NewMockMetadata(s.controller)
 
 	config := tests.NewDynamicConfig()
 	s.mockShardContext = shard.NewMockContext(s.controller)
 	s.mockShardContext.EXPECT().GetMetricsClient().Return(metrics.NoopClient).AnyTimes()
 	s.mockShardContext.EXPECT().GetNamespaceRegistry().Return(s.mockNamespaceRegistry).AnyTimes()
+	s.mockShardContext.EXPECT().GetClusterMetadata().Return(s.mockMetadata).AnyTimes()
 
 	s.deleteManager = NewDeleteManager(
 		s.mockShardContext,
@@ -104,10 +108,6 @@ func (s *deleteManagerWorkflowSuite) SetupTest() {
 		s.mockArchivalClient,
 		s.mockClock,
 	)
-}
-
-func (s *deleteManagerWorkflowSuite) TearDownTest() {
-	s.controller.Finish()
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
@@ -291,6 +291,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
 		Times(2)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
@@ -305,6 +307,8 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
 		Times(4)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
@@ -314,6 +318,22 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		1000,
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
+
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   1000,
+		CloseVisibilityTaskId: 1001}).
+		Times(2)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName)
+	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		999,
+		1000,
+	)
+	s.NoError(err)
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_ArchivalNotInline() {
@@ -336,7 +356,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().GetCompletionEvent(gomock.Any()).Return(completionEvent, nil)
 
 	// ====================== Archival mocks =======================================
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespace.NewLocalNamespaceForTest(
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Name: tests.Namespace.String(),
 		},
@@ -344,7 +364,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 			HistoryArchivalState: enums.ARCHIVAL_STATE_ENABLED,
 		},
 		"target-cluster",
-	), nil)
+	))
 
 	mockClusterArchivalMetadata := carchiver.NewMockArchivalMetadata(s.controller)
 	mockClusterArchivalConfig := carchiver.NewMockArchivalConfig(s.controller)
@@ -402,7 +422,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 
 	// ====================== Archival mocks =======================================
-	s.mockNamespaceRegistry.EXPECT().GetNamespaceByID(tests.NamespaceID).Return(namespace.NewLocalNamespaceForTest(
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{
 			Name: tests.Namespace.String(),
 		},
@@ -410,7 +430,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 			HistoryArchivalState: enums.ARCHIVAL_STATE_ENABLED,
 		},
 		"target-cluster",
-	), nil)
+	))
 
 	mockClusterArchivalMetadata := carchiver.NewMockArchivalMetadata(s.controller)
 	mockClusterArchivalConfig := carchiver.NewMockArchivalConfig(s.controller)
