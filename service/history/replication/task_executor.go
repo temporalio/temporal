@@ -303,6 +303,6 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		wfCtx,
 		mutableState,
 		lastWriteVersion,
-		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		false,
 	)
 }

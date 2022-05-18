@@ -1,0 +1,18 @@
+# Overrides for CDD for Mac/Darwin users.
+version: "3.5"
+
+services:
+  temporal-ui-standby:
+    environment:
+      - TEMPORAL_ADDRESS=host.docker.internal:8233
+    ports:
+      - "8081:8081"
+    networks:
+      - temporal-dev-network
+  temporal-ui-other:
+    environment:
+      - TEMPORAL_ADDRESS=host.docker.internal:9233
+    ports:
+      - "8082:8082"
+    networks:
+      - temporal-dev-network

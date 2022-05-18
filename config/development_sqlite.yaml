@@ -49,10 +49,14 @@ persistence:
 global:
   membership:
     maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
   pprof:
     port: 7936
   metrics:
     prometheus:
+#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
+#      framework: "opentelemetry"
+      framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
 
@@ -105,6 +109,8 @@ archival:
       filestore:
         fileMode: "0666"
         dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
   visibility:
     state: "enabled"
     enableRead: true
@@ -123,9 +129,8 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_vis_archival/development"
 
 publicClient:
-  hostPort: "127.0.0.1:7233"
+  hostPort: "localhost:7233"
 
 dynamicConfigClient:
   filepath: "config/dynamicconfig/development_sql.yaml"
   pollInterval: "10s"
-

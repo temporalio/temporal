@@ -1,26 +1,37 @@
 persistence:
   defaultStore: cass-default
-  visibilityStore: cass-visibility
+  visibilityStore:
+  advancedVisibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
     cass-default:
       cassandra:
         hosts: "127.0.0.1"
         keyspace: "temporal"
-    cass-visibility:
-      cassandra:
-        hosts: "127.0.0.1"
-        keyspace: "temporal_visibility"
-
+    es-visibility:
+      elasticsearch:
+        version: "v7"
+        logLevel: "error"
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: temporal_visibility_v1_dev
+          # secondary_visibility: temporal_visibility_v2_dev
+        closeIdleConnectionsInterval: 15s
 global:
   membership:
     maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
   pprof:
     port: 7936
   metrics:
-    statsd:
-      hostPort: "127.0.0.1:8125"
-      prefix: "temporal"
+    prometheus:
+#      # specify framework to use new approach for initializing metrics and/or use opentelemetry
+#      framework: "opentelemetry"
+      framework: "tally"
+      timerType: "histogram"
+      listenAddress: "127.0.0.1:8000"
 
 services:
   frontend:
@@ -71,6 +82,8 @@ archival:
       filestore:
         fileMode: "0666"
         dirMode: "0766"
+      gstorage:
+        credentialsPath: "/tmp/gcloud/keyfile.json"
   visibility:
     state: "enabled"
     enableRead: true
@@ -91,3 +104,6 @@ namespaceDefaults:
 publicClient:
   hostPort: "localhost:7233"
 
+dynamicConfigClient:
+  filepath: "config/dynamicconfig/development_es.yaml"
+  pollInterval: "10s"

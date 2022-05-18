@@ -73,6 +73,7 @@ var (
 		"TerminateWorkflowExecution":             0,
 		"GenerateLastHistoryReplicationTasks":    0,
 		"GetReplicationStatus":                   0,
+		"DeleteWorkflowVisibilityRecord":         0,
 	}
 
 	APIPriorities = map[int]struct{}{
