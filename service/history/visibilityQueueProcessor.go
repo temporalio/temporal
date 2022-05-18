@@ -164,9 +164,6 @@ func newVisibilityQueueProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				metricsClient.Scope(
-					tasks.GetVisibilityTaskMetricsScope(t),
-				),
 				shard.GetConfig().VisibilityTaskMaxRetryCount,
 				queues.QueueTypeVisibility,
 				shard.GetConfig().NamespaceCacheRefreshInterval,

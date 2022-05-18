@@ -31,7 +31,6 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -54,7 +53,6 @@ func newTransferQueueStandbyProcessor(
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	taskAllocator taskAllocator,
-	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
@@ -112,7 +110,6 @@ func newTransferQueueStandbyProcessor(
 		shard,
 		workflowCache,
 		archivalClient,
-		nDCHistoryResender,
 		logger,
 		clusterName,
 		matchingClient,
@@ -143,9 +140,6 @@ func newTransferQueueStandbyProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				shard.GetMetricsClient().Scope(
-					tasks.GetStandbyTransferTaskMetricsScope(t),
-				),
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				queues.QueueTypeStandbyTransfer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,

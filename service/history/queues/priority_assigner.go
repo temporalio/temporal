@@ -99,8 +99,15 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 	// TODO: remove QueueType() and the special logic for assgining high priority to no-op tasks
 	// after merging active/standby queue processor or performing task filtering before submitting
 	// tasks to worker pool
-	taskActive := executable.QueueType() != QueueTypeStandbyTransfer &&
-		executable.QueueType() != QueueTypeStandbyTimer
+	var taskActive bool
+	switch executable.QueueType() {
+	case QueueTypeActiveTransfer, QueueTypeActiveTimer:
+		taskActive = true
+	case QueueTypeStandbyTransfer, QueueTypeStandbyTimer:
+		taskActive = false
+	default:
+		taskActive = namespaceActive
+	}
 
 	if !taskActive && !namespaceActive {
 		// standby tasks

@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -532,7 +531,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTimerTasks(
 	now time.Time,
 ) error {
 
-	_, err := r.getTimerSequence(now).CreateNextActivityTimer()
+	_, err := r.getTimerSequence().CreateNextActivityTimer()
 	return err
 }
 
@@ -540,7 +539,7 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks(
 	now time.Time,
 ) error {
 
-	_, err := r.getTimerSequence(now).CreateNextUserTimer()
+	_, err := r.getTimerSequence().CreateNextUserTimer()
 	return err
 }
 
@@ -594,10 +593,8 @@ func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
 	}, nil
 }
 
-func (r *TaskGeneratorImpl) getTimerSequence(now time.Time) TimerSequence {
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(now)
-	return NewTimerSequence(timeSource, r.mutableState)
+func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {
+	return NewTimerSequence(r.mutableState)
 }
 
 func (r *TaskGeneratorImpl) getTargetNamespaceID(

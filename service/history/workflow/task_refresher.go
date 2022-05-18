@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility"
@@ -339,7 +338,6 @@ Loop:
 	}
 
 	if _, err := NewTimerSequence(
-		r.getTimeSource(now),
 		mutableState,
 	).CreateNextActivityTimer(); err != nil {
 		return err
@@ -369,7 +367,6 @@ func (r *TaskRefresherImpl) refreshTasksForTimer(
 	}
 
 	if _, err := NewTimerSequence(
-		r.getTimeSource(now),
 		mutableState,
 	).CreateNextUserTimer(); err != nil {
 		return err
@@ -524,13 +521,4 @@ func (r *TaskRefresherImpl) refreshTasksForWorkflowSearchAttr(
 	return taskGenerator.GenerateWorkflowSearchAttrTasks(
 		now,
 	)
-}
-
-func (r *TaskRefresherImpl) getTimeSource(
-	now time.Time,
-) clock.TimeSource {
-
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(now)
-	return timeSource
 }

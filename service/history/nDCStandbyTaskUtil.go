@@ -253,3 +253,21 @@ func refreshTasks(
 	})
 	return err
 }
+
+func getRemoteClusterName(
+	currentCluster string,
+	registry namespace.Registry,
+	namespaceID string,
+) (string, error) {
+	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		return "", err
+	}
+
+	remoteClusterName := namespaceEntry.ActiveClusterName()
+	if remoteClusterName == currentCluster {
+		// namespace has turned active, retry the task
+		return "", consts.ErrTaskRetry
+	}
+	return remoteClusterName, nil
+}

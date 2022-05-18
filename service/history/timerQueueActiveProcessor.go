@@ -56,6 +56,7 @@ func newTimerQueueActiveProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	logger log.Logger,
+	singleCursor bool,
 ) *timerQueueActiveProcessorImpl {
 
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
@@ -63,6 +64,10 @@ func newTimerQueueActiveProcessor(
 		return shard.GetCurrentTime(currentClusterName)
 	}
 	updateShardAckLevel := func(ackLevel tasks.Key) error {
+		// in single cursor mode, continue to update cluster ack level
+		// complete task loop will update overall ack level and
+		// shard.UpdateQueueAcklevel will then forward it to standby cluster ack level entries
+		// so that we can later disable single cursor mode without encountering tombstone issues
 		return shard.UpdateQueueClusterAckLevel(
 			tasks.CategoryTimer,
 			currentClusterName,
@@ -72,12 +77,22 @@ func newTimerQueueActiveProcessor(
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
 	metricsClient := shard.GetMetricsClient()
 	config := shard.GetConfig()
-	timerTaskFilter := func(task tasks.Task) bool {
-		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
-	}
 
 	processor := &timerQueueActiveProcessorImpl{}
 
+	if scheduler == nil {
+		scheduler = newTimerTaskScheduler(shard, logger)
+	}
+
+	rescheduler := queues.NewRescheduler(
+		scheduler,
+		shard.GetTimeSource(),
+		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
+	)
+
+	timerTaskFilter := func(task tasks.Task) bool {
+		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
+	}
 	taskExecutor := newTimerQueueActiveTaskExecutor(
 		shard,
 		workflowCache,
@@ -87,21 +102,40 @@ func newTimerQueueActiveProcessor(
 		config,
 		matchingClient,
 	)
+	ackLevel := shard.GetQueueClusterAckLevel(tasks.CategoryTimer, currentClusterName).FireTime
+	queueType := queues.QueueTypeActiveTimer
 
-	if scheduler == nil {
-		scheduler = newTimerTaskScheduler(shard, logger)
+	// if single cursor is enabled, then this processor is responsible for both active and standby tasks
+	// and we need to customize some parameters for ack manager and task executable
+	if singleCursor {
+		timerTaskFilter = func(task tasks.Task) bool { return true }
+		taskExecutor = queues.NewExecutorWrapper(
+			currentClusterName,
+			shard.GetNamespaceRegistry(),
+			taskExecutor,
+			newTimerQueueStandbyTaskExecutor(
+				shard,
+				workflowCache,
+				workflowDeleteManager,
+				matchingClient,
+				logger,
+				// note: the cluster name is for calculating time for standby tasks,
+				// here we are basically using current cluster time
+				// this field will be deprecated soon, currently exists so that
+				// we have the option of revert to old behavior
+				currentClusterName,
+				config,
+			),
+			logger,
+		)
+		ackLevel = shard.GetQueueAckLevel(tasks.CategoryTimer).FireTime
+		queueType = queues.QueueTypeTimer
 	}
-
-	rescheduler := queues.NewRescheduler(
-		scheduler,
-		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
-	)
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
 		metrics.TimerActiveQueueProcessorScope,
 		shard,
-		shard.GetQueueClusterAckLevel(tasks.CategoryTimer, currentClusterName).FireTime,
+		ackLevel,
 		timeNow,
 		updateShardAckLevel,
 		logger,
@@ -115,12 +149,9 @@ func newTimerQueueActiveProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				metricsClient.Scope(
-					tasks.GetActiveTimerTaskMetricScope(t),
-				),
-				shard.GetConfig().TimerTaskMaxRetryCount,
-				queues.QueueTypeActiveTimer,
-				shard.GetConfig().NamespaceCacheRefreshInterval,
+				config.TimerTaskMaxRetryCount,
+				queueType,
+				config.NamespaceCacheRefreshInterval,
 			)
 		},
 	)
@@ -134,9 +165,9 @@ func newTimerQueueActiveProcessor(
 		timer.NewLocalGate(shard.GetTimeSource()),
 		scheduler,
 		rescheduler,
-		shard.GetConfig().TimerProcessorMaxPollRPS,
+		config.TimerProcessorMaxPollRPS,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
+		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	return processor
@@ -230,9 +261,6 @@ func newTimerQueueFailoverProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				shard.GetMetricsClient().Scope(
-					tasks.GetActiveTimerTaskMetricScope(t),
-				),
 				shard.GetConfig().TimerTaskMaxRetryCount,
 				queues.QueueTypeActiveTimer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,

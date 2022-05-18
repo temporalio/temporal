@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/timer"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -57,7 +56,6 @@ func newTimerQueueStandbyProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	clusterName string,
 	taskAllocator taskAllocator,
-	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 ) *timerQueueStandbyProcessorImpl {
 
@@ -91,7 +89,6 @@ func newTimerQueueStandbyProcessor(
 		shard,
 		workflowCache,
 		workflowDeleteManager,
-		nDCHistoryResender,
 		matchingClient,
 		logger,
 		clusterName,
@@ -105,7 +102,7 @@ func newTimerQueueStandbyProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
+		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -125,12 +122,9 @@ func newTimerQueueStandbyProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				metricsClient.Scope(
-					tasks.GetStandbyTimerTaskMetricScope(t),
-				),
-				shard.GetConfig().TimerTaskMaxRetryCount,
+				config.TimerTaskMaxRetryCount,
 				queues.QueueTypeStandbyTimer,
-				shard.GetConfig().NamespaceCacheRefreshInterval,
+				config.NamespaceCacheRefreshInterval,
 			)
 		},
 	)
@@ -148,9 +142,9 @@ func newTimerQueueStandbyProcessor(
 		timerGate,
 		scheduler,
 		rescheduler,
-		shard.GetConfig().TimerProcessorMaxPollRPS,
+		config.TimerProcessorMaxPollRPS,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TimerStandbyQueueProcessorScope),
+		metricsClient.Scope(metrics.TimerStandbyQueueProcessorScope),
 	)
 
 	return processor

@@ -34,6 +34,7 @@ import (
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -57,11 +58,14 @@ const (
 
 type (
 	transferQueueTaskExecutorBase struct {
+		currentClusterName       string
 		shard                    shard.Context
+		registry                 namespace.Registry
 		cache                    workflow.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricsClient            metrics.Client
+		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
@@ -77,11 +81,14 @@ func newTransferQueueTaskExecutorBase(
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
+		currentClusterName:       shard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:                    shard,
+		registry:                 shard.GetNamespaceRegistry(),
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
 		metricsClient:            shard.GetMetricsClient(),
+		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
@@ -165,7 +172,7 @@ func (t *transferQueueTaskExecutorBase) archiveVisibility(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -254,11 +261,11 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 	}
 
 	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		ns, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
+		ns, err := t.registry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
 		if err != nil {
 			return err
 		}
-		if ns.ActiveInCluster(t.shard.GetClusterMetadata().GetCurrentClusterName()) {
+		if ns.ActiveInCluster(t.currentClusterName) {
 			// DeleteExecutionTask transfer task is created only if workflow is not running.
 			// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
 			// workflow should not be deleted.

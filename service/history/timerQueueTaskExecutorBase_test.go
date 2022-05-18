@@ -95,6 +95,7 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.testShardContext,
 		s.mockCache,
 		s.mockDeleteManager,
+		nil,
 		s.testShardContext.GetLogger(),
 		config,
 	)
