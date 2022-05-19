@@ -387,17 +387,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 
 	workflowID := request.GetWorkflowId()
 	runID := uuid.New()
-	// grab the current context as a Lock, nothing more
-	_, currentRelease, err := e.historyCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		namespaceID,
-		workflowID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { currentRelease(retError) }()
-
 	workflowContext, err := api.NewWorkflowWithSignal(
 		e.shard,
 		namespaceEntry,
