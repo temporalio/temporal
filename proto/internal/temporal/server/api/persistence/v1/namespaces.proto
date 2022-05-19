@@ -40,6 +40,7 @@ message NamespaceDetail {
     int64 failover_notification_version = 5;
     int64 failover_version = 6;
     google.protobuf.Timestamp failover_end_time = 7 [(gogoproto.stdtime) = true];
+    repeated ReplicationStatus replication_history = 8;
 }
 
 message NamespaceInfo {
@@ -65,4 +66,10 @@ message NamespaceReplicationConfig {
     string active_cluster_name = 1;
     repeated string clusters = 2;
     temporal.api.enums.v1.ReplicationState state = 3;
+}
+
+// Represents a historical replication status of a Namespace
+message ReplicationStatus {
+    google.protobuf.Timestamp status_time = 1 [(gogoproto.stdtime) = true];
+    string active_cluster_name = 3;
 }
