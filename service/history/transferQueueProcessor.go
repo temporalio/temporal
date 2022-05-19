@@ -35,13 +35,13 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/sdk"
-	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -61,13 +61,13 @@ type (
 		isGlobalNamespaceEnabled  bool
 		currentClusterName        string
 		shard                     shard.Context
-		historyEngine             shard.Engine
 		workflowCache             workflow.Cache
 		archivalClient            archiver.Client
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
 		metricsClient             metrics.Client
+		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
 		ackLevel                  int64
@@ -84,9 +84,9 @@ type (
 
 func newTransferQueueProcessor(
 	shard shard.Context,
-	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	clientBean client.Bean,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -102,13 +102,13 @@ func newTransferQueueProcessor(
 		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
 		currentClusterName:       currentClusterName,
 		shard:                    shard,
-		historyEngine:            historyEngine,
 		workflowCache:            workflowCache,
 		archivalClient:           archivalClient,
 		sdkClientFactory:         sdkClientFactory,
 		taskAllocator:            taskAllocator,
 		config:                   config,
 		metricsClient:            shard.GetMetricsClient(),
+		clientBean:               clientBean,
 		matchingClient:           matchingClient,
 		historyClient:            historyClient,
 		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
@@ -354,23 +354,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 			delete(t.standbyTaskProcessors, clusterName)
 		}
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
-			remoteAdminClient, err := t.shard.GetRemoteAdminClient(clusterName)
-			if err != nil {
-				// Cannot find remote cluster info.
-				// This should never happen as cluster metadata should have the up-to-date data.
-				panic(fmt.Sprintf("Bug found in cluster metadata with error %v", err))
-			}
 			// Case 2 and Case 3
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				t.shard.GetNamespaceRegistry(),
-				remoteAdminClient,
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					return t.historyEngine.ReplicateEventsV2(ctx, request)
-				},
-				t.shard.GetPayloadSerializer(),
-				t.config.StandbyTaskReReplicationContextTimeout,
-				t.logger,
-			)
 			processor := newTransferQueueStandbyProcessor(
 				clusterName,
 				t.shard,
@@ -378,7 +362,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.workflowCache,
 				t.archivalClient,
 				t.taskAllocator,
-				nDCHistoryResender,
+				t.clientBean,
 				t.logger,
 				t.matchingClient,
 			)

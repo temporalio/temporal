@@ -120,6 +120,7 @@ func (s *dlqHandlerSuite) SetupTest() {
 		s.mockShard,
 		workflow.NewMockDeleteManager(s.controller),
 		workflow.NewMockCache(s.controller),
+		s.mockClientBean,
 		s.taskExecutors,
 	)
 }

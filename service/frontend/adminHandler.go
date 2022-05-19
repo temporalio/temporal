@@ -1419,13 +1419,9 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	remoteClient, err := adh.clientBean.GetRemoteAdminClient(request.GetRemoteCluster())
-	if err != nil {
-		return nil, err
-	}
 	resender := xdc.NewNDCHistoryResender(
 		adh.namespaceRegistry,
-		remoteClient,
+		adh.clientBean,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 			_, err1 := adh.historyClient.ReplicateEventsV2(ctx, request)
 			return err1
@@ -1435,6 +1431,7 @@ func (adh *AdminHandler) ResendReplicationTasks(
 		adh.logger,
 	)
 	if err := resender.SendSingleWorkflowHistory(
+		request.GetRemoteCluster(),
 		namespace.ID(request.GetNamespaceId()),
 		request.GetWorkflowId(),
 		request.GetRunId(),

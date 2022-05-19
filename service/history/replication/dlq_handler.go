@@ -31,12 +31,11 @@ import (
 	"fmt"
 	"sync"
 
-	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -46,10 +45,6 @@ import (
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-)
-
-var (
-	errInvalidCluster = &serviceerror.InvalidArgument{Message: "Invalid target cluster name."}
 )
 
 type (
@@ -82,6 +77,7 @@ type (
 		shard             shard.Context
 		deleteManager     workflow.DeleteManager
 		workflowCache     workflow.Cache
+		resender          xdc.NDCHistoryResender
 		logger            log.Logger
 	}
 )
@@ -90,11 +86,13 @@ func NewLazyDLQHandler(
 	shard shard.Context,
 	deleteManager workflow.DeleteManager,
 	workflowCache workflow.Cache,
+	clientBean client.Bean,
 ) DLQHandler {
 	return newDLQHandler(
 		shard,
 		deleteManager,
 		workflowCache,
+		clientBean,
 		make(map[string]TaskExecutor),
 	)
 }
@@ -103,16 +101,36 @@ func newDLQHandler(
 	shard shard.Context,
 	deleteManager workflow.DeleteManager,
 	workflowCache workflow.Cache,
+	clientBean client.Bean,
 	taskExecutors map[string]TaskExecutor,
 ) *dlqHandlerImpl {
 
 	if taskExecutors == nil {
 		panic("Failed to initialize replication DLQ handler due to nil task executors")
 	}
+
+	historyClient := shard.GetHistoryClient()
+	historyRetryableClient := history.NewRetryableClient(
+		historyClient,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsResourceExhausted,
+	)
+
 	return &dlqHandlerImpl{
 		shard:         shard,
 		deleteManager: deleteManager,
 		workflowCache: workflowCache,
+		resender: xdc.NewNDCHistoryResender(
+			shard.GetNamespaceRegistry(),
+			clientBean,
+			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+				_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
+				return err
+			},
+			shard.GetPayloadSerializer(),
+			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
+			shard.GetLogger(),
+		),
 		taskExecutors: taskExecutors,
 		logger:        shard.GetLogger(),
 	}
@@ -184,6 +202,9 @@ func (r *dlqHandlerImpl) MergeMessages(
 		pageSize,
 		pageToken,
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	taskExecutor, err := r.getOrCreateTaskExecutor(sourceCluster)
 	if err != nil {
@@ -313,36 +334,11 @@ func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecut
 	if err != nil {
 		return nil, err
 	}
-	adminClient, err := r.shard.GetRemoteAdminClient(clusterName)
-	if err != nil {
-		return nil, err
-	}
-	adminRetryableClient := admin.NewRetryableClient(
-		adminClient,
-		common.CreateReplicationServiceBusyRetryPolicy(),
-		common.IsResourceExhausted,
-	)
-	historyClient := r.shard.GetHistoryClient()
-	historyRetryableClient := history.NewRetryableClient(
-		historyClient,
-		common.CreateReplicationServiceBusyRetryPolicy(),
-		common.IsResourceExhausted,
-	)
-	resender := xdc.NewNDCHistoryResender(
-		r.shard.GetNamespaceRegistry(),
-		adminRetryableClient,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
-			return err
-		},
-		r.shard.GetPayloadSerializer(),
-		r.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-		r.shard.GetLogger(),
-	)
 	taskExecutor := NewTaskExecutor(
+		clusterName,
 		r.shard,
 		r.shard.GetNamespaceRegistry(),
-		resender,
+		r.resender,
 		engine,
 		r.deleteManager,
 		r.workflowCache,

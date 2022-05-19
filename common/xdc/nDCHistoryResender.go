@@ -30,6 +30,7 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence/serialization"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -58,6 +59,7 @@ type (
 	NDCHistoryResender interface {
 		// SendSingleWorkflowHistory sends multiple run IDs's history events to remote
 		SendSingleWorkflowHistory(
+			remoteClusterName string,
 			namespaceID namespace.ID,
 			workflowID string,
 			runID string,
@@ -71,7 +73,7 @@ type (
 	// NDCHistoryResenderImpl is the implementation of NDCHistoryResender
 	NDCHistoryResenderImpl struct {
 		namespaceRegistry    namespace.Registry
-		adminClient          adminservice.AdminServiceClient
+		clientBean           client.Bean
 		historyReplicationFn nDCHistoryReplicationFn
 		serializer           serialization.Serializer
 		rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter
@@ -91,7 +93,7 @@ const (
 // NewNDCHistoryResender create a new NDCHistoryResenderImpl
 func NewNDCHistoryResender(
 	namespaceRegistry namespace.Registry,
-	adminClient adminservice.AdminServiceClient,
+	clientBean client.Bean,
 	historyReplicationFn nDCHistoryReplicationFn,
 	serializer serialization.Serializer,
 	rereplicationTimeout dynamicconfig.DurationPropertyFnWithNamespaceIDFilter,
@@ -100,7 +102,7 @@ func NewNDCHistoryResender(
 
 	return &NDCHistoryResenderImpl{
 		namespaceRegistry:    namespaceRegistry,
-		adminClient:          adminClient,
+		clientBean:           clientBean,
 		historyReplicationFn: historyReplicationFn,
 		serializer:           serializer,
 		rereplicationTimeout: rereplicationTimeout,
@@ -110,6 +112,7 @@ func NewNDCHistoryResender(
 
 // SendSingleWorkflowHistory sends one run IDs's history events to remote
 func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
+	remoteClusterName string,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -131,13 +134,15 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 
 	historyIterator := collection.NewPagingIterator(n.getPaginationFn(
 		ctx,
+		remoteClusterName,
 		namespaceID,
 		workflowID,
 		runID,
 		startEventID,
 		startEventVersion,
 		endEventID,
-		endEventVersion))
+		endEventVersion,
+	))
 
 	for historyIterator.HasNext() {
 		batch, err := historyIterator.Next()
@@ -172,6 +177,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 
 func (n *NDCHistoryResenderImpl) getPaginationFn(
 	ctx context.Context,
+	remoteClusterName string,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -185,6 +191,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 
 		response, err := n.getHistory(
 			ctx,
+			remoteClusterName,
 			namespaceID,
 			workflowID,
 			runID,
@@ -244,6 +251,7 @@ func (n *NDCHistoryResenderImpl) sendReplicationRawRequest(
 
 func (n *NDCHistoryResenderImpl) getHistory(
 	ctx context.Context,
+	remoteClusterName string,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
@@ -266,7 +274,13 @@ func (n *NDCHistoryResenderImpl) getHistory(
 
 	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndHeaders(ctx, resendContextTimeout)
 	defer cancel()
-	response, err := n.adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+
+	adminClient, err := n.clientBean.GetRemoteAdminClient(remoteClusterName)
+	if err != nil {
+		return nil, err
+	}
+
+	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: namespace.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
