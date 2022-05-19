@@ -1419,7 +1419,6 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-
 	resender := xdc.NewNDCHistoryResender(
 		adh.namespaceRegistry,
 		adh.clientBean,

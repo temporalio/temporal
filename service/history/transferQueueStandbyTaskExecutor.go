@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -56,7 +55,6 @@ type (
 		*transferQueueTaskExecutorBase
 
 		clusterName        string
-		adminClient        adminservice.AdminServiceClient
 		historyClient      historyservice.HistoryServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
@@ -80,7 +78,6 @@ func newTransferQueueStandbyTaskExecutor(
 			matchingClient,
 		),
 		clusterName:        clusterName,
-		adminClient:        shard.GetRemoteAdminClient(clusterName),
 		historyClient:      shard.GetHistoryClient(),
 		nDCHistoryResender: nDCHistoryResender,
 	}
@@ -591,11 +588,14 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	var err error
+	adminClient, err := t.shard.GetRemoteAdminClient(t.clusterName)
+	if err != nil {
+		return err
+	}
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		if err := refreshTasks(
 			ctx,
-			t.adminClient,
+			adminClient,
 			t.shard.GetNamespaceRegistry(),
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),

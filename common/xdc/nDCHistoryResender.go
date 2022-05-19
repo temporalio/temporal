@@ -275,7 +275,11 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndHeaders(ctx, resendContextTimeout)
 	defer cancel()
 
-	adminClient := n.clientBean.GetRemoteAdminClient(remoteClusterName)
+	adminClient, err := n.clientBean.GetRemoteAdminClient(remoteClusterName)
+	if err != nil {
+		return nil, err
+	}
+
 	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 		Namespace: namespace.String(),
 		Execution: &commonpb.WorkflowExecution{

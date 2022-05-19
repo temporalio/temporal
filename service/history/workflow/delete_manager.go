@@ -95,16 +95,21 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	visibilityQueueAckLevel int64,
 ) error {
 
-	// Create delete workflow execution task only if workflow is closed successfully and all pending tasks are completed (if in active cluster).
-	// Otherwise, mutable state might be deleted before close tasks are executed.
+	// Create `DeleteWorkflowExecutionTask` only if workflow is closed successfully and all pending tasks are completed (if in active cluster).
+	// Otherwise, mutable state might be deleted before close tasks are executed (race condition between close and delete tasks).
 	// Unfortunately, queue ack levels are updated with delay (default 30s),
 	// therefore this API will return error if workflow is deleted within 30 seconds after close.
-	// The check is on API call side, not on task processor side because visibility delete task doesn't have access to mutable state.
+	// The check is on API call side, not on task processor side, because delete visibility task doesn't have access to mutable state.
 	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // Workflow execution still might be running in passive cluster.
 		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel) || // Transfer close task wasn't executed.
 		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // Workflow execution still might be running in passive cluster.
 			ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) {
-		return consts.ErrWorkflowNotReady
+
+		// The logic above is only for active cluster. Standby cluster bypasses ack level check,
+		// because race condition doesn't break anything there.
+		if ms.GetNamespaceEntry().ActiveInCluster(m.shard.GetClusterMetadata().GetCurrentClusterName()) {
+			return consts.ErrWorkflowNotReady
+		}
 	}
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(m.shard, ms)
@@ -246,14 +251,12 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	workflowExecution commonpb.WorkflowExecution,
 	currentBranchToken []byte,
 	weCtx Context,
-	mutableState MutableState,
+	ms MutableState,
 	scope metrics.Scope,
 ) (bool, error) {
 
-	namespaceRegistryEntry, err := m.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return false, err
-	}
+	namespaceRegistryEntry := ms.GetNamespaceEntry()
+
 	clusterConfiguredForHistoryArchival := m.shard.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
 	namespaceConfiguredForHistoryArchival := namespaceRegistryEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
@@ -263,7 +266,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 		return true, nil
 	}
 
-	closeFailoverVersion, err := mutableState.GetLastWriteVersion()
+	closeFailoverVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return false, err
 	}
@@ -277,7 +280,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 			Namespace:            namespaceRegistryEntry.Name().String(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
 			HistoryURI:           namespaceRegistryEntry.HistoryArchivalState().URI,
-			NextEventID:          mutableState.GetNextEventID(),
+			NextEventID:          ms.GetNextEventID(),
 			BranchToken:          currentBranchToken,
 			CloseFailoverVersion: closeFailoverVersion,
 		},

@@ -190,6 +190,7 @@ func (r *taskProcessorFactoryImpl) handleClusterMetadataUpdate(
 			processor.Stop()
 			delete(r.taskProcessors, clusterName)
 		}
+
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 			// Case 2 and Case 3
 			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
