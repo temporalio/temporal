@@ -26,6 +26,7 @@ package replication
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -172,12 +173,18 @@ func (r *taskProcessorFactoryImpl) handleClusterMetadataUpdate(
 			processor.Stop()
 			delete(r.taskProcessors, clusterName)
 		}
+
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 			// Case 2 and Case 3
 			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
-			adminClient := r.shard.GetRemoteAdminClient(clusterName)
+			remoteAdminClient, err := r.shard.GetRemoteAdminClient(clusterName)
+			if err != nil {
+				// Cannot find remote cluster info.
+				// This should never happen as cluster metadata should have the up-to-date data.
+				panic(fmt.Sprintf("Bug found in cluster metadata with error %v", err))
+			}
 			adminRetryableClient := admin.NewRetryableClient(
-				adminClient,
+				remoteAdminClient,
 				common.CreateReplicationServiceBusyRetryPolicy(),
 				common.IsResourceExhausted,
 			)

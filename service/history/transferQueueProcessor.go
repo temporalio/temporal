@@ -354,10 +354,16 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 			delete(t.standbyTaskProcessors, clusterName)
 		}
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
+			remoteAdminClient, err := t.shard.GetRemoteAdminClient(clusterName)
+			if err != nil {
+				// Cannot find remote cluster info.
+				// This should never happen as cluster metadata should have the up-to-date data.
+				panic(fmt.Sprintf("Bug found in cluster metadata with error %v", err))
+			}
 			// Case 2 and Case 3
 			nDCHistoryResender := xdc.NewNDCHistoryResender(
 				t.shard.GetNamespaceRegistry(),
-				t.shard.GetRemoteAdminClient(clusterName),
+				remoteAdminClient,
 				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 					return t.historyEngine.ReplicateEventsV2(ctx, request)
 				},

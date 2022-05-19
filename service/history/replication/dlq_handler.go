@@ -250,7 +250,10 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 	}
 	pageToken = resp.NextPageToken
 
-	remoteAdminClient := r.shard.GetRemoteAdminClient(sourceCluster)
+	remoteAdminClient, err := r.shard.GetRemoteAdminClient(sourceCluster)
+	if err != nil {
+		return nil, ackLevel, nil, err
+	}
 	taskInfo := make([]*replicationspb.ReplicationTaskInfo, 0, len(resp.Tasks))
 	for _, task := range resp.Tasks {
 		switch task := task.(type) {
@@ -310,7 +313,10 @@ func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecut
 	if err != nil {
 		return nil, err
 	}
-	adminClient := r.shard.GetRemoteAdminClient(clusterName)
+	adminClient, err := r.shard.GetRemoteAdminClient(clusterName)
+	if err != nil {
+		return nil, err
+	}
 	adminRetryableClient := admin.NewRetryableClient(
 		adminClient,
 		common.CreateReplicationServiceBusyRetryPolicy(),

@@ -1992,7 +1992,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	return shardInfoCopy
 }
 
-func (s *ContextImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
+func (s *ContextImpl) GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error) {
 	return s.clientBean.GetRemoteAdminClient(cluster)
 }
 func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {
