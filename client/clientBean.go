@@ -28,9 +28,10 @@ package client
 
 import (
 	"fmt"
-	"go.temporal.io/api/serviceerror"
 	"sync"
 	"sync/atomic"
+
+	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/api/workflowservice/v1"
 
