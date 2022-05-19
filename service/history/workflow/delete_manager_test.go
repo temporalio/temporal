@@ -245,6 +245,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	s.mockShardContext.EXPECT().GetShardID().Return(int32(1)).AnyTimes()
 	s.mockShardContext.EXPECT().AddTasks(gomock.Any(), gomock.Any()).Return(nil).AnyTimes()
 
+	// Both queues are right at the minimum level.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
@@ -259,6 +260,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	)
 	s.NoError(err)
 
+	// Workflow execution is not closed.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   0,
 		CloseVisibilityTaskId: 0}).
@@ -268,11 +270,12 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		tests.NamespaceID,
 		we,
 		mockMutableState,
-		2000,
-		2000,
+		1000,
+		1001,
 	)
 	s.NoError(err)
 
+	// Visibility close task is not processed.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 0}).
@@ -282,11 +285,12 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		tests.NamespaceID,
 		we,
 		mockMutableState,
+		1000,
 		1001,
-		2000,
 	)
 	s.NoError(err)
 
+	// Both queues are behind in active cluster.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
@@ -303,12 +307,11 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 
+	// Only visibility queue is behind (cluster doesn't matter).
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
 		Times(4)
-	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
-	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
 		context.Background(),
 		tests.NamespaceID,
@@ -319,10 +322,45 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 	)
 	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 
+	// Only transfer queue is behind in active cluster.
 	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
 		CloseTransferTaskId:   1000,
 		CloseVisibilityTaskId: 1001}).
 		Times(2)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName)
+	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		999,
+		1001,
+	)
+	s.ErrorIs(err, consts.ErrWorkflowNotReady)
+
+	// Only transfer queue is behind in standby cluster.
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   1000,
+		CloseVisibilityTaskId: 1001}).
+		Times(4)
+	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
+	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName)
+	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
+		context.Background(),
+		tests.NamespaceID,
+		we,
+		mockMutableState,
+		999,
+		1001,
+	)
+	s.NoError(err)
+
+	// Both queues are behind in standby cluster.
+	mockMutableState.EXPECT().GetExecutionInfo().Return(&persistencespb.WorkflowExecutionInfo{
+		CloseTransferTaskId:   1000,
+		CloseVisibilityTaskId: 1001}).
+		Times(4)
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(tests.GlobalNamespaceEntry)
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestAlternativeClusterName)
 	err = s.deleteManager.AddDeleteWorkflowExecutionTask(
@@ -333,7 +371,7 @@ func (s *deleteManagerWorkflowSuite) TestAddDeleteWorkflowExecutionTask() {
 		999,
 		1000,
 	)
-	s.NoError(err)
+	s.ErrorIs(err, consts.ErrWorkflowNotReady)
 }
 
 func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_ArchivalNotInline() {

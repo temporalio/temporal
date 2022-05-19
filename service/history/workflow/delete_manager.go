@@ -95,21 +95,24 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	visibilityQueueAckLevel int64,
 ) error {
 
-	// Create `DeleteWorkflowExecutionTask` only if workflow is closed successfully and all pending tasks are completed (if in active cluster).
-	// Otherwise, mutable state might be deleted before close tasks are executed (race condition between close and delete tasks).
+	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
+	// and all pending transfer tasks are completed.
+	// This check is required to avoid race condition between close and delete tasks.
+	// Otherwise, mutable state might be deleted before close transfer task is executed, and therefore close task will be dropped.
+	//
+	// In passive cluster, transfer task queue check can be ignored but not visibility task queue.
+	// If visibility close task is executed after visibility is deleted then it will resurrect visibility record in closed state.
+	//
 	// Unfortunately, queue ack levels are updated with delay (default 30s),
 	// therefore this API will return error if workflow is deleted within 30 seconds after close.
 	// The check is on API call side, not on task processor side, because delete visibility task doesn't have access to mutable state.
-	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // Workflow execution still might be running in passive cluster.
-		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel) || // Transfer close task wasn't executed.
-		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // Workflow execution still might be running in passive cluster.
-			ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) {
+	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // Workflow execution still might be running in passive cluster or closed before this field was added (v1.17).
+		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel && // Transfer close task wasn't executed.
+		ms.GetNamespaceEntry().ActiveInCluster(m.shard.GetClusterMetadata().GetCurrentClusterName())) ||
+		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // Workflow execution still might be running in passive cluster or closed before this field was added (v1.17).
+			ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) { // Visibility close task wasn't executed.
 
-		// The logic above is only for active cluster. Standby cluster bypasses ack level check,
-		// because race condition doesn't break anything there.
-		if ms.GetNamespaceEntry().ActiveInCluster(m.shard.GetClusterMetadata().GetCurrentClusterName()) {
-			return consts.ErrWorkflowNotReady
-		}
+		return consts.ErrWorkflowNotReady
 	}
 
 	taskGenerator := taskGeneratorProvider.NewTaskGenerator(m.shard, ms)
