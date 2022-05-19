@@ -117,5 +117,5 @@ publicClient:
   hostPort: "localhost:7233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_es.yaml"
+  filepath: "config/dynamicconfig/development_cass.yaml"
   pollInterval: "10s"
