@@ -97,7 +97,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
 
-	s.mockClientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(s.mockAdminClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(s.mockAdminClient, nil).AnyTimes()
 
 	s.logger = log.NewTestLogger()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
