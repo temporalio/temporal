@@ -364,7 +364,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	out, err := s.rereplicator.getHistory(
 		context.Background(),
 		cluster.TestCurrentClusterName,
-		s.namespaceID,
+		s.namespace,
 		workflowID,
 		runID,
 		startEventID,
