@@ -78,6 +78,10 @@ func emitMutableStateStatus(
 		scope.RecordDistribution(metrics.HistorySize, stats.HistoryStatistics.SizeDiff)
 		scope.RecordDistribution(metrics.HistoryCount, stats.HistoryStatistics.CountDiff)
 	}
+
+	for category, taskCount := range stats.TaskCountByCategory {
+		scope.Tagged(metrics.TaskCategoryTag(category)).RecordDistribution(metrics.TaskCount, taskCount)
+	}
 }
 
 func emitWorkflowCompletionStats(
