@@ -527,12 +527,9 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if err != nil {
 		return err
 	}
-	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
-		ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
-		if err != nil {
-			return err
-		}
-
+	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
+		err = serviceerror.NewInternal("timerQueueStandbyProcessor encountered empty historyResendInfo")
+	} else {
 		if err := refreshTasks(
 			ctx,
 			adminClient,
@@ -541,12 +538,18 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
 		); err != nil {
+			if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+				// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+				return err
+			}
+
 			t.logger.Error("Error refresh tasks from remote.",
 				tag.ShardID(t.shard.GetShardID()),
 				tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 				tag.WorkflowID(taskInfo.GetWorkflowID()),
 				tag.WorkflowRunID(taskInfo.GetRunID()),
-				tag.ClusterName(remoteClusterName))
+				tag.ClusterName(remoteClusterName),
+				tag.Error(err))
 		}
 
 		// NOTE: history resend may take long time and its timeout is currently
@@ -561,17 +564,20 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			common.EmptyEventID,
 			common.EmptyVersion,
 		)
-	} else {
-		err = serviceerror.NewInternal("timerQueueStandbyProcessor encountered empty historyResendInfo")
 	}
 
 	if err != nil {
+		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound {
+			// Don't log NamespaceNotFound error because it is valid case, and return error to stop retry.
+			return err
+		}
 		t.logger.Error("Error re-replicating history from remote.",
 			tag.ShardID(t.shard.GetShardID()),
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.ClusterName(remoteClusterName))
+			tag.ClusterName(remoteClusterName),
+			tag.Error(err))
 	}
 
 	// return error so task processing logic will retry

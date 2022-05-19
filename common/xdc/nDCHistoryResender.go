@@ -30,19 +30,19 @@ import (
 	"context"
 	"time"
 
-	"go.temporal.io/server/client"
-	"go.temporal.io/server/common/persistence/serialization"
-
 	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/rpc"
 )
 
@@ -132,10 +132,18 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		}
 	}
 
+	namespaceEntry, err := n.namespaceRegistry.GetNamespaceByID(namespaceID)
+	if err != nil {
+		return err
+	}
+	if namespaceEntry.State() == enumspb.NAMESPACE_STATE_DELETED {
+		return nil
+	}
+
 	historyIterator := collection.NewPagingIterator(n.getPaginationFn(
 		ctx,
 		remoteClusterName,
-		namespaceID,
+		namespaceEntry.Name(),
 		workflowID,
 		runID,
 		startEventID,
@@ -178,7 +186,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 func (n *NDCHistoryResenderImpl) getPaginationFn(
 	ctx context.Context,
 	remoteClusterName string,
-	namespaceID namespace.ID,
+	nsName namespace.Name,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -192,7 +200,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 		response, err := n.getHistory(
 			ctx,
 			remoteClusterName,
-			namespaceID,
+			nsName,
 			workflowID,
 			runID,
 			startEventID,
@@ -252,7 +260,7 @@ func (n *NDCHistoryResenderImpl) sendReplicationRawRequest(
 func (n *NDCHistoryResenderImpl) getHistory(
 	ctx context.Context,
 	remoteClusterName string,
-	namespaceID namespace.ID,
+	nsName namespace.Name,
 	workflowID string,
 	runID string,
 	startEventID int64,
