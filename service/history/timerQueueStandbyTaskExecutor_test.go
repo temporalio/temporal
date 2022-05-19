@@ -83,6 +83,7 @@ type (
 		mockDeleteManager      *workflow.MockDeleteManager
 		mockMatchingClient     *matchingservicemock.MockMatchingServiceClient
 
+		workflowCache        workflow.Cache
 		logger               log.Logger
 		namespaceID          namespace.ID
 		namespaceEntry       *namespace.Namespace
@@ -162,17 +163,15 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.clusterName).AnyTimes()
-
+	s.workflowCache = workflow.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
-	historyCache := workflow.NewCache(s.mockShard)
 	s.mockDeleteManager = workflow.NewMockDeleteManager(s.controller)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
@@ -186,7 +185,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	s.timerQueueStandbyTaskExecutor = newTimerQueueStandbyTaskExecutor(
 		s.mockShard,
-		h.historyCache,
+		s.workflowCache,
 		s.mockDeleteManager,
 		s.mockNDCHistoryResender,
 		s.mockMatchingClient,

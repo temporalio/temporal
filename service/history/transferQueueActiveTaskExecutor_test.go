@@ -102,6 +102,7 @@ type (
 		mockArchiverProvider        *provider.MockArchiverProvider
 		mockParentClosePolicyClient *parentclosepolicy.MockClient
 
+		workflowCache                   workflow.Cache
 		logger                          log.Logger
 		namespaceID                     namespace.ID
 		namespace                       namespace.Name
@@ -203,15 +204,14 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(s.namespaceEntry.IsGlobalNamespace(), s.version).Return(s.mockClusterMetadata.GetCurrentClusterName()).AnyTimes()
 
+	s.workflowCache = workflow.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
-	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.Resource.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
@@ -225,7 +225,7 @@ func (s *transferQueueActiveTaskExecutorSuite) SetupTest() {
 
 	s.transferQueueActiveTaskExecutor = newTransferQueueActiveTaskExecutor(
 		s.mockShard,
-		h.historyCache,
+		s.workflowCache,
 		s.mockArchivalClient,
 		h.sdkClientFactory,
 		s.logger,

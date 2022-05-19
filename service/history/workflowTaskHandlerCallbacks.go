@@ -78,7 +78,6 @@ type (
 		timeSource             clock.TimeSource
 		historyEngine          *historyEngineImpl
 		namespaceRegistry      namespace.Registry
-		historyCache           workflow.Cache
 		tokenSerializer        common.TaskTokenSerializer
 		metricsClient          metrics.Client
 		logger                 log.Logger
@@ -96,7 +95,6 @@ func newWorkflowTaskHandlerCallback(historyEngine *historyEngineImpl) *workflowT
 		timeSource:         historyEngine.shard.GetTimeSource(),
 		historyEngine:      historyEngine,
 		namespaceRegistry:  historyEngine.shard.GetNamespaceRegistry(),
-		historyCache:       historyEngine.historyCache,
 		tokenSerializer:    historyEngine.tokenSerializer,
 		metricsClient:      historyEngine.metricsClient,
 		logger:             historyEngine.logger,
