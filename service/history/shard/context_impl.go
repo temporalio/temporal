@@ -221,7 +221,7 @@ func (s *ContextImpl) AssertOwnership(
 	return nil
 }
 
-func (s *ContextImpl) NewVectorClock() (*clockspb.ShardClock, error) {
+func (s *ContextImpl) NewVectorClock() (*clockspb.Clock, error) {
 	s.wLock()
 	defer s.wUnlock()
 
@@ -229,15 +229,15 @@ func (s *ContextImpl) NewVectorClock() (*clockspb.ShardClock, error) {
 	if err != nil {
 		return nil, err
 	}
-	return vclock.NewShardClock(s.shardID, clock), nil
+	return vclock.NewClock(s.clusterMetadata.GetClusterID(), s.shardID, clock), nil
 }
 
-func (s *ContextImpl) CurrentVectorClock() *clockspb.ShardClock {
+func (s *ContextImpl) CurrentVectorClock() *clockspb.Clock {
 	s.rLock()
 	defer s.rUnlock()
 
 	clock := s.taskSequenceNumber
-	return vclock.NewShardClock(s.shardID, clock)
+	return vclock.NewClock(s.clusterMetadata.GetClusterID(), s.shardID, clock)
 }
 
 func (s *ContextImpl) GenerateTaskID() (int64, error) {

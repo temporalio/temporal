@@ -166,6 +166,7 @@ func (s *engineSuite) SetupTest() {
 	s.mockClusterMetadata = s.mockShard.Resource.ClusterMetadata
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(false).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestSingleDCClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
@@ -5426,7 +5427,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 }
 
 func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, workflowID, runID string,
-	workflowType string, clock *clockspb.ShardClock) *historypb.HistoryEvent {
+	workflowType string, clock *clockspb.Clock) *historypb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
 		namespace,
 		&commonpb.WorkflowExecution{

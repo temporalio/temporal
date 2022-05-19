@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -1513,7 +1514,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 
 func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	parentNamespaceID namespace.ID,
-	parentClock *clockspb.ShardClock,
+	parentClock *clockspb.Clock,
 	execution commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
@@ -3265,7 +3266,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 	workflowType *commonpb.WorkflowType,
 	initiatedID int64,
 	header *commonpb.Header,
-	clock *clockspb.ShardClock,
+	clock *clockspb.Clock,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowStarted
@@ -3298,7 +3299,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 
 func (e *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 	event *historypb.HistoryEvent,
-	clock *clockspb.ShardClock,
+	clock *clockspb.Clock,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionStartedEventAttributes()

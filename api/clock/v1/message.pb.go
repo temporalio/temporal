@@ -49,22 +49,23 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 
-type ShardClock struct {
-	Id    int32 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
-	Clock int64 `protobuf:"varint,2,opt,name=clock,proto3" json:"clock,omitempty"`
+type Clock struct {
+	ShardId   int32 `protobuf:"varint,1,opt,name=shard_id,json=shardId,proto3" json:"shard_id,omitempty"`
+	Clock     int64 `protobuf:"varint,2,opt,name=clock,proto3" json:"clock,omitempty"`
+	ClusterId int64 `protobuf:"varint,3,opt,name=cluster_id,json=clusterId,proto3" json:"cluster_id,omitempty"`
 }
 
-func (m *ShardClock) Reset()      { *m = ShardClock{} }
-func (*ShardClock) ProtoMessage() {}
-func (*ShardClock) Descriptor() ([]byte, []int) {
+func (m *Clock) Reset()      { *m = Clock{} }
+func (*Clock) ProtoMessage() {}
+func (*Clock) Descriptor() ([]byte, []int) {
 	return fileDescriptor_86d20c4676353367, []int{0}
 }
-func (m *ShardClock) XXX_Unmarshal(b []byte) error {
+func (m *Clock) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
 }
-func (m *ShardClock) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+func (m *Clock) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 	if deterministic {
-		return xxx_messageInfo_ShardClock.Marshal(b, m, deterministic)
+		return xxx_messageInfo_Clock.Marshal(b, m, deterministic)
 	} else {
 		b = b[:cap(b)]
 		n, err := m.MarshalToSizedBuffer(b)
@@ -74,34 +75,41 @@ func (m *ShardClock) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
 		return b[:n], nil
 	}
 }
-func (m *ShardClock) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_ShardClock.Merge(m, src)
+func (m *Clock) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_Clock.Merge(m, src)
 }
-func (m *ShardClock) XXX_Size() int {
+func (m *Clock) XXX_Size() int {
 	return m.Size()
 }
-func (m *ShardClock) XXX_DiscardUnknown() {
-	xxx_messageInfo_ShardClock.DiscardUnknown(m)
+func (m *Clock) XXX_DiscardUnknown() {
+	xxx_messageInfo_Clock.DiscardUnknown(m)
 }
 
-var xxx_messageInfo_ShardClock proto.InternalMessageInfo
+var xxx_messageInfo_Clock proto.InternalMessageInfo
 
-func (m *ShardClock) GetId() int32 {
+func (m *Clock) GetShardId() int32 {
 	if m != nil {
-		return m.Id
+		return m.ShardId
 	}
 	return 0
 }
 
-func (m *ShardClock) GetClock() int64 {
+func (m *Clock) GetClock() int64 {
 	if m != nil {
 		return m.Clock
 	}
 	return 0
 }
 
+func (m *Clock) GetClusterId() int64 {
+	if m != nil {
+		return m.ClusterId
+	}
+	return 0
+}
+
 func init() {
-	proto.RegisterType((*ShardClock)(nil), "temporal.server.api.clock.v1.ShardClock")
+	proto.RegisterType((*Clock)(nil), "temporal.server.api.clock.v1.Clock")
 }
 
 func init() {
@@ -109,30 +117,32 @@ func init() {
 }
 
 var fileDescriptor_86d20c4676353367 = []byte{
-	// 205 bytes of a gzipped FileDescriptorProto
+	// 228 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xd2, 0x2a, 0x49, 0xcd, 0x2d,
 	0xc8, 0x2f, 0x4a, 0xcc, 0xd1, 0x2f, 0x4e, 0x2d, 0x2a, 0x4b, 0x2d, 0xd2, 0x4f, 0x2c, 0xc8, 0xd4,
 	0x4f, 0xce, 0xc9, 0x4f, 0xce, 0xd6, 0x2f, 0x33, 0xd4, 0xcf, 0x4d, 0x2d, 0x2e, 0x4e, 0x4c, 0x4f,
 	0xd5, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x92, 0x81, 0xa9, 0xd5, 0x83, 0xa8, 0xd5, 0x4b, 0x2c,
-	0xc8, 0xd4, 0x03, 0xab, 0xd5, 0x2b, 0x33, 0x54, 0x32, 0xe2, 0xe2, 0x0a, 0xce, 0x48, 0x2c, 0x4a,
-	0x71, 0x06, 0x09, 0x08, 0xf1, 0x71, 0x31, 0x65, 0xa6, 0x48, 0x30, 0x2a, 0x30, 0x6a, 0xb0, 0x06,
-	0x31, 0x65, 0xa6, 0x08, 0x89, 0x70, 0xb1, 0x82, 0x55, 0x4a, 0x30, 0x29, 0x30, 0x6a, 0x30, 0x07,
-	0x41, 0x38, 0x4e, 0x71, 0x17, 0x1e, 0xca, 0x31, 0xdc, 0x78, 0x28, 0xc7, 0xf0, 0xe1, 0xa1, 0x1c,
-	0x63, 0xc3, 0x23, 0x39, 0xc6, 0x15, 0x8f, 0xe4, 0x18, 0x4f, 0x3c, 0x92, 0x63, 0xbc, 0xf0, 0x48,
-	0x8e, 0xf1, 0xc1, 0x23, 0x39, 0xc6, 0x17, 0x8f, 0xe4, 0x18, 0x3e, 0x3c, 0x92, 0x63, 0x9c, 0xf0,
-	0x58, 0x8e, 0xe1, 0xc2, 0x63, 0x39, 0x86, 0x1b, 0x8f, 0xe5, 0x18, 0xa2, 0x34, 0xd2, 0xf3, 0xf5,
-	0xe0, 0x4e, 0xc9, 0xcc, 0xc7, 0xe6, 0x72, 0x6b, 0x30, 0x23, 0x89, 0x0d, 0xec, 0x70, 0x63, 0x40,
-	0x00, 0x00, 0x00, 0xff, 0xff, 0xa1, 0x1d, 0xbd, 0x58, 0xe6, 0x00, 0x00, 0x00,
+	0xc8, 0xd4, 0x03, 0xab, 0xd5, 0x2b, 0x33, 0x54, 0x0a, 0xe7, 0x62, 0x75, 0x06, 0xb1, 0x85, 0x24,
+	0xb9, 0x38, 0x8a, 0x33, 0x12, 0x8b, 0x52, 0xe2, 0x33, 0x53, 0x24, 0x18, 0x15, 0x18, 0x35, 0x58,
+	0x83, 0xd8, 0xc1, 0x7c, 0xcf, 0x14, 0x21, 0x11, 0x2e, 0x56, 0xb0, 0x7a, 0x09, 0x26, 0x05, 0x46,
+	0x0d, 0xe6, 0x20, 0x08, 0x47, 0x48, 0x96, 0x8b, 0x2b, 0x39, 0xa7, 0xb4, 0xb8, 0x24, 0xb5, 0x08,
+	0xa4, 0x85, 0x19, 0x2c, 0xc5, 0x09, 0x15, 0xf1, 0x4c, 0x71, 0x8a, 0xbb, 0xf0, 0x50, 0x8e, 0xe1,
+	0xc6, 0x43, 0x39, 0x86, 0x0f, 0x0f, 0xe5, 0x18, 0x1b, 0x1e, 0xc9, 0x31, 0xae, 0x78, 0x24, 0xc7,
+	0x78, 0xe2, 0x91, 0x1c, 0xe3, 0x85, 0x47, 0x72, 0x8c, 0x0f, 0x1e, 0xc9, 0x31, 0xbe, 0x78, 0x24,
+	0xc7, 0xf0, 0xe1, 0x91, 0x1c, 0xe3, 0x84, 0xc7, 0x72, 0x0c, 0x17, 0x1e, 0xcb, 0x31, 0xdc, 0x78,
+	0x2c, 0xc7, 0x10, 0xa5, 0x91, 0x9e, 0xaf, 0x07, 0x77, 0x6f, 0x66, 0x3e, 0x36, 0xef, 0x59, 0x83,
+	0x19, 0x49, 0x6c, 0x60, 0xdf, 0x19, 0x03, 0x02, 0x00, 0x00, 0xff, 0xff, 0xe2, 0x63, 0xc8, 0x7a,
+	0x0b, 0x01, 0x00, 0x00,
 }
 
-func (this *ShardClock) Equal(that interface{}) bool {
+func (this *Clock) Equal(that interface{}) bool {
 	if that == nil {
 		return this == nil
 	}
 
-	that1, ok := that.(*ShardClock)
+	that1, ok := that.(*Clock)
 	if !ok {
-		that2, ok := that.(ShardClock)
+		that2, ok := that.(Clock)
 		if ok {
 			that1 = &that2
 		} else {
@@ -144,22 +154,26 @@ func (this *ShardClock) Equal(that interface{}) bool {
 	} else if this == nil {
 		return false
 	}
-	if this.Id != that1.Id {
+	if this.ShardId != that1.ShardId {
 		return false
 	}
 	if this.Clock != that1.Clock {
 		return false
 	}
+	if this.ClusterId != that1.ClusterId {
+		return false
+	}
 	return true
 }
-func (this *ShardClock) GoString() string {
+func (this *Clock) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 6)
-	s = append(s, "&clock.ShardClock{")
-	s = append(s, "Id: "+fmt.Sprintf("%#v", this.Id)+",\n")
+	s := make([]string, 0, 7)
+	s = append(s, "&clock.Clock{")
+	s = append(s, "ShardId: "+fmt.Sprintf("%#v", this.ShardId)+",\n")
 	s = append(s, "Clock: "+fmt.Sprintf("%#v", this.Clock)+",\n")
+	s = append(s, "ClusterId: "+fmt.Sprintf("%#v", this.ClusterId)+",\n")
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -171,7 +185,7 @@ func valueToGoStringMessage(v interface{}, typ string) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("func(v %v) *%v { return &v } ( %#v )", typ, typ, pv)
 }
-func (m *ShardClock) Marshal() (dAtA []byte, err error) {
+func (m *Clock) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
 	n, err := m.MarshalToSizedBuffer(dAtA[:size])
@@ -181,23 +195,28 @@ func (m *ShardClock) Marshal() (dAtA []byte, err error) {
 	return dAtA[:n], nil
 }
 
-func (m *ShardClock) MarshalTo(dAtA []byte) (int, error) {
+func (m *Clock) MarshalTo(dAtA []byte) (int, error) {
 	size := m.Size()
 	return m.MarshalToSizedBuffer(dAtA[:size])
 }
 
-func (m *ShardClock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+func (m *Clock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	i := len(dAtA)
 	_ = i
 	var l int
 	_ = l
+	if m.ClusterId != 0 {
+		i = encodeVarintMessage(dAtA, i, uint64(m.ClusterId))
+		i--
+		dAtA[i] = 0x18
+	}
 	if m.Clock != 0 {
 		i = encodeVarintMessage(dAtA, i, uint64(m.Clock))
 		i--
 		dAtA[i] = 0x10
 	}
-	if m.Id != 0 {
-		i = encodeVarintMessage(dAtA, i, uint64(m.Id))
+	if m.ShardId != 0 {
+		i = encodeVarintMessage(dAtA, i, uint64(m.ShardId))
 		i--
 		dAtA[i] = 0x8
 	}
@@ -215,17 +234,20 @@ func encodeVarintMessage(dAtA []byte, offset int, v uint64) int {
 	dAtA[offset] = uint8(v)
 	return base
 }
-func (m *ShardClock) Size() (n int) {
+func (m *Clock) Size() (n int) {
 	if m == nil {
 		return 0
 	}
 	var l int
 	_ = l
-	if m.Id != 0 {
-		n += 1 + sovMessage(uint64(m.Id))
+	if m.ShardId != 0 {
+		n += 1 + sovMessage(uint64(m.ShardId))
 	}
 	if m.Clock != 0 {
 		n += 1 + sovMessage(uint64(m.Clock))
+	}
+	if m.ClusterId != 0 {
+		n += 1 + sovMessage(uint64(m.ClusterId))
 	}
 	return n
 }
@@ -236,13 +258,14 @@ func sovMessage(x uint64) (n int) {
 func sozMessage(x uint64) (n int) {
 	return sovMessage(uint64((x << 1) ^ uint64((int64(x) >> 63))))
 }
-func (this *ShardClock) String() string {
+func (this *Clock) String() string {
 	if this == nil {
 		return "nil"
 	}
-	s := strings.Join([]string{`&ShardClock{`,
-		`Id:` + fmt.Sprintf("%v", this.Id) + `,`,
+	s := strings.Join([]string{`&Clock{`,
+		`ShardId:` + fmt.Sprintf("%v", this.ShardId) + `,`,
 		`Clock:` + fmt.Sprintf("%v", this.Clock) + `,`,
+		`ClusterId:` + fmt.Sprintf("%v", this.ClusterId) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -255,7 +278,7 @@ func valueToStringMessage(v interface{}) string {
 	pv := reflect.Indirect(rv).Interface()
 	return fmt.Sprintf("*%v", pv)
 }
-func (m *ShardClock) Unmarshal(dAtA []byte) error {
+func (m *Clock) Unmarshal(dAtA []byte) error {
 	l := len(dAtA)
 	iNdEx := 0
 	for iNdEx < l {
@@ -278,17 +301,17 @@ func (m *ShardClock) Unmarshal(dAtA []byte) error {
 		fieldNum := int32(wire >> 3)
 		wireType := int(wire & 0x7)
 		if wireType == 4 {
-			return fmt.Errorf("proto: ShardClock: wiretype end group for non-group")
+			return fmt.Errorf("proto: Clock: wiretype end group for non-group")
 		}
 		if fieldNum <= 0 {
-			return fmt.Errorf("proto: ShardClock: illegal tag %d (wire type %d)", fieldNum, wire)
+			return fmt.Errorf("proto: Clock: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Id", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ShardId", wireType)
 			}
-			m.Id = 0
+			m.ShardId = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowMessage
@@ -298,7 +321,7 @@ func (m *ShardClock) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.Id |= int32(b&0x7F) << shift
+				m.ShardId |= int32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -318,6 +341,25 @@ func (m *ShardClock) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.Clock |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterId", wireType)
+			}
+			m.ClusterId = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowMessage
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ClusterId |= int64(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}

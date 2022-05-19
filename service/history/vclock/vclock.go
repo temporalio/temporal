@@ -32,19 +32,21 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 )
 
-func NewShardClock(
+func NewClock(
+	clusterID int64,
 	shardID int32,
 	clock int64,
-) *clockspb.ShardClock {
-	return &clockspb.ShardClock{
-		Id:    shardID,
-		Clock: clock,
+) *clockspb.Clock {
+	return &clockspb.Clock{
+		ClusterId: clusterID,
+		ShardId:   shardID,
+		Clock:     clock,
 	}
 }
 
 func HappensBefore(
-	clock1 *clockspb.ShardClock,
-	clock2 *clockspb.ShardClock,
+	clock1 *clockspb.Clock,
+	clock2 *clockspb.Clock,
 ) (bool, error) {
 	compare, err := Compare(clock1, clock2)
 	if err != nil {
@@ -54,14 +56,16 @@ func HappensBefore(
 }
 
 func Compare(
-	clock1 *clockspb.ShardClock,
-	clock2 *clockspb.ShardClock,
+	clock1 *clockspb.Clock,
+	clock2 *clockspb.Clock,
 ) (int, error) {
-	if clock1.GetId() != clock2.GetId() {
+	if clock1.GetClusterId() != clock2.GetClusterId() || clock1.GetShardId() != clock2.GetShardId() {
 		return 0, serviceerror.NewInternal(fmt.Sprintf(
-			"Encountered shard ID mismatch: %v vs %v",
-			clock1.GetId(),
-			clock2.GetId(),
+			"Encountered shard ID mismatch: %v:%v vs %v:%v",
+			clock1.GetClusterId(),
+			clock1.GetShardId(),
+			clock2.GetClusterId(),
+			clock2.GetShardId(),
 		))
 	}
 

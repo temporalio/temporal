@@ -107,7 +107,7 @@ message AddWorkflowTaskRequest {
     google.protobuf.Duration schedule_to_start_timeout = 5 [(gogoproto.stdduration) = true];
     string forwarded_source = 6;
     temporal.server.api.enums.v1.TaskSource source = 7;
-    temporal.server.api.clock.v1.ShardClock clock = 9;
+    temporal.server.api.clock.v1.Clock clock = 9;
 }
 
 message AddWorkflowTaskResponse {
@@ -125,7 +125,7 @@ message AddActivityTaskRequest {
     google.protobuf.Duration schedule_to_start_timeout = 6 [(gogoproto.stdduration) = true];
     string forwarded_source = 7;
     temporal.server.api.enums.v1.TaskSource source = 8;
-    temporal.server.api.clock.v1.ShardClock clock = 9;
+    temporal.server.api.clock.v1.Clock clock = 9;
 }
 
 message AddActivityTaskResponse {
