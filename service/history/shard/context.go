@@ -114,7 +114,7 @@ type (
 		// If branchToken != nil, then delete history also, otherwise leave history.
 		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, version int64, startTime *time.Time, closeTime *time.Time) error
 
-		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
+		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
 		GetHistoryClient() historyservice.HistoryServiceClient
 		GetPayloadSerializer() serialization.Serializer
 

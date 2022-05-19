@@ -519,11 +519,12 @@ func (mr *MockContextMockRecorder) GetQueueMaxReadLevel(category, cluster interf
 }
 
 // GetRemoteAdminClient mocks base method.
-func (m *MockContext) GetRemoteAdminClient(cluster string) v10.AdminServiceClient {
+func (m *MockContext) GetRemoteAdminClient(cluster string) (v10.AdminServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteAdminClient", cluster)
 	ret0, _ := ret[0].(v10.AdminServiceClient)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetRemoteAdminClient indicates an expected call of GetRemoteAdminClient.

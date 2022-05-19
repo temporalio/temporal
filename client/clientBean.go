@@ -28,6 +28,7 @@ package client
 
 import (
 	"fmt"
+	"go.temporal.io/api/serviceerror"
 	"sync"
 	"sync/atomic"
 
@@ -52,9 +53,9 @@ type (
 		SetMatchingClient(client matchingservice.MatchingServiceClient)
 		GetFrontendClient() workflowservice.WorkflowServiceClient
 		SetFrontendClient(client workflowservice.WorkflowServiceClient)
-		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
+		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
 		SetRemoteAdminClient(cluster string, client adminservice.AdminServiceClient)
-		GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient
+		GetRemoteFrontendClient(cluster string) (workflowservice.WorkflowServiceClient, error)
 	}
 
 	clientBeanImpl struct {
@@ -170,7 +171,7 @@ func (h *clientBeanImpl) SetFrontendClient(
 	h.remoteFrontendClients[h.clusterMetadata.GetCurrentClusterName()] = client
 }
 
-func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
+func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error) {
 	h.remoteAdminClientsLock.RLock()
 	client, ok := h.remoteAdminClients[cluster]
 	h.remoteAdminClientsLock.RUnlock()
@@ -178,11 +179,13 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.Admin
 	if !ok {
 		clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
 		if !clusterFound {
-			panic(fmt.Sprintf(
-				"Unknown cluster name: %v with given cluster information map: %v.",
-				cluster,
-				clusterInfo,
-			))
+			return nil, &serviceerror.Unavailable{
+				Message: fmt.Sprintf(
+					"Unknown cluster name: %v with given cluster information map: %v.",
+					cluster,
+					clusterInfo,
+				),
+			}
 		}
 
 		h.remoteAdminClientsLock.Lock()
@@ -197,7 +200,7 @@ func (h *clientBeanImpl) GetRemoteAdminClient(cluster string) adminservice.Admin
 			h.setRemoteAdminClientLocked(cluster, client)
 		}
 	}
-	return client
+	return client, nil
 }
 
 func (h *clientBeanImpl) SetRemoteAdminClient(
@@ -210,7 +213,7 @@ func (h *clientBeanImpl) SetRemoteAdminClient(
 	h.setRemoteAdminClientLocked(cluster, client)
 }
 
-func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice.WorkflowServiceClient {
+func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) (workflowservice.WorkflowServiceClient, error) {
 	h.remoteFrontendClientsLock.RLock()
 	client, ok := h.remoteFrontendClients[cluster]
 	h.remoteFrontendClientsLock.RUnlock()
@@ -218,11 +221,13 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice
 	if !ok {
 		clusterInfo, clusterFound := h.clusterMetadata.GetAllClusterInfo()[cluster]
 		if !clusterFound {
-			panic(fmt.Sprintf(
-				"Unknown cluster name: %v with given cluster information map: %v.",
-				cluster,
-				clusterInfo,
-			))
+			return nil, &serviceerror.Unavailable{
+				Message: fmt.Sprintf(
+					"Unknown cluster name: %v with given cluster information map: %v.",
+					cluster,
+					clusterInfo,
+				),
+			}
 		}
 
 		h.remoteFrontendClientsLock.Lock()
@@ -237,7 +242,7 @@ func (h *clientBeanImpl) GetRemoteFrontendClient(cluster string) workflowservice
 			h.setRemoteFrontendClientLocked(cluster, client)
 		}
 	}
-	return client
+	return client, nil
 }
 
 func (h *clientBeanImpl) setRemoteFrontendClientLocked(

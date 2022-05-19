@@ -1419,10 +1419,13 @@ func (adh *AdminHandler) ResendReplicationTasks(
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-
+	remoteClient, err := adh.clientBean.GetRemoteAdminClient(request.GetRemoteCluster())
+	if err != nil {
+		return nil, err
+	}
 	resender := xdc.NewNDCHistoryResender(
 		adh.namespaceRegistry,
-		adh.clientBean.GetRemoteAdminClient(request.GetRemoteCluster()),
+		remoteClient,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 			_, err1 := adh.historyClient.ReplicateEventsV2(ctx, request)
 			return err1

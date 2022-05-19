@@ -25,6 +25,7 @@
 package replicator
 
 import (
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -137,12 +138,19 @@ func (r *Replicator) listenToClusterMetadataChange() {
 					processor.Stop()
 					delete(r.namespaceProcessors, clusterName)
 				}
+
+				remoteAdminClient, err := r.clientBean.GetRemoteAdminClient(clusterName)
+				if err != nil {
+					// Cannot find remote cluster info.
+					// This should never happen as cluster metadata should have the up-to-date data.
+					panic(fmt.Sprintf("Bug found in cluster metadata with error %v", err))
+				}
 				if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 					processor := newNamespaceReplicationMessageProcessor(
 						currentClusterName,
 						clusterName,
 						log.With(r.logger, tag.ComponentReplicationTaskProcessor, tag.SourceCluster(clusterName)),
-						r.clientBean.GetRemoteAdminClient(clusterName),
+						remoteAdminClient,
 						r.metricsClient,
 						r.namespaceReplicationTaskExecutor,
 						r.hostInfo,
