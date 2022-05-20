@@ -435,14 +435,14 @@ func (s *mutableStateSuite) TestSanitizedMutableState() {
 	)
 
 	mutableState.executionInfo.LastFirstEventTxnId = txnID
-	mutableState.executionInfo.ParentClock = &clock.ShardClock{
-		Id:    1,
-		Clock: 1,
+	mutableState.executionInfo.ParentClock = &clock.VectorClock{
+		ShardId: 1,
+		Clock:   1,
 	}
 	mutableState.pendingChildExecutionInfoIDs = map[int64]*persistencespb.ChildExecutionInfo{1: {
-		Clock: &clock.ShardClock{
-			Id:    1,
-			Clock: 1,
+		Clock: &clock.VectorClock{
+			ShardId: 1,
+			Clock:   1,
 		},
 	}}
 
