@@ -26,11 +26,12 @@ package history
 
 import (
 	"context"
+	"testing"
+	"time"
+
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/service/history/events"
-	"testing"
-	"time"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
