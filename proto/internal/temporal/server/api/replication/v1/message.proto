@@ -42,12 +42,12 @@ import "temporal/api/failure/v1/message.proto";
 message ReplicationTask {
     temporal.server.api.enums.v1.ReplicationTaskType task_type = 1;
     int64 source_task_id = 2;
+    reserved 4;
+    reserved 7;
     oneof attributes {
         NamespaceTaskAttributes namespace_task_attributes = 3;
-        reserved 4;
         SyncShardStatusTaskAttributes sync_shard_status_task_attributes = 5;
         SyncActivityTaskAttributes sync_activity_task_attributes = 6;
-        reserved 7;
         HistoryTaskV2Attributes history_task_v2_attributes = 8;
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
     }
