@@ -58,7 +58,7 @@ type (
 	updateTimerAckLevel     func(tasks.Key) error
 	timerQueueShutdown      func() error
 	timerQueueProcessorImpl struct {
-		isGlobalNamespaceEnabled   bool
+		singleProcessor            bool
 		currentClusterName         string
 		shard                      shard.Context
 		taskAllocator              taskAllocator
@@ -89,6 +89,9 @@ func newTimerQueueProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Processor {
 
+	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
+		shard.GetConfig().TimerProcessorEnableSingleCursor()
+
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 	logger := log.With(shard.GetLogger(), tag.ComponentTimerQueue)
@@ -102,21 +105,21 @@ func newTimerQueueProcessor(
 	)
 
 	return &timerQueueProcessorImpl{
-		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
-		currentClusterName:       currentClusterName,
-		shard:                    shard,
-		taskAllocator:            taskAllocator,
-		config:                   config,
-		metricsClient:            shard.GetMetricsClient(),
-		workflowCache:            workflowCache,
-		scheduler:                scheduler,
-		workflowDeleteManager:    workflowDeleteManager,
-		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTimer),
-		logger:                   logger,
-		clientBean:               clientBean,
-		matchingClient:           matchingClient,
-		status:                   common.DaemonStatusInitialized,
-		shutdownChan:             make(chan struct{}),
+		singleProcessor:       singleProcessor,
+		currentClusterName:    currentClusterName,
+		shard:                 shard,
+		taskAllocator:         taskAllocator,
+		config:                config,
+		metricsClient:         shard.GetMetricsClient(),
+		workflowCache:         workflowCache,
+		scheduler:             scheduler,
+		workflowDeleteManager: workflowDeleteManager,
+		ackLevel:              shard.GetQueueAckLevel(tasks.CategoryTimer),
+		logger:                logger,
+		clientBean:            clientBean,
+		matchingClient:        matchingClient,
+		status:                common.DaemonStatusInitialized,
+		shutdownChan:          make(chan struct{}),
 		activeTimerProcessor: newTimerQueueActiveProcessor(
 			shard,
 			workflowCache,
@@ -124,7 +127,9 @@ func newTimerQueueProcessor(
 			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
+			clientBean,
 			logger,
+			singleProcessor,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
 	}
@@ -135,7 +140,7 @@ func (t *timerQueueProcessorImpl) Start() {
 		return
 	}
 	t.activeTimerProcessor.Start()
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.listenToClusterMetadataChange()
 	}
 
@@ -148,7 +153,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 		return
 	}
 	t.activeTimerProcessor.Stop()
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t)
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
@@ -167,7 +172,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	timerTasks []tasks.Task,
 ) {
 
-	if clusterName == t.currentClusterName {
+	if clusterName == t.currentClusterName || t.singleProcessor {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return
 	}
@@ -185,6 +190,12 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 func (t *timerQueueProcessorImpl) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
+	if t.singleProcessor {
+		// TODO: we may want to reschedule all tasks for new active namespaces in buffer
+		// so that they don't have to keeping waiting on the backoff timer
+		return
+	}
+
 	// Failover queue is used to scan all inflight tasks, if queue processor is not
 	// started, there's no inflight task and we don't need to create a failover processor.
 	// Also the HandleAction will be blocked if queue processor processing loop is not running.
@@ -236,10 +247,18 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 }
 
 func (t *timerQueueProcessorImpl) LockTaskProcessing() {
+	if t.singleProcessor {
+		return
+	}
+
 	t.taskAllocator.lock()
 }
 
 func (t *timerQueueProcessorImpl) UnlockTaskProcessing() {
+	if t.singleProcessor {
+		return
+	}
+
 	t.taskAllocator.unlock()
 }
 
@@ -284,7 +303,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTimerProcessor.getAckLevel()
 
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			ackLevel := standbyTimerProcessor.getAckLevel()

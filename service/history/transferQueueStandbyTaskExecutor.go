@@ -55,7 +55,6 @@ type (
 		*transferQueueTaskExecutorBase
 
 		clusterName        string
-		historyClient      historyservice.HistoryServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
@@ -78,7 +77,6 @@ func newTransferQueueStandbyTaskExecutor(
 			matchingClient,
 		),
 		clusterName:        clusterName,
-		historyClient:      shard.GetHistoryClient(),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }
@@ -86,28 +84,35 @@ func newTransferQueueStandbyTaskExecutor(
 func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) error {
-	switch task := executable.GetTask().(type) {
+) (metrics.Scope, error) {
+
+	task := executable.GetTask()
+	scope := t.metricsClient.Scope(
+		tasks.GetStandbyTransferTaskMetricsScope(task),
+		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	)
+
+	switch task := task.(type) {
 	case *tasks.ActivityTask:
-		return t.processActivityTask(ctx, task)
+		return scope, t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:
-		return t.processWorkflowTask(ctx, task)
+		return scope, t.processWorkflowTask(ctx, task)
 	case *tasks.CancelExecutionTask:
-		return t.processCancelExecution(ctx, task)
+		return scope, t.processCancelExecution(ctx, task)
 	case *tasks.SignalExecutionTask:
-		return t.processSignalExecution(ctx, task)
+		return scope, t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		return t.processStartChildExecution(ctx, task)
+		return scope, t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby
 		// TODO: add error logs
-		return nil
+		return scope, nil
 	case *tasks.CloseExecutionTask:
-		return t.processCloseExecution(ctx, task)
+		return scope, t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionTask:
-		return t.processDeleteExecutionTask(ctx, task)
+		return scope, t.processDeleteExecutionTask(ctx, task)
 	default:
-		return errUnknownTransferTask
+		return scope, errUnknownTransferTask
 	}
 }
 
@@ -584,11 +589,20 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		logger.Fatal("unknown post action info for fetching remote history", tag.Value(postActionInfo))
 	}
 
+	remoteClusterName, err := getRemoteClusterName(
+		t.currentClusterName,
+		t.registry,
+		taskInfo.GetNamespaceID(),
+	)
+	if err != nil {
+		return err
+	}
+
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientRequests)
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	adminClient, err := t.shard.GetRemoteAdminClient(t.clusterName)
+	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {
 		return err
 	}
@@ -596,7 +610,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		if err := refreshTasks(
 			ctx,
 			adminClient,
-			t.shard.GetNamespaceRegistry(),
+			t.registry,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
@@ -606,13 +620,13 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 				tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 				tag.WorkflowID(taskInfo.GetWorkflowID()),
 				tag.WorkflowRunID(taskInfo.GetRunID()),
-				tag.ClusterName(t.clusterName))
+				tag.ClusterName(remoteClusterName))
 		}
 
 		// NOTE: history resend may take long time and its timeout is currently
 		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			t.clusterName,
+			remoteClusterName,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
@@ -633,7 +647,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.SourceCluster(t.clusterName))
+			tag.SourceCluster(remoteClusterName))
 	}
 
 	// return error so task processing logic will retry

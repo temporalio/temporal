@@ -160,9 +160,6 @@ func newTransferQueueStandbyProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				shard.GetMetricsClient().Scope(
-					tasks.GetStandbyTransferTaskMetricsScope(t),
-				),
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				queues.QueueTypeStandbyTransfer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,

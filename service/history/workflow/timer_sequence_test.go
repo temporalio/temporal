@@ -35,7 +35,6 @@ import (
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
@@ -47,9 +46,8 @@ type (
 		suite.Suite
 		*require.Assertions
 
-		controller          *gomock.Controller
-		mockMutableState    *MockMutableState
-		mockEventTimeSource clock.TimeSource
+		controller       *gomock.Controller
+		mockMutableState *MockMutableState
 
 		workflowKey   definition.WorkflowKey
 		timerSequence *timerSequenceImpl
@@ -74,7 +72,6 @@ func (s *timerSequenceSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockMutableState = NewMockMutableState(s.controller)
-	s.mockEventTimeSource = clock.NewEventTimeSource()
 
 	s.workflowKey = definition.NewWorkflowKey(
 		tests.NamespaceID.String(),
@@ -82,7 +79,7 @@ func (s *timerSequenceSuite) SetupTest() {
 		tests.RunID,
 	)
 	s.mockMutableState.EXPECT().GetWorkflowKey().Return(s.workflowKey).AnyTimes()
-	s.timerSequence = NewTimerSequence(s.mockEventTimeSource, s.mockMutableState)
+	s.timerSequence = NewTimerSequence(s.mockMutableState)
 }
 
 func (s *timerSequenceSuite) TearDownTest() {

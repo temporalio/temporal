@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/visibility/manager"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -73,18 +74,25 @@ func newVisibilityQueueTaskExecutor(
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) error {
-	switch task := executable.GetTask().(type) {
+) (metrics.Scope, error) {
+
+	task := executable.GetTask()
+	scope := t.shard.GetMetricsClient().Scope(
+		tasks.GetVisibilityTaskMetricsScope(task),
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+	)
+
+	switch task := task.(type) {
 	case *tasks.StartExecutionVisibilityTask:
-		return t.processStartExecution(ctx, task)
+		return scope, t.processStartExecution(ctx, task)
 	case *tasks.UpsertExecutionVisibilityTask:
-		return t.processUpsertExecution(ctx, task)
+		return scope, t.processUpsertExecution(ctx, task)
 	case *tasks.CloseExecutionVisibilityTask:
-		return t.processCloseExecution(ctx, task)
+		return scope, t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
-		return t.processDeleteExecution(ctx, task)
+		return scope, t.processDeleteExecution(ctx, task)
 	default:
-		return errUnknownVisibilityTask
+		return scope, errUnknownVisibilityTask
 	}
 }
 

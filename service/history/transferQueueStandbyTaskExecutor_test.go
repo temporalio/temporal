@@ -119,8 +119,8 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 
 	config := tests.NewDynamicConfig()
 
-	s.namespaceID = tests.NamespaceID
-	s.namespaceEntry = tests.GlobalNamespaceEntry
+	s.namespaceEntry = tests.GlobalStandbyNamespaceEntry
+	s.namespaceID = s.namespaceEntry.ID()
 	s.version = s.namespaceEntry.FailoverVersion()
 	s.now = time.Now().UTC()
 	s.timeSource = clock.NewEventTimeSource().Update(s.now)
@@ -168,6 +168,9 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ParentNamespace).Return(tests.GlobalParentNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.ChildNamespaceID).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
 	s.mockNamespaceCache.EXPECT().GetNamespace(tests.ChildNamespace).Return(tests.GlobalChildNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(tests.StandbyNamespaceID).Return(tests.GlobalStandbyNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(tests.StandbyNamespace).Return(tests.GlobalStandbyNamespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceName(tests.StandbyNamespaceID).Return(tests.StandbyNamespace, nil).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
@@ -259,7 +262,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	// resend history post action
@@ -281,13 +284,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Pending(
 		int64(0),
 		int64(0),
 	).Return(nil)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	// push to matching post action
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockMatchingClient.EXPECT().AddActivityTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddActivityTaskResponse{}, nil)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -351,7 +354,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessActivityTask_Success(
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -402,7 +405,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 
 	// no-op post action
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	// resend history post action
@@ -424,13 +427,13 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Pending(
 		int64(0),
 		int64(0),
 	).Return(nil)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	// push to matching post action
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockMatchingClient.EXPECT().AddWorkflowTask(gomock.Any(), gomock.Any(), gomock.Any()).Return(&matchingservice.AddWorkflowTaskResponse{}, nil)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -483,7 +486,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -541,7 +544,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessWorkflowTask_Success_
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -621,7 +624,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	}).Return(nil, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), &historyservice.VerifyChildExecutionCompletionRecordedRequest{
@@ -634,7 +637,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	}).Return(nil, &serviceerror.WorkflowNotReady{})
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockHistoryClient.EXPECT().VerifyChildExecutionCompletionRecorded(gomock.Any(), &historyservice.VerifyChildExecutionCompletionRecordedRequest{
@@ -647,7 +650,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCloseExecution() {
 	}).Return(nil, &serviceerror.WorkflowNotReady{})
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, err)
 }
 
@@ -711,7 +714,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
@@ -732,11 +735,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Pendi
 		int64(0),
 		int64(0),
 	).Return(nil)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, err)
 }
 
@@ -802,7 +805,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessCancelExecution_Succe
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -867,7 +870,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
@@ -888,11 +891,11 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Pendi
 		int64(0),
 		int64(0),
 	).Return(nil)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, err)
 }
 
@@ -960,7 +963,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessSignalExecution_Succe
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -1022,7 +1025,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
@@ -1043,7 +1046,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 		int64(0),
 		int64(0),
 	).Return(nil)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	event = addChildWorkflowExecutionStartedEvent(mutableState, event.GetEventId(), tests.ChildNamespace, childWorkflowID, uuid.New(), childWorkflowType, nil)
@@ -1055,17 +1058,17 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_P
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.fetchHistoryDuration))
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(&persistence.GetWorkflowExecutionResponse{State: persistenceMutableState}, nil)
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.WorkflowNotReady{})
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskRetry, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, &serviceerror.WorkflowNotReady{})
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Equal(consts.ErrTaskDiscarded, err)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now.Add(s.discardDuration))
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -1132,7 +1135,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 
 	// workflow closed && child started && parent close policy is abandon
@@ -1149,7 +1152,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) TestProcessStartChildExecution_S
 	s.mockHistoryClient.EXPECT().VerifyFirstWorkflowTaskScheduled(gomock.Any(), gomock.Any()).Return(nil, nil)
 
 	s.mockShard.SetCurrentTime(s.clusterName, now)
-	err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
+	_, err = s.transferQueueStandbyTaskExecutor.Execute(context.Background(), s.newTaskExecutable(transferTask))
 	s.Nil(err)
 }
 
@@ -1171,5 +1174,5 @@ func (s *transferQueueStandbyTaskExecutorSuite) createPersistenceMutableState(
 func (s *transferQueueStandbyTaskExecutorSuite) newTaskExecutable(
 	task tasks.Task,
 ) queues.Executable {
-	return queues.NewExecutable(task, nil, s.transferQueueStandbyTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, nil, queues.QueueTypeStandbyTransfer, nil)
+	return queues.NewExecutable(task, nil, s.transferQueueStandbyTaskExecutor, nil, nil, s.mockShard.GetTimeSource(), nil, nil, queues.QueueTypeStandbyTransfer, nil)
 }

@@ -244,6 +244,9 @@ func (e *historyEngineImpl) Start() {
 	// can't be retrieved before the processor is started. If failover callback is registered
 	// before queue processor is started, it may result in a deadline as to create the failover queue,
 	// queue processor need to be started.
+	//
+	// Ideally, when both timer and transfer queues enabled single cursor mode, we don't have to register
+	// the callback. However, currently namespace migration is relying on the callback to UpdateHandoverNamespaces
 	e.registerNamespaceFailoverCallback()
 }
 

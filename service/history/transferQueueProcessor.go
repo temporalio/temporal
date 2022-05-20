@@ -58,7 +58,7 @@ type (
 	taskFilter func(task tasks.Task) bool
 
 	transferQueueProcessorImpl struct {
-		isGlobalNamespaceEnabled  bool
+		singleProcessor           bool
 		currentClusterName        string
 		shard                     shard.Context
 		workflowCache             workflow.Cache
@@ -93,28 +93,31 @@ func newTransferQueueProcessor(
 	historyClient historyservice.HistoryServiceClient,
 ) queues.Processor {
 
+	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
+		shard.GetConfig().TransferProcessorEnableSingleCursor()
+
 	logger := log.With(shard.GetLogger(), tag.ComponentTransferQueue)
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	config := shard.GetConfig()
 	taskAllocator := newTaskAllocator(shard)
 
 	return &transferQueueProcessorImpl{
-		isGlobalNamespaceEnabled: shard.GetClusterMetadata().IsGlobalNamespaceEnabled(),
-		currentClusterName:       currentClusterName,
-		shard:                    shard,
-		workflowCache:            workflowCache,
-		archivalClient:           archivalClient,
-		sdkClientFactory:         sdkClientFactory,
-		taskAllocator:            taskAllocator,
-		config:                   config,
-		metricsClient:            shard.GetMetricsClient(),
-		clientBean:               clientBean,
-		matchingClient:           matchingClient,
-		historyClient:            historyClient,
-		ackLevel:                 shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
-		logger:                   logger,
-		shutdownChan:             make(chan struct{}),
-		scheduler:                scheduler,
+		singleProcessor:    singleProcessor,
+		currentClusterName: currentClusterName,
+		shard:              shard,
+		workflowCache:      workflowCache,
+		archivalClient:     archivalClient,
+		sdkClientFactory:   sdkClientFactory,
+		taskAllocator:      taskAllocator,
+		config:             config,
+		metricsClient:      shard.GetMetricsClient(),
+		clientBean:         clientBean,
+		matchingClient:     matchingClient,
+		historyClient:      historyClient,
+		ackLevel:           shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
+		logger:             logger,
+		shutdownChan:       make(chan struct{}),
+		scheduler:          scheduler,
 		activeTaskProcessor: newTransferQueueActiveProcessor(
 			shard,
 			workflowCache,
@@ -124,7 +127,9 @@ func newTransferQueueProcessor(
 			matchingClient,
 			historyClient,
 			taskAllocator,
+			clientBean,
 			logger,
+			singleProcessor,
 		),
 		standbyTaskProcessors: make(map[string]*transferQueueStandbyProcessorImpl),
 	}
@@ -135,7 +140,7 @@ func (t *transferQueueProcessorImpl) Start() {
 		return
 	}
 	t.activeTaskProcessor.Start()
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.listenToClusterMetadataChange()
 	}
 
@@ -147,7 +152,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 		return
 	}
 	t.activeTaskProcessor.Stop()
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t)
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
@@ -165,7 +170,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	transferTasks []tasks.Task,
 ) {
 
-	if clusterName == t.currentClusterName {
+	if clusterName == t.currentClusterName || t.singleProcessor {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {
 			t.activeTaskProcessor.notifyNewTask()
@@ -187,6 +192,11 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 func (t *transferQueueProcessorImpl) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
+	if t.singleProcessor {
+		// TODO: we may want to reschedule all tasks for new active namespaces in buffer
+		// so that they don't have to keeping waiting on the backoff timer
+		return
+	}
 
 	minLevel := t.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, t.currentClusterName).TaskID
 	standbyClusterName := t.currentClusterName
@@ -233,10 +243,18 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 }
 
 func (t *transferQueueProcessorImpl) LockTaskProcessing() {
+	if t.singleProcessor {
+		return
+	}
+
 	t.taskAllocator.lock()
 }
 
 func (t *transferQueueProcessorImpl) UnlockTaskProcessing() {
+	if t.singleProcessor {
+		return
+	}
+
 	t.taskAllocator.unlock()
 }
 
@@ -283,7 +301,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTaskProcessor.queueAckMgr.getQueueAckLevel()
 
-	if t.isGlobalNamespaceEnabled {
+	if !t.singleProcessor {
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			ackLevel := standbyTaskProcessor.queueAckMgr.getQueueAckLevel()
