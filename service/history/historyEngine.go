@@ -2401,7 +2401,8 @@ func (e *historyEngineImpl) RecordChildExecutionCompleted(
 
 			// Check mutable state to make sure child execution is in pending child executions
 			ci, isRunning := mutableState.GetChildExecutionInfo(initiatedID)
-			if !isRunning && initiatedID >= mutableState.GetNextEventID() {
+			if !isRunning && initiatedID >= mutableState.GetNextEventID() ||
+				isRunning && ci.StartedId == common.EmptyEventID {
 				// possible stale mutable state, try reload mutable state
 				//
 				// TODO: use initiate event ID and version to verify if the child exists or not
