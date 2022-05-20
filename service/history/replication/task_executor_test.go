@@ -33,8 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-	"go.temporal.io/api/serviceerror"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -42,8 +40,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/definition"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -383,16 +379,10 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 
 func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
 	namespaceID := namespace.ID(uuid.New())
-	workflowID := uuid.New()
-	runID := uuid.New()
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
 		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
-			SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
-				//NamespaceId: namespaceID.String(),
-				//WorkflowId:  workflowID,
-				//RunId:       runID,
-			},
+			SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{},
 		},
 	}
 
@@ -407,13 +397,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
 			}},
 			0,
 		), nil).AnyTimes()
-	s.mockResource.ExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
-	mockWeCtx := workflow.NewContext(s.mockShard, definition.WorkflowKey{
-		NamespaceID: namespaceID.String(),
-		WorkflowID:  workflowID,
-		RunID:       runID,
-	}, log.NewNoopLogger())
-	s.workflowCache.EXPECT().GetOrCreateWorkflowExecution(gomock.Any(), gomock.Any(), gomock.Any(), gomock.Any()).Return(mockWeCtx, workflow.NoopReleaseFn, nil)
+	s.mockEngine.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(nil)
 
 	_, err := s.replicationTaskExecutor.Execute(task, true)
 	s.NoError(err)
