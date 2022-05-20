@@ -151,17 +151,6 @@ func (s *controllerSuite) TearDownTest() {
 	s.controller.Finish()
 }
 
-type getOrCreateShardRequestMatcher int32
-
-func (s getOrCreateShardRequestMatcher) Matches(x interface{}) bool {
-	req, ok := x.(*persistence.GetOrCreateShardRequest)
-	return ok && req.ShardID == int32(s)
-}
-
-func (s getOrCreateShardRequestMatcher) String() string {
-	return strconv.Itoa(int(s))
-}
-
 func (s *controllerSuite) TestAcquireShardSuccess() {
 	numShards := int32(10)
 	s.config.NumberOfShards = numShards
@@ -750,6 +739,11 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 	}).Return(nil).MinTimes(minTimes)
 }
 
+// This is needed to avoid race conditions when using this matcher, since
+// fmt.Sprintf("%v"), used by gomock, would otherwise access private fields.
+// See https://github.com/temporalio/temporal/issues/2777
+var _ fmt.Stringer = (*ContextImpl)(nil)
+
 func newContextMatcher(shardID int32) *contextMatcher {
 	return &contextMatcher{shardID: shardID}
 }
@@ -765,4 +759,15 @@ func (m *contextMatcher) Matches(x interface{}) bool {
 func (m *contextMatcher) String() string {
 	// noop, not used
 	return ""
+}
+
+type getOrCreateShardRequestMatcher int32
+
+func (s getOrCreateShardRequestMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*persistence.GetOrCreateShardRequest)
+	return ok && req.ShardID == int32(s)
+}
+
+func (s getOrCreateShardRequestMatcher) String() string {
+	return strconv.Itoa(int(s))
 }

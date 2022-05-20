@@ -173,6 +173,11 @@ const (
 	minContextTimeout        = 2 * time.Second
 )
 
+func (s *ContextImpl) String() string {
+	// constant from initialization, no need for locks
+	return fmt.Sprintf("Shard(%d)", s.shardID)
+}
+
 func (s *ContextImpl) GetShardID() int32 {
 	// constant from initialization, no need for locks
 	return s.shardID
