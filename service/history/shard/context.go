@@ -68,8 +68,8 @@ type (
 		GetEngineWithContext(ctx context.Context) (Engine, error)
 
 		AssertOwnership(ctx context.Context) error
-		NewVectorClock() (*clockspb.ShardClock, error)
-		CurrentVectorClock() *clockspb.ShardClock
+		NewVectorClock() (*clockspb.VectorClock, error)
+		CurrentVectorClock() *clockspb.VectorClock
 
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)

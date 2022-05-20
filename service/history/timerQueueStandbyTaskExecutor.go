@@ -586,7 +586,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		},
 		ScheduleId:             activityTask.EventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
-		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), activityTask.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), activityTask.TaskID),
 	})
 	return err
 }

@@ -158,6 +158,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 	s.mockAdminClient = s.mockShard.Resource.RemoteAdminClient
 	s.mockMatchingClient = s.mockShard.Resource.MatchingClient
 	s.mockNamespaceCache.EXPECT().GetNamespaceByID(gomock.Any()).Return(tests.GlobalNamespaceEntry, nil).AnyTimes()
+	s.mockClusterMetadata.EXPECT().GetClusterID().Return(cluster.TestCurrentClusterInitialFailoverVersion).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().GetAllClusterInfo().Return(cluster.TestAllClusterInfo).AnyTimes()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
@@ -1516,7 +1517,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 			},
 			ScheduleId:             scheduledEvent.EventId,
 			ScheduleToStartTimeout: &timerTimeout,
-			Clock:                  vclock.NewShardClock(s.mockShard.GetShardID(), timerTask.TaskID),
+			Clock:                  vclock.NewVectorClock(s.mockClusterMetadata.GetClusterID(), s.mockShard.GetShardID(), timerTask.TaskID),
 		},
 		gomock.Any(),
 	).Return(&matchingservice.AddActivityTaskResponse{}, nil)

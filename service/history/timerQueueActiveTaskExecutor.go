@@ -37,6 +37,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -435,7 +436,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.EventID,
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
-		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})
 
 	return retError
