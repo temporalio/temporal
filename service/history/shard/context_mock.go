@@ -150,10 +150,10 @@ func (mr *MockContextMockRecorder) CreateWorkflowExecution(ctx, request interfac
 }
 
 // CurrentVectorClock mocks base method.
-func (m *MockContext) CurrentVectorClock() *v11.ShardClock {
+func (m *MockContext) CurrentVectorClock() *v11.VectorClock {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CurrentVectorClock")
-	ret0, _ := ret[0].(*v11.ShardClock)
+	ret0, _ := ret[0].(*v11.VectorClock)
 	return ret0
 }
 
@@ -649,10 +649,10 @@ func (mr *MockContextMockRecorder) GetWorkflowExecution(ctx, request interface{}
 }
 
 // NewVectorClock mocks base method.
-func (m *MockContext) NewVectorClock() (*v11.ShardClock, error) {
+func (m *MockContext) NewVectorClock() (*v11.VectorClock, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "NewVectorClock")
-	ret0, _ := ret[0].(*v11.ShardClock)
+	ret0, _ := ret[0].(*v11.VectorClock)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }

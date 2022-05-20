@@ -59,7 +59,7 @@ message Task {
     string activity_id = 6;
     string workflow_type = 7;
     string activity_type = 8;
-    temporal.server.api.clock.v1.ShardClock clock = 9;
+    temporal.server.api.clock.v1.VectorClock clock = 9;
 }
 
 message QueryTask {

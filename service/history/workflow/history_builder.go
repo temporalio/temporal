@@ -142,6 +142,18 @@ func NewImmutableHistoryBuilder(
 	}
 }
 
+func NewImmutableHistoriesBuilder(
+	histories [][]*historypb.HistoryEvent,
+) *HistoryBuilder {
+	return &HistoryBuilder{
+		state: HistoryBuilderStateImmutable,
+
+		workflowFinished: true,
+		dbClearBuffer:    false,
+		memEventsBatches: histories,
+	}
+}
+
 // NOTE:
 // originalRunID is the runID when the WorkflowExecutionStarted event is written
 // firstRunID is the very first runID along the chain of ContinueAsNew and Reset

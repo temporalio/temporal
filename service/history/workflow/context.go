@@ -282,7 +282,6 @@ func (c *ContextImpl) LoadWorkflowExecution(ctx context.Context) (MutableState, 
 		}
 
 		c.MutableState, err = newMutableStateBuilderFromDB(
-			ctx,
 			c.shard,
 			c.shard.GetEventsCache(),
 			c.logger,

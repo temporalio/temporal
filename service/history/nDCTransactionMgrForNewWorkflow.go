@@ -163,14 +163,11 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsCurrent(
 	if err != nil {
 		return err
 	}
-	if len(targetWorkflowEventsSeq) != 1 {
-		return serviceerror.NewInternal("unable to create 1st event batch")
-	}
 
 	// target workflow to be created as current
 	if currentWorkflow != nil {
 		// current workflow exists, need to do compare and swap
-		createMode := persistence.CreateWorkflowModeWorkflowIDReuse
+		createMode := persistence.CreateWorkflowModeUpdateCurrent
 		prevRunID := currentWorkflow.getMutableState().GetExecutionState().GetRunId()
 		prevLastWriteVersion, _, err := currentWorkflow.getVectorClock()
 		if err != nil {
@@ -233,9 +230,6 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 	if err != nil {
 		return err
 	}
-	if len(targetWorkflowEventsSeq) != 1 {
-		return serviceerror.NewInternal("unable to create 1st event batch")
-	}
 
 	if err := targetWorkflow.getContext().ReapplyEvents(
 		targetWorkflowEventsSeq,
@@ -243,7 +237,8 @@ func (r *nDCTransactionMgrForNewWorkflowImpl) createAsZombie(
 		return err
 	}
 
-	createMode := persistence.CreateWorkflowModeZombie
+	// target workflow is in zombie state, no need to update current record.
+	createMode := persistence.CreateWorkflowModeBypassCurrent
 	prevRunID := ""
 	prevLastWriteVersion := int64(0)
 	err = targetWorkflow.getContext().CreateWorkflowExecution(

@@ -143,7 +143,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 			// current run ID is already request ID
 		}
 
-	case p.CreateWorkflowModeWorkflowIDReuse:
+	case p.CreateWorkflowModeUpdateCurrent:
 		if currentRow == nil {
 			return nil, extractCurrentWorkflowConflictError(currentRow, "")
 		}
@@ -184,7 +184,7 @@ func (m *sqlExecutionStore) createWorkflowExecutionTx(
 			)
 		}
 
-	case p.CreateWorkflowModeZombie:
+	case p.CreateWorkflowModeBypassCurrent:
 		if err := assertRunIDMismatch(
 			primitives.MustParseUUID(newWorkflow.ExecutionState.RunId),
 			currentRow,
