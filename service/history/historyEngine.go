@@ -2027,9 +2027,9 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	// Open and Close workflow executions are deleted differently.
 	// Open workflow execution is deleted by terminating with special flag `deleteAfterTerminate` set to true.
 	// This flag will be carried over with CloseExecutionTask and workflow will be deleted as the last step while processing the task.
-
+	//
 	// Close workflow execution is deleted using DeleteExecutionTask.
-
+	//
 	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
 	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
 	// In passive cluster, workflow executions are just deleted in regardless of its state.
