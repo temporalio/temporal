@@ -885,7 +885,11 @@ func (r *nDCHistoryReplicatorImpl) getHistoryPaginationFn(
 
 	return func(paginationToken []byte) ([]*rawHistoryData, []byte, error) {
 
-		response, err := r.shard.GetRemoteAdminClient(remoteClusterName).GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
+		adminClient, err := r.shard.GetRemoteAdminClient(remoteClusterName)
+		if err != nil {
+			return nil, nil, err
+		}
+		response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace:       namespace,
 			Execution:       &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 			EndEventId:      endEventID + 1,

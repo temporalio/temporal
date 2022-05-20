@@ -68,8 +68,8 @@ type (
 		GetEngineWithContext(ctx context.Context) (Engine, error)
 
 		AssertOwnership(ctx context.Context) error
-		NewVectorClock() (*clockspb.ShardClock, error)
-		CurrentVectorClock() *clockspb.ShardClock
+		NewVectorClock() (*clockspb.VectorClock, error)
+		CurrentVectorClock() *clockspb.VectorClock
 
 		GenerateTaskID() (int64, error)
 		GenerateTaskIDs(number int) ([]int64, error)
@@ -114,7 +114,7 @@ type (
 		// If branchToken != nil, then delete history also, otherwise leave history.
 		DeleteWorkflowExecution(ctx context.Context, workflowKey definition.WorkflowKey, branchToken []byte, version int64, startTime *time.Time, closeTime *time.Time) error
 
-		GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient
+		GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error)
 		GetHistoryClient() historyservice.HistoryServiceClient
 		GetPayloadSerializer() serialization.Serializer
 

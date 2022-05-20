@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -119,6 +120,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
+	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
@@ -213,7 +215,7 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
-	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache)
+	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache, clientBean)
 
 	return historyEngImpl
 }
@@ -387,17 +389,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 
 	workflowID := request.GetWorkflowId()
 	runID := uuid.New()
-	// grab the current context as a Lock, nothing more
-	_, currentRelease, err := e.historyCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		namespaceID,
-		workflowID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { currentRelease(retError) }()
-
 	workflowContext, err := api.NewWorkflowWithSignal(
 		e.shard,
 		namespaceEntry,
@@ -2426,7 +2417,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 func (e *historyEngineImpl) updateWorkflow(
 	ctx context.Context,
-	reqClock *clockspb.ShardClock,
+	reqClock *clockspb.VectorClock,
 	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action api.UpdateWorkflowActionFunc,
@@ -2447,7 +2438,7 @@ func (e *historyEngineImpl) updateWorkflow(
 
 func (e *historyEngineImpl) updateWorkflowWithNew(
 	ctx context.Context,
-	reqClock *clockspb.ShardClock,
+	reqClock *clockspb.VectorClock,
 	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action api.UpdateWorkflowActionFunc,

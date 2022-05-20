@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
@@ -57,7 +56,6 @@ type (
 		*timerQueueTaskExecutorBase
 
 		clusterName        string
-		adminClient        adminservice.AdminServiceClient
 		matchingClient     matchingservice.MatchingServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
@@ -82,7 +80,6 @@ func newTimerQueueStandbyTaskExecutor(
 			config,
 		),
 		clusterName:        clusterName,
-		adminClient:        shard.GetRemoteAdminClient(clusterName),
 		nDCHistoryResender: nDCHistoryResender,
 		matchingClient:     matchingClient,
 	}
@@ -511,11 +508,14 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	var err error
+	adminClient, err := t.shard.GetRemoteAdminClient(t.clusterName)
+	if err != nil {
+		return err
+	}
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		if err := refreshTasks(
 			ctx,
-			t.adminClient,
+			adminClient,
 			t.shard.GetNamespaceRegistry(),
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
@@ -532,6 +532,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		// NOTE: history resend may take long time and its timeout is currently
 		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			t.clusterName,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
@@ -585,7 +586,7 @@ func (t *timerQueueStandbyTaskExecutor) pushActivity(
 		},
 		ScheduleId:             activityTask.EventID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
-		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), activityTask.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), activityTask.TaskID),
 	})
 	return err
 }

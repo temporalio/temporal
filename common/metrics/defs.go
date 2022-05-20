@@ -2125,6 +2125,7 @@ const (
 	SignalInfoCount
 	RequestCancelInfoCount
 	BufferedEventsCount
+	TaskCount
 	WorkflowRetryBackoffTimerCount
 	WorkflowCronBackoffTimerCount
 	WorkflowCleanupDeleteCount
@@ -2607,6 +2608,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SignalInfoCount:                                   NewDimensionlessHistogramDef("signal_info_count"),
 		RequestCancelInfoCount:                            NewDimensionlessHistogramDef("request_cancel_info_count"),
 		BufferedEventsCount:                               NewDimensionlessHistogramDef("buffered_events_count"),
+		TaskCount:                                         NewDimensionlessHistogramDef("task_count"),
 		WorkflowRetryBackoffTimerCount:                    NewCounterDef("workflow_retry_backoff_timer"),
 		WorkflowCronBackoffTimerCount:                     NewCounterDef("workflow_cron_backoff_timer"),
 		WorkflowCleanupDeleteCount:                        NewCounterDef("workflow_cleanup_delete"),

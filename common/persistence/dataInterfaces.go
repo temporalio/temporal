@@ -688,6 +688,7 @@ type (
 		SignalInfoCount        int
 		SignalRequestIDCount   int
 		BufferedEventsCount    int
+		TaskCountByCategory    map[string]int
 	}
 
 	HistoryStatistics struct {
