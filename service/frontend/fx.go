@@ -388,6 +388,7 @@ func AdminHandlerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
 	eventSerializer serialization.Serializer,
+	timeSource clock.TimeSource,
 ) *AdminHandler {
 	args := NewAdminHandlerArgs{
 		persistenceConfig,
@@ -416,6 +417,7 @@ func AdminHandlerProvider(
 		archivalMetadata,
 		healthServer,
 		eventSerializer,
+		timeSource,
 	}
 	return NewAdminHandler(args)
 }
@@ -493,6 +495,7 @@ func HandlerProvider(
 		clusterMetadata,
 		archivalMetadata,
 		healthServer,
+		timeSource,
 	)
 	handler := NewDCRedirectionHandler(wfHandler, dcRedirectionPolicy, logger, clientBean, metricsClient, timeSource, namespaceRegistry, clusterMetadata)
 	return handler

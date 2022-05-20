@@ -26,6 +26,7 @@ package namespace
 
 import (
 	"context"
+	"go.temporal.io/server/common/clock"
 	"testing"
 	"time"
 
@@ -109,6 +110,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
 		s.archivalMetadata,
 		s.mockArchiverProvider,
 		dc.GetBoolPropertyFnFilteredByNamespace(false),
+		clock.NewRealTimeSource(),
 	)
 }
 

@@ -29,6 +29,7 @@ package namespace
 import (
 	"context"
 	"fmt"
+	"go.temporal.io/server/common/clock"
 	"time"
 
 	"github.com/pborman/uuid"
@@ -88,6 +89,7 @@ type (
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
 		supportsSchedules      dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		timeSource             clock.TimeSource
 	}
 )
 
@@ -104,6 +106,7 @@ func NewHandler(
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
 	supportsSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter,
+	timeSource clock.TimeSource,
 ) *HandlerImpl {
 	return &HandlerImpl{
 		maxBadBinaryCount:      maxBadBinaryCount,
@@ -115,6 +118,7 @@ func NewHandler(
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
 		supportsSchedules:      supportsSchedules,
+		timeSource:             timeSource,
 	}
 }
 
@@ -385,6 +389,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
+	replicationHistory := getResponse.Namespace.ReplicationHistory
 	configVersion := getResponse.Namespace.ConfigVersion
 	failoverVersion := getResponse.Namespace.FailoverVersion
 	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
@@ -562,6 +567,18 @@ func (d *HandlerImpl) UpdateNamespace(
 			failoverNotificationVersion = notificationVersion
 		}
 
+		// If the active cluster has changed, add a status record to the replication history
+		if activeClusterChanged {
+			// TODO replace with real clock
+			now := d.timeSource.Now()
+			replicationHistory = append(
+				replicationHistory, &persistencespb.ReplicationStatus{
+					StatusTime:        &now,
+					ActiveClusterName: updateRequest.ReplicationConfig.ActiveClusterName,
+				},
+			)
+		}
+
 		updateReq := &persistence.UpdateNamespaceRequest{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info:                        info,
@@ -570,6 +587,7 @@ func (d *HandlerImpl) UpdateNamespace(
 				ConfigVersion:               configVersion,
 				FailoverVersion:             failoverVersion,
 				FailoverNotificationVersion: failoverNotificationVersion,
+				ReplicationHistory:          replicationHistory,
 			},
 			IsGlobalNamespace:   isGlobalNamespace,
 			NotificationVersion: notificationVersion,

@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/clock"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -147,6 +148,7 @@ type (
 		ArchivalMetadata                    archiver.ArchivalMetadata
 		HealthServer                        *health.Server
 		EventSerializer                     serialization.Serializer
+		TimeSource                          clock.TimeSource
 	}
 )
 
@@ -181,6 +183,7 @@ func NewAdminHandler(
 			args.ArchivalMetadata,
 			args.ArchiverProvider,
 			args.Config.EnableSchedules,
+			args.TimeSource,
 		),
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,

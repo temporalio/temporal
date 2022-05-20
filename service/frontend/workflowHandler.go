@@ -28,6 +28,7 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"go.temporal.io/server/common/clock"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
@@ -141,6 +142,7 @@ func NewWorkflowHandler(
 	clusterMetadata cluster.Metadata,
 	archivalMetadata archiver.ArchivalMetadata,
 	healthServer *health.Server,
+	timeSource clock.TimeSource,
 ) *WorkflowHandler {
 
 	handler := &WorkflowHandler{
@@ -157,6 +159,7 @@ func NewWorkflowHandler(
 			archivalMetadata,
 			archiverProvider,
 			config.EnableSchedules,
+			timeSource,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMrg:                   visibilityMrg,

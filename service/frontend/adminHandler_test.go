@@ -28,6 +28,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"go.temporal.io/server/common/clock"
 	"testing"
 	"time"
 
@@ -160,6 +161,7 @@ func (s *adminHandlerSuite) SetupTest() {
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
 		serialization.NewSerializer(),
+		clock.NewRealTimeSource(),
 	}
 	s.mockMetadata.EXPECT().GetCurrentClusterName().Return(uuid.New()).AnyTimes()
 	s.handler = NewAdminHandler(args)
