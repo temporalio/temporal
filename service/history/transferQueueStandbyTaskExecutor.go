@@ -88,7 +88,7 @@ func (t *transferQueueStandbyTaskExecutor) Execute(
 
 	task := executable.GetTask()
 	scope := t.metricsClient.Scope(
-		tasks.GetActiveTransferTaskMetricsScope(task),
+		tasks.GetStandbyTransferTaskMetricsScope(task),
 		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
 	)
 
