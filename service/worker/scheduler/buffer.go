@@ -110,7 +110,7 @@ func processBuffer[T overlappable](
 			}
 		case enumspb.SCHEDULE_OVERLAP_POLICY_TERMINATE_OTHER:
 			if isRunning {
-				// an actual workflow is running, terminate it (asynchronously)
+				// an actual workflow is running, terminate it
 				action.needTerminate = true
 				// keep in buffer so it will get started once terminate completes
 				action.newBuffer = append(action.newBuffer, start)
@@ -119,6 +119,14 @@ func processBuffer[T overlappable](
 				action.nonOverlappingStart = start
 			}
 		}
+	}
+
+	if action.needCancel || action.needTerminate {
+		// In a very contrived situation, we could end up with overlapping starts at the same
+		// time as a non-overlapping start tries to cancel/terminate a running workflow. But
+		// then it will immediately cancel/terminate the overlapping ones too (either on this
+		// iteration or the next one). So we shouldn't even bother starting them.
+		action.overlappingStarts = nil
 	}
 
 	return action
