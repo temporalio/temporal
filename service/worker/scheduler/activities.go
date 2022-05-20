@@ -103,9 +103,13 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 }
 
 func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWorkflowRequest) (*schedspb.WatchWorkflowResponse, error) {
-	// make sure we return and heartbeat 5s before the timeout
-	ctx2, cancel := context.WithTimeout(ctx, activity.GetInfo(ctx).HeartbeatTimeout-5*time.Second)
-	defer cancel()
+	if req.LongPoll {
+		// make sure we return and heartbeat 5s before the timeout. this is only
+		// for long polls, for refreshes we just use the local activity timeout.
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, activity.GetInfo(ctx).HeartbeatTimeout-5*time.Second)
+		defer cancel()
+	}
 
 	// poll history service directly instead of just going to frontend to avoid
 	// using resources on frontend while waiting.
@@ -121,8 +125,8 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 		pollReq.ExpectedNextEventId = common.EndEventID
 	}
 	// if long-polling, this will block up for workflow completion to 20s (default) and return
-	// the current mutable state at that point
-	pollRes, err := a.HistoryClient.PollMutableState(ctx2, pollReq)
+	// the current mutable state at that point. otherwise it should return immediately.
+	pollRes, err := a.HistoryClient.PollMutableState(ctx, pollReq)
 	if err != nil {
 		switch err.(type) {
 		case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
@@ -168,7 +172,7 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 		HistoryEventFilterType: enumspb.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT,
 		SkipArchival:           true, // should be recently closed, no need for archival
 	}
-	histRes, err := a.FrontendClient.GetWorkflowExecutionHistory(ctx2, histReq)
+	histRes, err := a.FrontendClient.GetWorkflowExecutionHistory(ctx, histReq)
 
 	if err != nil {
 		return nil, err
