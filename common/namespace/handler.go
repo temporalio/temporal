@@ -516,6 +516,12 @@ func (d *HandlerImpl) UpdateNamespace(
 			}
 			configurationChanged = true
 			replicationConfig.State = updateReplicationConfig.State
+
+			replicationHistory = d.maybeAppendToReplicationHistory(
+				replicationHistory,
+				updateReplicationConfig,
+				getResponse.Namespace,
+			)
 		}
 
 		if updateReplicationConfig.GetActiveClusterName() != "" {
@@ -558,18 +564,6 @@ func (d *HandlerImpl) UpdateNamespace(
 				failoverVersion,
 			)
 			failoverNotificationVersion = notificationVersion
-		}
-
-		// If the active cluster has changed, add a status record to the replication history
-		if activeClusterChanged {
-			// TODO replace with real clock
-			now := d.timeSource.Now()
-			replicationHistory = append(
-				replicationHistory, &persistencespb.ReplicationStatus{
-					StatusTime:        &now,
-					ActiveClusterName: updateRequest.ReplicationConfig.ActiveClusterName,
-				},
-			)
 		}
 
 		updateReq := &persistence.UpdateNamespaceRequest{
@@ -803,6 +797,44 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
+// maybeAppendToReplicationHistory adds an entry iff the replication state is changing to Active and the new Active
+// Cluster is different from the last Active Cluster. This is usually but not always the case, since handover may fail
+// in whichc case the old cluster becomes Active again.
+func (d *HandlerImpl) maybeAppendToReplicationHistory(
+	replicationHistory []*persistencespb.ReplicationStatus,
+	updateReplicationConfig *replicationpb.NamespaceReplicationConfig,
+	namespaceDetail *persistencespb.NamespaceDetail,
+) []*persistencespb.ReplicationStatus {
+	d.logger.Debug(
+		"maybeAppendToReplicationHistory",
+		tag.NewAnyTag("replicationHistory", replicationHistory),
+		tag.NewAnyTag("updateReplConfig", updateReplicationConfig),
+		tag.NewAnyTag("namespaceDetail", namespaceDetail),
+	)
+	if updateReplicationConfig.State != enumspb.REPLICATION_STATE_NORMAL {
+		d.logger.Debug("Replication state not normal", tag.NewAnyTag("state", updateReplicationConfig.State))
+		return replicationHistory
+	}
+	newActiveCluster := updateReplicationConfig.ActiveClusterName
+	if newActiveCluster == "" {
+		newActiveCluster = namespaceDetail.ReplicationConfig.ActiveClusterName
+	}
+	lastActiveCluster := ""
+	if l := len(namespaceDetail.ReplicationHistory); l > 0 {
+		lastActiveCluster = namespaceDetail.ReplicationHistory[l-1].ActiveClusterName
+	}
+	if lastActiveCluster != newActiveCluster {
+		now := d.timeSource.Now()
+		replicationHistory = append(
+			replicationHistory, &persistencespb.ReplicationStatus{
+				StatusTime:        &now,
+				ActiveClusterName: newActiveCluster,
+			},
+		)
+	}
+	return replicationHistory
+}
+
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
 func validateRetentionDuration(retention time.Duration, isGlobalNamespace bool) error {
 	min := MinRetentionLocal
@@ -823,14 +855,24 @@ func validateReplicationStateUpdate(existingNamespace *persistence.GetNamespaceR
 		return nil // no change
 	}
 
-	nsState := existingNamespace.Namespace.Info.State
-	if nsState != enumspb.NAMESPACE_STATE_REGISTERED {
-		return serviceerror.NewInvalidArgument(fmt.Sprintf("update ReplicationState is only supported when namespace is in %s state, current state: %s", enumspb.NAMESPACE_STATE_REGISTERED.String(), nsState.String()))
+	if existingNamespace.Namespace.Info.State != enumspb.NAMESPACE_STATE_REGISTERED {
+		return serviceerror.NewInvalidArgument(
+			fmt.Sprintf(
+				"update ReplicationState is only supported when namespace is in %s state, current state: %s",
+				enumspb.NAMESPACE_STATE_REGISTERED.String(),
+				existingNamespace.Namespace.Info.State.String(),
+			),
+		)
 	}
 
 	if nsUpdateRequest.ReplicationConfig.State == enumspb.REPLICATION_STATE_HANDOVER {
 		if !existingNamespace.IsGlobalNamespace {
-			return serviceerror.NewInvalidArgument(fmt.Sprintf("%s can only be set for global namespace", enumspb.REPLICATION_STATE_HANDOVER))
+			return serviceerror.NewInvalidArgument(
+				fmt.Sprintf(
+					"%s can only be set for global namespace",
+					enumspb.REPLICATION_STATE_HANDOVER,
+				),
+			)
 		}
 		// verify namespace has more than 1 replication clusters
 		replicationClusterCount := len(existingNamespace.Namespace.ReplicationConfig.Clusters)

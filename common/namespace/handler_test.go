@@ -50,7 +50,6 @@ import (
 	"go.temporal.io/server/common/archiver/provider"
 	"go.temporal.io/server/common/cluster"
 	dc "go.temporal.io/server/common/dynamicconfig"
-	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/persistence"
 	persistencetests "go.temporal.io/server/common/persistence/persistence-tests"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -92,7 +91,7 @@ func (s *namespaceHandlerCommonSuite) TearDownSuite() {
 }
 
 func (s *namespaceHandlerCommonSuite) SetupTest() {
-	logger := log.NewNoopLogger()
+	logger := s.Logger
 	dcCollection := dc.NewCollection(dc.NewNoopClient(), logger)
 	s.maxBadBinaryCount = 10
 	s.metadataMgr = s.TestBase.MetadataManager
@@ -541,20 +540,15 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster() 
 
 	s.checkActiveClusterName(namespace, srcCluster)
 
-	// Set the active cluster to the destination cluster
 	s.fakeClock.Update(update1Time)
-	s.setActiveClusterName(namespace, targetCluster)
+	s.migrateNamespace(namespace, targetCluster)
+	handover1Time := s.fakeClock.Now()
 
-	// Verify that the active cluster was updated
-	s.checkActiveClusterName(namespace, targetCluster)
-
-	// Set the active cluster back to the source cluster
+	// Migrate back to the source cluster
 	s.fakeClock.Update(update2Time)
-	s.setActiveClusterName(namespace, srcCluster)
-
-	// Verify that the active cluster  was updated
-	s.checkActiveClusterName(namespace, srcCluster)
-
+	s.migrateNamespace(namespace, srcCluster)
+	handover2Time := s.fakeClock.Now()
+	
 	// Verify that the replication history was written
 	getNsResp, err := s.MetadataManager.GetNamespace(
 		context.Background(),
@@ -564,11 +558,21 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster() 
 	s.True(getNsResp.IsGlobalNamespace)
 
 	wantReplHist := []*p2.ReplicationStatus{
-		{StatusTime: &update1Time, ActiveClusterName: targetCluster},
-		{StatusTime: &update2Time, ActiveClusterName: srcCluster},
+		{StatusTime: &handover1Time, ActiveClusterName: targetCluster},
+		{StatusTime: &handover2Time, ActiveClusterName: srcCluster},
 	}
 
 	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationHistory)
+}
+
+func (s *namespaceHandlerCommonSuite) migrateNamespace(namespace string, targetCluster string) {
+	s.setReplicationState(namespace, enumspb.REPLICATION_STATE_HANDOVER)
+	s.clockTick()
+
+	s.setActiveClusterName(namespace, targetCluster)
+	s.clockTick()
+
+	s.setReplicationState(namespace, enumspb.REPLICATION_STATE_NORMAL)
 }
 
 func (s *namespaceHandlerCommonSuite) setActiveClusterName(namespace string, newActiveCluster string) {
@@ -579,6 +583,17 @@ func (s *namespaceHandlerCommonSuite) setActiveClusterName(namespace string, new
 		},
 	}
 	_, err := s.handler.UpdateNamespace(context.Background(), &setActiveClusterReq)
+	s.NoError(err)
+}
+
+func (s *namespaceHandlerCommonSuite) setReplicationState(namespace string, replicationState enumspb.ReplicationState) {
+	setReplStateReq := workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			State: replicationState,
+		},
+	}
+	_, err := s.handler.UpdateNamespace(context.Background(), &setReplStateReq)
 	s.NoError(err)
 }
 
@@ -594,7 +609,12 @@ func (s *namespaceHandlerCommonSuite) checkActiveClusterName(namespace string, w
 // TODO: Write a test where
 // - migration fails during handover and is reverted
 // - the active cluster doesn't change
+// - active cluster updated in same req as status
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
 	return "namespace" + uuid.New()
+}
+
+func (s *namespaceHandlerCommonSuite) clockTick() {
+	s.fakeClock.Update(s.fakeClock.Now().Add(time.Second))
 }
