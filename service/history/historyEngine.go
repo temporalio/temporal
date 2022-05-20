@@ -507,7 +507,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err = workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
 		now,
-		persistence.CreateWorkflowModeWorkflowIDReuse,
+		persistence.CreateWorkflowModeUpdateCurrent,
 		prevRunID,
 		prevLastWriteVersion,
 		workflowContext.GetMutableState(),
@@ -2245,6 +2245,15 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 ) error {
 
 	return e.nDCReplicator.ApplyEvents(ctx, replicateRequest)
+}
+
+// ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
+func (e *historyEngineImpl) ReplicateWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+) error {
+
+	return e.nDCReplicator.ApplyWorkflowState(ctx, request)
 }
 
 func (e *historyEngineImpl) SyncShardStatus(

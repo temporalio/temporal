@@ -25,7 +25,6 @@
 package workflow
 
 import (
-	"context"
 	"testing"
 	"time"
 
@@ -39,6 +38,7 @@ import (
 	historypb "go.temporal.io/api/history/v1"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	"go.temporal.io/server/api/clock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
@@ -247,7 +247,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			// create mutable state and verify checksum is generated on close
 			loadErrors = loadErrorsFunc()
 			var err error
-			s.mutableState, err = newMutableStateBuilderFromDB(context.Background(), s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc()) // no errors expected
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
@@ -261,7 +261,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// verify checksum is verified on Load
 			dbState.Checksum = csum
-			s.mutableState, err = newMutableStateBuilderFromDB(context.Background(), s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 
@@ -273,7 +273,7 @@ func (s *mutableStateSuite) TestChecksum() {
 
 			// modify checksum and verify Load fails
 			dbState.Checksum.Value[0]++
-			s.mutableState, err = newMutableStateBuilderFromDB(context.Background(), s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors+1, loadErrorsFunc())
 			s.EqualValues(dbState.Checksum, s.mutableState.checksum)
@@ -283,7 +283,7 @@ func (s *mutableStateSuite) TestChecksum() {
 			s.mockConfig.MutableStateChecksumInvalidateBefore = func(...dynamicconfig.FilterOption) float64 {
 				return float64((s.mutableState.executionInfo.LastUpdateTime.UnixNano() / int64(time.Second)) + 1)
 			}
-			s.mutableState, err = newMutableStateBuilderFromDB(context.Background(), s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
+			s.mutableState, err = newMutableStateBuilderFromDB(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, dbState, 123)
 			s.NoError(err)
 			s.Equal(loadErrors, loadErrorsFunc())
 			s.Nil(s.mutableState.checksum)
@@ -421,6 +421,39 @@ func (s *mutableStateSuite) TestTransientWorkflowTaskStart_CurrentVersionChanged
 	)
 	s.NoError(err)
 	s.Equal(0, s.mutableState.hBuilder.BufferEventSize())
+}
+
+func (s *mutableStateSuite) TestSanitizedMutableState() {
+	txnID := int64(2000)
+	runID := uuid.New()
+	mutableState := TestGlobalMutableState(
+		s.mockShard,
+		s.mockEventsCache,
+		s.logger,
+		1000,
+		runID,
+	)
+
+	mutableState.executionInfo.LastFirstEventTxnId = txnID
+	mutableState.executionInfo.ParentClock = &clock.VectorClock{
+		ShardId: 1,
+		Clock:   1,
+	}
+	mutableState.pendingChildExecutionInfoIDs = map[int64]*persistencespb.ChildExecutionInfo{1: {
+		Clock: &clock.VectorClock{
+			ShardId: 1,
+			Clock:   1,
+		},
+	}}
+
+	mutableStateProto := mutableState.CloneToProto()
+	sanitizedMutableState, err := NewSanitizedMutableState(s.mockShard, s.mockEventsCache, s.logger, tests.LocalNamespaceEntry, mutableStateProto)
+	s.NoError(err)
+	s.Equal(int64(0), sanitizedMutableState.executionInfo.LastFirstEventTxnId)
+	s.Nil(sanitizedMutableState.executionInfo.ParentClock)
+	for _, childInfo := range sanitizedMutableState.pendingChildExecutionInfoIDs {
+		s.Nil(childInfo.Clock)
+	}
 }
 
 func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchReplicated(version int64, runID string) (*historypb.HistoryEvent, *historypb.HistoryEvent) {

@@ -270,7 +270,6 @@ func NewMutableState(
 }
 
 func newMutableStateBuilderFromDB(
-	ctx context.Context,
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
@@ -318,17 +317,6 @@ func newMutableStateBuilderFromDB(
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	// Workflows created before 1.11 doesn't have ExecutionTime and it must be computed for backwards compatibility.
-	// Remove this "if" block when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
-	if mutableState.executionInfo.ExecutionTime == nil {
-		startEvent, err := mutableState.GetStartEvent(ctx)
-		if err != nil {
-			return nil, err
-		}
-		backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
-		mutableState.executionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(mutableState.executionInfo.GetStartTime()).Add(backoffDuration))
-	}
-
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
 		mutableState.shard.GenerateTaskIDs,
@@ -360,6 +348,29 @@ func newMutableStateBuilderFromDB(
 		}
 	}
 
+	return mutableState, nil
+}
+
+func NewSanitizedMutableState(
+	shard shard.Context,
+	eventsCache events.Cache,
+	logger log.Logger,
+	namespaceEntry *namespace.Namespace,
+	mutableStateRecord *persistencespb.WorkflowMutableState,
+) (*MutableStateImpl, error) {
+
+	mutableState, err := newMutableStateBuilderFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	// sanitize data
+	mutableState.executionInfo.LastFirstEventTxnId = common.EmptyVersion
+	// TODO: after adding cluster to clock info, no need to reset clock here
+	mutableState.executionInfo.ParentClock = nil
+	for _, childExecutionInfo := range mutableState.pendingChildExecutionInfoIDs {
+		childExecutionInfo.Clock = nil
+	}
 	return mutableState, nil
 }
 

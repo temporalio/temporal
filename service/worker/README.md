@@ -17,17 +17,23 @@ can be applied to local Temporal cluster.
     ./temporal-server --zone active start
     ```
 
-1. Start Temporal development server for standby(passive) zone:
+2. Start Temporal development server for standby(passive) zone:
     ```
     ./temporal-server --zone standby start
     ```
+   
+3. Connect two Temporal clusters:
+   ```
+   tctl --ad 127.0.0.1:7233 adm cl upsert-remote-cluster --frontend_address "localhost:8233"
+   tctl --ad 127.0.0.1:8233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
+   ```
 
-1. Create global namespaces
+4. Create global namespaces
     ```
     tctl --ns sample namespace register --gd true --ac active --cl active standby
     ```
 
-1. Failover between zones:
+5. Failover between zones:
 
     Failover to standby:
     ```
