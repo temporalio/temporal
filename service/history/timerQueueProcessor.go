@@ -58,7 +58,7 @@ type (
 	updateTimerAckLevel     func(tasks.Key) error
 	timerQueueShutdown      func() error
 	timerQueueProcessorImpl struct {
-		singleCursor               bool
+		singleProcessor            bool
 		currentClusterName         string
 		shard                      shard.Context
 		taskAllocator              taskAllocator
@@ -105,7 +105,7 @@ func newTimerQueueProcessor(
 	)
 
 	return &timerQueueProcessorImpl{
-		singleCursor:          singleProcessor,
+		singleProcessor:       singleProcessor,
 		currentClusterName:    currentClusterName,
 		shard:                 shard,
 		taskAllocator:         taskAllocator,
@@ -140,7 +140,7 @@ func (t *timerQueueProcessorImpl) Start() {
 		return
 	}
 	t.activeTimerProcessor.Start()
-	if !t.singleCursor {
+	if !t.singleProcessor {
 		t.listenToClusterMetadataChange()
 	}
 
@@ -153,7 +153,7 @@ func (t *timerQueueProcessorImpl) Stop() {
 		return
 	}
 	t.activeTimerProcessor.Stop()
-	if !t.singleCursor {
+	if !t.singleProcessor {
 		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t)
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
@@ -172,7 +172,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 	timerTasks []tasks.Task,
 ) {
 
-	if clusterName == t.currentClusterName || t.singleCursor {
+	if clusterName == t.currentClusterName || t.singleProcessor {
 		t.activeTimerProcessor.notifyNewTimers(timerTasks)
 		return
 	}
@@ -190,7 +190,7 @@ func (t *timerQueueProcessorImpl) NotifyNewTasks(
 func (t *timerQueueProcessorImpl) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
-	if t.singleCursor {
+	if t.singleProcessor {
 		// TODO: we may want to reschedule all tasks for new active namespaces in buffer
 		// so that they don't have to keeping waiting on the backoff timer
 		return
@@ -247,7 +247,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 }
 
 func (t *timerQueueProcessorImpl) LockTaskProcessing() {
-	if t.singleCursor {
+	if t.singleProcessor {
 		return
 	}
 
@@ -255,7 +255,7 @@ func (t *timerQueueProcessorImpl) LockTaskProcessing() {
 }
 
 func (t *timerQueueProcessorImpl) UnlockTaskProcessing() {
-	if t.singleCursor {
+	if t.singleProcessor {
 		return
 	}
 
@@ -303,7 +303,7 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTimerProcessor.getAckLevel()
 
-	if !t.singleCursor {
+	if !t.singleProcessor {
 		t.standbyTimerProcessorsLock.RLock()
 		for _, standbyTimerProcessor := range t.standbyTimerProcessors {
 			ackLevel := standbyTimerProcessor.getAckLevel()

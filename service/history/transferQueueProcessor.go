@@ -58,7 +58,7 @@ type (
 	taskFilter func(task tasks.Task) bool
 
 	transferQueueProcessorImpl struct {
-		singleCursor              bool
+		singleProcessor           bool
 		currentClusterName        string
 		shard                     shard.Context
 		workflowCache             workflow.Cache
@@ -102,7 +102,7 @@ func newTransferQueueProcessor(
 	taskAllocator := newTaskAllocator(shard)
 
 	return &transferQueueProcessorImpl{
-		singleCursor:       singleProcessor,
+		singleProcessor:    singleProcessor,
 		currentClusterName: currentClusterName,
 		shard:              shard,
 		workflowCache:      workflowCache,
@@ -140,7 +140,7 @@ func (t *transferQueueProcessorImpl) Start() {
 		return
 	}
 	t.activeTaskProcessor.Start()
-	if !t.singleCursor {
+	if !t.singleProcessor {
 		t.listenToClusterMetadataChange()
 	}
 
@@ -152,7 +152,7 @@ func (t *transferQueueProcessorImpl) Stop() {
 		return
 	}
 	t.activeTaskProcessor.Stop()
-	if !t.singleCursor {
+	if !t.singleProcessor {
 		t.shard.GetClusterMetadata().UnRegisterMetadataChangeCallback(t)
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
@@ -170,7 +170,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 	transferTasks []tasks.Task,
 ) {
 
-	if clusterName == t.currentClusterName || t.singleCursor {
+	if clusterName == t.currentClusterName || t.singleProcessor {
 		// we will ignore the current time passed in, since the active processor process task immediately
 		if len(transferTasks) != 0 {
 			t.activeTaskProcessor.notifyNewTask()
@@ -192,7 +192,7 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 func (t *transferQueueProcessorImpl) FailoverNamespace(
 	namespaceIDs map[string]struct{},
 ) {
-	if t.singleCursor {
+	if t.singleProcessor {
 		// TODO: we may want to reschedule all tasks for new active namespaces in buffer
 		// so that they don't have to keeping waiting on the backoff timer
 		return
@@ -243,7 +243,7 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 }
 
 func (t *transferQueueProcessorImpl) LockTaskProcessing() {
-	if t.singleCursor {
+	if t.singleProcessor {
 		return
 	}
 
@@ -251,7 +251,7 @@ func (t *transferQueueProcessorImpl) LockTaskProcessing() {
 }
 
 func (t *transferQueueProcessorImpl) UnlockTaskProcessing() {
-	if t.singleCursor {
+	if t.singleProcessor {
 		return
 	}
 
@@ -301,7 +301,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 	lowerAckLevel := t.ackLevel
 	upperAckLevel := t.activeTaskProcessor.queueAckMgr.getQueueAckLevel()
 
-	if !t.singleCursor {
+	if !t.singleProcessor {
 		t.standbyTaskProcessorsLock.RLock()
 		for _, standbyTaskProcessor := range t.standbyTaskProcessors {
 			ackLevel := standbyTaskProcessor.queueAckMgr.getQueueAckLevel()

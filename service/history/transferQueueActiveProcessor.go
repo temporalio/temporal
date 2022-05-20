@@ -65,7 +65,7 @@ func newTransferQueueActiveProcessor(
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
 	logger log.Logger,
-	singleCursor bool,
+	singleProcessor bool,
 ) *transferQueueActiveProcessorImpl {
 
 	config := shard.GetConfig()
@@ -142,7 +142,7 @@ func newTransferQueueActiveProcessor(
 
 	// if single cursor is enabled, then this processor is responsible for both active and standby tasks
 	// and we need to customize some parameters for ack manager and task executable
-	if singleCursor {
+	if singleProcessor {
 		transferTaskFilter = func(task tasks.Task) bool { return true }
 		taskExecutor = queues.NewExecutorWrapper(
 			currentClusterName,

@@ -374,11 +374,10 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 	// as well to prevent loading too many tombstones if the cluster ack level is used later
 	// this may happen when adding back a removed cluster or rolling back the change for using
 	// single queue in timer/transfer queue processor
-	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok {
-		for clusterName, persistenceClusterAckLevel := range queueAckLevel.ClusterAckLevel {
-			if persistenceClusterAckLevel < persistenceAckLevel {
-				queueAckLevel.ClusterAckLevel[clusterName] = persistenceAckLevel
-			}
+	clusterAckLevel := s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel
+	for clusterName, persistenceClusterAckLevel := range clusterAckLevel {
+		if persistenceClusterAckLevel < persistenceAckLevel {
+			clusterAckLevel[clusterName] = persistenceAckLevel
 		}
 	}
 

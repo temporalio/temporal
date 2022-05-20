@@ -83,7 +83,6 @@ func (e *executorWrapper) isActiveTask(
 	}
 
 	if !entry.ActiveInCluster(e.currentClusterName) {
-		// timer task does not belong to cluster name
 		e.logger.Debug("Process task as standby.", tag.WorkflowNamespaceID(namespaceID), tag.Value(executable.GetTask()))
 		return false
 	}
