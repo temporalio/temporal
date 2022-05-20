@@ -154,6 +154,7 @@ func getFilterMapsForTaskQueue(namespace string, taskQueue string, taskType enum
 	return []map[Filter]interface{}{
 		getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue), TaskTypeFilter(taskType)),
 		getFilterMap(NamespaceFilter(namespace), TaskQueueFilter(taskQueue)),
+		getFilterMap(NamespaceFilter(namespace)),
 		getFilterMap(TaskQueueFilter(taskQueue)),
 	}
 }
