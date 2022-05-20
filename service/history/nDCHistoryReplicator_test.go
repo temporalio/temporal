@@ -26,6 +26,9 @@ package history
 
 import (
 	"context"
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/service/history/events"
 	"testing"
 	"time"
 
@@ -59,6 +62,7 @@ type (
 
 		controller            *gomock.Controller
 		mockShard             *shard.ContextTest
+		mockEventCache        *events.MockCache
 		mockHistoryCache      *workflow.MockCache
 		mockNamespaceCache    *namespace.MockRegistry
 		mockRemoteAdminClient *adminservicemock.MockAdminServiceClient
@@ -99,6 +103,7 @@ func (s *nDCHistoryReplicatorSuite) SetupTest() {
 	s.mockExecutionManager = s.mockShard.Resource.ExecutionMgr
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockHistoryCache = workflow.NewMockCache(s.controller)
+	s.mockEventCache = s.mockShard.MockEventsCache
 	s.mockRemoteAdminClient = s.mockShard.Resource.RemoteAdminClient
 	eventReapplier := NewMocknDCEventsReapplier(s.controller)
 	s.logger = s.mockShard.GetLogger()
@@ -184,6 +189,12 @@ func (s *nDCHistoryReplicatorSuite) Test_ApplyWorkflowState_BrandNew() {
 		nil,
 	)
 	s.mockExecutionManager.EXPECT().GetCurrentExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound(""))
+	fakeStartHistory := &historypb.HistoryEvent{
+		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{
+			WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{},
+		},
+	}
+	s.mockEventCache.EXPECT().GetEvent(gomock.Any(), gomock.Any(), common.FirstEventID, gomock.Any()).Return(fakeStartHistory, nil).AnyTimes()
 	err := s.historyReplicator.ApplyWorkflowState(context.Background(), request)
 	s.NoError(err)
 }
