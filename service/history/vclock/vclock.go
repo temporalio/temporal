@@ -44,22 +44,22 @@ func NewVectorClock(
 	}
 }
 
-func HappensBefore(
+func Comparable(
 	clock1 *clockspb.VectorClock,
 	clock2 *clockspb.VectorClock,
-) (bool, error) {
-	compare, err := Compare(clock1, clock2)
-	if err != nil {
-		return false, err
+) bool {
+	if clock1 == nil || clock2 == nil {
+		return false
 	}
-	return compare < 0, nil
+	return clock1.GetClusterId() == clock2.GetClusterId() &&
+		clock1.GetShardId() == clock2.GetShardId()
 }
 
 func Compare(
 	clock1 *clockspb.VectorClock,
 	clock2 *clockspb.VectorClock,
 ) (int, error) {
-	if clock1.GetClusterId() != clock2.GetClusterId() || clock1.GetShardId() != clock2.GetShardId() {
+	if !Comparable(clock1, clock2) {
 		return 0, serviceerror.NewInternal(fmt.Sprintf(
 			"Encountered shard ID mismatch: %v:%v vs %v:%v",
 			clock1.GetClusterId(),
