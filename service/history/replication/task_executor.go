@@ -60,8 +60,6 @@ type (
 		workflowCache      workflow.Cache
 		metricsClient      metrics.Client
 		logger             log.Logger
-
-		resenderFn func(ctx context.Context, namespaceID string, workflowID string, runID string, endEventID int64, endEventVersion int64)
 	}
 )
 

@@ -44,8 +44,10 @@ message ReplicationTask {
     int64 source_task_id = 2;
     oneof attributes {
         NamespaceTaskAttributes namespace_task_attributes = 3;
+        reserved 4;
         SyncShardStatusTaskAttributes sync_shard_status_task_attributes = 5;
         SyncActivityTaskAttributes sync_activity_task_attributes = 6;
+        reserved 7;
         HistoryTaskV2Attributes history_task_v2_attributes = 8;
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
     }
