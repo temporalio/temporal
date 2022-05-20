@@ -84,9 +84,8 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          0,
-				RangeId:          1,
-				TransferAckLevel: 0,
+				ShardId: 0,
+				RangeId: 1,
 			}},
 		config,
 	)

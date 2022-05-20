@@ -120,10 +120,15 @@ func (s *timerQueueAckMgrSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-				ClusterTimerAckLevel: map[string]*time.Time{
-					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtcAddSeconds(-8),
-					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
-				}},
+				QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+					tasks.CategoryTimer.ID(): {
+						ClusterAckLevel: map[string]int64{
+							cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtcAddSeconds(-8).UnixNano(),
+							cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10).UnixNano(),
+						},
+					},
+				},
+			},
 		},
 		config,
 	)
@@ -617,10 +622,15 @@ func (s *timerQueueFailoverAckMgrSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId: 1,
 				RangeId: 1,
-				ClusterTimerAckLevel: map[string]*time.Time{
-					cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtc(),
-					cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10),
-				}},
+				QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+					tasks.CategoryTimer.ID(): {
+						ClusterAckLevel: map[string]int64{
+							cluster.TestCurrentClusterName:     timestamp.TimeNowPtrUtc().UnixNano(),
+							cluster.TestAlternativeClusterName: timestamp.TimeNowPtrUtcAddSeconds(-10).UnixNano(),
+						},
+					},
+				},
+			},
 			FailoverLevels: make(map[tasks.Category]map[string]persistence.FailoverLevel),
 		},
 		config,

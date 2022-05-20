@@ -111,11 +111,14 @@ func (s *taskProcessorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          s.shardID,
-				RangeId:          1,
-				TransferAckLevel: 0,
-				ClusterReplicationLevel: map[string]int64{
-					cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
+				ShardId: s.shardID,
+				RangeId: 1,
+				QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+					tasks.CategoryReplication.ID(): {
+						ClusterAckLevel: map[string]int64{
+							cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
+						},
+					},
 				},
 			},
 		},

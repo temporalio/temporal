@@ -497,11 +497,6 @@ func ShardTime(shardTime interface{}) ZapTag {
 	return NewAnyTag("shard-time", shardTime)
 }
 
-// ShardReplicationAck returns tag for ShardReplicationAck
-func ShardReplicationAck(shardReplicationAck int64) ZapTag {
-	return NewInt64("shard-replication-ack", shardReplicationAck)
-}
-
 // PreviousShardRangeID returns tag for PreviousShardRangeID
 func PreviousShardRangeID(id int64) ZapTag {
 	return NewInt64("previous-shard-range-id", id)
@@ -537,14 +532,9 @@ func MaxLevel(lv int64) ZapTag {
 	return NewInt64("max-level", lv)
 }
 
-// ShardTransferAcks returns tag for ShardTransferAcks
-func ShardTransferAcks(shardTransferAcks interface{}) ZapTag {
-	return NewAnyTag("shard-transfer-acks", shardTransferAcks)
-}
-
-// ShardTimerAcks returns tag for ShardTimerAcks
-func ShardTimerAcks(shardTimerAcks interface{}) ZapTag {
-	return NewAnyTag("shard-timer-acks", shardTimerAcks)
+// ShardQueueAcks returns tag for shard queue ack levels
+func ShardQueueAcks(shardQueueAcks interface{}) ZapTag {
+	return NewAnyTag("shard-queue-acks", shardQueueAcks)
 }
 
 // task queue processor
