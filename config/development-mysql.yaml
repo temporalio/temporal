@@ -1,7 +1,10 @@
+log:
+  stdout: true
+  level: info
+
 persistence:
   defaultStore: mysql-default
-  visibilityStore:
-  advancedVisibilityStore: es-visibility
+  visibilityStore: mysql-visibility
   numHistoryShards: 4
   datastores:
     mysql-default:
@@ -15,16 +18,18 @@ persistence:
         maxConns: 20
         maxIdleConns: 20
         maxConnLifetime: "1h"
-    es-visibility:
-      elasticsearch:
-        version: "v7"
-        logLevel: "error"
-        url:
-          scheme: "http"
-          host: "127.0.0.1:9200"
-        indices:
-          visibility: temporal_visibility_v1_dev
-        closeIdleConnectionsInterval: 15s
+    mysql-visibility:
+      sql:
+        pluginName: "mysql"
+        databaseName: "temporal_visibility"
+        connectAddr: "127.0.0.1:3306"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 2
+        maxIdleConns: 2
+        maxConnLifetime: "1h"
+
 global:
   membership:
     maxJoinDuration: 30s
@@ -111,5 +116,5 @@ publicClient:
   hostPort: "localhost:7233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_sql.yaml"
+  filepath: "config/dynamicconfig/development-sql.yaml"
   pollInterval: "10s"

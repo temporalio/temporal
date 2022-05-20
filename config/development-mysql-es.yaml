@@ -1,13 +1,24 @@
+log:
+  stdout: true
+  level: info
+
 persistence:
-  defaultStore: cass-default
+  defaultStore: mysql-default
   visibilityStore:
   advancedVisibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
-    cass-default:
-      cassandra:
-        hosts: "127.0.0.1"
-        keyspace: "temporal_other"
+    mysql-default:
+      sql:
+        pluginName: "mysql"
+        databaseName: "temporal"
+        connectAddr: "127.0.0.1:3306"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
     es-visibility:
       elasticsearch:
         version: "v7"
@@ -16,15 +27,14 @@ persistence:
           scheme: "http"
           host: "127.0.0.1:9200"
         indices:
-          visibility: temporal_visibility_v1_dev_other
-          # secondary_visibility: temporal_visibility_v2_dev
+          visibility: temporal_visibility_v1_dev
         closeIdleConnectionsInterval: 15s
-
 global:
   membership:
     maxJoinDuration: 30s
+    broadcastAddress: "127.0.0.1"
   pprof:
-    port: 9936
+    port: 7936
   metrics:
     prometheus:
 #      # specify framework to use new approach for initializing metrics and/or use opentelemetry
@@ -36,59 +46,42 @@ global:
 services:
   frontend:
     rpc:
-      grpcPort: 9233
-      membershipPort: 9933
+      grpcPort: 7233
+      membershipPort: 6933
       bindOnLocalHost: true
 
   matching:
     rpc:
-      grpcPort: 9235
-      membershipPort: 9935
+      grpcPort: 7235
+      membershipPort: 6935
       bindOnLocalHost: true
 
   history:
     rpc:
-      grpcPort: 9234
-      membershipPort: 9934
+      grpcPort: 7234
+      membershipPort: 6934
       bindOnLocalHost: true
 
   worker:
     rpc:
-      grpcPort: 9240
-      membershipPort: 9940
+      grpcPort: 7239
+      membershipPort: 6939
       bindOnLocalHost: true
 
 clusterMetadata:
-  enableGlobalNamespace: true
+  enableGlobalNamespace: false
   failoverVersionIncrement: 10
   masterClusterName: "active"
-  currentClusterName: "other"
+  currentClusterName: "active"
   clusterInformation:
     active:
       enabled: true
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
-    other:
-      enabled: true
-      initialFailoverVersion: 3
-      rpcName: "frontend"
-      rpcAddress: "localhost:9233"
-# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "localhost:7233"
-#    active:
-#      enabled: true
-#      initialFailoverVersion: 1
-#      rpcName: "frontend"
-#      rpcAddress: "localhost:7233"
-# Use tctl --ad 127.0.0.1:9233 adm cl upsert-remote-cluster --frontend_address "localhost:8233"
-#    standby:
-#      enabled: true
-#      initialFailoverVersion: 2
-#      rpcName: "frontend"
-#      rpcAddress: "localhost:8233"
 
 dcRedirectionPolicy:
-  policy: "selected-apis-forwarding"
+  policy: "noop"
   toDC: ""
 
 archival:
@@ -119,8 +112,8 @@ namespaceDefaults:
       URI: "file:///tmp/temporal_vis_archival/development"
 
 publicClient:
-  hostPort: "localhost:9233"
+  hostPort: "localhost:7233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_cass.yaml"
+  filepath: "config/dynamicconfig/development-sql.yaml"
   pollInterval: "10s"
