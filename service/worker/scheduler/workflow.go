@@ -451,6 +451,7 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 	var refresh schedspb.RefreshRequest
 	ch.Receive(s.ctx, &refresh)
 	s.logger.Debug("Got refresh signal", "refresh", refresh.String())
+	// TODO: consider just setting needRefresh to true so we refresh all instead of sending a list
 	s.refreshWorkflows(refresh.Workflows)
 }
 
@@ -563,6 +564,9 @@ func (s *scheduler) processBuffer() bool {
 		return false
 	}
 
+	// TODO: consider doing this always and removing needRefresh? we only end up here without
+	// needRefresh in the case of update, or patch without an immediate run, so it's not much
+	// wasted work.
 	if s.needRefresh {
 		s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
 		s.needRefresh = false
