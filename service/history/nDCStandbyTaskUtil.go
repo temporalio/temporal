@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -267,7 +268,7 @@ func getRemoteClusterName(
 	remoteClusterName := namespaceEntry.ActiveClusterName()
 	if remoteClusterName == currentCluster {
 		// namespace has turned active, retry the task
-		return "", consts.ErrTaskRetry
+		return "", errors.New("namespace becomes active when processing task as standby")
 	}
 	return remoteClusterName, nil
 }

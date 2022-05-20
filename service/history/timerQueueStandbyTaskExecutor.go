@@ -523,7 +523,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	adminClient, err := t.shard.GetRemoteAdminClient(t.clusterName)
+	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
 	if err != nil {
 		return err
 	}
@@ -547,7 +547,7 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 		// NOTE: history resend may take long time and its timeout is currently
 		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
-			t.clusterName,
+			remoteClusterName,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
