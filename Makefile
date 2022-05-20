@@ -416,25 +416,31 @@ stop-dependencies-cdc:
 	docker-compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) down
 
 start: temporal-server
-	./temporal-server --zone cass start
+	./temporal-server --env development-cass start
 
 start-es: temporal-server
-	./temporal-server --zone cass-es start
+	./temporal-server --env development-cass-es start
 
 start-mysql: temporal-server
-	./temporal-server --zone mysql start
+	./temporal-server --env development-mysql start
 
 start-mysql-es: temporal-server
-	./temporal-server --zone mysql-es start
+	./temporal-server --env development-mysql-es start
+
+start-postgres: temporal-server
+	./temporal-server --env development-postgres start
+
+start-sqlite: temporal-server
+	./temporal-server --env development-sqlite start
 
 start-cdc-active: temporal-server
-	./temporal-server --zone active start
+	./temporal-server --env development-active start
 
 start-cdc-standby: temporal-server
-	./temporal-server --zone standby start
+	./temporal-server --env development-standby start
 
 start-cdc-other: temporal-server
-	./temporal-server --zone other start
+	./temporal-server --env development-other start
 
 ##### Mocks #####
 AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go v1" go.mod))

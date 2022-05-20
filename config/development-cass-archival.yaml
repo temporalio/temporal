@@ -1,31 +1,20 @@
+log:
+  stdout: true
+  level: info
+
 persistence:
-  defaultStore: postgres-default
-  visibilityStore: postgres-visibility
+  defaultStore: cass-default
+  visibilityStore: cass-visibility
   numHistoryShards: 4
   datastores:
-    postgres-default:
-      sql:
-        pluginName: "postgres"
-        databaseName: "temporal"
-        connectAddr: "127.0.0.1:5432"
-        connectProtocol: "tcp"
-        user: "temporal"
-        password: "temporal"
-        maxConns: 20
-        maxIdleConns: 20
-        maxConnLifetime: "1h"
-    postgres-visibility:
-      sql:
-        pluginName: "postgres"
-        databaseName: "temporal_visibility"
-        connectAddr: "127.0.0.1:5432"
-        connectProtocol: "tcp"
-        user: "temporal"
-        password: "temporal"
-        maxConns: 2
-        maxIdleConns: 2
-        maxConnLifetime: "1h"
-
+    cass-default:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "temporal"
+    cass-visibility:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "temporal_visibility"
 global:
   membership:
     maxJoinDuration: 30s
@@ -102,15 +91,15 @@ archival:
 namespaceDefaults:
   archival:
     history:
-      state: "disabled"
+      state: "enabled"
       URI: "file:///tmp/temporal_archival/development"
     visibility:
-      state: "disabled"
+      state: "enabled"
       URI: "file:///tmp/temporal_vis_archival/development"
 
 publicClient:
   hostPort: "localhost:7233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_sql.yaml"
+  filepath: "./config/dynamicconfig/development-cass.yaml"
   pollInterval: "10s"

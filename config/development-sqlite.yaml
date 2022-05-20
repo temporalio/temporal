@@ -1,24 +1,55 @@
+log:
+  stdout: true
+  level: info
+
 persistence:
-  defaultStore: cass-default
-  visibilityStore:
-  advancedVisibilityStore: es-visibility
-  numHistoryShards: 4
+  defaultStore: sqlite-default
+  visibilityStore: sqlite-visibility
+  numHistoryShards: 1
   datastores:
-    cass-default:
-      cassandra:
-        hosts: "127.0.0.1"
-        keyspace: "temporal_active"
-    es-visibility:
-      elasticsearch:
-        version: "v7"
-        logLevel: "error"
-        url:
-          scheme: "http"
-          host: "127.0.0.1:9200"
-        indices:
-          visibility: temporal_visibility_v1_dev_active
-          # secondary_visibility: temporal_visibility_v2_dev
-        closeIdleConnectionsInterval: 15s
+    sqlite-default:
+      sql:
+        user: ""
+        password: ""
+        pluginName: "sqlite"
+        databaseName: "default"
+        connectAddr: "localhost"
+        connectProtocol: "tcp"
+        connectAttributes:
+          mode: "memory"
+          cache: "private"
+        maxConns: 1
+        maxIdleConns: 1
+        maxConnLifetime: "1h"
+        tls:
+          enabled: false
+          caFile: ""
+          certFile: ""
+          keyFile: ""
+          enableHostVerification: false
+          serverName: ""
+
+    sqlite-visibility:
+      sql:
+        user: ""
+        password: ""
+        pluginName: "sqlite"
+        databaseName: "default"
+        connectAddr: "localhost"
+        connectProtocol: "tcp"
+        connectAttributes:
+          mode: "memory"
+          cache: "private"
+        maxConns: 1
+        maxIdleConns: 1
+        maxConnLifetime: "1h"
+        tls:
+          enabled: false
+          caFile: ""
+          certFile: ""
+          keyFile: ""
+          enableHostVerification: false
+          serverName: ""
 global:
   membership:
     maxJoinDuration: 30s
@@ -54,12 +85,12 @@ services:
 
   worker:
     rpc:
-      grpcPort: 7940
-      membershipPort: 6940
+      grpcPort: 7239
+      membershipPort: 6939
       bindOnLocalHost: true
 
 clusterMetadata:
-  enableGlobalNamespace: true
+  enableGlobalNamespace: false
   failoverVersionIncrement: 10
   masterClusterName: "active"
   currentClusterName: "active"
@@ -69,21 +100,9 @@ clusterMetadata:
       initialFailoverVersion: 1
       rpcName: "frontend"
       rpcAddress: "localhost:7233"
-# Use tctl --ad 127.0.0.1:7233 adm cl upsert-remote-cluster --frontend_address "localhost:8233"
-#    standby:
-#      enabled: true
-#      initialFailoverVersion: 2
-#      rpcName: "frontend"
-#      rpcAddress: "localhost:8233"
-# Use tctl --ad 127.0.0.1:7233 adm cl upsert-remote-cluster --frontend_address "localhost:9233"
-#    other:
-#      enabled: false
-#      initialFailoverVersion: 3
-#      rpcName: "frontend"
-#      rpcAddress: "localhost:9233"
 
 dcRedirectionPolicy:
-  policy: "selected-apis-forwarding"
+  policy: "noop"
   toDC: ""
 
 archival:
@@ -117,5 +136,5 @@ publicClient:
   hostPort: "localhost:7233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_cass.yaml"
+  filepath: "config/dynamicconfig/development-sql.yaml"
   pollInterval: "10s"
