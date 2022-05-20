@@ -29,7 +29,7 @@ GOOS        ?= $(shell go env GOOS)
 GOARCH      ?= $(shell go env GOARCH)
 GOPATH      ?= $(shell go env GOPATH)
 # Disable cgo by default.
-CGO_ENABLED ?= 0
+export CGO_ENABLED ?= 0
 
 PERSISTENCE_TYPE ?= nosql
 PERSISTENCE_DRIVER ?= cassandra
