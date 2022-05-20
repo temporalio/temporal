@@ -12,6 +12,11 @@ This doc is for contributors to Temporal Server (hopefully that's you!)
 * [Protocol buffers compiler](https://github.com/protocolbuffers/protobuf/) (only if you are going to change `proto` files):
   - Install on macOS with `brew install protobuf`.
   - Install on Ubuntu with `sudo apt install protobuf-compiler`.
+* [Temporal CLI tctl](https://github.com/temporalio/tctl)
+  - Homebrew `brew install tctl`
+  - Go install `make update-tctl`
+  - Or download it from here https://github.com/temporalio/tctl
+
 
 ### Runtime (server and tests) prerequisites
 * [docker](https://docs.docker.com/engine/install/)
@@ -101,8 +106,7 @@ make start
 
 Now you can create default namespace with `tctl`:
 ```bash
-make tctl
-./tctl --ns default namespace register
+tctl --namespace default namespace register
 ```
 and run samples from [Go](https://github.com/temporalio/samples-go) and [Java](https://github.com/temporalio/samples-java) samples repos. Also, you can access web UI at `localhost:8088`.
 
