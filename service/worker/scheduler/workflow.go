@@ -25,8 +25,6 @@
 package scheduler
 
 import (
-	"bytes"
-	"encoding/binary"
 	"errors"
 	"fmt"
 	"time"
@@ -60,6 +58,8 @@ const (
 
 	QueryNameDescribe          = "describe"
 	QueryNameListMatchingTimes = "listMatchingTimes"
+
+	InitialConflictToken = 1
 
 	// The number of future action times to include in Describe.
 	futureActionCount = 10
@@ -100,8 +100,6 @@ type (
 )
 
 var (
-	InitialConflictToken = make([]byte, 8)
-
 	defaultLocalActivityOptions = workflow.LocalActivityOptions{
 		StartToCloseTimeout: 5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
@@ -147,9 +145,7 @@ func (s *scheduler) run() error {
 		s.Info = &schedpb.ScheduleInfo{
 			CreateTime: s.State.LastProcessedTime,
 		}
-		if len(s.State.ConflictToken) != 8 {
-			s.State.ConflictToken = InitialConflictToken
-		}
+		s.State.ConflictToken = InitialConflictToken
 	}
 
 	// A schedule may be created with an initial Patch, e.g. start one immediately. Handle that now.
@@ -503,15 +499,11 @@ func (s *scheduler) handleListMatchingTimesQuery(req *workflowservice.ListSchedu
 }
 
 func (s *scheduler) incSeqNo() {
-	if len(s.State.ConflictToken) != 8 {
-		s.State.ConflictToken = InitialConflictToken
-	}
-	v := binary.BigEndian.Uint64(s.State.ConflictToken)
-	binary.BigEndian.PutUint64(s.State.ConflictToken, v+1)
+	s.State.ConflictToken++
 }
 
-func (s *scheduler) checkConflict(token []byte) error {
-	if token == nil || bytes.Equal(token, s.State.ConflictToken) {
+func (s *scheduler) checkConflict(token int64) error {
+	if token == 0 || token == s.State.ConflictToken {
 		return nil
 	}
 	return errUpdateConflict

@@ -60,7 +60,7 @@ message InternalState {
     temporal.api.failure.v1.Failure continued_failure = 6;
 
     // conflict token is implemented as simple sequence number
-    bytes conflict_token = 7;
+    int64 conflict_token = 7;
 }
 
 message StartScheduleArgs {
@@ -72,7 +72,7 @@ message StartScheduleArgs {
 
 message FullUpdateRequest {
     temporal.api.schedule.v1.Schedule schedule = 1;
-    bytes conflict_token = 2;
+    int64 conflict_token = 2;
 }
 
 message RefreshRequest {
@@ -85,7 +85,7 @@ message RefreshRequest {
 message DescribeResponse {
     temporal.api.schedule.v1.Schedule schedule = 1;
     temporal.api.schedule.v1.ScheduleInfo info = 2;
-    bytes conflict_token = 3;
+    int64 conflict_token = 3;
 }
 
 message WatchWorkflowRequest {
