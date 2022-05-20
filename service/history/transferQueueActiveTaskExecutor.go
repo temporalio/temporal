@@ -307,9 +307,9 @@ func (t *transferQueueActiveTaskExecutor) processCloseExecution(
 	parentRunID := executionInfo.ParentRunId
 	parentInitiatedID := executionInfo.ParentInitiatedId
 	parentInitiatedVersion := executionInfo.ParentInitiatedVersion
-	var parentClock *clockspb.Clock
+	var parentClock *clockspb.VectorClock
 	if executionInfo.ParentClock != nil {
-		parentClock = vclock.NewClock(
+		parentClock = vclock.NewVectorClock(
 			executionInfo.ParentClock.ClusterId,
 			executionInfo.ParentClock.ShardId,
 			executionInfo.ParentClock.Clock,
@@ -954,7 +954,7 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 	context workflow.Context,
 	initiatedAttributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
 	runID string,
-	clock *clockspb.Clock,
+	clock *clockspb.VectorClock,
 ) error {
 
 	return t.updateWorkflowExecution(ctx, context, true,
@@ -1019,7 +1019,7 @@ func (t *transferQueueActiveTaskExecutor) createFirstWorkflowTask(
 	ctx context.Context,
 	namespaceID string,
 	execution *commonpb.WorkflowExecution,
-	clock *clockspb.Clock,
+	clock *clockspb.VectorClock,
 ) error {
 
 	_, err := t.historyClient.ScheduleWorkflowTask(ctx, &historyservice.ScheduleWorkflowTaskRequest{
@@ -1288,7 +1288,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 	targetNamespace namespace.Name,
 	childRequestID string,
 	attributes *historypb.StartChildWorkflowExecutionInitiatedEventAttributes,
-) (string, *clockspb.Clock, error) {
+) (string, *clockspb.VectorClock, error) {
 	request := common.CreateHistoryStartWorkflowRequest(
 		task.TargetNamespaceID,
 		&workflowservice.StartWorkflowExecutionRequest{
@@ -1319,7 +1319,7 @@ func (t *transferQueueActiveTaskExecutor) startWorkflowWithRetry(
 			},
 			InitiatedId:      task.InitiatedID,
 			InitiatedVersion: task.Version,
-			Clock:            vclock.NewClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
+			Clock:            vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 		},
 		t.shard.GetTimeSource().Now(),
 	)

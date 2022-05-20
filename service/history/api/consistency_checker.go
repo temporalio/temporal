@@ -53,7 +53,7 @@ type (
 		) (string, error)
 		GetWorkflowContext(
 			ctx context.Context,
-			reqClock *clockspb.Clock,
+			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 		) (WorkflowContext, error)
@@ -98,7 +98,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 
 func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 	ctx context.Context,
-	reqClock *clockspb.Clock,
+	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 ) (WorkflowContext, error) {
@@ -133,7 +133,7 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	ctx context.Context,
-	reqClock *clockspb.Clock,
+	reqClock *clockspb.VectorClock,
 	workflowKey definition.WorkflowKey,
 ) (WorkflowContext, error) {
 	cmpResult, err := vclock.Compare(reqClock, c.shardContext.CurrentVectorClock())

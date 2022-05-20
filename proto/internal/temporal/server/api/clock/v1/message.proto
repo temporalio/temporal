@@ -24,7 +24,7 @@ package temporal.server.api.clock.v1;
 
 option go_package = "go.temporal.io/server/api/clock/v1;clock";
 
-message Clock {
+message VectorClock {
     int32 shard_id = 1;
     int64 clock = 2;
     int64 cluster_id = 3;

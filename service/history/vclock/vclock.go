@@ -32,12 +32,12 @@ import (
 	clockspb "go.temporal.io/server/api/clock/v1"
 )
 
-func NewClock(
+func NewVectorClock(
 	clusterID int64,
 	shardID int32,
 	clock int64,
-) *clockspb.Clock {
-	return &clockspb.Clock{
+) *clockspb.VectorClock {
+	return &clockspb.VectorClock{
 		ClusterId: clusterID,
 		ShardId:   shardID,
 		Clock:     clock,
@@ -45,8 +45,8 @@ func NewClock(
 }
 
 func HappensBefore(
-	clock1 *clockspb.Clock,
-	clock2 *clockspb.Clock,
+	clock1 *clockspb.VectorClock,
+	clock2 *clockspb.VectorClock,
 ) (bool, error) {
 	compare, err := Compare(clock1, clock2)
 	if err != nil {
@@ -56,8 +56,8 @@ func HappensBefore(
 }
 
 func Compare(
-	clock1 *clockspb.Clock,
-	clock2 *clockspb.Clock,
+	clock1 *clockspb.VectorClock,
+	clock2 *clockspb.VectorClock,
 ) (int, error) {
 	if clock1.GetClusterId() != clock2.GetClusterId() || clock1.GetShardId() != clock2.GetShardId() {
 		return 0, serviceerror.NewInternal(fmt.Sprintf(

@@ -346,7 +346,7 @@ func (s *TaskQueueTaskSuite) randomTask(
 			ScheduleId:  rand.Int63(),
 			CreateTime:  now,
 			ExpiryTime:  timestamp.TimePtr(now.Add(s.taskTTL)),
-			Clock: &clockspb.Clock{
+			Clock: &clockspb.VectorClock{
 				ClusterId: rand.Int63(),
 				ShardId:   rand.Int31(),
 				Clock:     rand.Int63(),

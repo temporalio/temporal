@@ -5427,7 +5427,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 }
 
 func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, workflowID, runID string,
-	workflowType string, clock *clockspb.Clock) *historypb.HistoryEvent {
+	workflowType string, clock *clockspb.VectorClock) *historypb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
 		namespace,
 		&commonpb.WorkflowExecution{
