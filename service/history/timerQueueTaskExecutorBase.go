@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -47,12 +48,15 @@ import (
 
 type (
 	timerQueueTaskExecutorBase struct {
-		shard         shard.Context
-		deleteManager workflow.DeleteManager
-		cache         workflow.Cache
-		logger        log.Logger
-		metricsClient metrics.Client
-		config        *configs.Config
+		currentClusterName string
+		shard              shard.Context
+		registry           namespace.Registry
+		deleteManager      workflow.DeleteManager
+		cache              workflow.Cache
+		logger             log.Logger
+		matchingClient     matchingservice.MatchingServiceClient
+		metricsClient      metrics.Client
+		config             *configs.Config
 	}
 )
 
@@ -60,16 +64,20 @@ func newTimerQueueTaskExecutorBase(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	deleteManager workflow.DeleteManager,
+	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
-		shard:         shard,
-		cache:         workflowCache,
-		deleteManager: deleteManager,
-		logger:        logger,
-		metricsClient: shard.GetMetricsClient(),
-		config:        config,
+		currentClusterName: shard.GetClusterMetadata().GetCurrentClusterName(),
+		shard:              shard,
+		registry:           shard.GetNamespaceRegistry(),
+		cache:              workflowCache,
+		deleteManager:      deleteManager,
+		logger:             logger,
+		matchingClient:     matchingClient,
+		metricsClient:      shard.GetMetricsClient(),
+		config:             config,
 	}
 }
 

@@ -85,6 +85,7 @@ type Config struct {
 	TimerTaskBatchSize                                dynamicconfig.IntPropertyFn
 	TimerTaskWorkerCount                              dynamicconfig.IntPropertyFn
 	TimerTaskMaxRetryCount                            dynamicconfig.IntPropertyFn
+	TimerProcessorEnableSingleCursor                  dynamicconfig.BoolPropertyFn
 	TimerProcessorEnablePriorityTaskScheduler         dynamicconfig.BoolPropertyFn
 	TimerProcessorSchedulerWorkerCount                dynamicconfig.IntPropertyFn
 	TimerProcessorSchedulerQueueSize                  dynamicconfig.IntPropertyFn
@@ -110,6 +111,7 @@ type Config struct {
 	TransferTaskBatchSize                                dynamicconfig.IntPropertyFn
 	TransferTaskWorkerCount                              dynamicconfig.IntPropertyFn
 	TransferTaskMaxRetryCount                            dynamicconfig.IntPropertyFn
+	TransferProcessorEnableSingleCursor                  dynamicconfig.BoolPropertyFn
 	TransferProcessorEnablePriorityTaskScheduler         dynamicconfig.BoolPropertyFn
 	TransferProcessorSchedulerWorkerCount                dynamicconfig.IntPropertyFn
 	TransferProcessorSchedulerQueueSize                  dynamicconfig.IntPropertyFn
@@ -312,6 +314,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TimerTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.TimerTaskBatchSize, 100),
 		TimerTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.TimerTaskWorkerCount, 10),
 		TimerTaskMaxRetryCount:                            dc.GetIntProperty(dynamicconfig.TimerTaskMaxRetryCount, 100),
+		TimerProcessorEnableSingleCursor:                  dc.GetBoolProperty(dynamicconfig.TimerProcessorEnableSingleCursor, false),
 		TimerProcessorEnablePriorityTaskScheduler:         dc.GetBoolProperty(dynamicconfig.TimerProcessorEnablePriorityTaskScheduler, false),
 		TimerProcessorSchedulerWorkerCount:                dc.GetIntProperty(dynamicconfig.TimerProcessorSchedulerWorkerCount, 200),
 		TimerProcessorSchedulerQueueSize:                  dc.GetIntProperty(dynamicconfig.TimerProcessorSchedulerQueueSize, 10000),
@@ -336,6 +339,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TransferTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.TransferTaskBatchSize, 100),
 		TransferTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.TransferTaskWorkerCount, 10),
 		TransferTaskMaxRetryCount:                            dc.GetIntProperty(dynamicconfig.TransferTaskMaxRetryCount, 100),
+		TransferProcessorEnableSingleCursor:                  dc.GetBoolProperty(dynamicconfig.TransferProcessorEnableSingleCursor, false),
 		TransferProcessorEnablePriorityTaskScheduler:         dc.GetBoolProperty(dynamicconfig.TransferProcessorEnablePriorityTaskScheduler, false),
 		TransferProcessorSchedulerWorkerCount:                dc.GetIntProperty(dynamicconfig.TransferProcessorSchedulerWorkerCount, 200),
 		TransferProcessorSchedulerQueueSize:                  dc.GetIntProperty(dynamicconfig.TransferProcessorSchedulerQueueSize, 10000),

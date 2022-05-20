@@ -1,3 +1,7 @@
+log:
+  stdout: true
+  level: info
+
 persistence:
   defaultStore: cass-default
   visibilityStore:
@@ -122,5 +126,5 @@ publicClient:
   hostPort: "localhost:8233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_es.yaml"
+  filepath: "config/dynamicconfig/development-cass.yaml"
   pollInterval: "10s"

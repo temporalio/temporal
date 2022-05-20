@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -119,6 +120,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
+	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
@@ -213,7 +215,7 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
-	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache)
+	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache, clientBean)
 
 	return historyEngImpl
 }
@@ -242,6 +244,9 @@ func (e *historyEngineImpl) Start() {
 	// can't be retrieved before the processor is started. If failover callback is registered
 	// before queue processor is started, it may result in a deadline as to create the failover queue,
 	// queue processor need to be started.
+	//
+	// Ideally, when both timer and transfer queues enabled single cursor mode, we don't have to register
+	// the callback. However, currently namespace migration is relying on the callback to UpdateHandoverNamespaces
 	e.registerNamespaceFailoverCallback()
 }
 
@@ -387,17 +392,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 
 	workflowID := request.GetWorkflowId()
 	runID := uuid.New()
-	// grab the current context as a Lock, nothing more
-	_, currentRelease, err := e.historyCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		namespaceID,
-		workflowID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { currentRelease(retError) }()
-
 	workflowContext, err := api.NewWorkflowWithSignal(
 		e.shard,
 		namespaceEntry,
@@ -516,7 +510,7 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 	if err = workflowContext.GetContext().CreateWorkflowExecution(
 		ctx,
 		now,
-		persistence.CreateWorkflowModeWorkflowIDReuse,
+		persistence.CreateWorkflowModeUpdateCurrent,
 		prevRunID,
 		prevLastWriteVersion,
 		workflowContext.GetMutableState(),
@@ -2033,9 +2027,9 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	// Open and Close workflow executions are deleted differently.
 	// Open workflow execution is deleted by terminating with special flag `deleteAfterTerminate` set to true.
 	// This flag will be carried over with CloseExecutionTask and workflow will be deleted as the last step while processing the task.
-
+	//
 	// Close workflow execution is deleted using DeleteExecutionTask.
-
+	//
 	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
 	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
 	// In passive cluster, workflow executions are just deleted in regardless of its state.
@@ -2256,6 +2250,15 @@ func (e *historyEngineImpl) ReplicateEventsV2(
 	return e.nDCReplicator.ApplyEvents(ctx, replicateRequest)
 }
 
+// ReplicateWorkflowState is an experimental method to replicate workflow state. This should not expose outside of history service role.
+func (e *historyEngineImpl) ReplicateWorkflowState(
+	ctx context.Context,
+	request *historyservice.ReplicateWorkflowStateRequest,
+) error {
+
+	return e.nDCReplicator.ApplyWorkflowState(ctx, request)
+}
+
 func (e *historyEngineImpl) SyncShardStatus(
 	ctx context.Context,
 	request *historyservice.SyncShardStatusRequest,
@@ -2417,7 +2420,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 func (e *historyEngineImpl) updateWorkflow(
 	ctx context.Context,
-	reqClock *clockspb.ShardClock,
+	reqClock *clockspb.VectorClock,
 	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action api.UpdateWorkflowActionFunc,
@@ -2438,7 +2441,7 @@ func (e *historyEngineImpl) updateWorkflow(
 
 func (e *historyEngineImpl) updateWorkflowWithNew(
 	ctx context.Context,
-	reqClock *clockspb.ShardClock,
+	reqClock *clockspb.VectorClock,
 	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action api.UpdateWorkflowActionFunc,

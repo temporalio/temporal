@@ -24,6 +24,8 @@
 
 package persistence
 
+import "go.temporal.io/server/service/history/tasks"
+
 func statusOfInternalWorkflow(
 	state *InternalWorkflowMutableState,
 	historyStatistics *HistoryStatistics,
@@ -144,7 +146,8 @@ func statusOfInternalWorkflowMutation(
 		bufferedEventsSize = mutation.NewBufferedEvents.Size()
 	}
 
-	// TODO what about tasks?
+	taskCountByCategory := taskCountsByCategory(&mutation.Tasks)
+
 	// TODO what about checksum?
 
 	totalSize := executionInfoSize
@@ -184,7 +187,17 @@ func statusOfInternalWorkflowMutation(
 
 		BufferedEventsSize:  bufferedEventsSize,
 		BufferedEventsCount: bufferedEventsCount,
+
+		TaskCountByCategory: taskCountByCategory,
 	}
+}
+
+func taskCountsByCategory(t *map[tasks.Category][]InternalHistoryTask) map[string]int {
+	counts := make(map[string]int)
+	for category, tasks := range *t {
+		counts[category.Name()] = len(tasks)
+	}
+	return counts
 }
 
 func statusOfInternalWorkflowSnapshot(
@@ -229,6 +242,8 @@ func statusOfInternalWorkflowSnapshot(
 	totalSize += signalRequestIDSize
 	totalSize += bufferedEventsSize
 
+	taskCountByCategory := taskCountsByCategory(&snapshot.Tasks)
+
 	return &MutableStateStatistics{
 		TotalSize:         totalSize,
 		HistoryStatistics: historyStatistics,
@@ -256,5 +271,7 @@ func statusOfInternalWorkflowSnapshot(
 
 		BufferedEventsSize:  bufferedEventsSize,
 		BufferedEventsCount: bufferedEventsCount,
+
+		TaskCountByCategory: taskCountByCategory,
 	}
 }

@@ -422,7 +422,10 @@ func (f *replicationTaskFetcherWorker) getMessages() error {
 		Tokens:      tokens,
 		ClusterName: f.currentCluster,
 	}
-	remoteClient := f.clientBean.GetRemoteAdminClient(f.sourceCluster)
+	remoteClient, err := f.clientBean.GetRemoteAdminClient(f.sourceCluster)
+	if err != nil {
+		return err
+	}
 	response, err := remoteClient.GetReplicationMessages(ctx, request)
 	if err != nil {
 		f.logger.Error("Failed to get replication tasks", tag.Error(err))

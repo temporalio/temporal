@@ -219,7 +219,7 @@ func (s *ContextImpl) AssertOwnership(
 	return nil
 }
 
-func (s *ContextImpl) NewVectorClock() (*clockspb.ShardClock, error) {
+func (s *ContextImpl) NewVectorClock() (*clockspb.VectorClock, error) {
 	s.wLock()
 	defer s.wUnlock()
 
@@ -227,15 +227,15 @@ func (s *ContextImpl) NewVectorClock() (*clockspb.ShardClock, error) {
 	if err != nil {
 		return nil, err
 	}
-	return vclock.NewShardClock(s.shardID, clock), nil
+	return vclock.NewVectorClock(s.clusterMetadata.GetClusterID(), s.shardID, clock), nil
 }
 
-func (s *ContextImpl) CurrentVectorClock() *clockspb.ShardClock {
+func (s *ContextImpl) CurrentVectorClock() *clockspb.VectorClock {
 	s.rLock()
 	defer s.rUnlock()
 
 	clock := s.taskSequenceNumber
-	return vclock.NewShardClock(s.shardID, clock)
+	return vclock.NewVectorClock(s.clusterMetadata.GetClusterID(), s.shardID, clock)
 }
 
 func (s *ContextImpl) GenerateTaskID() (int64, error) {
@@ -309,7 +309,7 @@ func (s *ContextImpl) GetQueueAckLevel(category tasks.Category) tasks.Key {
 
 func (s *ContextImpl) getQueueAckLevelLocked(category tasks.Category) tasks.Key {
 	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok && queueAckLevel.AckLevel != 0 {
-		return convertAckLevelToTaskKey(category.Type(), queueAckLevel.AckLevel)
+		return convertPersistenceAckLevelToTaskKey(category.Type(), queueAckLevel.AckLevel)
 	}
 
 	return tasks.Key{}
@@ -330,7 +330,19 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 			ClusterAckLevel: make(map[string]int64),
 		}
 	}
-	s.shardInfo.QueueAckLevels[category.ID()].AckLevel = convertTaskKeyToAckLevel(category.Type(), ackLevel)
+	persistenceAckLevel := convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
+	s.shardInfo.QueueAckLevels[category.ID()].AckLevel = persistenceAckLevel
+
+	// if cluster ack level is less than the overall ack level, update cluster ack level
+	// as well to prevent loading too many tombstones if the cluster ack level is used later
+	// this may happen when adding back a removed cluster or rolling back the change for using
+	// single queue in timer/transfer queue processor
+	clusterAckLevel := s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel
+	for clusterName, persistenceClusterAckLevel := range clusterAckLevel {
+		if persistenceClusterAckLevel < persistenceAckLevel {
+			clusterAckLevel[clusterName] = persistenceAckLevel
+		}
+	}
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -352,7 +364,7 @@ func (s *ContextImpl) getQueueClusterAckLevelLocked(
 ) tasks.Key {
 	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok {
 		if ackLevel, ok := queueAckLevel.ClusterAckLevel[cluster]; ok {
-			return convertAckLevelToTaskKey(category.Type(), ackLevel)
+			return convertPersistenceAckLevelToTaskKey(category.Type(), ackLevel)
 		}
 	}
 
@@ -380,7 +392,7 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 			ClusterAckLevel: make(map[string]int64),
 		}
 	}
-	s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel[cluster] = convertTaskKeyToAckLevel(category.Type(), ackLevel)
+	s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel[cluster] = convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -1883,7 +1895,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	return shardInfoCopy
 }
 
-func (s *ContextImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
+func (s *ContextImpl) GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error) {
 	return s.clientBean.GetRemoteAdminClient(cluster)
 }
 func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {
@@ -1958,7 +1970,7 @@ func OperationPossiblySucceeded(err error) bool {
 	}
 }
 
-func convertAckLevelToTaskKey(
+func convertPersistenceAckLevelToTaskKey(
 	categoryType tasks.CategoryType,
 	ackLevel int64,
 ) tasks.Key {
@@ -1968,7 +1980,7 @@ func convertAckLevelToTaskKey(
 	return tasks.Key{FireTime: timestamp.UnixOrZeroTime(ackLevel)}
 }
 
-func convertTaskKeyToAckLevel(
+func convertTaskKeyToPersistenceAckLevel(
 	categoryType tasks.CategoryType,
 	taskKey tasks.Key,
 ) int64 {

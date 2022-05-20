@@ -25,9 +25,12 @@
 package history
 
 import (
+	"context"
 	"time"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
@@ -57,7 +60,7 @@ func newTimerQueueStandbyProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	clusterName string,
 	taskAllocator taskAllocator,
-	nDCHistoryResender xdc.NDCHistoryResender,
+	clientBean client.Bean,
 	logger log.Logger,
 ) *timerQueueStandbyProcessorImpl {
 
@@ -91,7 +94,20 @@ func newTimerQueueStandbyProcessor(
 		shard,
 		workflowCache,
 		workflowDeleteManager,
-		nDCHistoryResender,
+		xdc.NewNDCHistoryResender(
+			shard.GetNamespaceRegistry(),
+			clientBean,
+			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+				engine, err := shard.GetEngine()
+				if err != nil {
+					return err
+				}
+				return engine.ReplicateEventsV2(ctx, request)
+			},
+			shard.GetPayloadSerializer(),
+			config.StandbyTaskReReplicationContextTimeout,
+			logger,
+		),
 		matchingClient,
 		logger,
 		clusterName,
@@ -105,7 +121,7 @@ func newTimerQueueStandbyProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
+		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
 	timerQueueAckMgr := newTimerQueueAckMgr(
@@ -125,12 +141,9 @@ func newTimerQueueStandbyProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				metricsClient.Scope(
-					tasks.GetStandbyTimerTaskMetricScope(t),
-				),
-				shard.GetConfig().TimerTaskMaxRetryCount,
+				config.TimerTaskMaxRetryCount,
 				queues.QueueTypeStandbyTimer,
-				shard.GetConfig().NamespaceCacheRefreshInterval,
+				config.NamespaceCacheRefreshInterval,
 			)
 		},
 	)
@@ -148,9 +161,9 @@ func newTimerQueueStandbyProcessor(
 		timerGate,
 		scheduler,
 		rescheduler,
-		shard.GetConfig().TimerProcessorMaxPollRPS,
+		config.TimerProcessorMaxPollRPS,
 		logger,
-		shard.GetMetricsClient().Scope(metrics.TimerStandbyQueueProcessorScope),
+		metricsClient.Scope(metrics.TimerStandbyQueueProcessorScope),
 	)
 
 	return processor

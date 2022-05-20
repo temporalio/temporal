@@ -25,8 +25,12 @@
 package history
 
 import (
+	"context"
+
 	enumsspb "go.temporal.io/server/api/enums/v1"
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -54,7 +58,7 @@ func newTransferQueueStandbyProcessor(
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
 	taskAllocator taskAllocator,
-	nDCHistoryResender xdc.NDCHistoryResender,
+	clientBean client.Bean,
 	logger log.Logger,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
@@ -112,7 +116,20 @@ func newTransferQueueStandbyProcessor(
 		shard,
 		workflowCache,
 		archivalClient,
-		nDCHistoryResender,
+		xdc.NewNDCHistoryResender(
+			shard.GetNamespaceRegistry(),
+			clientBean,
+			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+				engine, err := shard.GetEngine()
+				if err != nil {
+					return err
+				}
+				return engine.ReplicateEventsV2(ctx, request)
+			},
+			shard.GetPayloadSerializer(),
+			config.StandbyTaskReReplicationContextTimeout,
+			logger,
+		),
 		logger,
 		clusterName,
 		matchingClient,
@@ -143,9 +160,6 @@ func newTransferQueueStandbyProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				shard.GetMetricsClient().Scope(
-					tasks.GetStandbyTransferTaskMetricsScope(t),
-				),
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				queues.QueueTypeStandbyTransfer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,

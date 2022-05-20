@@ -105,11 +105,12 @@ func (mr *MockBeanMockRecorder) GetMatchingClient(namespaceIDToName interface{})
 }
 
 // GetRemoteAdminClient mocks base method.
-func (m *MockBean) GetRemoteAdminClient(cluster string) v10.AdminServiceClient {
+func (m *MockBean) GetRemoteAdminClient(cluster string) (v10.AdminServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteAdminClient", cluster)
 	ret0, _ := ret[0].(v10.AdminServiceClient)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetRemoteAdminClient indicates an expected call of GetRemoteAdminClient.
@@ -119,11 +120,12 @@ func (mr *MockBeanMockRecorder) GetRemoteAdminClient(cluster interface{}) *gomoc
 }
 
 // GetRemoteFrontendClient mocks base method.
-func (m *MockBean) GetRemoteFrontendClient(cluster string) v1.WorkflowServiceClient {
+func (m *MockBean) GetRemoteFrontendClient(cluster string) (v1.WorkflowServiceClient, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetRemoteFrontendClient", cluster)
 	ret0, _ := ret[0].(v1.WorkflowServiceClient)
-	return ret0
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
 }
 
 // GetRemoteFrontendClient indicates an expected call of GetRemoteFrontendClient.

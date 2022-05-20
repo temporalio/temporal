@@ -85,6 +85,20 @@ func (mr *MockMetadataMockRecorder) GetAllClusterInfo() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetAllClusterInfo", reflect.TypeOf((*MockMetadata)(nil).GetAllClusterInfo))
 }
 
+// GetClusterID mocks base method.
+func (m *MockMetadata) GetClusterID() int64 {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "GetClusterID")
+	ret0, _ := ret[0].(int64)
+	return ret0
+}
+
+// GetClusterID indicates an expected call of GetClusterID.
+func (mr *MockMetadataMockRecorder) GetClusterID() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetClusterID", reflect.TypeOf((*MockMetadata)(nil).GetClusterID))
+}
+
 // GetCurrentClusterName mocks base method.
 func (m *MockMetadata) GetCurrentClusterName() string {
 	m.ctrl.T.Helper()

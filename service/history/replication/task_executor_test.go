@@ -34,14 +34,12 @@ import (
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
 
-	"go.temporal.io/server/api/adminservicemock/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
-	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -61,15 +59,13 @@ type (
 		*require.Assertions
 		controller *gomock.Controller
 
-		currentCluster     string
+		remoteCluster      string
 		mockResource       *resource.Test
 		mockShard          *shard.ContextTest
 		mockEngine         *shard.MockEngine
 		config             *configs.Config
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
-		mockClientBean     *client.MockBean
-		adminClient        *adminservicemock.MockAdminServiceClient
 		clusterMetadata    *cluster.MockMetadata
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
@@ -93,7 +89,7 @@ func (s *taskExecutorSuite) TearDownSuite() {
 func (s *taskExecutorSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
 	s.controller = gomock.NewController(s.T())
-	s.currentCluster = cluster.TestCurrentClusterName
+	s.remoteCluster = cluster.TestAlternativeClusterName
 
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
@@ -111,8 +107,6 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.mockEngine = shard.NewMockEngine(s.controller)
 	s.mockResource = s.mockShard.Resource
 	s.mockNamespaceCache = s.mockResource.NamespaceCache
-	s.mockClientBean = s.mockResource.ClientBean
-	s.adminClient = s.mockResource.RemoteAdminClient
 	s.clusterMetadata = s.mockResource.ClusterMetadata
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 
@@ -121,6 +115,7 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.replicationTaskExecutor = NewTaskExecutor(
+		s.remoteCluster,
 		s.mockShard,
 		s.mockNamespaceCache,
 		s.nDCHistoryResender,
@@ -280,6 +275,7 @@ func (s *taskExecutorSuite) TestProcessTaskOnce_SyncActivityReplicationTask_Rese
 	)
 	s.mockEngine.EXPECT().SyncActivity(gomock.Any(), request).Return(resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		s.remoteCluster,
 		namespaceID,
 		workflowID,
 		runID,
@@ -366,6 +362,7 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(resendErr)
 	s.nDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
+		s.remoteCluster,
 		namespaceID,
 		workflowID,
 		runID,

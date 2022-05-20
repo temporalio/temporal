@@ -95,10 +95,10 @@ func (s *executableSuite) TestExecute_TaskExecuted() {
 		return true
 	})
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(errors.New("some random error"))
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopScope, errors.New("some random error"))
 	s.Error(executable.Execute())
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Return(metrics.NoopScope, nil)
 	s.NoError(executable.Execute())
 }
 
@@ -112,7 +112,7 @@ func (s *executableSuite) TestExecute_UserLatency() {
 		metrics.ContextCounterAdd(ctx, metrics.HistoryWorkflowExecutionCacheLatency, expectedUserLatency)
 	}
 
-	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(nil)
+	s.mockExecutor.EXPECT().Execute(gomock.Any(), executable).Do(updateContext).Return(metrics.NoopScope, nil)
 	s.NoError(executable.Execute())
 	s.Equal(time.Duration(expectedUserLatency), executable.(*executableImpl).userLatency)
 }
@@ -219,7 +219,6 @@ func (s *executableSuite) newTestExecutable(
 		s.mockRescheduler,
 		s.timeSource,
 		log.NewTestLogger(),
-		metrics.NoopScope,
 		dynamicconfig.GetIntPropertyFn(100),
 		QueueTypeActiveTransfer,
 		dynamicconfig.GetDurationPropertyFn(namespaceCacheRefreshInterval),

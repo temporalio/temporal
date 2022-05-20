@@ -1234,7 +1234,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevSuccess() {
 			s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(
 				gomock.Any(),
 				newCreateWorkflowExecutionRequestMatcher(func(request *persistence.CreateWorkflowExecutionRequest) bool {
-					return request.Mode == persistence.CreateWorkflowModeWorkflowIDReuse &&
+					return request.Mode == persistence.CreateWorkflowModeUpdateCurrent &&
 						request.PreviousRunID == runID &&
 						request.PreviousLastWriteVersion == lastWriteVersion
 				}),
@@ -1315,7 +1315,7 @@ func (s *engine2Suite) TestStartWorkflowExecution_NotRunning_PrevFail() {
 				s.mockExecutionMgr.EXPECT().CreateWorkflowExecution(
 					gomock.Any(),
 					newCreateWorkflowExecutionRequestMatcher(func(request *persistence.CreateWorkflowExecutionRequest) bool {
-						return request.Mode == persistence.CreateWorkflowModeWorkflowIDReuse &&
+						return request.Mode == persistence.CreateWorkflowModeUpdateCurrent &&
 							request.PreviousRunID == runIDs[i] &&
 							request.PreviousLastWriteVersion == lastWriteVersion
 					}),

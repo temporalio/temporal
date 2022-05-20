@@ -37,6 +37,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/definition"
@@ -60,7 +61,6 @@ type (
 		*timerQueueTaskExecutorBase
 
 		queueProcessor *timerQueueActiveProcessorImpl
-		matchingClient matchingservice.MatchingServiceClient
 	}
 )
 
@@ -78,36 +78,42 @@ func newTimerQueueActiveTaskExecutor(
 			shard,
 			workflowCache,
 			workflowDeleteManager,
+			matchingClient,
 			logger,
 			config,
 		),
 		queueProcessor: queueProcessor,
-		matchingClient: matchingClient,
 	}
 }
 
 func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) error {
+) (metrics.Scope, error) {
 
-	switch task := executable.GetTask().(type) {
+	task := executable.GetTask()
+	scope := t.metricsClient.Scope(
+		tasks.GetActiveTimerTaskMetricScope(task),
+		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	)
+
+	switch task := task.(type) {
 	case *tasks.UserTimerTask:
-		return t.executeUserTimerTimeoutTask(ctx, task)
+		return scope, t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		return t.executeActivityTimeoutTask(ctx, task)
+		return scope, t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		return t.executeWorkflowTaskTimeoutTask(ctx, task)
+		return scope, t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
-		return t.executeWorkflowTimeoutTask(ctx, task)
+		return scope, t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		return t.executeActivityRetryTimerTask(ctx, task)
+		return scope, t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		return t.executeWorkflowBackoffTimerTask(ctx, task)
+		return scope, t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		return t.executeDeleteHistoryEventTask(ctx, task)
+		return scope, t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		return errUnknownTimerTask
+		return scope, errUnknownTimerTask
 	}
 }
 
@@ -435,7 +441,7 @@ func (t *timerQueueActiveTaskExecutor) executeActivityRetryTimerTask(
 		TaskQueue:              taskQueue,
 		ScheduleId:             task.EventID,
 		ScheduleToStartTimeout: timestamp.DurationPtr(scheduleToStartTimeout),
-		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})
 
 	return retError
@@ -562,8 +568,7 @@ func (t *timerQueueActiveTaskExecutor) getTimerSequence(
 	mutableState workflow.MutableState,
 ) workflow.TimerSequence {
 
-	timeSource := t.shard.GetTimeSource()
-	return workflow.NewTimerSequence(timeSource, mutableState)
+	return workflow.NewTimerSequence(mutableState)
 }
 
 func (t *timerQueueActiveTaskExecutor) updateWorkflowExecution(
@@ -601,7 +606,7 @@ func (t *timerQueueActiveTaskExecutor) emitTimeoutMetricScopeWithNamespaceTag(
 	scope int,
 	timerType enumspb.TimeoutType,
 ) {
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return
 	}

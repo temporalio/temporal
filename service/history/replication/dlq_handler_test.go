@@ -119,6 +119,7 @@ func (s *dlqHandlerSuite) SetupTest() {
 		s.mockShard,
 		workflow.NewMockDeleteManager(s.controller),
 		workflow.NewMockCache(s.controller),
+		s.mockClientBean,
 		s.taskExecutors,
 	)
 }
@@ -186,7 +187,7 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		SourceClusterName: s.sourceCluster,
 	}).Return(dbResp, nil)
 
-	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient, nil).AnyTimes()
 	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
@@ -275,7 +276,7 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		SourceClusterName: s.sourceCluster,
 	}).Return(dbResp, nil)
 
-	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient, nil).AnyTimes()
 	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
