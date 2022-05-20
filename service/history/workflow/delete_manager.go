@@ -96,12 +96,12 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 ) error {
 
 	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
-	// and all pending transfer tasks are completed.
+	// and all pending transfer and visibility tasks are completed.
 	// This check is required to avoid race condition between close and delete tasks.
-	// Otherwise, mutable state might be deleted before close transfer task is executed, and therefore close task will be dropped.
+	// Otherwise, mutable state might be deleted before close task is executed, and therefore close task will be dropped.
 	//
 	// In passive cluster, transfer task queue check can be ignored but not visibility task queue.
-	// If visibility close task is executed after visibility is deleted then it will resurrect visibility record in closed state.
+	// If visibility close task is executed after visibility record is deleted then it will resurrect record in closed state.
 	//
 	// Unfortunately, queue ack levels are updated with delay (default 30s),
 	// therefore this API will return error if workflow is deleted within 30 seconds after close.
