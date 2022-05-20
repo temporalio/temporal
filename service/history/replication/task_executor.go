@@ -267,8 +267,6 @@ func (e *taskExecutorImpl) handleSyncWorkflowStateTask(
 	attr := task.GetSyncWorkflowStateTaskAttributes()
 	executionInfo := attr.GetWorkflowState().GetExecutionInfo()
 	namespaceID := namespace.ID(executionInfo.GetNamespaceId())
-	//wid := executionInfo.GetWorkflowId()
-	//rid := attr.GetExecutionState().GetRunId()
 
 	doContinue, err := e.filterTask(namespaceID, forceApply)
 	if err != nil || !doContinue {
