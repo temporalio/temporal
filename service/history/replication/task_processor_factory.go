@@ -120,26 +120,26 @@ func (r *taskProcessorFactoryImpl) Stop() {
 	r.taskProcessorLock.Unlock()
 }
 
-func (r taskProcessorFactoryImpl) Category() tasks.Category {
+func (r *taskProcessorFactoryImpl) Category() tasks.Category {
 	return tasks.CategoryReplication
 }
 
-func (r taskProcessorFactoryImpl) NotifyNewTasks(_ string, _ []tasks.Task) {
+func (r *taskProcessorFactoryImpl) NotifyNewTasks(_ string, _ []tasks.Task) {
 	//no-op
 	return
 }
 
-func (r taskProcessorFactoryImpl) FailoverNamespace(_ map[string]struct{}) {
+func (r *taskProcessorFactoryImpl) FailoverNamespace(_ map[string]struct{}) {
 	//no-op
 	return
 }
 
-func (r taskProcessorFactoryImpl) LockTaskProcessing() {
+func (r *taskProcessorFactoryImpl) LockTaskProcessing() {
 	//no-op
 	return
 }
 
-func (r taskProcessorFactoryImpl) UnlockTaskProcessing() {
+func (r *taskProcessorFactoryImpl) UnlockTaskProcessing() {
 	//no-op
 	return
 }
