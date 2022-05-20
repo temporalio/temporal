@@ -92,8 +92,8 @@ func (a *activities) StartWorkflow(ctx context.Context, req *schedspb.StartWorkf
 		return nil, translateError(err, "StartWorkflowExecution")
 	}
 
-	// TODO: ideally, get the time of the workflow execution started event
-	// instead of this one, which will be close but not the same
+	// this will not match the time in the workflow execution started event
+	// exactly, but it's just informational so it's close enough.
 	now := time.Now()
 
 	return &schedspb.StartWorkflowResponse{
@@ -161,7 +161,6 @@ func (a *activities) tryWatchWorkflow(ctx context.Context, req *schedspb.WatchWo
 	}
 
 	// get last event from history
-	// TODO: could we read from persistence directly or is that too crazy?
 	histReq := &workflowservice.GetWorkflowExecutionHistoryRequest{
 		Namespace:              req.Namespace,
 		Execution:              req.Execution,
@@ -225,7 +224,7 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkf
 		return nil, err
 	}
 
-	for {
+	for ctx.Err() == nil {
 		activity.RecordHeartbeat(ctx)
 		res, err := a.tryWatchWorkflow(ctx, req)
 		// long poll should return before our deadline, but even if it doesn't,
@@ -239,6 +238,7 @@ func (a *activities) WatchWorkflow(ctx context.Context, req *schedspb.WatchWorkf
 		}
 		return res, translateError(err, "WatchWorkflow")
 	}
+	return nil, ctx.Err()
 }
 
 func (a *activities) CancelWorkflow(ctx context.Context, req *schedspb.CancelWorkflowRequest) error {
