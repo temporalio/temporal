@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"encoding/binary"
 	"fmt"
 	"sync/atomic"
 	"time"
@@ -3110,9 +3111,10 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 		Schedule:     request.Schedule,
 		InitialPatch: request.InitialPatch,
 		State: &schedspb.InternalState{
-			Namespace:   namespaceName.String(),
-			NamespaceId: namespaceID.String(),
-			ScheduleId:  request.ScheduleId,
+			Namespace:     namespaceName.String(),
+			NamespaceId:   namespaceID.String(),
+			ScheduleId:    request.ScheduleId,
+			ConflictToken: scheduler.InitialConflictToken,
 		},
 	}
 	inputPayload, err := payloads.Encode(input)
@@ -3137,8 +3139,10 @@ func (wh *WorkflowHandler) CreateSchedule(ctx context.Context, request *workflow
 	if err != nil {
 		return nil, err
 	}
+	token := make([]byte, 8)
+	binary.BigEndian.PutUint64(token, scheduler.InitialConflictToken)
 	return &workflowservice.CreateScheduleResponse{
-		ConflictToken: scheduler.InitialConflictToken,
+		ConflictToken: token,
 	}, nil
 }
 
@@ -3254,12 +3258,14 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 		}
 
 		if len(needRefresh) == 0 {
+			token := make([]byte, 8)
+			binary.BigEndian.PutUint64(token, uint64(response.ConflictToken))
 			describeScheduleResponse = &workflowservice.DescribeScheduleResponse{
 				Schedule:         response.Schedule,
 				Info:             response.Info,
 				Memo:             describeResponse.GetWorkflowExecutionInfo().Memo,
 				SearchAttributes: describeResponse.GetWorkflowExecutionInfo().SearchAttributes,
-				ConflictToken:    response.ConflictToken,
+				ConflictToken:    token,
 			}
 			return nil
 		}
@@ -3341,8 +3347,10 @@ func (wh *WorkflowHandler) UpdateSchedule(ctx context.Context, request *workflow
 	}
 
 	input := &schedspb.FullUpdateRequest{
-		Schedule:      request.Schedule,
-		ConflictToken: request.ConflictToken,
+		Schedule: request.Schedule,
+	}
+	if len(request.ConflictToken) >= 8 {
+		input.ConflictToken = int64(binary.BigEndian.Uint64(request.ConflictToken))
 	}
 	inputPayloads, err := payloads.Encode(input)
 
