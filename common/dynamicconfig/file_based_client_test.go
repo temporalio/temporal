@@ -179,6 +179,16 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo()
 	s.Equal(expectedValue, v)
 }
 
+func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
+	expectedValue := 1005
+	filters := map[Filter]interface{}{
+		TaskQueueName: "other-test-tq",
+	}
+	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
+	s.NoError(err)
+	s.Equal(expectedValue, v)
+}
+
 func (s *fileBasedClientSuite) TestGetFloatValue() {
 	v, err := s.client.GetFloatValue(testGetFloat64PropertyKey, nil, 1)
 	s.NoError(err)
