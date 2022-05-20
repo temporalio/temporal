@@ -74,7 +74,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	logger.Error("Discarding standby transfer task due to task being pending for too long.", tag.Task(taskInfo))
+	logger.Warn("Discarding standby transfer task due to task being pending for too long.", tag.Task(taskInfo))
 	return consts.ErrTaskDiscarded
 }
 
@@ -89,7 +89,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	logger.Error("Discarding standby timer task due to task being pending for too long.", tag.Task(taskInfo))
+	logger.Warn("Discarding standby timer task due to task being pending for too long.", tag.Task(taskInfo))
 	return consts.ErrTaskDiscarded
 }
 

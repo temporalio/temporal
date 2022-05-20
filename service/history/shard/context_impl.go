@@ -442,12 +442,10 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 	s.wLock()
 	defer s.wUnlock()
 
-	if levels, ok := s.shardInfo.FailoverLevels[category]; ok {
-		for _, failoverLevel := range levels {
-			if ackLevel.CompareTo(failoverLevel.CurrentLevel) > 0 {
-				ackLevel = failoverLevel.CurrentLevel
-			}
-		}
+	if levels, ok := s.shardInfo.FailoverLevels[category]; ok && len(levels) != 0 {
+		// do not move ack level when there's failover queue
+		// so that after shard reload we can re-create the failover queue
+		return nil
 	}
 
 	// backward compatibility (for rollback)
@@ -2007,7 +2005,7 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 	return shardInfoCopy
 }
 
-func (s *ContextImpl) GetRemoteAdminClient(cluster string) adminservice.AdminServiceClient {
+func (s *ContextImpl) GetRemoteAdminClient(cluster string) (adminservice.AdminServiceClient, error) {
 	return s.clientBean.GetRemoteAdminClient(cluster)
 }
 func (s *ContextImpl) GetPayloadSerializer() serialization.Serializer {

@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -233,7 +232,7 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 func (t *transferQueueTaskExecutorBase) deleteExecution(
 	ctx context.Context,
 	task tasks.Task,
-	deleteFromOpenVisibility bool,
+	forceDeleteFromOpenVisibility bool,
 ) (retError error) {
 
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
@@ -260,19 +259,6 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		return err
 	}
 
-	if mutableState.GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
-		ns, err := t.registry.GetNamespaceByID(namespace.ID(task.GetNamespaceID()))
-		if err != nil {
-			return err
-		}
-		if ns.ActiveInCluster(t.currentClusterName) {
-			// DeleteExecutionTask transfer task is created only if workflow is not running.
-			// Therefore, this should almost never happen but if it does (cross DC resurrection, for example),
-			// workflow should not be deleted.
-			return nil
-		}
-	}
-
 	lastWriteVersion, err := mutableState.GetLastWriteVersion()
 	if err != nil {
 		return err
@@ -289,6 +275,6 @@ func (t *transferQueueTaskExecutorBase) deleteExecution(
 		weCtx,
 		mutableState,
 		task.GetVersion(),
-		deleteFromOpenVisibility,
+		forceDeleteFromOpenVisibility,
 	)
 }

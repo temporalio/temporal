@@ -34,7 +34,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -55,7 +54,8 @@ type (
 	timerQueueStandbyTaskExecutor struct {
 		*timerQueueTaskExecutorBase
 
-		clusterName string
+		clusterName        string
+		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
 
@@ -63,6 +63,7 @@ func newTimerQueueStandbyTaskExecutor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	workflowDeleteManager workflow.DeleteManager,
+	nDCHistoryResender xdc.NDCHistoryResender,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
 	clusterName string,
@@ -77,7 +78,8 @@ func newTimerQueueStandbyTaskExecutor(
 			logger,
 			config,
 		),
-		clusterName: clusterName,
+		clusterName:        clusterName,
+		nDCHistoryResender: nDCHistoryResender,
 	}
 }
 
@@ -521,25 +523,10 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTimerTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	// TODO: nDCHistoryResender should not require adminClient when creating the component.
-	// The remote cluster name can be passed into the SendSingleWorkflowHistory method or
-	// be determined dynamically inside the SendSingleWorkflowHistory method.
-	adminClient := t.shard.GetRemoteAdminClient(remoteClusterName)
-	nDCHistoryResender := xdc.NewNDCHistoryResender(
-		t.registry,
-		adminClient,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			engine, err := t.shard.GetEngineWithContext(ctx)
-			if err != nil {
-				return nil
-			}
-			return engine.ReplicateEventsV2(ctx, request)
-		},
-		t.shard.GetPayloadSerializer(),
-		t.config.StandbyTaskReReplicationContextTimeout,
-		logger,
-	)
-
+	adminClient, err := t.shard.GetRemoteAdminClient(t.clusterName)
+	if err != nil {
+		return err
+	}
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		if err := refreshTasks(
 			ctx,
@@ -559,7 +546,8 @@ func (t *timerQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 		// NOTE: history resend may take long time and its timeout is currently
 		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-		err = nDCHistoryResender.SendSingleWorkflowHistory(
+		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			t.clusterName,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),

@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -119,6 +120,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
+	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
@@ -213,7 +215,7 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
-	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache)
+	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache, clientBean)
 
 	return historyEngImpl
 }
@@ -327,11 +329,16 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
 			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
-			if newNotificationVersion <= shardNotificationVersion {
-				// skip if this is known version. this could happen once after shard reload because we use
-				// 0 as initialNotificationVersion when RegisterNamespaceChangeCallback.
-				return
-			}
+
+			// 1. We can't return when newNotificationVersion == shardNotificationVersion
+			// since we don't know if the previous failover queue processing has finished or not
+			// 2. We can return when newNotificationVersion < shardNotificationVersion. But the check
+			// is basically the same as the check in failover predicate. Because
+			// failover notification version <= NotificationVersion,
+			// there's no notification version that can make
+			// newNotificationVersion < shardNotificationVersion and
+			// failoverNotificationVersion >= shardNotificationVersion are true at the same time
+			// Meaning if the check decides to return, no namespace will pass the failover predicate.
 
 			failoverNamespaceIDs := map[string]struct{}{}
 			for _, nextNamespace := range nextNamespaces {
@@ -385,17 +392,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 
 	workflowID := request.GetWorkflowId()
 	runID := uuid.New()
-	// grab the current context as a Lock, nothing more
-	_, currentRelease, err := e.historyCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		namespaceID,
-		workflowID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { currentRelease(retError) }()
-
 	workflowContext, err := api.NewWorkflowWithSignal(
 		e.shard,
 		namespaceEntry,
@@ -2034,11 +2030,11 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 
 	// Close workflow execution is deleted using DeleteExecutionTask.
 
-	// DeleteWorkflowExecution is not replicated automatically. Workflow execution must be deleted separately in each cluster.
-	// Although running workflows in active cluster are terminated first and the termination is replicated.
-	// In passive cluster, workflow executions are just deleted in regardless of its status.
+	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
+	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
+	// In passive cluster, workflow executions are just deleted in regardless of its state.
 
-	if weCtx.GetMutableState().GetExecutionState().GetState() != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
 		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
 		if err != nil {
 			return err
@@ -2075,8 +2071,10 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
 		weCtx.GetMutableState(),
+		// Use cluster ack level for transfer queue ack level because it gets updated more often.
 		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
-		e.shard.GetQueueClusterAckLevel(tasks.CategoryVisibility, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
+		// Use global ack level visibility queue ack level because cluster level is not updated.
+		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
 	)
 }
 

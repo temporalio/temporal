@@ -100,6 +100,26 @@ func (mr *MockHistoryServiceClientMockRecorder) DeleteWorkflowExecution(ctx, in 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteWorkflowExecution), varargs...)
 }
 
+// DeleteWorkflowVisibilityRecord mocks base method.
+func (m *MockHistoryServiceClient) DeleteWorkflowVisibilityRecord(ctx context.Context, in *historyservice.DeleteWorkflowVisibilityRecordRequest, opts ...grpc.CallOption) (*historyservice.DeleteWorkflowVisibilityRecordResponse, error) {
+	m.ctrl.T.Helper()
+	varargs := []interface{}{ctx, in}
+	for _, a := range opts {
+		varargs = append(varargs, a)
+	}
+	ret := m.ctrl.Call(m, "DeleteWorkflowVisibilityRecord", varargs...)
+	ret0, _ := ret[0].(*historyservice.DeleteWorkflowVisibilityRecordResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkflowVisibilityRecord indicates an expected call of DeleteWorkflowVisibilityRecord.
+func (mr *MockHistoryServiceClientMockRecorder) DeleteWorkflowVisibilityRecord(ctx, in interface{}, opts ...interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	varargs := append([]interface{}{ctx, in}, opts...)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowVisibilityRecord", reflect.TypeOf((*MockHistoryServiceClient)(nil).DeleteWorkflowVisibilityRecord), varargs...)
+}
+
 // DescribeHistoryHost mocks base method.
 func (m *MockHistoryServiceClient) DescribeHistoryHost(ctx context.Context, in *historyservice.DescribeHistoryHostRequest, opts ...grpc.CallOption) (*historyservice.DescribeHistoryHostResponse, error) {
 	m.ctrl.T.Helper()
@@ -971,6 +991,21 @@ func (m *MockHistoryServiceServer) DeleteWorkflowExecution(arg0 context.Context,
 func (mr *MockHistoryServiceServerMockRecorder) DeleteWorkflowExecution(arg0, arg1 interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowExecution", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteWorkflowExecution), arg0, arg1)
+}
+
+// DeleteWorkflowVisibilityRecord mocks base method.
+func (m *MockHistoryServiceServer) DeleteWorkflowVisibilityRecord(arg0 context.Context, arg1 *historyservice.DeleteWorkflowVisibilityRecordRequest) (*historyservice.DeleteWorkflowVisibilityRecordResponse, error) {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "DeleteWorkflowVisibilityRecord", arg0, arg1)
+	ret0, _ := ret[0].(*historyservice.DeleteWorkflowVisibilityRecordResponse)
+	ret1, _ := ret[1].(error)
+	return ret0, ret1
+}
+
+// DeleteWorkflowVisibilityRecord indicates an expected call of DeleteWorkflowVisibilityRecord.
+func (mr *MockHistoryServiceServerMockRecorder) DeleteWorkflowVisibilityRecord(arg0, arg1 interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DeleteWorkflowVisibilityRecord", reflect.TypeOf((*MockHistoryServiceServer)(nil).DeleteWorkflowVisibilityRecord), arg0, arg1)
 }
 
 // DescribeHistoryHost mocks base method.

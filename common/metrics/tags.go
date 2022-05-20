@@ -48,6 +48,7 @@ const (
 	activityType  = "activityType"
 	commandType   = "commandType"
 	serviceName   = "service_name"
+	actionType    = "action_type"
 
 	namespaceAllValue = "all"
 	unknownValue      = "_unknown_"
@@ -235,4 +236,8 @@ func ResourceExhaustedCauseTag(cause enumspb.ResourceExhaustedCause) Tag {
 
 func ServiceTypeTag(value string) Tag {
 	return &tagImpl{key: serviceName, value: value}
+}
+
+func ActionType(value string) Tag {
+	return &tagImpl{key: actionType, value: value}
 }

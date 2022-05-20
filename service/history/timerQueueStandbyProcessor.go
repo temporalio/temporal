@@ -25,9 +25,12 @@
 package history
 
 import (
+	"context"
 	"time"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/log"
@@ -35,6 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/timer"
+	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -56,6 +60,7 @@ func newTimerQueueStandbyProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	clusterName string,
 	taskAllocator taskAllocator,
+	clientBean client.Bean,
 	logger log.Logger,
 ) *timerQueueStandbyProcessorImpl {
 
@@ -89,6 +94,20 @@ func newTimerQueueStandbyProcessor(
 		shard,
 		workflowCache,
 		workflowDeleteManager,
+		xdc.NewNDCHistoryResender(
+			shard.GetNamespaceRegistry(),
+			clientBean,
+			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+				engine, err := shard.GetEngine()
+				if err != nil {
+					return err
+				}
+				return engine.ReplicateEventsV2(ctx, request)
+			},
+			shard.GetPayloadSerializer(),
+			config.StandbyTaskReReplicationContextTimeout,
+			logger,
+		),
 		matchingClient,
 		logger,
 		clusterName,

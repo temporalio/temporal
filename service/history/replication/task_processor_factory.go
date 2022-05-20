@@ -30,7 +30,7 @@ import (
 	"sync/atomic"
 
 	"go.temporal.io/server/api/historyservice/v1"
-	"go.temporal.io/server/client/admin"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/client/history"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -55,6 +55,7 @@ type (
 		status                        int32
 		replicationTaskFetcherFactory TaskFetcherFactory
 		workflowCache                 workflow.Cache
+		resender                      xdc.NDCHistoryResender
 
 		taskProcessorLock sync.RWMutex
 		taskProcessors    map[string]TaskProcessor
@@ -69,6 +70,7 @@ func NewTaskProcessorFactory(
 	shard shard.Context,
 	replicationTaskFetcherFactory TaskFetcherFactory,
 	workflowCache workflow.Cache,
+	clientBean client.Bean,
 ) queues.Processor {
 	workflowDeleteManager := workflow.NewDeleteManager(
 		shard,
@@ -77,6 +79,15 @@ func NewTaskProcessorFactory(
 		archivalClient,
 		shard.GetTimeSource(),
 	)
+
+	// Intentionally use the raw client to create its own retry policy
+	historyClient := shard.GetHistoryClient()
+	historyRetryableClient := history.NewRetryableClient(
+		historyClient,
+		common.CreateReplicationServiceBusyRetryPolicy(),
+		common.IsResourceExhausted,
+	)
+
 	return &taskProcessorFactoryImpl{
 		config:                        config,
 		deleteMgr:                     workflowDeleteManager,
@@ -86,7 +97,18 @@ func NewTaskProcessorFactory(
 		status:                        common.DaemonStatusInitialized,
 		replicationTaskFetcherFactory: replicationTaskFetcherFactory,
 		workflowCache:                 workflowCache,
-		taskProcessors:                make(map[string]TaskProcessor),
+		resender: xdc.NewNDCHistoryResender(
+			shard.GetNamespaceRegistry(),
+			clientBean,
+			func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+				_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
+				return err
+			},
+			shard.GetPayloadSerializer(),
+			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
+			shard.GetLogger(),
+		),
+		taskProcessors: make(map[string]TaskProcessor),
 	}
 }
 
@@ -120,28 +142,24 @@ func (r *taskProcessorFactoryImpl) Stop() {
 	r.taskProcessorLock.Unlock()
 }
 
-func (r taskProcessorFactoryImpl) Category() tasks.Category {
+func (r *taskProcessorFactoryImpl) Category() tasks.Category {
 	return tasks.CategoryReplication
 }
 
-func (r taskProcessorFactoryImpl) NotifyNewTasks(_ string, _ []tasks.Task) {
+func (r *taskProcessorFactoryImpl) NotifyNewTasks(_ string, _ []tasks.Task) {
 	//no-op
-	return
 }
 
-func (r taskProcessorFactoryImpl) FailoverNamespace(_ map[string]struct{}) {
+func (r *taskProcessorFactoryImpl) FailoverNamespace(_ map[string]struct{}) {
 	//no-op
-	return
 }
 
-func (r taskProcessorFactoryImpl) LockTaskProcessing() {
+func (r *taskProcessorFactoryImpl) LockTaskProcessing() {
 	//no-op
-	return
 }
 
-func (r taskProcessorFactoryImpl) UnlockTaskProcessing() {
+func (r *taskProcessorFactoryImpl) UnlockTaskProcessing() {
 	//no-op
-	return
 }
 
 func (r *taskProcessorFactoryImpl) listenToClusterMetadataChange() {
@@ -172,37 +190,15 @@ func (r *taskProcessorFactoryImpl) handleClusterMetadataUpdate(
 			processor.Stop()
 			delete(r.taskProcessors, clusterName)
 		}
+
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 			// Case 2 and Case 3
 			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
-			adminClient := r.shard.GetRemoteAdminClient(clusterName)
-			adminRetryableClient := admin.NewRetryableClient(
-				adminClient,
-				common.CreateReplicationServiceBusyRetryPolicy(),
-				common.IsResourceExhausted,
-			)
-			// Intentionally use the raw client to create its own retry policy
-			historyClient := r.shard.GetHistoryClient()
-			historyRetryableClient := history.NewRetryableClient(
-				historyClient,
-				common.CreateReplicationServiceBusyRetryPolicy(),
-				common.IsResourceExhausted,
-			)
-			nDCHistoryResender := xdc.NewNDCHistoryResender(
-				r.shard.GetNamespaceRegistry(),
-				adminRetryableClient,
-				func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-					_, err := historyRetryableClient.ReplicateEventsV2(ctx, request)
-					return err
-				},
-				r.shard.GetPayloadSerializer(),
-				r.shard.GetConfig().StandbyTaskReReplicationContextTimeout,
-				r.shard.GetLogger(),
-			)
 			replicationTaskExecutor := NewTaskExecutor(
+				clusterName,
 				r.shard,
 				r.shard.GetNamespaceRegistry(),
-				nDCHistoryResender,
+				r.resender,
 				r.engine,
 				r.deleteMgr,
 				r.workflowCache,

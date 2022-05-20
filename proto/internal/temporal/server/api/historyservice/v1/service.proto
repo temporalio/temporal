@@ -266,4 +266,10 @@ service HistoryService {
     // RebuildMutableState attempts to rebuild mutable state according to persisted history events.
     rpc RebuildMutableState (RebuildMutableStateRequest) returns (RebuildMutableStateResponse) {
     }
+
+    // DeleteWorkflowVisibilityRecord force delete a workflow's visibility record.
+    // This is used by admin delete workflow execution API to delete visibility record as frontend
+    // visibility manager doesn't support write operations
+    rpc DeleteWorkflowVisibilityRecord (DeleteWorkflowVisibilityRecordRequest) returns (DeleteWorkflowVisibilityRecordResponse) {
+    }
 }

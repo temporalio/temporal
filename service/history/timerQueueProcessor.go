@@ -34,6 +34,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
@@ -60,7 +61,6 @@ type (
 		singleCursor               bool
 		currentClusterName         string
 		shard                      shard.Context
-		historyEngine              shard.Engine
 		taskAllocator              taskAllocator
 		config                     *configs.Config
 		metricsClient              metrics.Client
@@ -69,6 +69,7 @@ type (
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
 		logger                     log.Logger
+		clientBean                 client.Bean
 		matchingClient             matchingservice.MatchingServiceClient
 		status                     int32
 		shutdownChan               chan struct{}
@@ -81,9 +82,9 @@ type (
 
 func newTimerQueueProcessor(
 	shard shard.Context,
-	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Processor {
@@ -107,7 +108,6 @@ func newTimerQueueProcessor(
 		singleCursor:          singleProcessor,
 		currentClusterName:    currentClusterName,
 		shard:                 shard,
-		historyEngine:         historyEngine,
 		taskAllocator:         taskAllocator,
 		config:                config,
 		metricsClient:         shard.GetMetricsClient(),
@@ -116,6 +116,7 @@ func newTimerQueueProcessor(
 		workflowDeleteManager: workflowDeleteManager,
 		ackLevel:              shard.GetQueueAckLevel(tasks.CategoryTimer),
 		logger:                logger,
+		clientBean:            clientBean,
 		matchingClient:        matchingClient,
 		status:                common.DaemonStatusInitialized,
 		shutdownChan:          make(chan struct{}),
@@ -126,6 +127,7 @@ func newTimerQueueProcessor(
 			workflowDeleteManager,
 			matchingClient,
 			taskAllocator,
+			clientBean,
 			logger,
 			singleProcessor,
 		),
@@ -381,6 +383,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.matchingClient,
 				clusterName,
 				t.taskAllocator,
+				t.clientBean,
 				t.logger,
 			)
 			processor.Start()

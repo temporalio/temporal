@@ -54,7 +54,8 @@ type (
 	transferQueueStandbyTaskExecutor struct {
 		*transferQueueTaskExecutorBase
 
-		clusterName string
+		clusterName        string
+		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
 
@@ -62,6 +63,7 @@ func newTransferQueueStandbyTaskExecutor(
 	shard shard.Context,
 	workflowCache workflow.Cache,
 	archivalClient archiver.Client,
+	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
 	clusterName string,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -74,7 +76,8 @@ func newTransferQueueStandbyTaskExecutor(
 			logger,
 			matchingClient,
 		),
-		clusterName: clusterName,
+		clusterName:        clusterName,
+		nDCHistoryResender: nDCHistoryResender,
 	}
 }
 
@@ -492,7 +495,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() && !processTaskIfClosed {
-		// workflow already finished, no need to process the timer
+		// workflow already finished, no need to process transfer task.
 		return nil
 	}
 
@@ -599,25 +602,10 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	// TODO: nDCHistoryResender should not require adminClient when creating the component.
-	// The remote cluster name and correspoding remote admin client should be determined
-	// dynamically inside the SendSingleWorkflowHistory method.
-	adminClient := t.shard.GetRemoteAdminClient(remoteClusterName)
-	nDCHistoryResender := xdc.NewNDCHistoryResender(
-		t.registry,
-		adminClient,
-		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
-			engine, err := t.shard.GetEngineWithContext(ctx)
-			if err != nil {
-				return nil
-			}
-			return engine.ReplicateEventsV2(ctx, request)
-		},
-		t.shard.GetPayloadSerializer(),
-		t.config.StandbyTaskReReplicationContextTimeout,
-		logger,
-	)
-
+	adminClient, err := t.shard.GetRemoteAdminClient(t.clusterName)
+	if err != nil {
+		return err
+	}
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		if err := refreshTasks(
 			ctx,
@@ -637,7 +625,8 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 
 		// NOTE: history resend may take long time and its timeout is currently
 		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
-		err = nDCHistoryResender.SendSingleWorkflowHistory(
+		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			t.clusterName,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),

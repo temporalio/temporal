@@ -54,7 +54,7 @@ type (
 		Logger            log.Logger
 		SdkClientFactory  sdk.ClientFactory
 		NamespaceRegistry namespace.Registry
-		Components        []workercommon.WorkerComponent `group:"perNamespaceWorkerComponent"`
+		Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
 	}
 
 	perNamespaceWorkerManager struct {
@@ -66,7 +66,7 @@ type (
 		namespaceRegistry namespace.Registry
 		self              *membership.HostInfo
 		serviceResolver   membership.ServiceResolver
-		components        []workercommon.WorkerComponent
+		components        []workercommon.PerNSWorkerComponent
 
 		membershipChangedCh chan *membership.ChangedEvent
 
@@ -79,7 +79,7 @@ type (
 		wm *perNamespaceWorkerManager
 
 		lock    sync.Mutex
-		workers map[workercommon.WorkerComponent]*worker
+		workers map[workercommon.PerNSWorkerComponent]*worker
 	}
 
 	worker struct {
@@ -179,7 +179,7 @@ func (wm *perNamespaceWorkerManager) getWorkerSet(ns *namespace.Namespace) *work
 	ws := &workerSet{
 		ns:      ns,
 		wm:      wm,
-		workers: make(map[workercommon.WorkerComponent]*worker),
+		workers: make(map[workercommon.PerNSWorkerComponent]*worker),
 	}
 
 	wm.workerSets[ns.ID()] = ws
@@ -207,7 +207,7 @@ func (ws *workerSet) refresh() {
 }
 
 func (ws *workerSet) refreshComponent(
-	cmp workercommon.WorkerComponent,
+	cmp workercommon.PerNSWorkerComponent,
 	nsExists bool,
 ) {
 	op := func() error {
@@ -268,7 +268,7 @@ func (ws *workerSet) refreshComponent(
 	backoff.Retry(op, policy, nil)
 }
 
-func (ws *workerSet) startWorker(wc workercommon.WorkerComponent) (*worker, error) {
+func (ws *workerSet) startWorker(wc workercommon.PerNSWorkerComponent) (*worker, error) {
 	client, err := ws.wm.sdkClientFactory.NewClient(ws.ns.Name().String(), ws.wm.logger)
 	if err != nil {
 		return nil, err
@@ -276,7 +276,7 @@ func (ws *workerSet) startWorker(wc workercommon.WorkerComponent) (*worker, erro
 
 	options := wc.DedicatedWorkerOptions()
 	sdkworker := sdkworker.New(client, options.TaskQueue, options.Options)
-	wc.Register(sdkworker)
+	wc.Register(sdkworker, ws.ns)
 	// TODO: use Run() and handle post-startup errors by recreating worker
 	// (after sdk supports returning post-startup errors from Run)
 	err = sdkworker.Start()

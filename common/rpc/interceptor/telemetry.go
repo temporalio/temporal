@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
@@ -42,13 +43,7 @@ import (
 
 type (
 	metricsContextKey struct{}
-)
 
-var (
-	metricsCtxKey = metricsContextKey{}
-)
-
-type (
 	TelemetryInterceptor struct {
 		namespaceRegistry namespace.Registry
 		metricsClient     metrics.Client
@@ -57,7 +52,38 @@ type (
 	}
 )
 
-var _ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
+var (
+	metricsCtxKey = metricsContextKey{}
+
+	_ grpc.UnaryServerInterceptor = (*TelemetryInterceptor)(nil).Intercept
+)
+
+// static variables used to emit action metrics.
+var (
+	respondWorkflowTaskCompleted = "RespondWorkflowTaskCompleted"
+	pollActivityTaskQueue        = "PollActivityTaskQueue"
+
+	grpcActions = map[string]int{
+		"QueryWorkflow":                    metrics.FrontendQueryWorkflowScope,
+		"RecordActivityTaskHeartbeat":      metrics.FrontendRecordActivityTaskHeartbeatScope,
+		"RecordActivityTaskHeartbeatById":  metrics.FrontendRecordActivityTaskHeartbeatByIdScope,
+		"ResetWorkflowExecution":           metrics.FrontendResetWorkflowExecutionScope,
+		"StartWorkflowExecution":           metrics.FrontendStartWorkflowExecutionScope,
+		"SignalWorkflowExecution":          metrics.FrontendSignalWorkflowExecutionScope,
+		"SignalWithStartWorkflowExecution": metrics.FrontendSignalWithStartWorkflowExecutionScope,
+		respondWorkflowTaskCompleted:       metrics.FrontendRespondWorkflowTaskCompletedScope,
+		pollActivityTaskQueue:              metrics.FrontendPollActivityTaskQueueScope,
+	}
+
+	commandActions = map[enums.CommandType]struct{}{
+		enums.COMMAND_TYPE_RECORD_MARKER:                      {},
+		enums.COMMAND_TYPE_START_TIMER:                        {},
+		enums.COMMAND_TYPE_SCHEDULE_ACTIVITY_TASK:             {},
+		enums.COMMAND_TYPE_START_CHILD_WORKFLOW_EXECUTION:     {},
+		enums.COMMAND_TYPE_SIGNAL_EXTERNAL_WORKFLOW_EXECUTION: {},
+		enums.COMMAND_TYPE_UPSERT_WORKFLOW_SEARCH_ATTRIBUTES:  {},
+	}
+)
 
 func NewTelemetryInterceptor(
 	namespaceRegistry namespace.Registry,
@@ -118,7 +144,66 @@ func (ti *TelemetryInterceptor) Intercept(
 		return nil, err
 	}
 
+	// emit action metrics only after successful calls
+	ti.emitActionMetric(methodName, req, metricsScope, resp)
+
 	return resp, nil
+}
+
+func (ti *TelemetryInterceptor) emitActionMetric(
+	methodName string,
+	req interface{},
+	scope metrics.Scope,
+	result interface{},
+) {
+	if actionScope, ok := grpcActions[methodName]; !ok || actionScope != ti.scopes[methodName] {
+		// grpcActions checks that methodName is the one that we care about.
+		// ti.scopes verifies that the scope is the one we intended to emit action metrics.
+		// This is necessary because TelemetryInterceptor is used for all services. Different service could have same
+		// method name. But we only want to emit action metrics from frontend.
+		return
+	}
+
+	switch methodName {
+	case respondWorkflowTaskCompleted:
+		// handle commands
+		completedRequest, ok := req.(*workflowservice.RespondWorkflowTaskCompletedRequest)
+		if !ok {
+			return
+		}
+
+		for _, command := range completedRequest.Commands {
+			if _, ok := commandActions[command.CommandType]; ok {
+				switch command.CommandType {
+				case enums.COMMAND_TYPE_RECORD_MARKER:
+					// handle RecordMarker command, they are used for localActivity, sideEffect, versioning etc.
+					markerName := command.GetRecordMarkerCommandAttributes().GetMarkerName()
+					scope.Tagged(metrics.ActionType("command_RecordMarker_" + markerName)).IncCounter(metrics.ActionCounter)
+				default:
+					// handle all other command action
+					scope.Tagged(metrics.ActionType("command_" + command.CommandType.String())).IncCounter(metrics.ActionCounter)
+				}
+			}
+		}
+
+	case pollActivityTaskQueue:
+		// handle activity retries
+		activityPollResponse, ok := result.(*workflowservice.PollActivityTaskQueueResponse)
+		if !ok {
+			return
+		}
+		if activityPollResponse == nil || len(activityPollResponse.TaskToken) == 0 {
+			// empty response
+			return
+		}
+		if activityPollResponse.Attempt > 1 {
+			scope.Tagged(metrics.ActionType("activity_retry")).IncCounter(metrics.ActionCounter)
+		}
+
+	default:
+		// grpc action
+		scope.Tagged(metrics.ActionType("grpc_" + methodName)).IncCounter(metrics.ActionCounter)
+	}
 }
 
 func (ti *TelemetryInterceptor) metricsScopeLogTags(

@@ -77,7 +77,7 @@ func (s *parentClosePolicyWorkflowSuite) SetupTest() {
 	s.mockRemoteClient = workflowservicemock.NewMockWorkflowServiceClient(s.controller)
 
 	s.mockClientBean.EXPECT().GetHistoryClient().Return(s.mockHistoryClient).AnyTimes()
-	s.mockClientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(s.mockRemoteClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteFrontendClient(gomock.Any()).Return(s.mockRemoteClient, nil).AnyTimes()
 
 	s.processor = &Processor{
 		metricsClient: metrics.NoopClient,

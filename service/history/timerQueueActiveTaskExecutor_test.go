@@ -187,6 +187,7 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 			s.mockDeleteManager,
 			s.mockMatchingClient,
 			newTaskAllocator(s.mockShard),
+			s.mockShard.Resource.ClientBean,
 			s.logger,
 			false,
 		),

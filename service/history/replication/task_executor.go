@@ -52,6 +52,7 @@ type (
 
 	taskExecutorImpl struct {
 		currentCluster     string
+		remoteCluster      string
 		shard              shard.Context
 		namespaceRegistry  namespace.Registry
 		nDCHistoryResender xdc.NDCHistoryResender
@@ -66,6 +67,7 @@ type (
 // NewTaskExecutor creates a replication task executor
 // The executor uses by 1) DLQ replication task handler 2) history replication task processor
 func NewTaskExecutor(
+	remoteCluster string,
 	shard shard.Context,
 	namespaceRegistry namespace.Registry,
 	nDCHistoryResender xdc.NDCHistoryResender,
@@ -77,6 +79,7 @@ func NewTaskExecutor(
 ) TaskExecutor {
 	return &taskExecutorImpl{
 		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
+		remoteCluster:      remoteCluster,
 		shard:              shard,
 		namespaceRegistry:  namespaceRegistry,
 		nDCHistoryResender: nDCHistoryResender,
@@ -161,6 +164,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		defer stopwatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
 			retryErr.RunId,
@@ -225,6 +229,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		defer resendStopWatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
 			retryErr.RunId,
@@ -303,6 +308,6 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 		wfCtx,
 		mutableState,
 		lastWriteVersion,
-		mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED,
+		false,
 	)
 }

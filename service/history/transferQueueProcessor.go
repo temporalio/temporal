@@ -35,6 +35,7 @@ import (
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -60,13 +61,13 @@ type (
 		singleCursor              bool
 		currentClusterName        string
 		shard                     shard.Context
-		historyEngine             shard.Engine
 		workflowCache             workflow.Cache
 		archivalClient            archiver.Client
 		sdkClientFactory          sdk.ClientFactory
 		taskAllocator             taskAllocator
 		config                    *configs.Config
 		metricsClient             metrics.Client
+		clientBean                client.Bean
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
 		ackLevel                  int64
@@ -83,9 +84,9 @@ type (
 
 func newTransferQueueProcessor(
 	shard shard.Context,
-	historyEngine shard.Engine,
 	workflowCache workflow.Cache,
 	scheduler queues.Scheduler,
+	clientBean client.Bean,
 	archivalClient archiver.Client,
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
@@ -104,13 +105,13 @@ func newTransferQueueProcessor(
 		singleCursor:       singleProcessor,
 		currentClusterName: currentClusterName,
 		shard:              shard,
-		historyEngine:      historyEngine,
 		workflowCache:      workflowCache,
 		archivalClient:     archivalClient,
 		sdkClientFactory:   sdkClientFactory,
 		taskAllocator:      taskAllocator,
 		config:             config,
 		metricsClient:      shard.GetMetricsClient(),
+		clientBean:         clientBean,
 		matchingClient:     matchingClient,
 		historyClient:      historyClient,
 		ackLevel:           shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
@@ -126,6 +127,7 @@ func newTransferQueueProcessor(
 			matchingClient,
 			historyClient,
 			taskAllocator,
+			clientBean,
 			logger,
 			singleProcessor,
 		),
@@ -176,7 +178,9 @@ func (t *transferQueueProcessorImpl) NotifyNewTasks(
 		return
 	}
 
+	t.standbyTaskProcessorsLock.RLock()
 	standbyTaskProcessor, ok := t.standbyTaskProcessors[clusterName]
+	t.standbyTaskProcessorsLock.RUnlock()
 	if !ok {
 		panic(fmt.Sprintf("Cannot find transfer processor for %s.", clusterName))
 	}
@@ -376,6 +380,7 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.workflowCache,
 				t.archivalClient,
 				t.taskAllocator,
+				t.clientBean,
 				t.logger,
 				t.matchingClient,
 			)
