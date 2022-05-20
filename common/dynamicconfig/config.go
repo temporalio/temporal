@@ -142,9 +142,6 @@ func (c *Collection) GetProperty(key Key, defaultValue interface{}) PropertyFn {
 }
 
 func getOneFilterMap(opts ...FilterOption) map[Filter]interface{} {
-	if len(opts) == 0 {
-		return nil
-	}
 	m := make(map[Filter]interface{}, len(opts))
 	for _, opt := range opts {
 		opt(m)
@@ -153,6 +150,9 @@ func getOneFilterMap(opts ...FilterOption) map[Filter]interface{} {
 }
 
 func getFilterMap(opts ...FilterOption) []map[Filter]interface{} {
+	if len(opts) == 0 {
+		return nil
+	}
 	return []map[Filter]interface{}{getOneFilterMap(opts...)}
 }
 
