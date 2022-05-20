@@ -26,6 +26,7 @@ package frontend
 
 import (
 	"context"
+	"go.temporal.io/server/common/clock"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -126,6 +127,7 @@ func (s *dcRedirectionHandlerSuite) SetupTest() {
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
+		clock.NewRealTimeSource(),
 	)
 
 	s.mockFrontendHandler = workflowservicemock.NewMockWorkflowServiceServer(s.controller)

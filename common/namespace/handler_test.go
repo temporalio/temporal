@@ -26,6 +26,8 @@ package namespace
 
 import (
 	"context"
+	p2 "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/clock"
 	"testing"
 	"time"
 
@@ -67,6 +69,7 @@ type (
 		mockNamespaceReplicator Replicator
 		archivalMetadata        archiver.ArchivalMetadata
 		mockArchiverProvider    *provider.MockArchiverProvider
+		fakeClock               *clock.EventTimeSource
 
 		handler *HandlerImpl
 	}
@@ -105,6 +108,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		&config.ArchivalNamespaceDefaults{},
 	)
 	s.mockArchiverProvider = provider.NewMockArchiverProvider(s.controller)
+	s.fakeClock = clock.NewEventTimeSource()
 	s.handler = NewHandler(
 		dc.GetIntPropertyFilteredByNamespace(s.maxBadBinaryCount),
 		logger,
@@ -113,6 +117,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
+		s.fakeClock,
 	)
 }
 
@@ -500,13 +505,95 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_PromoteLocalNamespace(
 	_, err = s.handler.UpdateNamespace(context.Background(), updateRequest)
 	s.NoError(err)
 
-	descResp, err := s.handler.DescribeNamespace(context.Background(), &workflowservice.DescribeNamespaceRequest{
-		Namespace: namespace,
-	})
+	descResp, err := s.handler.DescribeNamespace(
+		context.Background(), &workflowservice.DescribeNamespaceRequest{
+			Namespace: namespace,
+		},
+	)
 	s.NoError(err)
 	s.True(descResp.IsGlobalNamespace)
 	s.Equal(cluster.TestCurrentClusterInitialFailoverVersion, descResp.FailoverVersion)
 }
+
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster() {
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
+
+	update1Time := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
+	update2Time := update1Time.Add(17 * time.Minute)
+
+	namespace := "global-ns-to-be-migrated"
+	srcCluster := s.ClusterMetadata.GetCurrentClusterName()
+	targetCluster := cluster.TestAlternativeClusterName
+	registerReq := workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		Description:                      namespace,
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(24 * time.Hour),
+		IsGlobalNamespace:                true,
+		ActiveClusterName:                s.ClusterMetadata.GetCurrentClusterName(),
+		Clusters: []*replicationpb.ClusterReplicationConfig{
+			{ClusterName: srcCluster},
+			{ClusterName: targetCluster},
+		},
+	}
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &registerReq)
+	s.NoError(err)
+	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
+
+	s.checkActiveClusterName(namespace, srcCluster)
+
+	// Set the active cluster to the destination cluster
+	s.fakeClock.Update(update1Time)
+	s.setActiveClusterName(namespace, targetCluster)
+
+	// Verify that the active cluster was updated
+	s.checkActiveClusterName(namespace, targetCluster)
+
+	// Set the active cluster back to the source cluster
+	s.fakeClock.Update(update2Time)
+	s.setActiveClusterName(namespace, srcCluster)
+
+	// Verify that the active cluster  was updated
+	s.checkActiveClusterName(namespace, srcCluster)
+
+	// Verify that the replication history was written
+	getNsResp, err := s.MetadataManager.GetNamespace(
+		context.Background(),
+		&persistence.GetNamespaceRequest{Name: namespace},
+	)
+	s.NoError(err)
+	s.True(getNsResp.IsGlobalNamespace)
+
+	wantReplHist := []*p2.ReplicationStatus{
+		{StatusTime: &update1Time, ActiveClusterName: targetCluster},
+		{StatusTime: &update2Time, ActiveClusterName: srcCluster},
+	}
+
+	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationHistory)
+}
+
+func (s *namespaceHandlerCommonSuite) setActiveClusterName(namespace string, newActiveCluster string) {
+	setActiveClusterReq := workflowservice.UpdateNamespaceRequest{
+		Namespace: namespace,
+		ReplicationConfig: &replicationpb.NamespaceReplicationConfig{
+			ActiveClusterName: newActiveCluster,
+		},
+	}
+	_, err := s.handler.UpdateNamespace(context.Background(), &setActiveClusterReq)
+	s.NoError(err)
+}
+
+func (s *namespaceHandlerCommonSuite) checkActiveClusterName(namespace string, wantClusterName string) {
+	descResp, err := s.handler.DescribeNamespace(
+		context.Background(),
+		&workflowservice.DescribeNamespaceRequest{Namespace: namespace},
+	)
+	s.NoError(err)
+	s.Equal(wantClusterName, descResp.ReplicationConfig.ActiveClusterName)
+}
+
+// TODO: Write a test where
+// - migration fails during handover and is reverted
+// - the active cluster doesn't change
 
 func (s *namespaceHandlerCommonSuite) getRandomNamespace() string {
 	return "namespace" + uuid.New()

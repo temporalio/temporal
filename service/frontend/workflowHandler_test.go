@@ -27,6 +27,7 @@ package frontend
 import (
 	"context"
 	"errors"
+	"go.temporal.io/server/common/clock"
 	"testing"
 	"time"
 
@@ -178,6 +179,7 @@ func (s *workflowHandlerSuite) getWorkflowHandler(config *Config) *WorkflowHandl
 		s.mockResource.GetClusterMetadata(),
 		s.mockResource.GetArchivalMetadata(),
 		health.NewServer(),
+		clock.NewRealTimeSource(),
 	)
 }
 
