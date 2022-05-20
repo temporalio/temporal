@@ -31,13 +31,15 @@ import (
 )
 
 const (
-	ExecutionsStillExistErrType = "ExecutionsStillExist"
-	NoProgressErrType           = "NoProgress"
+	ExecutionsStillExistErrType           = "ExecutionsStillExist"
+	NoProgressErrType                     = "NoProgress"
+	NotDeletedExecutionsStillExistErrType = "NotDeletedExecutionsStillExist"
 )
 
 var (
-	ErrUnableToExecuteActivity      = errors.New("unable to execute activity")
-	ErrUnableToExecuteChildWorkflow = errors.New("unable to execute child workflow")
-	ErrExecutionsStillExist         = temporal.NewApplicationError("executions are still exist", ExecutionsStillExistErrType)
-	ErrNoProgress                   = temporal.NewNonRetryableApplicationError("no progress were made", NoProgressErrType, nil)
+	ErrUnableToExecuteActivity        = errors.New("unable to execute activity")
+	ErrUnableToExecuteChildWorkflow   = errors.New("unable to execute child workflow")
+	ErrExecutionsStillExist           = temporal.NewApplicationError("executions are still exist", ExecutionsStillExistErrType)
+	ErrNoProgress                     = temporal.NewNonRetryableApplicationError("no progress were made", NoProgressErrType, nil)
+	ErrNotDeletedExecutionsStillExist = temporal.NewNonRetryableApplicationError("not deleted executions are still exist", NotDeletedExecutionsStillExistErrType, nil)
 )

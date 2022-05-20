@@ -641,6 +641,20 @@ func (c *metricClient) GetReplicationStatus(
 	return c.client.GetReplicationStatus(ctx, request, opts...)
 }
 
+func (c *metricClient) DeleteWorkflowVisibilityRecord(
+	ctx context.Context,
+	request *historyservice.DeleteWorkflowVisibilityRecordRequest,
+	opts ...grpc.CallOption,
+) (_ *historyservice.DeleteWorkflowVisibilityRecordResponse, retError error) {
+
+	scope, stopwatch := c.startMetricsRecording(metrics.HistoryClientDeleteWorkflowVisibilityRecordScope)
+	defer func() {
+		c.finishMetricsRecording(scope, stopwatch, retError)
+	}()
+
+	return c.client.DeleteWorkflowVisibilityRecord(ctx, request, opts...)
+}
+
 func (c *metricClient) startMetricsRecording(
 	metricScope int,
 ) (metrics.Scope, metrics.Stopwatch) {
@@ -662,6 +676,7 @@ func (c *metricClient) finishMetricsRecording(
 			*serviceerror.NotFound,
 			*serviceerror.QueryFailed,
 			*serviceerror.NamespaceNotFound,
+			*serviceerror.WorkflowNotReady,
 			*serviceerror.WorkflowExecutionAlreadyStarted:
 			// noop - not interest and too many logs
 		default:

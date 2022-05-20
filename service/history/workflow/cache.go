@@ -53,12 +53,6 @@ type (
 	ReleaseCacheFunc func(err error)
 
 	Cache interface {
-		GetOrCreateCurrentWorkflowExecution(
-			ctx context.Context,
-			namespaceID namespace.ID,
-			workflowID string,
-		) (Context, ReleaseCacheFunc, error)
-
 		GetOrCreateWorkflowExecution(
 			ctx context.Context,
 			namespaceID namespace.ID,
@@ -99,34 +93,6 @@ func NewCache(shard shard.Context) Cache {
 		metricsClient: shard.GetMetricsClient(),
 		config:        config,
 	}
-}
-
-func (c *CacheImpl) GetOrCreateCurrentWorkflowExecution(
-	ctx context.Context,
-	namespaceID namespace.ID,
-	workflowID string,
-) (Context, ReleaseCacheFunc, error) {
-
-	scope := metrics.HistoryCacheGetOrCreateCurrentScope
-	c.metricsClient.IncCounter(scope, metrics.CacheRequests)
-	sw := c.metricsClient.StartTimer(scope, metrics.CacheLatency)
-	defer sw.Stop()
-
-	// using empty run ID as current workflow run ID
-	runID := ""
-	execution := commonpb.WorkflowExecution{
-		WorkflowId: workflowID,
-		RunId:      runID,
-	}
-
-	return c.getOrCreateWorkflowExecutionInternal(
-		ctx,
-		namespaceID,
-		execution,
-		scope,
-		true,
-		CallerTypeAPI,
-	)
 }
 
 func (c *CacheImpl) GetOrCreateWorkflowExecution(

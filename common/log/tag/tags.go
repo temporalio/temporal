@@ -481,6 +481,10 @@ func CertThumbprint(thumbprint string) ZapTag {
 	return NewStringTag("cert-thumbprint", thumbprint)
 }
 
+func WorkerComponent(v interface{}) ZapTag {
+	return NewStringTag("worker-component", fmt.Sprintf("%T", v))
+}
+
 // history engine shard
 
 // ShardID returns tag for ShardID

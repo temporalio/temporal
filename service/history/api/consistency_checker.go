@@ -32,6 +32,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	clockspb "go.temporal.io/server/api/clock/v1"
+
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
@@ -52,7 +53,7 @@ type (
 		) (string, error)
 		GetWorkflowContext(
 			ctx context.Context,
-			reqClock *clockspb.ShardClock,
+			reqClock *clockspb.VectorClock,
 			consistencyPredicate MutableStateConsistencyPredicate,
 			workflowKey definition.WorkflowKey,
 		) (WorkflowContext, error)
@@ -97,16 +98,22 @@ func (c *WorkflowConsistencyCheckerImpl) GetCurrentRunID(
 
 func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 	ctx context.Context,
-	reqClock *clockspb.ShardClock,
+	reqClock *clockspb.VectorClock,
 	consistencyPredicate MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 ) (WorkflowContext, error) {
 	if reqClock != nil {
-		return c.getWorkflowContextValidatedByClock(
-			ctx,
-			reqClock,
-			workflowKey,
-		)
+		currentClock := c.shardContext.CurrentVectorClock()
+		if vclock.Comparable(reqClock, currentClock) {
+			return c.getWorkflowContextValidatedByClock(
+				ctx,
+				reqClock,
+				currentClock,
+				workflowKey,
+			)
+		}
+		// request vector clock cannot is not comparable with current shard vector clock
+		// use methods below
 	}
 
 	// to achieve read after write consistency,
@@ -132,10 +139,11 @@ func (c *WorkflowConsistencyCheckerImpl) GetWorkflowContext(
 
 func (c *WorkflowConsistencyCheckerImpl) getWorkflowContextValidatedByClock(
 	ctx context.Context,
-	reqClock *clockspb.ShardClock,
+	reqClock *clockspb.VectorClock,
+	currentClock *clockspb.VectorClock,
 	workflowKey definition.WorkflowKey,
 ) (WorkflowContext, error) {
-	cmpResult, err := vclock.Compare(reqClock, c.shardContext.CurrentVectorClock())
+	cmpResult, err := vclock.Compare(reqClock, currentClock)
 	if err != nil {
 		return nil, err
 	}

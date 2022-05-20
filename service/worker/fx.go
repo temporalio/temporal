@@ -59,6 +59,7 @@ var Module = fx.Options(
 	fx.Provide(PersistenceMaxQpsProvider),
 	fx.Provide(NewService),
 	fx.Provide(NewWorkerManager),
+	fx.Provide(NewPerNamespaceWorkerManager),
 	fx.Invoke(ServiceLifetimeHooks),
 )
 

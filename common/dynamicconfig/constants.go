@@ -315,6 +315,9 @@ const (
 	TimerTaskWorkerCount = "history.timerTaskWorkerCount"
 	// TimerTaskMaxRetryCount is max retry count for timer processor
 	TimerTaskMaxRetryCount = "history.timerTaskMaxRetryCount"
+	// TimerProcessorEnableSingleCursor indicates if only one timer processor should be started for both active and standby tasks
+	// NOTE: this is an experimental flag for guarantee task execution and will be deprecated after multicursor solution is ready
+	TimerProcessorEnableSingleCursor = "history.timerProcessorEnableSingleCursor"
 	// TimerProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for timer processor
 	TimerProcessorEnablePriorityTaskScheduler = "history.timerProcessorEnablePriorityTaskScheduler"
 	// TimerProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for timer processor
@@ -365,6 +368,9 @@ const (
 	TransferTaskWorkerCount = "history.transferTaskWorkerCount"
 	// TransferTaskMaxRetryCount is max times of retry for transferQueueProcessor
 	TransferTaskMaxRetryCount = "history.transferTaskMaxRetryCount"
+	// TransferProcessorEnableSingleCursor indicates if only one transfer processor should be started for both active and standby tasks
+	// NOTE: this is an experimental flag for guarantee task execution and will be deprecated after multicursor solution is ready
+	TransferProcessorEnableSingleCursor = "history.transferProcessorEnableSingleCursor"
 	// TransferProcessorEnablePriorityTaskScheduler indicates whether host level priority task scheduler should be used for transferQueueProcessor
 	TransferProcessorEnablePriorityTaskScheduler = "history.transferProcessorEnablePriorityTaskScheduler"
 	// TransferProcessorSchedulerWorkerCount is the number of workers in the host level task scheduler for transferQueueProcessor

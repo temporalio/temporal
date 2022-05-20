@@ -105,6 +105,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_AppliedEvent() {
 		attr.GetIdentity(),
 		attr.GetHeader(),
 	).Return(event, nil)
+	msBuilderCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
 	dedupResource := definition.NewEventReappliedID(runID, event.GetEventId(), event.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource).Return(false)
 	msBuilderCurrent.EXPECT().UpdateDuplicatedResource(dedupResource)
@@ -178,6 +179,7 @@ func (s *nDCEventReapplicationSuite) TestReapplyEvents_PartialAppliedEvent() {
 		attr1.GetIdentity(),
 		attr1.GetHeader(),
 	).Return(event1, nil)
+	msBuilderCurrent.EXPECT().IsWorkflowPendingOnWorkflowTaskBackoff().Return(true)
 	dedupResource1 := definition.NewEventReappliedID(runID, event1.GetEventId(), event1.GetVersion())
 	msBuilderCurrent.EXPECT().IsResourceDuplicated(dedupResource1).Return(false)
 	dedupResource2 := definition.NewEventReappliedID(runID, event2.GetEventId(), event2.GetVersion())

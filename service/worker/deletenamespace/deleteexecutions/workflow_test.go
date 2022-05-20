@@ -26,6 +26,7 @@ package deleteexecutions
 
 import (
 	"context"
+	stderrors "errors"
 	"testing"
 
 	"github.com/golang/mock/gomock"
@@ -211,8 +212,12 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 
 	var a *Activities
 
-	env.OnActivity(a.GetNextPageTokenActivity, mock.Anything, mock.Anything).Return([]byte{3, 22, 83}, nil).Once()
-	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).Return(DeleteExecutionsActivityResult{}, serviceerror.NewUnavailable("random error")).Once()
+	env.OnActivity(a.GetNextPageTokenActivity, mock.Anything, mock.Anything).
+		Return([]byte{3, 22, 83}, nil).
+		Times(40) // GoSDK defaultMaximumAttemptsForUnitTest value * defaultConcurrentDeleteExecutionsActivities.
+	env.OnActivity(a.DeleteExecutionsActivity, mock.Anything, mock.Anything).
+		Return(DeleteExecutionsActivityResult{}, serviceerror.NewUnavailable("specific_error_from_activity")).
+		Times(40) // GoSDK defaultMaximumAttemptsForUnitTest value * defaultConcurrentDeleteExecutionsActivities.
 
 	env.ExecuteWorkflow(DeleteExecutionsWorkflow, DeleteExecutionsParams{
 		NamespaceID: "namespace-id",
@@ -223,10 +228,12 @@ func Test_DeleteExecutionsWorkflow_ManyExecutions_ActivityError(t *testing.T) {
 	})
 
 	require.True(t, env.IsWorkflowCompleted())
-	wfErr := env.GetWorkflowError()
-	require.Error(t, wfErr)
-	var errApplication *temporal.ApplicationError
-	require.ErrorAs(t, wfErr, &errApplication)
+	err := env.GetWorkflowError()
+	require.Error(t, err)
+	var appErr *temporal.ApplicationError
+	require.True(t, stderrors.As(err, &appErr))
+	require.Contains(t, appErr.Error(), "unable to execute activity: DeleteExecutionsActivity")
+	require.Contains(t, appErr.Error(), "specific_error_from_activity")
 }
 
 func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) {
@@ -291,8 +298,6 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_ManyExecutions(t *testing.T) 
 	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil).Times(2)
 	// NotFound errors should not affect the error count.
 	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found")).Times(2)
-	historyClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, nil)
-	historyClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewNotFound("not found"))
 
 	a := &Activities{
 		visibilityManager: visibilityManager,
@@ -380,8 +385,7 @@ func Test_DeleteExecutionsWorkflow_NoActivityMocks_HistoryClientError(t *testing
 	}, nil).Times(2)
 
 	historyClient := historyservicemock.NewMockHistoryServiceClient(ctrl)
-	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("random")).Times(2)
-	historyClient.EXPECT().TerminateWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("random")).Times(2)
+	historyClient.EXPECT().DeleteWorkflowExecution(gomock.Any(), gomock.Any()).Return(nil, serviceerror.NewUnavailable("random")).Times(4)
 
 	a := &Activities{
 		visibilityManager: visibilityManager,

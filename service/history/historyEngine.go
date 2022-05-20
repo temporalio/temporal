@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/api/matchingservice/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	tokenspb "go.temporal.io/server/api/token/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
@@ -119,6 +120,7 @@ type (
 // NewEngineWithShardContext creates an instance of history engine
 func NewEngineWithShardContext(
 	shard shard.Context,
+	clientBean client.Bean,
 	matchingClient matchingservice.MatchingServiceClient,
 	sdkClientFactory sdk.ClientFactory,
 	eventNotifier events.Notifier,
@@ -213,7 +215,7 @@ func NewEngineWithShardContext(
 	)
 
 	historyEngImpl.workflowTaskHandler = newWorkflowTaskHandlerCallback(historyEngImpl)
-	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache)
+	historyEngImpl.replicationDLQHandler = replication.NewLazyDLQHandler(shard, workflowDeleteManager, historyCache, clientBean)
 
 	return historyEngImpl
 }
@@ -242,6 +244,9 @@ func (e *historyEngineImpl) Start() {
 	// can't be retrieved before the processor is started. If failover callback is registered
 	// before queue processor is started, it may result in a deadline as to create the failover queue,
 	// queue processor need to be started.
+	//
+	// Ideally, when both timer and transfer queues enabled single cursor mode, we don't have to register
+	// the callback. However, currently namespace migration is relying on the callback to UpdateHandoverNamespaces
 	e.registerNamespaceFailoverCallback()
 }
 
@@ -324,11 +329,16 @@ func (e *historyEngineImpl) registerNamespaceFailoverCallback() {
 
 			newNotificationVersion := nextNamespaces[len(nextNamespaces)-1].NotificationVersion() + 1
 			shardNotificationVersion := e.shard.GetNamespaceNotificationVersion()
-			if newNotificationVersion <= shardNotificationVersion {
-				// skip if this is known version. this could happen once after shard reload because we use
-				// 0 as initialNotificationVersion when RegisterNamespaceChangeCallback.
-				return
-			}
+
+			// 1. We can't return when newNotificationVersion == shardNotificationVersion
+			// since we don't know if the previous failover queue processing has finished or not
+			// 2. We can return when newNotificationVersion < shardNotificationVersion. But the check
+			// is basically the same as the check in failover predicate. Because
+			// failover notification version <= NotificationVersion,
+			// there's no notification version that can make
+			// newNotificationVersion < shardNotificationVersion and
+			// failoverNotificationVersion >= shardNotificationVersion are true at the same time
+			// Meaning if the check decides to return, no namespace will pass the failover predicate.
 
 			failoverNamespaceIDs := map[string]struct{}{}
 			for _, nextNamespace := range nextNamespaces {
@@ -382,17 +392,6 @@ func (e *historyEngineImpl) StartWorkflowExecution(
 
 	workflowID := request.GetWorkflowId()
 	runID := uuid.New()
-	// grab the current context as a Lock, nothing more
-	_, currentRelease, err := e.historyCache.GetOrCreateCurrentWorkflowExecution(
-		ctx,
-		namespaceID,
-		workflowID,
-	)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { currentRelease(retError) }()
-
 	workflowContext, err := api.NewWorkflowWithSignal(
 		e.shard,
 		namespaceEntry,
@@ -564,6 +563,7 @@ func (e *historyEngineImpl) PollMutableState(
 		VersionHistories:                      response.VersionHistories,
 		WorkflowState:                         response.WorkflowState,
 		WorkflowStatus:                        response.WorkflowStatus,
+		FirstExecutionRunId:                   response.FirstExecutionRunId,
 	}, nil
 }
 
@@ -681,7 +681,7 @@ func (e *historyEngineImpl) QueryWorkflow(
 		}
 	}
 
-	de, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	nsEntry, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
 	if err != nil {
 		return nil, err
 	}
@@ -701,27 +701,36 @@ func (e *historyEngineImpl) QueryWorkflow(
 		return nil, err
 	}
 
+	if !mutableState.HasProcessedOrPendingWorkflowTask() {
+		// workflow has no workflow task ever scheduled, this usually is due to firstWorkflowTaskBackoff (cron / retry)
+		// in this case, don't buffer the query, because it is almost certain the query will time out.
+		return nil, consts.ErrWorkflowTaskNotScheduled
+	}
+
 	// There are two ways in which queries get dispatched to workflow worker. First, queries can be dispatched on workflow tasks.
 	// These workflow tasks potentially contain new events and queries. The events are treated as coming before the query in time.
 	// The second way in which queries are dispatched to workflow worker is directly through matching; in this approach queries can be
 	// dispatched to workflow worker immediately even if there are outstanding events that came before the query. The following logic
 	// is used to determine if a query can be safely dispatched directly through matching or must be dispatched on a workflow task.
 	//
-	// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
-	// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
-	// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
-	// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
-	safeToDispatchDirectly := !de.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName()) ||
-		!mutableState.IsWorkflowExecutionRunning() ||
-		(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
-	if safeToDispatchDirectly {
-		release(nil)
-		msResp, err := e.getMutableState(ctx, namespaceID, *request.GetRequest().GetExecution())
-		if err != nil {
-			return nil, err
+	// Precondition to dispatch query directly to matching is workflow has at least one WorkflowTaskStarted event. Otherwise, sdk would panic.
+	if mutableState.GetPreviousStartedEventID() != common.EmptyEventID {
+		// There are three cases in which a query can be dispatched directly through matching safely, without violating strong consistency level:
+		// 1. the namespace is not active, in this case history is immutable so a query dispatched at any time is consistent
+		// 2. the workflow is not running, whenever a workflow is not running dispatching query directly is consistent
+		// 3. if there is no pending or started workflow tasks it means no events came before query arrived, so its safe to dispatch directly
+		safeToDispatchDirectly := !nsEntry.ActiveInCluster(e.clusterMetadata.GetCurrentClusterName()) ||
+			!mutableState.IsWorkflowExecutionRunning() ||
+			(!mutableState.HasPendingWorkflowTask() && !mutableState.HasInFlightWorkflowTask())
+		if safeToDispatchDirectly {
+			release(nil)
+			msResp, err := e.getMutableState(ctx, namespaceID, *request.GetRequest().GetExecution())
+			if err != nil {
+				return nil, err
+			}
+			req.Execution.RunId = msResp.Execution.RunId
+			return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceId(), req, scope)
 		}
-		req.Execution.RunId = msResp.Execution.RunId
-		return e.queryDirectlyThroughMatching(ctx, msResp, request.GetNamespaceId(), req, scope)
 	}
 
 	// If we get here it means query could not be dispatched through matching directly, so it must block
@@ -912,6 +921,7 @@ func (e *historyEngineImpl) getMutableState(
 		VersionHistories: versionhistory.CopyVersionHistories(
 			mutableState.GetExecutionInfo().GetVersionHistories(),
 		),
+		FirstExecutionRunId: executionInfo.FirstExecutionRunId,
 	}, nil
 }
 
@@ -1789,9 +1799,8 @@ func (e *historyEngineImpl) SignalWorkflowExecution(
 
 			executionInfo := mutableState.GetExecutionInfo()
 			createWorkflowTask := true
-			// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
-			workflowTaskBackoff := timestamp.TimeValue(executionInfo.GetExecutionTime()).After(timestamp.TimeValue(executionInfo.GetStartTime()))
-			if workflowTaskBackoff && !mutableState.HasProcessedOrPendingWorkflowTask() {
+			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
+				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
 				createWorkflowTask = false
 			}
 
@@ -1990,6 +1999,7 @@ func (e *historyEngineImpl) TerminateWorkflowExecution(
 				request.GetReason(),
 				request.GetDetails(),
 				request.GetIdentity(),
+				false,
 			)
 		})
 }
@@ -1998,9 +2008,8 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	ctx context.Context,
 	request *historyservice.DeleteWorkflowExecutionRequest,
 ) (retError error) {
-	nsID := namespace.ID(request.GetNamespaceId())
 
-	workflowContext, err := e.workflowConsistencyChecker.GetWorkflowContext(
+	weCtx, err := e.workflowConsistencyChecker.GetWorkflowContext(
 		ctx,
 		nil,
 		api.BypassMutableStateConsistencyPredicate,
@@ -2013,16 +2022,59 @@ func (e *historyEngineImpl) DeleteWorkflowExecution(
 	if err != nil {
 		return err
 	}
-	defer func() { workflowContext.GetReleaseFn()(retError) }()
+	defer func() { weCtx.GetReleaseFn()(retError) }()
 
+	// Open and Close workflow executions are deleted differently.
+	// Open workflow execution is deleted by terminating with special flag `deleteAfterTerminate` set to true.
+	// This flag will be carried over with CloseExecutionTask and workflow will be deleted as the last step while processing the task.
+
+	// Close workflow execution is deleted using DeleteExecutionTask.
+
+	// DeleteWorkflowExecution is not replicated automatically. Workflow executions must be deleted separately in each cluster.
+	// Although running workflows in active cluster are terminated first and the termination event might be replicated.
+	// In passive cluster, workflow executions are just deleted in regardless of its state.
+
+	if weCtx.GetMutableState().IsWorkflowExecutionRunning() {
+		ns, err := e.shard.GetNamespaceRegistry().GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		if err != nil {
+			return err
+		}
+		if ns.ActiveInCluster(e.shard.GetClusterMetadata().GetCurrentClusterName()) {
+			// If workflow execution is running and in active cluster.
+			return api.UpdateWorkflowWithNew(
+				e.shard,
+				ctx,
+				weCtx,
+				func(workflowContext api.WorkflowContext) (*api.UpdateWorkflowAction, error) {
+					mutableState := workflowContext.GetMutableState()
+					eventBatchFirstEventID := mutableState.GetNextEventID()
+
+					return api.UpdateWorkflowWithoutWorkflowTask, workflow.TerminateWorkflow(
+						mutableState,
+						eventBatchFirstEventID,
+						"Delete workflow execution",
+						nil,
+						consts.IdentityHistoryService,
+						true,
+					)
+				},
+				nil)
+		}
+	}
+
+	// If workflow execution is closed or in passive cluster.
 	return e.workflowDeleteManager.AddDeleteWorkflowExecutionTask(
 		ctx,
-		nsID,
+		namespace.ID(request.GetNamespaceId()),
 		commonpb.WorkflowExecution{
 			WorkflowId: request.GetWorkflowExecution().GetWorkflowId(),
 			RunId:      request.GetWorkflowExecution().GetRunId(),
 		},
-		workflowContext.GetMutableState(),
+		weCtx.GetMutableState(),
+		// Use cluster ack level for transfer queue ack level because it gets updated more often.
+		e.shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, e.shard.GetClusterMetadata().GetCurrentClusterName()).TaskID,
+		// Use global ack level visibility queue ack level because cluster level is not updated.
+		e.shard.GetQueueAckLevel(tasks.CategoryVisibility).TaskID,
 	)
 }
 
@@ -2368,7 +2420,7 @@ func (e *historyEngineImpl) ResetWorkflowExecution(
 
 func (e *historyEngineImpl) updateWorkflow(
 	ctx context.Context,
-	reqClock *clockspb.ShardClock,
+	reqClock *clockspb.VectorClock,
 	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action api.UpdateWorkflowActionFunc,
@@ -2389,7 +2441,7 @@ func (e *historyEngineImpl) updateWorkflow(
 
 func (e *historyEngineImpl) updateWorkflowWithNew(
 	ctx context.Context,
-	reqClock *clockspb.ShardClock,
+	reqClock *clockspb.VectorClock,
 	consistencyCheckFn api.MutableStateConsistencyPredicate,
 	workflowKey definition.WorkflowKey,
 	action api.UpdateWorkflowActionFunc,
@@ -2853,8 +2905,8 @@ func (e *historyEngineImpl) ReapplyEvents(
 				Noop:               false,
 				CreateWorkflowTask: true,
 			}
-			// Do not create workflow task when the workflow is cron and the cron has not been started yet
-			if mutableState.GetExecutionInfo().CronSchedule != "" && !mutableState.HasProcessedOrPendingWorkflowTask() {
+			if mutableState.IsWorkflowPendingOnWorkflowTaskBackoff() {
+				// Do not create workflow task when the workflow has first workflow task backoff and execution is not started yet
 				postActions.CreateWorkflowTask = false
 			}
 			reappliedEvents, err := e.eventsReapplier.reapplyEvents(

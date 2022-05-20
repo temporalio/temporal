@@ -58,7 +58,7 @@ type (
 	}
 
 	Executor interface {
-		Execute(context.Context, Executable) error
+		Execute(context.Context, Executable) (metrics.Scope, error)
 	}
 
 	// TaskFilter determines if the given task should be executed
@@ -117,7 +117,6 @@ func NewExecutable(
 	rescheduler Rescheduler,
 	timeSource clock.TimeSource,
 	logger log.Logger,
-	scope metrics.Scope,
 	criticalRetryAttempt dynamicconfig.IntPropertyFn,
 	queueType QueueType,
 	namespaceCacheRefreshInterval dynamicconfig.DurationPropertyFn,
@@ -137,7 +136,7 @@ func NewExecutable(
 				return tasks.Tags(task)
 			},
 		),
-		scope:                         scope,
+		scope:                         metrics.NoopScope,
 		queueType:                     queueType,
 		criticalRetryAttempt:          criticalRetryAttempt,
 		filter:                        filter,
@@ -155,7 +154,10 @@ func (e *executableImpl) Execute() error {
 
 	ctx := metrics.AddMetricsContext(context.Background())
 	startTime := e.timeSource.Now()
-	err := e.executor.Execute(ctx, e)
+
+	var err error
+	e.scope, err = e.executor.Execute(ctx, e)
+
 	var userLatency time.Duration
 	if duration, ok := metrics.ContextCounterGet(ctx, metrics.HistoryWorkflowExecutionCacheLatency); ok {
 		userLatency = time.Duration(duration)

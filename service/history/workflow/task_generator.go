@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -50,6 +49,7 @@ type (
 		) error
 		GenerateWorkflowCloseTasks(
 			now time.Time,
+			deleteAfterClose bool,
 		) error
 		GenerateDeleteExecutionTask(
 			now time.Time,
@@ -161,6 +161,7 @@ func (r *TaskGeneratorImpl) GenerateWorkflowStartTasks(
 
 func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	now time.Time,
+	deleteAfterClose bool,
 ) error {
 
 	currentVersion := r.mutableState.GetCurrentVersion()
@@ -180,28 +181,38 @@ func (r *TaskGeneratorImpl) GenerateWorkflowCloseTasks(
 	if err != nil {
 		return err
 	}
-	r.mutableState.AddTasks(
+	closeTasks := []tasks.Task{
 		&tasks.CloseExecutionTask{
 			// TaskID is set by shard
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),
 			VisibilityTimestamp: now,
 			Version:             currentVersion,
+			DeleteAfterClose:    deleteAfterClose,
 		},
-		&tasks.CloseExecutionVisibilityTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: now,
-			Version:             currentVersion,
-		},
-		&tasks.DeleteHistoryEventTask{
-			// TaskID is set by shard
-			WorkflowKey:         r.mutableState.GetWorkflowKey(),
-			VisibilityTimestamp: now.Add(retention),
-			Version:             currentVersion,
-			BranchToken:         branchToken,
-		},
-	)
+	}
 
+	// To avoid race condition between visibility close and delete tasks, visibility close task is not created here.
+	// Also, there is no reason to schedule history retention task if workflow executions in about to be deleted.
+	// This will also save one call to visibility storage and one timer task creation.
+	if !deleteAfterClose {
+		closeTasks = append(closeTasks,
+			&tasks.CloseExecutionVisibilityTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: now,
+				Version:             currentVersion,
+			},
+			&tasks.DeleteHistoryEventTask{
+				// TaskID is set by shard
+				WorkflowKey:         r.mutableState.GetWorkflowKey(),
+				VisibilityTimestamp: now.Add(retention),
+				Version:             currentVersion,
+				BranchToken:         branchToken,
+			},
+		)
+	}
+
+	r.mutableState.AddTasks(closeTasks...)
 	return nil
 }
 
@@ -520,7 +531,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTimerTasks(
 	now time.Time,
 ) error {
 
-	_, err := r.getTimerSequence(now).CreateNextActivityTimer()
+	_, err := r.getTimerSequence().CreateNextActivityTimer()
 	return err
 }
 
@@ -528,7 +539,7 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks(
 	now time.Time,
 ) error {
 
-	_, err := r.getTimerSequence(now).CreateNextUserTimer()
+	_, err := r.getTimerSequence().CreateNextUserTimer()
 	return err
 }
 
@@ -590,10 +601,8 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(
 	}
 }
 
-func (r *TaskGeneratorImpl) getTimerSequence(now time.Time) TimerSequence {
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(now)
-	return NewTimerSequence(timeSource, r.mutableState)
+func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {
+	return NewTimerSequence(r.mutableState)
 }
 
 func (r *TaskGeneratorImpl) getTargetNamespaceID(

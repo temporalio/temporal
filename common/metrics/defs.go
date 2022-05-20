@@ -411,6 +411,8 @@ const (
 	HistoryClientGenerateLastHistoryReplicationTasksScope
 	// HistoryClientGetReplicationStatusScope tracks RPC calls to history service
 	HistoryClientGetReplicationStatusScope
+	// HistoryClientDeleteWorkflowVisibilityRecordScope tracks RPC calls to history service
+	HistoryClientDeleteWorkflowVisibilityRecordScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
@@ -521,6 +523,20 @@ const (
 	FrontendClientGetSystemInfoScope
 	// FrontendClientListTaskQueuePartitionsScope tracks RPC calls to frontend service
 	FrontendClientListTaskQueuePartitionsScope
+	// FrontendClientCreateScheduleScope tracks RPC calls to frontend service
+	FrontendClientCreateScheduleScope
+	// FrontendClientDescribeScheduleScope tracks RPC calls to frontend service
+	FrontendClientDescribeScheduleScope
+	// FrontendClientUpdateScheduleScope tracks RPC calls to frontend service
+	FrontendClientUpdateScheduleScope
+	// FrontendClientPatchScheduleScope tracks RPC calls to frontend service
+	FrontendClientPatchScheduleScope
+	// FrontendClientListScheduleMatchingTimesScope tracks RPC calls to frontend service
+	FrontendClientListScheduleMatchingTimesScope
+	// FrontendClientDeleteScheduleScope tracks RPC calls to frontend service
+	FrontendClientDeleteScheduleScope
+	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
+	FrontendClientListSchedulesScope
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
 	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
@@ -565,6 +581,8 @@ const (
 	AdminClientResendReplicationTasksScope
 	// AdminClientGetTaskQueueTasksScope tracks RPC calls to admin service
 	AdminClientGetTaskQueueTasksScope
+	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
+	AdminClientDeleteWorkflowExecutionScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -645,6 +663,20 @@ const (
 	DCRedirectionUpdateNamespaceScope
 	// DCRedirectionListTaskQueuePartitionsScope tracks RPC calls for dc redirection
 	DCRedirectionListTaskQueuePartitionsScope
+	// DCRedirectionCreateScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionCreateScheduleScope
+	// DCRedirectionDescribeScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionDescribeScheduleScope
+	// DCRedirectionUpdateScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateScheduleScope
+	// DCRedirectionPatchScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionPatchScheduleScope
+	// DCRedirectionListScheduleMatchingTimesScope tracks RPC calls for dc redirection
+	DCRedirectionListScheduleMatchingTimesScope
+	// DCRedirectionDeleteScheduleScope tracks RPC calls for dc redirection
+	DCRedirectionDeleteScheduleScope
+	// DCRedirectionListSchedulesScope tracks RPC calls for dc redirection
+	DCRedirectionListSchedulesScope
 
 	// MessagingClientPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -787,6 +819,8 @@ const (
 	AdminAddOrUpdateRemoteClusterScope
 	// AdminRemoveRemoteClusterScope is the metric scope for admin.AdminRemoveRemoteClusterScope
 	AdminRemoveRemoteClusterScope
+	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecutionScope
+	AdminDeleteWorkflowExecutionScope
 
 	NumAdminScopes
 )
@@ -892,6 +926,20 @@ const (
 	FrontendGetClusterInfoScope
 	// FrontendGetSystemInfoScope is the metric scope for frontend.GetSystemInfo
 	FrontendGetSystemInfoScope
+	// FrontendCreateScheduleScope is the metric scope for frontend.CreateScheduleScope
+	FrontendCreateScheduleScope
+	// FrontendDescribeScheduleScope is the metric scope for frontend.DescribeScheduleScope
+	FrontendDescribeScheduleScope
+	// FrontendUpdateScheduleScope is the metric scope for frontend.UpdateScheduleScope
+	FrontendUpdateScheduleScope
+	// FrontendPatchScheduleScope is the metric scope for frontend.PatchScheduleScope
+	FrontendPatchScheduleScope
+	// FrontendListScheduleMatchingTimesScope is the metric scope for frontend.ListScheduleMatchingTimesScope
+	FrontendListScheduleMatchingTimesScope
+	// FrontendDeleteScheduleScope is the metric scope for frontend.DeleteScheduleScope
+	FrontendDeleteScheduleScope
+	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope
+	FrontendListSchedulesScope
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
@@ -989,6 +1037,8 @@ const (
 	HistoryReapplyEvents
 	// HistoryDescribeHistoryHost is the scope used by describe history host API
 	HistoryDescribeHistoryHost
+	// HistoryDeleteWorkflowVisibilityRecordScope is the scope used by delete workflow visibility record API
+	HistoryDeleteWorkflowVisibilityRecordScope
 	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
 	TaskPriorityAssignerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1366,6 +1416,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRefreshWorkflowTasksScope:                   {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGenerateLastHistoryReplicationTasksScope:    {operation: "HistoryClientGenerateLastHistoryReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationStatusScope:                   {operation: "HistoryClientGetReplicationStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDeleteWorkflowVisibilityRecordScope:         {operation: "HistoryClientDeleteWorkflowVisibilityRecordScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 
 		MatchingClientPollWorkflowTaskQueueScope:     {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollActivityTaskQueueScope:     {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
@@ -1423,6 +1474,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientGetClusterInfoScope:                     {operation: "FrontendClientGetClusterInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientGetSystemInfoScope:                      {operation: "FrontendClientGetSystemInfoScope", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListTaskQueuePartitionsScope:            {operation: "FrontendClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientCreateScheduleScope:                     {operation: "FrontendClientCreateSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDescribeScheduleScope:                   {operation: "FrontendClientDescribeSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateScheduleScope:                     {operation: "FrontendClientUpdateSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientPatchScheduleScope:                      {operation: "FrontendClientPatchSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListScheduleMatchingTimesScope:          {operation: "FrontendClientListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientDeleteScheduleScope:                     {operation: "FrontendClientDeleteSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientListSchedulesScope:                      {operation: "FrontendClientListSchedules", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 
 		AdminClientAddSearchAttributesScope:              {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRemoveSearchAttributesScope:           {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1446,6 +1504,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientGetDLQMessagesScope:                   {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                 {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                 {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDeleteWorkflowExecutionScope:          {operation: "AdminClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 
 		DCRedirectionDeprecateNamespaceScope:                 {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeNamespaceScope:                  {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1487,6 +1546,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionTerminateWorkflowExecutionScope:         {operation: "DCRedirectionTerminateWorkflowExecution", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionUpdateNamespaceScope:                    {operation: "DCRedirectionUpdateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListTaskQueuePartitionsScope:            {operation: "DCRedirectionListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionCreateScheduleScope:                     {operation: "DCRedirectionCreateSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDescribeScheduleScope:                   {operation: "DCRedirectionDescribeSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateScheduleScope:                     {operation: "DCRedirectionUpdateSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionPatchScheduleScope:                      {operation: "DCRedirectionPatchSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListScheduleMatchingTimesScope:          {operation: "DCRedirectionListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionDeleteScheduleScope:                     {operation: "DCRedirectionDeleteSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionListSchedulesScope:                      {operation: "DCRedirectionListSchedules", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1547,6 +1613,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminListClustersScope:                          {operation: "AdminListClusters"},
 		AdminAddOrUpdateRemoteClusterScope:              {operation: "AdminAddOrUpdateRemoteCluster"},
 		AdminRemoveRemoteClusterScope:                   {operation: "AdminRemoveRemoteCluster"},
+		AdminDeleteWorkflowExecutionScope:               {operation: "AdminDeleteWorkflowExecution"},
 		OperatorAddSearchAttributesScope:                {operation: "OperatorAddSearchAttributes"},
 		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
 		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
@@ -1594,6 +1661,13 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendGetSearchAttributesScope:                {operation: "GetSearchAttributes"},
 		FrontendGetClusterInfoScope:                     {operation: "GetClusterInfo"},
 		FrontendGetSystemInfoScope:                      {operation: "GetSystemInfo"},
+		FrontendCreateScheduleScope:                     {operation: "CreateSchedule"},
+		FrontendDescribeScheduleScope:                   {operation: "DescribeSchedule"},
+		FrontendUpdateScheduleScope:                     {operation: "UpdateSchedule"},
+		FrontendPatchScheduleScope:                      {operation: "PatchSchedule"},
+		FrontendListScheduleMatchingTimesScope:          {operation: "ListScheduleMatchingTimes"},
+		FrontendDeleteScheduleScope:                     {operation: "DeleteSchedule"},
+		FrontendListSchedulesScope:                      {operation: "ListSchedules"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
 	},
@@ -1646,6 +1720,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryResetStickyTaskQueue:                        {operation: "ResetStickyTaskQueue"},
 		HistoryReapplyEvents:                               {operation: "ReapplyEvents"},
 		HistoryDescribeHistoryHost:                         {operation: "DescribeHistoryHost"},
+		HistoryDeleteWorkflowVisibilityRecordScope:         {operation: "DeleteWorkflowVisibilityRecord"},
 
 		TaskPriorityAssignerScope:                   {operation: "TaskPriorityAssigner"},
 		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},
@@ -1793,6 +1868,8 @@ const (
 	ServiceErrNonDeterministicCounter
 	ServiceErrUnauthorizedCounter
 	ServiceErrAuthorizeFailedCounter
+
+	ActionCounter
 
 	PersistenceRequests
 	PersistenceFailures
@@ -2051,6 +2128,7 @@ const (
 	SignalInfoCount
 	RequestCancelInfoCount
 	BufferedEventsCount
+	TaskCount
 	WorkflowRetryBackoffTimerCount
 	WorkflowCronBackoffTimerCount
 	WorkflowCleanupDeleteCount
@@ -2229,8 +2307,6 @@ const (
 	RenameNamespaceFailuresCount
 	ReadNamespaceFailuresCount
 	ListExecutionsFailuresCount
-	TerminateExecutionFailuresCount
-	TerminateExecutionNotFoundCount
 	DeleteExecutionFailuresCount
 	DeleteExecutionNotFoundCount
 	RateLimiterFailuresCount
@@ -2291,6 +2367,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrNonDeterministicCounter:                   NewCounterDef("service_errors_nondeterministic"),
 		ServiceErrUnauthorizedCounter:                       NewCounterDef("service_errors_unauthorized"),
 		ServiceErrAuthorizeFailedCounter:                    NewCounterDef("service_errors_authorize_failed"),
+		ActionCounter:                                       NewCounterDef("action"),
 		PersistenceRequests:                                 NewCounterDef("persistence_requests"),
 		PersistenceFailures:                                 NewCounterDef("persistence_errors"),
 		PersistenceLatency:                                  NewTimerDef("persistence_latency"),
@@ -2457,7 +2534,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		EmptyCompletionCommandsCounter:                    NewCounterDef("empty_completion_commands"),
 		MultipleCompletionCommandsCounter:                 NewCounterDef("multiple_completion_commands"),
 		FailedWorkflowTasksCounter:                        NewCounterDef("failed_workflow_tasks"),
-		WorkflowTaskAttempt:                               NewDimensionlessHistogramDef("worrkflow_task_attempt"),
+		WorkflowTaskAttempt:                               NewDimensionlessHistogramDef("workflow_task_attempt"),
 		StaleMutableStateCounter:                          NewCounterDef("stale_mutable_state"),
 		AutoResetPointsLimitExceededCounter:               NewCounterDef("auto_reset_points_exceed_limit"),
 		AutoResetPointCorruptionCounter:                   NewCounterDef("auto_reset_point_corruption"),
@@ -2534,6 +2611,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SignalInfoCount:                                   NewDimensionlessHistogramDef("signal_info_count"),
 		RequestCancelInfoCount:                            NewDimensionlessHistogramDef("request_cancel_info_count"),
 		BufferedEventsCount:                               NewDimensionlessHistogramDef("buffered_events_count"),
+		TaskCount:                                         NewDimensionlessHistogramDef("task_count"),
 		WorkflowRetryBackoffTimerCount:                    NewCounterDef("workflow_retry_backoff_timer"),
 		WorkflowCronBackoffTimerCount:                     NewCounterDef("workflow_cron_backoff_timer"),
 		WorkflowCleanupDeleteCount:                        NewCounterDef("workflow_cleanup_delete"),
@@ -2693,19 +2771,17 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		CatchUpReadyShardCountGauge:                   NewGaugeDef("catchup_ready_shard_count"),
 		HandoverReadyShardCountGauge:                  NewGaugeDef("handover_ready_shard_count"),
 
-		DeleteNamespaceSuccessCount:     NewCounterDef("delete_namespace_success"),
-		RenameNamespaceSuccessCount:     NewCounterDef("rename_namespace_success"),
-		DeleteExecutionsSuccessCount:    NewCounterDef("delete_executions_success"),
-		DeleteNamespaceFailuresCount:    NewCounterDef("delete_namespace_failures"),
-		UpdateNamespaceFailuresCount:    NewCounterDef("update_namespace_failures"),
-		RenameNamespaceFailuresCount:    NewCounterDef("rename_namespace_failures"),
-		ReadNamespaceFailuresCount:      NewCounterDef("read_namespace_failures"),
-		ListExecutionsFailuresCount:     NewCounterDef("list_executions_failures"),
-		TerminateExecutionFailuresCount: NewCounterDef("terminate_executions_failures"),
-		TerminateExecutionNotFoundCount: NewCounterDef("terminate_executions_not_found"),
-		DeleteExecutionFailuresCount:    NewCounterDef("delete_execution_failures"),
-		DeleteExecutionNotFoundCount:    NewCounterDef("delete_execution_not_found"),
-		RateLimiterFailuresCount:        NewCounterDef("rate_limiter_failures"),
+		DeleteNamespaceSuccessCount:  NewCounterDef("delete_namespace_success"),
+		RenameNamespaceSuccessCount:  NewCounterDef("rename_namespace_success"),
+		DeleteExecutionsSuccessCount: NewCounterDef("delete_executions_success"),
+		DeleteNamespaceFailuresCount: NewCounterDef("delete_namespace_failures"),
+		UpdateNamespaceFailuresCount: NewCounterDef("update_namespace_failures"),
+		RenameNamespaceFailuresCount: NewCounterDef("rename_namespace_failures"),
+		ReadNamespaceFailuresCount:   NewCounterDef("read_namespace_failures"),
+		ListExecutionsFailuresCount:  NewCounterDef("list_executions_failures"),
+		DeleteExecutionFailuresCount: NewCounterDef("delete_execution_failures"),
+		DeleteExecutionNotFoundCount: NewCounterDef("delete_execution_not_found"),
+		RateLimiterFailuresCount:     NewCounterDef("rate_limiter_failures"),
 	},
 	Server: {
 		TlsCertsExpired:  NewGaugeDef("certificates_expired"),

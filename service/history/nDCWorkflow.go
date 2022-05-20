@@ -269,6 +269,7 @@ func (r *nDCWorkflowImpl) terminateWorkflow(
 		workflowTerminationReason,
 		payloads.EncodeString(fmt.Sprintf("terminated by version: %v", incomingLastWriteVersion)),
 		workflowTerminationIdentity,
+		false,
 	)
 
 	return err

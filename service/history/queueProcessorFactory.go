@@ -28,6 +28,7 @@ import (
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -81,6 +82,7 @@ type (
 
 		SchedulerParams
 
+		ClientBean       client.Bean
 		ArchivalClient   archiver.Client
 		SdkClientFactory sdk.ClientFactory
 		MatchingClient   resource.MatchingClient
@@ -92,6 +94,7 @@ type (
 
 		SchedulerParams
 
+		ClientBean     client.Bean
 		ArchivalClient archiver.Client
 		MatchingClient resource.MatchingClient
 	}
@@ -108,6 +111,7 @@ type (
 		fx.In
 
 		Config             *configs.Config
+		ClientBean         client.Bean
 		ArchivalClient     archiver.Client
 		EventSerializer    serialization.Serializer
 		TaskFetcherFactory replication.TaskFetcherFactory
@@ -177,9 +181,9 @@ func (f *transferQueueProcessorFactory) CreateProcessor(
 ) queues.Processor {
 	return newTransferQueueProcessor(
 		shard,
-		engine,
 		workflowCache,
 		f.scheduler,
+		f.ClientBean,
 		f.ArchivalClient,
 		f.SdkClientFactory,
 		f.MatchingClient,
@@ -228,9 +232,9 @@ func (f *timerQueueProcessorFactory) CreateProcessor(
 ) queues.Processor {
 	return newTimerQueueProcessor(
 		shard,
-		engine,
 		workflowCache,
 		f.scheduler,
+		f.ClientBean,
 		f.ArchivalClient,
 		f.MatchingClient,
 	)
@@ -305,5 +309,6 @@ func (f *replicationQueueProcessorFactory) CreateProcessor(
 		shard,
 		f.TaskFetcherFactory,
 		workflowCache,
+		f.ClientBean,
 	)
 }

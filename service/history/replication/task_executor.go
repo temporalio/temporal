@@ -167,6 +167,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 		defer stopwatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
 			retryErr.RunId,
@@ -180,7 +181,7 @@ func (e *taskExecutorImpl) handleActivityTask(
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
-			//no-op
+			// no-op
 		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
@@ -231,6 +232,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 		defer resendStopWatch.Stop()
 
 		resendErr := e.nDCHistoryResender.SendSingleWorkflowHistory(
+			e.remoteCluster,
 			namespace.ID(retryErr.NamespaceId),
 			retryErr.WorkflowId,
 			retryErr.RunId,
@@ -244,7 +246,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 			// workflow is not found in source cluster, cleanup workflow in target cluster
 			return e.cleanupWorkflowExecution(ctx, retryErr.NamespaceId, retryErr.WorkflowId, retryErr.RunId)
 		case nil:
-			//no-op
+			// no-op
 		default:
 			e.logger.Error("error resend history for history event", tag.Error(resendErr))
 			return err
@@ -326,12 +328,14 @@ func (e *taskExecutorImpl) cleanupWorkflowExecution(ctx context.Context, namespa
 	if err != nil {
 		return err
 	}
-	return e.deleteManager.DeleteWorkflowExecutionByReplication(
+
+	return e.deleteManager.DeleteWorkflowExecution(
 		ctx,
 		nsID,
 		ex,
 		wfCtx,
 		mutableState,
 		lastWriteVersion,
+		false,
 	)
 }

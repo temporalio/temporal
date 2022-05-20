@@ -120,6 +120,11 @@ type (
 	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
 	CallbackFn func(oldNamespaces []*Namespace, newNamespaces []*Namespace)
 
+	// StateChangeCallbackFn can be registered to be called on any namespace state change,
+	// plus once for all namespaces after registration. There is no guarantee about when
+	// these are called.
+	StateChangeCallbackFn func(*Namespace)
+
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
 		common.Daemon
@@ -132,6 +137,11 @@ type (
 		GetCacheSize() (sizeOfCacheByName int64, sizeOfCacheByID int64)
 		// Refresh forces an immediate refresh of the namespace cache and blocks until it's complete.
 		Refresh()
+		// Registers callback for namespace state changes. This is regrettably
+		// different from the above RegisterNamespaceChangeCallback because we
+		// need different semantics (and that one is going away).
+		RegisterStateChangeCallback(key any, cb StateChangeCallbackFn)
+		UnregisterStateChangeCallback(key any)
 	}
 
 	registry struct {
@@ -146,9 +156,9 @@ type (
 		lastRefreshTime         atomic.Value
 		refreshInterval         dynamicconfig.DurationPropertyFn
 
-		// cacheLock protects cachNameToID and cacheByID. If the exclusive side
-		// is to be held at the same time as the callbackLock (below), this lock
-		// MUST be acquired *first*.
+		// cacheLock protects cachNameToID, cacheByID and stateChangeCallbacks.
+		// If the exclusive side is to be held at the same time as the
+		// callbackLock (below), this lock MUST be acquired *first*.
 		cacheLock     sync.RWMutex
 		cacheNameToID cache.Cache
 		cacheByID     cache.Cache
@@ -159,6 +169,9 @@ type (
 		callbackLock     sync.Mutex
 		prepareCallbacks map[any]PrepareCallbackFn
 		callbacks        map[any]CallbackFn
+
+		// State-change callbacks. Protected by cacheLock
+		stateChangeCallbacks map[any]StateChangeCallbackFn
 	}
 )
 
@@ -183,6 +196,7 @@ func NewRegistry(
 		prepareCallbacks:        make(map[any]PrepareCallbackFn),
 		callbacks:               make(map[any]CallbackFn),
 		refreshInterval:         refreshInterval,
+		stateChangeCallbacks:    make(map[any]StateChangeCallbackFn),
 	}
 	reg.lastRefreshTime.Store(time.Time{})
 	return reg
@@ -222,9 +236,13 @@ func (r *registry) Stop() {
 }
 
 func (r *registry) getAllNamespace() map[ID]*Namespace {
-	result := make(map[ID]*Namespace)
 	r.cacheLock.RLock()
 	defer r.cacheLock.RUnlock()
+	return r.getAllNamespaceLocked()
+}
+
+func (r *registry) getAllNamespaceLocked() map[ID]*Namespace {
+	result := make(map[ID]*Namespace)
 
 	ite := r.cacheByID.Iterator()
 	defer ite.Close()
@@ -285,6 +303,24 @@ func (r *registry) UnregisterNamespaceChangeCallback(
 
 	delete(r.prepareCallbacks, listenerID)
 	delete(r.callbacks, listenerID)
+}
+
+func (r *registry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn) {
+	r.cacheLock.Lock()
+	r.stateChangeCallbacks[key] = cb
+	allNamespaces := r.getAllNamespaceLocked()
+	r.cacheLock.Unlock()
+
+	// call once for each namespace already in the registry
+	for _, ns := range allNamespaces {
+		cb(ns)
+	}
+}
+
+func (r *registry) UnregisterStateChangeCallback(key any) {
+	r.cacheLock.Lock()
+	defer r.cacheLock.Unlock()
+	delete(r.stateChangeCallbacks, key)
 }
 
 // GetNamespace retrieves the information from the cache if it exists, otherwise retrieves the information from metadata
@@ -428,6 +464,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 
 	var oldEntries []*Namespace
 	var newEntries []*Namespace
+	var stateChanged []*Namespace
 UpdateLoop:
 	for _, namespace := range namespacesDb {
 		if namespace.notificationVersion >= namespaceNotificationVersion {
@@ -438,14 +475,20 @@ UpdateLoop:
 			// will be loaded into cache in the next refresh
 			break UpdateLoop
 		}
-		oldNS := r.updateIDToNamespaceCache(newCacheByID, namespace.ID(), namespace)
-		r.updateNameToIDCache(newCacheNameToID, namespace.Name(), namespace.ID())
+		oldNS, oldNSAnyVersion := r.updateIDToNamespaceCache(newCacheByID, namespace.ID(), namespace)
+		newCacheNameToID.Put(namespace.Name(), namespace.ID())
 
 		if oldNS != nil {
 			oldEntries = append(oldEntries, oldNS)
 			newEntries = append(newEntries, namespace)
 		}
+
+		if oldNSAnyVersion == nil || oldNSAnyVersion.State() != namespace.State() {
+			stateChanged = append(stateChanged, namespace)
+		}
 	}
+
+	var stateChangeCallbacks []StateChangeCallbackFn
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
@@ -454,27 +497,33 @@ UpdateLoop:
 		defer r.cacheLock.Unlock()
 		r.cacheByID = newCacheByID
 		r.cacheNameToID = newCacheNameToID
+		stateChangeCallbacks = mapAnyValues(r.stateChangeCallbacks)
 		return oldEntries, newEntries
 	})
-	return nil
-}
 
-func (r *registry) updateNameToIDCache(c cache.Cache, name Name, id ID) {
-	c.Put(name, id)
+	// call state change callbacks
+	for _, cb := range stateChangeCallbacks {
+		for _, ns := range stateChanged {
+			cb(ns)
+		}
+	}
+
+	return nil
 }
 
 func (r *registry) updateIDToNamespaceCache(
 	cacheByID cache.Cache,
 	id ID,
 	newNS *Namespace,
-) *Namespace {
+) (*Namespace, *Namespace) {
 	oldCacheRec := cacheByID.Put(id, newNS)
-	if oldNS, ok := oldCacheRec.(*Namespace); ok &&
-		newNS.notificationVersion > oldNS.notificationVersion &&
-		r.globalNamespacesEnabled {
-		return oldNS
+	if oldNS, ok := oldCacheRec.(*Namespace); ok {
+		if newNS.notificationVersion > oldNS.notificationVersion && r.globalNamespacesEnabled {
+			return oldNS, oldNS
+		}
+		return nil, oldNS
 	}
-	return nil
+	return nil, nil
 }
 
 // getNamespace retrieves the information from the cache if it exists
@@ -543,4 +592,14 @@ func byName(name Name) *persistence.GetNamespaceRequest {
 
 func byID(id ID) *persistence.GetNamespaceRequest {
 	return &persistence.GetNamespaceRequest{ID: id.String()}
+}
+
+// This is https://pkg.go.dev/golang.org/x/exp/maps#Values except that it works
+// for map[any]T (see https://github.com/golang/go/issues/51257 and many more)
+func mapAnyValues[T any](m map[any]T) []T {
+	r := make([]T, 0, len(m))
+	for _, v := range m {
+		r = append(r, v)
+	}
+	return r
 }

@@ -29,8 +29,6 @@ import (
 	"testing"
 	"time"
 
-	"go.temporal.io/server/common/persistence/serialization"
-
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"
 	"github.com/stretchr/testify/require"
@@ -45,10 +43,12 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/historyservicemock/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/primitives/timestamp"
 	serviceerrors "go.temporal.io/server/common/serviceerror"
 )
@@ -61,6 +61,7 @@ type (
 		controller          *gomock.Controller
 		mockClusterMetadata *cluster.MockMetadata
 		mockNamespaceCache  *namespace.MockRegistry
+		mockClientBean      *client.MockBean
 		mockAdminClient     *adminservicemock.MockAdminServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 
@@ -91,9 +92,12 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 	s.mockClusterMetadata = cluster.NewMockMetadata(s.controller)
+	s.mockClientBean = client.NewMockBean(s.controller)
 	s.mockAdminClient = adminservicemock.NewMockAdminServiceClient(s.controller)
 	s.mockHistoryClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	s.mockNamespaceCache = namespace.NewMockRegistry(s.controller)
+
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(gomock.Any()).Return(s.mockAdminClient, nil).AnyTimes()
 
 	s.logger = log.NewTestLogger()
 	s.mockClusterMetadata.EXPECT().IsGlobalNamespaceEnabled().Return(true).AnyTimes()
@@ -118,7 +122,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 
 	s.rereplicator = NewNDCHistoryResender(
 		s.mockNamespaceCache,
-		s.mockAdminClient,
+		s.mockClientBean,
 		func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
 			_, err := s.mockHistoryClient.ReplicateEventsV2(ctx, request)
 			return err
@@ -219,6 +223,7 @@ func (s *nDCHistoryResenderSuite) TestSendSingleWorkflowHistory() {
 		}).Return(nil, nil).Times(2)
 
 	err := s.rereplicator.SendSingleWorkflowHistory(
+		cluster.TestCurrentClusterName,
 		s.namespaceID,
 		workflowID,
 		runID,
@@ -355,6 +360,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 
 	out, err := s.rereplicator.getHistory(
 		context.Background(),
+		cluster.TestCurrentClusterName,
 		s.namespaceID,
 		workflowID,
 		runID,

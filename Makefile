@@ -186,15 +186,15 @@ clean-bins:
 
 temporal-server:
 	@printf $(COLOR) "Build temporal-server with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	go build -o temporal-server ./cmd/server
+	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-server ./cmd/server
 
 temporal-cassandra-tool:
 	@printf $(COLOR) "Build temporal-cassandra-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	go build -o temporal-cassandra-tool ./cmd/tools/cassandra
+	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-cassandra-tool ./cmd/tools/cassandra
 
 temporal-sql-tool:
 	@printf $(COLOR) "Build temporal-sql-tool with CGO_ENABLED=$(CGO_ENABLED) for $(GOOS)/$(GOARCH)..."
-	go build -o temporal-sql-tool ./cmd/tools/sql
+	CGO_ENABLED=$(CGO_ENABLED) go build -o temporal-sql-tool ./cmd/tools/sql
 
 ##### Checks #####
 copyright-check:
@@ -374,38 +374,52 @@ install-schema-es:
 	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev" --write-out "\n"
 
 install-schema-cdc: temporal-cassandra-tool
-	@printf $(COLOR)  "Set up temporal_active key space..."
+	@printf $(COLOR)  "Install Cassandra schema (active)..."
 	./temporal-cassandra-tool drop -k temporal_active -f
 	./temporal-cassandra-tool create -k temporal_active --rf 1
 	./temporal-cassandra-tool -k temporal_active setup-schema -v 0.0
 	./temporal-cassandra-tool -k temporal_active update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool drop -k temporal_visibility_active -f
-	./temporal-cassandra-tool create -k temporal_visibility_active --rf 1
-	./temporal-cassandra-tool -k temporal_visibility_active setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_visibility_active update-schema -d ./schema/cassandra/visibility/versioned
 
-	@printf $(COLOR) "Set up temporal_standby key space..."
+	@printf $(COLOR)  "Install Cassandra schema (standby)..."
 	./temporal-cassandra-tool drop -k temporal_standby -f
 	./temporal-cassandra-tool create -k temporal_standby --rf 1
 	./temporal-cassandra-tool -k temporal_standby setup-schema -v 0.0
 	./temporal-cassandra-tool -k temporal_standby update-schema -d ./schema/cassandra/temporal/versioned
-	./temporal-cassandra-tool drop -k temporal_visibility_standby -f
-	./temporal-cassandra-tool create -k temporal_visibility_standby --rf 1
-	./temporal-cassandra-tool -k temporal_visibility_standby setup-schema -v 0.0
-	./temporal-cassandra-tool -k temporal_visibility_standby update-schema -d ./schema/cassandra/visibility/versioned
+
+	@printf $(COLOR)  "Install Cassandra schema (other)..."
+	./temporal-cassandra-tool drop -k temporal_other -f
+	./temporal-cassandra-tool create -k temporal_other --rf 1
+	./temporal-cassandra-tool -k temporal_other setup-schema -v 0.0
+	./temporal-cassandra-tool -k temporal_other update-schema -d ./schema/cassandra/temporal/versioned
+
+	@printf $(COLOR) "Install Elasticsearch schemas..."
+	curl --fail -X PUT "http://127.0.0.1:9200/_cluster/settings" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/cluster_settings_v7.json --write-out "\n"
+	curl --fail -X PUT "http://127.0.0.1:9200/_template/temporal_visibility_v1_template" -H "Content-Type: application/json" --data-binary @./schema/elasticsearch/visibility/index_template_v7.json --write-out "\n"
+# No --fail here because create index is not idempotent operation.
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_active" --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_standby" --write-out "\n"
+	curl -X PUT "http://127.0.0.1:9200/temporal_visibility_v1_dev_other" --write-out "\n"
 
 ##### Run server #####
+DOCKER_COMPOSE_FILES     := -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml
+DOCKER_COMPOSE_CDC_FILES := -f ./develop/docker-compose/docker-compose.cdc.yml -f ./develop/docker-compose/docker-compose.cdc.$(GOOS).yml
 start-dependencies:
-	docker-compose -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml up
+	docker-compose $(DOCKER_COMPOSE_FILES) up
 
 stop-dependencies:
-	docker-compose -f ./develop/docker-compose/docker-compose.yml -f ./develop/docker-compose/docker-compose.$(GOOS).yml down
+	docker-compose $(DOCKER_COMPOSE_FILES) down
+
+start-dependencies-cdc:
+	docker-compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) up
+
+stop-dependencies-cdc:
+	docker-compose $(DOCKER_COMPOSE_FILES) $(DOCKER_COMPOSE_CDC_FILES) down
 
 start: temporal-server
-	./temporal-server start
+	./temporal-server --zone cass start
 
 start-es: temporal-server
-	./temporal-server --zone es start
+	./temporal-server --zone cass-es start
 
 start-mysql: temporal-server
 	./temporal-server --zone mysql start
@@ -423,7 +437,7 @@ start-cdc-other: temporal-server
 	./temporal-server --zone other start
 
 ##### Mocks #####
-AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go" go.mod))
+AWS_SDK_VERSION := $(lastword $(shell grep "github.com/aws/aws-sdk-go v1" go.mod))
 external-mocks:
 	@printf $(COLOR) "Generate external libraries mocks..."
 	@mockgen -copyright_file ./LICENSE -package mocks -source $(GOPATH)/pkg/mod/github.com/aws/aws-sdk-go@$(AWS_SDK_VERSION)/service/s3/s3iface/interface.go | grep -v -e "^// Source: .*" > common/archiver/s3store/mocks/S3API.go
@@ -433,23 +447,6 @@ go-generate:
 	@go generate ./...
 
 mocks: go-generate external-mocks
-
-##### Fossa #####
-fossa-install:
-	curl -H 'Cache-Control: no-cache' https://raw.githubusercontent.com/fossas/fossa-cli/master/install.sh | bash
-
-fossa-analyze:
-	fossa analyze -b $${BUILDKITE_BRANCH:-$$(git branch --show-current)}
-
-fossa-delay:
-	echo "Fossa requested to add delay between analyze and test due to API race condition"
-	sleep 30
-	echo "Fossa wait complete"
-
-fossa-test:
-	fossa test --timeout 1800
-
-build-fossa: bins fossa-analyze fossa-delay fossa-test
 
 ##### Grafana #####
 update-dashboards:

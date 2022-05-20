@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
+	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/log"
@@ -56,11 +57,14 @@ const (
 
 type (
 	transferQueueTaskExecutorBase struct {
+		currentClusterName       string
 		shard                    shard.Context
+		registry                 namespace.Registry
 		cache                    workflow.Cache
 		archivalClient           archiver.Client
 		logger                   log.Logger
 		metricsClient            metrics.Client
+		historyClient            historyservice.HistoryServiceClient
 		matchingClient           matchingservice.MatchingServiceClient
 		config                   *configs.Config
 		searchAttributesProvider searchattribute.Provider
@@ -76,11 +80,14 @@ func newTransferQueueTaskExecutorBase(
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueTaskExecutorBase {
 	return &transferQueueTaskExecutorBase{
+		currentClusterName:       shard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:                    shard,
+		registry:                 shard.GetNamespaceRegistry(),
 		cache:                    workflowCache,
 		archivalClient:           archivalClient,
 		logger:                   logger,
 		metricsClient:            shard.GetMetricsClient(),
+		historyClient:            shard.GetHistoryClient(),
 		matchingClient:           matchingClient,
 		config:                   shard.GetConfig(),
 		searchAttributesProvider: shard.GetSearchAttributesProvider(),
@@ -112,7 +119,7 @@ func (t *transferQueueTaskExecutorBase) pushActivity(
 		},
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: activityScheduleToStartTimeout,
-		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
@@ -138,7 +145,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 		TaskQueue:              taskqueue,
 		ScheduleId:             task.ScheduleID,
 		ScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
-		Clock:                  vclock.NewShardClock(t.shard.GetShardID(), task.TaskID),
+		Clock:                  vclock.NewVectorClock(t.shard.GetClusterMetadata().GetClusterID(), t.shard.GetShardID(), task.TaskID),
 	})
 	if _, isNotFound := err.(*serviceerror.NotFound); isNotFound {
 		// NotFound error is not expected for AddTasks calls
@@ -149,7 +156,7 @@ func (t *transferQueueTaskExecutorBase) pushWorkflowTask(
 	return err
 }
 
-func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
+func (t *transferQueueTaskExecutorBase) archiveVisibility(
 	ctx context.Context,
 	namespaceID namespace.ID,
 	workflowID string,
@@ -164,7 +171,7 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 	searchAttributes *commonpb.SearchAttributes,
 ) error {
 
-	namespaceEntry, err := t.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
+	namespaceEntry, err := t.registry.GetNamespaceByID(namespaceID)
 	if err != nil {
 		return err
 	}
@@ -218,6 +225,14 @@ func (t *transferQueueTaskExecutorBase) recordWorkflowClosed(
 func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	ctx context.Context,
 	task *tasks.DeleteExecutionTask,
+) error {
+	return t.deleteExecution(ctx, task, false)
+}
+
+func (t *transferQueueTaskExecutorBase) deleteExecution(
+	ctx context.Context,
+	task tasks.Task,
+	forceDeleteFromOpenVisibility bool,
 ) (retError error) {
 
 	ctx, cancel := context.WithTimeout(ctx, taskTimeout)
@@ -248,7 +263,7 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 	if err != nil {
 		return err
 	}
-	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.Version, task)
+	ok := VerifyTaskVersion(t.shard, t.logger, mutableState.GetNamespaceEntry(), lastWriteVersion, task.GetVersion(), task)
 	if !ok {
 		return nil
 	}
@@ -260,5 +275,6 @@ func (t *transferQueueTaskExecutorBase) processDeleteExecutionTask(
 		weCtx,
 		mutableState,
 		task.GetVersion(),
+		forceDeleteFromOpenVisibility,
 	)
 }

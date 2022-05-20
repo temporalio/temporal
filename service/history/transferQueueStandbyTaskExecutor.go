@@ -33,7 +33,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
 
-	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
 	"go.temporal.io/server/common"
@@ -56,8 +55,6 @@ type (
 		*transferQueueTaskExecutorBase
 
 		clusterName        string
-		adminClient        adminservice.AdminServiceClient
-		historyClient      historyservice.HistoryServiceClient
 		nDCHistoryResender xdc.NDCHistoryResender
 	}
 )
@@ -80,8 +77,6 @@ func newTransferQueueStandbyTaskExecutor(
 			matchingClient,
 		),
 		clusterName:        clusterName,
-		adminClient:        shard.GetRemoteAdminClient(clusterName),
-		historyClient:      shard.GetHistoryClient(),
 		nDCHistoryResender: nDCHistoryResender,
 	}
 }
@@ -89,28 +84,35 @@ func newTransferQueueStandbyTaskExecutor(
 func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) error {
-	switch task := executable.GetTask().(type) {
+) (metrics.Scope, error) {
+
+	task := executable.GetTask()
+	scope := t.metricsClient.Scope(
+		tasks.GetStandbyTransferTaskMetricsScope(task),
+		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	)
+
+	switch task := task.(type) {
 	case *tasks.ActivityTask:
-		return t.processActivityTask(ctx, task)
+		return scope, t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:
-		return t.processWorkflowTask(ctx, task)
+		return scope, t.processWorkflowTask(ctx, task)
 	case *tasks.CancelExecutionTask:
-		return t.processCancelExecution(ctx, task)
+		return scope, t.processCancelExecution(ctx, task)
 	case *tasks.SignalExecutionTask:
-		return t.processSignalExecution(ctx, task)
+		return scope, t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		return t.processStartChildExecution(ctx, task)
+		return scope, t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby
 		// TODO: add error logs
-		return nil
+		return scope, nil
 	case *tasks.CloseExecutionTask:
-		return t.processCloseExecution(ctx, task)
+		return scope, t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionTask:
-		return t.processDeleteExecutionTask(ctx, task)
+		return scope, t.processDeleteExecutionTask(ctx, task)
 	default:
-		return errUnknownTransferTask
+		return scope, errUnknownTransferTask
 	}
 }
 
@@ -133,7 +135,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 		}
 
 		if activityInfo.StartedId == common.EmptyEventID {
-			return newPushActivityToMatchingInfo(*activityInfo.ScheduleToStartTimeout), nil
+			return newActivityTaskPostActionInfo(mutableState, *activityInfo.ScheduleToStartTimeout)
 		}
 
 		return nil, nil
@@ -149,7 +151,7 @@ func (t *transferQueueStandbyTaskExecutor) processActivityTask(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.pushActivity,
+			t.fetchHistoryFromRemote,
 			t.pushActivity,
 		),
 	)
@@ -189,10 +191,11 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 		}
 
 		if wtInfo.StartedID == common.EmptyEventID {
-			return newPushWorkflowTaskToMatchingInfo(
+			return newWorkflowTaskPostActionInfo(
+				mutableState,
 				taskScheduleToStartTimeoutSeconds,
 				*taskQueue,
-			), nil
+			)
 		}
 
 		return nil, nil
@@ -208,7 +211,7 @@ func (t *transferQueueStandbyTaskExecutor) processWorkflowTask(
 			t.getCurrentTime,
 			t.config.StandbyTaskMissingEventsResendDelay(),
 			t.config.StandbyTaskMissingEventsDiscardDelay(),
-			t.pushWorkflowTask,
+			t.fetchHistoryFromRemote,
 			t.pushWorkflowTask,
 		),
 	)
@@ -253,7 +256,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		if err := t.recordWorkflowClosed(
+		if err := t.archiveVisibility(
 			ctx,
 			namespace.ID(transferTask.NamespaceID),
 			transferTask.WorkflowID,
@@ -492,7 +495,7 @@ func (t *transferQueueStandbyTaskExecutor) processTransfer(
 	}
 
 	if !mutableState.IsWorkflowExecutionRunning() && !processTaskIfClosed {
-		// workflow already finished, no need to process the timer
+		// workflow already finished, no need to process transfer task.
 		return nil
 	}
 
@@ -517,7 +520,7 @@ func (t *transferQueueStandbyTaskExecutor) pushActivity(
 		return nil
 	}
 
-	pushActivityInfo := postActionInfo.(*pushActivityTaskToMatchingInfo)
+	pushActivityInfo := postActionInfo.(*activityTaskPostActionInfo)
 	timeout := pushActivityInfo.activityTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushActivity(
 		ctx,
@@ -537,7 +540,7 @@ func (t *transferQueueStandbyTaskExecutor) pushWorkflowTask(
 		return nil
 	}
 
-	pushwtInfo := postActionInfo.(*pushWorkflowTaskToMatchingInfo)
+	pushwtInfo := postActionInfo.(*workflowTaskPostActionInfo)
 	timeout := pushwtInfo.workflowTaskScheduleToStartTimeout
 	return t.transferQueueTaskExecutorBase.pushWorkflowTask(
 		ctx,
@@ -569,25 +572,45 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	ctx context.Context,
 	taskInfo tasks.Task,
 	postActionInfo interface{},
-	log log.Logger,
+	logger log.Logger,
 ) error {
 
-	if postActionInfo == nil {
+	var resendInfo *historyResendInfo
+	switch postActionInfo := postActionInfo.(type) {
+	case nil:
 		return nil
+	case *historyResendInfo:
+		resendInfo = postActionInfo
+	case *activityTaskPostActionInfo:
+		resendInfo = postActionInfo.historyResendInfo
+	case *workflowTaskPostActionInfo:
+		resendInfo = postActionInfo.historyResendInfo
+	default:
+		logger.Fatal("unknown post action info for fetching remote history", tag.Value(postActionInfo))
 	}
 
-	resendInfo := postActionInfo.(*historyResendInfo)
+	remoteClusterName, err := getRemoteClusterName(
+		t.currentClusterName,
+		t.registry,
+		taskInfo.GetNamespaceID(),
+	)
+	if err != nil {
+		return err
+	}
 
 	t.metricsClient.IncCounter(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientRequests)
 	stopwatch := t.metricsClient.StartTimer(metrics.HistoryRereplicationByTransferTaskScope, metrics.ClientLatency)
 	defer stopwatch.Stop()
 
-	var err error
+	adminClient, err := t.shard.GetRemoteAdminClient(remoteClusterName)
+	if err != nil {
+		return err
+	}
 	if resendInfo.lastEventID != common.EmptyEventID && resendInfo.lastEventVersion != common.EmptyVersion {
 		if err := refreshTasks(
 			ctx,
-			t.adminClient,
-			t.shard.GetNamespaceRegistry(),
+			adminClient,
+			t.registry,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
@@ -597,12 +620,13 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 				tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 				tag.WorkflowID(taskInfo.GetWorkflowID()),
 				tag.WorkflowRunID(taskInfo.GetRunID()),
-				tag.ClusterName(t.clusterName))
+				tag.ClusterName(remoteClusterName))
 		}
 
 		// NOTE: history resend may take long time and its timeout is currently
 		// controlled by a separate dynamicconfig config: StandbyTaskReReplicationContextTimeout
 		err = t.nDCHistoryResender.SendSingleWorkflowHistory(
+			remoteClusterName,
 			namespace.ID(taskInfo.GetNamespaceID()),
 			taskInfo.GetWorkflowID(),
 			taskInfo.GetRunID(),
@@ -623,7 +647,7 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 			tag.WorkflowNamespaceID(taskInfo.GetNamespaceID()),
 			tag.WorkflowID(taskInfo.GetWorkflowID()),
 			tag.WorkflowRunID(taskInfo.GetRunID()),
-			tag.SourceCluster(t.clusterName))
+			tag.SourceCluster(remoteClusterName))
 	}
 
 	// return error so task processing logic will retry

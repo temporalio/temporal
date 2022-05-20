@@ -43,7 +43,7 @@ import (
 // Fixed namespace values for now
 const (
 	namespacePartition       = 0
-	cassandraPersistenceName = "cassandra"
+	CassandraPersistenceName = "cassandra"
 )
 
 const (
@@ -148,7 +148,7 @@ func NewVisibilityStore(
 }
 
 func (v *visibilityStore) GetName() string {
-	return cassandraPersistenceName
+	return CassandraPersistenceName
 }
 
 // Close releases the resources held by this object

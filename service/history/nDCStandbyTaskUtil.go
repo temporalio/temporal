@@ -26,6 +26,7 @@ package history
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
@@ -74,7 +75,7 @@ func standbyTransferTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	logger.Error("Discarding standby transfer task due to task being pending for too long.", tag.Task(taskInfo))
+	logger.Warn("Discarding standby transfer task due to task being pending for too long.", tag.Task(taskInfo))
 	return consts.ErrTaskDiscarded
 }
 
@@ -89,7 +90,7 @@ func standbyTimerTaskPostActionTaskDiscarded(
 		return nil
 	}
 
-	logger.Error("Discarding standby timer task due to task being pending for too long.", tag.Task(taskInfo))
+	logger.Warn("Discarding standby timer task due to task being pending for too long.", tag.Task(taskInfo))
 	return consts.ErrTaskDiscarded
 }
 
@@ -101,12 +102,16 @@ type (
 		lastEventVersion int64
 	}
 
-	pushActivityTaskToMatchingInfo struct {
+	activityTaskPostActionInfo struct {
+		*historyResendInfo
+
 		taskQueue                          string
 		activityTaskScheduleToStartTimeout time.Duration
 	}
 
-	pushWorkflowTaskToMatchingInfo struct {
+	workflowTaskPostActionInfo struct {
+		*historyResendInfo
+
 		workflowTaskScheduleToStartTimeout int64
 		taskqueue                          taskqueuepb.TaskQueue
 	}
@@ -134,35 +139,53 @@ func newHistoryResendInfo(
 	}
 }
 
-func newPushActivityToMatchingInfo(
+func newActivityTaskPostActionInfo(
+	mutableState workflow.MutableState,
 	activityScheduleToStartTimeout time.Duration,
-) *pushActivityTaskToMatchingInfo {
-
-	return &pushActivityTaskToMatchingInfo{
-		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+) (*activityTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
 	}
+
+	return &activityTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
+		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
+	}, nil
 }
 
-func newActivityRetryTimerToMatchingInfo(
+func newActivityRetryTimePostActionInfo(
+	mutableState workflow.MutableState,
 	taskQueue string,
 	activityScheduleToStartTimeout time.Duration,
-) *pushActivityTaskToMatchingInfo {
+) (*activityTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
+	}
 
-	return &pushActivityTaskToMatchingInfo{
+	return &activityTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
 		taskQueue:                          taskQueue,
 		activityTaskScheduleToStartTimeout: activityScheduleToStartTimeout,
-	}
+	}, nil
 }
 
-func newPushWorkflowTaskToMatchingInfo(
+func newWorkflowTaskPostActionInfo(
+	mutableState workflow.MutableState,
 	workflowTaskScheduleToStartTimeout int64,
 	taskqueue taskqueuepb.TaskQueue,
-) *pushWorkflowTaskToMatchingInfo {
+) (*workflowTaskPostActionInfo, error) {
+	resendInfo, err := getHistoryResendInfo(mutableState)
+	if err != nil {
+		return nil, err
+	}
 
-	return &pushWorkflowTaskToMatchingInfo{
+	return &workflowTaskPostActionInfo{
+		historyResendInfo:                  resendInfo,
 		workflowTaskScheduleToStartTimeout: workflowTaskScheduleToStartTimeout,
 		taskqueue:                          taskqueue,
-	}
+	}, nil
 }
 
 func getHistoryResendInfo(
@@ -230,4 +253,22 @@ func refreshTasks(
 		},
 	})
 	return err
+}
+
+func getRemoteClusterName(
+	currentCluster string,
+	registry namespace.Registry,
+	namespaceID string,
+) (string, error) {
+	namespaceEntry, err := registry.GetNamespaceByID(namespace.ID(namespaceID))
+	if err != nil {
+		return "", err
+	}
+
+	remoteClusterName := namespaceEntry.ActiveClusterName()
+	if remoteClusterName == currentCluster {
+		// namespace has turned active, retry the task
+		return "", errors.New("namespace becomes active when processing task as standby")
+	}
+	return remoteClusterName, nil
 }
