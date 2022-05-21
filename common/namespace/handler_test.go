@@ -26,9 +26,10 @@ package namespace
 
 import (
 	"context"
-	persistence2 "go.temporal.io/server/api/persistence/v1"
 	"testing"
 	"time"
+
+	persistence2 "go.temporal.io/server/api/persistence/v1"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/golang/mock/gomock"
