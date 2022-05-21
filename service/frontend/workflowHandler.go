@@ -28,12 +28,13 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"go.temporal.io/server/common/clock"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
 
 	"github.com/gogo/protobuf/jsonpb"
+	"go.temporal.io/server/common/clock"
+
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"

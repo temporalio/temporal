@@ -26,9 +26,10 @@ package namespace
 
 import (
 	"context"
-	"go.temporal.io/server/common/clock"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"

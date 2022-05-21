@@ -28,9 +28,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/clock"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 
 	"google.golang.org/grpc/health"
 

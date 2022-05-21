@@ -28,11 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/clock"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
