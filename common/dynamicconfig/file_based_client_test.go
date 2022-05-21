@@ -86,34 +86,34 @@ func (s *fileBasedClientSuite) TestGetValue_CaseInsensitie() {
 }
 
 func (s *fileBasedClientSuite) TestGetValueWithFilters() {
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace: "global-samples-namespace",
-	}
+	}}
 	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
 	s.NoError(err)
 	s.Equal(true, v)
 
-	filters = map[Filter]interface{}{
+	filters = []map[Filter]interface{}{{
 		Namespace: "non-exist-namespace",
-	}
+	}}
 	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, true)
 	s.NoError(err)
 	s.Equal(false, v)
 
-	filters = map[Filter]interface{}{
+	filters = []map[Filter]interface{}{{
 		Namespace:     "samples-namespace",
 		TaskQueueName: "non-exist-taskqueue",
-	}
+	}}
 	v, err = s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
 	s.NoError(err)
 	s.Equal(false, v)
 }
 
 func (s *fileBasedClientSuite) TestGetValueWithFilters_UnknownFilter() {
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace:     "global-samples-namespace",
 		unknownFilter: "unknown-filter",
-	}
+	}}
 	v, err := s.client.GetValueWithFilters(testGetBoolPropertyKey, filters, false)
 	s.NoError(err)
 	s.Equal(false, v)
@@ -126,9 +126,9 @@ func (s *fileBasedClientSuite) TestGetIntValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace: "samples-namespace",
-	}
+	}}
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 500)
 	s.NoError(err)
 	s.Equal(1000, v)
@@ -136,9 +136,9 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilterNotMatch() {
 
 func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
 	defaultValue := 2000
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace: "global-samples-namespace",
-	}
+	}}
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, defaultValue)
 	s.Error(err)
 	s.Equal(defaultValue, v)
@@ -146,11 +146,11 @@ func (s *fileBasedClientSuite) TestGetIntValue_WrongType() {
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo() {
 	expectedValue := 1001
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace:     "global-samples-namespace",
 		TaskQueueName: "test-tq",
 		TaskType:      "Workflow",
-	}
+	}}
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
 	s.NoError(err)
 	s.Equal(expectedValue, v)
@@ -158,10 +158,10 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByWorkflowTaskQueueInfo()
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 	expectedValue := 1003
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace:     "global-samples-namespace",
 		TaskQueueName: "test-tq",
-	}
+	}}
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
 	s.NoError(err)
 	s.Equal(expectedValue, v)
@@ -169,11 +169,11 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByNoTaskTypeQueueInfo() {
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo() {
 	expectedValue := 1002
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace:     "global-samples-namespace",
 		TaskQueueName: "test-tq",
 		TaskType:      "Activity",
-	}
+	}}
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
 	s.NoError(err)
 	s.Equal(expectedValue, v)
@@ -181,12 +181,39 @@ func (s *fileBasedClientSuite) TestGetIntValue_FilteredByActivityTaskQueueInfo()
 
 func (s *fileBasedClientSuite) TestGetIntValue_FilteredByTaskQueueNameOnly() {
 	expectedValue := 1005
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		TaskQueueName: "other-test-tq",
-	}
+	}}
 	v, err := s.client.GetIntValue(testGetIntPropertyKey, filters, 0)
 	s.NoError(err)
 	s.Equal(expectedValue, v)
+}
+
+func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchWithoutType() {
+	cln := NewCollection(s.client, log.NewNoopLogger())
+	expectedValue := 1003
+	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
+	// 5 is nonsense value that doesn't match either Workflow or Activity
+	v := f("global-samples-namespace", "test-tq", 5)
+	s.Equal(expectedValue, v)
+}
+
+func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_NamespaceOnly() {
+	cln := NewCollection(s.client, log.NewNoopLogger())
+	expectedValue := 1004
+	f := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
+	v := f("another-namespace", "other-test-tq", 0)
+	s.Equal(expectedValue, v)
+}
+
+func (s *fileBasedClientSuite) TestGetIntValue_FilterByTQ_MatchFallback() {
+	cln := NewCollection(s.client, log.NewNoopLogger())
+	// should return 1001 as the most specific match
+	f1 := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 1001)
+	v1 := f1("global-samples-namespace", "test-tq", 1)
+	f2 := cln.GetIntPropertyFilteredByTaskQueueInfo(testGetIntPropertyKey, 0)
+	v2 := f2("global-samples-namespace", "test-tq", 1)
+	s.Equal(v1, v2)
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue() {
@@ -196,9 +223,9 @@ func (s *fileBasedClientSuite) TestGetFloatValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetFloatValue_WrongType() {
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace: "samples-namespace",
-	}
+	}}
 	defaultValue := 1.0
 	v, err := s.client.GetFloatValue(testGetFloat64PropertyKey, filters, defaultValue)
 	s.Error(err)
@@ -212,9 +239,9 @@ func (s *fileBasedClientSuite) TestGetBoolValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetStringValue() {
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		TaskQueueName: "random taskqueue",
-	}
+	}}
 	v, err := s.client.GetStringValue(testGetStringPropertyKey, filters, "defaultString")
 	s.NoError(err)
 	s.Equal("constrained-string", v)
@@ -240,9 +267,9 @@ func (s *fileBasedClientSuite) TestGetMapValue() {
 
 func (s *fileBasedClientSuite) TestGetMapValue_WrongType() {
 	var defaultVal map[string]interface{}
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		TaskQueueName: "random taskqueue",
-	}
+	}}
 	v, err := s.client.GetMapValue(testGetMapPropertyKey, filters, defaultVal)
 	s.Error(err)
 	s.Equal(defaultVal, v)
@@ -255,19 +282,19 @@ func (s *fileBasedClientSuite) TestGetDurationValue() {
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_NotStringRepresentation() {
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace: "samples-namespace",
-	}
+	}}
 	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, filters, time.Second)
 	s.Error(err)
 	s.Equal(time.Second, v)
 }
 
 func (s *fileBasedClientSuite) TestGetDurationValue_ParseFailed() {
-	filters := map[Filter]interface{}{
+	filters := []map[Filter]interface{}{{
 		Namespace:     "samples-namespace",
 		TaskQueueName: "longIdleTimeTaskqueue",
-	}
+	}}
 	v, err := s.client.GetDurationValue(testGetDurationPropertyKey, filters, time.Second)
 	s.Error(err)
 	s.Equal(time.Second, v)

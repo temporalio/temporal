@@ -38,6 +38,11 @@ import (
 
 var _ Client = (*basicClient)(nil)
 
+var (
+	errKeyNotPresent        = errors.New("key not present")
+	errNoMatchingConstraint = errors.New("no matching constraint in key")
+)
+
 type configValueMap map[string][]*constrainedValue
 
 type constrainedValue struct {
@@ -77,7 +82,7 @@ func (bc *basicClient) GetValue(
 
 func (bc *basicClient) GetValueWithFilters(
 	name Key,
-	filters map[Filter]interface{},
+	filters []map[Filter]interface{},
 	defaultValue interface{},
 ) (interface{}, error) {
 	return bc.getValueWithFilters(name, filters, defaultValue)
@@ -85,7 +90,7 @@ func (bc *basicClient) GetValueWithFilters(
 
 func (bc *basicClient) GetIntValue(
 	name Key,
-	filters map[Filter]interface{},
+	filters []map[Filter]interface{},
 	defaultValue int,
 ) (int, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
@@ -101,7 +106,7 @@ func (bc *basicClient) GetIntValue(
 
 func (bc *basicClient) GetFloatValue(
 	name Key,
-	filters map[Filter]interface{},
+	filters []map[Filter]interface{},
 	defaultValue float64,
 ) (float64, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
@@ -119,7 +124,7 @@ func (bc *basicClient) GetFloatValue(
 
 func (bc *basicClient) GetBoolValue(
 	name Key,
-	filters map[Filter]interface{},
+	filters []map[Filter]interface{},
 	defaultValue bool,
 ) (bool, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
@@ -135,7 +140,7 @@ func (bc *basicClient) GetBoolValue(
 
 func (bc *basicClient) GetStringValue(
 	name Key,
-	filters map[Filter]interface{},
+	filters []map[Filter]interface{},
 	defaultValue string,
 ) (string, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
@@ -151,7 +156,7 @@ func (bc *basicClient) GetStringValue(
 
 func (bc *basicClient) GetMapValue(
 	name Key,
-	filters map[Filter]interface{},
+	filters []map[Filter]interface{},
 	defaultValue map[string]interface{},
 ) (map[string]interface{}, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
@@ -165,7 +170,7 @@ func (bc *basicClient) GetMapValue(
 }
 
 func (bc *basicClient) GetDurationValue(
-	name Key, filters map[Filter]interface{}, defaultValue time.Duration,
+	name Key, filters []map[Filter]interface{}, defaultValue time.Duration,
 ) (time.Duration, error) {
 	val, err := bc.getValueWithFilters(name, filters, defaultValue)
 	if err != nil {
@@ -189,27 +194,30 @@ func (bc *basicClient) GetDurationValue(
 
 func (bc *basicClient) getValueWithFilters(
 	key Key,
-	filters map[Filter]interface{},
+	filters []map[Filter]interface{},
 	defaultValue interface{},
 ) (interface{}, error) {
 	keyName := strings.ToLower(key.String())
 	values := bc.values.Load().(configValueMap)
-	found := false
-	for _, constrainedValue := range values[keyName] {
-		if len(constrainedValue.Constraints) == 0 {
-			// special handling for default value (value without any constraints)
-			defaultValue = constrainedValue.Value
-			found = true
-			continue
+	constrainedValues := values[keyName]
+	if constrainedValues == nil {
+		return defaultValue, errKeyNotPresent
+	}
+	for _, filter := range filters {
+		for _, constrainedValue := range constrainedValues {
+			if match(constrainedValue, filter) {
+				return constrainedValue.Value, nil
+			}
 		}
-		if match(constrainedValue, filters) {
+	}
+	// if not found yet, try empty filter
+	for _, constrainedValue := range constrainedValues {
+		if len(constrainedValue.Constraints) == 0 {
 			return constrainedValue.Value, nil
 		}
 	}
-	if !found {
-		return defaultValue, errors.New("unable to find key")
-	}
-	return defaultValue, nil
+	// key is present but no constraint section matches
+	return defaultValue, errNoMatchingConstraint
 }
 
 // match will return true if the constraints matches the filters exactly
