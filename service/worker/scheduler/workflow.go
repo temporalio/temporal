@@ -555,7 +555,7 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 
 // processBuffer should return true if there might be more work to do right now.
 func (s *scheduler) processBuffer() bool {
-	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStart), "running", len(s.Info.RunningWorkflows), "needRefresh", s.needRefresh)
+	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.needRefresh)
 
 	// Make sure we have something to start. If not, we can clear the buffer.
 	req := s.Schedule.Action.GetStartWorkflow()
