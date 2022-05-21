@@ -516,18 +516,18 @@ func (d *HandlerImpl) UpdateNamespace(
 			}
 			configurationChanged = true
 			replicationConfig.State = updateReplicationConfig.State
-
-			replicationHistory = d.maybeAppendToReplicationHistory(
-				replicationHistory,
-				updateReplicationConfig,
-				getResponse.Namespace,
-			)
 		}
 
 		if updateReplicationConfig.GetActiveClusterName() != "" {
 			activeClusterChanged = true
 			replicationConfig.ActiveClusterName = updateReplicationConfig.GetActiveClusterName()
 		}
+
+		replicationHistory = d.maybeAppendToReplicationHistory(
+			replicationHistory,
+			updateReplicationConfig,
+			getResponse.Namespace,
+		)
 	}
 
 	if err := d.namespaceAttrValidator.validateNamespaceConfig(config); err != nil {
@@ -797,9 +797,7 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
-// maybeAppendToReplicationHistory adds an entry iff the replication state is changing to Active and the new Active
-// Cluster is different from the last Active Cluster. This is usually but not always the case, since handover may fail
-// in whichc case the old cluster becomes Active again.
+// maybeAppendToReplicationHistory adds an entry if the Namespace is becoming active in a new cluster.
 func (d *HandlerImpl) maybeAppendToReplicationHistory(
 	replicationHistory []*persistencespb.ReplicationStatus,
 	updateReplicationConfig *replicationpb.NamespaceReplicationConfig,
@@ -811,8 +809,14 @@ func (d *HandlerImpl) maybeAppendToReplicationHistory(
 		tag.NewAnyTag("updateReplConfig", updateReplicationConfig),
 		tag.NewAnyTag("namespaceDetail", namespaceDetail),
 	)
-	if updateReplicationConfig.State != enumspb.REPLICATION_STATE_NORMAL {
-		d.logger.Debug("Replication state not normal", tag.NewAnyTag("state", updateReplicationConfig.State))
+	desiredReplicationState := updateReplicationConfig.State
+	if desiredReplicationState == enumspb.REPLICATION_STATE_UNSPECIFIED {
+		desiredReplicationState = namespaceDetail.ReplicationConfig.State
+	}
+	// N.B., UNSPECIFIED is the same as NORMAL
+	if desiredReplicationState != enumspb.REPLICATION_STATE_NORMAL &&
+		desiredReplicationState != enumspb.REPLICATION_STATE_UNSPECIFIED {
+		d.logger.Debug("Replication state not NORMAL", tag.NewAnyTag("state", updateReplicationConfig.State))
 		return replicationHistory
 	}
 	newActiveCluster := updateReplicationConfig.ActiveClusterName
