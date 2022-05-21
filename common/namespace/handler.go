@@ -226,6 +226,7 @@ func (d *HandlerImpl) RegisterNamespace(
 	replicationConfig := &persistencespb.NamespaceReplicationConfig{
 		ActiveClusterName: activeClusterName,
 		Clusters:          clusters,
+		State:             enumspb.REPLICATION_STATE_NORMAL,
 	}
 	isGlobalNamespace := registerRequest.GetIsGlobalNamespace()
 
