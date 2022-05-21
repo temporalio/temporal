@@ -26,8 +26,9 @@ package frontend
 
 import (
 	"context"
-	"go.temporal.io/server/common/clock"
 	"testing"
+
+	"go.temporal.io/server/common/clock"
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"

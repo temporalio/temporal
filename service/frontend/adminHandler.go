@@ -28,11 +28,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"go.temporal.io/server/common/clock"
 	"net"
 	"strings"
 	"sync/atomic"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"
@@ -137,18 +138,18 @@ type (
 		ClientFactory                       serverClient.Factory
 		ClientBean                          serverClient.Bean
 		HistoryClient                       historyservice.HistoryServiceClient
-		sdkClientFactory  sdk.ClientFactory
-		MembershipMonitor membership.Monitor
-		ArchiverProvider  provider.ArchiverProvider
-		MetricsClient     metrics.Client
-		NamespaceRegistry namespace.Registry
-		SaProvider        searchattribute.Provider
-		SaManager         searchattribute.Manager
-		ClusterMetadata   cluster.Metadata
-		ArchivalMetadata  archiver.ArchivalMetadata
-		HealthServer      *health.Server
-		EventSerializer   serialization.Serializer
-		TimeSource        clock.TimeSource
+		sdkClientFactory                    sdk.ClientFactory
+		MembershipMonitor                   membership.Monitor
+		ArchiverProvider                    provider.ArchiverProvider
+		MetricsClient                       metrics.Client
+		NamespaceRegistry                   namespace.Registry
+		SaProvider                          searchattribute.Provider
+		SaManager                           searchattribute.Manager
+		ClusterMetadata                     cluster.Metadata
+		ArchivalMetadata                    archiver.ArchivalMetadata
+		HealthServer                        *health.Server
+		EventSerializer                     serialization.Serializer
+		TimeSource                          clock.TimeSource
 	}
 )
 

@@ -28,10 +28,11 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"go.temporal.io/server/common/clock"
 	"sync/atomic"
 	"time"
 	"unicode/utf8"
+
+	"go.temporal.io/server/common/clock"
 
 	"github.com/pborman/uuid"
 	commonpb "go.temporal.io/api/common/v1"

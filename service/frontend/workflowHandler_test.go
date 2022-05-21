@@ -27,9 +27,10 @@ package frontend
 import (
 	"context"
 	"errors"
-	"go.temporal.io/server/common/clock"
 	"testing"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 
 	"github.com/golang/mock/gomock"
 	"github.com/pborman/uuid"

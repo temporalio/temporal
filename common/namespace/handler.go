@@ -29,8 +29,9 @@ package namespace
 import (
 	"context"
 	"fmt"
-	"go.temporal.io/server/common/clock"
 	"time"
+
+	"go.temporal.io/server/common/clock"
 
 	"github.com/pborman/uuid"
 	enumspb "go.temporal.io/api/enums/v1"
