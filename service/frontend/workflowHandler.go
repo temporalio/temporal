@@ -1931,8 +1931,8 @@ func (wh *WorkflowHandler) RespondActivityTaskCanceledById(ctx context.Context, 
 
 // RequestCancelWorkflowExecution is called by application worker when it wants to request cancellation of a workflow instance.
 // It will result in a new 'WorkflowExecutionCancelRequested' event being written to the workflow history and a new WorkflowTask
-// created for the workflow instance so new commands could be made. It fails with 'EntityNotExistsError' if the workflow is not valid
-// anymore due to completion or doesn't exist.
+// created for the workflow instance so new commands could be made. It returns success if requested workflow already closed.
+// It fails with 'NotFound' if the requested workflow doesn't exist.
 func (wh *WorkflowHandler) RequestCancelWorkflowExecution(ctx context.Context, request *workflowservice.RequestCancelWorkflowExecutionRequest) (_ *workflowservice.RequestCancelWorkflowExecutionResponse, retError error) {
 	defer log.CapturePanic(wh.logger, &retError)
 
