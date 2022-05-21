@@ -56,10 +56,6 @@ import (
 )
 
 type (
-	contextMatcher struct {
-		shardID int32
-	}
-
 	controllerSuite struct {
 		suite.Suite
 		*require.Assertions
@@ -149,17 +145,6 @@ func (s *controllerSuite) SetupTest() {
 
 func (s *controllerSuite) TearDownTest() {
 	s.controller.Finish()
-}
-
-type getOrCreateShardRequestMatcher int32
-
-func (s getOrCreateShardRequestMatcher) Matches(x interface{}) bool {
-	req, ok := x.(*persistence.GetOrCreateShardRequest)
-	return ok && req.ShardID == int32(s)
-}
-
-func (s getOrCreateShardRequestMatcher) String() string {
-	return strconv.Itoa(int(s))
 }
 
 func (s *controllerSuite) TestAcquireShardSuccess() {
@@ -702,7 +687,7 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 	// s.mockResource.ExecutionMgr.On("Close").Return()
 	mockEngine.EXPECT().Start().MinTimes(minTimes)
 	s.mockServiceResolver.EXPECT().Lookup(convert.Int32ToString(shardID)).Return(s.hostInfo, nil).Times(2).MinTimes(minTimes)
-	s.mockEngineFactory.EXPECT().CreateEngine(newContextMatcher(shardID)).Return(mockEngine).MinTimes(minTimes)
+	s.mockEngineFactory.EXPECT().CreateEngine(contextMatcher(shardID)).Return(mockEngine).MinTimes(minTimes)
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), getOrCreateShardRequestMatcher(shardID)).Return(
 		&persistence.GetOrCreateShardResponse{
 			ShardInfo: &persistencespb.ShardInfo{
@@ -750,19 +735,29 @@ func (s *controllerSuite) setupMocksForAcquireShard(shardID int32, mockEngine *M
 	}).Return(nil).MinTimes(minTimes)
 }
 
-func newContextMatcher(shardID int32) *contextMatcher {
-	return &contextMatcher{shardID: shardID}
-}
+// This is needed to avoid race conditions when using this matcher, since
+// fmt.Sprintf("%v"), used by gomock, would otherwise access private fields.
+// See https://github.com/temporalio/temporal/issues/2777
+var _ fmt.Stringer = (*ContextImpl)(nil)
 
-func (m *contextMatcher) Matches(x interface{}) bool {
+type contextMatcher int32
+
+func (s contextMatcher) Matches(x interface{}) bool {
 	context, ok := x.(Context)
-	if !ok {
-		return false
-	}
-	return m.shardID == context.GetShardID()
+	return ok && context.GetShardID() == int32(s)
 }
 
-func (m *contextMatcher) String() string {
-	// noop, not used
-	return ""
+func (s contextMatcher) String() string {
+	return strconv.Itoa(int(s))
+}
+
+type getOrCreateShardRequestMatcher int32
+
+func (s getOrCreateShardRequestMatcher) Matches(x interface{}) bool {
+	req, ok := x.(*persistence.GetOrCreateShardRequest)
+	return ok && req.ShardID == int32(s)
+}
+
+func (s getOrCreateShardRequestMatcher) String() string {
+	return strconv.Itoa(int(s))
 }
