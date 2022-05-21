@@ -1216,9 +1216,15 @@ func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 			logWarnImmediateTaskLevelDiff < visibilityLag ||
 			logWarnImmediateTaskLevelDiff < replicationLag) {
 
-		s.contextTaggedLogger.Warn("Shard ack levels diff exceeds warn threshold.",
-			tag.ShardQueueAcks(s.shardInfo.QueueAckLevels),
-		)
+		ackLevelTags := make([]tag.Tag, 0, len(s.shardInfo.QueueAckLevels))
+		for categoryID, ackLevel := range s.shardInfo.QueueAckLevels {
+			category, ok := tasks.GetCategoryByID(categoryID)
+			if !ok {
+				continue
+			}
+			ackLevelTags = append(ackLevelTags, tag.ShardQueueAcks(category.Name(), ackLevel))
+		}
+		s.contextTaggedLogger.Warn("Shard ack levels diff exceeds warn threshold.", ackLevelTags...)
 	}
 
 	metricsScope := s.GetMetricsClient().Scope(metrics.ShardInfoScope)

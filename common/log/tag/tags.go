@@ -533,8 +533,8 @@ func MaxLevel(lv int64) ZapTag {
 }
 
 // ShardQueueAcks returns tag for shard queue ack levels
-func ShardQueueAcks(shardQueueAcks interface{}) ZapTag {
-	return NewAnyTag("shard-queue-acks", shardQueueAcks)
+func ShardQueueAcks(categoryName string, ackLevel interface{}) ZapTag {
+	return NewAnyTag("shard-"+categoryName+"-queue-acks", ackLevel)
 }
 
 // task queue processor
