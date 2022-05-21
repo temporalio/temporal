@@ -3589,10 +3589,12 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 
 	persistenceResp, err := wh.visibilityMrg.ListOpenWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
 		ListWorkflowExecutionsRequest: &manager.ListWorkflowExecutionsRequest{
-			NamespaceID:   namespaceID,
-			Namespace:     namespaceName,
-			PageSize:      int(request.GetMaximumPageSize()),
-			NextPageToken: request.NextPageToken,
+			NamespaceID:       namespaceID,
+			Namespace:         namespaceName,
+			PageSize:          int(request.GetMaximumPageSize()),
+			NextPageToken:     request.NextPageToken,
+			EarliestStartTime: minTime,
+			LatestStartTime:   maxTime,
 		},
 		WorkflowTypeName: scheduler.WorkflowType,
 	})
