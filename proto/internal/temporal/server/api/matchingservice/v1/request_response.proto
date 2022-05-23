@@ -32,6 +32,7 @@ import "temporal/api/common/v1/message.proto";
 import "temporal/api/enums/v1/task_queue.proto";
 import "temporal/api/taskqueue/v1/message.proto";
 import "temporal/api/query/v1/message.proto";
+import "temporal/api/workflow/v1/message.proto";
 
 import "temporal/server/api/clock/v1/message.proto";
 import "temporal/server/api/enums/v1/task.proto";
@@ -182,3 +183,22 @@ message ListTaskQueuePartitionsResponse {
     repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata activity_task_queue_partitions = 1;
     repeated temporal.api.taskqueue.v1.TaskQueuePartitionMetadata workflow_task_queue_partitions = 2;
 }
+
+// (-- api-linter: core::0134::request-mask-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest doesn't follow Google API format --)
+// (-- api-linter: core::0134::request-resource-required=disabled
+//     aip.dev/not-precedent: UpdateWorkerBuildIdOrderingRequest RPC doesn't follow Google API format. --)
+message UpdateWorkerBuildIdOrderingRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.UpdateWorkerBuildIdOrderingRequest request = 2;
+}
+message UpdateWorkerBuildIdOrderingResponse {}
+
+message GetWorkerBuildIdOrderingRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.GetWorkerBuildIdOrderingRequest request = 2;
+}
+message GetWorkerBuildIdOrderingResponse {
+    temporal.api.workflowservice.v1.GetWorkerBuildIdOrderingResponse response = 1;
+}
+

@@ -680,6 +680,20 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	return &resp, nil
 }
 
+func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
+	hCtx *handlerContext,
+	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
+) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
+func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
+	hCtx *handlerContext,
+	request *matchingservice.GetWorkerBuildIdOrderingRequest,
+) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	return nil, serviceerror.NewUnimplemented("todo")
+}
+
 func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		namespace.Name(request.GetNamespace()),

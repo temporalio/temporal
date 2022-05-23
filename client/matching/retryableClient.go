@@ -193,3 +193,35 @@ func (c *retryableClient) ListTaskQueuePartitions(
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) UpdateWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+
+	var resp *matchingservice.UpdateWorkerBuildIdOrderingResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *matchingservice.GetWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+
+	var resp *matchingservice.GetWorkerBuildIdOrderingResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+		return err
+	}
+
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}

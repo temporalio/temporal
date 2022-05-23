@@ -730,6 +730,36 @@ func (c *clientImpl) ListSchedules(
 	return client.ListSchedules(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerBuildIdOrderingResponse, error) {
+	client, err := c.getRandomClient()
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+
+	return client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }
