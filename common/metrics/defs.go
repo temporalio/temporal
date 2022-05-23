@@ -433,6 +433,10 @@ const (
 	MatchingClientDescribeTaskQueueScope
 	// MatchingClientListTaskQueuePartitionsScope tracks RPC calls to matching service
 	MatchingClientListTaskQueuePartitionsScope
+	// MatchingClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to matching service
+	MatchingClientUpdateWorkerBuildIdOrderingScope
+	// MatchingGetBuildIdOrdering tracks RPC calls to matching service
+	MatchingClientGetWorkerBuildIdOrderingScope
 	// FrontendClientDeprecateNamespaceScope tracks RPC calls to frontend service
 	FrontendClientDeprecateNamespaceScope
 	// FrontendClientDescribeNamespaceScope tracks RPC calls to frontend service
@@ -539,6 +543,10 @@ const (
 	FrontendClientDeleteScheduleScope
 	// FrontendClientListSchedulesScope tracks RPC calls to frontend service
 	FrontendClientListSchedulesScope
+	// FrontendClientUpdateWorkerBuildIdOrderingScope tracks RPC calls to frontend service
+	FrontendClientUpdateWorkerBuildIdOrderingScope
+	// FrontendClientGetWorkerBuildIdOrderingScope tracks RPC calls to frontend service
+	FrontendClientGetWorkerBuildIdOrderingScope
 	// AdminClientAddSearchAttributesScope tracks RPC calls to admin service
 	AdminClientAddSearchAttributesScope
 	// AdminClientRemoveSearchAttributesScope tracks RPC calls to admin service
@@ -679,6 +687,10 @@ const (
 	DCRedirectionDeleteScheduleScope
 	// DCRedirectionListSchedulesScope tracks RPC calls for dc redirection
 	DCRedirectionListSchedulesScope
+	// DCRedirectionUpdateWorkerBuildIdOrderingScope tracks RPC calls for dc redirection
+	DCRedirectionUpdateWorkerBuildIdOrderingScope
+	// DCRedirectionGetWorkerBuildIdOrderingScope tracks RPC calls for dc redirection
+	DCRedirectionGetWorkerBuildIdOrderingScope
 
 	// MessagingClientPublishScope tracks Publish calls made by service to messaging layer
 	MessagingClientPublishScope
@@ -942,6 +954,10 @@ const (
 	FrontendDeleteScheduleScope
 	// FrontendListSchedulesScope is the metric scope for frontend.ListSchedulesScope
 	FrontendListSchedulesScope
+	// FrontendUpdateWorkerBuildIdOrderingScope is the metric scope for frontend.UpdateWorkerBuildIdOrderingScope
+	FrontendUpdateWorkerBuildIdOrderingScope
+	// FrontendGetWorkerBuildIdOrderingScope is the metric scope for frontend.GetWorkerBuildIdOrderingScope
+	FrontendGetWorkerBuildIdOrderingScope
 
 	// VersionCheckScope is scope used by version checker
 	VersionCheckScope
@@ -1201,6 +1217,10 @@ const (
 	MatchingDescribeTaskQueueScope
 	// MatchingListTaskQueuePartitionsScope tracks ListTaskQueuePartitions API calls received by service
 	MatchingListTaskQueuePartitionsScope
+	// MatchingUpdateWorkerBuildIdOrderingScope tracks UpdateWorkerBuildIdOrdering API calls received by service
+	MatchingUpdateWorkerBuildIdOrderingScope
+	// MatchingGetWorkerBuildIdOrderingScope tracks GetWorkerBuildIdOrdering API calls received by service
+	MatchingGetWorkerBuildIdOrderingScope
 
 	NumMatchingScopes
 )
@@ -1420,15 +1440,17 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientGetReplicationStatusScope:                   {operation: "HistoryClientGetReplicationStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientDeleteWorkflowVisibilityRecordScope:         {operation: "HistoryClientDeleteWorkflowVisibilityRecordScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 
-		MatchingClientPollWorkflowTaskQueueScope:     {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientPollActivityTaskQueueScope:     {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientAddActivityTaskScope:           {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientAddWorkflowTaskScope:           {operation: "MatchingClientAddWorkflowTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientQueryWorkflowScope:             {operation: "MatchingClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientRespondQueryTaskCompletedScope: {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientCancelOutstandingPollScope:     {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientDescribeTaskQueueScope:         {operation: "MatchingClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
-		MatchingClientListTaskQueuePartitionsScope:   {operation: "MatchingClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientPollWorkflowTaskQueueScope:       {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientPollActivityTaskQueueScope:       {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddActivityTaskScope:             {operation: "MatchingClientAddActivityTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientAddWorkflowTaskScope:             {operation: "MatchingClientAddWorkflowTask", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientQueryWorkflowScope:               {operation: "MatchingClientQueryWorkflow", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientRespondQueryTaskCompletedScope:   {operation: "MatchingClientRespondQueryTaskCompleted", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientCancelOutstandingPollScope:       {operation: "MatchingClientCancelOutstandingPoll", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientDescribeTaskQueueScope:           {operation: "MatchingClientDescribeTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientListTaskQueuePartitionsScope:     {operation: "MatchingClientListTaskQueuePartitions", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientUpdateWorkerBuildIdOrderingScope: {operation: "MatchingClientUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
+		MatchingClientGetWorkerBuildIdOrderingScope:    {operation: "MatchingClientGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 
 		FrontendClientDeprecateNamespaceScope:                 {operation: "FrontendClientDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDescribeNamespaceScope:                  {operation: "FrontendClientDescribeNamespace", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
@@ -1483,6 +1505,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendClientListScheduleMatchingTimesScope:          {operation: "FrontendClientListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientDeleteScheduleScope:                     {operation: "FrontendClientDeleteSchedule", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 		FrontendClientListSchedulesScope:                      {operation: "FrontendClientListSchedules", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientUpdateWorkerBuildIdOrderingScope:        {operation: "FrontendClientUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
+		FrontendClientGetWorkerBuildIdOrderingScope:           {operation: "FrontendClientGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: FrontendRoleTagValue}},
 
 		AdminClientAddSearchAttributesScope:              {operation: "AdminClientAddSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientRemoveSearchAttributesScope:           {operation: "AdminClientRemoveSearchAttributes", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
@@ -1555,6 +1579,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		DCRedirectionListScheduleMatchingTimesScope:          {operation: "DCRedirectionListScheduleMatchingTimes", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDeleteScheduleScope:                     {operation: "DCRedirectionDeleteSchedule", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionListSchedulesScope:                      {operation: "DCRedirectionListSchedules", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionUpdateWorkerBuildIdOrderingScope:        {operation: "DCRedirectionUpdateWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
+		DCRedirectionGetWorkerBuildIdOrderingScope:           {operation: "DCRedirectionGetWorkerBuildIdOrdering", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 
 		MessagingClientPublishScope:      {operation: "MessagingClientPublish"},
 		MessagingClientPublishBatchScope: {operation: "MessagingClientPublishBatch"},
@@ -1587,7 +1613,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Frontend Scope Names
 	Frontend: {
-		// Admin API scope co-locates with with frontend
+		// Admin API scope co-locates with frontend
 		AdminRemoveTaskScope:                            {operation: "AdminRemoveTask"},
 		AdminCloseShardScope:                            {operation: "AdminCloseShard"},
 		AdminGetShardScope:                              {operation: "AdminGetShard"},
@@ -1670,6 +1696,8 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		FrontendListScheduleMatchingTimesScope:          {operation: "ListScheduleMatchingTimes"},
 		FrontendDeleteScheduleScope:                     {operation: "DeleteSchedule"},
 		FrontendListSchedulesScope:                      {operation: "ListSchedules"},
+		FrontendUpdateWorkerBuildIdOrderingScope:        {operation: "UpdateWorkerBuildIdOrdering"},
+		FrontendGetWorkerBuildIdOrderingScope:           {operation: "GetWorkerBuildIdOrdering"},
 		VersionCheckScope:                               {operation: "VersionCheck"},
 		AuthorizationScope:                              {operation: "Authorization"},
 	},
@@ -1795,17 +1823,19 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 	},
 	// Matching Scope Names
 	Matching: {
-		MatchingPollWorkflowTaskQueueScope:     {operation: "PollWorkflowTaskQueue"},
-		MatchingPollActivityTaskQueueScope:     {operation: "PollActivityTaskQueue"},
-		MatchingAddActivityTaskScope:           {operation: "AddActivityTask"},
-		MatchingAddWorkflowTaskScope:           {operation: "AddWorkflowTask"},
-		MatchingTaskQueueMgrScope:              {operation: "TaskQueueMgr"},
-		MatchingEngineScope:                    {operation: "MatchingEngine"},
-		MatchingQueryWorkflowScope:             {operation: "QueryWorkflow"},
-		MatchingRespondQueryTaskCompletedScope: {operation: "RespondQueryTaskCompleted"},
-		MatchingCancelOutstandingPollScope:     {operation: "CancelOutstandingPoll"},
-		MatchingDescribeTaskQueueScope:         {operation: "DescribeTaskQueue"},
-		MatchingListTaskQueuePartitionsScope:   {operation: "ListTaskQueuePartitions"},
+		MatchingPollWorkflowTaskQueueScope:       {operation: "PollWorkflowTaskQueue"},
+		MatchingPollActivityTaskQueueScope:       {operation: "PollActivityTaskQueue"},
+		MatchingAddActivityTaskScope:             {operation: "AddActivityTask"},
+		MatchingAddWorkflowTaskScope:             {operation: "AddWorkflowTask"},
+		MatchingTaskQueueMgrScope:                {operation: "TaskQueueMgr"},
+		MatchingEngineScope:                      {operation: "MatchingEngine"},
+		MatchingQueryWorkflowScope:               {operation: "QueryWorkflow"},
+		MatchingRespondQueryTaskCompletedScope:   {operation: "RespondQueryTaskCompleted"},
+		MatchingCancelOutstandingPollScope:       {operation: "CancelOutstandingPoll"},
+		MatchingDescribeTaskQueueScope:           {operation: "DescribeTaskQueue"},
+		MatchingListTaskQueuePartitionsScope:     {operation: "ListTaskQueuePartitions"},
+		MatchingUpdateWorkerBuildIdOrderingScope: {operation: "UpdateWorkerBuildIdOrdering"},
+		MatchingGetWorkerBuildIdOrderingScope:    {operation: "GetWorkerBuildIdOrdering"},
 	},
 	// Worker Scope Names
 	Worker: {

@@ -754,3 +754,33 @@ func (c *retryableClient) ListSchedules(
 	err := backoff.Retry(op, c.policy, c.isRetryable)
 	return resp, err
 }
+
+func (c *retryableClient) UpdateWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.UpdateWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	var resp *workflowservice.UpdateWorkerBuildIdOrderingResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}
+
+func (c *retryableClient) GetWorkerBuildIdOrdering(
+	ctx context.Context,
+	request *workflowservice.GetWorkerBuildIdOrderingRequest,
+	opts ...grpc.CallOption,
+) (*workflowservice.GetWorkerBuildIdOrderingResponse, error) {
+	var resp *workflowservice.GetWorkerBuildIdOrderingResponse
+	op := func() error {
+		var err error
+		resp, err = c.client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+		return err
+	}
+	err := backoff.Retry(op, c.policy, c.isRetryable)
+	return resp, err
+}

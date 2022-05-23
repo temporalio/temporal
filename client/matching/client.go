@@ -204,6 +204,26 @@ func (c *clientImpl) ListTaskQueuePartitions(ctx context.Context, request *match
 	return client.ListTaskQueuePartitions(ctx, request, opts...)
 }
 
+func (c *clientImpl) UpdateWorkerBuildIdOrdering(ctx context.Context, request *matchingservice.UpdateWorkerBuildIdOrderingRequest, opts ...grpc.CallOption) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	client, err := c.getClientForTaskqueue(request.Request.TaskQueue)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.UpdateWorkerBuildIdOrdering(ctx, request, opts...)
+}
+
+func (c *clientImpl) GetWorkerBuildIdOrdering(ctx context.Context, request *matchingservice.GetWorkerBuildIdOrderingRequest, opts ...grpc.CallOption) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	client, err := c.getClientForTaskqueue(request.Request.TaskQueue)
+	if err != nil {
+		return nil, err
+	}
+	ctx, cancel := c.createContext(ctx)
+	defer cancel()
+	return client.GetWorkerBuildIdOrdering(ctx, request, opts...)
+}
+
 func (c *clientImpl) createContext(parent context.Context) (context.Context, context.CancelFunc) {
 	return context.WithTimeout(parent, c.timeout)
 }
