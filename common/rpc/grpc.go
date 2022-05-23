@@ -61,7 +61,7 @@ const (
 // The hostName syntax is defined in
 // https://github.com/grpc/grpc/blob/master/doc/naming.md.
 // e.g. to use dns resolver, a "dns:///" prefix should be applied to the target.
-func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger) (*grpc.ClientConn, error) {
+func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger, customDialOptions ...grpc.DialOption) (*grpc.ClientConn, error) {
 	// Default to insecure
 	grpcSecureOpt := grpc.WithInsecure()
 	if tlsConfig != nil {
@@ -91,6 +91,7 @@ func Dial(hostName string, tlsConfig *tls.Config, logger log.Logger) (*grpc.Clie
 		grpc.WithDisableServiceConfig(),
 		grpc.WithConnectParams(cp),
 	}
+	dialOptions = append(dialOptions, customDialOptions...)
 
 	return grpc.Dial(
 		hostName,
