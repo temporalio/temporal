@@ -65,8 +65,9 @@ type (
 		mockAdminClient     *adminservicemock.MockAdminServiceClient
 		mockHistoryClient   *historyservicemock.MockHistoryServiceClient
 
-		namespaceID namespace.ID
-		namespace   namespace.Name
+		namespaceID    namespace.ID
+		namespace      namespace.Name
+		namespaceEntry *namespace.Namespace
 
 		serializer serialization.Serializer
 		logger     log.Logger
@@ -104,7 +105,7 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 
 	s.namespaceID = namespace.ID(uuid.New())
 	s.namespace = "some random namespace name"
-	namespaceEntry := namespace.NewGlobalNamespaceForTest(
+	s.namespaceEntry = namespace.NewGlobalNamespaceForTest(
 		&persistencespb.NamespaceInfo{Id: s.namespaceID.String(), Name: s.namespace.String()},
 		&persistencespb.NamespaceConfig{Retention: timestamp.DurationFromDays(1)},
 		&persistencespb.NamespaceReplicationConfig{
@@ -116,8 +117,8 @@ func (s *nDCHistoryResenderSuite) SetupTest() {
 		},
 		1234,
 	)
-	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(namespaceEntry, nil).AnyTimes()
-	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespaceByID(s.namespaceID).Return(s.namespaceEntry, nil).AnyTimes()
+	s.mockNamespaceCache.EXPECT().GetNamespace(s.namespace).Return(s.namespaceEntry, nil).AnyTimes()
 	s.serializer = serialization.NewSerializer()
 
 	s.rereplicator = NewNDCHistoryResender(
@@ -364,7 +365,7 @@ func (s *nDCHistoryResenderSuite) TestGetHistory() {
 	out, err := s.rereplicator.getHistory(
 		context.Background(),
 		cluster.TestCurrentClusterName,
-		s.namespace,
+		s.namespaceEntry,
 		workflowID,
 		runID,
 		startEventID,

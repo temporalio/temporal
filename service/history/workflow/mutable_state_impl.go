@@ -4206,9 +4206,7 @@ func (e *MutableStateImpl) updateWithLastWriteEvent(
 }
 
 func (e *MutableStateImpl) canReplicateEvents() bool {
-	return e.namespaceEntry.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster &&
-		// Don't replicate workflow executions in deleted namespace.
-		e.namespaceEntry.State() != enumspb.NAMESPACE_STATE_DELETED
+	return e.namespaceEntry.ReplicationPolicy() == namespace.ReplicationPolicyMultiCluster
 }
 
 // validateNoEventsAfterWorkflowFinish perform check on history event batch
