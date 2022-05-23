@@ -184,7 +184,7 @@ func getListenIP(cfg *config.RPC, logger log.Logger) net.IP {
 }
 
 // CreateFrontendGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateFrontendGRPCConnection(rpcAddress string) *grpc.ClientConn {
+func (d *RPCFactory) CreateFrontendGRPCConnection(rpcAddress string, dialOpts ...grpc.DialOption) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -206,11 +206,11 @@ func (d *RPCFactory) CreateFrontendGRPCConnection(rpcAddress string) *grpc.Clien
 		}
 	}
 
-	return d.dial(rpcAddress, tlsClientConfig)
+	return d.dial(rpcAddress, tlsClientConfig, dialOpts...)
 }
 
 // CreateInternodeGRPCConnection creates connection for gRPC calls
-func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.ClientConn {
+func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string, dialOpts ...grpc.DialOption) *grpc.ClientConn {
 	var tlsClientConfig *tls.Config
 	var err error
 	if d.tlsFactory != nil {
@@ -221,11 +221,11 @@ func (d *RPCFactory) CreateInternodeGRPCConnection(hostName string) *grpc.Client
 		}
 	}
 
-	return d.dial(hostName, tlsClientConfig)
+	return d.dial(hostName, tlsClientConfig, dialOpts...)
 }
 
-func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config) *grpc.ClientConn {
-	connection, err := Dial(hostName, tlsClientConfig, d.logger)
+func (d *RPCFactory) dial(hostName string, tlsClientConfig *tls.Config, dialOpts ...grpc.DialOption) *grpc.ClientConn {
+	connection, err := Dial(hostName, tlsClientConfig, d.logger, dialOpts...)
 	if err != nil {
 		d.logger.Fatal("Failed to create gRPC connection", tag.Error(err))
 		return nil
