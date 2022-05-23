@@ -114,9 +114,8 @@ func (s *engine3Suite) SetupTest() {
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&p.ShardInfoWithFailover{ShardInfo: &persistencespb.ShardInfo{
-			ShardId:          1,
-			RangeId:          1,
-			TransferAckLevel: 0,
+			ShardId: 1,
+			RangeId: 1,
 		}},
 		s.config,
 	)

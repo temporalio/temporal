@@ -130,9 +130,8 @@ func (s *engine2Suite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          1,
-				RangeId:          1,
-				TransferAckLevel: 0,
+				ShardId: 1,
+				RangeId: 1,
 			}},
 		s.config,
 	)

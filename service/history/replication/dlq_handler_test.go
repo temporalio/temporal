@@ -97,7 +97,6 @@ func (s *dlqHandlerSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:                0,
 				RangeId:                1,
-				ReplicationAckLevel:    0,
 				ReplicationDlqAckLevel: map[string]int64{cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID},
 			}},
 		tests.NewDynamicConfig(),

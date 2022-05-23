@@ -33,6 +33,7 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/service/history/tasks"
 )
 
 type (
@@ -114,11 +115,18 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	updatedInfo := copyShardInfo(shardInfo)
 	updatedInfo.Owner = updatedOwner
 	updatedInfo.RangeId = updatedRangeID
-	updatedInfo.TransferAckLevel = updatedTransferAckLevel
-	updatedInfo.ReplicationAckLevel = updatedReplicationAckLevel
+	updatedInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
+	updatedInfo.QueueAckLevels[tasks.CategoryTransfer.ID()] = &persistencespb.QueueAckLevel{
+		AckLevel: updatedTransferAckLevel,
+	}
+	updatedInfo.QueueAckLevels[tasks.CategoryReplication.ID()] = &persistencespb.QueueAckLevel{
+		AckLevel: updatedReplicationAckLevel,
+	}
 	updatedInfo.StolenSinceRenew = updatedStolenSinceRenew
-	updatedTimerAckLevel := timestamp.TimeNowPtrUtc()
-	updatedInfo.TimerAckLevelTime = updatedTimerAckLevel
+	updatedTimerAckLevel := time.Now().UTC()
+	updatedInfo.QueueAckLevels[tasks.CategoryTimer.ID()] = &persistencespb.QueueAckLevel{
+		AckLevel: updatedTimerAckLevel.UnixNano(),
+	}
 	err2 := s.UpdateShard(s.ctx, updatedInfo, shardInfo.GetRangeId())
 	s.Nil(err2)
 
@@ -127,16 +135,20 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.NotNil(info1)
 	s.Equal(updatedOwner, info1.Owner)
 	s.Equal(updatedRangeID, info1.GetRangeId())
-	s.Equal(updatedTransferAckLevel, info1.TransferAckLevel)
-	s.Equal(updatedReplicationAckLevel, info1.ReplicationAckLevel)
+	s.Equal(updatedTransferAckLevel, info1.QueueAckLevels[tasks.CategoryTransfer.ID()].AckLevel)
+	s.Equal(updatedReplicationAckLevel, info1.QueueAckLevels[tasks.CategoryReplication.ID()].AckLevel)
 	s.Equal(updatedStolenSinceRenew, info1.StolenSinceRenew)
-	info1timerAckLevelTime := info1.TimerAckLevelTime
-	s.EqualTimes(*updatedTimerAckLevel, *info1timerAckLevelTime)
+	s.EqualTimes(updatedTimerAckLevel, timestamp.UnixOrZeroTime(info1.QueueAckLevels[tasks.CategoryTimer.ID()].AckLevel))
 
 	failedUpdateInfo := copyShardInfo(shardInfo)
 	failedUpdateInfo.Owner = "failed_owner"
-	failedUpdateInfo.TransferAckLevel = int64(4000)
-	failedUpdateInfo.ReplicationAckLevel = int64(5000)
+	failedUpdateInfo.QueueAckLevels = make(map[int32]*persistencespb.QueueAckLevel)
+	failedUpdateInfo.QueueAckLevels[tasks.CategoryTransfer.ID()] = &persistencespb.QueueAckLevel{
+		AckLevel: int64(4000),
+	}
+	failedUpdateInfo.QueueAckLevels[tasks.CategoryReplication.ID()] = &persistencespb.QueueAckLevel{
+		AckLevel: int64(5000),
+	}
 	err4 := s.UpdateShard(s.ctx, failedUpdateInfo, shardInfo.GetRangeId())
 	s.NotNil(err4)
 	s.IsType(&p.ShardOwnershipLostError{}, err4)
@@ -146,23 +158,17 @@ func (s *ShardPersistenceSuite) TestUpdateShard() {
 	s.NotNil(info2)
 	s.Equal(updatedOwner, info2.Owner)
 	s.Equal(updatedRangeID, info2.GetRangeId())
-	s.Equal(updatedTransferAckLevel, info2.TransferAckLevel)
-	s.Equal(updatedReplicationAckLevel, info2.ReplicationAckLevel)
+	s.Equal(updatedTransferAckLevel, info2.QueueAckLevels[tasks.CategoryTransfer.ID()].AckLevel)
+	s.Equal(updatedReplicationAckLevel, info2.QueueAckLevels[tasks.CategoryReplication.ID()].AckLevel)
 	s.Equal(updatedStolenSinceRenew, info2.StolenSinceRenew)
-
-	info1timerAckLevelTime = info1.TimerAckLevelTime
-	s.EqualTimes(*updatedTimerAckLevel, *info1timerAckLevelTime)
 }
 
 func copyShardInfo(sourceInfo *persistencespb.ShardInfo) *persistencespb.ShardInfo {
 	return &persistencespb.ShardInfo{
-		ShardId:             sourceInfo.GetShardId(),
-		Owner:               sourceInfo.Owner,
-		RangeId:             sourceInfo.GetRangeId(),
-		TransferAckLevel:    sourceInfo.TransferAckLevel,
-		ReplicationAckLevel: sourceInfo.ReplicationAckLevel,
-		StolenSinceRenew:    sourceInfo.StolenSinceRenew,
-		TimerAckLevelTime:   sourceInfo.TimerAckLevelTime,
-		VisibilityAckLevel:  sourceInfo.VisibilityAckLevel,
+		ShardId:          sourceInfo.GetShardId(),
+		Owner:            sourceInfo.Owner,
+		RangeId:          sourceInfo.GetRangeId(),
+		StolenSinceRenew: sourceInfo.StolenSinceRenew,
+		QueueAckLevels:   sourceInfo.QueueAckLevels,
 	}
 }

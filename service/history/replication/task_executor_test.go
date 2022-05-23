@@ -96,9 +96,8 @@ func (s *taskExecutorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:             0,
-				RangeId:             1,
-				ReplicationAckLevel: 0,
+				ShardId: 0,
+				RangeId: 1,
 				ReplicationDlqAckLevel: map[string]int64{
 					cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
 				},

@@ -76,9 +76,8 @@ func (s *contextSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          0,
-				RangeId:          1,
-				TransferAckLevel: 0,
+				ShardId: 0,
+				RangeId: 1,
 			}},
 		tests.NewDynamicConfig(),
 		s.timeSource,
@@ -133,10 +132,14 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 
 	now := time.Now().Truncate(time.Millisecond)
 	persistenceShardInfo := &persistencespb.ShardInfo{
-		ShardId:           0,
-		TimerAckLevelTime: timestamp.TimePtr(now.Add(-time.Minute)),
-		ClusterTimerAckLevel: map[string]*time.Time{
-			cluster.TestCurrentClusterName: timestamp.TimePtr(now),
+		ShardId: 0,
+		QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+			tasks.CategoryTimer.ID(): {
+				AckLevel: now.Add(-time.Minute).UnixNano(),
+				ClusterAckLevel: map[string]int64{
+					cluster.TestCurrentClusterName: now.UnixNano(),
+				},
+			},
 		},
 	}
 	s.mockShardManager.EXPECT().GetOrCreateShard(gomock.Any(), gomock.Any()).Return(
@@ -157,11 +160,13 @@ func (s *contextSuite) TestTimerMaxReadLevelInitialization() {
 			continue
 		}
 
-		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
-		s.False(maxReadLevel.Before(*persistenceShardInfo.TimerAckLevelTime))
+		timerQueueAckLevels := persistenceShardInfo.QueueAckLevels[tasks.CategoryTimer.ID()]
 
-		if clusterAckLevel, ok := persistenceShardInfo.ClusterTimerAckLevel[clusterName]; ok {
-			s.False(maxReadLevel.Before(*clusterAckLevel))
+		maxReadLevel := shardContextImpl.getScheduledTaskMaxReadLevel(clusterName).FireTime
+		s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(timerQueueAckLevels.AckLevel)))
+
+		if clusterAckLevel, ok := timerQueueAckLevels.ClusterAckLevel[clusterName]; ok {
+			s.False(maxReadLevel.Before(timestamp.UnixOrZeroTime(clusterAckLevel)))
 		}
 	}
 }

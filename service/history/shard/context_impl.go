@@ -65,8 +65,6 @@ import (
 )
 
 var (
-	defaultTime = time.Unix(0, 0)
-
 	persistenceOperationRetryPolicy = common.CreatePersistenceRetryPolicy()
 )
 
@@ -167,10 +165,10 @@ var (
 )
 
 const (
-	logWarnTransferLevelDiff = 3000000 // 3 million
-	logWarnTimerLevelDiff    = time.Duration(30 * time.Minute)
-	historySizeLogThreshold  = 10 * 1024 * 1024
-	minContextTimeout        = 2 * time.Second
+	logWarnImmediateTaskLevelDiff = 3000000 // 3 million
+	logWarnScheduledTaskLevelDiff = time.Duration(30 * time.Minute)
+	historySizeLogThreshold       = 10 * 1024 * 1024
+	minContextTimeout             = 2 * time.Second
 )
 
 func (s *ContextImpl) String() string {
@@ -319,28 +317,7 @@ func (s *ContextImpl) getQueueAckLevelLocked(category tasks.Category) tasks.Key 
 		return convertPersistenceAckLevelToTaskKey(category.Type(), queueAckLevel.AckLevel)
 	}
 
-	// backward compatibility
-	switch category {
-	case tasks.CategoryTransfer:
-		return tasks.Key{
-			TaskID: s.shardInfo.TransferAckLevel,
-		}
-	case tasks.CategoryTimer:
-		return tasks.Key{
-			FireTime: timestamp.TimeValue(s.shardInfo.TimerAckLevelTime),
-		}
-	case tasks.CategoryReplication:
-		return tasks.Key{
-			TaskID: s.shardInfo.ReplicationAckLevel,
-		}
-	case tasks.CategoryVisibility:
-		return tasks.Key{
-			TaskID: s.shardInfo.VisibilityAckLevel,
-		}
-	default:
-		// might be a new category we added
-		return tasks.Key{}
-	}
+	return tasks.Key{}
 }
 
 func (s *ContextImpl) UpdateQueueAckLevel(
@@ -352,20 +329,6 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 
 	// the ack level is already the min ack level across all types of
 	// queue processors: active, passive, failover
-
-	// backward compatibility (for rollback)
-	switch category {
-	case tasks.CategoryTransfer:
-		s.shardInfo.TransferAckLevel = ackLevel.TaskID
-	case tasks.CategoryTimer:
-		s.shardInfo.TimerAckLevelTime = timestamp.TimePtr(ackLevel.FireTime)
-	case tasks.CategoryReplication:
-		s.shardInfo.ReplicationAckLevel = ackLevel.TaskID
-	case tasks.CategoryVisibility:
-		s.shardInfo.VisibilityAckLevel = ackLevel.TaskID
-	default:
-		// for new category, we don't need to worry about rollback
-	}
 
 	if _, ok := s.shardInfo.QueueAckLevels[category.ID()]; !ok {
 		s.shardInfo.QueueAckLevels[category.ID()] = &persistencespb.QueueAckLevel{
@@ -397,40 +360,17 @@ func (s *ContextImpl) GetQueueClusterAckLevel(
 	s.rLock()
 	defer s.rUnlock()
 
+	return s.getQueueClusterAckLevelLocked(category, cluster)
+}
+
+func (s *ContextImpl) getQueueClusterAckLevelLocked(
+	category tasks.Category,
+	cluster string,
+) tasks.Key {
 	if queueAckLevel, ok := s.shardInfo.QueueAckLevels[category.ID()]; ok {
 		if ackLevel, ok := queueAckLevel.ClusterAckLevel[cluster]; ok {
 			return convertPersistenceAckLevelToTaskKey(category.Type(), ackLevel)
 		}
-	}
-
-	// backward compatibility
-	switch category {
-	case tasks.CategoryTransfer:
-		if ackLevel, ok := s.shardInfo.ClusterTransferAckLevel[cluster]; ok {
-			return tasks.Key{
-				TaskID: ackLevel,
-			}
-		}
-	case tasks.CategoryTimer:
-		if ackLevel, ok := s.shardInfo.ClusterTimerAckLevel[cluster]; ok {
-			return tasks.Key{
-				FireTime: timestamp.TimeValue(ackLevel),
-			}
-		}
-	case tasks.CategoryReplication:
-		if replicationLevel, ok := s.shardInfo.ClusterReplicationLevel[cluster]; ok {
-			return tasks.Key{
-				TaskID: replicationLevel,
-			}
-		}
-		return tasks.Key{
-			TaskID: persistence.EmptyQueueMessageID,
-		}
-	case tasks.CategoryVisibility:
-		// no-op
-	default:
-		// might be a new category
-		// no-op
 	}
 
 	// otherwise, default to existing ack level, which belongs to local cluster
@@ -450,20 +390,6 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 		// do not move ack level when there's failover queue
 		// so that after shard reload we can re-create the failover queue
 		return nil
-	}
-
-	// backward compatibility (for rollback)
-	switch category {
-	case tasks.CategoryTransfer:
-		s.shardInfo.ClusterTransferAckLevel[cluster] = ackLevel.TaskID
-	case tasks.CategoryTimer:
-		s.shardInfo.ClusterTimerAckLevel[cluster] = timestamp.TimePtr(ackLevel.FireTime)
-	case tasks.CategoryReplication:
-		s.shardInfo.ClusterReplicationLevel[cluster] = ackLevel.TaskID
-	case tasks.CategoryVisibility:
-		// no-op
-	default:
-		// for new category, we don't need to worry about rollback
 	}
 
 	if _, ok := s.shardInfo.QueueAckLevels[category.ID()]; !ok {
@@ -1243,69 +1169,67 @@ func (s *ContextImpl) updateShardInfoLocked() error {
 	return nil
 }
 
-// TODO:
-// 1. when deprecating old ack level related fields, use shardInfo.QueueAckLevels
-// for calculating queue processing lag and diff. Current those old ack level fields
-// are updated together with the new QueueAckLevels, so metrics can still be emitted
-// correctly.
-// 2. instead of having separate metric definition for each task category, we should
+// TODO: Instead of having separate metric definition for each task category, we should
 // use one metrics (or two, one for immedidate task, one for scheduled task),
 // and add tags indicating the task category.
 func (s *ContextImpl) emitShardInfoMetricsLogsLocked() {
 	currentCluster := s.GetClusterMetadata().GetCurrentClusterName()
 	clusterInfo := s.GetClusterMetadata().GetAllClusterInfo()
 
-	minTransferLevel := s.shardInfo.ClusterTransferAckLevel[currentCluster]
-	maxTransferLevel := s.shardInfo.ClusterTransferAckLevel[currentCluster]
-	for clusterName, v := range s.shardInfo.ClusterTransferAckLevel {
-		if !clusterInfo[clusterName].Enabled {
+	minTransferLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTransfer, currentCluster) // s.shardInfo.ClusterTransferAckLevel[currentCluster]
+	maxTransferLevel := minTransferLevel
+	minTimerLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTimer, currentCluster)
+	maxTimerLevel := minTimerLevel
+	for clusterName, info := range clusterInfo {
+		if !info.Enabled {
 			continue
 		}
 
-		if v < minTransferLevel {
-			minTransferLevel = v
+		clusterTransferLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTransfer, clusterName)
+		if clusterTransferLevel.CompareTo(minTransferLevel) < 0 {
+			minTransferLevel = clusterTransferLevel
 		}
-		if v > maxTransferLevel {
-			maxTransferLevel = v
+		if clusterTransferLevel.CompareTo(maxTransferLevel) > 0 {
+			maxTransferLevel = clusterTransferLevel
+		}
+
+		clusterTimerLevel := s.getQueueClusterAckLevelLocked(tasks.CategoryTimer, clusterName)
+		if clusterTimerLevel.CompareTo(minTimerLevel) < 0 {
+			minTimerLevel = clusterTimerLevel
+		}
+		if clusterTimerLevel.CompareTo(maxTimerLevel) > 0 {
+			maxTimerLevel = clusterTimerLevel
 		}
 	}
-	diffTransferLevel := maxTransferLevel - minTransferLevel
 
-	minTimerLevel := timestamp.TimeValue(s.shardInfo.ClusterTimerAckLevel[currentCluster])
-	maxTimerLevel := timestamp.TimeValue(s.shardInfo.ClusterTimerAckLevel[currentCluster])
-	for clusterName, v := range s.shardInfo.ClusterTimerAckLevel {
-		if !clusterInfo[clusterName].Enabled {
-			continue
-		}
+	diffTransferLevel := maxTransferLevel.TaskID - minTransferLevel.TaskID
+	diffTimerLevel := maxTimerLevel.FireTime.Sub(minTimerLevel.FireTime)
 
-		t := timestamp.TimeValue(v)
-		if t.Before(minTimerLevel) {
-			minTimerLevel = t
-		}
-		if t.After(maxTimerLevel) {
-			maxTimerLevel = t
-		}
-	}
-	diffTimerLevel := maxTimerLevel.Sub(minTimerLevel)
-
-	replicationLag := s.immediateTaskMaxReadLevel - s.shardInfo.ReplicationAckLevel
-	transferLag := s.immediateTaskMaxReadLevel - s.shardInfo.TransferAckLevel
-	timerLag := time.Since(timestamp.TimeValue(s.shardInfo.TimerAckLevelTime))
-	visibilityLag := s.immediateTaskMaxReadLevel - s.shardInfo.VisibilityAckLevel
+	replicationLag := s.immediateTaskMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryReplication).TaskID
+	transferLag := s.immediateTaskMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryTransfer).TaskID
+	timerLag := s.timeSource.Now().Sub(s.getQueueAckLevelLocked(tasks.CategoryTimer).FireTime)
+	visibilityLag := s.immediateTaskMaxReadLevel - s.getQueueAckLevelLocked(tasks.CategoryVisibility).TaskID
 
 	transferFailoverInProgress := len(s.shardInfo.FailoverLevels[tasks.CategoryTransfer])
 	timerFailoverInProgress := len(s.shardInfo.FailoverLevels[tasks.CategoryTimer])
 
 	if s.config.EmitShardDiffLog() &&
-		(logWarnTransferLevelDiff < diffTransferLevel ||
-			logWarnTimerLevelDiff < diffTimerLevel ||
-			logWarnTransferLevelDiff < transferLag ||
-			logWarnTimerLevelDiff < timerLag) {
+		(logWarnImmediateTaskLevelDiff < diffTransferLevel ||
+			logWarnScheduledTaskLevelDiff < diffTimerLevel ||
+			logWarnImmediateTaskLevelDiff < transferLag ||
+			logWarnScheduledTaskLevelDiff < timerLag ||
+			logWarnImmediateTaskLevelDiff < visibilityLag ||
+			logWarnImmediateTaskLevelDiff < replicationLag) {
 
-		s.contextTaggedLogger.Warn("Shard ack levels diff exceeds warn threshold.",
-			tag.ShardReplicationAck(s.shardInfo.ReplicationAckLevel),
-			tag.ShardTimerAcks(s.shardInfo.ClusterTimerAckLevel),
-			tag.ShardTransferAcks(s.shardInfo.ClusterTransferAckLevel))
+		ackLevelTags := make([]tag.Tag, 0, len(s.shardInfo.QueueAckLevels))
+		for categoryID, ackLevel := range s.shardInfo.QueueAckLevels {
+			category, ok := tasks.GetCategoryByID(categoryID)
+			if !ok {
+				continue
+			}
+			ackLevelTags = append(ackLevelTags, tag.ShardQueueAcks(category.Name(), ackLevel))
+		}
+		s.contextTaggedLogger.Warn("Shard ack levels diff exceeds warn threshold.", ackLevelTags...)
 	}
 
 	metricsScope := s.GetMetricsClient().Scope(metrics.ShardInfoScope)
@@ -1363,7 +1287,7 @@ func (s *ContextImpl) allocateTaskIDsLocked(
 
 				visibilityTs := task.GetVisibilityTime()
 				s.contextTaggedLogger.Debug("Assigning new timer",
-					tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.AckLevel(s.shardInfo.TimerAckLevelTime))
+					tag.Timestamp(visibilityTs), tag.TaskID(task.GetTaskID()), tag.MaxQueryLevel(readCursorTS))
 			}
 		}
 	}
@@ -1709,12 +1633,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 			continue
 		}
 
-		// for backward compatibility
-		maxReadTime := timestamp.TimeValue(shardInfo.TimerAckLevelTime)
-		if currentTime, ok := shardInfo.ClusterTimerAckLevel[clusterName]; ok {
-			maxReadTime = common.MaxTime(maxReadTime, timestamp.TimeValue(currentTime))
-		}
-
+		var maxReadTime time.Time
 		for categoryID, queueAckLevels := range shardInfo.QueueAckLevels {
 			category, ok := taskCategories[categoryID]
 			if !ok || category.Type() != tasks.CategoryTypeScheduled {
@@ -1952,28 +1871,12 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 			failoverLevels[category][k] = v
 		}
 	}
-	clusterTransferAckLevel := make(map[string]int64)
-	for k, v := range shardInfo.ClusterTransferAckLevel {
-		clusterTransferAckLevel[k] = v
-	}
-	clusterTimerAckLevel := make(map[string]*time.Time)
-	for k, v := range shardInfo.ClusterTimerAckLevel {
-		if timestamp.TimeValue(v).IsZero() {
-			v = timestamp.TimePtr(defaultTime)
-		}
-		clusterTimerAckLevel[k] = v
-	}
-	clusterReplicationLevel := make(map[string]int64)
-	for k, v := range shardInfo.ClusterReplicationLevel {
-		clusterReplicationLevel[k] = v
-	}
+
 	clusterReplicationDLQLevel := make(map[string]int64)
 	for k, v := range shardInfo.ReplicationDlqAckLevel {
 		clusterReplicationDLQLevel[k] = v
 	}
-	if timestamp.TimeValue(shardInfo.TimerAckLevelTime).IsZero() {
-		shardInfo.TimerAckLevelTime = timestamp.TimePtr(defaultTime)
-	}
+
 	queueAckLevels := make(map[int32]*persistencespb.QueueAckLevel)
 	for category, ackLevels := range shardInfo.QueueAckLevels {
 		copiedLevel := &persistencespb.QueueAckLevel{
@@ -1985,22 +1888,16 @@ func copyShardInfo(shardInfo *persistence.ShardInfoWithFailover) *persistence.Sh
 		}
 		queueAckLevels[category] = copiedLevel
 	}
+
 	shardInfoCopy := &persistence.ShardInfoWithFailover{
 		ShardInfo: &persistencespb.ShardInfo{
 			ShardId:                      shardInfo.GetShardId(),
 			Owner:                        shardInfo.Owner,
 			RangeId:                      shardInfo.GetRangeId(),
 			StolenSinceRenew:             shardInfo.StolenSinceRenew,
-			ReplicationAckLevel:          shardInfo.ReplicationAckLevel,
-			TransferAckLevel:             shardInfo.TransferAckLevel,
-			TimerAckLevelTime:            shardInfo.TimerAckLevelTime,
-			ClusterTransferAckLevel:      clusterTransferAckLevel,
-			ClusterTimerAckLevel:         clusterTimerAckLevel,
 			NamespaceNotificationVersion: shardInfo.NamespaceNotificationVersion,
-			ClusterReplicationLevel:      clusterReplicationLevel,
 			ReplicationDlqAckLevel:       clusterReplicationDLQLevel,
 			UpdateTime:                   shardInfo.UpdateTime,
-			VisibilityAckLevel:           shardInfo.VisibilityAckLevel,
 			QueueAckLevels:               queueAckLevels,
 		},
 		FailoverLevels: failoverLevels,

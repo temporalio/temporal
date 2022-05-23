@@ -135,8 +135,7 @@ func (s *transferQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				RangeId:          1,
-				TransferAckLevel: 0,
+				RangeId: 1,
 			}},
 		config,
 		s.timeSource,
