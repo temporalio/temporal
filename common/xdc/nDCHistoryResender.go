@@ -31,8 +31,6 @@ import (
 	"time"
 
 	commonpb "go.temporal.io/api/common/v1"
-	enumspb "go.temporal.io/api/enums/v1"
-	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/api/adminservice/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
@@ -300,9 +298,6 @@ func (n *NDCHistoryResenderImpl) getHistory(
 		NextPageToken:     token,
 	})
 	if err != nil {
-		if _, isNotFound := err.(*serviceerror.NamespaceNotFound); isNotFound && ns.State() == enumspb.NAMESPACE_STATE_DELETED {
-			return nil, nil
-		}
 		logger.Error("error getting history", tag.Error(err))
 		return nil, err
 	}
