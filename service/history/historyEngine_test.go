@@ -97,6 +97,7 @@ type (
 		mockEventsReapplier     *MocknDCEventsReapplier
 		mockWorkflowResetter    *MockworkflowResetter
 
+		workflowCache     workflow.Cache
 		mockHistoryEngine *historyEngineImpl
 		mockExecutionMgr  *persistence.MockExecutionManager
 		mockShardManager  *persistence.MockShardManager
@@ -133,7 +134,6 @@ func (s *engineSuite) SetupTest() {
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockVisibilityProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-
 	s.config = tests.NewDynamicConfig()
 	s.mockShard = shard.NewTestContext(
 		s.controller,
@@ -144,6 +144,7 @@ func (s *engineSuite) SetupTest() {
 			}},
 		s.config,
 	)
+	s.workflowCache = workflow.NewCache(s.mockShard)
 	s.mockShard.Resource.ShardMgr.EXPECT().AssertShardOwnership(gomock.Any(), gomock.Any()).AnyTimes()
 
 	s.eventsCache = events.NewEventsCache(
@@ -181,13 +182,11 @@ func (s *engineSuite) SetupTest() {
 		},
 	)
 
-	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
 		logger:             s.mockShard.GetLogger(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
@@ -200,7 +199,7 @@ func (s *engineSuite) SetupTest() {
 		},
 		eventsReapplier:            s.mockEventsReapplier,
 		workflowResetter:           s.mockWorkflowResetter,
-		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, historyCache),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
@@ -641,7 +640,7 @@ func (s *engineSuite) TestQueryWorkflow_ConsistentQueryBufferFull() {
 	s.mockExecutionMgr.EXPECT().GetWorkflowExecution(gomock.Any(), gomock.Any()).Return(gweResponse, nil)
 
 	// buffer query so that when history.QueryWorkflow is called buffer is already full
-	ctx, release, err := s.mockHistoryEngine.historyCache.GetOrCreateWorkflowExecution(
+	ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
 		execution,
@@ -4380,7 +4379,7 @@ func (s *engineSuite) TestRequestCancel_RespondWorkflowTaskCompleted_SuccessWith
 
 	// load mutable state such that it already exists in memory when respond workflow task is called
 	// this enables us to set query registry on it
-	ctx, release, err := s.mockHistoryEngine.historyCache.GetOrCreateWorkflowExecution(
+	ctx, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
 		we,
@@ -5176,7 +5175,7 @@ func (s *engineSuite) TestReapplyEvents_ResetWorkflow() {
 }
 
 func (s *engineSuite) getBuilder(testNamespaceID namespace.ID, we commonpb.WorkflowExecution) workflow.MutableState {
-	context, release, err := s.mockHistoryEngine.historyCache.GetOrCreateWorkflowExecution(
+	context, release, err := s.workflowCache.GetOrCreateWorkflowExecution(
 		context.Background(),
 		tests.NamespaceID,
 		we,

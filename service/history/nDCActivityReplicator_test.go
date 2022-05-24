@@ -73,8 +73,8 @@ type (
 
 		mockExecutionMgr *persistence.MockExecutionManager
 
-		logger       log.Logger
-		historyCache *workflow.CacheImpl
+		workflowCache *workflow.CacheImpl
+		logger        log.Logger
 
 		nDCActivityReplicator *nDCActivityReplicatorImpl
 	}
@@ -104,7 +104,6 @@ func (s *activityReplicatorSuite) SetupTest() {
 	s.mockTimerProcessor.EXPECT().Category().Return(tasks.CategoryTimer).AnyTimes()
 	s.mockTxProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
 	s.mockTimerProcessor.EXPECT().NotifyNewTasks(gomock.Any(), gomock.Any()).AnyTimes()
-
 	s.mockShard = shard.NewTestContext(
 		s.controller,
 		&persistence.ShardInfoWithFailover{
@@ -114,6 +113,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 			}},
 		tests.NewDynamicConfig(),
 	)
+	s.workflowCache = workflow.NewCache(s.mockShard).(*workflow.CacheImpl)
 
 	s.mockNamespaceCache = s.mockShard.Resource.NamespaceCache
 	s.mockExecutionMgr = s.mockShard.Resource.ExecutionMgr
@@ -124,13 +124,11 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.logger = s.mockShard.GetLogger()
 
-	s.historyCache = workflow.NewCache(s.mockShard).(*workflow.CacheImpl)
 	engine := &historyEngineImpl{
 		currentClusterName: s.mockClusterMetadata.GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyCache:       s.historyCache,
 		logger:             s.logger,
 		tokenSerializer:    common.NewProtoTaskTokenSerializer(),
 		metricsClient:      s.mockShard.GetMetricsClient(),
@@ -149,7 +147,7 @@ func (s *activityReplicatorSuite) SetupTest() {
 
 	s.nDCActivityReplicator = newNDCActivityReplicator(
 		s.mockShard,
-		s.historyCache,
+		s.workflowCache,
 		s.logger,
 	)
 }
@@ -670,7 +668,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_WorkflowClosed() {
 	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
-	_, err := s.historyCache.PutIfNotExist(key, weContext)
+	_, err := s.workflowCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
@@ -744,7 +742,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityNotFound() {
 	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
-	_, err := s.historyCache.PutIfNotExist(key, weContext)
+	_, err := s.workflowCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
 	request := &historyservice.SyncActivityRequest{
@@ -820,7 +818,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_Zombie() {
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
 
-	_, err := s.historyCache.PutIfNotExist(key, weContext)
+	_, err := s.workflowCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
 	now := time.Now()
@@ -912,7 +910,7 @@ func (s *activityReplicatorSuite) TestSyncActivity_ActivityFound_NonZombie() {
 	weContext.EXPECT().LoadWorkflowExecution(gomock.Any()).Return(s.mockMutableState, nil)
 	weContext.EXPECT().Lock(gomock.Any(), workflow.CallerTypeAPI).Return(nil)
 	weContext.EXPECT().Unlock(workflow.CallerTypeAPI)
-	_, err := s.historyCache.PutIfNotExist(key, weContext)
+	_, err := s.workflowCache.PutIfNotExist(key, weContext)
 	s.NoError(err)
 
 	now := time.Now()

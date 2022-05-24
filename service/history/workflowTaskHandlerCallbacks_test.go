@@ -110,7 +110,6 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		shard:              mockShard,
 		clusterMetadata:    mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
 		metricsClient:      metrics.NoopClient,

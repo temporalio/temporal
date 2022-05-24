@@ -75,9 +75,9 @@ type (
 		mockEventsCache         *events.MockCache
 		mockNamespaceCache      *namespace.MockRegistry
 		mockClusterMetadata     *cluster.MockMetadata
-
-		historyEngine    *historyEngineImpl
-		mockExecutionMgr *persistence.MockExecutionManager
+		workflowCache           workflow.Cache
+		historyEngine           *historyEngineImpl
+		mockExecutionMgr        *persistence.MockExecutionManager
 
 		config *configs.Config
 		logger log.Logger
@@ -130,16 +130,14 @@ func (s *engine3Suite) SetupTest() {
 	s.mockClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockClusterMetadata.EXPECT().ClusterNameForFailoverVersion(false, common.EmptyVersion).Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.mockEventsCache.EXPECT().PutEvent(gomock.Any(), gomock.Any()).AnyTimes()
-
+	s.workflowCache = workflow.NewCache(s.mockShard)
 	s.logger = s.mockShard.GetLogger()
 
-	historyCache := workflow.NewCache(s.mockShard)
 	h := &historyEngineImpl{
 		currentClusterName: s.mockShard.GetClusterMetadata().GetCurrentClusterName(),
 		shard:              s.mockShard,
 		clusterMetadata:    s.mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
 		metricsClient:      metrics.NoopClient,
@@ -152,7 +150,7 @@ func (s *engine3Suite) SetupTest() {
 			s.mockTimerProcessor.Category():      s.mockTimerProcessor,
 			s.mockVisibilityProcessor.Category(): s.mockVisibilityProcessor,
 		},
-		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, historyCache),
+		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(s.mockShard, s.workflowCache),
 	}
 	s.mockShard.SetEngineForTesting(h)
 	h.workflowTaskHandler = newWorkflowTaskHandlerCallback(h)
