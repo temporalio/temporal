@@ -25,7 +25,7 @@
 package tasks
 
 const (
-	WeightedChannelDefaultSize = 100
+	WeightedChannelDefaultSize = 10000
 )
 
 type (
