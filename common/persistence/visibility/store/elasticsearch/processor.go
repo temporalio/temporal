@@ -34,14 +34,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	"go.temporal.io/server/common/future"
-
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic/v7"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/collection"
 	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/future"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
