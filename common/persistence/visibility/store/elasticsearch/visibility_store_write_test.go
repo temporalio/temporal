@@ -30,6 +30,10 @@ import (
 	"strings"
 	"time"
 
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/metrics"
+
 	"github.com/golang/mock/gomock"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
@@ -295,4 +299,41 @@ func (s *ESVisibilitySuite) Test_getDocID() {
 func (s *ESVisibilitySuite) Test_getVisibilityTaskKey() {
 	s.Equal("22~8", getVisibilityTaskKey(22, 8))
 	s.Equal("228~1978", getVisibilityTaskKey(228, 1978))
+}
+
+func (s *ESVisibilitySuite) Test_BulkRequest_TimedOut() {
+	cfg := &ProcessorConfig{
+		IndexerConcurrency:       dynamicconfig.GetIntPropertyFn(32),
+		ESProcessorNumOfWorkers:  dynamicconfig.GetIntPropertyFn(1),
+		ESProcessorBulkActions:   dynamicconfig.GetIntPropertyFn(10),
+		ESProcessorBulkSize:      dynamicconfig.GetIntPropertyFn(2 << 20),
+		ESProcessorFlushInterval: dynamicconfig.GetDurationPropertyFn(1 * time.Minute),
+	}
+	s.mockESClient.EXPECT().RunBulkProcessor(gomock.Any(), gomock.Any()).
+		DoAndReturn(func(_ context.Context, input *client.BulkProcessorParameters) (client.BulkProcessor, error) {
+			bulkProcessor := client.NewMockBulkProcessor(s.controller)
+			bulkProcessor.EXPECT().Stop()
+			bulkProcessor.EXPECT().Add(gomock.Any()).Times(2)
+			return bulkProcessor, nil
+		}).Times(1)
+
+	esProcessor := NewProcessor(cfg, s.mockESClient, log.NewNoopLogger(), metrics.NoopClient)
+	esProcessor.Start()
+	defer esProcessor.Stop()
+
+	visibilityStore := NewVisibilityStore(s.mockESClient, testIndex, searchattribute.NewTestProvider(), nil, esProcessor, dynamicconfig.GetDurationPropertyFn(time.Millisecond), metrics.NoopClient)
+	err := visibilityStore.addBulkIndexRequestAndWait(
+		context.Background(),
+		&store.InternalVisibilityRequestBase{},
+		nil,
+		"test")
+	var timeoutErr *persistence.TimeoutError
+	s.ErrorAs(err, &timeoutErr)
+
+	err = visibilityStore.addBulkIndexRequestAndWait(
+		context.Background(),
+		&store.InternalVisibilityRequestBase{},
+		nil,
+		"test")
+	s.ErrorAs(err, &timeoutErr)
 }

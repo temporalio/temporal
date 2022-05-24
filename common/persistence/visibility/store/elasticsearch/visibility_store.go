@@ -259,6 +259,7 @@ func (s *visibilityStore) addBulkRequestAndWait(
 		}
 		return nil
 	case <-ackTimeoutTimer.C:
+		s.processor.Remove(visibilityTaskKey)
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
 	}
 }

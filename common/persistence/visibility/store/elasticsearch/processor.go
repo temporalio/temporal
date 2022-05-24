@@ -54,6 +54,7 @@ type (
 
 		// Add request to bulk processor.
 		Add(request *client.BulkableRequest, visibilityTaskKey string) <-chan bool
+		Remove(visibilityTaskKey string)
 	}
 
 	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor
@@ -190,6 +191,17 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 		ackCh.recordAdd(p.metricsClient)
 	}
 	return ackCh.ackChInternal
+}
+
+func (p *processorImpl) Remove(visibilityTaskKey string) {
+	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
+	_ = p.mapToAckChan.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
+		_, ok := value.(*ackChan)
+		if !ok {
+			p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChan{}), tag.ESKey(visibilityTaskKey))
+		}
+		return true
+	})
 }
 
 // bulkBeforeAction is triggered before bulk processor commit

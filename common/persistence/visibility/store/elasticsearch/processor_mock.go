@@ -72,6 +72,18 @@ func (mr *MockProcessorMockRecorder) Add(request, visibilityTaskKey interface{})
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockProcessor)(nil).Add), request, visibilityTaskKey)
 }
 
+// Remove mocks base method.
+func (m *MockProcessor) Remove(visibilityTaskKey string) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "Remove", visibilityTaskKey)
+}
+
+// Remove indicates an expected call of Remove.
+func (mr *MockProcessorMockRecorder) Remove(visibilityTaskKey interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Remove", reflect.TypeOf((*MockProcessor)(nil).Remove), visibilityTaskKey)
+}
+
 // Start mocks base method.
 func (m *MockProcessor) Start() {
 	m.ctrl.T.Helper()
