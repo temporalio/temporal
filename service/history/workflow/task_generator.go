@@ -581,7 +581,7 @@ func (r *TaskGeneratorImpl) GenerateMigrationTasks(
 		return nil, err
 	}
 
-	if !r.mutableState.IsWorkflowExecutionRunning() {
+	if r.mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		return &tasks.SyncWorkflowStateTask{
 			VisibilityTimestamp: now,
 			WorkflowKey:         r.mutableState.GetWorkflowKey(),

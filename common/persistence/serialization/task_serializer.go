@@ -1038,34 +1038,34 @@ func (s *TaskSerializer) replicationHistoryTaskFromProto(
 }
 
 func (s *TaskSerializer) replicationSyncWorkflowStateTaskToProto(
-	closedWorkflowTask *tasks.SyncWorkflowStateTask,
+	syncWorkflowStateTask *tasks.SyncWorkflowStateTask,
 ) *persistencespb.ReplicationTaskInfo {
 	return &persistencespb.ReplicationTaskInfo{
-		NamespaceId:    closedWorkflowTask.WorkflowKey.NamespaceID,
-		WorkflowId:     closedWorkflowTask.WorkflowKey.WorkflowID,
-		RunId:          closedWorkflowTask.WorkflowKey.RunID,
+		NamespaceId:    syncWorkflowStateTask.WorkflowKey.NamespaceID,
+		WorkflowId:     syncWorkflowStateTask.WorkflowKey.WorkflowID,
+		RunId:          syncWorkflowStateTask.WorkflowKey.RunID,
 		TaskType:       enumsspb.TASK_TYPE_REPLICATION_SYNC_WORKFLOW_STATE,
-		TaskId:         closedWorkflowTask.TaskID,
-		Version:        closedWorkflowTask.Version,
-		VisibilityTime: &closedWorkflowTask.VisibilityTimestamp,
+		TaskId:         syncWorkflowStateTask.TaskID,
+		Version:        syncWorkflowStateTask.Version,
+		VisibilityTime: &syncWorkflowStateTask.VisibilityTimestamp,
 	}
 }
 
 func (s *TaskSerializer) replicationSyncWorkflowStateTaskFromProto(
-	closedWorkflowTask *persistencespb.ReplicationTaskInfo,
+	syncWorkflowStateTask *persistencespb.ReplicationTaskInfo,
 ) *tasks.SyncWorkflowStateTask {
 	visibilityTimestamp := time.Unix(0, 0)
-	if closedWorkflowTask.VisibilityTime != nil {
-		visibilityTimestamp = *closedWorkflowTask.VisibilityTime
+	if syncWorkflowStateTask.VisibilityTime != nil {
+		visibilityTimestamp = *syncWorkflowStateTask.VisibilityTime
 	}
 	return &tasks.SyncWorkflowStateTask{
 		WorkflowKey: definition.NewWorkflowKey(
-			closedWorkflowTask.NamespaceId,
-			closedWorkflowTask.WorkflowId,
-			closedWorkflowTask.RunId,
+			syncWorkflowStateTask.NamespaceId,
+			syncWorkflowStateTask.WorkflowId,
+			syncWorkflowStateTask.RunId,
 		),
 		VisibilityTimestamp: visibilityTimestamp,
-		Version:             closedWorkflowTask.Version,
-		TaskID:              closedWorkflowTask.TaskId,
+		Version:             syncWorkflowStateTask.Version,
+		TaskID:              syncWorkflowStateTask.TaskId,
 	}
 }
