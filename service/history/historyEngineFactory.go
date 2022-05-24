@@ -25,6 +25,7 @@
 package history
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -56,6 +57,7 @@ type (
 		QueueProcessorFactories         []queues.ProcessorFactory `group:"queueProcessorFactory"`
 		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
 		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
+		TracerProvider                  trace.TracerProvider
 	}
 
 	historyEngineFactory struct {
@@ -80,5 +82,6 @@ func (f *historyEngineFactory) CreateEngine(
 		f.QueueProcessorFactories,
 		f.ReplicationTaskFetcherFactory,
 		f.ReplicationTaskExecutorProvider,
+		f.TracerProvider,
 	)
 }

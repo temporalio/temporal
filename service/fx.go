@@ -25,6 +25,7 @@
 package service
 
 import (
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 
 	"go.temporal.io/server/common"
@@ -59,6 +60,7 @@ func PersistenceMaxQpsFn(
 func GrpcServerOptionsProvider(
 	logger log.Logger,
 	rpcFactory common.RPCFactory,
+	otelGrpcOpts []otelgrpc.Option,
 	telemetryInterceptor *interceptor.TelemetryInterceptor,
 	rateLimitInterceptor *interceptor.RateLimitInterceptor,
 ) []grpc.ServerOption {
@@ -72,6 +74,7 @@ func GrpcServerOptionsProvider(
 		grpcServerOptions,
 		grpc.ChainUnaryInterceptor(
 			rpc.ServiceErrorInterceptor,
+			otelgrpc.UnaryServerInterceptor(otelGrpcOpts...),
 			metrics.NewServerMetricsContextInjectorInterceptor(),
 			metrics.NewServerMetricsTrailerPropagatorInterceptor(logger),
 			telemetryInterceptor.Intercept,

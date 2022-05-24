@@ -25,6 +25,7 @@
 package shard
 
 import (
+	"go.opentelemetry.io/otel/trace"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -42,6 +43,7 @@ import (
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/service/history/configs"
+	"go.temporal.io/server/service/history/consts"
 )
 
 var Module = fx.Options(
@@ -68,6 +70,7 @@ func ShardControllerProvider(
 	archivalMetadata archiver.ArchivalMetadata,
 	hostInfoProvider membership.HostInfoProvider,
 	engineFactory EngineFactory,
+	tracerProvider trace.TracerProvider,
 ) *ControllerImpl {
 	return &ControllerImpl{
 		status:                      common.DaemonStatusInitialized,
@@ -95,5 +98,6 @@ func ShardControllerProvider(
 		archivalMetadata:            archivalMetadata,
 		hostInfoProvider:            hostInfoProvider,
 		engineFactory:               engineFactory,
+		tracer:                      tracerProvider.Tracer(consts.LibraryName),
 	}
 }

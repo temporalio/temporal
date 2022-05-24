@@ -36,6 +36,7 @@ import (
 const (
 	IdentityHistoryService = "history-service"
 	IdentityResetter       = "history-resetter"
+	LibraryName            = "go.temporal.io/service/history"
 )
 
 var (

@@ -32,6 +32,7 @@ import (
 	"time"
 
 	"github.com/pborman/uuid"
+	"go.opentelemetry.io/otel/trace"
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
@@ -114,6 +115,7 @@ type (
 		workflowDeleteManager      workflow.DeleteManager
 		eventSerializer            serialization.Serializer
 		workflowConsistencyChecker api.WorkflowConsistencyChecker
+		tracer                     trace.Tracer
 	}
 )
 
@@ -132,6 +134,7 @@ func NewEngineWithShardContext(
 	queueProcessorFactories []queues.ProcessorFactory,
 	replicationTaskFetcherFactory replication.TaskFetcherFactory,
 	replicationTaskExecutorProvider replication.TaskExecutorProvider,
+	tracerProvider trace.TracerProvider,
 ) shard.Engine {
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 
@@ -166,6 +169,7 @@ func NewEngineWithShardContext(
 		workflowDeleteManager:      workflowDeleteManager,
 		eventSerializer:            eventSerializer,
 		workflowConsistencyChecker: api.NewWorkflowConsistencyChecker(shard, historyCache),
+		tracer:                     tracerProvider.Tracer(consts.LibraryName),
 	}
 
 	historyEngImpl.queueProcessors = make(map[tasks.Category]queues.Processor)

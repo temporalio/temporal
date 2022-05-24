@@ -61,6 +61,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/frontend/configs"
 )
@@ -69,6 +70,8 @@ type FEReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
 
 var Module = fx.Options(
 	resource.Module,
+	telemetry.GlobalModule,
+	telemetry.ServiceModule(common.FrontendServiceName),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider),
 	fx.Provide(NamespaceLogInterceptorProvider),

@@ -50,6 +50,7 @@ import (
 	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
+	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/events"
@@ -62,6 +63,8 @@ var Module = fx.Options(
 	resource.Module,
 	workflow.Module,
 	shard.Module,
+	telemetry.GlobalModule,
+	telemetry.ServiceModule(common.HistoryServiceName),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ConfigProvider), // might be worth just using provider for configs.Config directly
 	fx.Provide(TelemetryInterceptorProvider),
@@ -131,6 +134,7 @@ func HandlerProvider(args NewHandlerArgs) *Handler {
 		controller:                    args.ShardController,
 		eventNotifier:                 args.EventNotifier,
 		replicationTaskFetcherFactory: args.ReplicationTaskFetcherFactory,
+		tracer:                        args.TracerProvider.Tracer("go.temporal.io/service/history"),
 	}
 
 	// prevent us from trying to serve requests before shard controller is started and ready
