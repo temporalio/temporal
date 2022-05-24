@@ -31,8 +31,8 @@ package elasticsearch
 import (
 	reflect "reflect"
 
-	"go.temporal.io/server/common/future"
 	gomock "github.com/golang/mock/gomock"
+	"go.temporal.io/server/common/future"
 	client "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
 
