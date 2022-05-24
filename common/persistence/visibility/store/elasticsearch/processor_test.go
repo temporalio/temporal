@@ -32,6 +32,8 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/future"
+
 	"github.com/golang/mock/gomock"
 	"github.com/olivere/elastic/v7"
 	"github.com/stretchr/testify/suite"
@@ -136,30 +138,21 @@ func (s *processorSuite) TestAdd() {
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockBulkProcessor.EXPECT().Add(request)
 
-	ackCh1 := s.esProcessor.Add(request, visibilityTaskKey)
+	future1 := s.esProcessor.Add(request, visibilityTaskKey)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
-	select {
-	case <-ackCh1:
+	if future1.Ready() {
 		s.Fail("1st request shouldn't be acknowledged")
-	default:
 	}
 
-	// handle duplicate
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
+	// duplicate request returns same future object
 	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDuplicateRequest)
-	ackCh2 := s.esProcessor.Add(request, visibilityTaskKey)
+	future2 := s.esProcessor.Add(request, visibilityTaskKey)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
-	select {
-	case ack := <-ackCh2:
-		s.True(ack)
-	default:
-		s.Fail("2nd (new) request should be acked due to duplicate key")
-	}
 
-	select {
-	case <-ackCh1:
-		s.Fail("1st (existing) request shouldn't be acknowledged")
-	default:
+	s.Equal(future1, future2)
+
+	if future1.Ready() {
+		s.Fail("1st request shouldn't be acknowledged")
 	}
 }
 
@@ -167,7 +160,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	request := &client.BulkableRequest{}
 	docsCount := 1000
 	parallelFactor := 10
-	ackChs := make([]<-chan bool, docsCount)
+	futures := make([]future.Future[bool], docsCount)
 
 	wg := sync.WaitGroup{}
 	wg.Add(parallelFactor)
@@ -176,7 +169,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	for i := 0; i < parallelFactor; i++ {
 		go func(i int) {
 			for j := 0; j < docsCount/parallelFactor; j++ {
-				ackChs[i*docsCount/parallelFactor+j] = s.esProcessor.Add(request, fmt.Sprintf("test-key-%d-%d", i, j))
+				futures[i*docsCount/parallelFactor+j] = s.esProcessor.Add(request, fmt.Sprintf("test-key-%d-%d", i, j))
 			}
 			wg.Done()
 		}(i)
@@ -185,10 +178,8 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 	s.Equal(docsCount, s.esProcessor.mapToAckChan.Len())
 
 	for i := 0; i < docsCount; i++ {
-		select {
-		case <-ackChs[i]:
+		if futures[i].Ready() {
 			s.Fail("all request must be in the bulk")
-		default:
 		}
 	}
 }
@@ -197,9 +188,8 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 	request := &client.BulkableRequest{}
 	key := "test-key"
 	duplicates := 100
-	ackChs := make([]<-chan bool, duplicates)
+	futures := make([]future.Future[bool], duplicates)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any()).Times(1)
-	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any()).Times(duplicates - 1)
 	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDuplicateRequest).Times(duplicates - 1)
 
 	wg := sync.WaitGroup{}
@@ -207,22 +197,21 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 	s.mockBulkProcessor.EXPECT().Add(request)
 	for i := 0; i < duplicates; i++ {
 		go func(i int) {
-			ackChs[i] = s.esProcessor.Add(request, key)
+			futures[i] = s.esProcessor.Add(request, key)
 			wg.Done()
 		}(i)
 	}
 	wg.Wait()
 	pendingRequestsCount := 0
 	for i := 0; i < duplicates; i++ {
-		select {
-		case ack := <-ackChs[i]:
-			s.True(ack)
-		default:
+		if futures[i].Ready() {
+			s.Fail("all request must be in the bulk")
+		} else {
 			pendingRequestsCount++
 		}
 	}
 
-	s.Equal(1, pendingRequestsCount, "only one request should not be acked")
+	s.Equal(100, pendingRequestsCount, "only one request should not be acked")
 	s.Equal(1, s.esProcessor.mapToAckChan.Len(), "only one request should be in the bulk")
 }
 
@@ -254,12 +243,9 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 	mapVal := newAckChan()
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
-	select {
-	case ack := <-mapVal.ackChInternal:
-		s.True(ack)
-	default:
-		s.Fail("request should be acknowledged")
-	}
+	result, err := mapVal.future.Get(context.Background())
+	s.NoError(err)
+	s.True(result)
 }
 
 func (s *processorSuite) TestBulkAfterAction_Nack() {
@@ -301,12 +287,9 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
 	s.mockMetricClient.EXPECT().Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(400)).Return(metrics.NoopScope)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
-	select {
-	case ack := <-mapVal.ackChInternal:
-		s.False(ack)
-	default:
-		s.Fail("request should be acknowledged")
-	}
+	result, err := mapVal.future.Get(context.Background())
+	s.NoError(err)
+	s.False(result)
 }
 
 func (s *processorSuite) TestBulkAfterAction_Error() {
@@ -373,16 +356,13 @@ func (s *processorSuite) TestAckChan() {
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	s.mockBulkProcessor.EXPECT().Add(request)
-	ackCh := s.esProcessor.Add(request, key)
+	future := s.esProcessor.Add(request, key)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 
 	s.esProcessor.sendToAckChan(key, true)
-	select {
-	case ack := <-ackCh:
-		s.True(ack)
-	default:
-		s.Fail("request should be acknowledged")
-	}
+	result, err := future.Get(context.Background())
+	s.NoError(err)
+	s.True(result)
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 }
 
@@ -395,16 +375,13 @@ func (s *processorSuite) TestNackChan() {
 	s.mockBulkProcessor.EXPECT().Add(request)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
-	ackCh := s.esProcessor.Add(request, key)
+	future := s.esProcessor.Add(request, key)
 	s.Equal(1, s.esProcessor.mapToAckChan.Len())
 
 	s.esProcessor.sendToAckChan(key, false)
-	select {
-	case ack := <-ackCh:
-		s.False(ack)
-	default:
-		s.Fail("request should be not acknowledged")
-	}
+	result, err := future.Get(context.Background())
+	s.NoError(err)
+	s.False(result)
 	s.Equal(0, s.esProcessor.mapToAckChan.Len())
 }
 
@@ -496,7 +473,7 @@ func (s *processorSuite) Test_End2End() {
 		Errors: false,
 		Items:  make([]map[string]*elastic.BulkResponseItem, docsCount),
 	}
-	ackChs := make([]<-chan bool, docsCount)
+	futures := make([]future.Future[bool], docsCount)
 
 	// Add documents in parallel.
 	wg := sync.WaitGroup{}
@@ -509,7 +486,7 @@ func (s *processorSuite) Test_End2End() {
 				docIndex := i*docsCount/parallelFactor + j
 				testKey := fmt.Sprintf("test-key-%d-%d", i, j)
 				docId := fmt.Sprintf("docId-%d", docIndex)
-				ackChs[docIndex] = s.esProcessor.Add(request, testKey)
+				futures[docIndex] = s.esProcessor.Add(request, testKey)
 				bulkIndexRequests[docIndex] = elastic.NewBulkIndexRequest().
 					Index(testIndex).
 					Id(docId).
@@ -545,11 +522,8 @@ func (s *processorSuite) Test_End2End() {
 	s.esProcessor.bulkAfterAction(0, bulkIndexRequests, bulkIndexResponse, nil)
 
 	for i := 0; i < docsCount; i++ {
-		select {
-		case ack := <-ackChs[i]:
-			s.True(ack)
-		default:
-			s.Fail("all requests must be acked")
-		}
+		result, err := futures[i].Get(context.Background())
+		s.NoError(err)
+		s.True(result)
 	}
 }

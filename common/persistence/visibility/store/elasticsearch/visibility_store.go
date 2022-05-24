@@ -241,7 +241,7 @@ func (s *visibilityStore) addBulkRequestAndWait(
 	// Therefore, ackTimeoutTimer in fact wait for request to be committed after it was added to bulk processor.
 	// TODO: this also means ctx is not respected if bulk processor is busy. Shall we make Add non-blocking or
 	// respecting the context?
-	ackCh := s.processor.Add(bulkRequest, visibilityTaskKey)
+	future := s.processor.Add(bulkRequest, visibilityTaskKey)
 
 	ackTimeout := s.processorAckTimeout()
 	if deadline, ok := ctx.Deadline(); ok {
@@ -249,19 +249,20 @@ func (s *visibilityStore) addBulkRequestAndWait(
 	}
 	ackTimeoutTimer := time.NewTimer(ackTimeout)
 	defer ackTimeoutTimer.Stop()
+	subCtx, subCtxCancelFn := context.WithTimeout(context.Background(), ackTimeout)
+	defer subCtxCancelFn()
 
-	select {
-	case ack := <-ackCh:
-		if !ack {
-			// Returns non-retryable Internal error here because NACK from bulk processor means that this request can't be processed.
-			// Visibility task processor retries all errors though, therefore new request will be generated for the same task.
-			return serviceerror.NewInternal(fmt.Sprintf("visibility task %s received NACK", visibilityTaskKey))
-		}
-		return nil
-	case <-ackTimeoutTimer.C:
-		s.processor.Remove(visibilityTaskKey)
+	ack, err := future.Get(subCtx)
+	if err != nil {
 		return &persistence.TimeoutError{Msg: fmt.Sprintf("visibility task %s timedout waiting for ACK after %v", visibilityTaskKey, s.processorAckTimeout())}
 	}
+
+	if !ack {
+		// Returns non-retryable Internal error here because NACK from bulk processor means that this request can't be processed.
+		// Visibility task processor retries all errors though, therefore new request will be generated for the same task.
+		return serviceerror.NewInternal(fmt.Sprintf("visibility task %s received NACK", visibilityTaskKey))
+	}
+	return nil
 }
 
 func (s *visibilityStore) checkProcessor() {

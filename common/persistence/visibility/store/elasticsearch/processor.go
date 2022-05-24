@@ -34,6 +34,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.temporal.io/server/common/future"
+
 	"github.com/dgryski/go-farm"
 	"github.com/olivere/elastic/v7"
 
@@ -53,8 +55,7 @@ type (
 		common.Daemon
 
 		// Add request to bulk processor.
-		Add(request *client.BulkableRequest, visibilityTaskKey string) <-chan bool
-		Remove(visibilityTaskKey string)
+		Add(request *client.BulkableRequest, visibilityTaskKey string) future.Future[bool]
 	}
 
 	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor
@@ -82,10 +83,10 @@ type (
 	}
 
 	ackChan struct { // value of processorImpl.mapToAckChan
-		ackChInternal chan bool
-		createdAt     time.Time    // Time when request was created (used to report metrics).
-		addedAt       atomic.Value // of time.Time // Time when request was added to bulk processor (used to report metrics).
-		startedAt     time.Time    // Time when request was sent to Elasticsearch by bulk processor (used to report metrics).
+		future    *future.FutureImpl[bool]
+		createdAt time.Time    // Time when request was created (used to report metrics).
+		addedAt   atomic.Value // of time.Time // Time when request was added to bulk processor (used to report metrics).
+		startedAt time.Time    // Time when request was sent to Elasticsearch by bulk processor (used to report metrics).
 	}
 )
 
@@ -171,7 +172,7 @@ func (p *processorImpl) hashFn(key interface{}) uint32 {
 }
 
 // Add request to the bulk and return ack channel which will receive ack signal when request is processed.
-func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 	ackCh := newAckChan()
 	_, isDup, _ := p.mapToAckChan.PutOrDo(visibilityTaskKey, ackCh, func(key interface{}, value interface{}) error {
 		ackChExisting, ok := value.(*ackChan)
@@ -181,29 +182,14 @@ func (p *processorImpl) Add(request *client.BulkableRequest, visibilityTaskKey s
 
 		p.logger.Warn("Skipping duplicate ES request for visibility task key.", tag.Key(visibilityTaskKey), tag.ESDocID(request.ID), tag.Value(request.Doc), tag.NewDurationTag("interval-between-duplicates", ackCh.createdAt.Sub(ackChExisting.createdAt)))
 		p.metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDuplicateRequest)
-
-		// Ack duplicate visibility task right away as if it is processed successfully.
-		ackCh.done(true, p.metricsClient)
+		ackCh = ackChExisting
 		return nil
 	})
 	if !isDup {
 		p.bulkProcessor.Add(request)
 		ackCh.recordAdd(p.metricsClient)
 	}
-	return ackCh.ackChInternal
-}
-
-func (p *processorImpl) Remove(visibilityTaskKey string) {
-	// Use RemoveIf here to prevent race condition with de-dup logic in Add method.
-	_ = p.mapToAckChan.RemoveIf(visibilityTaskKey, func(key interface{}, value interface{}) bool {
-		ackCh, ok := value.(*ackChan)
-		if !ok {
-			p.logger.Fatal(fmt.Sprintf("mapToAckChan has item of a wrong type %T (%T expected).", value, &ackChan{}), tag.ESKey(visibilityTaskKey))
-		}
-
-		ackCh.done(false, p.metricsClient)
-		return true
-	})
+	return ackCh.future
 }
 
 // bulkBeforeAction is triggered before bulk processor commit
@@ -416,16 +402,16 @@ func newAckChan() *ackChan {
 	var addedAt atomic.Value
 	addedAt.Store(time.Time{})
 	return &ackChan{
-		ackChInternal: make(chan bool, 1),
-		createdAt:     time.Now().UTC(),
-		addedAt:       addedAt,
+		future:    future.NewFuture[bool](),
+		createdAt: time.Now().UTC(),
+		addedAt:   addedAt,
 	}
 }
 
 func (a *ackChan) recordAdd(metricsClient metrics.Client) {
 	addedAt := time.Now().UTC()
 	a.addedAt.Store(addedAt)
-	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, addedAt.Sub(a.createdAt))
+	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, addedAt.Sub(a.createdAt)) // can be replace
 }
 
 func (a *ackChan) recordStart(metricsClient metrics.Client) {
@@ -437,16 +423,12 @@ func (a *ackChan) recordStart(metricsClient metrics.Client) {
 }
 
 func (a *ackChan) done(ack bool, metricsClient metrics.Client) {
-	select {
-	case a.ackChInternal <- ack:
-		doneAt := time.Now().UTC()
-		if !a.createdAt.IsZero() {
-			metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, doneAt.Sub(a.createdAt))
-		}
-		if !a.startedAt.IsZero() {
-			metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCommitLatency, doneAt.Sub(a.startedAt))
-		}
-	default:
-		metricsClient.IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDeadlock)
+	a.future.Set(ack, nil)
+	doneAt := time.Now().UTC()
+	if !a.createdAt.IsZero() {
+		metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, doneAt.Sub(a.createdAt))
+	}
+	if !a.startedAt.IsZero() {
+		metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorCommitLatency, doneAt.Sub(a.startedAt))
 	}
 }

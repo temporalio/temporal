@@ -31,6 +31,8 @@ package elasticsearch
 import (
 	reflect "reflect"
 
+	"go.temporal.io/server/common/future"
+
 	gomock "github.com/golang/mock/gomock"
 	client "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 )
@@ -59,10 +61,10 @@ func (m *MockProcessor) EXPECT() *MockProcessorMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string) <-chan bool {
+func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", request, visibilityTaskKey)
-	ret0, _ := ret[0].(<-chan bool)
+	ret0, _ := ret[0].(future.Future[bool])
 	return ret0
 }
 
