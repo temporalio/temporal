@@ -411,7 +411,7 @@ func newAckChan() *ackChan {
 func (a *ackChan) recordAdd(metricsClient metrics.Client) {
 	addedAt := time.Now().UTC()
 	a.addedAt.Store(addedAt)
-	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, addedAt.Sub(a.createdAt)) // can be replace
+	metricsClient.RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, addedAt.Sub(a.createdAt))
 }
 
 func (a *ackChan) recordStart(metricsClient metrics.Client) {

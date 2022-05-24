@@ -247,8 +247,6 @@ func (s *visibilityStore) addBulkRequestAndWait(
 	if deadline, ok := ctx.Deadline(); ok {
 		ackTimeout = common.MinDuration(ackTimeout, time.Until(deadline))
 	}
-	ackTimeoutTimer := time.NewTimer(ackTimeout)
-	defer ackTimeoutTimer.Stop()
 	subCtx, subCtxCancelFn := context.WithTimeout(context.Background(), ackTimeout)
 	defer subCtxCancelFn()
 
