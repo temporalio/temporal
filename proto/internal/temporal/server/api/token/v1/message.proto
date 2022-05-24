@@ -48,6 +48,7 @@ message RawHistoryContinuation{
     int64 end_event_version = 7;
     bytes persistence_token = 8;
     temporal.server.api.history.v1.VersionHistories version_histories = 9;
+    string namespace_id = 10;
 }
 
 message Task {

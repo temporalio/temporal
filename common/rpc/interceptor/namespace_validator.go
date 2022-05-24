@@ -33,6 +33,7 @@ import (
 	"go.temporal.io/api/workflowservice/v1"
 	"google.golang.org/grpc"
 
+	"go.temporal.io/server/api/adminservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/namespace"
@@ -160,6 +161,31 @@ func (ni *NamespaceValidatorInterceptor) extractNamespaceFromRequest(req interfa
 			return nil, ErrNamespaceNotSet
 		}
 		return nil, nil
+	// TODO (alex): remove 3 below cases in 1.18+ together with `namespace` field in corresponding protos.
+	case *adminservice.GetWorkflowExecutionRawHistoryV2Request:
+		if request.GetNamespaceId() != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		}
+		if namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	case *adminservice.ReapplyEventsRequest:
+		if request.GetNamespaceId() != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		}
+		if namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
+	case *adminservice.RefreshWorkflowTasksRequest:
+		if request.GetNamespaceId() != "" {
+			return ni.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		}
+		if namespaceName.IsEmpty() {
+			return nil, ErrNamespaceNotSet
+		}
+		return ni.namespaceRegistry.GetNamespace(namespaceName)
 	default:
 		// All other APIs.
 		if namespaceName.IsEmpty() {
