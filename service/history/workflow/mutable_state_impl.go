@@ -3958,10 +3958,10 @@ func (e *MutableStateImpl) UpdateDuplicatedResource(
 	e.appliedEvents[id] = struct{}{}
 }
 
-func (e *MutableStateImpl) GenerateLastHistoryReplicationTasks(
+func (e *MutableStateImpl) GenerateMigrationTasks(
 	now time.Time,
 ) (tasks.Task, error) {
-	return e.taskGenerator.GenerateLastHistoryReplicationTasks(now)
+	return e.taskGenerator.GenerateMigrationTasks(now)
 }
 
 func (e *MutableStateImpl) prepareCloseTransaction(

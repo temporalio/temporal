@@ -1149,7 +1149,7 @@ const (
 	EventsCacheGetFromStoreScope
 	// ExecutionStatsScope is the scope used for emiting workflow execution related stats
 	ExecutionStatsScope
-	// SessionSizeStatsScope is the scope used for emiting session update related stats
+	// SessionStatsScope is the scope used for emiting session update related stats
 	SessionStatsScope
 	// HistoryResetWorkflowExecutionScope tracks ResetWorkflowExecution API calls received by service
 	HistoryResetWorkflowExecutionScope
@@ -1169,6 +1169,8 @@ const (
 	ReplicationTaskCleanupScope
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope
+	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
+	SyncWorkflowStateTaskScope
 
 	NumHistoryScopes
 )
@@ -1786,6 +1788,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		SyncActivityTaskScope:                     {operation: "SyncActivityTask"},
 		HistoryMetadataReplicationTaskScope:       {operation: "HistoryMetadataReplicationTask"},
 		HistoryReplicationTaskScope:               {operation: "HistoryReplicationTask"},
+		SyncWorkflowStateTaskScope:                {operation: "SyncWorkflowStateTask"},
 		ReplicatorScope:                           {operation: "Replicator"},
 	},
 	// Matching Scope Names

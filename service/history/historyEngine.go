@@ -3111,7 +3111,7 @@ func (e *historyEngineImpl) GenerateLastHistoryReplicationTasks(
 	defer func() { wfContext.GetReleaseFn()(retError) }()
 
 	now := e.shard.GetTimeSource().Now()
-	task, err := wfContext.GetMutableState().GenerateLastHistoryReplicationTasks(now)
+	task, err := wfContext.GetMutableState().GenerateMigrationTasks(now)
 	if err != nil {
 		return nil, err
 	}

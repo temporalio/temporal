@@ -112,7 +112,7 @@ type (
 			branchToken []byte,
 			events []*historypb.HistoryEvent,
 		) error
-		GenerateLastHistoryReplicationTasks(
+		GenerateMigrationTasks(
 			now time.Time,
 		) (tasks.Task, error)
 	}
@@ -568,7 +568,7 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
+func (r *TaskGeneratorImpl) GenerateMigrationTasks(
 	now time.Time,
 ) (tasks.Task, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
@@ -581,16 +581,24 @@ func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	return &tasks.HistoryReplicationTask{
-		// TaskID is set by shard
-		VisibilityTimestamp: now,
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		FirstEventID:        executionInfo.LastFirstEventId,
-		NextEventID:         lastItem.GetEventId() + 1,
-		Version:             lastItem.GetVersion(),
-		BranchToken:         versionHistory.BranchToken,
-		NewRunBranchToken:   nil,
-	}, nil
+	if r.mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return &tasks.SyncWorkflowStateTask{
+			VisibilityTimestamp: now,
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			Version:             lastItem.GetVersion(),
+		}, nil
+	} else {
+		return &tasks.HistoryReplicationTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: now,
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			FirstEventID:        executionInfo.LastFirstEventId,
+			NextEventID:         lastItem.GetEventId() + 1,
+			Version:             lastItem.GetVersion(),
+			BranchToken:         versionHistory.BranchToken,
+			NewRunBranchToken:   nil,
+		}, nil
+	}
 }
 
 func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {

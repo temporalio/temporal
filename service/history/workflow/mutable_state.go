@@ -252,6 +252,6 @@ type (
 		StartTransaction(entry *namespace.Namespace) (bool, error)
 		CloseTransactionAsMutation(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowMutation, []*persistence.WorkflowEvents, error)
 		CloseTransactionAsSnapshot(now time.Time, transactionPolicy TransactionPolicy) (*persistence.WorkflowSnapshot, []*persistence.WorkflowEvents, error)
-		GenerateLastHistoryReplicationTasks(now time.Time) (tasks.Task, error)
+		GenerateMigrationTasks(now time.Time) (tasks.Task, error)
 	}
 )

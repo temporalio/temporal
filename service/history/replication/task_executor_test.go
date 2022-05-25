@@ -33,7 +33,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	commonpb "go.temporal.io/api/common/v1"
-
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	historyspb "go.temporal.io/server/api/history/v1"
 	"go.temporal.io/server/api/historyservice/v1"
@@ -67,6 +66,7 @@ type (
 		historyClient      *historyservicemock.MockHistoryServiceClient
 		mockNamespaceCache *namespace.MockRegistry
 		clusterMetadata    *cluster.MockMetadata
+		workflowCache      *workflow.MockCache
 		nDCHistoryResender *xdc.MockNDCHistoryResender
 
 		replicationTaskExecutor *taskExecutorImpl
@@ -113,7 +113,7 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
 	metricsClient := metrics.NoopClient
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
-
+	s.workflowCache = workflow.NewMockCache(s.controller)
 	s.replicationTaskExecutor = NewTaskExecutor(
 		s.remoteCluster,
 		s.mockShard,
@@ -121,7 +121,7 @@ func (s *taskExecutorSuite) SetupTest() {
 		s.nDCHistoryResender,
 		s.mockEngine,
 		workflow.NewMockDeleteManager(s.controller),
-		workflow.NewMockCache(s.controller),
+		s.workflowCache,
 		metricsClient,
 		s.mockShard.GetLogger(),
 	).(*taskExecutorImpl)
@@ -372,6 +372,32 @@ func (s *taskExecutorSuite) TestProcess_HistoryReplicationTask_Resend() {
 		int64(456),
 	)
 	s.mockEngine.EXPECT().ReplicateEventsV2(gomock.Any(), request).Return(nil)
+	_, err := s.replicationTaskExecutor.Execute(task, true)
+	s.NoError(err)
+}
+
+func (s *taskExecutorSuite) TestProcessTaskOnce_SyncWorkflowStateTask() {
+	namespaceID := namespace.ID(uuid.New())
+	task := &replicationspb.ReplicationTask{
+		TaskType: enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
+		Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
+			SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{},
+		},
+	}
+
+	s.mockNamespaceCache.EXPECT().
+		GetNamespaceByID(namespaceID).
+		Return(namespace.NewGlobalNamespaceForTest(
+			nil,
+			nil,
+			&persistencespb.NamespaceReplicationConfig{Clusters: []string{
+				cluster.TestCurrentClusterName,
+				cluster.TestAlternativeClusterName,
+			}},
+			0,
+		), nil).AnyTimes()
+	s.mockEngine.EXPECT().ReplicateWorkflowState(gomock.Any(), gomock.Any()).Return(nil)
+
 	_, err := s.replicationTaskExecutor.Execute(task, true)
 	s.NoError(err)
 }

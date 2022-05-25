@@ -346,10 +346,10 @@ func (p *ackMgrImpl) toReplicationTask(
 	switch task := task.(type) {
 	case *tasks.SyncActivityTask:
 		return p.generateSyncActivityTask(ctx, task)
-
 	case *tasks.HistoryReplicationTask:
 		return p.generateHistoryReplicationTask(ctx, task)
-
+	case *tasks.SyncWorkflowStateTask:
+		return p.generateSyncWorkflowStateTask(ctx, task)
 	default:
 		return nil, errUnknownReplicationTask
 	}
@@ -489,6 +489,35 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 				VisibilityTime: &taskInfo.VisibilityTimestamp,
 			}
 			return replicationTask, nil
+		},
+	)
+}
+
+func (p *ackMgrImpl) generateSyncWorkflowStateTask(
+	ctx context.Context,
+	taskInfo *tasks.SyncWorkflowStateTask,
+) (*replicationspb.ReplicationTask, error) {
+	namespaceID := namespace.ID(taskInfo.NamespaceID)
+	workflowID := taskInfo.WorkflowID
+	runID := taskInfo.RunID
+	taskID := taskInfo.TaskID
+	return p.processReplication(
+		ctx,
+		true,
+		namespaceID,
+		workflowID,
+		runID,
+		func(mutableState workflow.MutableState) (*replicationspb.ReplicationTask, error) {
+			return &replicationspb.ReplicationTask{
+				TaskType:     enumsspb.REPLICATION_TASK_TYPE_SYNC_WORKFLOW_STATE_TASK,
+				SourceTaskId: taskID,
+				Attributes: &replicationspb.ReplicationTask_SyncWorkflowStateTaskAttributes{
+					SyncWorkflowStateTaskAttributes: &replicationspb.SyncWorkflowStateTaskAttributes{
+						WorkflowState: mutableState.CloneToProto(),
+					},
+				},
+				VisibilityTime: &taskInfo.VisibilityTimestamp,
+			}, nil
 		},
 	)
 }
