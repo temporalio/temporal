@@ -75,13 +75,6 @@ message FullUpdateRequest {
     int64 conflict_token = 2;
 }
 
-message RefreshRequest {
-    // List of workflows that we think are completed now.
-    // Note that the run ids in here are first execution run ids, not
-    // necessarily the most recent run id for the workflow.
-    repeated temporal.api.common.v1.WorkflowExecution workflows = 1;
-}
-
 message DescribeResponse {
     temporal.api.schedule.v1.Schedule schedule = 1;
     temporal.api.schedule.v1.ScheduleInfo info = 2;

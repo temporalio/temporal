@@ -452,11 +452,11 @@ func (s *scheduler) handlePatchSignal(ch workflow.ReceiveChannel, _ bool) {
 }
 
 func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
-	var refresh schedspb.RefreshRequest
-	ch.Receive(s.ctx, &refresh)
-	s.logger.Debug("Got refresh signal", "refresh", refresh.String())
-	// TODO: consider just setting needRefresh to true so we refresh all instead of sending a list
-	s.refreshWorkflows(refresh.Workflows)
+	ch.Receive(s.ctx, nil)
+	s.logger.Debug("got refresh signal")
+	// If we're woken up by any signal, we'll pass through processBuffer before sleeping again.
+	// processBuffer will see this flag and refresh everything.
+	s.needRefresh = true
 }
 
 func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
