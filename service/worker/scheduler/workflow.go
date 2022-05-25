@@ -101,10 +101,14 @@ type (
 
 var (
 	defaultLocalActivityOptions = workflow.LocalActivityOptions{
+		// This applies to poll, cancel, and terminate. Start workflow overrides this.
+		ScheduleToCloseTimeout: 1 * time.Hour,
+		// We're using the default workflow task timeout of 10s, so limit local activities to 5s.
+		// We might do up to two per workflow task (cancel previous and start new workflow).
 		StartToCloseTimeout: 5 * time.Second,
 		RetryPolicy: &temporal.RetryPolicy{
-			InitialInterval:    1 * time.Second,
-			BackoffCoefficient: 1.0,
+			InitialInterval: 1 * time.Second,
+			MaximumInterval: 60 * time.Second,
 		},
 	}
 
@@ -649,7 +653,22 @@ func (s *scheduler) startWorkflow(
 	nominalTimeSec := start.NominalTime.UTC().Truncate(time.Second)
 	workflowID := newWorkflow.WorkflowId + "-" + nominalTimeSec.Format(time.RFC3339)
 
-	ctx := workflow.WithLocalActivityOptions(s.ctx, defaultLocalActivityOptions)
+	// Set scheduleToCloseTimeout based on catchup window, which is the latest time that it's
+	// acceptable to start this workflow. For manual starts (trigger immediately or backfill),
+	// catch up window doesn't apply, so just use 60s.
+	options := defaultLocalActivityOptions
+	if start.Manual {
+		options.ScheduleToCloseTimeout = 60 * time.Second
+	} else {
+		deadline := start.ActualTime.Add(s.getCatchupWindow())
+		options.ScheduleToCloseTimeout = deadline.Sub(s.now())
+		if options.ScheduleToCloseTimeout < options.StartToCloseTimeout {
+			options.ScheduleToCloseTimeout = options.StartToCloseTimeout
+		} else if options.ScheduleToCloseTimeout > 1*time.Hour {
+			options.ScheduleToCloseTimeout = 1 * time.Hour
+		}
+	}
+	ctx := workflow.WithLocalActivityOptions(s.ctx, options)
 
 	// this timestamp is the one used to set the deadline for workflow execution timeout
 	startTime := timestamp.TimePtr(s.now())
@@ -773,8 +792,12 @@ func (s *scheduler) cancelWorkflow(ex *commonpb.WorkflowExecution) {
 		Execution:   ex,
 		Reason:      "cancelled by schedule overlap policy",
 	}
-	workflow.ExecuteLocalActivity(ctx, s.a.CancelWorkflow, areq)
-	// do not wait for cancel to complete
+	err := workflow.ExecuteLocalActivity(ctx, s.a.CancelWorkflow, areq).Get(s.ctx, nil)
+	if err != nil {
+		s.logger.Error("cancel workflow failed", "workflow", ex.WorkflowId, "error", err)
+	}
+	// Note: the local activity has completed (or failed) here but the workflow might take time
+	// to close since a cancel is only a request.
 }
 
 func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
@@ -787,8 +810,10 @@ func (s *scheduler) terminateWorkflow(ex *commonpb.WorkflowExecution) {
 		Execution:   ex,
 		Reason:      "terminated by schedule overlap policy",
 	}
-	workflow.ExecuteLocalActivity(ctx, s.a.TerminateWorkflow, areq)
-	// do not wait for terminate to complete
+	err := workflow.ExecuteLocalActivity(ctx, s.a.TerminateWorkflow, areq).Get(s.ctx, nil)
+	if err != nil {
+		s.logger.Error("terminate workflow failed", "workflow", ex.WorkflowId, "error", err)
+	}
 }
 
 func (s *scheduler) newUUIDString() string {
