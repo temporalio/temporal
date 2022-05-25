@@ -38,6 +38,7 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
+	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -680,20 +681,6 @@ func (e *matchingEngineImpl) ListTaskQueuePartitions(
 	return &resp, nil
 }
 
-func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
-	hCtx *handlerContext,
-	request *matchingservice.UpdateWorkerBuildIdOrderingRequest,
-) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
-	return nil, serviceerror.NewUnimplemented("todo")
-}
-
-func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
-	hCtx *handlerContext,
-	request *matchingservice.GetWorkerBuildIdOrderingRequest,
-) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
-	return nil, serviceerror.NewUnimplemented("todo")
-}
-
 func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.ListTaskQueuePartitionsRequest, taskQueueType enumspb.TaskQueueType) ([]*taskqueuepb.TaskQueuePartitionMetadata, error) {
 	partitions, err := e.getAllPartitions(
 		namespace.Name(request.GetNamespace()),
@@ -719,6 +706,58 @@ func (e *matchingEngineImpl) listTaskQueuePartitions(request *matchingservice.Li
 	}
 
 	return partitionHostInfo, nil
+}
+
+func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
+	hCtx *handlerContext,
+	req *matchingservice.UpdateWorkerBuildIdOrderingRequest,
+) (*matchingservice.UpdateWorkerBuildIdOrderingResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetRequest().GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	tqMgr, err := e.getTaskQueueManager(taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL)
+	if err != nil {
+		return nil, err
+	}
+	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) {
+		if data.CurrentDefaults == nil {
+			data.CurrentDefaults = make([]*workflow.VersionIdNode, 0)
+		}
+		data.CurrentDefaults = append(data.CurrentDefaults, &workflow.VersionIdNode{
+			Version:              &workflow.VersionId{Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "hi"}},
+			PreviousCompatible:   nil,
+			PreviousIncompatible: nil,
+		})
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &matchingservice.UpdateWorkerBuildIdOrderingResponse{}, nil
+}
+
+func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
+	hCtx *handlerContext,
+	req *matchingservice.GetWorkerBuildIdOrderingRequest,
+) (*matchingservice.GetWorkerBuildIdOrderingResponse, error) {
+	namespaceID := namespace.ID(req.GetNamespaceId())
+	taskQueueName := req.GetRequest().GetTaskQueue()
+	taskQueue, err := newTaskQueueID(namespaceID, taskQueueName, enumspb.TASK_QUEUE_TYPE_WORKFLOW)
+	tqMgr, err := e.getTaskQueueManager(taskQueue, enumspb.TASK_QUEUE_KIND_NORMAL)
+	if err != nil {
+		return nil, err
+	}
+	verDat, err := tqMgr.GetVersioningData(hCtx.Context)
+	if err != nil {
+		return nil, err
+	}
+	//graph := VersionGraphFromProto(verDat)
+	//return graph.AsOrderingResponse(), nil
+	return &matchingservice.GetWorkerBuildIdOrderingResponse{
+		Response: &workflowservice.GetWorkerBuildIdOrderingResponse{
+			CurrentDefaults:  verDat.CurrentDefaults,
+			CompatibleLeaves: verDat.CompatibleLeaves,
+		},
+	}, nil
 }
 
 func (e *matchingEngineImpl) getHostInfo(partitionKey string) (string, error) {

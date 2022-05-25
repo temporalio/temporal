@@ -301,6 +301,57 @@ func (db *taskQueueDB) CompleteTasksLessThan(
 	return n, err
 }
 
+// GetVersioningData returns the versioning data for this task queue
+func (db *taskQueueDB) GetVersioningData(
+	ctx context.Context,
+) (*persistencespb.VersioningData, error) {
+	tqInfo, err := db.store.GetTaskQueue(ctx, &persistence.GetTaskQueueRequest{
+		NamespaceID: db.namespaceID.String(),
+		TaskQueue:   db.taskQueueName,
+		TaskType:    db.taskType,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return tqInfo.TaskQueueInfo.GetVersioningData(), nil
+}
+
+// MutateVersioningData allows callers to update versioning data for this task queue. The pointer passed to the
+// mutating function is guaranteed to be non-nil.
+func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData)) error {
+	db.Lock()
+	defer db.Unlock()
+
+	// TODO: caching this seems necessary. UpdateState can blow it away
+	verDat, err := db.GetVersioningData(ctx)
+	if err != nil {
+		return err
+	}
+
+	if verDat == nil {
+		verDat = &persistencespb.VersioningData{}
+	}
+	mutator(verDat)
+	db.logger.Info("Updating versioning data "+verDat.String(), tag.ShardRangeID(db.rangeID))
+
+	_, err = db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
+		RangeID: db.rangeID,
+		TaskQueueInfo: &persistencespb.TaskQueueInfo{
+			NamespaceId:    db.namespaceID.String(),
+			Name:           db.taskQueueName,
+			TaskType:       db.taskType,
+			Kind:           db.taskQueueKind,
+			AckLevel:       db.ackLevel,
+			ExpiryTime:     db.expiryTime(),
+			LastUpdateTime: timestamp.TimeNowPtrUtc(),
+			VersioningData: verDat,
+		},
+		PrevRangeID: db.rangeID,
+	})
+	return err
+}
+
 func (db *taskQueueDB) expiryTime() *time.Time {
 	switch db.taskQueueKind {
 	case enumspb.TASK_QUEUE_KIND_NORMAL:
