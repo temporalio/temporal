@@ -568,6 +568,60 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster() 
 	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationConfig.ReplicationHistory)
 }
 
+// Test that the number of replication statuses is limited
+func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster_LimitRecordHistory() {
+	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
+
+	update1Time := time.Date(2011, 12, 27, 23, 44, 55, 999999, time.UTC)
+
+	namespace := "global-ns-to-be-migrated-many-times"
+	srcCluster := s.ClusterMetadata.GetCurrentClusterName()
+	targetCluster := cluster.TestAlternativeClusterName
+	registerReq := workflowservice.RegisterNamespaceRequest{
+		Namespace:                        namespace,
+		Description:                      namespace,
+		WorkflowExecutionRetentionPeriod: timestamp.DurationPtr(24 * time.Hour),
+		IsGlobalNamespace:                true,
+		ActiveClusterName:                s.ClusterMetadata.GetCurrentClusterName(),
+		Clusters: []*replicationpb.ClusterReplicationConfig{
+			{ClusterName: srcCluster},
+			{ClusterName: targetCluster},
+		},
+	}
+	registerResp, err := s.handler.RegisterNamespace(context.Background(), &registerReq)
+	s.NoError(err)
+	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
+
+	s.checkActiveClusterName(namespace, srcCluster)
+
+	s.fakeClock.Update(update1Time)
+
+	for i := 0; i < 10; i++ {
+		s.migrateNamespace(namespace, targetCluster)
+		s.migrateNamespace(namespace, srcCluster)
+	}
+
+	// Verify that the replication history was written
+	getNsResp, err := s.MetadataManager.GetNamespace(
+		context.Background(),
+		&persistence.GetNamespaceRequest{Name: namespace},
+	)
+	s.NoError(err)
+	s.True(getNsResp.IsGlobalNamespace)
+
+	var wantClusters []string
+	for i := 0; i < 5; i++ {
+		wantClusters = append(wantClusters, targetCluster, srcCluster)
+	}
+
+	var gotClusters []string
+	for _, s := range getNsResp.Namespace.ReplicationConfig.ReplicationHistory {
+		gotClusters = append(gotClusters, s.ActiveClusterName)
+	}
+
+	s.Equal(wantClusters, gotClusters)
+}
+
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_HandoverFails() {
 	s.mockProducer.EXPECT().Publish(gomock.Any(), gomock.Any()).AnyTimes()
 

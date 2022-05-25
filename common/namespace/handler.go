@@ -93,6 +93,10 @@ type (
 	}
 )
 
+const (
+	maxReplicationHistorySize = 10
+)
+
 var ErrInvalidNamespaceStateUpdate = serviceerror.NewInvalidArgument("invalid namespace state update")
 var _ Handler = (*HandlerImpl)(nil)
 
@@ -836,6 +840,9 @@ func (d *HandlerImpl) maybeAppendToReplicationHistory(
 				ActiveClusterName: newActiveCluster,
 			},
 		)
+	}
+	if l := len(replicationHistory); l > maxReplicationHistorySize {
+		replicationHistory = replicationHistory[l-maxReplicationHistorySize : l]
 	}
 	return replicationHistory
 }
