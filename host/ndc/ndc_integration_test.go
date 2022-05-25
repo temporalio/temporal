@@ -1881,14 +1881,15 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 		replicationTask := &replicationspb.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,
-			Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-				NamespaceId:         s.namespaceID,
-				WorkflowId:          workflowID,
-				RunId:               runID,
-				VersionHistoryItems: versionHistory.GetItems(),
-				Events:              eventBlob,
-				NewRunEvents:        newRunEventBlob,
-			}},
+			Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+				HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
+					NamespaceId:         s.namespaceID,
+					WorkflowId:          workflowID,
+					RunId:               runID,
+					VersionHistoryItems: versionHistory.GetItems(),
+					Events:              eventBlob,
+					NewRunEvents:        newRunEventBlob,
+				}},
 		}
 
 		s.standByReplicationTasksChan <- replicationTask

@@ -395,7 +395,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		}, nil
 
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
+		taskAttributes := replicationTask.GetHistoryTaskAttributes()
 
 		events, err := p.historySerializer.DeserializeEvents(taskAttributes.GetEvents())
 		if err != nil {
