@@ -21,7 +21,7 @@
 			"cwd": "${workspaceFolder}",
 			"args": [
 				"--env",
-				"development_active",
+				"development-active",
 				"start",
 			]
 		},
@@ -34,7 +34,7 @@
 			"cwd": "${workspaceFolder}",
 			"args": [
 				"--env",
-				"development_mysql",
+				"development-mysql",
 				"start",
 			]
 		},
@@ -47,7 +47,7 @@
 			"cwd": "${workspaceFolder}",
 			"args": [
 				"--env",
-				"development_postgres",
+				"development-postgres",
 				"start",
 			]
 		},
@@ -60,60 +60,9 @@
 			"cwd": "${workspaceFolder}",
 			"args": [
 				"--env",
-				"development_sqlite",
+				"development-sqlite",
 				"start",
 			]
 		},
-		{
-			"name": "Debug CLI Namespace Describe",
-			"type": "go",
-			"request": "launch",
-			"mode": "debug",
-			"program": "${workspaceFolder}/cmd/tools/cli",
-			"cwd": "${workspaceFolder}",
-			"args": [
-				"--namespace",
-				"default",
-				"namespace",
-				"describe"
-			]
-		},
-		{
-			"name": "Debug CLI Admin Namespace Describe",
-			"type": "go",
-			"request": "launch",
-			"mode": "debug",
-			"program": "${workspaceFolder}/cmd/tools/cli",
-			"cwd": "${workspaceFolder}",
-			"args": [
-				"admin",
-				"namespace",
-				"describe",
-				"--service_config_dir",
-				"./config"
-			]
-		},
-		{
-			"name": "Debug CLI Workflow Run",
-			"type": "go",
-			"request": "launch",
-			"mode": "debug",
-			"program": "${workspaceFolder}/cmd/tools/cli",
-			"cwd": "${workspaceFolder}",
-			"args": [
-				"workflow",
-				"run",
-				"--taskqueue",
-				"TestTaskQueue",
-				"--workflow_type",
-				"TestWorkflow_test",
-				"--execution_timeout",
-				"100000000",
-				"--input",
-				"{}"
-			],
-			"env": {"TEMPORAL_CLI_SHOW_STACKS": 1}
-		},
-
 	]
 }
