@@ -48,7 +48,7 @@ message ReplicationTask {
         NamespaceTaskAttributes namespace_task_attributes = 3;
         SyncShardStatusTaskAttributes sync_shard_status_task_attributes = 5;
         SyncActivityTaskAttributes sync_activity_task_attributes = 6;
-        HistoryTaskV2Attributes history_task_v2_attributes = 8;
+        HistoryTaskAttributes history_task_attributes = 8;
         SyncWorkflowStateTaskAttributes sync_workflow_state_task_attributes = 10;
     }
     google.protobuf.Timestamp visibility_time = 9 [(gogoproto.stdtime) = true];
@@ -123,7 +123,7 @@ message SyncActivityTaskAttributes {
     temporal.server.api.history.v1.VersionHistory version_history = 14;
 }
 
-message HistoryTaskV2Attributes {
+message HistoryTaskAttributes {
     reserved 1;
     string namespace_id = 2;
     string workflow_id = 3;

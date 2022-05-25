@@ -476,8 +476,8 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 			replicationTask := &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 				SourceTaskId: taskID,
-				Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-					HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+					HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 						NamespaceId:         namespaceID.String(),
 						WorkflowId:          workflowID,
 						RunId:               runID,

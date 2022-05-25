@@ -161,8 +161,8 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 	remoteTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -250,8 +250,8 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 	remoteTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
