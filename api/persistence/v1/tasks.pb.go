@@ -41,6 +41,7 @@ import (
 	_ "github.com/gogo/protobuf/types"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	v11 "go.temporal.io/api/enums/v1"
+	v12 "go.temporal.io/api/workflow/v1"
 	v1 "go.temporal.io/server/api/clock/v1"
 )
 
@@ -109,13 +110,13 @@ func (m *AllocatedTaskInfo) GetTaskId() int64 {
 }
 
 type TaskInfo struct {
-	NamespaceId string          `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
-	WorkflowId  string          `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
-	RunId       string          `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
-	ScheduleId  int64           `protobuf:"varint,4,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
-	CreateTime  *time.Time      `protobuf:"bytes,5,opt,name=create_time,json=createTime,proto3,stdtime" json:"create_time,omitempty"`
-	ExpiryTime  *time.Time      `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3,stdtime" json:"expiry_time,omitempty"`
-	Clock       *v1.VectorClock `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
+	NamespaceId string         `protobuf:"bytes,1,opt,name=namespace_id,json=namespaceId,proto3" json:"namespace_id,omitempty"`
+	WorkflowId  string         `protobuf:"bytes,2,opt,name=workflow_id,json=workflowId,proto3" json:"workflow_id,omitempty"`
+	RunId       string         `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
+	ScheduleId  int64          `protobuf:"varint,4,opt,name=schedule_id,json=scheduleId,proto3" json:"schedule_id,omitempty"`
+	CreateTime  *time.Time     `protobuf:"bytes,5,opt,name=create_time,json=createTime,proto3,stdtime" json:"create_time,omitempty"`
+	ExpiryTime  *time.Time     `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3,stdtime" json:"expiry_time,omitempty"`
+	Clock       *v1.ShardClock `protobuf:"bytes,7,opt,name=clock,proto3" json:"clock,omitempty"`
 }
 
 func (m *TaskInfo) Reset()      { *m = TaskInfo{} }
@@ -192,7 +193,7 @@ func (m *TaskInfo) GetExpiryTime() *time.Time {
 	return nil
 }
 
-func (m *TaskInfo) GetClock() *v1.VectorClock {
+func (m *TaskInfo) GetClock() *v1.ShardClock {
 	if m != nil {
 		return m.Clock
 	}
@@ -208,6 +209,7 @@ type TaskQueueInfo struct {
 	AckLevel       int64             `protobuf:"varint,5,opt,name=ack_level,json=ackLevel,proto3" json:"ack_level,omitempty"`
 	ExpiryTime     *time.Time        `protobuf:"bytes,6,opt,name=expiry_time,json=expiryTime,proto3,stdtime" json:"expiry_time,omitempty"`
 	LastUpdateTime *time.Time        `protobuf:"bytes,7,opt,name=last_update_time,json=lastUpdateTime,proto3,stdtime" json:"last_update_time,omitempty"`
+	VersioningData *VersioningData   `protobuf:"bytes,8,opt,name=versioning_data,json=versioningData,proto3" json:"versioning_data,omitempty"`
 }
 
 func (m *TaskQueueInfo) Reset()      { *m = TaskQueueInfo{} }
@@ -291,10 +293,75 @@ func (m *TaskQueueInfo) GetLastUpdateTime() *time.Time {
 	return nil
 }
 
+func (m *TaskQueueInfo) GetVersioningData() *VersioningData {
+	if m != nil {
+		return m.VersioningData
+	}
+	return nil
+}
+
+// Holds all the data related to worker versioning for a task queue
+type VersioningData struct {
+	// The currently established default versions. There will be one per version type as defined in
+	// the `VersionId` message.
+	CurrentDefaults []*v12.VersionIdNode `protobuf:"bytes,8,rep,name=current_defaults,json=currentDefaults,proto3" json:"current_defaults,omitempty"`
+	// Other current latest-compatible versions who are not the overall default. These are the
+	// versions that will be used when generating new tasks by following the graph from the
+	// version of the last task out to a leaf.
+	CompatibleLeaves []*v12.VersionIdNode `protobuf:"bytes,9,rep,name=compatible_leaves,json=compatibleLeaves,proto3" json:"compatible_leaves,omitempty"`
+}
+
+func (m *VersioningData) Reset()      { *m = VersioningData{} }
+func (*VersioningData) ProtoMessage() {}
+func (*VersioningData) Descriptor() ([]byte, []int) {
+	return fileDescriptor_f9c734e3b35cf986, []int{3}
+}
+func (m *VersioningData) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *VersioningData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_VersioningData.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *VersioningData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_VersioningData.Merge(m, src)
+}
+func (m *VersioningData) XXX_Size() int {
+	return m.Size()
+}
+func (m *VersioningData) XXX_DiscardUnknown() {
+	xxx_messageInfo_VersioningData.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_VersioningData proto.InternalMessageInfo
+
+func (m *VersioningData) GetCurrentDefaults() []*v12.VersionIdNode {
+	if m != nil {
+		return m.CurrentDefaults
+	}
+	return nil
+}
+
+func (m *VersioningData) GetCompatibleLeaves() []*v12.VersionIdNode {
+	if m != nil {
+		return m.CompatibleLeaves
+	}
+	return nil
+}
+
 func init() {
 	proto.RegisterType((*AllocatedTaskInfo)(nil), "temporal.server.api.persistence.v1.AllocatedTaskInfo")
 	proto.RegisterType((*TaskInfo)(nil), "temporal.server.api.persistence.v1.TaskInfo")
 	proto.RegisterType((*TaskQueueInfo)(nil), "temporal.server.api.persistence.v1.TaskQueueInfo")
+	proto.RegisterType((*VersioningData)(nil), "temporal.server.api.persistence.v1.VersioningData")
 }
 
 func init() {
@@ -302,44 +369,51 @@ func init() {
 }
 
 var fileDescriptor_f9c734e3b35cf986 = []byte{
-	// 579 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0x3f, 0x6f, 0xd3, 0x40,
-	0x1c, 0xb5, 0xf3, 0x3f, 0x17, 0xa8, 0xc0, 0x12, 0x22, 0x0a, 0xd2, 0xa5, 0x8d, 0x10, 0x2a, 0x08,
-	0xd9, 0x6a, 0x61, 0x40, 0x62, 0x80, 0x94, 0x29, 0xc0, 0x82, 0x15, 0x18, 0x58, 0xa2, 0xab, 0xef,
-	0x17, 0x63, 0xfc, 0xe7, 0x0e, 0xdf, 0x39, 0x25, 0x1b, 0x1f, 0xa1, 0x1f, 0x83, 0x8f, 0xc2, 0x82,
-	0x94, 0xb1, 0x1b, 0xc4, 0x59, 0xd8, 0xe8, 0x47, 0x40, 0x77, 0x8e, 0xd3, 0x0e, 0x45, 0x64, 0x60,
-	0xbb, 0xdf, 0xef, 0xde, 0x7b, 0xf7, 0xfc, 0x5e, 0x14, 0x64, 0x4b, 0x88, 0x39, 0x4b, 0x49, 0xe4,
-	0x08, 0x48, 0x67, 0x90, 0x3a, 0x84, 0x07, 0x0e, 0x87, 0x54, 0x04, 0x42, 0x42, 0xe2, 0x81, 0x33,
-	0x3b, 0x70, 0x24, 0x11, 0xa1, 0xb0, 0x79, 0xca, 0x24, 0xb3, 0x06, 0x25, 0xde, 0x2e, 0xf0, 0x36,
-	0xe1, 0x81, 0x7d, 0x09, 0x6f, 0xcf, 0x0e, 0x7a, 0x7d, 0x9f, 0x31, 0x3f, 0x02, 0x47, 0x33, 0x8e,
-	0xb3, 0xa9, 0x23, 0x83, 0x18, 0x84, 0x24, 0x31, 0x2f, 0x44, 0x7a, 0x7b, 0x14, 0x38, 0x24, 0x14,
-	0x12, 0x2f, 0x00, 0xe1, 0xf8, 0xcc, 0x67, 0x7a, 0xaf, 0x4f, 0x6b, 0xc8, 0xbd, 0x8d, 0x2f, 0x65,
-	0x08, 0x92, 0x2c, 0x16, 0xa5, 0x95, 0xc9, 0xa7, 0x0c, 0x32, 0x58, 0xe3, 0x1e, 0x5c, 0xe5, 0xdf,
-	0x8b, 0x98, 0x17, 0x2a, 0x78, 0x0c, 0x42, 0x10, 0x7f, 0x8d, 0x1d, 0x24, 0xe8, 0xe6, 0x30, 0x8a,
-	0x98, 0x47, 0x24, 0xd0, 0x31, 0x11, 0xe1, 0x28, 0x99, 0x32, 0xeb, 0x39, 0xaa, 0x51, 0x22, 0x49,
-	0xd7, 0xdc, 0x35, 0xf7, 0x3b, 0x87, 0x0f, 0xed, 0x7f, 0x7f, 0x9f, 0x5d, 0x72, 0x5d, 0xcd, 0xb4,
-	0x6e, 0xa3, 0xa6, 0xb6, 0x15, 0xd0, 0x6e, 0x65, 0xd7, 0xdc, 0xaf, 0xba, 0x0d, 0x35, 0x8e, 0xe8,
-	0xe0, 0x7b, 0x05, 0xb5, 0x36, 0xef, 0xec, 0xa1, 0x6b, 0x09, 0x89, 0x41, 0x70, 0xe2, 0x81, 0x82,
-	0xaa, 0xf7, 0xda, 0x6e, 0x67, 0xb3, 0x1b, 0x51, 0xab, 0x8f, 0x3a, 0x27, 0x2c, 0x0d, 0xa7, 0x11,
-	0x3b, 0x29, 0xc5, 0xda, 0x2e, 0x2a, 0x57, 0x23, 0x6a, 0xdd, 0x42, 0x8d, 0x34, 0x4b, 0xd4, 0x5d,
-	0x55, 0xdf, 0xd5, 0xd3, 0x2c, 0x29, 0x78, 0xc2, 0xfb, 0x00, 0x34, 0x8b, 0xb4, 0x72, 0x4d, 0x9b,
-	0x40, 0xe5, 0x6a, 0x44, 0xad, 0x21, 0xea, 0x78, 0x29, 0x10, 0x09, 0x13, 0xd5, 0x44, 0xb7, 0xae,
-	0x3f, 0xb5, 0x67, 0x17, 0x35, 0xd9, 0x65, 0x4d, 0xf6, 0xb8, 0xac, 0xe9, 0xa8, 0x76, 0xfa, 0xa3,
-	0x6f, 0xba, 0xa8, 0x20, 0xa9, 0xb5, 0x92, 0x80, 0xcf, 0x3c, 0x48, 0xe7, 0x85, 0x44, 0x63, 0x5b,
-	0x89, 0x82, 0xa4, 0x25, 0x9e, 0xa1, 0xba, 0x2e, 0xa6, 0xdb, 0xd4, 0xe4, 0xfb, 0x57, 0x46, 0xad,
-	0x11, 0x2a, 0xe4, 0x77, 0xe0, 0x49, 0x96, 0xbe, 0x50, 0xa3, 0x5b, 0xf0, 0x06, 0xbf, 0x2b, 0xe8,
-	0xba, 0xca, 0xf3, 0x8d, 0xea, 0x7f, 0xdb, 0x50, 0x2d, 0x54, 0x53, 0xe3, 0x3a, 0x4d, 0x7d, 0xb6,
-	0x86, 0xa8, 0xad, 0x1b, 0x93, 0x73, 0x0e, 0x3a, 0xca, 0x9d, 0xc3, 0xbb, 0x17, 0x6e, 0x94, 0x0d,
-	0xfd, 0x83, 0x2b, 0xbb, 0xd6, 0xef, 0x8d, 0xe7, 0x1c, 0xdc, 0x96, 0xa2, 0xa9, 0x93, 0xf5, 0x04,
-	0xd5, 0xc2, 0x20, 0x29, 0xc2, 0xde, 0x82, 0xfd, 0x2a, 0x48, 0xa8, 0xab, 0x19, 0xd6, 0x1d, 0xd4,
-	0x26, 0x5e, 0x38, 0x89, 0x60, 0x06, 0x91, 0xae, 0xa2, 0xea, 0xb6, 0x88, 0x17, 0xbe, 0x56, 0xf3,
-	0xff, 0x88, 0xf9, 0x25, 0xba, 0x11, 0x11, 0x21, 0x27, 0x19, 0xa7, 0x9b, 0xc6, 0x9b, 0x5b, 0xea,
-	0xec, 0x28, 0xe6, 0x5b, 0x4d, 0x54, 0x57, 0x47, 0x1f, 0x17, 0x4b, 0x6c, 0x9c, 0x2d, 0xb1, 0x71,
-	0xbe, 0xc4, 0xe6, 0x97, 0x1c, 0x9b, 0x5f, 0x73, 0x6c, 0x7e, 0xcb, 0xb1, 0xb9, 0xc8, 0xb1, 0xf9,
-	0x33, 0xc7, 0xe6, 0xaf, 0x1c, 0x1b, 0xe7, 0x39, 0x36, 0x4f, 0x57, 0xd8, 0x58, 0xac, 0xb0, 0x71,
-	0xb6, 0xc2, 0xc6, 0xfb, 0xc7, 0x3e, 0xbb, 0xc8, 0x23, 0x60, 0x7f, 0xff, 0x67, 0x79, 0x7a, 0x69,
-	0x3c, 0x6e, 0x68, 0x57, 0x8f, 0xfe, 0x04, 0x00, 0x00, 0xff, 0xff, 0x22, 0x67, 0xc8, 0xa7, 0x92,
-	0x04, 0x00, 0x00,
+	// 691 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xac, 0x54, 0xc1, 0x6e, 0xd3, 0x30,
+	0x18, 0x6e, 0xd6, 0xae, 0x6b, 0x5d, 0xe8, 0xb6, 0x48, 0x88, 0x6a, 0x48, 0xd9, 0x56, 0x21, 0xa8,
+	0x10, 0x4a, 0xb4, 0xc2, 0x01, 0x09, 0x09, 0xb1, 0xb1, 0x4b, 0x61, 0x42, 0x22, 0x14, 0x0e, 0x70,
+	0x88, 0xbc, 0xf8, 0x6f, 0x16, 0x92, 0xd8, 0x21, 0x76, 0x32, 0x76, 0xe3, 0x11, 0xf6, 0x18, 0x3c,
+	0x03, 0x4f, 0xc0, 0x61, 0x87, 0x1d, 0x77, 0x83, 0x65, 0x17, 0x8e, 0x7b, 0x04, 0x64, 0xa7, 0xe9,
+	0x36, 0x51, 0x44, 0x91, 0xb8, 0xf9, 0x77, 0xbe, 0xef, 0xfb, 0x7f, 0x7f, 0x9f, 0x1d, 0x64, 0x0a,
+	0x88, 0x62, 0x96, 0xe0, 0xd0, 0xe2, 0x90, 0x64, 0x90, 0x58, 0x38, 0xf6, 0xad, 0x18, 0x12, 0xee,
+	0x73, 0x01, 0xd4, 0x05, 0x2b, 0xdb, 0xb0, 0x04, 0xe6, 0x01, 0x37, 0xe3, 0x84, 0x09, 0xa6, 0x77,
+	0x4b, 0xbc, 0x59, 0xe0, 0x4d, 0x1c, 0xfb, 0xe6, 0x25, 0xbc, 0x99, 0x6d, 0xac, 0xac, 0x7a, 0x8c,
+	0x79, 0x21, 0x58, 0x8a, 0xb1, 0x9b, 0x8e, 0x2c, 0xe1, 0x47, 0xc0, 0x05, 0x8e, 0xe2, 0x42, 0x64,
+	0x65, 0x9d, 0x40, 0x0c, 0x94, 0x00, 0x75, 0x7d, 0xe0, 0x96, 0xc7, 0x3c, 0xa6, 0xf6, 0xd5, 0x6a,
+	0x0c, 0xb9, 0x33, 0x99, 0x4b, 0x0e, 0x04, 0x34, 0x8d, 0x78, 0x39, 0x8a, 0xf3, 0x31, 0x85, 0x14,
+	0xa6, 0xe2, 0xf6, 0x59, 0x12, 0x8c, 0x42, 0xb6, 0x2f, 0xa1, 0x11, 0x70, 0x8e, 0xbd, 0x12, 0x77,
+	0x6f, 0xda, 0x39, 0xdd, 0x90, 0xb9, 0xc1, 0x6f, 0xd8, 0x2e, 0x45, 0xcb, 0x9b, 0x61, 0xc8, 0x5c,
+	0x2c, 0x80, 0x0c, 0x31, 0x0f, 0x06, 0x74, 0xc4, 0xf4, 0xa7, 0xa8, 0x46, 0xb0, 0xc0, 0x1d, 0x6d,
+	0x4d, 0xeb, 0xb5, 0xfa, 0xf7, 0xcd, 0xbf, 0xfb, 0x60, 0x96, 0x5c, 0x5b, 0x31, 0xf5, 0x9b, 0x68,
+	0x41, 0x8d, 0xef, 0x93, 0xce, 0xdc, 0x9a, 0xd6, 0xab, 0xda, 0x75, 0x59, 0x0e, 0x48, 0xf7, 0x68,
+	0x0e, 0x35, 0x26, 0x7d, 0xd6, 0xd1, 0x35, 0x8a, 0x23, 0xe0, 0x31, 0x76, 0x41, 0x42, 0x65, 0xbf,
+	0xa6, 0xdd, 0x9a, 0xec, 0x0d, 0x88, 0xbe, 0x8a, 0x5a, 0xe5, 0x41, 0x4b, 0xb1, 0xa6, 0x8d, 0xca,
+	0xad, 0x01, 0xd1, 0x6f, 0xa0, 0x7a, 0x92, 0x52, 0xf9, 0xad, 0xaa, 0xbe, 0xcd, 0x27, 0x29, 0x2d,
+	0x78, 0xdc, 0xdd, 0x03, 0x92, 0x86, 0x4a, 0xb9, 0xa6, 0x86, 0x40, 0xe5, 0xd6, 0x80, 0xe8, 0x9b,
+	0xa8, 0xe5, 0x26, 0x80, 0x05, 0x38, 0x32, 0xb1, 0xce, 0xbc, 0x3a, 0xea, 0x8a, 0x59, 0xc4, 0x69,
+	0x96, 0x71, 0x9a, 0xc3, 0x32, 0xce, 0xad, 0xda, 0xe1, 0xf7, 0x55, 0xcd, 0x46, 0x05, 0x49, 0x6e,
+	0x4b, 0x09, 0xf8, 0x14, 0xfb, 0xc9, 0x41, 0x21, 0x51, 0x9f, 0x55, 0xa2, 0x20, 0x29, 0x89, 0x27,
+	0x68, 0x5e, 0x05, 0xd3, 0x59, 0x50, 0xe4, 0xde, 0x54, 0xab, 0x15, 0x42, 0x9a, 0xfc, 0x7a, 0x0f,
+	0x27, 0xe4, 0x99, 0xac, 0xec, 0x82, 0xd6, 0x3d, 0xaa, 0xa2, 0xeb, 0xd2, 0xce, 0x57, 0xf2, 0x9a,
+	0xcc, 0xea, 0xa9, 0x8e, 0x6a, 0xb2, 0x1c, 0x9b, 0xa9, 0xd6, 0xfa, 0x26, 0x6a, 0xaa, 0xc0, 0xc4,
+	0x41, 0x0c, 0xca, 0xc9, 0x76, 0xff, 0xf6, 0xc5, 0x30, 0x72, 0x0a, 0x75, 0x2f, 0xcb, 0xa8, 0x55,
+	0xbf, 0xe1, 0x41, 0x0c, 0x76, 0x43, 0xd2, 0xe4, 0x4a, 0x7f, 0x84, 0x6a, 0x81, 0x4f, 0x0b, 0xaf,
+	0x67, 0x60, 0xbf, 0xf0, 0x29, 0xb1, 0x15, 0x43, 0xbf, 0x85, 0x9a, 0xd8, 0x0d, 0x9c, 0x10, 0x32,
+	0x08, 0x55, 0x12, 0x55, 0xbb, 0x81, 0xdd, 0x60, 0x47, 0xd6, 0xff, 0xc3, 0xe5, 0xe7, 0x68, 0x29,
+	0xc4, 0x5c, 0x38, 0x69, 0x4c, 0x26, 0x81, 0x2f, 0xcc, 0xa8, 0xd3, 0x96, 0xcc, 0x37, 0x8a, 0xa8,
+	0xb4, 0xde, 0xa3, 0xc5, 0x4c, 0x5e, 0x7d, 0x46, 0x7d, 0xea, 0x39, 0xea, 0x99, 0x34, 0x94, 0x54,
+	0x7f, 0x96, 0x67, 0xf2, 0x76, 0x42, 0xdd, 0xc6, 0x02, 0xdb, 0xed, 0xec, 0x4a, 0xdd, 0xfd, 0xaa,
+	0xa1, 0xf6, 0x55, 0x88, 0x6e, 0xa3, 0x25, 0x37, 0x4d, 0x12, 0xa0, 0xc2, 0x21, 0x30, 0xc2, 0x69,
+	0x28, 0x78, 0xa7, 0xb1, 0x56, 0xed, 0xb5, 0xfa, 0x77, 0xaf, 0x3a, 0x5c, 0xbe, 0x89, 0x4b, 0x6d,
+	0x06, 0xe4, 0x25, 0x23, 0x60, 0x2f, 0x8e, 0x05, 0xb6, 0xc7, 0x7c, 0x7d, 0x88, 0x96, 0x5d, 0x16,
+	0xc5, 0x58, 0xf8, 0xbb, 0x21, 0x38, 0x21, 0xe0, 0x0c, 0x78, 0xa7, 0xf9, 0x6f, 0xa2, 0x4b, 0x17,
+	0x0a, 0x3b, 0x4a, 0x60, 0xeb, 0xc3, 0xf1, 0xa9, 0x51, 0x39, 0x39, 0x35, 0x2a, 0xe7, 0xa7, 0x86,
+	0xf6, 0x39, 0x37, 0xb4, 0x2f, 0xb9, 0xa1, 0x7d, 0xcb, 0x0d, 0xed, 0x38, 0x37, 0xb4, 0x1f, 0xb9,
+	0xa1, 0xfd, 0xcc, 0x8d, 0xca, 0x79, 0x6e, 0x68, 0x87, 0x67, 0x46, 0xe5, 0xf8, 0xcc, 0xa8, 0x9c,
+	0x9c, 0x19, 0x95, 0x77, 0x0f, 0x3d, 0x76, 0xd1, 0xd2, 0x67, 0x7f, 0xfe, 0x35, 0x3f, 0xbe, 0x54,
+	0xee, 0xd6, 0x55, 0x5e, 0x0f, 0x7e, 0x05, 0x00, 0x00, 0xff, 0xff, 0x9a, 0xef, 0xe0, 0x23, 0xd3,
+	0x05, 0x00, 0x00,
 }
 
 func (this *AllocatedTaskInfo) Equal(that interface{}) bool {
@@ -467,6 +541,46 @@ func (this *TaskQueueInfo) Equal(that interface{}) bool {
 	} else if !this.LastUpdateTime.Equal(*that1.LastUpdateTime) {
 		return false
 	}
+	if !this.VersioningData.Equal(that1.VersioningData) {
+		return false
+	}
+	return true
+}
+func (this *VersioningData) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*VersioningData)
+	if !ok {
+		that2, ok := that.(VersioningData)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if len(this.CurrentDefaults) != len(that1.CurrentDefaults) {
+		return false
+	}
+	for i := range this.CurrentDefaults {
+		if !this.CurrentDefaults[i].Equal(that1.CurrentDefaults[i]) {
+			return false
+		}
+	}
+	if len(this.CompatibleLeaves) != len(that1.CompatibleLeaves) {
+		return false
+	}
+	for i := range this.CompatibleLeaves {
+		if !this.CompatibleLeaves[i].Equal(that1.CompatibleLeaves[i]) {
+			return false
+		}
+	}
 	return true
 }
 func (this *AllocatedTaskInfo) GoString() string {
@@ -504,7 +618,7 @@ func (this *TaskQueueInfo) GoString() string {
 	if this == nil {
 		return "nil"
 	}
-	s := make([]string, 0, 11)
+	s := make([]string, 0, 12)
 	s = append(s, "&persistence.TaskQueueInfo{")
 	s = append(s, "NamespaceId: "+fmt.Sprintf("%#v", this.NamespaceId)+",\n")
 	s = append(s, "Name: "+fmt.Sprintf("%#v", this.Name)+",\n")
@@ -513,6 +627,24 @@ func (this *TaskQueueInfo) GoString() string {
 	s = append(s, "AckLevel: "+fmt.Sprintf("%#v", this.AckLevel)+",\n")
 	s = append(s, "ExpiryTime: "+fmt.Sprintf("%#v", this.ExpiryTime)+",\n")
 	s = append(s, "LastUpdateTime: "+fmt.Sprintf("%#v", this.LastUpdateTime)+",\n")
+	if this.VersioningData != nil {
+		s = append(s, "VersioningData: "+fmt.Sprintf("%#v", this.VersioningData)+",\n")
+	}
+	s = append(s, "}")
+	return strings.Join(s, "")
+}
+func (this *VersioningData) GoString() string {
+	if this == nil {
+		return "nil"
+	}
+	s := make([]string, 0, 6)
+	s = append(s, "&persistence.VersioningData{")
+	if this.CurrentDefaults != nil {
+		s = append(s, "CurrentDefaults: "+fmt.Sprintf("%#v", this.CurrentDefaults)+",\n")
+	}
+	if this.CompatibleLeaves != nil {
+		s = append(s, "CompatibleLeaves: "+fmt.Sprintf("%#v", this.CompatibleLeaves)+",\n")
+	}
 	s = append(s, "}")
 	return strings.Join(s, "")
 }
@@ -665,23 +797,35 @@ func (m *TaskQueueInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
-	if m.LastUpdateTime != nil {
-		n5, err5 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastUpdateTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastUpdateTime):])
-		if err5 != nil {
-			return 0, err5
+	if m.VersioningData != nil {
+		{
+			size, err := m.VersioningData.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTasks(dAtA, i, uint64(size))
 		}
-		i -= n5
-		i = encodeVarintTasks(dAtA, i, uint64(n5))
 		i--
-		dAtA[i] = 0x3a
+		dAtA[i] = 0x42
 	}
-	if m.ExpiryTime != nil {
-		n6, err6 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.ExpiryTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.ExpiryTime):])
+	if m.LastUpdateTime != nil {
+		n6, err6 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastUpdateTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastUpdateTime):])
 		if err6 != nil {
 			return 0, err6
 		}
 		i -= n6
 		i = encodeVarintTasks(dAtA, i, uint64(n6))
+		i--
+		dAtA[i] = 0x3a
+	}
+	if m.ExpiryTime != nil {
+		n7, err7 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.ExpiryTime, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.ExpiryTime):])
+		if err7 != nil {
+			return 0, err7
+		}
+		i -= n7
+		i = encodeVarintTasks(dAtA, i, uint64(n7))
 		i--
 		dAtA[i] = 0x32
 	}
@@ -713,6 +857,57 @@ func (m *TaskQueueInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintTasks(dAtA, i, uint64(len(m.NamespaceId)))
 		i--
 		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *VersioningData) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *VersioningData) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *VersioningData) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.CompatibleLeaves) > 0 {
+		for iNdEx := len(m.CompatibleLeaves) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.CompatibleLeaves[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTasks(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x4a
+		}
+	}
+	if len(m.CurrentDefaults) > 0 {
+		for iNdEx := len(m.CurrentDefaults) - 1; iNdEx >= 0; iNdEx-- {
+			{
+				size, err := m.CurrentDefaults[iNdEx].MarshalToSizedBuffer(dAtA[:i])
+				if err != nil {
+					return 0, err
+				}
+				i -= size
+				i = encodeVarintTasks(dAtA, i, uint64(size))
+			}
+			i--
+			dAtA[i] = 0x42
+		}
 	}
 	return len(dAtA) - i, nil
 }
@@ -811,6 +1006,31 @@ func (m *TaskQueueInfo) Size() (n int) {
 		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastUpdateTime)
 		n += 1 + l + sovTasks(uint64(l))
 	}
+	if m.VersioningData != nil {
+		l = m.VersioningData.Size()
+		n += 1 + l + sovTasks(uint64(l))
+	}
+	return n
+}
+
+func (m *VersioningData) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.CurrentDefaults) > 0 {
+		for _, e := range m.CurrentDefaults {
+			l = e.Size()
+			n += 1 + l + sovTasks(uint64(l))
+		}
+	}
+	if len(m.CompatibleLeaves) > 0 {
+		for _, e := range m.CompatibleLeaves {
+			l = e.Size()
+			n += 1 + l + sovTasks(uint64(l))
+		}
+	}
 	return n
 }
 
@@ -842,7 +1062,7 @@ func (this *TaskInfo) String() string {
 		`ScheduleId:` + fmt.Sprintf("%v", this.ScheduleId) + `,`,
 		`CreateTime:` + strings.Replace(fmt.Sprintf("%v", this.CreateTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`ExpiryTime:` + strings.Replace(fmt.Sprintf("%v", this.ExpiryTime), "Timestamp", "types.Timestamp", 1) + `,`,
-		`Clock:` + strings.Replace(fmt.Sprintf("%v", this.Clock), "VectorClock", "v1.VectorClock", 1) + `,`,
+		`Clock:` + strings.Replace(fmt.Sprintf("%v", this.Clock), "ShardClock", "v1.ShardClock", 1) + `,`,
 		`}`,
 	}, "")
 	return s
@@ -859,6 +1079,28 @@ func (this *TaskQueueInfo) String() string {
 		`AckLevel:` + fmt.Sprintf("%v", this.AckLevel) + `,`,
 		`ExpiryTime:` + strings.Replace(fmt.Sprintf("%v", this.ExpiryTime), "Timestamp", "types.Timestamp", 1) + `,`,
 		`LastUpdateTime:` + strings.Replace(fmt.Sprintf("%v", this.LastUpdateTime), "Timestamp", "types.Timestamp", 1) + `,`,
+		`VersioningData:` + strings.Replace(this.VersioningData.String(), "VersioningData", "VersioningData", 1) + `,`,
+		`}`,
+	}, "")
+	return s
+}
+func (this *VersioningData) String() string {
+	if this == nil {
+		return "nil"
+	}
+	repeatedStringForCurrentDefaults := "[]*VersionIdNode{"
+	for _, f := range this.CurrentDefaults {
+		repeatedStringForCurrentDefaults += strings.Replace(fmt.Sprintf("%v", f), "VersionIdNode", "v12.VersionIdNode", 1) + ","
+	}
+	repeatedStringForCurrentDefaults += "}"
+	repeatedStringForCompatibleLeaves := "[]*VersionIdNode{"
+	for _, f := range this.CompatibleLeaves {
+		repeatedStringForCompatibleLeaves += strings.Replace(fmt.Sprintf("%v", f), "VersionIdNode", "v12.VersionIdNode", 1) + ","
+	}
+	repeatedStringForCompatibleLeaves += "}"
+	s := strings.Join([]string{`&VersioningData{`,
+		`CurrentDefaults:` + repeatedStringForCurrentDefaults + `,`,
+		`CompatibleLeaves:` + repeatedStringForCompatibleLeaves + `,`,
 		`}`,
 	}, "")
 	return s
@@ -1225,7 +1467,7 @@ func (m *TaskInfo) Unmarshal(dAtA []byte) error {
 				return io.ErrUnexpectedEOF
 			}
 			if m.Clock == nil {
-				m.Clock = &v1.VectorClock{}
+				m.Clock = &v1.ShardClock{}
 			}
 			if err := m.Clock.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
@@ -1474,6 +1716,163 @@ func (m *TaskQueueInfo) Unmarshal(dAtA []byte) error {
 				m.LastUpdateTime = new(time.Time)
 			}
 			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.LastUpdateTime, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field VersioningData", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTasks
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTasks
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTasks
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.VersioningData == nil {
+				m.VersioningData = &VersioningData{}
+			}
+			if err := m.VersioningData.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipTasks(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthTasks
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthTasks
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *VersioningData) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowTasks
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: VersioningData: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: VersioningData: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 8:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CurrentDefaults", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTasks
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTasks
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTasks
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CurrentDefaults = append(m.CurrentDefaults, &v12.VersionIdNode{})
+			if err := m.CurrentDefaults[len(m.CurrentDefaults)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 9:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field CompatibleLeaves", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTasks
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTasks
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTasks
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.CompatibleLeaves = append(m.CompatibleLeaves, &v12.VersionIdNode{})
+			if err := m.CompatibleLeaves[len(m.CompatibleLeaves)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
