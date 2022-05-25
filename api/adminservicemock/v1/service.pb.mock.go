@@ -33,7 +33,7 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
-	adminservice "go.temporal.io/server/api/adminservice/v1"
+	v1 "go.temporal.io/server/api/adminservice/v1"
 	grpc "google.golang.org/grpc"
 )
 
@@ -61,14 +61,14 @@ func (m *MockAdminServiceClient) EXPECT() *MockAdminServiceClientMockRecorder {
 }
 
 // AddOrUpdateRemoteCluster mocks base method.
-func (m *MockAdminServiceClient) AddOrUpdateRemoteCluster(ctx context.Context, in *adminservice.AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+func (m *MockAdminServiceClient) AddOrUpdateRemoteCluster(ctx context.Context, in *v1.AddOrUpdateRemoteClusterRequest, opts ...grpc.CallOption) (*v1.AddOrUpdateRemoteClusterResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddOrUpdateRemoteCluster", varargs...)
-	ret0, _ := ret[0].(*adminservice.AddOrUpdateRemoteClusterResponse)
+	ret0, _ := ret[0].(*v1.AddOrUpdateRemoteClusterResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -81,14 +81,14 @@ func (mr *MockAdminServiceClientMockRecorder) AddOrUpdateRemoteCluster(ctx, in i
 }
 
 // AddSearchAttributes mocks base method.
-func (m *MockAdminServiceClient) AddSearchAttributes(ctx context.Context, in *adminservice.AddSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.AddSearchAttributesResponse, error) {
+func (m *MockAdminServiceClient) AddSearchAttributes(ctx context.Context, in *v1.AddSearchAttributesRequest, opts ...grpc.CallOption) (*v1.AddSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "AddSearchAttributes", varargs...)
-	ret0, _ := ret[0].(*adminservice.AddSearchAttributesResponse)
+	ret0, _ := ret[0].(*v1.AddSearchAttributesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -101,14 +101,14 @@ func (mr *MockAdminServiceClientMockRecorder) AddSearchAttributes(ctx, in interf
 }
 
 // CloseShard mocks base method.
-func (m *MockAdminServiceClient) CloseShard(ctx context.Context, in *adminservice.CloseShardRequest, opts ...grpc.CallOption) (*adminservice.CloseShardResponse, error) {
+func (m *MockAdminServiceClient) CloseShard(ctx context.Context, in *v1.CloseShardRequest, opts ...grpc.CallOption) (*v1.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "CloseShard", varargs...)
-	ret0, _ := ret[0].(*adminservice.CloseShardResponse)
+	ret0, _ := ret[0].(*v1.CloseShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -121,14 +121,14 @@ func (mr *MockAdminServiceClientMockRecorder) CloseShard(ctx, in interface{}, op
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockAdminServiceClient) DeleteWorkflowExecution(ctx context.Context, in *adminservice.DeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*adminservice.DeleteWorkflowExecutionResponse, error) {
+func (m *MockAdminServiceClient) DeleteWorkflowExecution(ctx context.Context, in *v1.DeleteWorkflowExecutionRequest, opts ...grpc.CallOption) (*v1.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", varargs...)
-	ret0, _ := ret[0].(*adminservice.DeleteWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v1.DeleteWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -141,14 +141,14 @@ func (mr *MockAdminServiceClientMockRecorder) DeleteWorkflowExecution(ctx, in in
 }
 
 // DescribeCluster mocks base method.
-func (m *MockAdminServiceClient) DescribeCluster(ctx context.Context, in *adminservice.DescribeClusterRequest, opts ...grpc.CallOption) (*adminservice.DescribeClusterResponse, error) {
+func (m *MockAdminServiceClient) DescribeCluster(ctx context.Context, in *v1.DescribeClusterRequest, opts ...grpc.CallOption) (*v1.DescribeClusterResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DescribeCluster", varargs...)
-	ret0, _ := ret[0].(*adminservice.DescribeClusterResponse)
+	ret0, _ := ret[0].(*v1.DescribeClusterResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -161,14 +161,14 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeCluster(ctx, in interface{
 }
 
 // DescribeHistoryHost mocks base method.
-func (m *MockAdminServiceClient) DescribeHistoryHost(ctx context.Context, in *adminservice.DescribeHistoryHostRequest, opts ...grpc.CallOption) (*adminservice.DescribeHistoryHostResponse, error) {
+func (m *MockAdminServiceClient) DescribeHistoryHost(ctx context.Context, in *v1.DescribeHistoryHostRequest, opts ...grpc.CallOption) (*v1.DescribeHistoryHostResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DescribeHistoryHost", varargs...)
-	ret0, _ := ret[0].(*adminservice.DescribeHistoryHostResponse)
+	ret0, _ := ret[0].(*v1.DescribeHistoryHostResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -181,14 +181,14 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeHistoryHost(ctx, in interf
 }
 
 // DescribeMutableState mocks base method.
-func (m *MockAdminServiceClient) DescribeMutableState(ctx context.Context, in *adminservice.DescribeMutableStateRequest, opts ...grpc.CallOption) (*adminservice.DescribeMutableStateResponse, error) {
+func (m *MockAdminServiceClient) DescribeMutableState(ctx context.Context, in *v1.DescribeMutableStateRequest, opts ...grpc.CallOption) (*v1.DescribeMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "DescribeMutableState", varargs...)
-	ret0, _ := ret[0].(*adminservice.DescribeMutableStateResponse)
+	ret0, _ := ret[0].(*v1.DescribeMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -201,14 +201,14 @@ func (mr *MockAdminServiceClientMockRecorder) DescribeMutableState(ctx, in inter
 }
 
 // GetDLQMessages mocks base method.
-func (m *MockAdminServiceClient) GetDLQMessages(ctx context.Context, in *adminservice.GetDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetDLQMessagesResponse, error) {
+func (m *MockAdminServiceClient) GetDLQMessages(ctx context.Context, in *v1.GetDLQMessagesRequest, opts ...grpc.CallOption) (*v1.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetDLQMessages", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetDLQMessagesResponse)
+	ret0, _ := ret[0].(*v1.GetDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -221,14 +221,14 @@ func (mr *MockAdminServiceClientMockRecorder) GetDLQMessages(ctx, in interface{}
 }
 
 // GetDLQReplicationMessages mocks base method.
-func (m *MockAdminServiceClient) GetDLQReplicationMessages(ctx context.Context, in *adminservice.GetDLQReplicationMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetDLQReplicationMessagesResponse, error) {
+func (m *MockAdminServiceClient) GetDLQReplicationMessages(ctx context.Context, in *v1.GetDLQReplicationMessagesRequest, opts ...grpc.CallOption) (*v1.GetDLQReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetDLQReplicationMessages", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetDLQReplicationMessagesResponse)
+	ret0, _ := ret[0].(*v1.GetDLQReplicationMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -241,14 +241,14 @@ func (mr *MockAdminServiceClientMockRecorder) GetDLQReplicationMessages(ctx, in 
 }
 
 // GetNamespaceReplicationMessages mocks base method.
-func (m *MockAdminServiceClient) GetNamespaceReplicationMessages(ctx context.Context, in *adminservice.GetNamespaceReplicationMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
+func (m *MockAdminServiceClient) GetNamespaceReplicationMessages(ctx context.Context, in *v1.GetNamespaceReplicationMessagesRequest, opts ...grpc.CallOption) (*v1.GetNamespaceReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetNamespaceReplicationMessages", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetNamespaceReplicationMessagesResponse)
+	ret0, _ := ret[0].(*v1.GetNamespaceReplicationMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -261,14 +261,14 @@ func (mr *MockAdminServiceClientMockRecorder) GetNamespaceReplicationMessages(ct
 }
 
 // GetReplicationMessages mocks base method.
-func (m *MockAdminServiceClient) GetReplicationMessages(ctx context.Context, in *adminservice.GetReplicationMessagesRequest, opts ...grpc.CallOption) (*adminservice.GetReplicationMessagesResponse, error) {
+func (m *MockAdminServiceClient) GetReplicationMessages(ctx context.Context, in *v1.GetReplicationMessagesRequest, opts ...grpc.CallOption) (*v1.GetReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetReplicationMessages", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetReplicationMessagesResponse)
+	ret0, _ := ret[0].(*v1.GetReplicationMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -281,14 +281,14 @@ func (mr *MockAdminServiceClientMockRecorder) GetReplicationMessages(ctx, in int
 }
 
 // GetSearchAttributes mocks base method.
-func (m *MockAdminServiceClient) GetSearchAttributes(ctx context.Context, in *adminservice.GetSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.GetSearchAttributesResponse, error) {
+func (m *MockAdminServiceClient) GetSearchAttributes(ctx context.Context, in *v1.GetSearchAttributesRequest, opts ...grpc.CallOption) (*v1.GetSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetSearchAttributes", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetSearchAttributesResponse)
+	ret0, _ := ret[0].(*v1.GetSearchAttributesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -301,14 +301,14 @@ func (mr *MockAdminServiceClientMockRecorder) GetSearchAttributes(ctx, in interf
 }
 
 // GetShard mocks base method.
-func (m *MockAdminServiceClient) GetShard(ctx context.Context, in *adminservice.GetShardRequest, opts ...grpc.CallOption) (*adminservice.GetShardResponse, error) {
+func (m *MockAdminServiceClient) GetShard(ctx context.Context, in *v1.GetShardRequest, opts ...grpc.CallOption) (*v1.GetShardResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetShard", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetShardResponse)
+	ret0, _ := ret[0].(*v1.GetShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -321,14 +321,14 @@ func (mr *MockAdminServiceClientMockRecorder) GetShard(ctx, in interface{}, opts
 }
 
 // GetTaskQueueTasks mocks base method.
-func (m *MockAdminServiceClient) GetTaskQueueTasks(ctx context.Context, in *adminservice.GetTaskQueueTasksRequest, opts ...grpc.CallOption) (*adminservice.GetTaskQueueTasksResponse, error) {
+func (m *MockAdminServiceClient) GetTaskQueueTasks(ctx context.Context, in *v1.GetTaskQueueTasksRequest, opts ...grpc.CallOption) (*v1.GetTaskQueueTasksResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetTaskQueueTasks", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetTaskQueueTasksResponse)
+	ret0, _ := ret[0].(*v1.GetTaskQueueTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -341,14 +341,14 @@ func (mr *MockAdminServiceClientMockRecorder) GetTaskQueueTasks(ctx, in interfac
 }
 
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
-func (m *MockAdminServiceClient) GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *adminservice.GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+func (m *MockAdminServiceClient) GetWorkflowExecutionRawHistoryV2(ctx context.Context, in *v1.GetWorkflowExecutionRawHistoryV2Request, opts ...grpc.CallOption) (*v1.GetWorkflowExecutionRawHistoryV2Response, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistoryV2", varargs...)
-	ret0, _ := ret[0].(*adminservice.GetWorkflowExecutionRawHistoryV2Response)
+	ret0, _ := ret[0].(*v1.GetWorkflowExecutionRawHistoryV2Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -361,14 +361,14 @@ func (mr *MockAdminServiceClientMockRecorder) GetWorkflowExecutionRawHistoryV2(c
 }
 
 // ListClusterMembers mocks base method.
-func (m *MockAdminServiceClient) ListClusterMembers(ctx context.Context, in *adminservice.ListClusterMembersRequest, opts ...grpc.CallOption) (*adminservice.ListClusterMembersResponse, error) {
+func (m *MockAdminServiceClient) ListClusterMembers(ctx context.Context, in *v1.ListClusterMembersRequest, opts ...grpc.CallOption) (*v1.ListClusterMembersResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListClusterMembers", varargs...)
-	ret0, _ := ret[0].(*adminservice.ListClusterMembersResponse)
+	ret0, _ := ret[0].(*v1.ListClusterMembersResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -381,14 +381,14 @@ func (mr *MockAdminServiceClientMockRecorder) ListClusterMembers(ctx, in interfa
 }
 
 // ListClusters mocks base method.
-func (m *MockAdminServiceClient) ListClusters(ctx context.Context, in *adminservice.ListClustersRequest, opts ...grpc.CallOption) (*adminservice.ListClustersResponse, error) {
+func (m *MockAdminServiceClient) ListClusters(ctx context.Context, in *v1.ListClustersRequest, opts ...grpc.CallOption) (*v1.ListClustersResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListClusters", varargs...)
-	ret0, _ := ret[0].(*adminservice.ListClustersResponse)
+	ret0, _ := ret[0].(*v1.ListClustersResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -401,14 +401,14 @@ func (mr *MockAdminServiceClientMockRecorder) ListClusters(ctx, in interface{}, 
 }
 
 // ListHistoryTasks mocks base method.
-func (m *MockAdminServiceClient) ListHistoryTasks(ctx context.Context, in *adminservice.ListHistoryTasksRequest, opts ...grpc.CallOption) (*adminservice.ListHistoryTasksResponse, error) {
+func (m *MockAdminServiceClient) ListHistoryTasks(ctx context.Context, in *v1.ListHistoryTasksRequest, opts ...grpc.CallOption) (*v1.ListHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ListHistoryTasks", varargs...)
-	ret0, _ := ret[0].(*adminservice.ListHistoryTasksResponse)
+	ret0, _ := ret[0].(*v1.ListHistoryTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -421,14 +421,14 @@ func (mr *MockAdminServiceClientMockRecorder) ListHistoryTasks(ctx, in interface
 }
 
 // MergeDLQMessages mocks base method.
-func (m *MockAdminServiceClient) MergeDLQMessages(ctx context.Context, in *adminservice.MergeDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.MergeDLQMessagesResponse, error) {
+func (m *MockAdminServiceClient) MergeDLQMessages(ctx context.Context, in *v1.MergeDLQMessagesRequest, opts ...grpc.CallOption) (*v1.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "MergeDLQMessages", varargs...)
-	ret0, _ := ret[0].(*adminservice.MergeDLQMessagesResponse)
+	ret0, _ := ret[0].(*v1.MergeDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -441,14 +441,14 @@ func (mr *MockAdminServiceClientMockRecorder) MergeDLQMessages(ctx, in interface
 }
 
 // PurgeDLQMessages mocks base method.
-func (m *MockAdminServiceClient) PurgeDLQMessages(ctx context.Context, in *adminservice.PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*adminservice.PurgeDLQMessagesResponse, error) {
+func (m *MockAdminServiceClient) PurgeDLQMessages(ctx context.Context, in *v1.PurgeDLQMessagesRequest, opts ...grpc.CallOption) (*v1.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "PurgeDLQMessages", varargs...)
-	ret0, _ := ret[0].(*adminservice.PurgeDLQMessagesResponse)
+	ret0, _ := ret[0].(*v1.PurgeDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -461,14 +461,14 @@ func (mr *MockAdminServiceClientMockRecorder) PurgeDLQMessages(ctx, in interface
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockAdminServiceClient) ReapplyEvents(ctx context.Context, in *adminservice.ReapplyEventsRequest, opts ...grpc.CallOption) (*adminservice.ReapplyEventsResponse, error) {
+func (m *MockAdminServiceClient) ReapplyEvents(ctx context.Context, in *v1.ReapplyEventsRequest, opts ...grpc.CallOption) (*v1.ReapplyEventsResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ReapplyEvents", varargs...)
-	ret0, _ := ret[0].(*adminservice.ReapplyEventsResponse)
+	ret0, _ := ret[0].(*v1.ReapplyEventsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -481,14 +481,14 @@ func (mr *MockAdminServiceClientMockRecorder) ReapplyEvents(ctx, in interface{},
 }
 
 // RebuildMutableState mocks base method.
-func (m *MockAdminServiceClient) RebuildMutableState(ctx context.Context, in *adminservice.RebuildMutableStateRequest, opts ...grpc.CallOption) (*adminservice.RebuildMutableStateResponse, error) {
+func (m *MockAdminServiceClient) RebuildMutableState(ctx context.Context, in *v1.RebuildMutableStateRequest, opts ...grpc.CallOption) (*v1.RebuildMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RebuildMutableState", varargs...)
-	ret0, _ := ret[0].(*adminservice.RebuildMutableStateResponse)
+	ret0, _ := ret[0].(*v1.RebuildMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -501,14 +501,14 @@ func (mr *MockAdminServiceClientMockRecorder) RebuildMutableState(ctx, in interf
 }
 
 // RefreshWorkflowTasks mocks base method.
-func (m *MockAdminServiceClient) RefreshWorkflowTasks(ctx context.Context, in *adminservice.RefreshWorkflowTasksRequest, opts ...grpc.CallOption) (*adminservice.RefreshWorkflowTasksResponse, error) {
+func (m *MockAdminServiceClient) RefreshWorkflowTasks(ctx context.Context, in *v1.RefreshWorkflowTasksRequest, opts ...grpc.CallOption) (*v1.RefreshWorkflowTasksResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", varargs...)
-	ret0, _ := ret[0].(*adminservice.RefreshWorkflowTasksResponse)
+	ret0, _ := ret[0].(*v1.RefreshWorkflowTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -521,14 +521,14 @@ func (mr *MockAdminServiceClientMockRecorder) RefreshWorkflowTasks(ctx, in inter
 }
 
 // RemoveRemoteCluster mocks base method.
-func (m *MockAdminServiceClient) RemoveRemoteCluster(ctx context.Context, in *adminservice.RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*adminservice.RemoveRemoteClusterResponse, error) {
+func (m *MockAdminServiceClient) RemoveRemoteCluster(ctx context.Context, in *v1.RemoveRemoteClusterRequest, opts ...grpc.CallOption) (*v1.RemoveRemoteClusterResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RemoveRemoteCluster", varargs...)
-	ret0, _ := ret[0].(*adminservice.RemoveRemoteClusterResponse)
+	ret0, _ := ret[0].(*v1.RemoveRemoteClusterResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -541,14 +541,14 @@ func (mr *MockAdminServiceClientMockRecorder) RemoveRemoteCluster(ctx, in interf
 }
 
 // RemoveSearchAttributes mocks base method.
-func (m *MockAdminServiceClient) RemoveSearchAttributes(ctx context.Context, in *adminservice.RemoveSearchAttributesRequest, opts ...grpc.CallOption) (*adminservice.RemoveSearchAttributesResponse, error) {
+func (m *MockAdminServiceClient) RemoveSearchAttributes(ctx context.Context, in *v1.RemoveSearchAttributesRequest, opts ...grpc.CallOption) (*v1.RemoveSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RemoveSearchAttributes", varargs...)
-	ret0, _ := ret[0].(*adminservice.RemoveSearchAttributesResponse)
+	ret0, _ := ret[0].(*v1.RemoveSearchAttributesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -561,14 +561,14 @@ func (mr *MockAdminServiceClientMockRecorder) RemoveSearchAttributes(ctx, in int
 }
 
 // RemoveTask mocks base method.
-func (m *MockAdminServiceClient) RemoveTask(ctx context.Context, in *adminservice.RemoveTaskRequest, opts ...grpc.CallOption) (*adminservice.RemoveTaskResponse, error) {
+func (m *MockAdminServiceClient) RemoveTask(ctx context.Context, in *v1.RemoveTaskRequest, opts ...grpc.CallOption) (*v1.RemoveTaskResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "RemoveTask", varargs...)
-	ret0, _ := ret[0].(*adminservice.RemoveTaskResponse)
+	ret0, _ := ret[0].(*v1.RemoveTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -581,14 +581,14 @@ func (mr *MockAdminServiceClientMockRecorder) RemoveTask(ctx, in interface{}, op
 }
 
 // ResendReplicationTasks mocks base method.
-func (m *MockAdminServiceClient) ResendReplicationTasks(ctx context.Context, in *adminservice.ResendReplicationTasksRequest, opts ...grpc.CallOption) (*adminservice.ResendReplicationTasksResponse, error) {
+func (m *MockAdminServiceClient) ResendReplicationTasks(ctx context.Context, in *v1.ResendReplicationTasksRequest, opts ...grpc.CallOption) (*v1.ResendReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
 	varargs := []interface{}{ctx, in}
 	for _, a := range opts {
 		varargs = append(varargs, a)
 	}
 	ret := m.ctrl.Call(m, "ResendReplicationTasks", varargs...)
-	ret0, _ := ret[0].(*adminservice.ResendReplicationTasksResponse)
+	ret0, _ := ret[0].(*v1.ResendReplicationTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -624,10 +624,10 @@ func (m *MockAdminServiceServer) EXPECT() *MockAdminServiceServerMockRecorder {
 }
 
 // AddOrUpdateRemoteCluster mocks base method.
-func (m *MockAdminServiceServer) AddOrUpdateRemoteCluster(arg0 context.Context, arg1 *adminservice.AddOrUpdateRemoteClusterRequest) (*adminservice.AddOrUpdateRemoteClusterResponse, error) {
+func (m *MockAdminServiceServer) AddOrUpdateRemoteCluster(arg0 context.Context, arg1 *v1.AddOrUpdateRemoteClusterRequest) (*v1.AddOrUpdateRemoteClusterResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddOrUpdateRemoteCluster", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.AddOrUpdateRemoteClusterResponse)
+	ret0, _ := ret[0].(*v1.AddOrUpdateRemoteClusterResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -639,10 +639,10 @@ func (mr *MockAdminServiceServerMockRecorder) AddOrUpdateRemoteCluster(arg0, arg
 }
 
 // AddSearchAttributes mocks base method.
-func (m *MockAdminServiceServer) AddSearchAttributes(arg0 context.Context, arg1 *adminservice.AddSearchAttributesRequest) (*adminservice.AddSearchAttributesResponse, error) {
+func (m *MockAdminServiceServer) AddSearchAttributes(arg0 context.Context, arg1 *v1.AddSearchAttributesRequest) (*v1.AddSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddSearchAttributes", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.AddSearchAttributesResponse)
+	ret0, _ := ret[0].(*v1.AddSearchAttributesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -654,10 +654,10 @@ func (mr *MockAdminServiceServerMockRecorder) AddSearchAttributes(arg0, arg1 int
 }
 
 // CloseShard mocks base method.
-func (m *MockAdminServiceServer) CloseShard(arg0 context.Context, arg1 *adminservice.CloseShardRequest) (*adminservice.CloseShardResponse, error) {
+func (m *MockAdminServiceServer) CloseShard(arg0 context.Context, arg1 *v1.CloseShardRequest) (*v1.CloseShardResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "CloseShard", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.CloseShardResponse)
+	ret0, _ := ret[0].(*v1.CloseShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -669,10 +669,10 @@ func (mr *MockAdminServiceServerMockRecorder) CloseShard(arg0, arg1 interface{})
 }
 
 // DeleteWorkflowExecution mocks base method.
-func (m *MockAdminServiceServer) DeleteWorkflowExecution(arg0 context.Context, arg1 *adminservice.DeleteWorkflowExecutionRequest) (*adminservice.DeleteWorkflowExecutionResponse, error) {
+func (m *MockAdminServiceServer) DeleteWorkflowExecution(arg0 context.Context, arg1 *v1.DeleteWorkflowExecutionRequest) (*v1.DeleteWorkflowExecutionResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DeleteWorkflowExecution", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.DeleteWorkflowExecutionResponse)
+	ret0, _ := ret[0].(*v1.DeleteWorkflowExecutionResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -684,10 +684,10 @@ func (mr *MockAdminServiceServerMockRecorder) DeleteWorkflowExecution(arg0, arg1
 }
 
 // DescribeCluster mocks base method.
-func (m *MockAdminServiceServer) DescribeCluster(arg0 context.Context, arg1 *adminservice.DescribeClusterRequest) (*adminservice.DescribeClusterResponse, error) {
+func (m *MockAdminServiceServer) DescribeCluster(arg0 context.Context, arg1 *v1.DescribeClusterRequest) (*v1.DescribeClusterResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DescribeCluster", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.DescribeClusterResponse)
+	ret0, _ := ret[0].(*v1.DescribeClusterResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -699,10 +699,10 @@ func (mr *MockAdminServiceServerMockRecorder) DescribeCluster(arg0, arg1 interfa
 }
 
 // DescribeHistoryHost mocks base method.
-func (m *MockAdminServiceServer) DescribeHistoryHost(arg0 context.Context, arg1 *adminservice.DescribeHistoryHostRequest) (*adminservice.DescribeHistoryHostResponse, error) {
+func (m *MockAdminServiceServer) DescribeHistoryHost(arg0 context.Context, arg1 *v1.DescribeHistoryHostRequest) (*v1.DescribeHistoryHostResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DescribeHistoryHost", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.DescribeHistoryHostResponse)
+	ret0, _ := ret[0].(*v1.DescribeHistoryHostResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -714,10 +714,10 @@ func (mr *MockAdminServiceServerMockRecorder) DescribeHistoryHost(arg0, arg1 int
 }
 
 // DescribeMutableState mocks base method.
-func (m *MockAdminServiceServer) DescribeMutableState(arg0 context.Context, arg1 *adminservice.DescribeMutableStateRequest) (*adminservice.DescribeMutableStateResponse, error) {
+func (m *MockAdminServiceServer) DescribeMutableState(arg0 context.Context, arg1 *v1.DescribeMutableStateRequest) (*v1.DescribeMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "DescribeMutableState", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.DescribeMutableStateResponse)
+	ret0, _ := ret[0].(*v1.DescribeMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -729,10 +729,10 @@ func (mr *MockAdminServiceServerMockRecorder) DescribeMutableState(arg0, arg1 in
 }
 
 // GetDLQMessages mocks base method.
-func (m *MockAdminServiceServer) GetDLQMessages(arg0 context.Context, arg1 *adminservice.GetDLQMessagesRequest) (*adminservice.GetDLQMessagesResponse, error) {
+func (m *MockAdminServiceServer) GetDLQMessages(arg0 context.Context, arg1 *v1.GetDLQMessagesRequest) (*v1.GetDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDLQMessages", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetDLQMessagesResponse)
+	ret0, _ := ret[0].(*v1.GetDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -744,10 +744,10 @@ func (mr *MockAdminServiceServerMockRecorder) GetDLQMessages(arg0, arg1 interfac
 }
 
 // GetDLQReplicationMessages mocks base method.
-func (m *MockAdminServiceServer) GetDLQReplicationMessages(arg0 context.Context, arg1 *adminservice.GetDLQReplicationMessagesRequest) (*adminservice.GetDLQReplicationMessagesResponse, error) {
+func (m *MockAdminServiceServer) GetDLQReplicationMessages(arg0 context.Context, arg1 *v1.GetDLQReplicationMessagesRequest) (*v1.GetDLQReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetDLQReplicationMessages", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetDLQReplicationMessagesResponse)
+	ret0, _ := ret[0].(*v1.GetDLQReplicationMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -759,10 +759,10 @@ func (mr *MockAdminServiceServerMockRecorder) GetDLQReplicationMessages(arg0, ar
 }
 
 // GetNamespaceReplicationMessages mocks base method.
-func (m *MockAdminServiceServer) GetNamespaceReplicationMessages(arg0 context.Context, arg1 *adminservice.GetNamespaceReplicationMessagesRequest) (*adminservice.GetNamespaceReplicationMessagesResponse, error) {
+func (m *MockAdminServiceServer) GetNamespaceReplicationMessages(arg0 context.Context, arg1 *v1.GetNamespaceReplicationMessagesRequest) (*v1.GetNamespaceReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetNamespaceReplicationMessages", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetNamespaceReplicationMessagesResponse)
+	ret0, _ := ret[0].(*v1.GetNamespaceReplicationMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -774,10 +774,10 @@ func (mr *MockAdminServiceServerMockRecorder) GetNamespaceReplicationMessages(ar
 }
 
 // GetReplicationMessages mocks base method.
-func (m *MockAdminServiceServer) GetReplicationMessages(arg0 context.Context, arg1 *adminservice.GetReplicationMessagesRequest) (*adminservice.GetReplicationMessagesResponse, error) {
+func (m *MockAdminServiceServer) GetReplicationMessages(arg0 context.Context, arg1 *v1.GetReplicationMessagesRequest) (*v1.GetReplicationMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetReplicationMessages", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetReplicationMessagesResponse)
+	ret0, _ := ret[0].(*v1.GetReplicationMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -789,10 +789,10 @@ func (mr *MockAdminServiceServerMockRecorder) GetReplicationMessages(arg0, arg1 
 }
 
 // GetSearchAttributes mocks base method.
-func (m *MockAdminServiceServer) GetSearchAttributes(arg0 context.Context, arg1 *adminservice.GetSearchAttributesRequest) (*adminservice.GetSearchAttributesResponse, error) {
+func (m *MockAdminServiceServer) GetSearchAttributes(arg0 context.Context, arg1 *v1.GetSearchAttributesRequest) (*v1.GetSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetSearchAttributes", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetSearchAttributesResponse)
+	ret0, _ := ret[0].(*v1.GetSearchAttributesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -804,10 +804,10 @@ func (mr *MockAdminServiceServerMockRecorder) GetSearchAttributes(arg0, arg1 int
 }
 
 // GetShard mocks base method.
-func (m *MockAdminServiceServer) GetShard(arg0 context.Context, arg1 *adminservice.GetShardRequest) (*adminservice.GetShardResponse, error) {
+func (m *MockAdminServiceServer) GetShard(arg0 context.Context, arg1 *v1.GetShardRequest) (*v1.GetShardResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetShard", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetShardResponse)
+	ret0, _ := ret[0].(*v1.GetShardResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -819,10 +819,10 @@ func (mr *MockAdminServiceServerMockRecorder) GetShard(arg0, arg1 interface{}) *
 }
 
 // GetTaskQueueTasks mocks base method.
-func (m *MockAdminServiceServer) GetTaskQueueTasks(arg0 context.Context, arg1 *adminservice.GetTaskQueueTasksRequest) (*adminservice.GetTaskQueueTasksResponse, error) {
+func (m *MockAdminServiceServer) GetTaskQueueTasks(arg0 context.Context, arg1 *v1.GetTaskQueueTasksRequest) (*v1.GetTaskQueueTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetTaskQueueTasks", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetTaskQueueTasksResponse)
+	ret0, _ := ret[0].(*v1.GetTaskQueueTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -834,10 +834,10 @@ func (mr *MockAdminServiceServerMockRecorder) GetTaskQueueTasks(arg0, arg1 inter
 }
 
 // GetWorkflowExecutionRawHistoryV2 mocks base method.
-func (m *MockAdminServiceServer) GetWorkflowExecutionRawHistoryV2(arg0 context.Context, arg1 *adminservice.GetWorkflowExecutionRawHistoryV2Request) (*adminservice.GetWorkflowExecutionRawHistoryV2Response, error) {
+func (m *MockAdminServiceServer) GetWorkflowExecutionRawHistoryV2(arg0 context.Context, arg1 *v1.GetWorkflowExecutionRawHistoryV2Request) (*v1.GetWorkflowExecutionRawHistoryV2Response, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetWorkflowExecutionRawHistoryV2", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.GetWorkflowExecutionRawHistoryV2Response)
+	ret0, _ := ret[0].(*v1.GetWorkflowExecutionRawHistoryV2Response)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -849,10 +849,10 @@ func (mr *MockAdminServiceServerMockRecorder) GetWorkflowExecutionRawHistoryV2(a
 }
 
 // ListClusterMembers mocks base method.
-func (m *MockAdminServiceServer) ListClusterMembers(arg0 context.Context, arg1 *adminservice.ListClusterMembersRequest) (*adminservice.ListClusterMembersResponse, error) {
+func (m *MockAdminServiceServer) ListClusterMembers(arg0 context.Context, arg1 *v1.ListClusterMembersRequest) (*v1.ListClusterMembersResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListClusterMembers", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ListClusterMembersResponse)
+	ret0, _ := ret[0].(*v1.ListClusterMembersResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -864,10 +864,10 @@ func (mr *MockAdminServiceServerMockRecorder) ListClusterMembers(arg0, arg1 inte
 }
 
 // ListClusters mocks base method.
-func (m *MockAdminServiceServer) ListClusters(arg0 context.Context, arg1 *adminservice.ListClustersRequest) (*adminservice.ListClustersResponse, error) {
+func (m *MockAdminServiceServer) ListClusters(arg0 context.Context, arg1 *v1.ListClustersRequest) (*v1.ListClustersResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListClusters", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ListClustersResponse)
+	ret0, _ := ret[0].(*v1.ListClustersResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -879,10 +879,10 @@ func (mr *MockAdminServiceServerMockRecorder) ListClusters(arg0, arg1 interface{
 }
 
 // ListHistoryTasks mocks base method.
-func (m *MockAdminServiceServer) ListHistoryTasks(arg0 context.Context, arg1 *adminservice.ListHistoryTasksRequest) (*adminservice.ListHistoryTasksResponse, error) {
+func (m *MockAdminServiceServer) ListHistoryTasks(arg0 context.Context, arg1 *v1.ListHistoryTasksRequest) (*v1.ListHistoryTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ListHistoryTasks", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ListHistoryTasksResponse)
+	ret0, _ := ret[0].(*v1.ListHistoryTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -894,10 +894,10 @@ func (mr *MockAdminServiceServerMockRecorder) ListHistoryTasks(arg0, arg1 interf
 }
 
 // MergeDLQMessages mocks base method.
-func (m *MockAdminServiceServer) MergeDLQMessages(arg0 context.Context, arg1 *adminservice.MergeDLQMessagesRequest) (*adminservice.MergeDLQMessagesResponse, error) {
+func (m *MockAdminServiceServer) MergeDLQMessages(arg0 context.Context, arg1 *v1.MergeDLQMessagesRequest) (*v1.MergeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "MergeDLQMessages", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.MergeDLQMessagesResponse)
+	ret0, _ := ret[0].(*v1.MergeDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -909,10 +909,10 @@ func (mr *MockAdminServiceServerMockRecorder) MergeDLQMessages(arg0, arg1 interf
 }
 
 // PurgeDLQMessages mocks base method.
-func (m *MockAdminServiceServer) PurgeDLQMessages(arg0 context.Context, arg1 *adminservice.PurgeDLQMessagesRequest) (*adminservice.PurgeDLQMessagesResponse, error) {
+func (m *MockAdminServiceServer) PurgeDLQMessages(arg0 context.Context, arg1 *v1.PurgeDLQMessagesRequest) (*v1.PurgeDLQMessagesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "PurgeDLQMessages", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.PurgeDLQMessagesResponse)
+	ret0, _ := ret[0].(*v1.PurgeDLQMessagesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -924,10 +924,10 @@ func (mr *MockAdminServiceServerMockRecorder) PurgeDLQMessages(arg0, arg1 interf
 }
 
 // ReapplyEvents mocks base method.
-func (m *MockAdminServiceServer) ReapplyEvents(arg0 context.Context, arg1 *adminservice.ReapplyEventsRequest) (*adminservice.ReapplyEventsResponse, error) {
+func (m *MockAdminServiceServer) ReapplyEvents(arg0 context.Context, arg1 *v1.ReapplyEventsRequest) (*v1.ReapplyEventsResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReapplyEvents", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ReapplyEventsResponse)
+	ret0, _ := ret[0].(*v1.ReapplyEventsResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -939,10 +939,10 @@ func (mr *MockAdminServiceServerMockRecorder) ReapplyEvents(arg0, arg1 interface
 }
 
 // RebuildMutableState mocks base method.
-func (m *MockAdminServiceServer) RebuildMutableState(arg0 context.Context, arg1 *adminservice.RebuildMutableStateRequest) (*adminservice.RebuildMutableStateResponse, error) {
+func (m *MockAdminServiceServer) RebuildMutableState(arg0 context.Context, arg1 *v1.RebuildMutableStateRequest) (*v1.RebuildMutableStateResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RebuildMutableState", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.RebuildMutableStateResponse)
+	ret0, _ := ret[0].(*v1.RebuildMutableStateResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -954,10 +954,10 @@ func (mr *MockAdminServiceServerMockRecorder) RebuildMutableState(arg0, arg1 int
 }
 
 // RefreshWorkflowTasks mocks base method.
-func (m *MockAdminServiceServer) RefreshWorkflowTasks(arg0 context.Context, arg1 *adminservice.RefreshWorkflowTasksRequest) (*adminservice.RefreshWorkflowTasksResponse, error) {
+func (m *MockAdminServiceServer) RefreshWorkflowTasks(arg0 context.Context, arg1 *v1.RefreshWorkflowTasksRequest) (*v1.RefreshWorkflowTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RefreshWorkflowTasks", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.RefreshWorkflowTasksResponse)
+	ret0, _ := ret[0].(*v1.RefreshWorkflowTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -969,10 +969,10 @@ func (mr *MockAdminServiceServerMockRecorder) RefreshWorkflowTasks(arg0, arg1 in
 }
 
 // RemoveRemoteCluster mocks base method.
-func (m *MockAdminServiceServer) RemoveRemoteCluster(arg0 context.Context, arg1 *adminservice.RemoveRemoteClusterRequest) (*adminservice.RemoveRemoteClusterResponse, error) {
+func (m *MockAdminServiceServer) RemoveRemoteCluster(arg0 context.Context, arg1 *v1.RemoveRemoteClusterRequest) (*v1.RemoveRemoteClusterResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveRemoteCluster", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.RemoveRemoteClusterResponse)
+	ret0, _ := ret[0].(*v1.RemoveRemoteClusterResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -984,10 +984,10 @@ func (mr *MockAdminServiceServerMockRecorder) RemoveRemoteCluster(arg0, arg1 int
 }
 
 // RemoveSearchAttributes mocks base method.
-func (m *MockAdminServiceServer) RemoveSearchAttributes(arg0 context.Context, arg1 *adminservice.RemoveSearchAttributesRequest) (*adminservice.RemoveSearchAttributesResponse, error) {
+func (m *MockAdminServiceServer) RemoveSearchAttributes(arg0 context.Context, arg1 *v1.RemoveSearchAttributesRequest) (*v1.RemoveSearchAttributesResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveSearchAttributes", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.RemoveSearchAttributesResponse)
+	ret0, _ := ret[0].(*v1.RemoveSearchAttributesResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -999,10 +999,10 @@ func (mr *MockAdminServiceServerMockRecorder) RemoveSearchAttributes(arg0, arg1 
 }
 
 // RemoveTask mocks base method.
-func (m *MockAdminServiceServer) RemoveTask(arg0 context.Context, arg1 *adminservice.RemoveTaskRequest) (*adminservice.RemoveTaskResponse, error) {
+func (m *MockAdminServiceServer) RemoveTask(arg0 context.Context, arg1 *v1.RemoveTaskRequest) (*v1.RemoveTaskResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "RemoveTask", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.RemoveTaskResponse)
+	ret0, _ := ret[0].(*v1.RemoveTaskResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
@@ -1014,10 +1014,10 @@ func (mr *MockAdminServiceServerMockRecorder) RemoveTask(arg0, arg1 interface{})
 }
 
 // ResendReplicationTasks mocks base method.
-func (m *MockAdminServiceServer) ResendReplicationTasks(arg0 context.Context, arg1 *adminservice.ResendReplicationTasksRequest) (*adminservice.ResendReplicationTasksResponse, error) {
+func (m *MockAdminServiceServer) ResendReplicationTasks(arg0 context.Context, arg1 *v1.ResendReplicationTasksRequest) (*v1.ResendReplicationTasksResponse, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ResendReplicationTasks", arg0, arg1)
-	ret0, _ := ret[0].(*adminservice.ResendReplicationTasksResponse)
+	ret0, _ := ret[0].(*v1.ResendReplicationTasksResponse)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
