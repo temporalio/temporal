@@ -119,6 +119,8 @@ func metricOptions(opts ...MetricOption) *event.MetricOptions {
 }
 
 // WithTags creates a new MetricProvder with provided []Tag
+// Tags registered with the resulting MetricProvider are only the Tags provided
+// Tags are not merged with registered Tags from the source MetricProvider
 func (emp *eventMetricProvider) WithTags(tags ...Tag) MetricProvider {
 	return &eventMetricProvider{
 		exporter: emp.exporter,

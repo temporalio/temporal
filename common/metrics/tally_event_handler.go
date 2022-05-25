@@ -1,0 +1,140 @@
+// The MIT License
+//
+// Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
+//
+// Copyright (c) 2020 Uber Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+package metrics
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+
+	"github.com/uber-go/tally/v4"
+	"golang.org/x/exp/event"
+)
+
+type TallyMetricHandler struct {
+	scope tally.Scope
+	mu    sync.Mutex
+
+	recordFuncs map[event.Metric]tallyRecordFunc
+
+	perUnitBuckets map[MetricUnit]tally.Buckets
+}
+
+type tallyRecordFunc func(event.Label)
+
+var _ event.Handler = (*TallyMetricHandler)(nil)
+
+// NewTallyMetricHandler creates a new tally event.Handler.
+func NewTallyMetricHandler(scope tally.Scope, perUnitHistogramBoundaries map[string][]float64) *TallyMetricHandler {
+	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
+	for unit, boundariesList := range perUnitHistogramBoundaries {
+		perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
+	}
+
+	return &TallyMetricHandler{
+		scope:          scope,
+		perUnitBuckets: perUnitBuckets,
+		recordFuncs:    make(map[event.Metric]tallyRecordFunc),
+	}
+}
+
+func (t *TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.Context {
+	if e.Kind != event.MetricKind {
+		return ctx
+	}
+
+	mi, ok := event.MetricKey.Find(e)
+	if !ok {
+		panic(errors.New("no metric key for metric event"))
+	}
+	em := mi.(event.Metric)
+	lval := e.Find(event.MetricVal)
+	if !lval.HasValue() {
+		panic(errors.New("no metric value for metric event"))
+	}
+	rf := t.getRecordFunc(em, labelsToMap(e.Labels))
+	if rf == nil {
+		panic(fmt.Errorf("unable to record for metric %v", em))
+	}
+	rf(lval)
+	return ctx
+}
+
+func (t *TallyMetricHandler) getRecordFunc(em event.Metric, tags map[string]string) tallyRecordFunc {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if f, ok := t.recordFuncs[em]; ok {
+		return f
+	}
+	f := t.newRecordFunc(em, tags)
+	t.recordFuncs[em] = f
+	return f
+}
+
+func (t *TallyMetricHandler) newRecordFunc(em event.Metric, tags map[string]string) tallyRecordFunc {
+	opts := em.Options()
+	name := opts.Namespace + "/" + em.Name()
+	unit := em.Options().Unit
+	switch em.(type) {
+	case *event.Counter:
+		c := t.scope.Tagged(tags).Counter(name)
+		return func(l event.Label) {
+			c.Inc(l.Int64())
+		}
+
+	case *event.FloatGauge:
+		g := t.scope.Tagged(tags).Gauge(name)
+		return func(l event.Label) {
+			g.Update(l.Float64())
+		}
+
+	case *event.DurationDistribution:
+		r := t.scope.Tagged(tags).Timer(name)
+		return func(l event.Label) {
+			r.Record(l.Duration())
+		}
+
+	case *event.IntDistribution:
+		r := t.scope.Tagged(tags).Histogram(name, t.perUnitBuckets[MetricUnit(unit)])
+		return func(l event.Label) {
+			r.RecordValue(float64(l.Int64()))
+		}
+
+	default:
+		return nil
+	}
+}
+
+func labelsToMap(attrs []event.Label) map[string]string {
+	tags := make(map[string]string)
+	for _, l := range attrs {
+		if l.Name == string(event.MetricKey) || l.Name == string(event.MetricVal) {
+			continue
+		}
+		tags[l.Name] = l.String()
+	}
+	return tags
+}

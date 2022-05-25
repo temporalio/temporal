@@ -108,12 +108,10 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName: "go.temporal.io/server/common/metrics/test-counter",
-					InstrumentationLibrary: metrictest.Library{
-						InstrumentationName: "test",
-					},
-					AggregationKind: aggregation.SumKind,
-					Sum:             number.NewInt64Number(2),
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-counter",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.SumKind,
+					Sum:                    number.NewInt64Number(2),
 				},
 			},
 		},
@@ -123,12 +121,10 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 			[]Tag{OperationTag("awesome")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName: "go.temporal.io/server/common/metrics/test-counter2",
-					InstrumentationLibrary: metrictest.Library{
-						InstrumentationName: "test",
-					},
-					AggregationKind: aggregation.SumKind,
-					Sum:             number.NewInt64Number(4),
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-counter2",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.SumKind,
+					Sum:                    number.NewInt64Number(4),
 					Attributes: []attribute.KeyValue{
 						attribute.String("operation", "awesome"),
 					},
@@ -161,13 +157,11 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName: "go.temporal.io/server/common/metrics/test-gauge",
-					InstrumentationLibrary: metrictest.Library{
-						InstrumentationName: "test",
-					},
-					AggregationKind: aggregation.SumKind,
-					Sum:             number.NewFloat64Number(2.0),
-					NumberKind:      number.Float64Kind,
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-gauge",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.SumKind,
+					Sum:                    number.NewFloat64Number(2.0),
+					NumberKind:             number.Float64Kind,
 				},
 			},
 		},
@@ -177,13 +171,11 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 			[]Tag{OperationTag("awesome")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName: "go.temporal.io/server/common/metrics/test-gauge2",
-					InstrumentationLibrary: metrictest.Library{
-						InstrumentationName: "test",
-					},
-					AggregationKind: aggregation.SumKind,
-					Sum:             number.NewFloat64Number(4.0),
-					NumberKind:      number.Float64Kind,
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-gauge2",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.SumKind,
+					Sum:                    number.NewFloat64Number(4.0),
+					NumberKind:             number.Float64Kind,
 					Attributes: []attribute.KeyValue{
 						attribute.String("operation", "awesome"),
 					},
@@ -216,13 +208,11 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName: "go.temporal.io/server/common/metrics/test-timer",
-					InstrumentationLibrary: metrictest.Library{
-						InstrumentationName: "test",
-					},
-					AggregationKind: aggregation.HistogramKind,
-					Sum:             number.NewInt64Number(int64(2 * time.Hour)),
-					Count:           1,
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-timer",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.HistogramKind,
+					Sum:                    number.NewInt64Number(int64(2 * time.Hour)),
+					Count:                  1,
 					Histogram: aggregation.Buckets{
 						Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
 						Counts:     []uint64{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
@@ -236,13 +226,11 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 			[]Tag{OperationTag("awesome")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName: "go.temporal.io/server/common/metrics/test-timer2",
-					InstrumentationLibrary: metrictest.Library{
-						InstrumentationName: "test",
-					},
-					AggregationKind: aggregation.HistogramKind,
-					Sum:             number.NewInt64Number(int64(4 * time.Hour)),
-					Count:           1,
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-timer2",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.HistogramKind,
+					Sum:                    number.NewInt64Number(int64(4 * time.Hour)),
+					Count:                  1,
 					Histogram: aggregation.Buckets{
 						Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
 						Counts:     []uint64{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
@@ -279,13 +267,11 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 			nil,
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName: "go.temporal.io/server/common/metrics/test-histogram",
-					InstrumentationLibrary: metrictest.Library{
-						InstrumentationName: "test",
-					},
-					AggregationKind: aggregation.HistogramKind,
-					Sum:             number.NewInt64Number(2),
-					Count:           1,
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-histogram",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.HistogramKind,
+					Sum:                    number.NewInt64Number(2),
+					Count:                  1,
 					Histogram: aggregation.Buckets{
 						Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
 						Counts:     []uint64{0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
@@ -299,13 +285,11 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 			[]Tag{OperationTag("awesome")},
 			[]metrictest.ExportRecord{
 				{
-					InstrumentName: "go.temporal.io/server/common/metrics/test-histogram2",
-					InstrumentationLibrary: metrictest.Library{
-						InstrumentationName: "test",
-					},
-					AggregationKind: aggregation.HistogramKind,
-					Sum:             number.NewInt64Number(4.0),
-					Count:           1,
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-histogram2",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.HistogramKind,
+					Sum:                    number.NewInt64Number(4.0),
+					Count:                  1,
 					Histogram: aggregation.Buckets{
 						Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
 						Counts:     []uint64{0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
