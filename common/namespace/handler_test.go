@@ -565,7 +565,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_UpdateActiveCluster() 
 		{StatusTime: &handover2Time, ActiveClusterName: srcCluster},
 	}
 
-	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationHistory)
+	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationConfig.ReplicationHistory)
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_HandoverFails() {
@@ -618,7 +618,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_HandoverFails() {
 		{StatusTime: &handover1Time, ActiveClusterName: targetCluster},
 	}
 
-	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationHistory)
+	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationConfig.ReplicationHistory)
 }
 
 func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ChangeActiveClusterWithoutUpdatingReplicationState() {
@@ -668,7 +668,7 @@ func (s *namespaceHandlerCommonSuite) TestUpdateNamespace_ChangeActiveClusterWit
 		{StatusTime: &update1Time, ActiveClusterName: targetCluster},
 	}
 
-	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationHistory)
+	s.Equal(wantReplHist, getNsResp.Namespace.ReplicationConfig.ReplicationHistory)
 }
 
 func (s *namespaceHandlerCommonSuite) migrateNamespace(namespace string, targetCluster string) {

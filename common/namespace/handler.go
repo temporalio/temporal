@@ -386,7 +386,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
-	replicationHistory := getResponse.Namespace.ReplicationHistory
+	replicationHistory := getResponse.Namespace.ReplicationConfig.ReplicationHistory
 	configVersion := getResponse.Namespace.ConfigVersion
 	failoverVersion := getResponse.Namespace.FailoverVersion
 	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
@@ -567,6 +567,7 @@ func (d *HandlerImpl) UpdateNamespace(
 			failoverNotificationVersion = notificationVersion
 		}
 
+		replicationConfig.ReplicationHistory = replicationHistory
 		updateReq := &persistence.UpdateNamespaceRequest{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info:                        info,
@@ -575,7 +576,6 @@ func (d *HandlerImpl) UpdateNamespace(
 				ConfigVersion:               configVersion,
 				FailoverVersion:             failoverVersion,
 				FailoverNotificationVersion: failoverNotificationVersion,
-				ReplicationHistory:          replicationHistory,
 			},
 			IsGlobalNamespace:   isGlobalNamespace,
 			NotificationVersion: notificationVersion,
@@ -825,8 +825,8 @@ func (d *HandlerImpl) maybeAppendToReplicationHistory(
 		newActiveCluster = namespaceDetail.ReplicationConfig.ActiveClusterName
 	}
 	lastActiveCluster := ""
-	if l := len(namespaceDetail.ReplicationHistory); l > 0 {
-		lastActiveCluster = namespaceDetail.ReplicationHistory[l-1].ActiveClusterName
+	if l := len(namespaceDetail.ReplicationConfig.ReplicationHistory); l > 0 {
+		lastActiveCluster = namespaceDetail.ReplicationConfig.ReplicationHistory[l-1].ActiveClusterName
 	}
 	if lastActiveCluster != newActiveCluster {
 		now := d.timeSource.Now()
