@@ -47,6 +47,7 @@ type (
 	workerComponent struct {
 		activityDeps activityDeps
 		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		numWorkers   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -73,19 +74,20 @@ func NewResult(
 ) fxResult {
 	return fxResult{
 		Component: &workerComponent{
+			activityDeps: params,
 			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
 				dynamicconfig.WorkerEnableScheduler, false),
-			activityDeps: params,
+			numWorkers: dcCollection.GetIntPropertyFilteredByNamespace(
+				dynamicconfig.WorkerSchedulerNumWorkers, 1),
 		},
 	}
 }
 
 func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		Enabled:   s.enabledForNs(ns.Name().String()),
-		TaskQueue: TaskQueueName,
-		// TODO: maybe make dynamic config
-		NumWorkers: 1,
+		Enabled:    s.enabledForNs(ns.Name().String()),
+		TaskQueue:  TaskQueueName,
+		NumWorkers: s.numWorkers(ns.Name().String()),
 	}
 }
 
