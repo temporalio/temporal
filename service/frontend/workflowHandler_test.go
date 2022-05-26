@@ -204,7 +204,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err := wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 
 	// test list open by workflow type
 	listRequest.Filters = &workflowservice.ListOpenWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{
@@ -212,7 +212,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListOpenWorkflowExecutions(context.Background(), listRequest)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 
 	// test list close by wid
 	listRequest2 := &workflowservice.ListClosedWorkflowExecutionsRequest{
@@ -227,7 +227,7 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 
 	// test list close by workflow type
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_TypeFilter{TypeFilter: &filterpb.WorkflowTypeFilter{
@@ -235,14 +235,14 @@ func (s *workflowHandlerSuite) TestDisableListVisibilityByFilter() {
 	}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 
 	// test list close by workflow status
 	failedStatus := enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 	listRequest2.Filters = &workflowservice.ListClosedWorkflowExecutionsRequest_StatusFilter{StatusFilter: &filterpb.StatusFilter{Status: failedStatus}}
 	_, err = wh.ListClosedWorkflowExecutions(context.Background(), listRequest2)
 	s.Error(err)
-	s.Equal(errNoPermission, err)
+	s.Equal(errListNotAllowed, err)
 }
 
 func (s *workflowHandlerSuite) TestPollForTask_Failed_ContextTimeoutTooShort() {
