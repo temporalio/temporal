@@ -5356,25 +5356,26 @@ func addTimerFiredEvent(mutableState workflow.MutableState, timerID string) *his
 }
 
 func addRequestCancelInitiatedEvent(builder workflow.MutableState, workflowTaskCompletedEventID int64,
-	cancelRequestID string, namespace namespace.Name, workflowID, runID string) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
+	cancelRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo) {
 	event, rci, _ := builder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID,
 		cancelRequestID, &commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes{
 			Namespace:  namespace.String(),
 			WorkflowId: workflowID,
 			RunId:      runID,
 			Reason:     "cancellation reason",
-		})
+		},
+		namespaceID)
 
 	return event, rci
 }
 
-func addCancelRequestedEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, workflowID, runID string) *historypb.HistoryEvent {
-	event, _ := builder.AddExternalWorkflowExecutionCancelRequested(initiatedID, namespace, workflowID, runID)
+func addCancelRequestedEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string) *historypb.HistoryEvent {
+	event, _ := builder.AddExternalWorkflowExecutionCancelRequested(initiatedID, namespace, namespaceID, workflowID, runID)
 	return event
 }
 
 func addRequestSignalInitiatedEvent(builder workflow.MutableState, workflowTaskCompletedEventID int64,
-	signalRequestID string, namespace namespace.Name, workflowID, runID, signalName string, input *commonpb.Payloads,
+	signalRequestID string, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID, signalName string, input *commonpb.Payloads,
 	control string, header *commonpb.Header) (*historypb.HistoryEvent, *persistencespb.SignalInfo) {
 	event, si, _ := builder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, signalRequestID,
 		&commandpb.SignalExternalWorkflowExecutionCommandAttributes{
@@ -5387,13 +5388,13 @@ func addRequestSignalInitiatedEvent(builder workflow.MutableState, workflowTaskC
 			Input:      input,
 			Control:    control,
 			Header:     header,
-		})
+		}, namespaceID)
 
 	return event, si
 }
 
-func addSignaledEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, workflowID, runID string, control string) *historypb.HistoryEvent {
-	event, _ := builder.AddExternalWorkflowExecutionSignaled(initiatedID, namespace, workflowID, runID, control)
+func addSignaledEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, namespaceID namespace.ID, workflowID, runID string, control string) *historypb.HistoryEvent {
+	event, _ := builder.AddExternalWorkflowExecutionSignaled(initiatedID, namespace, namespaceID, workflowID, runID, control)
 	return event
 }
 
@@ -5402,6 +5403,7 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedID int64,
 	createRequestID string,
 	namespace namespace.Name,
+	namespaceID namespace.ID,
 	workflowID, workflowType, taskQueue string,
 	input *commonpb.Payloads,
 	executionTimeout, runTimeout, taskTimeout time.Duration,
@@ -5420,14 +5422,13 @@ func addStartChildWorkflowExecutionInitiatedEvent(
 			WorkflowTaskTimeout:      &taskTimeout,
 			Control:                  "",
 			ParentClosePolicy:        parentClosePolicy,
-		})
+		}, namespaceID)
 	return event, cei
 }
 
-func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initiatedID int64, namespace namespace.Name, workflowID, runID string,
+func addChildWorkflowExecutionStartedEvent(builder workflow.MutableState, initiatedID int64, workflowID, runID string,
 	workflowType string, clock *clockspb.VectorClock) *historypb.HistoryEvent {
 	event, _ := builder.AddChildWorkflowExecutionStartedEvent(
-		namespace,
 		&commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
