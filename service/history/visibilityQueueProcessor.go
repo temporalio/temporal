@@ -350,7 +350,7 @@ func newVisibilityTaskScheduler(
 		queues.NewNoopPriorityAssigner(),
 		queues.SchedulerOptions{
 			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.VisibilityTaskWorkerCount(),
+				WorkerCount: config.VisibilityTaskWorkerCount,
 				QueueSize:   config.VisibilityTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{

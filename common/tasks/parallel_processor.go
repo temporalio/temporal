@@ -33,11 +33,13 @@ import (
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 )
 
 const (
 	defaultMonitorTickerDuration = time.Minute
+	defaultMonitorTickerJitter   = 0.15
 )
 
 type (
@@ -130,22 +132,30 @@ func (p *ParallelProcessor) workerMonitor(
 ) {
 	defer p.shutdownWG.Done()
 
-	ticker := time.NewTicker(tickerDuration)
+	timer := time.NewTimer(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
+	defer timer.Stop()
 
 	for {
 		select {
 		case <-p.shutdownChan:
-			ticker.Stop()
 			p.stopWorkers(len(p.workerShutdownCh))
 			return
-		case <-ticker.C:
+		case <-timer.C:
+			timer.Reset(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
+
 			targetWorkerNum := p.options.WorkerCount()
 			currentWorkerNum := len(p.workerShutdownCh)
+
+			if targetWorkerNum == currentWorkerNum {
+				continue
+			}
+
 			if targetWorkerNum > currentWorkerNum {
 				p.startWorkers(targetWorkerNum - currentWorkerNum)
 			} else {
 				p.stopWorkers(currentWorkerNum - targetWorkerNum)
 			}
+			p.logger.Info("Update worker pool size", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
 		}
 	}
 }
