@@ -37,6 +37,7 @@ import (
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
+	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/definition"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/service/history/shard"
@@ -84,17 +85,18 @@ func (s *timerQueueTaskExecutorBaseSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          0,
-				RangeId:          1,
-				TransferAckLevel: 0,
+				ShardId: 0,
+				RangeId: 1,
 			}},
 		config,
 	)
+	s.testShardContext.Resource.ClusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 
 	s.timerQueueTaskExecutorBase = newTimerQueueTaskExecutorBase(
 		s.testShardContext,
 		s.mockCache,
 		s.mockDeleteManager,
+		nil,
 		s.testShardContext.GetLogger(),
 		config,
 	)

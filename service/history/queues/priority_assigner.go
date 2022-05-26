@@ -27,6 +27,7 @@ package queues
 import (
 	"sync"
 
+	"go.temporal.io/api/serviceerror"
 	enumsspb "go.temporal.io/server/api/enums/v1"
 	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
@@ -91,6 +92,11 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 
 	namespaceEntry, err := a.namespaceRegistry.GetNamespaceByID(namespace.ID(executable.GetNamespaceID()))
 	if err != nil {
+		if _, ok := err.(*serviceerror.NamespaceNotFound); ok {
+			executable.SetPriority(configs.TaskPriorityLow)
+			return nil
+		}
+
 		return err
 	}
 
@@ -99,8 +105,15 @@ func (a *priorityAssignerImpl) Assign(executable Executable) error {
 	// TODO: remove QueueType() and the special logic for assgining high priority to no-op tasks
 	// after merging active/standby queue processor or performing task filtering before submitting
 	// tasks to worker pool
-	taskActive := executable.QueueType() != QueueTypeStandbyTransfer &&
-		executable.QueueType() != QueueTypeStandbyTimer
+	var taskActive bool
+	switch executable.QueueType() {
+	case QueueTypeActiveTransfer, QueueTypeActiveTimer:
+		taskActive = true
+	case QueueTypeStandbyTransfer, QueueTypeStandbyTimer:
+		taskActive = false
+	default:
+		taskActive = namespaceActive
+	}
 
 	if !taskActive && !namespaceActive {
 		// standby tasks

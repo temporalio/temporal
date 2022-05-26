@@ -411,6 +411,8 @@ const (
 	HistoryClientGenerateLastHistoryReplicationTasksScope
 	// HistoryClientGetReplicationStatusScope tracks RPC calls to history service
 	HistoryClientGetReplicationStatusScope
+	// HistoryClientDeleteWorkflowVisibilityRecordScope tracks RPC calls to history service
+	HistoryClientDeleteWorkflowVisibilityRecordScope
 	// MatchingClientPollWorkflowTaskQueueScope tracks RPC calls to matching service
 	MatchingClientPollWorkflowTaskQueueScope
 	// MatchingClientPollActivityTaskQueueScope tracks RPC calls to matching service
@@ -579,6 +581,8 @@ const (
 	AdminClientResendReplicationTasksScope
 	// AdminClientGetTaskQueueTasksScope tracks RPC calls to admin service
 	AdminClientGetTaskQueueTasksScope
+	// AdminClientDeleteWorkflowExecutionScope tracks RPC calls to admin service
+	AdminClientDeleteWorkflowExecutionScope
 	// DCRedirectionDeprecateNamespaceScope tracks RPC calls for dc redirection
 	DCRedirectionDeprecateNamespaceScope
 	// DCRedirectionDescribeNamespaceScope tracks RPC calls for dc redirection
@@ -815,6 +819,8 @@ const (
 	AdminAddOrUpdateRemoteClusterScope
 	// AdminRemoveRemoteClusterScope is the metric scope for admin.AdminRemoveRemoteClusterScope
 	AdminRemoveRemoteClusterScope
+	// AdminDeleteWorkflowExecutionScope is the metric scope for admin.AdminDeleteWorkflowExecutionScope
+	AdminDeleteWorkflowExecutionScope
 
 	NumAdminScopes
 )
@@ -1031,6 +1037,8 @@ const (
 	HistoryReapplyEvents
 	// HistoryDescribeHistoryHost is the scope used by describe history host API
 	HistoryDescribeHistoryHost
+	// HistoryDeleteWorkflowVisibilityRecordScope is the scope used by delete workflow visibility record API
+	HistoryDeleteWorkflowVisibilityRecordScope
 	// TaskPriorityAssignerScope is the scope used by all metric emitted by task priority assigner
 	TaskPriorityAssignerScope
 	// TransferQueueProcessorScope is the scope used by all metric emitted by transfer queue processor
@@ -1141,7 +1149,7 @@ const (
 	EventsCacheGetFromStoreScope
 	// ExecutionStatsScope is the scope used for emiting workflow execution related stats
 	ExecutionStatsScope
-	// SessionSizeStatsScope is the scope used for emiting session update related stats
+	// SessionStatsScope is the scope used for emiting session update related stats
 	SessionStatsScope
 	// HistoryResetWorkflowExecutionScope tracks ResetWorkflowExecution API calls received by service
 	HistoryResetWorkflowExecutionScope
@@ -1161,6 +1169,8 @@ const (
 	ReplicationTaskCleanupScope
 	// ReplicationDLQStatsScope is scope used by all metrics emitted related to replication DLQ
 	ReplicationDLQStatsScope
+	// SyncWorkflowStateTaskScope is the scope used by closed workflow task replication processing
+	SyncWorkflowStateTaskScope
 
 	NumHistoryScopes
 )
@@ -1406,6 +1416,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryClientRefreshWorkflowTasksScope:                   {operation: "HistoryClientRefreshWorkflowTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGenerateLastHistoryReplicationTasksScope:    {operation: "HistoryClientGenerateLastHistoryReplicationTasksScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 		HistoryClientGetReplicationStatusScope:                   {operation: "HistoryClientGetReplicationStatusScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
+		HistoryClientDeleteWorkflowVisibilityRecordScope:         {operation: "HistoryClientDeleteWorkflowVisibilityRecordScope", tags: map[string]string{ServiceRoleTagName: HistoryRoleTagValue}},
 
 		MatchingClientPollWorkflowTaskQueueScope:     {operation: "MatchingClientPollWorkflowTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
 		MatchingClientPollActivityTaskQueueScope:     {operation: "MatchingClientPollActivityTaskQueue", tags: map[string]string{ServiceRoleTagName: MatchingRoleTagValue}},
@@ -1493,6 +1504,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminClientGetDLQMessagesScope:                   {operation: "AdminClientGetDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientPurgeDLQMessagesScope:                 {operation: "AdminClientPurgeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 		AdminClientMergeDLQMessagesScope:                 {operation: "AdminClientMergeDLQMessages", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
+		AdminClientDeleteWorkflowExecutionScope:          {operation: "AdminClientDeleteWorkflowExecution", tags: map[string]string{ServiceRoleTagName: AdminRoleTagValue}},
 
 		DCRedirectionDeprecateNamespaceScope:                 {operation: "DCRedirectionDeprecateNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
 		DCRedirectionDescribeNamespaceScope:                  {operation: "DCRedirectionDescribeNamespace", tags: map[string]string{ServiceRoleTagName: DCRedirectionRoleTagValue}},
@@ -1601,6 +1613,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		AdminListClustersScope:                          {operation: "AdminListClusters"},
 		AdminAddOrUpdateRemoteClusterScope:              {operation: "AdminAddOrUpdateRemoteCluster"},
 		AdminRemoveRemoteClusterScope:                   {operation: "AdminRemoveRemoteCluster"},
+		AdminDeleteWorkflowExecutionScope:               {operation: "AdminDeleteWorkflowExecution"},
 		OperatorAddSearchAttributesScope:                {operation: "OperatorAddSearchAttributes"},
 		OperatorRemoveSearchAttributesScope:             {operation: "OperatorRemoveSearchAttributes"},
 		OperatorListSearchAttributesScope:               {operation: "OperatorListSearchAttributes"},
@@ -1707,6 +1720,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		HistoryResetStickyTaskQueue:                        {operation: "ResetStickyTaskQueue"},
 		HistoryReapplyEvents:                               {operation: "ReapplyEvents"},
 		HistoryDescribeHistoryHost:                         {operation: "DescribeHistoryHost"},
+		HistoryDeleteWorkflowVisibilityRecordScope:         {operation: "DeleteWorkflowVisibilityRecord"},
 
 		TaskPriorityAssignerScope:                   {operation: "TaskPriorityAssigner"},
 		TransferQueueProcessorScope:                 {operation: "TransferQueueProcessor"},
@@ -1774,6 +1788,7 @@ var ScopeDefs = map[ServiceIdx]map[int]scopeDefinition{
 		SyncActivityTaskScope:                     {operation: "SyncActivityTask"},
 		HistoryMetadataReplicationTaskScope:       {operation: "HistoryMetadataReplicationTask"},
 		HistoryReplicationTaskScope:               {operation: "HistoryReplicationTask"},
+		SyncWorkflowStateTaskScope:                {operation: "SyncWorkflowStateTask"},
 		ReplicatorScope:                           {operation: "Replicator"},
 	},
 	// Matching Scope Names
@@ -1853,6 +1868,8 @@ const (
 	ServiceErrNonDeterministicCounter
 	ServiceErrUnauthorizedCounter
 	ServiceErrAuthorizeFailedCounter
+
+	ActionCounter
 
 	PersistenceRequests
 	PersistenceFailures
@@ -2111,6 +2128,7 @@ const (
 	SignalInfoCount
 	RequestCancelInfoCount
 	BufferedEventsCount
+	TaskCount
 	WorkflowRetryBackoffTimerCount
 	WorkflowCronBackoffTimerCount
 	WorkflowCleanupDeleteCount
@@ -2349,6 +2367,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		ServiceErrNonDeterministicCounter:                   NewCounterDef("service_errors_nondeterministic"),
 		ServiceErrUnauthorizedCounter:                       NewCounterDef("service_errors_unauthorized"),
 		ServiceErrAuthorizeFailedCounter:                    NewCounterDef("service_errors_authorize_failed"),
+		ActionCounter:                                       NewCounterDef("action"),
 		PersistenceRequests:                                 NewCounterDef("persistence_requests"),
 		PersistenceFailures:                                 NewCounterDef("persistence_errors"),
 		PersistenceLatency:                                  NewTimerDef("persistence_latency"),
@@ -2592,6 +2611,7 @@ var MetricDefs = map[ServiceIdx]map[int]metricDefinition{
 		SignalInfoCount:                                   NewDimensionlessHistogramDef("signal_info_count"),
 		RequestCancelInfoCount:                            NewDimensionlessHistogramDef("request_cancel_info_count"),
 		BufferedEventsCount:                               NewDimensionlessHistogramDef("buffered_events_count"),
+		TaskCount:                                         NewDimensionlessHistogramDef("task_count"),
 		WorkflowRetryBackoffTimerCount:                    NewCounterDef("workflow_retry_backoff_timer"),
 		WorkflowCronBackoffTimerCount:                     NewCounterDef("workflow_cron_backoff_timer"),
 		WorkflowCleanupDeleteCount:                        NewCounterDef("workflow_cleanup_delete"),

@@ -59,6 +59,8 @@ type (
 		IsGlobalNamespaceEnabled() bool
 		// IsMasterCluster whether current cluster is master cluster
 		IsMasterCluster() bool
+		// GetClusterID return the cluster ID, which is also the initial failover version
+		GetClusterID() int64
 		// GetNextFailoverVersion return the next failover version for namespace failover
 		GetNextFailoverVersion(string, int64) int64
 		// IsVersionFromSameCluster return true if 2 version are used for the same cluster
@@ -247,6 +249,18 @@ func (m *metadataImpl) IsGlobalNamespaceEnabled() bool {
 
 func (m *metadataImpl) IsMasterCluster() bool {
 	return m.masterClusterName == m.currentClusterName
+}
+
+func (m *metadataImpl) GetClusterID() int64 {
+	info, ok := m.clusterInfo[m.currentClusterName]
+	if !ok {
+		panic(fmt.Sprintf(
+			"Unknown cluster name: %v with given cluster initial failover version map: %v.",
+			m.currentClusterName,
+			m.clusterInfo,
+		))
+	}
+	return info.InitialFailoverVersion
 }
 
 func (m *metadataImpl) GetNextFailoverVersion(clusterName string, currentFailoverVersion int64) int64 {

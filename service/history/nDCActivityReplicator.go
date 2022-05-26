@@ -42,7 +42,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 
 	"go.temporal.io/server/common"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/cluster"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
@@ -196,7 +195,6 @@ func (r *nDCActivityReplicatorImpl) SyncActivity(
 	// passive logic need to explicitly call create timer
 	now := eventTime
 	if _, err := workflow.NewTimerSequence(
-		clock.NewEventTimeSource().Update(now),
 		mutableState,
 	).CreateNextActivityTimer(); err != nil {
 		return err

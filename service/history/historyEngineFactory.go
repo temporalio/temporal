@@ -27,6 +27,7 @@ package history
 import (
 	"go.uber.org/fx"
 
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
@@ -42,6 +43,7 @@ type (
 	HistoryEngineFactoryParams struct {
 		fx.In
 
+		ClientBean              client.Bean
 		MatchingClient          resource.MatchingClient
 		SdkClientFactory        sdk.ClientFactory
 		EventNotifier           events.Notifier
@@ -63,6 +65,7 @@ func (f *historyEngineFactory) CreateEngine(
 ) shard.Engine {
 	return NewEngineWithShardContext(
 		context,
+		f.ClientBean,
 		f.MatchingClient,
 		f.SdkClientFactory,
 		f.EventNotifier,

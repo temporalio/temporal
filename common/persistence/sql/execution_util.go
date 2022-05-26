@@ -603,7 +603,7 @@ func createOrUpdateCurrentExecution(
 	}
 
 	switch createMode {
-	case p.CreateWorkflowModeWorkflowIDReuse:
+	case p.CreateWorkflowModeUpdateCurrent:
 		if err := updateCurrentExecution(ctx,
 			tx,
 			shardID,
@@ -621,7 +621,7 @@ func createOrUpdateCurrentExecution(
 		if _, err := tx.InsertIntoCurrentExecutions(ctx, &row); err != nil {
 			return serviceerror.NewUnavailable(fmt.Sprintf("createOrUpdateCurrentExecution failed. Failed to insert into current_executions table. Error: %v", err))
 		}
-	case p.CreateWorkflowModeZombie:
+	case p.CreateWorkflowModeBypassCurrent:
 		// noop
 	default:
 		return fmt.Errorf("createOrUpdateCurrentExecution failed. Unknown workflow creation mode: %v", createMode)

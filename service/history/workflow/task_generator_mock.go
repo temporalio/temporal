@@ -159,19 +159,19 @@ func (mr *MockTaskGeneratorMockRecorder) GenerateHistoryReplicationTasks(now, br
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateHistoryReplicationTasks), now, branchToken, events)
 }
 
-// GenerateLastHistoryReplicationTasks mocks base method.
-func (m *MockTaskGenerator) GenerateLastHistoryReplicationTasks(now time.Time) (tasks.Task, error) {
+// GenerateMigrationTasks mocks base method.
+func (m *MockTaskGenerator) GenerateMigrationTasks(now time.Time) (tasks.Task, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", now)
+	ret := m.ctrl.Call(m, "GenerateMigrationTasks", now)
 	ret0, _ := ret[0].(tasks.Task)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
-func (mr *MockTaskGeneratorMockRecorder) GenerateLastHistoryReplicationTasks(now interface{}) *gomock.Call {
+// GenerateMigrationTasks indicates an expected call of GenerateMigrationTasks.
+func (mr *MockTaskGeneratorMockRecorder) GenerateMigrationTasks(now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateLastHistoryReplicationTasks), now)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockTaskGenerator)(nil).GenerateMigrationTasks), now)
 }
 
 // GenerateRecordWorkflowStartedTasks mocks base method.

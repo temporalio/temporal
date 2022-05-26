@@ -85,9 +85,8 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          1,
-				RangeId:          1,
-				TransferAckLevel: 0,
+				ShardId: 1,
+				RangeId: 1,
 			}},
 		config,
 	)
@@ -111,7 +110,6 @@ func (s *WorkflowTaskHandlerCallbackSuite) SetupTest() {
 		shard:              mockShard,
 		clusterMetadata:    mockClusterMetadata,
 		executionManager:   s.mockExecutionMgr,
-		historyCache:       historyCache,
 		logger:             s.logger,
 		throttledLogger:    s.logger,
 		metricsClient:      metrics.NoopClient,

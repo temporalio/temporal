@@ -132,5 +132,9 @@ service AdminService {
     // GetTaskQueueTasks returns tasks from task queue.
     rpc GetTaskQueueTasks(GetTaskQueueTasksRequest) returns (GetTaskQueueTasksResponse) {
     }
+
+    // DeleteWorkflowExecution force deletes a workflow's visibility record, current & concrete execution record and history if possible
+    rpc DeleteWorkflowExecution(DeleteWorkflowExecutionRequest) returns (DeleteWorkflowExecutionResponse) {
+    }
 }
 

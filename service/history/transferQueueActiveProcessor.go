@@ -25,16 +25,20 @@
 package history
 
 import (
+	"context"
+
 	"github.com/pborman/uuid"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/api/matchingservice/v1"
+	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/sdk"
+	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
 	"go.temporal.io/server/service/history/tasks"
@@ -59,7 +63,9 @@ func newTransferQueueActiveProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
+	clientBean client.Bean,
 	logger log.Logger,
+	singleProcessor bool,
 ) *transferQueueActiveProcessorImpl {
 
 	config := shard.GetConfig()
@@ -78,13 +84,15 @@ func newTransferQueueActiveProcessor(
 	}
 	currentClusterName := shard.GetClusterMetadata().GetCurrentClusterName()
 	logger = log.With(logger, tag.ClusterName(currentClusterName))
-	transferTaskFilter := func(task tasks.Task) bool {
-		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
-	}
+
 	maxReadAckLevel := func() int64 {
 		return shard.GetQueueMaxReadLevel(tasks.CategoryTransfer, currentClusterName).TaskID
 	}
 	updateTransferAckLevel := func(ackLevel int64) error {
+		// in single cursor mode, continue to update cluster ack level
+		// complete task loop will update overall ack level and
+		// shard.UpdateQueueAcklevel will then forward it to standby cluster ack level entries
+		// so that we can later disable single cursor mode without encountering tombstone issues
 		return shard.UpdateQueueClusterAckLevel(
 			tasks.CategoryTransfer,
 			currentClusterName,
@@ -107,16 +115,6 @@ func newTransferQueueActiveProcessor(
 		),
 	}
 
-	taskExecutor := newTransferQueueActiveTaskExecutor(
-		shard,
-		workflowCache,
-		archivalClient,
-		sdkClientFactory,
-		logger,
-		config,
-		matchingClient,
-	)
-
 	if scheduler == nil {
 		scheduler = newTransferTaskScheduler(shard, logger)
 	}
@@ -127,11 +125,67 @@ func newTransferQueueActiveProcessor(
 		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
 	)
 
+	transferTaskFilter := func(task tasks.Task) bool {
+		return taskAllocator.verifyActiveTask(namespace.ID(task.GetNamespaceID()), task)
+	}
+	taskExecutor := newTransferQueueActiveTaskExecutor(
+		shard,
+		workflowCache,
+		archivalClient,
+		sdkClientFactory,
+		logger,
+		config,
+		matchingClient,
+	)
+	ackLevel := shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID
+	queueType := queues.QueueTypeActiveTransfer
+
+	// if single cursor is enabled, then this processor is responsible for both active and standby tasks
+	// and we need to customize some parameters for ack manager and task executable
+	if singleProcessor {
+		transferTaskFilter = func(task tasks.Task) bool { return true }
+		taskExecutor = queues.NewExecutorWrapper(
+			currentClusterName,
+			shard.GetNamespaceRegistry(),
+			taskExecutor,
+			newTransferQueueStandbyTaskExecutor(
+				shard,
+				workflowCache,
+				archivalClient,
+				xdc.NewNDCHistoryResender(
+					shard.GetNamespaceRegistry(),
+					clientBean,
+					func(ctx context.Context, request *historyservice.ReplicateEventsV2Request) error {
+						engine, err := shard.GetEngine()
+						if err != nil {
+							return err
+						}
+						return engine.ReplicateEventsV2(ctx, request)
+					},
+					shard.GetPayloadSerializer(),
+					config.StandbyTaskReReplicationContextTimeout,
+					logger,
+				),
+				logger,
+				// note: the cluster name is for calculating time for standby tasks,
+				// here we are basically using current cluster time
+				// this field will be deprecated soon, currently exists so that
+				// we have the option of revert to old behavior
+				currentClusterName,
+				matchingClient,
+			),
+			logger,
+		)
+
+		ackLevel = shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID
+		queueType = queues.QueueTypeTransfer
+	}
+
 	queueAckMgr := newQueueAckMgr(
 		shard,
 		options,
 		processor,
-		shard.GetQueueClusterAckLevel(tasks.CategoryTransfer, currentClusterName).TaskID,
+		ackLevel,
 		logger,
 		func(t tasks.Task) queues.Executable {
 			return queues.NewExecutable(
@@ -142,11 +196,8 @@ func newTransferQueueActiveProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				shard.GetMetricsClient().Scope(
-					tasks.GetActiveTransferTaskMetricsScope(t),
-				),
 				config.TransferTaskMaxRetryCount,
-				queues.QueueTypeActiveTransfer,
+				queueType,
 				shard.GetConfig().NamespaceCacheRefreshInterval,
 			)
 		},
@@ -279,9 +330,6 @@ func newTransferQueueFailoverProcessor(
 				rescheduler,
 				shard.GetTimeSource(),
 				logger,
-				shard.GetMetricsClient().Scope(
-					tasks.GetActiveTransferTaskMetricsScope(t),
-				),
 				shard.GetConfig().TransferTaskMaxRetryCount,
 				queues.QueueTypeActiveTransfer,
 				shard.GetConfig().NamespaceCacheRefreshInterval,

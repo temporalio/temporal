@@ -1,51 +1,28 @@
-persistence:
-  defaultStore: sqlite-default
-  visibilityStore: sqlite-visibility
-  numHistoryShards: 1
-  datastores:
-    sqlite-default:
-      sql:
-        user: ""
-        password: ""
-        pluginName: "sqlite"
-        databaseName: "default"
-        connectAddr: "localhost"
-        connectProtocol: "tcp"
-        connectAttributes:
-          mode: "memory"
-          cache: "private"
-        maxConns: 1
-        maxIdleConns: 1
-        maxConnLifetime: "1h"
-        tls:
-          enabled: false
-          caFile: ""
-          certFile: ""
-          keyFile: ""
-          enableHostVerification: false
-          serverName: ""
+log:
+  stdout: true
+  level: info
 
-    sqlite-visibility:
-      sql:
-        user: ""
-        password: ""
-        pluginName: "sqlite"
-        databaseName: "default"
-        connectAddr: "localhost"
-        connectProtocol: "tcp"
-        connectAttributes:
-          mode: "memory"
-          cache: "private"
-        maxConns: 1
-        maxIdleConns: 1
-        maxConnLifetime: "1h"
-        tls:
-          enabled: false
-          caFile: ""
-          certFile: ""
-          keyFile: ""
-          enableHostVerification: false
-          serverName: ""
+persistence:
+  defaultStore: cass-default
+  visibilityStore:
+  advancedVisibilityStore: es-visibility
+  numHistoryShards: 4
+  datastores:
+    cass-default:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "temporal"
+    es-visibility:
+      elasticsearch:
+        version: "v7"
+        logLevel: "error"
+        url:
+          scheme: "http"
+          host: "127.0.0.1:9200"
+        indices:
+          visibility: temporal_visibility_v1_dev
+          # secondary_visibility: temporal_visibility_v2_dev
+        closeIdleConnectionsInterval: 15s
 global:
   membership:
     maxJoinDuration: 30s
@@ -132,5 +109,5 @@ publicClient:
   hostPort: "localhost:7233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_sql.yaml"
+  filepath: "config/dynamicconfig/development-cass.yaml"
   pollInterval: "10s"

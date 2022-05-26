@@ -1,13 +1,24 @@
+log:
+  stdout: true
+  level: info
+
 persistence:
-  defaultStore: cass-default
+  defaultStore: mysql-default
   visibilityStore:
   advancedVisibilityStore: es-visibility
   numHistoryShards: 4
   datastores:
-    cass-default:
-      cassandra:
-        hosts: "127.0.0.1"
-        keyspace: "temporal"
+    mysql-default:
+      sql:
+        pluginName: "mysql"
+        databaseName: "temporal"
+        connectAddr: "127.0.0.1:3306"
+        connectProtocol: "tcp"
+        user: "temporal"
+        password: "temporal"
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
     es-visibility:
       elasticsearch:
         version: "v7"
@@ -17,7 +28,6 @@ persistence:
           host: "127.0.0.1:9200"
         indices:
           visibility: temporal_visibility_v1_dev
-          # secondary_visibility: temporal_visibility_v2_dev
         closeIdleConnectionsInterval: 15s
 global:
   membership:
@@ -105,5 +115,5 @@ publicClient:
   hostPort: "localhost:7233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_es.yaml"
+  filepath: "config/dynamicconfig/development-sql.yaml"
   pollInterval: "10s"

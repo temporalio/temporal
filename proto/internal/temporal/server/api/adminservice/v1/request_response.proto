@@ -360,3 +360,12 @@ message GetTaskQueueTasksResponse {
     repeated temporal.server.api.persistence.v1.AllocatedTaskInfo tasks = 1;
     bytes next_page_token = 2;
 }
+
+message DeleteWorkflowExecutionRequest {
+    string namespace = 1;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
+}
+
+message DeleteWorkflowExecutionResponse {
+    repeated string warnings = 1;
+}

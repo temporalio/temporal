@@ -97,7 +97,6 @@ func (s *dlqHandlerSuite) SetupTest() {
 			ShardInfo: &persistencespb.ShardInfo{
 				ShardId:                0,
 				RangeId:                1,
-				ReplicationAckLevel:    0,
 				ReplicationDlqAckLevel: map[string]int64{cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID},
 			}},
 		tests.NewDynamicConfig(),
@@ -120,6 +119,7 @@ func (s *dlqHandlerSuite) SetupTest() {
 		s.mockShard,
 		workflow.NewMockDeleteManager(s.controller),
 		workflow.NewMockCache(s.controller),
+		s.mockClientBean,
 		s.taskExecutors,
 	)
 }
@@ -161,8 +161,8 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 	remoteTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -187,7 +187,7 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		SourceClusterName: s.sourceCluster,
 	}).Return(dbResp, nil)
 
-	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient, nil).AnyTimes()
 	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},
@@ -250,8 +250,8 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 	remoteTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -276,7 +276,7 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		SourceClusterName: s.sourceCluster,
 	}).Return(dbResp, nil)
 
-	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient).AnyTimes()
+	s.mockClientBean.EXPECT().GetRemoteAdminClient(s.sourceCluster).Return(s.adminClient, nil).AnyTimes()
 	s.adminClient.EXPECT().GetDLQReplicationMessages(ctx, gomock.Any()).
 		Return(&adminservice.GetDLQReplicationMessagesResponse{
 			ReplicationTasks: []*replicationspb.ReplicationTask{remoteTask},

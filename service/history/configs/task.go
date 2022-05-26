@@ -55,9 +55,9 @@ var (
 )
 
 var DefaultTaskPriorityWeight = map[int]int{
-	TaskPriorityHigh:    200,
-	TaskPriorityDefault: 100,
-	TaskPriorityLow:     50,
+	TaskPriorityHigh:    900,
+	TaskPriorityDefault: 50,
+	TaskPriorityLow:     25,
 }
 
 func ConvertWeightsToDynamicConfigValue(

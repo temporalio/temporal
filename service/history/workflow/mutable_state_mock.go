@@ -228,7 +228,7 @@ func (mr *MockMutableStateMockRecorder) AddChildWorkflowExecutionFailedEvent(arg
 }
 
 // AddChildWorkflowExecutionStartedEvent mocks base method.
-func (m *MockMutableState) AddChildWorkflowExecutionStartedEvent(arg0 namespace.Name, arg1 *v10.WorkflowExecution, arg2 *v10.WorkflowType, arg3 int64, arg4 *v10.Header, arg5 *v17.ShardClock) (*v13.HistoryEvent, error) {
+func (m *MockMutableState) AddChildWorkflowExecutionStartedEvent(arg0 namespace.Name, arg1 *v10.WorkflowExecution, arg2 *v10.WorkflowType, arg3 int64, arg4 *v10.Header, arg5 *v17.VectorClock) (*v13.HistoryEvent, error) {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "AddChildWorkflowExecutionStartedEvent", arg0, arg1, arg2, arg3, arg4, arg5)
 	ret0, _ := ret[0].(*v13.HistoryEvent)
@@ -796,6 +796,20 @@ func (mr *MockMutableStateMockRecorder) ClearStickyness() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearStickyness", reflect.TypeOf((*MockMutableState)(nil).ClearStickyness))
 }
 
+// ClearTransientWorkflowTask mocks base method.
+func (m *MockMutableState) ClearTransientWorkflowTask() error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "ClearTransientWorkflowTask")
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearTransientWorkflowTask indicates an expected call of ClearTransientWorkflowTask.
+func (mr *MockMutableStateMockRecorder) ClearTransientWorkflowTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).ClearTransientWorkflowTask))
+}
+
 // CloneToProto mocks base method.
 func (m *MockMutableState) CloneToProto() *v110.WorkflowMutableState {
 	m.ctrl.T.Helper()
@@ -893,19 +907,19 @@ func (mr *MockMutableStateMockRecorder) FlushBufferedEvents() *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "FlushBufferedEvents", reflect.TypeOf((*MockMutableState)(nil).FlushBufferedEvents))
 }
 
-// GenerateLastHistoryReplicationTasks mocks base method.
-func (m *MockMutableState) GenerateLastHistoryReplicationTasks(now time.Time) (tasks.Task, error) {
+// GenerateMigrationTasks mocks base method.
+func (m *MockMutableState) GenerateMigrationTasks(now time.Time) (tasks.Task, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GenerateLastHistoryReplicationTasks", now)
+	ret := m.ctrl.Call(m, "GenerateMigrationTasks", now)
 	ret0, _ := ret[0].(tasks.Task)
 	ret1, _ := ret[1].(error)
 	return ret0, ret1
 }
 
-// GenerateLastHistoryReplicationTasks indicates an expected call of GenerateLastHistoryReplicationTasks.
-func (mr *MockMutableStateMockRecorder) GenerateLastHistoryReplicationTasks(now interface{}) *gomock.Call {
+// GenerateMigrationTasks indicates an expected call of GenerateMigrationTasks.
+func (mr *MockMutableStateMockRecorder) GenerateMigrationTasks(now interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateLastHistoryReplicationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateLastHistoryReplicationTasks), now)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GenerateMigrationTasks", reflect.TypeOf((*MockMutableState)(nil).GenerateMigrationTasks), now)
 }
 
 // GetActivityByActivityID mocks base method.
@@ -1564,6 +1578,20 @@ func (mr *MockMutableStateMockRecorder) HasProcessedOrPendingWorkflowTask() *gom
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasProcessedOrPendingWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasProcessedOrPendingWorkflowTask))
 }
 
+// HasTransientWorkflowTask mocks base method.
+func (m *MockMutableState) HasTransientWorkflowTask() bool {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "HasTransientWorkflowTask")
+	ret0, _ := ret[0].(bool)
+	return ret0
+}
+
+// HasTransientWorkflowTask indicates an expected call of HasTransientWorkflowTask.
+func (mr *MockMutableStateMockRecorder) HasTransientWorkflowTask() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "HasTransientWorkflowTask", reflect.TypeOf((*MockMutableState)(nil).HasTransientWorkflowTask))
+}
+
 // IsCancelRequested mocks base method.
 func (m *MockMutableState) IsCancelRequested() bool {
 	m.ctrl.T.Helper()
@@ -1832,7 +1860,7 @@ func (mr *MockMutableStateMockRecorder) ReplicateChildWorkflowExecutionFailedEve
 }
 
 // ReplicateChildWorkflowExecutionStartedEvent mocks base method.
-func (m *MockMutableState) ReplicateChildWorkflowExecutionStartedEvent(arg0 *v13.HistoryEvent, arg1 *v17.ShardClock) error {
+func (m *MockMutableState) ReplicateChildWorkflowExecutionStartedEvent(arg0 *v13.HistoryEvent, arg1 *v17.VectorClock) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateChildWorkflowExecutionStartedEvent", arg0, arg1)
 	ret0, _ := ret[0].(error)
@@ -2143,7 +2171,7 @@ func (mr *MockMutableStateMockRecorder) ReplicateWorkflowExecutionSignaled(arg0 
 }
 
 // ReplicateWorkflowExecutionStartedEvent mocks base method.
-func (m *MockMutableState) ReplicateWorkflowExecutionStartedEvent(arg0 namespace.ID, arg1 *v17.ShardClock, arg2 v10.WorkflowExecution, arg3 string, arg4 *v13.HistoryEvent) error {
+func (m *MockMutableState) ReplicateWorkflowExecutionStartedEvent(arg0 namespace.ID, arg1 *v17.VectorClock, arg2 v10.WorkflowExecution, arg3 string, arg4 *v13.HistoryEvent) error {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "ReplicateWorkflowExecutionStartedEvent", arg0, arg1, arg2, arg3, arg4)
 	ret0, _ := ret[0].(error)

@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
 	"go.temporal.io/server/service/worker/migration"
+	"go.temporal.io/server/service/worker/scheduler"
 )
 
 var Module = fx.Options(
@@ -52,6 +53,7 @@ var Module = fx.Options(
 	addsearchattributes.Module,
 	resource.Module,
 	deletenamespace.Module,
+	scheduler.Module,
 	fx.Provide(VisibilityManagerProvider),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(ThrottledLoggerRpsFnProvider),

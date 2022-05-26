@@ -111,11 +111,14 @@ func (s *taskProcessorSuite) SetupTest() {
 		s.controller,
 		&persistence.ShardInfoWithFailover{
 			ShardInfo: &persistencespb.ShardInfo{
-				ShardId:          s.shardID,
-				RangeId:          1,
-				TransferAckLevel: 0,
-				ClusterReplicationLevel: map[string]int64{
-					cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
+				ShardId: s.shardID,
+				RangeId: 1,
+				QueueAckLevels: map[int32]*persistencespb.QueueAckLevel{
+					tasks.CategoryReplication.ID(): {
+						ClusterAckLevel: map[string]int64{
+							cluster.TestAlternativeClusterName: persistence.EmptyQueueMessageID,
+						},
+					},
 				},
 			},
 		},
@@ -223,8 +226,8 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -334,8 +337,8 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -422,8 +425,8 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 	task := &replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -495,8 +498,8 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	task := &replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,

@@ -169,6 +169,12 @@ func (r *nDCBranchMgrImpl) flushBufferedEvents(
 	// check whether there are buffered events, if so, flush it
 	// NOTE: buffered events does not show in version history or next event id
 	if !r.mutableState.HasBufferedEvents() {
+		if r.mutableState.HasTransientWorkflowTask() {
+			if err := r.mutableState.ClearTransientWorkflowTask(); err != nil {
+				return nil, 0, err
+			}
+			// now transient task is gone
+		}
 		return lcaVersionHistoryItem, versionHistoryIndex, nil
 	}
 

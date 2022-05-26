@@ -35,7 +35,6 @@ import (
 	"go.temporal.io/api/serviceerror"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
-	"go.temporal.io/server/common/clock"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
@@ -113,7 +112,7 @@ type (
 			branchToken []byte,
 			events []*historypb.HistoryEvent,
 		) error
-		GenerateLastHistoryReplicationTasks(
+		GenerateMigrationTasks(
 			now time.Time,
 		) (tasks.Task, error)
 	}
@@ -532,7 +531,7 @@ func (r *TaskGeneratorImpl) GenerateActivityTimerTasks(
 	now time.Time,
 ) error {
 
-	_, err := r.getTimerSequence(now).CreateNextActivityTimer()
+	_, err := r.getTimerSequence().CreateNextActivityTimer()
 	return err
 }
 
@@ -540,7 +539,7 @@ func (r *TaskGeneratorImpl) GenerateUserTimerTasks(
 	now time.Time,
 ) error {
 
-	_, err := r.getTimerSequence(now).CreateNextUserTimer()
+	_, err := r.getTimerSequence().CreateNextUserTimer()
 	return err
 }
 
@@ -569,7 +568,7 @@ func (r *TaskGeneratorImpl) GenerateHistoryReplicationTasks(
 	return nil
 }
 
-func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
+func (r *TaskGeneratorImpl) GenerateMigrationTasks(
 	now time.Time,
 ) (tasks.Task, error) {
 	executionInfo := r.mutableState.GetExecutionInfo()
@@ -582,22 +581,28 @@ func (r *TaskGeneratorImpl) GenerateLastHistoryReplicationTasks(
 		return nil, err
 	}
 
-	return &tasks.HistoryReplicationTask{
-		// TaskID is set by shard
-		VisibilityTimestamp: now,
-		WorkflowKey:         r.mutableState.GetWorkflowKey(),
-		FirstEventID:        executionInfo.LastFirstEventId,
-		NextEventID:         lastItem.GetEventId() + 1,
-		Version:             lastItem.GetVersion(),
-		BranchToken:         versionHistory.BranchToken,
-		NewRunBranchToken:   nil,
-	}, nil
+	if r.mutableState.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
+		return &tasks.SyncWorkflowStateTask{
+			VisibilityTimestamp: now,
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			Version:             lastItem.GetVersion(),
+		}, nil
+	} else {
+		return &tasks.HistoryReplicationTask{
+			// TaskID is set by shard
+			VisibilityTimestamp: now,
+			WorkflowKey:         r.mutableState.GetWorkflowKey(),
+			FirstEventID:        executionInfo.LastFirstEventId,
+			NextEventID:         lastItem.GetEventId() + 1,
+			Version:             lastItem.GetVersion(),
+			BranchToken:         versionHistory.BranchToken,
+			NewRunBranchToken:   nil,
+		}, nil
+	}
 }
 
-func (r *TaskGeneratorImpl) getTimerSequence(now time.Time) TimerSequence {
-	timeSource := clock.NewEventTimeSource()
-	timeSource.Update(now)
-	return NewTimerSequence(timeSource, r.mutableState)
+func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {
+	return NewTimerSequence(r.mutableState)
 }
 
 func (r *TaskGeneratorImpl) getTargetNamespaceID(

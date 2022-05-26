@@ -54,7 +54,6 @@ import (
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/mysql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
 	"go.temporal.io/server/common/persistence/sql/sqlplugin/sqlite"
-	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/environment"
@@ -238,13 +237,9 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.ReadLevel = 0
 	s.ReplicationReadLevel = 0
 	s.ShardInfo = &persistencespb.ShardInfo{
-		ShardId:                 shardID,
-		RangeId:                 0,
-		TransferAckLevel:        0,
-		ReplicationAckLevel:     0,
-		TimerAckLevelTime:       timestamp.TimePtr(time.Unix(0, 0).UTC()),
-		ClusterTimerAckLevel:    map[string]*time.Time{},
-		ClusterTransferAckLevel: map[string]int64{clusterName: 0},
+		ShardId:        shardID,
+		RangeId:        0,
+		QueueAckLevels: make(map[int32]*persistencespb.QueueAckLevel), // TODO: is this needed?
 	}
 
 	s.TaskIDGenerator = &TestTransferTaskIDGenerator{}

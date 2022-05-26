@@ -1,31 +1,20 @@
+log:
+  stdout: true
+  level: info
+
 persistence:
-  defaultStore: mysql-default
-  visibilityStore: mysql-visibility
+  defaultStore: cass-default
+  visibilityStore: cass-visibility
   numHistoryShards: 4
   datastores:
-    mysql-default:
-      sql:
-        pluginName: "mysql"
-        databaseName: "temporal"
-        connectAddr: "127.0.0.1:3306"
-        connectProtocol: "tcp"
-        user: "temporal"
-        password: "temporal"
-        maxConns: 20
-        maxIdleConns: 20
-        maxConnLifetime: "1h"
-    mysql-visibility:
-      sql:
-        pluginName: "mysql"
-        databaseName: "temporal_visibility"
-        connectAddr: "127.0.0.1:3306"
-        connectProtocol: "tcp"
-        user: "temporal"
-        password: "temporal"
-        maxConns: 2
-        maxIdleConns: 2
-        maxConnLifetime: "1h"
-
+    cass-default:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "temporal"
+    cass-visibility:
+      cassandra:
+        hosts: "127.0.0.1"
+        keyspace: "temporal_visibility"
 global:
   membership:
     maxJoinDuration: 30s
@@ -39,6 +28,30 @@ global:
       framework: "tally"
       timerType: "histogram"
       listenAddress: "127.0.0.1:8000"
+#    # Deprecated
+#    prometheusSDK:
+#      framework: "tally"
+#      timerType: "histogram"
+#      listenAddress: "127.0.0.1:8001"
+#    tags:
+#      type: test
+#    excludeTags:
+#      namespace:
+#        - temporal-system
+#    perUnitHistogramBoundaries:
+#      dimensionless:
+#        - 10
+#        - 100
+#        - 1000
+#      milliseconds:
+#        - 10
+#        - 100
+#        - 1000
+#        - 60000
+#      bytes:
+#        - 1024
+#        - 1048576
+#        - 1073741824
 
 services:
   frontend:
@@ -112,5 +125,5 @@ publicClient:
   hostPort: "localhost:7233"
 
 dynamicConfigClient:
-  filepath: "config/dynamicconfig/development_sql.yaml"
+  filepath: "./config/dynamicconfig/development-cass.yaml"
   pollInterval: "10s"

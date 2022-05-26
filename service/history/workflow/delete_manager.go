@@ -95,15 +95,23 @@ func (m *DeleteManagerImpl) AddDeleteWorkflowExecutionTask(
 	visibilityQueueAckLevel int64,
 ) error {
 
-	// Create delete workflow execution task only if workflow is closed successfully and all pending tasks are completed (if in active cluster).
-	// Otherwise, mutable state might be deleted before close tasks are executed.
+	// In active cluster, create `DeleteWorkflowExecutionTask` only if workflow is closed successfully
+	// and all pending transfer and visibility tasks are completed.
+	// This check is required to avoid race condition between close and delete tasks.
+	// Otherwise, mutable state might be deleted before close task is executed, and therefore close task will be dropped.
+	//
+	// In passive cluster, transfer task queue check can be ignored but not visibility task queue.
+	// If visibility close task is executed after visibility record is deleted then it will resurrect record in closed state.
+	//
 	// Unfortunately, queue ack levels are updated with delay (default 30s),
 	// therefore this API will return error if workflow is deleted within 30 seconds after close.
-	// The check is on API call side, not on task processor side because visibility delete task doesn't have access to mutable state.
-	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // Workflow execution still might be running in passive cluster.
-		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel) || // Transfer close task wasn't executed.
-		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // Workflow execution still might be running in passive cluster.
-			ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) {
+	// The check is on API call side, not on task processor side, because delete visibility task doesn't have access to mutable state.
+	if (ms.GetExecutionInfo().CloseTransferTaskId != 0 && // Workflow execution still might be running in passive cluster or closed before this field was added (v1.17).
+		ms.GetExecutionInfo().CloseTransferTaskId > transferQueueAckLevel && // Transfer close task wasn't executed.
+		ms.GetNamespaceEntry().ActiveInCluster(m.shard.GetClusterMetadata().GetCurrentClusterName())) ||
+		(ms.GetExecutionInfo().CloseVisibilityTaskId != 0 && // Workflow execution still might be running in passive cluster or closed before this field was added (v1.17).
+			ms.GetExecutionInfo().CloseVisibilityTaskId > visibilityQueueAckLevel) { // Visibility close task wasn't executed.
+
 		return consts.ErrWorkflowNotReady
 	}
 
@@ -246,14 +254,12 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 	workflowExecution commonpb.WorkflowExecution,
 	currentBranchToken []byte,
 	weCtx Context,
-	mutableState MutableState,
+	ms MutableState,
 	scope metrics.Scope,
 ) (bool, error) {
 
-	namespaceRegistryEntry, err := m.shard.GetNamespaceRegistry().GetNamespaceByID(namespaceID)
-	if err != nil {
-		return false, err
-	}
+	namespaceRegistryEntry := ms.GetNamespaceEntry()
+
 	clusterConfiguredForHistoryArchival := m.shard.GetArchivalMetadata().GetHistoryConfig().ClusterConfiguredForArchival()
 	namespaceConfiguredForHistoryArchival := namespaceRegistryEntry.HistoryArchivalState().State == enumspb.ARCHIVAL_STATE_ENABLED
 	archiveHistory := clusterConfiguredForHistoryArchival && namespaceConfiguredForHistoryArchival
@@ -263,7 +269,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 		return true, nil
 	}
 
-	closeFailoverVersion, err := mutableState.GetLastWriteVersion()
+	closeFailoverVersion, err := ms.GetLastWriteVersion()
 	if err != nil {
 		return false, err
 	}
@@ -277,7 +283,7 @@ func (m *DeleteManagerImpl) archiveWorkflowIfEnabled(
 			Namespace:            namespaceRegistryEntry.Name().String(),
 			Targets:              []archiver.ArchivalTarget{archiver.ArchiveTargetHistory},
 			HistoryURI:           namespaceRegistryEntry.HistoryArchivalState().URI,
-			NextEventID:          mutableState.GetNextEventID(),
+			NextEventID:          ms.GetNextEventID(),
 			BranchToken:          currentBranchToken,
 			CloseFailoverVersion: closeFailoverVersion,
 		},

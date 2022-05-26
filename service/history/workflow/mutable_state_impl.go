@@ -48,6 +48,7 @@ import (
 	"go.temporal.io/server/api/historyservice/v1"
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	workflowspb "go.temporal.io/server/api/workflow/v1"
+
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
@@ -269,7 +270,6 @@ func NewMutableState(
 }
 
 func newMutableStateBuilderFromDB(
-	ctx context.Context,
 	shard shard.Context,
 	eventsCache events.Cache,
 	logger log.Logger,
@@ -317,17 +317,6 @@ func newMutableStateBuilderFromDB(
 	mutableState.executionState = dbRecord.ExecutionState
 	mutableState.executionInfo = dbRecord.ExecutionInfo
 
-	// Workflows created before 1.11 doesn't have ExecutionTime and it must be computed for backwards compatibility.
-	// Remove this "if" block when it is ok to rely on executionInfo.ExecutionTime only (added 6/9/21).
-	if mutableState.executionInfo.ExecutionTime == nil {
-		startEvent, err := mutableState.GetStartEvent(ctx)
-		if err != nil {
-			return nil, err
-		}
-		backoffDuration := timestamp.DurationValue(startEvent.GetWorkflowExecutionStartedEventAttributes().GetFirstWorkflowTaskBackoff())
-		mutableState.executionInfo.ExecutionTime = timestamp.TimePtr(timestamp.TimeValue(mutableState.executionInfo.GetStartTime()).Add(backoffDuration))
-	}
-
 	mutableState.hBuilder = NewMutableHistoryBuilder(
 		mutableState.timeSource,
 		mutableState.shard.GenerateTaskIDs,
@@ -359,6 +348,29 @@ func newMutableStateBuilderFromDB(
 		}
 	}
 
+	return mutableState, nil
+}
+
+func NewSanitizedMutableState(
+	shard shard.Context,
+	eventsCache events.Cache,
+	logger log.Logger,
+	namespaceEntry *namespace.Namespace,
+	mutableStateRecord *persistencespb.WorkflowMutableState,
+) (*MutableStateImpl, error) {
+
+	mutableState, err := newMutableStateBuilderFromDB(shard, eventsCache, logger, namespaceEntry, mutableStateRecord, 1)
+	if err != nil {
+		return nil, err
+	}
+
+	// sanitize data
+	mutableState.executionInfo.LastFirstEventTxnId = common.EmptyVersion
+	// TODO: after adding cluster to clock info, no need to reset clock here
+	mutableState.executionInfo.ParentClock = nil
+	for _, childExecutionInfo := range mutableState.pendingChildExecutionInfoIDs {
+		childExecutionInfo.Clock = nil
+	}
 	return mutableState, nil
 }
 
@@ -1255,6 +1267,46 @@ func (e *MutableStateImpl) GetInFlightWorkflowTask() (*WorkflowTaskInfo, bool) {
 	return e.workflowTaskManager.GetInFlightWorkflowTask()
 }
 
+func (e *MutableStateImpl) HasTransientWorkflowTask() bool {
+	workflowTask, ok := e.GetInFlightWorkflowTask()
+	if !ok {
+		return false
+	}
+	return workflowTask.ScheduleID >= e.GetNextEventID()
+}
+
+func (e *MutableStateImpl) ClearTransientWorkflowTask() error {
+	workflowTask, ok := e.GetInFlightWorkflowTask()
+	if !ok {
+		return serviceerror.NewInternal("cannot clear transient workflow task when task is missing")
+	}
+
+	if workflowTask.ScheduleID < e.GetNextEventID() {
+		return serviceerror.NewInternal("cannot clear transient workflow task when task is not transient")
+	}
+	// workflowTask.ScheduleID >= e.GetNextEventID()
+	// this is transient workflow
+	if e.HasBufferedEvents() {
+		return serviceerror.NewInternal("cannot clear transient workflow task when there are buffered events")
+	}
+	// no buffered event
+	resetWorkflowTaskInfo := &WorkflowTaskInfo{
+		Version:             common.EmptyVersion,
+		ScheduleID:          common.EmptyEventID,
+		StartedID:           common.EmptyEventID,
+		RequestID:           emptyUUID,
+		WorkflowTaskTimeout: timestamp.DurationFromSeconds(0),
+		Attempt:             1,
+		StartedTime:         timestamp.UnixOrZeroTimePtr(0),
+		ScheduledTime:       timestamp.UnixOrZeroTimePtr(0),
+
+		TaskQueue:             nil,
+		OriginalScheduledTime: timestamp.UnixOrZeroTimePtr(0),
+	}
+	e.workflowTaskManager.UpdateWorkflowTask(resetWorkflowTaskInfo)
+	return nil
+}
+
 func (e *MutableStateImpl) HasBufferedEvents() bool {
 	return e.hBuilder.HasBufferEvents()
 }
@@ -1513,7 +1565,7 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 
 func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	parentNamespaceID namespace.ID,
-	parentClock *clockspb.ShardClock,
+	parentClock *clockspb.VectorClock,
 	execution commonpb.WorkflowExecution,
 	requestID string,
 	startEvent *historypb.HistoryEvent,
@@ -3265,7 +3317,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 	workflowType *commonpb.WorkflowType,
 	initiatedID int64,
 	header *commonpb.Header,
-	clock *clockspb.ShardClock,
+	clock *clockspb.VectorClock,
 ) (*historypb.HistoryEvent, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowStarted
@@ -3298,7 +3350,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 
 func (e *MutableStateImpl) ReplicateChildWorkflowExecutionStartedEvent(
 	event *historypb.HistoryEvent,
-	clock *clockspb.ShardClock,
+	clock *clockspb.VectorClock,
 ) error {
 
 	attributes := event.GetChildWorkflowExecutionStartedEventAttributes()
@@ -3906,10 +3958,10 @@ func (e *MutableStateImpl) UpdateDuplicatedResource(
 	e.appliedEvents[id] = struct{}{}
 }
 
-func (e *MutableStateImpl) GenerateLastHistoryReplicationTasks(
+func (e *MutableStateImpl) GenerateMigrationTasks(
 	now time.Time,
 ) (tasks.Task, error) {
-	return e.taskGenerator.GenerateLastHistoryReplicationTasks(now)
+	return e.taskGenerator.GenerateMigrationTasks(now)
 }
 
 func (e *MutableStateImpl) prepareCloseTransaction(
