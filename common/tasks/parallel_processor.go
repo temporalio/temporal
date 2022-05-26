@@ -93,7 +93,7 @@ func (p *ParallelProcessor) Start() {
 	p.startWorkers(p.options.WorkerCount())
 
 	p.shutdownWG.Add(1)
-	go p.workerMonitor(defaultMonitorTickerDuration)
+	go p.workerMonitor()
 
 	p.logger.Info("Parallel task processor started")
 }
@@ -127,9 +127,7 @@ func (p *ParallelProcessor) Submit(task Task) {
 	}
 }
 
-func (p *ParallelProcessor) workerMonitor(
-	tickerDuration time.Duration,
-) {
+func (p *ParallelProcessor) workerMonitor() {
 	defer p.shutdownWG.Done()
 
 	timer := time.NewTimer(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
