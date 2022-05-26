@@ -25,6 +25,8 @@
 package worker
 
 import (
+	"fmt"
+	"os"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -40,6 +42,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/membership"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	workercommon "go.temporal.io/server/service/worker/common"
 )
@@ -54,6 +57,7 @@ type (
 		Logger            log.Logger
 		SdkClientFactory  sdk.ClientFactory
 		NamespaceRegistry namespace.Registry
+		HostName          resource.HostName
 		Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
 	}
 
@@ -65,6 +69,7 @@ type (
 		sdkClientFactory  sdk.ClientFactory
 		namespaceRegistry namespace.Registry
 		self              *membership.HostInfo
+		hostName          resource.HostName
 		serviceResolver   membership.ServiceResolver
 		components        []workercommon.PerNSWorkerComponent
 
@@ -186,14 +191,23 @@ func (wm *perNamespaceWorkerManager) getWorkerSet(ns *namespace.Namespace) *work
 	return ws
 }
 
-func (wm *perNamespaceWorkerManager) responsibleForNamespace(ns *namespace.Namespace, queueName string, num int) (bool, error) {
-	// TODO: implement num > 1 (with LookupN in serviceResolver)
-	key := ns.ID().String() + "-" + queueName
-	target, err := wm.serviceResolver.Lookup(key)
-	if err != nil {
-		return false, err
+func (wm *perNamespaceWorkerManager) responsibleForNamespace(ns *namespace.Namespace, queueName string, num int) (int, error) {
+	// This can result in fewer than the intended number of workers if num > 1, because
+	// multiple lookups might land on the same node. To compensate, we increase the number of
+	// pollers in that case, but it would be better to try to spread them across our nodes.
+	// TODO: implement this properly using LookupN in serviceResolver
+	multiplicity := 0
+	for i := 0; i < num; i++ {
+		key := fmt.Sprintf("%s/%s/%d", ns.ID().String(), queueName, i)
+		target, err := wm.serviceResolver.Lookup(key)
+		if err != nil {
+			return 0, err
+		}
+		if target.Identity() == wm.self.Identity() {
+			multiplicity++
+		}
 	}
-	return target.Identity() == wm.self.Identity(), nil
+	return multiplicity, nil
 }
 
 // called after change to this namespace state _or_ any membership change in the
@@ -216,29 +230,30 @@ func (ws *workerSet) refreshComponent(
 		// 2. this namespace exists
 		// 3. the component says we should be (can filter by namespace)
 		// 4. we are responsible for this namespace
-		shouldBeRunning := ws.wm.Running() && nsExists
-		if shouldBeRunning {
-			options := cmp.DedicatedWorkerOptions(ws.ns)
-			if !options.Enabled {
-				shouldBeRunning = false
-			} else {
+		multiplicity := 0
+		var options *workercommon.PerNSDedicatedWorkerOptions
+		if ws.wm.Running() && nsExists {
+			options = cmp.DedicatedWorkerOptions(ws.ns)
+			if options.Enabled {
 				var err error
-				shouldBeRunning, err = ws.wm.responsibleForNamespace(ws.ns, options.TaskQueue, options.NumWorkers)
+				multiplicity, err = ws.wm.responsibleForNamespace(ws.ns, options.TaskQueue, options.NumWorkers)
 				if err != nil {
 					return err
 				}
 			}
 		}
 
-		if shouldBeRunning {
+		if multiplicity > 0 {
 			ws.lock.Lock()
 			if _, ok := ws.workers[cmp]; ok {
+				// worker is already running. it's possible that it started with a different
+				// multiplicity. we don't bother changing it in that case.
 				ws.lock.Unlock()
 				return nil
 			}
 			ws.lock.Unlock()
 
-			worker, err := ws.startWorker(cmp)
+			worker, err := ws.startWorker(cmp, options, multiplicity)
 			if err != nil {
 				return err
 			}
@@ -273,14 +288,25 @@ func (ws *workerSet) refreshComponent(
 	backoff.Retry(op, policy, nil)
 }
 
-func (ws *workerSet) startWorker(wc workercommon.PerNSWorkerComponent) (*worker, error) {
-	client, err := ws.wm.sdkClientFactory.NewClient(ws.ns.Name().String(), ws.wm.logger)
+func (ws *workerSet) startWorker(
+	wc workercommon.PerNSWorkerComponent,
+	options *workercommon.PerNSDedicatedWorkerOptions,
+	multiplicity int,
+) (*worker, error) {
+	nsName := ws.ns.Name().String()
+	client, err := ws.wm.sdkClientFactory.NewClient(nsName, ws.wm.logger)
 	if err != nil {
 		return nil, err
 	}
 
-	options := wc.DedicatedWorkerOptions(ws.ns)
-	sdkworker := sdkworker.New(client, options.TaskQueue, options.Options)
+	sdkoptions := options.Options
+	sdkoptions.Identity = fmt.Sprintf("%d@%s@%s@%s@%T", os.Getpid(), ws.wm.hostName, nsName, options.TaskQueue, wc)
+	// sdk default is 2, we increase it if we're supposed to run with more multiplicity.
+	// other defaults are already large enough.
+	sdkoptions.MaxConcurrentWorkflowTaskPollers = 2 * multiplicity
+	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
+
+	sdkworker := sdkworker.New(client, options.TaskQueue, sdkoptions)
 	wc.Register(sdkworker, ws.ns)
 	// TODO: use Run() and handle post-startup errors by recreating worker
 	// (after sdk supports returning post-startup errors from Run)
