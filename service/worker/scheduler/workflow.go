@@ -561,19 +561,19 @@ func (s *scheduler) addStart(nominalTime, actualTime time.Time, overlapPolicy en
 func (s *scheduler) processBuffer() bool {
 	s.logger.Debug("processBuffer", "buffer", len(s.State.BufferedStarts), "running", len(s.Info.RunningWorkflows), "needRefresh", s.needRefresh)
 
-	// Make sure we have something to start. If not, we can clear the buffer.
-	req := s.Schedule.Action.GetStartWorkflow()
-	if req == nil || len(s.State.BufferedStarts) == 0 {
-		s.State.BufferedStarts = nil
-		return false
-	}
-
 	// TODO: consider doing this always and removing needRefresh? we only end up here without
 	// needRefresh in the case of update, or patch without an immediate run, so it's not much
 	// wasted work.
 	if s.needRefresh {
 		s.refreshWorkflows(slices.Clone(s.Info.RunningWorkflows))
 		s.needRefresh = false
+	}
+
+	// Make sure we have something to start. If not, we can clear the buffer.
+	req := s.Schedule.Action.GetStartWorkflow()
+	if req == nil || len(s.State.BufferedStarts) == 0 {
+		s.State.BufferedStarts = nil
+		return false
 	}
 
 	isRunning := len(s.Info.RunningWorkflows) > 0
