@@ -1034,8 +1034,6 @@ func validateTaskRange(
 	minTaskKey tasks.Key,
 	maxTaskKey tasks.Key,
 ) error {
-	fmt.Println(taskCategoryType)
-
 	minTaskIDSpecified := minTaskKey.TaskID != 0
 	minFireTimeSpecified := !minTaskKey.FireTime.IsZero() && !minTaskKey.FireTime.Equal(tasks.DefaultFireTime)
 	maxTaskIDSpecified := maxTaskKey.TaskID != 0
