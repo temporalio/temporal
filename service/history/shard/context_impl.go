@@ -282,18 +282,27 @@ func (s *ContextImpl) GetQueueMaxReadLevel(
 func (s *ContextImpl) getImmediateTaskMaxReadLevel() tasks.Key {
 	s.rLock()
 	defer s.rUnlock()
-	return tasks.Key{TaskID: s.immediateTaskMaxReadLevel}
+	return tasks.NewImmediateKey(s.immediateTaskMaxReadLevel)
 }
 
 func (s *ContextImpl) getScheduledTaskMaxReadLevel(cluster string) tasks.Key {
 	s.rLock()
 	defer s.rUnlock()
-	return tasks.Key{FireTime: s.scheduledTaskMaxReadLevelMap[cluster]}
+
+	if _, ok := s.scheduledTaskMaxReadLevelMap[cluster]; !ok {
+		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
+	}
+
+	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
 func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key {
 	s.wLock()
 	defer s.wUnlock()
+
+	if _, ok := s.scheduledTaskMaxReadLevelMap[cluster]; !ok {
+		s.scheduledTaskMaxReadLevelMap[cluster] = tasks.DefaultFireTime
+	}
 
 	currentTime := s.timeSource.Now()
 	if cluster != "" && cluster != s.GetClusterMetadata().GetCurrentClusterName() {
@@ -302,7 +311,7 @@ func (s *ContextImpl) updateScheduledTaskMaxReadLevel(cluster string) tasks.Key 
 
 	newMaxReadLevel := currentTime.Add(s.config.TimerProcessorMaxTimeShift()).Truncate(time.Millisecond)
 	s.scheduledTaskMaxReadLevelMap[cluster] = common.MaxTime(s.scheduledTaskMaxReadLevelMap[cluster], newMaxReadLevel)
-	return tasks.Key{FireTime: s.scheduledTaskMaxReadLevelMap[cluster]}
+	return tasks.NewKey(s.scheduledTaskMaxReadLevelMap[cluster], 0)
 }
 
 func (s *ContextImpl) GetQueueAckLevel(category tasks.Category) tasks.Key {
@@ -317,7 +326,7 @@ func (s *ContextImpl) getQueueAckLevelLocked(category tasks.Category) tasks.Key 
 		return convertPersistenceAckLevelToTaskKey(category.Type(), queueAckLevel.AckLevel)
 	}
 
-	return tasks.Key{}
+	return tasks.NewKey(tasks.DefaultFireTime, 0)
 }
 
 func (s *ContextImpl) UpdateQueueAckLevel(
@@ -1633,7 +1642,7 @@ func (s *ContextImpl) loadShardMetadata(ownershipChanged *bool) error {
 			continue
 		}
 
-		var maxReadTime time.Time
+		maxReadTime := tasks.DefaultFireTime
 		for categoryID, queueAckLevels := range shardInfo.QueueAckLevels {
 			category, ok := taskCategories[categoryID]
 			if !ok || category.Type() != tasks.CategoryTypeScheduled {
@@ -1986,9 +1995,9 @@ func convertPersistenceAckLevelToTaskKey(
 	ackLevel int64,
 ) tasks.Key {
 	if categoryType == tasks.CategoryTypeImmediate {
-		return tasks.Key{TaskID: ackLevel}
+		return tasks.NewImmediateKey(ackLevel)
 	}
-	return tasks.Key{FireTime: timestamp.UnixOrZeroTime(ackLevel)}
+	return tasks.NewKey(timestamp.UnixOrZeroTime(ackLevel), 0)
 }
 
 func convertTaskKeyToPersistenceAckLevel(

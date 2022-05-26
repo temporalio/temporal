@@ -74,10 +74,7 @@ func (s *taskKeySuite) TestSort() {
 	for i := 0; i < numInstant; i++ {
 		fireTime := time.Unix(0, rand.Int63())
 		for j := 0; j < numTaskPerInstant; j++ {
-			taskKeys = append(taskKeys, Key{
-				FireTime: fireTime,
-				TaskID:   rand.Int63(),
-			})
+			taskKeys = append(taskKeys, NewKey(fireTime, rand.Int63()))
 		}
 	}
 	sort.Sort(taskKeys)

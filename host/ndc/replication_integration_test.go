@@ -130,8 +130,8 @@ Loop:
 			GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 				ShardID:             shardID,
 				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: tasks.Key{TaskID: 0},
-				ExclusiveMaxTaskKey: tasks.Key{TaskID: math.MaxInt64},
+				InclusiveMinTaskKey: tasks.NewImmediateKey(0),
+				ExclusiveMaxTaskKey: tasks.NewImmediateKey(math.MaxInt64),
 				BatchSize:           math.MaxInt64,
 				NextPageToken:       nil,
 			},

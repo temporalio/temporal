@@ -239,7 +239,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 
 	// NOTE: READ REF BEFORE MODIFICATION
 	// ref: historyEngine.go registerNamespaceFailoverCallback function
-	err := updateShardAckLevel(tasks.Key{FireTime: minLevel})
+	err := updateShardAckLevel(tasks.NewKey(minLevel, 0))
 	if err != nil {
 		t.logger.Error("Error when update shard ack level", tag.Error(err))
 	}
@@ -329,14 +329,10 @@ func (t *timerQueueProcessorImpl) completeTimers() error {
 
 	if lowerAckLevel.FireTime.Before(upperAckLevel.FireTime) {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:      t.shard.GetShardID(),
-			TaskCategory: tasks.CategoryTimer,
-			InclusiveMinTaskKey: tasks.Key{
-				FireTime: lowerAckLevel.FireTime,
-			},
-			ExclusiveMaxTaskKey: tasks.Key{
-				FireTime: upperAckLevel.FireTime,
-			},
+			ShardID:             t.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryTimer,
+			InclusiveMinTaskKey: lowerAckLevel,
+			ExclusiveMaxTaskKey: upperAckLevel,
 		})
 		if err != nil {
 			return err

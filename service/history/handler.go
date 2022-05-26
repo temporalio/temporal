@@ -608,13 +608,18 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 		}
 	}
 
+	key := tasks.NewKey(
+		timestamp.TimeValue(request.GetVisibilityTime()),
+		request.GetTaskId(),
+	)
+	if err := tasks.ValidateKey(key); err != nil {
+		return nil, serviceerror.NewInvalidArgument(fmt.Sprintf("Invalid task key: %v", err.Error()))
+	}
+
 	err = h.persistenceExecutionManager.CompleteHistoryTask(ctx, &persistence.CompleteHistoryTaskRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: category,
-		TaskKey: tasks.Key{
-			TaskID:   request.GetTaskId(),
-			FireTime: timestamp.TimeValue(request.GetVisibilityTime()),
-		},
+		TaskKey:      key,
 	})
 
 	return &historyservice.RemoveTaskResponse{}, err
