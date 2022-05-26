@@ -48,10 +48,7 @@ type (
 )
 
 func (u *CancelExecutionTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   u.TaskID,
-	}
+	return NewImmediateKey(u.TaskID)
 }
 
 func (u *CancelExecutionTask) GetVersion() int64 {

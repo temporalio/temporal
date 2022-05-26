@@ -46,10 +46,7 @@ type (
 )
 
 func (u *StartChildExecutionTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   u.TaskID,
-	}
+	return NewImmediateKey(u.TaskID)
 }
 
 func (u *StartChildExecutionTask) GetVersion() int64 {

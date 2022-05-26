@@ -611,10 +611,10 @@ func (h *Handler) RemoveTask(ctx context.Context, request *historyservice.Remove
 	err = h.persistenceExecutionManager.CompleteHistoryTask(ctx, &persistence.CompleteHistoryTaskRequest{
 		ShardID:      request.GetShardId(),
 		TaskCategory: category,
-		TaskKey: tasks.Key{
-			TaskID:   request.GetTaskId(),
-			FireTime: timestamp.TimeValue(request.GetVisibilityTime()),
-		},
+		TaskKey: tasks.NewKey(
+			common.MaxTime(tasks.DefaultFireTime, timestamp.TimeValue(request.GetVisibilityTime())),
+			request.GetTaskId(),
+		),
 	})
 
 	return &historyservice.RemoveTaskResponse{}, err

@@ -1035,9 +1035,9 @@ func validateTaskRange(
 	maxTaskKey tasks.Key,
 ) error {
 	minTaskIDSpecified := minTaskKey.TaskID != 0
-	minFireTimeSpecified := !minTaskKey.FireTime.IsZero()
+	minFireTimeSpecified := !minTaskKey.FireTime.IsZero() && !minTaskKey.FireTime.Equal(tasks.DefaultFireTime)
 	maxTaskIDSpecified := maxTaskKey.TaskID != 0
-	maxFireTimeSpecified := !maxTaskKey.FireTime.IsZero()
+	maxFireTimeSpecified := !maxTaskKey.FireTime.IsZero() && !minTaskKey.FireTime.Equal(tasks.DefaultFireTime)
 
 	switch taskCategoryType {
 	case tasks.CategoryTypeImmediate:

@@ -30,6 +30,10 @@ import (
 	enumsspb "go.temporal.io/server/api/enums/v1"
 )
 
+var (
+	DefaultFireTime = time.Unix(0, 0)
+)
+
 type (
 	Key struct {
 		// FireTime is the scheduled time of the task
@@ -57,6 +61,20 @@ type (
 		SetVisibilityTime(timestamp time.Time)
 	}
 )
+
+func NewImmediateKey(taskID int64) Key {
+	return Key{
+		FireTime: DefaultFireTime,
+		TaskID:   taskID,
+	}
+}
+
+func NewKey(fireTime time.Time, taskID int64) Key {
+	return Key{
+		FireTime: fireTime,
+		TaskID:   taskID,
+	}
+}
 
 func (left Key) CompareTo(right Key) int {
 	if left.FireTime.Before(right.FireTime) {

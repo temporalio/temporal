@@ -45,10 +45,7 @@ type (
 )
 
 func (d *WorkflowTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   d.TaskID,
-	}
+	return NewImmediateKey(d.TaskID)
 }
 
 func (d *WorkflowTask) GetVersion() int64 {

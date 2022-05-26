@@ -2734,9 +2734,7 @@ func (e *historyEngineImpl) GetReplicationMessages(
 		if err := e.shard.UpdateQueueClusterAckLevel(
 			tasks.CategoryReplication,
 			pollingCluster,
-			tasks.Key{
-				TaskID: ackMessageID,
-			},
+			tasks.NewImmediateKey(ackMessageID),
 		); err != nil {
 			e.logger.Error("error updating replication level for shard", tag.Error(err), tag.OperationFailed)
 		}
