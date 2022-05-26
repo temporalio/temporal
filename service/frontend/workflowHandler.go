@@ -154,6 +154,7 @@ func NewWorkflowHandler(
 			namespace.NewNamespaceReplicator(namespaceReplicationQueue, logger),
 			archivalMetadata,
 			archiverProvider,
+			config.EnableScheduleRPCs,
 		),
 		getDefaultWorkflowRetrySettings: config.DefaultWorkflowRetryPolicy,
 		visibilityMrg:                   visibilityMrg,
