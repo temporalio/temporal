@@ -87,6 +87,17 @@ func TestMeter(t *testing.T) {
 			AggregationKind:        aggregation.SumKind,
 			NumberKind:             number.Float64Kind,
 		},
+		{
+			InstrumentName:         "go.temporal.io/server/common/metrics/transmission",
+			InstrumentationLibrary: lib,
+			Sum:                    number.NewInt64Number(1234567),
+			Count:                  1,
+			AggregationKind:        aggregation.HistogramKind,
+			Histogram: aggregation.Buckets{
+				Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
+				Counts:     []uint64{0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+			},
+		},
 	}
 
 	// Sort for comparison
@@ -111,9 +122,11 @@ func recordMetrics(ctx context.Context) {
 	c := event.NewCounter("hits", &event.MetricOptions{Description: "Earth meteorite hits"})
 	g := event.NewFloatGauge("temp", &event.MetricOptions{Description: "moon surface temperature in Kelvin"})
 	d := event.NewDuration("latency", &event.MetricOptions{Description: "Earth-moon comms lag, milliseconds"})
+	h := event.NewIntDistribution("transmission", &event.MetricOptions{Description: "Earth-moon comms sent, bytes", Unit: event.UnitBytes})
 
 	c.Record(ctx, 8)
 	g.Record(ctx, -100, event.String("location", "Mare Imbrium"))
 	d.Record(ctx, 1248*time.Millisecond)
 	d.Record(ctx, 1255*time.Millisecond)
+	h.Record(ctx, 1234567)
 }

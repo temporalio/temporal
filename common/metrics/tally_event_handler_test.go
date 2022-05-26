@@ -72,7 +72,7 @@ func recordTallyMetrics(ctx context.Context) {
 	c := event.NewCounter("hits", &event.MetricOptions{Description: "Earth meteorite hits"})
 	g := event.NewFloatGauge("temp", &event.MetricOptions{Description: "moon surface temperature in Kelvin"})
 	d := event.NewDuration("latency", &event.MetricOptions{Description: "Earth-moon comms lag, milliseconds"})
-	h := event.NewIntDistribution("transmission", &event.MetricOptions{Description: "Magical bytes from earth to mars", Unit: event.UnitBytes})
+	h := event.NewIntDistribution("transmission", &event.MetricOptions{Description: "Earth-moon comms sent, bytes", Unit: event.UnitBytes})
 
 	c.Record(ctx, 8)
 	g.Record(ctx, -100, event.String("location", "Mare Imbrium"))

@@ -38,7 +38,7 @@ type (
 	MetricProvider interface {
 		// WithTags creates a new MetricProvder with provided []Tag
 		// Tags registered with the resulting MetricProvider are only the Tags provided
-		// Tags are not merged with registered Tags from the source MetricProvider
+		// Tags are merged with registered Tags from the source MetricProvider
 		WithTags(...Tag) MetricProvider
 
 		// Counter obtains a counter for the given name.
@@ -52,9 +52,6 @@ type (
 
 		// Histogram obtains a histogram for the given name.
 		Histogram(string, ...MetricOption) HistogramMetric
-
-		// Tags returns registered []Tag
-		Tags() []Tag
 	}
 
 	// CounterMetric is an ever-increasing counter.

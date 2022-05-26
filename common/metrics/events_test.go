@@ -25,6 +25,7 @@
 package metrics
 
 import (
+	"sort"
 	"testing"
 	"time"
 
@@ -35,16 +36,14 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metrictest"
 	"go.opentelemetry.io/otel/sdk/metric/number"
-	"golang.org/x/exp/event"
 )
 
 type (
 	eventsSuite struct {
 		suite.Suite
 		*require.Assertions
-		exporter     *event.Exporter
-		testexporter *metrictest.Exporter
-		provider     metric.MeterProvider
+		testexporter  *metrictest.Exporter
+		meterProvider metric.MeterProvider
 	}
 )
 
@@ -55,9 +54,7 @@ func TestEventsSuite(t *testing.T) {
 
 func (s *eventsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.provider, s.testexporter = metrictest.NewTestMeterProvider()
-
-	s.exporter = NewMetricEventExporter(NewEventHandler(s.provider.Meter("test")))
+	s.meterProvider, s.testexporter = metrictest.NewTestMeterProvider()
 }
 
 func (s *eventsSuite) TestEventMetricProvider_WithTags() {
@@ -88,9 +85,9 @@ func (s *eventsSuite) TestEventMetricProvider_WithTags() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(s.exporter)
-			got := emp.WithTags(tt.tags...)
-			s.Equal(tt.want.tags, got.Tags())
+			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
+			got := emp.WithTags(tt.tags...).(*eventMetricProvider)
+			s.Equal(tt.want.tags, got.tags)
 		})
 	}
 }
@@ -134,7 +131,7 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(s.exporter)
+			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
 			emp.Counter(tt.name).Record(tt.v, tt.tags...)
 			s.testexporter.Collect(emp.context)
 
@@ -185,7 +182,7 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(s.exporter)
+			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
 			emp.Gauge(tt.name).Record(tt.v, tt.tags...)
 			s.testexporter.Collect(emp.context)
 
@@ -244,7 +241,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(s.exporter)
+			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
 			emp.Timer(tt.name, WithMetricUnit("ms")).Record(tt.v, tt.tags...)
 			s.testexporter.Collect(emp.context)
 
@@ -303,11 +300,76 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(s.exporter)
+			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
 			emp.Histogram(tt.name, WithMetricUnit("By")).Record(tt.v, tt.tags...)
 			s.testexporter.Collect(emp.context)
 
 			s.NotEmpty(s.testexporter.Records)
+			s.Equal(tt.want, s.testexporter.Records)
+		})
+	}
+}
+
+func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
+	tests := []struct {
+		name     string
+		v        int64
+		rootTags []Tag
+		tags     []Tag
+		want     []metrictest.ExportRecord
+	}{
+		{
+			"test-counter",
+			2,
+			[]Tag{OperationTag("awesome")},
+			nil,
+			[]metrictest.ExportRecord{
+				{
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-counter",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.SumKind,
+					Sum:                    number.NewInt64Number(2),
+					Attributes: []attribute.KeyValue{
+						attribute.String("operation", "awesome"),
+					},
+				},
+			},
+		},
+		{
+			"test-counter2",
+			4,
+			[]Tag{OperationTag("awesome")},
+			[]Tag{StringTag("new-tag", "new-value")},
+			[]metrictest.ExportRecord{
+				{
+					InstrumentName:         "go.temporal.io/server/common/metrics/test-counter2",
+					InstrumentationLibrary: metrictest.Library{InstrumentationName: "test"},
+					AggregationKind:        aggregation.SumKind,
+					Sum:                    number.NewInt64Number(4),
+					Attributes: []attribute.KeyValue{
+						attribute.String("operation", "awesome"),
+						attribute.String("new-tag", "new-value"),
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		s.T().Run(tt.name, func(t *testing.T) {
+			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test")))).WithTags(tt.rootTags...).(*eventMetricProvider)
+			emp.Counter(tt.name).Record(tt.v, tt.tags...)
+			s.testexporter.Collect(emp.context)
+
+			s.NotEmpty(s.testexporter.Records)
+
+			sort.Slice(tt.want[0].Attributes, func(i, j int) bool {
+				return tt.want[0].Attributes[i].Key < tt.want[0].Attributes[j].Key
+			})
+
+			sort.Slice(s.testexporter.Records[0].Attributes, func(i, j int) bool {
+				return s.testexporter.Records[0].Attributes[i].Key < s.testexporter.Records[0].Attributes[j].Key
+			})
+
 			s.Equal(tt.want, s.testexporter.Records)
 		})
 	}

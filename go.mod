@@ -48,6 +48,7 @@ require (
 	go.uber.org/multierr v1.8.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/exp v0.0.0-20220428152302-39d4317da171
+	golang.org/x/exp/event v0.0.0-20220428152302-39d4317da171
 	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306
 	google.golang.org/api v0.81.0

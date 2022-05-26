@@ -28,16 +28,13 @@ import (
 	"context"
 	"time"
 
-	"go.opentelemetry.io/otel/metric"
 	"golang.org/x/exp/event"
-	"golang.org/x/exp/event/otel"
 )
 
 type (
 	eventMetricProvider struct {
-		exporter *event.Exporter
-		context  context.Context
-		tags     []Tag
+		context context.Context
+		tags    []Tag
 	}
 
 	Option interface {
@@ -61,16 +58,20 @@ func NewMetricEventExporter(h event.Handler, opts ...Option) *event.Exporter {
 	return event.NewExporter(h, eo)
 }
 
-// NewEventHandler provides an event.Handler given OpenTelemetryProvider to supply an otel.Meter
-func NewEventHandler(m metric.Meter) event.Handler {
-	return otel.NewMetricHandler(m)
-}
+// func EventHandlerFromConfig(c *Config) event.Handler {
+// 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
+// 	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
+// 		return InitReporterFromPrometheusConfig(logger, c.Prometheus, &c.ClientConfig)
+// 	}
+
+// 	return NewTallyReporterFromConfig(logger, c)
+// }
 
 // NewEventMetricProvider provides an eventMetricProvider given event.Exporter struct
 func NewEventMetricProvider(e *event.Exporter) *eventMetricProvider {
 	return &eventMetricProvider{
-		exporter: e,
-		context:  event.WithExporter(context.Background(), e),
+		context: event.WithExporter(context.Background(), e),
+		tags:    []Tag{},
 	}
 }
 
@@ -120,12 +121,11 @@ func metricOptions(opts ...MetricOption) *event.MetricOptions {
 
 // WithTags creates a new MetricProvder with provided []Tag
 // Tags registered with the resulting MetricProvider are only the Tags provided
-// Tags are not merged with registered Tags from the source MetricProvider
+// Tags are merged with registered Tags from the source MetricProvider
 func (emp *eventMetricProvider) WithTags(tags ...Tag) MetricProvider {
 	return &eventMetricProvider{
-		exporter: emp.exporter,
-		context:  emp.context,
-		tags:     tags,
+		context: emp.context,
+		tags:    append(emp.tags, tags...),
 	}
 }
 
@@ -161,15 +161,10 @@ func (emp *eventMetricProvider) Histogram(n string, opts ...MetricOption) Histog
 	})
 }
 
-// Tags returns registered []Tag
-func (emp *eventMetricProvider) Tags() []Tag {
-	return emp.tags
-}
-
 // tagsToLabels helper to merge registred tags and additional tags converting to event.Label struct
 func (emp *eventMetricProvider) tagsToLabels(tags []Tag) []event.Label {
-	l := make([]event.Label, len(tags))
-	t := append(emp.Tags(), tags...)
+	l := make([]event.Label, len(emp.tags)+len(tags))
+	t := append(emp.tags, tags...)
 
 	for i := range t {
 		l[i] = event.String(t[i].Key(), t[i].Value())
