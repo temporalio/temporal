@@ -293,9 +293,6 @@ func InitReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfi
 // Current priority order is:
 // m3 > statsd > prometheus
 func NewScope(logger log.Logger, c *Config) tally.Scope {
-	if c.M3 != nil {
-		return newM3Scope(logger, c)
-	}
 	if c.Statsd != nil {
 		return newStatsdScope(logger, c)
 	}
@@ -359,22 +356,6 @@ func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
 			clientConfig.PerUnitHistogramBoundaries[unit] = bucket
 		}
 	}
-}
-
-// newM3Scope returns a new m3 scope with
-// a default reporting interval of a second
-func newM3Scope(logger log.Logger, c *Config) tally.Scope {
-	reporter, err := c.M3.NewReporter()
-	if err != nil {
-		logger.Fatal("error creating m3 reporter", tag.Error(err))
-	}
-	scopeOpts := tally.ScopeOptions{
-		Tags:           c.Tags,
-		CachedReporter: reporter,
-		Prefix:         c.Prefix,
-	}
-	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
-	return scope
 }
 
 // newM3Scope returns a new statsd scope with

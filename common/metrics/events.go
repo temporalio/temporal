@@ -28,6 +28,7 @@ import (
 	"context"
 	"time"
 
+	"go.temporal.io/server/common/log"
 	"golang.org/x/exp/event"
 )
 
@@ -58,14 +59,35 @@ func NewMetricEventExporter(h event.Handler, opts ...Option) *event.Exporter {
 	return event.NewExporter(h, eo)
 }
 
-// func EventHandlerFromConfig(c *Config) event.Handler {
-// 	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
-// 	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
-// 		return InitReporterFromPrometheusConfig(logger, c.Prometheus, &c.ClientConfig)
-// 	}
+// EventHanlderFromConfig is used at startup to construct
+func EventHandlerFromConfig(logger log.Logger, c *Config) event.Handler {
+	setDefaultPerUnitHistogramBoundaries(&c.ClientConfig)
+	if c.Prometheus != nil && len(c.Prometheus.Framework) > 0 {
+		switch c.Prometheus.Framework {
+		case FrameworkTally:
+			return NewTallyMetricHandler(
+				newPrometheusScope(
+					logger,
+					convertPrometheusConfigToTally(c.Prometheus),
+					&c.ClientConfig,
+				),
+				c.ClientConfig.PerUnitHistogramBoundaries,
+			)
+		case FrameworkOpentelemetry:
+			otelProvider, err := NewOpenTelemetryProvider(logger, c.Prometheus, &c.ClientConfig)
+			if err != nil {
+				logger.Fatal(err.Error())
+			}
 
-// 	return NewTallyReporterFromConfig(logger, c)
-// }
+			return NewOtelMetricHandler(otelProvider.GetMeter())
+		}
+	}
+
+	return NewTallyMetricHandler(
+		NewScope(logger, c),
+		c.ClientConfig.PerUnitHistogramBoundaries,
+	)
+}
 
 // NewEventMetricProvider provides an eventMetricProvider given event.Exporter struct
 func NewEventMetricProvider(e *event.Exporter) *eventMetricProvider {
@@ -120,7 +142,6 @@ func metricOptions(opts ...MetricOption) *event.MetricOptions {
 }
 
 // WithTags creates a new MetricProvder with provided []Tag
-// Tags registered with the resulting MetricProvider are only the Tags provided
 // Tags are merged with registered Tags from the source MetricProvider
 func (emp *eventMetricProvider) WithTags(tags ...Tag) MetricProvider {
 	return &eventMetricProvider{

@@ -37,7 +37,6 @@ type (
 	// MetricProvider represents the main dependency for instrumentation
 	MetricProvider interface {
 		// WithTags creates a new MetricProvder with provided []Tag
-		// Tags registered with the resulting MetricProvider are only the Tags provided
 		// Tags are merged with registered Tags from the source MetricProvider
 		WithTags(...Tag) MetricProvider
 
