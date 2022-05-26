@@ -34,30 +34,28 @@ import (
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
-const (
-	defaultJitter = 1 * time.Second
-)
-
 type (
 	compiledSpec struct {
-		spec     *schedpb.ScheduleSpec
-		tz       *time.Location
-		calendar []*compiledCalendar
-		excludes []*compiledCalendar
+		spec          *schedpb.ScheduleSpec
+		tz            *time.Location
+		calendar      []*compiledCalendar
+		excludes      []*compiledCalendar
+		defaultJitter time.Duration
 	}
 )
 
-func newCompiledSpec(spec *schedpb.ScheduleSpec) (*compiledSpec, error) {
+func newCompiledSpec(spec *schedpb.ScheduleSpec, defaultJitter time.Duration) (*compiledSpec, error) {
 	tz, err := loadTimezone(spec)
 	if err != nil {
 		return nil, err
 	}
 
 	cspec := &compiledSpec{
-		spec:     spec,
-		tz:       tz,
-		calendar: make([]*compiledCalendar, len(spec.Calendar)),
-		excludes: make([]*compiledCalendar, len(spec.ExcludeCalendar)),
+		spec:          spec,
+		tz:            tz,
+		calendar:      make([]*compiledCalendar, len(spec.Calendar)),
+		excludes:      make([]*compiledCalendar, len(spec.ExcludeCalendar)),
+		defaultJitter: defaultJitter,
 	}
 
 	for i, cal := range spec.Calendar {
@@ -171,7 +169,7 @@ func (cs *compiledSpec) excluded(nominal time.Time) bool {
 func (cs *compiledSpec) addJitter(nominal time.Time, limit time.Duration) time.Time {
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
 	if maxJitter == 0 {
-		maxJitter = defaultJitter
+		maxJitter = cs.defaultJitter
 	}
 	if maxJitter > limit {
 		maxJitter = limit
