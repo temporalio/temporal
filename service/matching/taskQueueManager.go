@@ -97,7 +97,7 @@ type (
 		// GetVersioningData returns the versioning data for this task queue
 		GetVersioningData(ctx context.Context) (*persistencespb.VersioningData, error)
 		// MutateVersioningData allows callers to update versioning data for this task queue
-		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData)) error
+		MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error
 		CancelPoller(pollerID string)
 		GetAllPollerInfo() []*taskqueuepb.PollerInfo
 		HasPollerAfter(accessTime time.Time) bool
@@ -406,7 +406,7 @@ func (c *taskQueueManagerImpl) GetVersioningData(ctx context.Context) (*persiste
 	return c.db.GetVersioningData(ctx)
 }
 
-func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData)) error {
+func (c *taskQueueManagerImpl) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
 	return c.db.MutateVersioningData(ctx, mutator)
 }
 

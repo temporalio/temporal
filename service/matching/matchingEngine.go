@@ -38,7 +38,6 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	taskqueuepb "go.temporal.io/api/taskqueue/v1"
-	"go.temporal.io/api/workflow/v1"
 	"go.temporal.io/api/workflowservice/v1"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -719,15 +718,8 @@ func (e *matchingEngineImpl) UpdateWorkerBuildIdOrdering(
 	if err != nil {
 		return nil, err
 	}
-	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) {
-		if data.CurrentDefaults == nil {
-			data.CurrentDefaults = make([]*workflow.VersionIdNode, 0)
-		}
-		data.CurrentDefaults = append(data.CurrentDefaults, &workflow.VersionIdNode{
-			Version:              &workflow.VersionId{Version: &workflow.VersionId_WorkerBuildId{WorkerBuildId: "hi"}},
-			PreviousCompatible:   nil,
-			PreviousIncompatible: nil,
-		})
+	err = tqMgr.MutateVersioningData(hCtx.Context, func(data *persistencespb.VersioningData) error {
+		return UpdateVersionsGraph(data, req.GetRequest())
 	})
 	if err != nil {
 		return nil, err
@@ -750,13 +742,8 @@ func (e *matchingEngineImpl) GetWorkerBuildIdOrdering(
 	if err != nil {
 		return nil, err
 	}
-	//graph := VersionGraphFromProto(verDat)
-	//return graph.AsOrderingResponse(), nil
 	return &matchingservice.GetWorkerBuildIdOrderingResponse{
-		Response: &workflowservice.GetWorkerBuildIdOrderingResponse{
-			CurrentDefaults:  verDat.CurrentDefaults,
-			CompatibleLeaves: verDat.CompatibleLeaves,
-		},
+		Response: ToBuildIdOrderingResponse(verDat),
 	}, nil
 }
 

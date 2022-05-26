@@ -60,13 +60,14 @@ message TaskQueueInfo {
     VersioningData versioning_data = 8;
 }
 
-// Holds all the data related to worker versioning for a task queue
+// Holds all the data related to worker versioning for a task queue.
+// Backwards-incompatible changes cannot be made, as this would make existing stored data unreadable
 message VersioningData {
     // The currently established default versions. There will be one per version type as defined in
     // the `VersionId` message.
-    repeated temporal.api.workflow.v1.VersionIdNode current_defaults = 8;
+    repeated temporal.api.workflow.v1.VersionIdNode current_defaults = 1;
     // Other current latest-compatible versions who are not the overall default. These are the
     // versions that will be used when generating new tasks by following the graph from the
     // version of the last task out to a leaf.
-    repeated temporal.api.workflow.v1.VersionIdNode compatible_leaves = 9;
+    repeated temporal.api.workflow.v1.VersionIdNode compatible_leaves = 2;
 }
