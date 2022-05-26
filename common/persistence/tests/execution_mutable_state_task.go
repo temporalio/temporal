@@ -309,8 +309,8 @@ func (s *ExecutionMutableStateTaskSuite) RandomPaginateRange(
 	taskCategory := createdTasks[0].GetCategory()
 	switch taskCategory.Type() {
 	case tasks.CategoryTypeImmediate:
-		inclusiveMinTaskKey.FireTime = time.Time{}
-		exclusiveMaxTaskKey.FireTime = time.Time{}
+		inclusiveMinTaskKey.FireTime = tasks.DefaultFireTime
+		exclusiveMaxTaskKey.FireTime = tasks.DefaultFireTime
 	case tasks.CategoryTypeScheduled:
 		inclusiveMinTaskKey.TaskID = 0
 		exclusiveMaxTaskKey.TaskID = 0

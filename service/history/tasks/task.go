@@ -25,6 +25,7 @@
 package tasks
 
 import (
+	"fmt"
 	"time"
 
 	enumsspb "go.temporal.io/server/api/enums/v1"
@@ -74,6 +75,18 @@ func NewKey(fireTime time.Time, taskID int64) Key {
 		FireTime: fireTime,
 		TaskID:   taskID,
 	}
+}
+
+func ValidateKey(key Key) error {
+	if key.FireTime.Before(DefaultFireTime) {
+		return fmt.Errorf("task key fire time must have unix nano value >= 0, got %v", key.FireTime.UnixNano())
+	}
+
+	if key.TaskID < 0 {
+		return fmt.Errorf("task key ID must >= 0, got %v", key.TaskID)
+	}
+
+	return nil
 }
 
 func (left Key) CompareTo(right Key) int {

@@ -568,12 +568,26 @@ func (adh *AdminHandler) ListHistoryTasks(
 
 	var minTaskKey, maxTaskKey tasks.Key
 	if taskRange.InclusiveMinTaskKey != nil {
-		minTaskKey.FireTime = timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime)
-		minTaskKey.TaskID = taskRange.InclusiveMinTaskKey.TaskId
+		minTaskKey = tasks.NewKey(
+			timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime),
+			taskRange.InclusiveMinTaskKey.TaskId,
+		)
+		if err := tasks.ValidateKey(minTaskKey); err != nil {
+			return nil, adh.error(&serviceerror.InvalidArgument{
+				Message: fmt.Sprintf("invalid minTaskKey: %v", err.Error()),
+			}, scope)
+		}
 	}
 	if taskRange.ExclusiveMaxTaskKey != nil {
-		maxTaskKey.FireTime = timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime)
-		maxTaskKey.TaskID = taskRange.ExclusiveMaxTaskKey.TaskId
+		maxTaskKey = tasks.NewKey(
+			timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime),
+			taskRange.ExclusiveMaxTaskKey.TaskId,
+		)
+		if err := tasks.ValidateKey(maxTaskKey); err != nil {
+			return nil, adh.error(&serviceerror.InvalidArgument{
+				Message: fmt.Sprintf("invalid maxTaskKey: %v", err.Error()),
+			}, scope)
+		}
 	}
 	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             request.ShardId,
