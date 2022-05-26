@@ -33,7 +33,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
@@ -199,19 +198,15 @@ func (s *TestBase) Setup(clusterMetadataConfig *cluster.Config) {
 	s.DefaultTestCluster.SetupTestDatabase()
 
 	cfg := s.DefaultTestCluster.Config()
-	scope := tally.NewTestScope(common.HistoryServiceName, make(map[string]string))
-	var metricsClient metrics.Client
-	metricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.GetMetricsServiceIdx(common.HistoryServiceName, s.Logger))
-	s.fatalOnError("metrics.NewClient", err)
 	dataStoreFactory, faultInjection := client.DataStoreFactoryProvider(
 		client.ClusterName(clusterName),
 		resolver.NewNoopResolver(),
 		&cfg,
 		s.AbstractDataStoreFactory,
 		s.Logger,
-		metricsClient,
+		metrics.NoopClient,
 	)
-	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metricsClient, s.Logger)
+	factory := client.NewFactory(dataStoreFactory, &cfg, nil, serialization.NewSerializer(), clusterName, metrics.NoopClient, s.Logger)
 
 	s.TaskMgr, err = factory.NewTaskManager()
 	s.fatalOnError("NewTaskManager", err)
@@ -322,7 +317,6 @@ func (s *TestBase) Publish(
 	ctx context.Context,
 	message interface{},
 ) error {
-
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
@@ -348,7 +342,6 @@ func (s *TestBase) GetReplicationMessages(
 	lastMessageID int64,
 	pageSize int,
 ) ([]*replicationspb.ReplicationTask, int64, error) {
-
 	return s.NamespaceReplicationQueue.GetReplicationMessages(ctx, lastMessageID, pageSize)
 }
 
@@ -358,7 +351,6 @@ func (s *TestBase) UpdateAckLevel(
 	lastProcessedMessageID int64,
 	clusterName string,
 ) error {
-
 	return s.NamespaceReplicationQueue.UpdateAckLevel(ctx, lastProcessedMessageID, clusterName)
 }
 
@@ -374,7 +366,6 @@ func (s *TestBase) PublishToNamespaceDLQ(
 	ctx context.Context,
 	message interface{},
 ) error {
-
 	retryPolicy := backoff.NewExponentialRetryPolicy(100 * time.Millisecond)
 	retryPolicy.SetBackoffCoefficient(1.5)
 	retryPolicy.SetMaximumAttempts(5)
@@ -398,7 +389,6 @@ func (s *TestBase) GetMessagesFromNamespaceDLQ(
 	pageSize int,
 	pageToken []byte,
 ) ([]*replicationspb.ReplicationTask, []byte, error) {
-
 	return s.NamespaceReplicationQueue.GetMessagesFromDLQ(
 		ctx,
 		firstMessageID,
@@ -413,7 +403,6 @@ func (s *TestBase) UpdateNamespaceDLQAckLevel(
 	ctx context.Context,
 	lastProcessedMessageID int64,
 ) error {
-
 	return s.NamespaceReplicationQueue.UpdateDLQAckLevel(ctx, lastProcessedMessageID)
 }
 
@@ -429,7 +418,6 @@ func (s *TestBase) DeleteMessageFromNamespaceDLQ(
 	ctx context.Context,
 	messageID int64,
 ) error {
-
 	return s.NamespaceReplicationQueue.DeleteMessageFromDLQ(ctx, messageID)
 }
 
@@ -439,7 +427,6 @@ func (s *TestBase) RangeDeleteMessagesFromNamespaceDLQ(
 	firstMessageID int64,
 	lastMessageID int64,
 ) error {
-
 	return s.NamespaceReplicationQueue.RangeDeleteMessagesFromDLQ(ctx, firstMessageID, lastMessageID)
 }
 
