@@ -3227,7 +3227,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 
 		// for all running workflows started by the schedule, we should check that they're
 		// still running, and if not, poke the schedule to refresh
-		var needRefresh []*commonpb.WorkflowExecution
+		needRefresh := false
 		for _, ex := range response.GetInfo().GetRunningWorkflows() {
 			if _, ok := sentRefresh[*ex]; ok {
 				// we asked the schedule to refresh this one because it wasn't running, but
@@ -3244,7 +3244,8 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 				switch err.(type) {
 				case *serviceerror.NotFound:
 					// if it doesn't exist (past retention period?) it's certainly not running
-					needRefresh = append(needRefresh, ex)
+					needRefresh = true
+					sentRefresh[*ex] = struct{}{}
 				default:
 					return err
 				}
@@ -3253,11 +3254,12 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 				// there is no running execution of this workflow id, or there is a running
 				// execution, but it's not part of the chain that we started.
 				// either way, the workflow that we started is not running.
-				needRefresh = append(needRefresh, ex)
+				needRefresh = true
+				sentRefresh[*ex] = struct{}{}
 			}
 		}
 
-		if len(needRefresh) == 0 {
+		if !needRefresh {
 			token := make([]byte, 8)
 			binary.BigEndian.PutUint64(token, uint64(response.ConflictToken))
 			describeScheduleResponse = &workflowservice.DescribeScheduleResponse{
@@ -3270,42 +3272,19 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 			return nil
 		}
 
-		if len(needRefresh) > 10 {
-			// this is very unlikely, but in this case we don't want to do too much work here,
-			// so just trim the list. we'll catch the rest next time.
-			wh.throttledLogger.Warn("schedule has lots of running workflows",
-				tag.WorkflowNamespace(request.Namespace),
-				tag.ScheduleID(request.ScheduleId),
-				tag.Counter(len(needRefresh)),
-			)
-			needRefresh = needRefresh[:10]
-		}
-
 		// poke to refresh
-		input := &schedspb.RefreshRequest{
-			Workflows: needRefresh,
-		}
-		inputPayloads, err := payloads.Encode(input)
-		if err != nil {
-			return err
-		}
 		_, err = wh.historyClient.SignalWorkflowExecution(ctx, &historyservice.SignalWorkflowExecutionRequest{
 			NamespaceId: namespaceID.String(),
 			SignalRequest: &workflowservice.SignalWorkflowExecutionRequest{
 				Namespace:         request.Namespace,
 				WorkflowExecution: execution,
 				SignalName:        scheduler.SignalNameRefresh,
-				Input:             inputPayloads,
 				Identity:          "internal refresh from describe request",
 				RequestId:         uuid.New(),
 			},
 		})
 		if err != nil {
 			return err
-		}
-
-		for _, ex := range needRefresh {
-			sentRefresh[*ex] = struct{}{}
 		}
 
 		return errWaitForRefresh
