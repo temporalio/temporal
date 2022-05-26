@@ -32,7 +32,8 @@ import (
 )
 
 var (
-	DefaultFireTime = time.Unix(0, 0)
+	DefaultFireTime         = time.Unix(0, 0)
+	defaultFireTimeUnixNano = DefaultFireTime.UnixNano()
 )
 
 type (
@@ -78,7 +79,7 @@ func NewKey(fireTime time.Time, taskID int64) Key {
 }
 
 func ValidateKey(key Key) error {
-	if key.FireTime.Before(DefaultFireTime) {
+	if key.FireTime.UnixNano() < defaultFireTimeUnixNano {
 		return fmt.Errorf("task key fire time must have unix nano value >= 0, got %v", key.FireTime.UnixNano())
 	}
 
