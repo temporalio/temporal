@@ -319,7 +319,7 @@ func (db *taskQueueDB) GetVersioningData(
 
 // MutateVersioningData allows callers to update versioning data for this task queue. The pointer passed to the
 // mutating function is guaranteed to be non-nil.
-func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData)) error {
+func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*persistencespb.VersioningData) error) error {
 	db.Lock()
 	defer db.Unlock()
 
@@ -332,7 +332,9 @@ func (db *taskQueueDB) MutateVersioningData(ctx context.Context, mutator func(*p
 	if verDat == nil {
 		verDat = &persistencespb.VersioningData{}
 	}
-	mutator(verDat)
+	if err := mutator(verDat); err != nil {
+		return err
+	}
 	db.logger.Info("Updating versioning data "+verDat.String(), tag.ShardRangeID(db.rangeID))
 
 	_, err = db.store.UpdateTaskQueue(ctx, &persistence.UpdateTaskQueueRequest{
