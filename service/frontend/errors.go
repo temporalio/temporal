@@ -86,5 +86,5 @@ var (
 	errUnableToStartWorkflowMessage                   = "Unable to start %s workflow: %v."
 	errWorkflowReturnedErrorMessage                   = "Workflow %s returned an error: %v."
 
-	errNoPermission = serviceerror.NewPermissionDenied("No permission to do this operation.", "")
+	errListNotAllowed = serviceerror.NewPermissionDenied("List is disabled on this namespace.", "")
 )

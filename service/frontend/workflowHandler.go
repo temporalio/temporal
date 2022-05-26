@@ -2275,7 +2275,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 	var persistenceResp *manager.ListWorkflowExecutionsResponse
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errNoPermission
+			err = errListNotAllowed
 		} else {
 			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByWorkflowID(
 				ctx,
@@ -2288,7 +2288,7 @@ func (wh *WorkflowHandler) ListOpenWorkflowExecutions(ctx context.Context, reque
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByID)
 	} else if request.GetTypeFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errNoPermission
+			err = errListNotAllowed
 		} else {
 			persistenceResp, err = wh.visibilityMrg.ListOpenWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
@@ -2369,7 +2369,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 	var persistenceResp *manager.ListWorkflowExecutionsResponse
 	if request.GetExecutionFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errNoPermission
+			err = errListNotAllowed
 		} else {
 			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByWorkflowID(
 				ctx,
@@ -2382,7 +2382,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByID)
 	} else if request.GetTypeFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errNoPermission
+			err = errListNotAllowed
 		} else {
 			persistenceResp, err = wh.visibilityMrg.ListClosedWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
 				ListWorkflowExecutionsRequest: baseReq,
@@ -2393,7 +2393,7 @@ func (wh *WorkflowHandler) ListClosedWorkflowExecutions(ctx context.Context, req
 			tag.WorkflowNamespace(request.GetNamespace()), tag.WorkflowListWorkflowFilterByType)
 	} else if request.GetStatusFilter() != nil {
 		if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-			err = errNoPermission
+			err = errListNotAllowed
 		} else {
 			if request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED || request.GetStatusFilter().GetStatus() == enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING {
 				err = errStatusFilterMustBeNotRunning
@@ -3201,7 +3201,7 @@ func (wh *WorkflowHandler) DescribeSchedule(ctx context.Context, request *workfl
 	}
 
 	// then query to get current state from the workflow itself
-	// TODO: turn this whole thing into a synchronous update
+	// TODO: turn the refresh path into a synchronous update so we don't have to retry in a loop
 	sentRefresh := make(map[commonpb.WorkflowExecution]struct{})
 	var describeScheduleResponse *workflowservice.DescribeScheduleResponse
 
@@ -3561,9 +3561,8 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 		return nil, err
 	}
 
-	// TODO: should we respect this here?
 	if wh.config.DisableListVisibilityByFilter(namespaceName.String()) {
-		return nil, errNoPermission
+		return nil, errListNotAllowed
 	}
 
 	persistenceResp, err := wh.visibilityMrg.ListOpenWorkflowExecutionsByType(ctx, &manager.ListWorkflowExecutionsByTypeRequest{
@@ -3584,9 +3583,8 @@ func (wh *WorkflowHandler) ListSchedules(ctx context.Context, request *workflows
 	schedules := make([]*schedpb.ScheduleListEntry, len(persistenceResp.Executions))
 	for i, ex := range persistenceResp.Executions {
 		schedules[i] = &schedpb.ScheduleListEntry{
-			ScheduleId: ex.GetExecution().GetWorkflowId(),
-			Memo:       ex.GetMemo(),
-			// TODO: is this correct? where does search attribute mapping happen?
+			ScheduleId:       ex.GetExecution().GetWorkflowId(),
+			Memo:             ex.GetMemo(),
 			SearchAttributes: ex.GetSearchAttributes(),
 		}
 	}
