@@ -394,7 +394,7 @@ func (d *HandlerImpl) UpdateNamespace(
 	info := getResponse.Namespace.Info
 	config := getResponse.Namespace.Config
 	replicationConfig := getResponse.Namespace.ReplicationConfig
-	replicationHistory := getResponse.Namespace.ReplicationConfig.ReplicationHistory
+	failoverHistory := getResponse.Namespace.ReplicationConfig.FailoverHistory
 	configVersion := getResponse.Namespace.ConfigVersion
 	failoverVersion := getResponse.Namespace.FailoverVersion
 	failoverNotificationVersion := getResponse.Namespace.FailoverNotificationVersion
@@ -534,12 +534,6 @@ func (d *HandlerImpl) UpdateNamespace(
 			activeClusterChanged = true
 			replicationConfig.ActiveClusterName = updateReplicationConfig.GetActiveClusterName()
 		}
-
-		replicationHistory = d.maybeAppendToReplicationHistory(
-			replicationHistory,
-			updateReplicationConfig,
-			getResponse.Namespace,
-		)
 	}
 
 	if err := d.namespaceAttrValidator.validateNamespaceConfig(config); err != nil {
@@ -566,10 +560,6 @@ func (d *HandlerImpl) UpdateNamespace(
 	if configurationChanged && activeClusterChanged && isGlobalNamespace {
 		return nil, errCannotDoNamespaceFailoverAndUpdate
 	} else if configurationChanged || activeClusterChanged || needsNamespacePromotion {
-		// set the versions
-		if configurationChanged {
-			configVersion++
-		}
 		if (needsNamespacePromotion || activeClusterChanged) && isGlobalNamespace {
 			failoverVersion = d.clusterMetadata.GetNextFailoverVersion(
 				replicationConfig.ActiveClusterName,
@@ -577,8 +567,21 @@ func (d *HandlerImpl) UpdateNamespace(
 			)
 			failoverNotificationVersion = notificationVersion
 		}
+		// set the versions
+		if configurationChanged {
+			configVersion++
+		}
 
-		replicationConfig.ReplicationHistory = replicationHistory
+		if configurationChanged || activeClusterChanged {
+			failoverHistory = d.maybeUpdateFailoverHistory(
+				failoverHistory,
+				updateRequest.ReplicationConfig,
+				getResponse.Namespace,
+				failoverVersion,
+			)
+		}
+
+		replicationConfig.FailoverHistory = failoverHistory
 		updateReq := &persistence.UpdateNamespaceRequest{
 			Namespace: &persistencespb.NamespaceDetail{
 				Info:                        info,
@@ -812,15 +815,16 @@ func (d *HandlerImpl) validateVisibilityArchivalURI(URIString string) error {
 	return archiver.ValidateURI(URI)
 }
 
-// maybeAppendToReplicationHistory adds an entry if the Namespace is becoming active in a new cluster.
-func (d *HandlerImpl) maybeAppendToReplicationHistory(
-	replicationHistory []*persistencespb.ReplicationStatus,
+// maybeUpdateFailoverHistory adds an entry if the Namespace is becoming active in a new cluster.
+func (d *HandlerImpl) maybeUpdateFailoverHistory(
+	failoverHistory []*persistencespb.FailoverStatus,
 	updateReplicationConfig *replicationpb.NamespaceReplicationConfig,
 	namespaceDetail *persistencespb.NamespaceDetail,
-) []*persistencespb.ReplicationStatus {
+	newFailoverVersion int64,
+) []*persistencespb.FailoverStatus {
 	d.logger.Debug(
-		"maybeAppendToReplicationHistory",
-		tag.NewAnyTag("replicationHistory", replicationHistory),
+		"maybeUpdateFailoverHistory",
+		tag.NewAnyTag("failoverHistory", failoverHistory),
 		tag.NewAnyTag("updateReplConfig", updateReplicationConfig),
 		tag.NewAnyTag("namespaceDetail", namespaceDetail),
 	)
@@ -832,29 +836,25 @@ func (d *HandlerImpl) maybeAppendToReplicationHistory(
 	if desiredReplicationState != enumspb.REPLICATION_STATE_NORMAL &&
 		desiredReplicationState != enumspb.REPLICATION_STATE_UNSPECIFIED {
 		d.logger.Debug("Replication state not NORMAL", tag.NewAnyTag("state", updateReplicationConfig.State))
-		return replicationHistory
+		return failoverHistory
 	}
-	newActiveCluster := updateReplicationConfig.ActiveClusterName
-	if newActiveCluster == "" {
-		newActiveCluster = namespaceDetail.ReplicationConfig.ActiveClusterName
+	lastFailoverVersion := int64(-1)
+	if l := len(namespaceDetail.ReplicationConfig.FailoverHistory); l > 0 {
+		lastFailoverVersion = namespaceDetail.ReplicationConfig.FailoverHistory[l-1].FailoverVersion
 	}
-	lastActiveCluster := ""
-	if l := len(namespaceDetail.ReplicationConfig.ReplicationHistory); l > 0 {
-		lastActiveCluster = namespaceDetail.ReplicationConfig.ReplicationHistory[l-1].ActiveClusterName
-	}
-	if lastActiveCluster != newActiveCluster {
+	if lastFailoverVersion != newFailoverVersion {
 		now := d.timeSource.Now()
-		replicationHistory = append(
-			replicationHistory, &persistencespb.ReplicationStatus{
-				StatusTime:        &now,
-				ActiveClusterName: newActiveCluster,
+		failoverHistory = append(
+			failoverHistory, &persistencespb.FailoverStatus{
+				FailoverTime:    &now,
+				FailoverVersion: newFailoverVersion,
 			},
 		)
 	}
-	if l := len(replicationHistory); l > maxReplicationHistorySize {
-		replicationHistory = replicationHistory[l-maxReplicationHistorySize : l]
+	if l := len(failoverHistory); l > maxReplicationHistorySize {
+		failoverHistory = failoverHistory[l-maxReplicationHistorySize : l]
 	}
-	return replicationHistory
+	return failoverHistory
 }
 
 // validateRetentionDuration ensures that retention duration can't be set below a sane minimum.
