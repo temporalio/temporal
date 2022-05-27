@@ -160,7 +160,7 @@ func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_ExecutionsStillExi
 
 	env.OnActivity(a.IsAdvancedVisibilityActivity, mock.Anything).Return(true, nil).Once()
 	env.OnActivity(a.EnsureNoExecutionsAdvVisibilityActivity, mock.Anything, namespace.ID("namespace-id"), namespace.Name("namespace"), 0).
-		Return(errors.ErrExecutionsStillExist).
+		Return(errors.NewExecutionsStillExistError(1)).
 		Times(10) // GoSDK defaultMaximumAttemptsForUnitTest value.
 
 	env.ExecuteWorkflow(ReclaimResourcesWorkflow, ReclaimResourcesParams{
