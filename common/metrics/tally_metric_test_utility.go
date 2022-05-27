@@ -46,7 +46,7 @@ func NewTallyMetricTestUtility() *TallyMetricTestUtility {
 }
 
 func (t *TallyMetricTestUtility) GetClient(config *ClientConfig, idx ServiceIdx) Client {
-	result, err := NewClient(config, t.scope, idx)
+	result, err := NewTallyClient(config, t.scope, idx)
 	if err != nil {
 		panic(err)
 	}
@@ -116,5 +116,4 @@ func (t *TallyMetricTestUtility) CollectionSize() int {
 		len(t.scope.Snapshot().Gauges()) +
 		len(t.scope.Snapshot().Timers()) +
 		len(t.scope.Snapshot().Histograms())
-
 }

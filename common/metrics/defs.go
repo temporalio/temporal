@@ -59,10 +59,11 @@ type (
 )
 
 // MetricUnit supported values
+// Values are pulled from https://pkg.go.dev/golang.org/x/exp/event#Unit
 const (
-	Dimensionless = "dimensionless"
-	Milliseconds  = "milliseconds"
-	Bytes         = "bytes"
+	Dimensionless = "1"
+	Milliseconds  = "ms"
+	Bytes         = "By"
 )
 
 // MetricTypes which are supported

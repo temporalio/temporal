@@ -32,7 +32,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
@@ -56,11 +55,9 @@ func TestInterleavedWeightedRoundRobinSchedulerSuite(t *testing.T) {
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupSuite() {
-
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) TearDownSuite() {
-
 }
 
 func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
@@ -76,21 +73,13 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 		3: 1,
 	}
 	logger := log.NewTestLogger()
-	metricsClient, err := metrics.NewClient(
-		&metrics.ClientConfig{},
-		tally.NewTestScope("test", nil),
-		metrics.History,
-	)
-	if err != nil {
-		s.NoError(err, "metrics.NewClient")
-	}
 
 	s.scheduler = NewInterleavedWeightedRoundRobinScheduler(
 		InterleavedWeightedRoundRobinSchedulerOptions{
 			PriorityToWeight: priorityToWeight,
 		},
 		s.mockProcessor,
-		metricsClient,
+		metrics.NoopClient,
 		logger,
 	)
 }

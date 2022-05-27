@@ -25,9 +25,11 @@
 package metrics
 
 import (
+	"context"
 	"time"
 
 	"go.temporal.io/server/common/log"
+	"golang.org/x/exp/event"
 )
 
 var (
@@ -37,6 +39,7 @@ var (
 	NoopScope         Scope         = noopInternalScope
 	NoopUserScope     UserScope     = newNoopUserScope()
 	NoopStopwatch     Stopwatch     = newNoopStopwatch()
+	NoopMetricHandler MetricHandler = newNoopMetricHandler()
 )
 
 type (
@@ -45,19 +48,20 @@ type (
 	noopMetricsUserScope struct{}
 	noopStopwatchImpl    struct{}
 	noopScopeImpl        struct{}
+	noopMetricHandler    struct{}
 )
 
 func newNoopReporter() *noopReporterImpl {
 	return &noopReporterImpl{}
 }
 
-func (_ *noopReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
+func (*noopReporterImpl) NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error) {
 	return NoopClient, nil
 }
 
-func (_ *noopReporterImpl) Stop(logger log.Logger) {}
+func (*noopReporterImpl) Stop(logger log.Logger) {}
 
-func (_ *noopReporterImpl) UserScope() UserScope {
+func (*noopReporterImpl) UserScope() UserScope {
 	return NoopUserScope
 }
 
@@ -156,3 +160,11 @@ func newNoopStopwatch() *noopStopwatchImpl {
 
 func (n *noopStopwatchImpl) Stop()                       {}
 func (n *noopStopwatchImpl) Subtract(nsec time.Duration) {}
+
+func newNoopMetricHandler() *noopMetricHandler {
+	return &noopMetricHandler{}
+}
+
+func (*noopMetricHandler) Event(ctx context.Context, _ *event.Event) context.Context {
+	return ctx
+}

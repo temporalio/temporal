@@ -33,7 +33,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/dynamicconfig"
@@ -213,17 +212,12 @@ func (s *parallelProcessorSuite) TestStartStopWorkers() {
 }
 
 func (s *parallelProcessorSuite) newTestProcessor() *ParallelProcessor {
-	metricsClient, err := metrics.NewClient(&metrics.ClientConfig{}, tally.NoopScope, metrics.History)
-	if err != nil {
-		s.NoError(err, "metrics.NewClient")
-	}
-
 	return NewParallelProcessor(
 		&ParallelProcessorOptions{
 			QueueSize:   1,
 			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
 		},
-		metricsClient,
+		metrics.NoopClient,
 		log.NewNoopLogger(),
 	)
 }

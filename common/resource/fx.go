@@ -116,6 +116,7 @@ var Module = fx.Options(
 	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
+	fx.Provide(metrics.NewEventMetricProvider),
 )
 
 var DefaultOptions = fx.Options(
@@ -250,13 +251,11 @@ func MembershipMonitorProvider(
 		tlsConfigProvider,
 		dc,
 	)
-
 	if err != nil {
 		return nil, err
 	}
 
 	monitor, err := factory.GetMembershipMonitor()
-
 	if err != nil {
 		return nil, err
 	}
