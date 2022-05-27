@@ -382,7 +382,7 @@ func newTimerTaskScheduler(
 		queues.NewNoopPriorityAssigner(),
 		queues.SchedulerOptions{
 			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.TimerTaskWorkerCount(),
+				WorkerCount: config.TimerTaskWorkerCount,
 				QueueSize:   config.TimerTaskWorkerCount() * config.TimerTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
