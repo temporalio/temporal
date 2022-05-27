@@ -40,6 +40,8 @@ message HistoryContinuation {
 
 message RawHistoryContinuation{
     string namespace = 1;
+    // TODO (alex): remove in 1.18+ in flavor of namespace_id.
+    string namespace_id = 10;
     string workflow_id = 2;
     string run_id = 3;
     int64 start_event_id = 4;
@@ -48,7 +50,6 @@ message RawHistoryContinuation{
     int64 end_event_version = 7;
     bytes persistence_token = 8;
     temporal.server.api.history.v1.VersionHistories version_histories = 9;
-    string namespace_id = 10;
 }
 
 message Task {

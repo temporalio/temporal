@@ -138,6 +138,7 @@ message RemoveTaskResponse {
 message GetWorkflowExecutionRawHistoryV2Request {
     // TODO (alex): remove in 1.18+ in flavor of namespace_id.
     string namespace = 1;
+    string namespace_id = 9;
     temporal.api.common.v1.WorkflowExecution execution = 2;
     int64 start_event_id = 3;
     int64 start_event_version = 4;
@@ -145,7 +146,6 @@ message GetWorkflowExecutionRawHistoryV2Request {
     int64 end_event_version = 6;
     int32 maximum_page_size = 7;
     bytes next_page_token = 8;
-    string namespace_id = 9;
 }
 
 message GetWorkflowExecutionRawHistoryV2Response {
@@ -190,9 +190,9 @@ message GetDLQReplicationMessagesResponse {
 message ReapplyEventsRequest {
     // TODO (alex): remove in 1.18+ in flavor of namespace_id.
     string namespace = 1;
+    string namespace_id = 4;
     temporal.api.common.v1.WorkflowExecution workflow_execution = 2;
     temporal.api.common.v1.DataBlob events = 3;
-    string namespace_id = 4;
 }
 
 message ReapplyEventsResponse {
@@ -331,8 +331,8 @@ message MergeDLQMessagesResponse {
 message RefreshWorkflowTasksRequest {
     // TODO (alex): remove in 1.18+ in flavor of namespace_id.
     string namespace = 1;
-    temporal.api.common.v1.WorkflowExecution execution = 2;
     string namespace_id = 3;
+    temporal.api.common.v1.WorkflowExecution execution = 2;
 }
 
 message RefreshWorkflowTasksResponse {

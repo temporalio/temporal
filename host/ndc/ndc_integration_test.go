@@ -1254,6 +1254,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	adminClient := s.active.GetAdminClient()
 	getHistory := func(
 		nsName namespace.Name,
+		nsID namespace.ID,
 		workflowID string,
 		runID string,
 		startEventID int64,
@@ -1270,6 +1271,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 		}
 		return adminClient.GetWorkflowExecutionRawHistoryV2(host.NewContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
 			Namespace:         nsName.String(),
+			NamespaceId:       nsID.String(),
 			Execution:         execution,
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
@@ -1652,6 +1654,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
 			s.namespace,
+			s.namespaceID,
 			workflowID,
 			runID,
 			14,
@@ -1674,6 +1677,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
 			s.namespace,
+			s.namespaceID,
 			workflowID,
 			runID,
 			17,
@@ -1696,6 +1700,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
 			s.namespace,
+			s.namespaceID,
 			workflowID,
 			runID,
 			14,
@@ -1718,6 +1723,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
 			s.namespace,
+			s.namespaceID,
 			workflowID,
 			runID,
 			common.EmptyEventID,
