@@ -45,7 +45,7 @@ func TestHistoryEventTestSuite(t *testing.T) {
 }
 
 func (s *historyEventTestSuit) SetupSuite() {
-	s.generator = InitializeHistoryEventGenerator("namespace", 1)
+	s.generator = InitializeHistoryEventGenerator("namespace", "ns-id", 1)
 }
 
 func (s *historyEventTestSuit) SetupTest() {
