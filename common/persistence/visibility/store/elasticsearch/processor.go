@@ -55,7 +55,7 @@ type (
 		common.Daemon
 
 		// Add request to bulk processor.
-		Add(request *client.BulkableRequest, visibilityTaskKey string) future.Future[bool]
+		Add(request *client.BulkableRequest, visibilityTaskKey string) future.FutureImpl[bool]
 	}
 
 	// processorImpl implements Processor, it's an agent of elastic.BulkProcessor
