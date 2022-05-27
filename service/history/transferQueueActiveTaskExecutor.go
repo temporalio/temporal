@@ -1457,7 +1457,7 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 
 			childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
 			if childNamespaceID.IsEmpty() {
-				// TODO (alex): Remove after 6/1/23. Backward compatibility: old child info doesn't have NamespaceId set.
+				// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
 				// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
 				var err error
 				childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
@@ -1523,7 +1523,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
 		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
 		if childNamespaceID.IsEmpty() {
-			// TODO (alex): Remove after 6/1/23. Backward compatibility: old child info doesn't have NamespaceId set.
+			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
 			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
 			var err error
 			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
@@ -1552,7 +1552,7 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
 		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
 		if childNamespaceID.IsEmpty() {
-			// TODO (alex): Remove after 6/1/23. Backward compatibility: old child info doesn't have NamespaceId set.
+			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
 			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
 			var err error
 			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))

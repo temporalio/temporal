@@ -610,7 +610,7 @@ func (r *TaskGeneratorImpl) getTargetNamespaceID(
 		return targetNamespaceID, nil
 	}
 
-	// TODO (alex): Remove targetNamespace in 1.18+. Backward compatibility: old events doesn't have targetNamespaceID.
+	// TODO (alex): Remove targetNamespace after NamespaceId is back filled. Backward compatibility: old events doesn't have targetNamespaceID.
 	if !targetNamespace.IsEmpty() {
 		targetNamespaceEntry, err := r.namespaceRegistry.GetNamespace(targetNamespace)
 		if err != nil {
