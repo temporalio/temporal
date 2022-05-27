@@ -131,15 +131,10 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 		}
 	}
 
-	namespaceEntry, err := n.namespaceRegistry.GetNamespaceByID(namespaceID)
-	if err != nil {
-		return err
-	}
-
 	historyIterator := collection.NewPagingIterator(n.getPaginationFn(
 		ctx,
 		remoteClusterName,
-		namespaceEntry,
+		namespaceID,
 		workflowID,
 		runID,
 		startEventID,
@@ -182,7 +177,7 @@ func (n *NDCHistoryResenderImpl) SendSingleWorkflowHistory(
 func (n *NDCHistoryResenderImpl) getPaginationFn(
 	ctx context.Context,
 	remoteClusterName string,
-	ns *namespace.Namespace,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	startEventID int64,
@@ -196,7 +191,7 @@ func (n *NDCHistoryResenderImpl) getPaginationFn(
 		response, err := n.getHistory(
 			ctx,
 			remoteClusterName,
-			ns,
+			namespaceID,
 			workflowID,
 			runID,
 			startEventID,
@@ -256,7 +251,6 @@ func (n *NDCHistoryResenderImpl) sendReplicationRawRequest(
 func (n *NDCHistoryResenderImpl) getHistory(
 	ctx context.Context,
 	remoteClusterName string,
-	nsName namespace.Name,
 	namespaceID namespace.ID,
 	workflowID string,
 	runID string,

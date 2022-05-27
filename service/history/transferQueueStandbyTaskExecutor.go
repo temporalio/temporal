@@ -609,6 +609,11 @@ func (t *transferQueueStandbyTaskExecutor) fetchHistoryFromRemote(
 	if resendInfo.lastEventID == common.EmptyEventID || resendInfo.lastEventVersion == common.EmptyVersion {
 		err = serviceerror.NewInternal("transferQueueStandbyProcessor encountered empty historyResendInfo")
 	} else {
+		ns, err := t.registry.GetNamespaceByID(namespace.ID(taskInfo.GetNamespaceID()))
+		if err != nil {
+			return err
+		}
+
 		if err := refreshTasks(
 			ctx,
 			adminClient,
