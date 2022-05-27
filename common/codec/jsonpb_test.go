@@ -51,8 +51,7 @@ var (
 		EventTime: timestamp.TimePtr(time.Date(1978, 8, 22, 0, 0, 0, 0, time.UTC)),
 		EventType: enumspb.EVENT_TYPE_REQUEST_CANCEL_EXTERNAL_WORKFLOW_EXECUTION_INITIATED,
 		Attributes: &historypb.HistoryEvent_RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{RequestCancelExternalWorkflowExecutionInitiatedEventAttributes: &historypb.RequestCancelExternalWorkflowExecutionInitiatedEventAttributes{
-			Namespace:   "some random target namespace",
-			NamespaceId: "30265c34-da36-47de-a104-ad4b0b61915e",
+			Namespace: "some random target namespace",
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: "some random target workflow ID",
 				RunId:      "some random target run ID",
