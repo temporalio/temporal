@@ -60,10 +60,10 @@ func (m *MockProcessor) EXPECT() *MockProcessorMockRecorder {
 }
 
 // Add mocks base method.
-func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string) future.Future[bool] {
+func (m *MockProcessor) Add(request *client.BulkableRequest, visibilityTaskKey string) *future.FutureImpl[bool] {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "Add", request, visibilityTaskKey)
-	ret0, _ := ret[0].(future.Future[bool])
+	ret0, _ := ret[0].(*future.FutureImpl[bool])
 	return ret0
 }
 

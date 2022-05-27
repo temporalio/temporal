@@ -85,7 +85,7 @@ func (s *processorSuite) SetupTest() {
 	s.esProcessor = NewProcessor(cfg, s.mockESClient, logger, s.mockMetricClient)
 
 	// esProcessor.Start mock
-	s.esProcessor.mapToAckChan = collection.NewShardedConcurrentTxMap(1024, s.esProcessor.hashFn)
+	s.esProcessor.mapToAckFuture = collection.NewShardedConcurrentTxMap(1024, s.esProcessor.hashFn)
 	s.esProcessor.bulkProcessor = s.mockBulkProcessor
 }
 
@@ -121,24 +121,24 @@ func (s *processorSuite) TestNewESProcessorAndStartStop() {
 		Times(1)
 
 	p.Start()
-	s.NotNil(p.mapToAckChan)
+	s.NotNil(p.mapToAckFuture)
 	s.NotNil(p.bulkProcessor)
 
 	p.Stop()
-	s.Nil(p.mapToAckChan)
+	s.Nil(p.mapToAckFuture)
 	s.Nil(p.bulkProcessor)
 }
 
 func (s *processorSuite) TestAdd() {
 	request := &client.BulkableRequest{}
 	visibilityTaskKey := "test-key"
-	s.Equal(0, s.esProcessor.mapToAckChan.Len())
+	s.Equal(0, s.esProcessor.mapToAckFuture.Len())
 
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockBulkProcessor.EXPECT().Add(request)
 
 	future1 := s.esProcessor.Add(request, visibilityTaskKey)
-	s.Equal(1, s.esProcessor.mapToAckChan.Len())
+	s.Equal(1, s.esProcessor.mapToAckFuture.Len())
 	if future1.Ready() {
 		s.Fail("1st request shouldn't be acknowledged")
 	}
@@ -146,7 +146,7 @@ func (s *processorSuite) TestAdd() {
 	// duplicate request returns same future object
 	s.mockMetricClient.EXPECT().IncCounter(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorDuplicateRequest)
 	future2 := s.esProcessor.Add(request, visibilityTaskKey)
-	s.Equal(1, s.esProcessor.mapToAckChan.Len())
+	s.Equal(1, s.esProcessor.mapToAckFuture.Len())
 
 	s.Equal(future1, future2)
 
@@ -174,7 +174,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd() {
 		}(i)
 	}
 	wg.Wait()
-	s.Equal(docsCount, s.esProcessor.mapToAckChan.Len())
+	s.Equal(docsCount, s.esProcessor.mapToAckFuture.Len())
 
 	for i := 0; i < docsCount; i++ {
 		if futures[i].Ready() {
@@ -211,7 +211,7 @@ func (s *processorSuite) TestAdd_ConcurrentAdd_Duplicates() {
 	}
 
 	s.Equal(100, pendingRequestsCount, "only one request should not be acked")
-	s.Equal(1, s.esProcessor.mapToAckChan.Len(), "only one request should be in the bulk")
+	s.Equal(1, s.esProcessor.mapToAckFuture.Len(), "only one request should be in the bulk")
 }
 
 func (s *processorSuite) TestBulkAfterAction_Ack() {
@@ -239,8 +239,8 @@ func (s *processorSuite) TestBulkAfterAction_Ack() {
 	}
 
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
-	mapVal := newAckChan()
-	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
+	mapVal := newAckFuture()
+	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	result, err := mapVal.future.Get(context.Background())
 	s.NoError(err)
@@ -282,8 +282,8 @@ func (s *processorSuite) TestBulkAfterAction_Nack() {
 	}
 
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
-	mapVal := newAckChan()
-	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
+	mapVal := newAckFuture()
+	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
 	s.mockMetricClient.EXPECT().Scope(metrics.ElasticsearchBulkProcessor, metrics.HttpStatusTag(400)).Return(metrics.NoopScope)
 	s.esProcessor.bulkAfterAction(0, requests, response, nil)
 	result, err := mapVal.future.Get(context.Background())
@@ -338,9 +338,9 @@ func (s *processorSuite) TestBulkBeforeAction() {
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitStartLatency, gomock.Any())
 
-	mapVal := newAckChan()
+	mapVal := newAckFuture()
 	mapVal.recordAdd(s.mockMetricClient)
-	s.esProcessor.mapToAckChan.Put(testKey, mapVal)
+	s.esProcessor.mapToAckFuture.Put(testKey, mapVal)
 	s.True(mapVal.startedAt.IsZero())
 	s.esProcessor.bulkBeforeAction(0, requests)
 	s.False(mapVal.startedAt.IsZero())
@@ -349,39 +349,39 @@ func (s *processorSuite) TestBulkBeforeAction() {
 func (s *processorSuite) TestAckChan() {
 	key := "test-key"
 	// no msg in map, nothing called
-	s.esProcessor.sendToAckChan(key, true)
+	s.esProcessor.notifyResult(key, true)
 
 	request := &client.BulkableRequest{}
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	s.mockBulkProcessor.EXPECT().Add(request)
 	future := s.esProcessor.Add(request, key)
-	s.Equal(1, s.esProcessor.mapToAckChan.Len())
+	s.Equal(1, s.esProcessor.mapToAckFuture.Len())
 
-	s.esProcessor.sendToAckChan(key, true)
+	s.esProcessor.notifyResult(key, true)
 	result, err := future.Get(context.Background())
 	s.NoError(err)
 	s.True(result)
-	s.Equal(0, s.esProcessor.mapToAckChan.Len())
+	s.Equal(0, s.esProcessor.mapToAckFuture.Len())
 }
 
 func (s *processorSuite) TestNackChan() {
 	key := "test-key-nack"
 	// no msg in map, nothing called
-	s.esProcessor.sendToAckChan(key, false)
+	s.esProcessor.notifyResult(key, false)
 
 	request := &client.BulkableRequest{}
 	s.mockBulkProcessor.EXPECT().Add(request)
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorWaitAddLatency, gomock.Any())
 	s.mockMetricClient.EXPECT().RecordTimer(metrics.ElasticsearchBulkProcessor, metrics.ElasticsearchBulkProcessorRequestLatency, gomock.Any())
 	future := s.esProcessor.Add(request, key)
-	s.Equal(1, s.esProcessor.mapToAckChan.Len())
+	s.Equal(1, s.esProcessor.mapToAckFuture.Len())
 
-	s.esProcessor.sendToAckChan(key, false)
+	s.esProcessor.notifyResult(key, false)
 	result, err := future.Get(context.Background())
 	s.NoError(err)
 	s.False(result)
-	s.Equal(0, s.esProcessor.mapToAckChan.Len())
+	s.Equal(0, s.esProcessor.mapToAckFuture.Len())
 }
 
 func (s *processorSuite) TestHashFn() {
@@ -506,7 +506,7 @@ func (s *processorSuite) Test_End2End() {
 		}(i)
 	}
 	wg.Wait()
-	s.Equal(docsCount, s.esProcessor.mapToAckChan.Len())
+	s.Equal(docsCount, s.esProcessor.mapToAckFuture.Len())
 
 	// Emulate bulk commit.
 
