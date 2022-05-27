@@ -583,7 +583,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 		eventBatchFirstEventID,
 		terminateReason,
 		nil,
-		consts.IdentityHistoryService,
+		"resetter",
 		false,
 	)
 }
