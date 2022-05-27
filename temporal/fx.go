@@ -27,7 +27,6 @@ package temporal
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -787,24 +786,18 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 // types can be overriden/augmented with fx.Replace/fx.Decorate:
 //
 // - []go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc.Option
-//   default: empty slice or oteltracegrpc.WithInsecure() depending on $OTEL_EXPORTER_OTLP_INSECURE
+//   default: empty slice
 // - go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc.Client
 // - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
 var TraceExportModule = fx.Options(
-	// https://github.com/open-telemetry/opentelemetry-specification/blob/v1.11.0/specification/protocol/exporter.md#configuration-options
-	// not yet supported by the Go OTEL sdk as of v1.7.0 so we'll do it manually here
-	fx.Provide(func() []otlptracegrpc.Option {
-		opts := []otlptracegrpc.Option{}
-		if boolstr := os.Getenv("OTEL_EXPORTER_OTLP_INSECURE"); boolstr == "true" {
-			opts = append(opts, otlptracegrpc.WithInsecure())
-		}
-		return opts
-	}),
+	fx.Supply([]otlptracegrpc.Option{}),
+
 	// Need this func to have the right type signature - fx will not inject a
 	// slice into a provider func defined with variadic parameters
 	fx.Provide(func(opts []otlptracegrpc.Option) otlptrace.Client {
 		return otlptracegrpc.NewClient(opts...)
 	}),
+
 	fx.Provide(func(lc fx.Lifecycle, c otlptrace.Client) []sdktrace.SpanExporter {
 		e := otlptrace.NewUnstarted(c)
 		lc.Append(fx.Hook{OnStart: e.Start, OnStop: e.Shutdown})
