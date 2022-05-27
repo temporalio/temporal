@@ -32,9 +32,9 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
+
 	"go.temporal.io/server/api/adminservice/v1"
 	enumsspb "go.temporal.io/server/api/enums/v1"
-
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
@@ -272,7 +272,8 @@ func (r *nDCHistoryReplicatorImpl) ApplyWorkflowState(
 	lastEventTime, err := r.backfillHistory(
 		ctx,
 		request.GetRemoteCluster(),
-		ns.Name().String(),
+		ns.Name(),
+		namespaceID,
 		wid,
 		rid,
 		lastEventItem.GetEventId(),
@@ -822,7 +823,8 @@ func (r *nDCHistoryReplicatorImpl) notify(
 func (r *nDCHistoryReplicatorImpl) backfillHistory(
 	ctx context.Context,
 	remoteClusterName string,
-	namespaceName string,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	lastEventID int64,
@@ -833,6 +835,7 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 		ctx,
 		remoteClusterName,
 		namespaceName,
+		namespaceID,
 		workflowID,
 		runID,
 		lastEventID,
@@ -875,7 +878,8 @@ func (r *nDCHistoryReplicatorImpl) backfillHistory(
 func (r *nDCHistoryReplicatorImpl) getHistoryPaginationFn(
 	ctx context.Context,
 	remoteClusterName string,
-	namespace string,
+	namespaceName namespace.Name,
+	namespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	endEventID int64,
@@ -889,7 +893,8 @@ func (r *nDCHistoryReplicatorImpl) getHistoryPaginationFn(
 			return nil, nil, err
 		}
 		response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:       namespace,
+			Namespace:       namespaceName.String(),
+			NamespaceId:     namespaceID.String(),
 			Execution:       &commonpb.WorkflowExecution{WorkflowId: workflowID, RunId: runID},
 			EndEventId:      endEventID + 1,
 			EndEventVersion: endEventVersion,

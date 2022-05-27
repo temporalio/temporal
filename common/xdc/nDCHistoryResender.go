@@ -265,12 +265,10 @@ func (n *NDCHistoryResenderImpl) getHistory(
 
 	logger := log.With(n.logger, tag.WorkflowRunID(runID))
 
-	namespaceEntry, err := n.namespaceRegistry.GetNamespaceByID(namespaceID)
+	ns, err := n.namespaceRegistry.GetNamespaceByID(namespaceID)
 	if err != nil {
-		logger.Error("error getting namespace", tag.Error(err))
 		return nil, err
 	}
-	namespace := namespaceEntry.Name()
 
 	ctx, cancel := rpc.NewContextFromParentWithTimeoutAndHeaders(ctx, resendContextTimeout)
 	defer cancel()
@@ -281,7 +279,8 @@ func (n *NDCHistoryResenderImpl) getHistory(
 	}
 
 	response, err := adminClient.GetWorkflowExecutionRawHistoryV2(ctx, &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-		Namespace: namespace.String(),
+		Namespace:   ns.Name().String(),
+		NamespaceId: namespaceID.String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: workflowID,
 			RunId:      runID,
