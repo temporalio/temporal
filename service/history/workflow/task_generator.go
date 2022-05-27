@@ -395,14 +395,13 @@ func (r *TaskGeneratorImpl) GenerateChildWorkflowTasks(
 
 	attr := event.GetStartChildWorkflowExecutionInitiatedEventAttributes()
 	childWorkflowScheduleID := event.GetEventId()
-	childWorkflowTargetNamespace := namespace.Name(attr.GetNamespace())
 
 	childWorkflowInfo, ok := r.mutableState.GetChildExecutionInfo(childWorkflowScheduleID)
 	if !ok {
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending child workflow: %v", childWorkflowScheduleID))
 	}
 
-	targetNamespaceID, err := r.getTargetNamespaceID(childWorkflowTargetNamespace)
+	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -428,7 +427,6 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 	attr := event.GetRequestCancelExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
-	targetNamespace := namespace.Name(attr.GetNamespace())
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
@@ -438,7 +436,7 @@ func (r *TaskGeneratorImpl) GenerateRequestCancelExternalTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending request cancel external workflow: %v", scheduleID))
 	}
 
-	targetNamespaceID, err := r.getTargetNamespaceID(targetNamespace)
+	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -466,7 +464,6 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 	attr := event.GetSignalExternalWorkflowExecutionInitiatedEventAttributes()
 	scheduleID := event.GetEventId()
 	version := event.GetVersion()
-	targetNamespace := namespace.Name(attr.GetNamespace())
 	targetWorkflowID := attr.GetWorkflowExecution().GetWorkflowId()
 	targetRunID := attr.GetWorkflowExecution().GetRunId()
 	targetChildOnly := attr.GetChildWorkflowOnly()
@@ -476,7 +473,7 @@ func (r *TaskGeneratorImpl) GenerateSignalExternalTasks(
 		return serviceerror.NewInternal(fmt.Sprintf("it could be a bug, cannot get pending signal external workflow: %v", scheduleID))
 	}
 
-	targetNamespaceID, err := r.getTargetNamespaceID(targetNamespace)
+	targetNamespaceID, err := r.getTargetNamespaceID(namespace.Name(attr.GetNamespace()), namespace.ID(attr.GetNamespaceId()))
 	if err != nil {
 		return err
 	}
@@ -607,16 +604,20 @@ func (r *TaskGeneratorImpl) getTimerSequence() TimerSequence {
 
 func (r *TaskGeneratorImpl) getTargetNamespaceID(
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 ) (namespace.ID, error) {
+	if !targetNamespaceID.IsEmpty() {
+		return targetNamespaceID, nil
+	}
 
-	targetNamespaceID := namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId)
-	if targetNamespace != "" {
+	// TODO (alex): Remove targetNamespace after NamespaceId is back filled. Backward compatibility: old events doesn't have targetNamespaceID.
+	if !targetNamespace.IsEmpty() {
 		targetNamespaceEntry, err := r.namespaceRegistry.GetNamespace(targetNamespace)
 		if err != nil {
 			return "", err
 		}
-		targetNamespaceID = targetNamespaceEntry.ID()
+		return targetNamespaceEntry.ID(), nil
 	}
 
-	return targetNamespaceID, nil
+	return namespace.ID(r.mutableState.GetExecutionInfo().NamespaceId), nil
 }

@@ -1686,7 +1686,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
 
 	initiatedEvent, _ := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
-		tests.ChildNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
+		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 	request.ParentInitiatedId = initiatedEvent.GetEventId()
 	request.ParentInitiatedVersion = initiatedEvent.GetVersion()
 
@@ -1698,7 +1698,7 @@ func (s *engine2Suite) TestRecordChildExecutionCompleted() {
 	s.IsType(&serviceerror.NotFound{}, err)
 
 	// add child started event
-	addChildWorkflowExecutionStartedEvent(msBuilder, initiatedEvent.GetEventId(), tests.ChildNamespace, childWorkflowID, childRunID, childWorkflowType, nil)
+	addChildWorkflowExecutionStartedEvent(msBuilder, initiatedEvent.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
 
 	ms = workflow.TestCloneToProto(msBuilder)
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: ms}
@@ -1865,7 +1865,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	di.StartedID = workflowTasksStartEvent.GetEventId()
 	workflowTaskCompletedEvent := addWorkflowTaskCompletedEvent(msBuilder, di.ScheduleID, di.StartedID, "some random identity")
 	initiatedEvent, ci := addStartChildWorkflowExecutionInitiatedEvent(msBuilder, workflowTaskCompletedEvent.GetEventId(), uuid.New(),
-		tests.ChildNamespace, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
+		tests.ChildNamespace, tests.ChildNamespaceID, childWorkflowID, childWorkflowType, childTaskQueueName, nil, 1*time.Second, 1*time.Second, 1*time.Second, enumspb.PARENT_CLOSE_POLICY_TERMINATE)
 
 	request := &historyservice.VerifyChildExecutionCompletionRecordedRequest{
 		NamespaceId: tests.NamespaceID.String(),
@@ -1890,7 +1890,7 @@ func (s *engine2Suite) TestVerifyChildExecutionCompletionRecorded_InitiatedEvent
 	s.IsType(&serviceerror.WorkflowNotReady{}, err)
 
 	// child workflow started but not completed
-	addChildWorkflowExecutionStartedEvent(msBuilder, initiatedEvent.GetEventId(), tests.ChildNamespace, childWorkflowID, childRunID, childWorkflowType, nil)
+	addChildWorkflowExecutionStartedEvent(msBuilder, initiatedEvent.GetEventId(), childWorkflowID, childRunID, childWorkflowType, nil)
 
 	ms = workflow.TestCloneToProto(msBuilder)
 	gwmsResponse = &persistence.GetWorkflowExecutionResponse{State: ms}

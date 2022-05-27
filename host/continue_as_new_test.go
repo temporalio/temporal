@@ -649,6 +649,8 @@ func (s *integrationSuite) TestChildWorkflowWithContinueAsNew() {
 	s.NotNil(definition.completedEvent)
 	completedAttributes := definition.completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
 	s.Equal(s.namespace, completedAttributes.Namespace)
+	// TODO: change to s.Equal(s.namespaceID) once it is available.
+	s.NotEmpty(completedAttributes.Namespace)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.NotEqual(definition.startedEvent.GetChildWorkflowExecutionStartedEventAttributes().WorkflowExecution.RunId,
 		completedAttributes.WorkflowExecution.RunId)

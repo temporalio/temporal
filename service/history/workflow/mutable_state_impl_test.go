@@ -535,7 +535,6 @@ func (s *mutableStateSuite) prepareTransientWorkflowTaskCompletionFirstBatchRepl
 		workflowStartEvent,
 	)
 	err := s.mutableState.ReplicateWorkflowExecutionStartedEvent(
-		"",
 		nil,
 		execution,
 		uuid.New(),
