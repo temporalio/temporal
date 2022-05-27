@@ -32,13 +32,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/uber-go/tally/v4"
+	"go.temporal.io/server/common/log"
 	"golang.org/x/exp/event"
 )
 
 func TestTallyScope(t *testing.T) {
 	ctx := context.Background()
 	scope := tally.NewTestScope("test", map[string]string{})
-	mh := NewTallyMetricHandler(scope, defaultConfig.PerUnitHistogramBoundaries)
+	mh := NewTallyMetricHandler(log.NewTestLogger(), scope, defaultConfig.PerUnitHistogramBoundaries)
 	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
 	recordTallyMetrics(ctx)
 

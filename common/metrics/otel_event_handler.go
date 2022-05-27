@@ -26,7 +26,6 @@ package metrics
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 
@@ -35,6 +34,9 @@ import (
 	"go.opentelemetry.io/otel/metric/instrument"
 	otelunit "go.opentelemetry.io/otel/metric/unit"
 	"golang.org/x/exp/event"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 // MetricHandler is an event.Handler for OpenTelemetry metrics.
@@ -42,6 +44,7 @@ import (
 type OtelMetricHandler struct {
 	meter metric.Meter
 	mu    sync.Mutex
+	l     log.Logger
 	// A map from event.Metrics to, effectively, otel Meters.
 	// But since the only thing we need from the Meter is recording a value, we
 	// use a function for that that closes over the Meter itself.
@@ -53,9 +56,10 @@ type recordFunc func(context.Context, event.Label, []attribute.KeyValue)
 var _ event.Handler = (*OtelMetricHandler)(nil)
 
 // NewOtelMetricHandler creates a new open telemetry MetricHandler.
-func NewOtelMetricHandler(m metric.Meter) *OtelMetricHandler {
+func NewOtelMetricHandler(l log.Logger, m metric.Meter) *OtelMetricHandler {
 	return &OtelMetricHandler{
 		meter:       m,
+		l:           l,
 		recordFuncs: map[event.Metric]recordFunc{},
 	}
 }
@@ -64,21 +68,23 @@ func (m *OtelMetricHandler) Event(ctx context.Context, e *event.Event) context.C
 	if e.Kind != event.MetricKind {
 		return ctx
 	}
-	// Get the otel instrument corresponding to the event's MetricDescriptor,
-	// or create a new one.
+
 	mi, ok := event.MetricKey.Find(e)
 	if !ok {
-		panic(errors.New("no metric key for metric event"))
+		m.l.Fatal("no metric key for metric event", tag.NewAnyTag("event", e))
 	}
+
 	em := mi.(event.Metric)
 	lval := e.Find(event.MetricVal)
 	if !lval.HasValue() {
-		panic(errors.New("no metric value for metric event"))
+		m.l.Fatal("no metric value for metric event", tag.NewAnyTag("event", e))
 	}
+
 	rf := m.getRecordFunc(em)
 	if rf == nil {
-		panic(fmt.Errorf("unable to record for metric %v", em))
+		m.l.Fatal("unable to record for metric", tag.NewAnyTag("event", e))
 	}
+
 	rf(ctx, lval, labelsToAttributes(e.Labels))
 	return ctx
 }
@@ -105,6 +111,7 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 	case *event.Counter:
 		c, err := m.meter.SyncInt64().Counter(name, otelOpts...)
 		if err != nil {
+			m.l.Fatal("unable to get new recording function", tag.NewAnyTag("MetricType", fmt.Sprintf("%T", em)), tag.Error(err))
 			return nil
 		}
 
@@ -115,6 +122,7 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 	case *event.FloatGauge:
 		g, err := m.meter.SyncFloat64().UpDownCounter(name, otelOpts...)
 		if err != nil {
+			m.l.Fatal("unable to get new recording function", tag.NewAnyTag("MetricType", fmt.Sprintf("%T", em)), tag.Error(err))
 			return nil
 		}
 
@@ -125,7 +133,7 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 	case *event.DurationDistribution:
 		r, err := m.meter.SyncInt64().Histogram(name, otelOpts...)
 		if err != nil {
-			return nil
+			m.l.Fatal("unable to get new recording function", tag.NewAnyTag("MetricType", fmt.Sprintf("%T", em)), tag.Error(err))
 		}
 
 		return func(ctx context.Context, l event.Label, attrs []attribute.KeyValue) {
@@ -135,6 +143,7 @@ func (m *OtelMetricHandler) newRecordFunc(em event.Metric) recordFunc {
 	case *event.IntDistribution:
 		r, err := m.meter.SyncInt64().Histogram(name, otelOpts...)
 		if err != nil {
+			m.l.Fatal("unable to get new recording function", tag.NewAnyTag("MetricType", fmt.Sprintf("%T", em)), tag.Error(err))
 			return nil
 		}
 

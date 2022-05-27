@@ -34,23 +34,25 @@ import (
 // https://github.com/temporalio/sdk-go/blob/master/internal/common/metrics/handler.go
 // and adapted to depend on golang.org/x/exp/event
 type (
+	MetricOptions = event.MetricOptions
+
 	// MetricProvider represents the main dependency for instrumentation
 	MetricProvider interface {
 		// WithTags creates a new MetricProvder with provided []Tag
 		// Tags are merged with registered Tags from the source MetricProvider
 		WithTags(...Tag) MetricProvider
 
-		// Counter obtains a counter for the given name.
-		Counter(string, ...MetricOption) CounterMetric
+		// Counter obtains a counter for the given name and MetricOptions.
+		Counter(string, *MetricOptions) CounterMetric
 
-		// Gauge obtains a gauge for the given name.
-		Gauge(string, ...MetricOption) GaugeMetric
+		// Gauge obtains a gauge for the given name and MetricOptions.
+		Gauge(string, *MetricOptions) GaugeMetric
 
-		// Timer obtains a timer for the given name.
-		Timer(string, ...MetricOption) TimerMetric
+		// Timer obtains a timer for the given name and MetricOptions.
+		Timer(string, *MetricOptions) TimerMetric
 
-		// Histogram obtains a histogram for the given name.
-		Histogram(string, ...MetricOption) HistogramMetric
+		// Histogram obtains a histogram for the given name and MetricOptions.
+		Histogram(string, *MetricOptions) HistogramMetric
 	}
 
 	// CounterMetric is an ever-increasing counter.
@@ -59,7 +61,7 @@ type (
 		// Tags provided are merged with the source MetricProvider
 		Record(int64, ...Tag)
 	}
-	// GaugeMetric can be set to any float.
+	// GaugeMetric can be set to any float and repesents a latest value instrument.
 	GaugeMetric interface {
 		// Record updates the gauge value.
 		// Tags provided are merged with the source MetricProvider
@@ -84,38 +86,9 @@ type (
 	GaugeMetricFunc     func(float64, ...Tag)
 	TimerMetricFunc     func(time.Duration, ...Tag)
 	HistogramMetricFunc func(int64, ...Tag)
-
-	MetricOption interface {
-		apply(*event.MetricOptions)
-	}
-
-	MetricOptionFunc func(*event.MetricOptions)
 )
-
-// WithMetricUnit provides MetricUnit MetricOption for metric
-func WithMetricUnit(unit MetricUnit) MetricOption {
-	return MetricOptionFunc(func(mo *event.MetricOptions) {
-		mo.Unit = event.Unit(unit)
-	})
-}
-
-// WithMetricDescription provides description MetricOption for metric
-func WithMetricDescription(description string) MetricOption {
-	return MetricOptionFunc(func(mo *event.MetricOptions) {
-		mo.Description = description
-	})
-}
-
-// WithMetricNamespace provides namespace MetricOption for metric
-func WithMetricNamespace(namespace string) MetricOption {
-	return MetricOptionFunc(func(mo *event.MetricOptions) {
-		mo.Namespace = namespace
-	})
-}
 
 func (c CounterMetricFunc) Record(v int64, tags ...Tag)       { c(v, tags...) }
 func (c GaugeMetricFunc) Record(v float64, tags ...Tag)       { c(v, tags...) }
 func (c TimerMetricFunc) Record(v time.Duration, tags ...Tag) { c(v, tags...) }
 func (c HistogramMetricFunc) Record(v int64, tags ...Tag)     { c(v, tags...) }
-
-func (m MetricOptionFunc) apply(mo *event.MetricOptions) { m(mo) }

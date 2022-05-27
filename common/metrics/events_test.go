@@ -25,25 +25,24 @@
 package metrics
 
 import (
-	"sort"
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.opentelemetry.io/otel/attribute"
-	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metrictest"
 	"go.opentelemetry.io/otel/sdk/metric/number"
+	"go.temporal.io/server/common/log"
 )
 
 type (
 	eventsSuite struct {
 		suite.Suite
 		*require.Assertions
-		testexporter  *metrictest.Exporter
-		meterProvider metric.MeterProvider
 	}
 )
 
@@ -54,7 +53,6 @@ func TestEventsSuite(t *testing.T) {
 
 func (s *eventsSuite) SetupTest() {
 	s.Assertions = require.New(s.T())
-	s.meterProvider, s.testexporter = metrictest.NewTestMeterProvider()
 }
 
 func (s *eventsSuite) TestEventMetricProvider_WithTags() {
@@ -85,14 +83,23 @@ func (s *eventsSuite) TestEventMetricProvider_WithTags() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
+			emp := NewEventMetricProvider(NoopMetricHandler)
 			got := emp.WithTags(tt.tags...).(*eventMetricProvider)
-			s.Equal(tt.want.tags, got.tags)
+
+			if diff := cmp.Diff(tt.want, *got,
+				cmp.Comparer(valuesEqual),
+				cmpopts.IgnoreFields(eventMetricProvider{}, "context"),
+				cmp.AllowUnexported(eventMetricProvider{}),
+				cmp.AllowUnexported(tagImpl{})); diff != "" {
+				t.Errorf("mismatch (-want, got):\n%s", diff)
+			}
 		})
 	}
 }
 
 func (s *eventsSuite) TestCounterMetricFunc_Record() {
+	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+
 	tests := []struct {
 		name string
 		v    int64
@@ -131,17 +138,23 @@ func (s *eventsSuite) TestCounterMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
-			emp.Counter(tt.name).Record(tt.v, tt.tags...)
-			s.testexporter.Collect(emp.context)
+			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test")))
+			emp.Counter(tt.name, &MetricOptions{
+				Description: "what you see is not a test",
+			}).Record(tt.v, tt.tags...)
+			testexporter.Collect(emp.context)
 
-			s.NotEmpty(s.testexporter.Records)
-			s.Equal(tt.want, s.testexporter.Records)
+			s.NotEmpty(testexporter.Records)
+			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual)); diff != "" {
+				t.Errorf("mismatch (-want, got):\n%s", diff)
+			}
 		})
 	}
 }
 
 func (s *eventsSuite) TestGaugeMetricFunc_Record() {
+	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+
 	tests := []struct {
 		name string
 		v    float64
@@ -182,17 +195,23 @@ func (s *eventsSuite) TestGaugeMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
-			emp.Gauge(tt.name).Record(tt.v, tt.tags...)
-			s.testexporter.Collect(emp.context)
+			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test")))
+			emp.Gauge(tt.name, &MetricOptions{
+				Description: "what you see is not a test",
+			}).Record(tt.v, tt.tags...)
+			testexporter.Collect(emp.context)
 
-			s.NotEmpty(s.testexporter.Records)
-			s.Equal(tt.want, s.testexporter.Records)
+			s.NotEmpty(testexporter.Records)
+			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual)); diff != "" {
+				t.Errorf("mismatch (-want, got):\n%s", diff)
+			}
 		})
 	}
 }
 
 func (s *eventsSuite) TestTimerMetricFunc_Record() {
+	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+
 	tests := []struct {
 		name string
 		v    time.Duration
@@ -211,8 +230,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 					Sum:                    number.NewInt64Number(int64(2 * time.Hour)),
 					Count:                  1,
 					Histogram: aggregation.Buckets{
-						Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
-						Counts:     []uint64{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
+						Counts: []uint64{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
 					},
 				},
 			},
@@ -229,8 +247,7 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 					Sum:                    number.NewInt64Number(int64(4 * time.Hour)),
 					Count:                  1,
 					Histogram: aggregation.Buckets{
-						Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
-						Counts:     []uint64{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
+						Counts: []uint64{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1},
 					},
 					Attributes: []attribute.KeyValue{
 						attribute.String("operation", "awesome"),
@@ -241,17 +258,24 @@ func (s *eventsSuite) TestTimerMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
-			emp.Timer(tt.name, WithMetricUnit("ms")).Record(tt.v, tt.tags...)
-			s.testexporter.Collect(emp.context)
+			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test")))
+			emp.Timer(tt.name, &MetricOptions{
+				Description: "what you see is not a test",
+				Unit:        Milliseconds,
+			}).Record(tt.v, tt.tags...)
+			testexporter.Collect(emp.context)
 
-			s.NotEmpty(s.testexporter.Records)
-			s.Equal(tt.want, s.testexporter.Records)
+			s.NotEmpty(testexporter.Records)
+			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual), cmpopts.IgnoreFields(aggregation.Buckets{}, "Boundaries")); diff != "" {
+				t.Errorf("mismatch (-want, got):\n%s", diff)
+			}
 		})
 	}
 }
 
 func (s *eventsSuite) TestHistogramMetricFunc_Record() {
+	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+
 	tests := []struct {
 		name string
 		v    int64
@@ -270,8 +294,7 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 					Sum:                    number.NewInt64Number(2),
 					Count:                  1,
 					Histogram: aggregation.Buckets{
-						Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
-						Counts:     []uint64{0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+						Counts: []uint64{0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 					},
 				},
 			},
@@ -288,8 +311,7 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 					Sum:                    number.NewInt64Number(4.0),
 					Count:                  1,
 					Histogram: aggregation.Buckets{
-						Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
-						Counts:     []uint64{0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
+						Counts: []uint64{0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0},
 					},
 					Attributes: []attribute.KeyValue{
 						attribute.String("operation", "awesome"),
@@ -300,17 +322,24 @@ func (s *eventsSuite) TestHistogramMetricFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test"))))
-			emp.Histogram(tt.name, WithMetricUnit("By")).Record(tt.v, tt.tags...)
-			s.testexporter.Collect(emp.context)
+			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test")))
+			emp.Histogram(tt.name, &MetricOptions{
+				Description: "what you see is not a test",
+				Unit:        Bytes,
+			}).Record(tt.v, tt.tags...)
+			testexporter.Collect(emp.context)
 
-			s.NotEmpty(s.testexporter.Records)
-			s.Equal(tt.want, s.testexporter.Records)
+			s.NotEmpty(testexporter.Records)
+			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual), cmpopts.IgnoreFields(aggregation.Buckets{}, "Boundaries")); diff != "" {
+				t.Errorf("mismatch (-want, got):\n%s", diff)
+			}
 		})
 	}
 }
 
 func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
+	meterProvider, testexporter := metrictest.NewTestMeterProvider()
+
 	tests := []struct {
 		name     string
 		v        int64
@@ -356,81 +385,102 @@ func (s *eventsSuite) TestCounterMetricWithTagsMergeFunc_Record() {
 	}
 	for _, tt := range tests {
 		s.T().Run(tt.name, func(t *testing.T) {
-			emp := NewEventMetricProvider(NewMetricEventExporter(NewOtelMetricHandler(s.meterProvider.Meter("test")))).WithTags(tt.rootTags...).(*eventMetricProvider)
-			emp.Counter(tt.name).Record(tt.v, tt.tags...)
-			s.testexporter.Collect(emp.context)
+			emp := NewEventMetricProvider(NewOtelMetricHandler(log.NewTestLogger(), meterProvider.Meter("test"))).WithTags(tt.rootTags...).(*eventMetricProvider)
+			emp.Counter(tt.name, &MetricOptions{
+				Description: "what you see is not a test",
+			}).Record(tt.v, tt.tags...)
+			testexporter.Collect(emp.context)
 
-			s.NotEmpty(s.testexporter.Records)
+			s.NotEmpty(testexporter.Records)
 
-			sort.Slice(tt.want[0].Attributes, func(i, j int) bool {
-				return tt.want[0].Attributes[i].Key < tt.want[0].Attributes[j].Key
-			})
-
-			sort.Slice(s.testexporter.Records[0].Attributes, func(i, j int) bool {
-				return s.testexporter.Records[0].Attributes[i].Key < s.testexporter.Records[0].Attributes[j].Key
-			})
-
-			s.Equal(tt.want, s.testexporter.Records)
+			if diff := cmp.Diff(tt.want, testexporter.Records, cmp.Comparer(valuesEqual), cmpopts.SortSlices(func(x, y attribute.KeyValue) bool {
+				return x.Key < y.Key
+			})); diff != "" {
+				t.Errorf("mismatch (-want, got):\n%s", diff)
+			}
 		})
 	}
 }
 
 func BenchmarkParallelHistogram(b *testing.B) {
-	emp := NewEventMetricProvider(nil)
+	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
 	b.ResetTimer()
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Histogram("test-bench-histogram", WithMetricUnit(Bytes)).Record(1024, OperationTag("everything-is-awesome-3"))
+				emp.Histogram("test-bench-histogram", &MetricOptions{
+					Description: "what you see is not a test",
+					Unit:        Bytes,
+				}).Record(1024)
 			}
 		},
 	)
 }
 
 func BenchmarkParallelCounter(b *testing.B) {
-	emp := NewEventMetricProvider(nil)
+	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-1"))
 	b.ResetTimer()
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Counter("test-bench-counter").Record(1024, OperationTag("everything-is-awesome-1"))
+				emp.Counter("test-bench-counter", &MetricOptions{
+					Description: "what you see is not a test",
+				}).Record(1024)
 			}
 		},
 	)
 }
 
 func BenchmarkParallelGauge(b *testing.B) {
-	emp := NewEventMetricProvider(nil)
+	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-2"))
 	b.ResetTimer()
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Gauge("test-bench-gauge").Record(1024, OperationTag("everything-is-awesome-2"))
+				emp.Gauge("test-bench-gauge", &MetricOptions{
+					Description: "what you see is not a test",
+				}).Record(1024)
 			}
 		},
 	)
 }
 
 func BenchmarkParallelTimer(b *testing.B) {
-	emp := NewEventMetricProvider(nil)
+	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-4"))
 	b.ResetTimer()
 	b.RunParallel(
 		func(p *testing.PB) {
 			for p.Next() {
-				emp.Timer("test-bench-timer").Record(time.Hour, OperationTag("everything-is-awesome-4"))
+				emp.Timer("test-bench-timer", &MetricOptions{
+					Description: "what you see is not a test",
+				}).Record(time.Hour)
 			}
 		},
 	)
 }
 
 func BenchmarkAllTheMetrics(b *testing.B) {
-	emp := NewEventMetricProvider(nil)
+	emp := NewEventMetricProvider(NoopMetricHandler).WithTags(OperationTag("everything-is-awesome-3"))
 	b.ResetTimer()
 
-	for i := 0; i < b.N; i++ {
-		emp.Histogram("test-bench-histogram", WithMetricUnit(Bytes)).Record(1024, OperationTag("everything-is-awesome-3"))
-		emp.Counter("test-bench-counter").Record(1024, OperationTag("everything-is-awesome-1"))
-		emp.Gauge("test-bench-gauge").Record(1024, OperationTag("everything-is-awesome-2"))
-		emp.Timer("test-bench-timer").Record(time.Hour, OperationTag("everything-is-awesome-4"))
-	}
+	b.RunParallel(
+		func(p *testing.PB) {
+			for p.Next() {
+				emp.Histogram("test-bench-histogram", &MetricOptions{
+					Description: "what you see is not a test",
+					Unit:        Bytes,
+				}).Record(1024, ServiceTypeTag("test-service"))
+				emp.Counter("test-bench-counter", &MetricOptions{
+					Description: "what you see is not a test",
+				}).Record(1024, ServiceTypeTag("test-service"))
+				emp.Gauge("test-bench-gauge", &MetricOptions{
+					Description: "what you see is not a test",
+				}).Record(1024, ServiceTypeTag("test-service"))
+				emp.Timer("test-bench-timer", &MetricOptions{
+					Description: "what you see is not a test",
+				}).Record(time.Hour, ServiceTypeTag("test-service"))
+
+			}
+		},
+	)
 }

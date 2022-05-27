@@ -26,18 +26,19 @@ package metrics
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/uber-go/tally/v4"
 	"golang.org/x/exp/event"
+
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 )
 
 type TallyMetricHandler struct {
-	scope tally.Scope
-	mu    sync.Mutex
-
+	scope       tally.Scope
+	mu          sync.Mutex
+	l           log.Logger
 	recordFuncs map[event.Metric]tallyRecordFunc
 
 	perUnitBuckets map[MetricUnit]tally.Buckets
@@ -48,13 +49,14 @@ type tallyRecordFunc func(event.Label)
 var _ event.Handler = (*TallyMetricHandler)(nil)
 
 // NewTallyMetricHandler creates a new tally event.Handler.
-func NewTallyMetricHandler(scope tally.Scope, perUnitHistogramBoundaries map[string][]float64) *TallyMetricHandler {
+func NewTallyMetricHandler(log log.Logger, scope tally.Scope, perUnitHistogramBoundaries map[string][]float64) *TallyMetricHandler {
 	perUnitBuckets := make(map[MetricUnit]tally.Buckets)
 	for unit, boundariesList := range perUnitHistogramBoundaries {
 		perUnitBuckets[MetricUnit(unit)] = tally.ValueBuckets(boundariesList)
 	}
 
 	return &TallyMetricHandler{
+		l:              log,
 		scope:          scope,
 		perUnitBuckets: perUnitBuckets,
 		recordFuncs:    make(map[event.Metric]tallyRecordFunc),
@@ -68,17 +70,20 @@ func (t *TallyMetricHandler) Event(ctx context.Context, e *event.Event) context.
 
 	mi, ok := event.MetricKey.Find(e)
 	if !ok {
-		panic(errors.New("no metric key for metric event"))
+		t.l.Fatal("no metric key for metric event", tag.NewAnyTag("event", e))
 	}
+
 	em := mi.(event.Metric)
 	lval := e.Find(event.MetricVal)
 	if !lval.HasValue() {
-		panic(errors.New("no metric value for metric event"))
+		t.l.Fatal("no metric value for metric event", tag.NewAnyTag("event", e))
 	}
+
 	rf := t.getRecordFunc(em, labelsToMap(e.Labels))
 	if rf == nil {
-		panic(fmt.Errorf("unable to record for metric %v", em))
+		t.l.Fatal("unable to record for metric", tag.NewAnyTag("event", e))
 	}
+
 	rf(lval)
 	return ctx
 }

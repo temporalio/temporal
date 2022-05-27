@@ -26,23 +26,24 @@ package metrics
 
 import (
 	"context"
-	"sort"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/stretchr/testify/assert"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/export/aggregation"
 	"go.opentelemetry.io/otel/sdk/metric/metrictest"
 	"go.opentelemetry.io/otel/sdk/metric/number"
+	"go.temporal.io/server/common/log"
 	"golang.org/x/exp/event"
 )
 
 func TestMeter(t *testing.T) {
 	ctx := context.Background()
 	mp, exp := metrictest.NewTestMeterProvider()
-	mh := NewOtelMetricHandler(mp.Meter("test"))
+	mh := NewOtelMetricHandler(log.NewTestLogger(), mp.Meter("test"))
 	ctx = event.WithExporter(ctx, event.NewExporter(mh, nil))
 	recordMetrics(ctx)
 
@@ -70,8 +71,7 @@ func TestMeter(t *testing.T) {
 			AggregationKind:        aggregation.HistogramKind,
 			NumberKind:             number.Int64Kind,
 			Histogram: aggregation.Buckets{
-				Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
-				Counts:     []uint64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
+				Counts: []uint64{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2},
 			},
 		},
 		{
@@ -94,22 +94,14 @@ func TestMeter(t *testing.T) {
 			Count:                  1,
 			AggregationKind:        aggregation.HistogramKind,
 			Histogram: aggregation.Buckets{
-				Boundaries: []float64{5000, 10000, 25000, 50000, 100000, 250000, 500000, 1e+06, 2.5e+06, 5e+06, 1e+07},
-				Counts:     []uint64{0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
+				Counts: []uint64{0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0},
 			},
 		},
 	}
 
-	// Sort for comparison
-	sort.Slice(got, func(i, j int) bool {
-		return got[i].InstrumentName < got[j].InstrumentName
-	})
-
-	sort.Slice(want, func(i, j int) bool {
-		return want[i].InstrumentName < want[j].InstrumentName
-	})
-
-	if diff := cmp.Diff(want, got, cmp.Comparer(valuesEqual)); diff != "" {
+	if diff := cmp.Diff(want, got, cmp.Comparer(valuesEqual), cmpopts.SortSlices(func(x, y metrictest.ExportRecord) bool {
+		return x.InstrumentName < y.InstrumentName
+	}), cmpopts.IgnoreFields(aggregation.Buckets{}, "Boundaries")); diff != "" {
 		t.Errorf("mismatch (-want, got):\n%s", diff)
 	}
 }
