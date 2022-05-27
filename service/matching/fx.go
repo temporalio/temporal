@@ -41,14 +41,11 @@ import (
 	persistenceClient "go.temporal.io/server/common/persistence/client"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/rpc/interceptor"
-	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/matching/configs"
 )
 
 var Module = fx.Options(
-	telemetry.GlobalModule,
-	telemetry.ServiceModule(common.MatchingServiceName),
 	fx.Provide(dynamicconfig.NewCollection),
 	fx.Provide(NewConfig),
 	fx.Provide(PersistenceMaxQpsProvider),

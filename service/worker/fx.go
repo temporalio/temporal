@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common/resolver"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/searchattribute"
-	"go.temporal.io/server/common/telemetry"
 	"go.temporal.io/server/service"
 	"go.temporal.io/server/service/worker/addsearchattributes"
 	"go.temporal.io/server/service/worker/deletenamespace"
@@ -51,8 +50,6 @@ import (
 
 var Module = fx.Options(
 	migration.Module,
-	telemetry.GlobalModule,
-	telemetry.ServiceModule(common.WorkerServiceName),
 	addsearchattributes.Module,
 	resource.Module,
 	deletenamespace.Module,

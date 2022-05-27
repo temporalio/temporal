@@ -27,10 +27,20 @@ package temporal
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"go.temporal.io/server/service/history/replication"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/propagation"
+	otelresource "go.opentelemetry.io/otel/sdk/resource"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 
 	"go.uber.org/fx"
@@ -132,6 +142,7 @@ func NewServerFx(opts ...ServerOption) *ServerFx {
 		ServerFxImplModule,
 		fx.Supply(opts),
 		fx.Provide(ServerOptionsProvider),
+		TraceExportModule,
 
 		fx.Provide(PersistenceFactoryProvider),
 		fx.Provide(HistoryServiceProvider),
@@ -328,6 +339,7 @@ type (
 		Authorizer                 authorization.Authorizer
 		ClaimMapper                authorization.ClaimMapper
 		DataStoreFactory           persistenceClient.AbstractDataStoreFactory
+		SpanExporters              []sdktrace.SpanExporter
 	}
 )
 
@@ -373,6 +385,8 @@ func HistoryServiceProvider(
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
 		fx.Provide(workflow.NewTaskGeneratorProvider),
+		fx.Supply(params.SpanExporters),
+		ServiceTracingModule(serviceName),
 		resource.DefaultOptions,
 		history.QueueProcessorModule,
 		history.Module,
@@ -430,6 +444,8 @@ func MatchingServiceProvider(
 		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Supply(params.SpanExporters),
+		ServiceTracingModule(serviceName),
 		resource.DefaultOptions,
 		matching.Module,
 		fx.NopLogger,
@@ -486,6 +502,8 @@ func FrontendServiceProvider(
 		fx.Provide(func() resource.NamespaceLogger { return params.NamespaceLogger }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Supply(params.SpanExporters),
+		ServiceTracingModule(serviceName),
 		resource.DefaultOptions,
 		frontend.Module,
 		fx.NopLogger,
@@ -541,6 +559,8 @@ func WorkerServiceProvider(
 		fx.Provide(func() metrics.Reporter { return params.ServerReporter }),
 		fx.Provide(func() esclient.Client { return params.EsClient }),
 		fx.Provide(params.PersistenceFactoryProvider),
+		fx.Supply(params.SpanExporters),
+		ServiceTracingModule(serviceName),
 		resource.DefaultOptions,
 		worker.Module,
 		fx.NopLogger,
@@ -761,4 +781,95 @@ func verifyPersistenceCompatibleVersion(config config.Persistence, persistenceSe
 		return fmt.Errorf("sql schema version compatibility check failed: %w", err)
 	}
 	return nil
+}
+
+// TraceExportModule holds process-global telemetry fx state. The following
+// types can be overriden/augmented with fx.Replace/fx.Decorate:
+//
+// - []go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc.Option
+//   default: empty slice or oteltracegrpc.WithInsecure() depending on $OTEL_EXPORTER_OTLP_INSECURE
+// - go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc.Client
+// - []go.opentelemetry.io/otel/sdk/trace.SpanExporter
+var TraceExportModule = fx.Options(
+	// https://github.com/open-telemetry/opentelemetry-specification/blob/v1.11.0/specification/protocol/exporter.md#configuration-options
+	// not yet supported by the Go OTEL sdk as of v1.7.0 so we'll do it manually here
+	fx.Provide(func() []otlptracegrpc.Option {
+		opts := []otlptracegrpc.Option{}
+		if boolstr := os.Getenv("OTEL_EXPORTER_OTLP_INSECURE"); boolstr == "true" {
+			opts = append(opts, otlptracegrpc.WithInsecure())
+		}
+		return opts
+	}),
+	// Need this func to have the right type signature - fx will not inject a
+	// slice into a provider func defined with variadic parameters
+	fx.Provide(func(opts []otlptracegrpc.Option) otlptrace.Client {
+		return otlptracegrpc.NewClient(opts...)
+	}),
+	fx.Provide(func(lc fx.Lifecycle, c otlptrace.Client) []sdktrace.SpanExporter {
+		e := otlptrace.NewUnstarted(c)
+		lc.Append(fx.Hook{OnStart: e.Start, OnStop: e.Shutdown})
+		return []sdktrace.SpanExporter{e}
+	}),
+)
+
+// ServiceTracingModule holds per-service (i.e. frontend/history/matching/worker) fx
+// state. The following types can be overriden with fx.Replace/fx.Decorate:
+//
+// - []go.opentelemetry.io/otel/sdk/trace.BatchSpanProcessorOption
+//   default: empty slice
+// - []go.opentelemetry.io/otel/sdk/trace.SpanProcessor
+//   default: wrap each sdktrace.SpanExporter with sdktrace.NewBatchSpanProcessor
+// - *go.opentelemetry.io/otel/sdk/resource.Resource
+//   default: resource.Default() augmented with the supplied serviceName
+// - []go.opentelemetry.io/otel/sdk/trace.TracerProviderOption
+//   default: the provided resource.Resource and each of the sdktrace.SpanExporter
+// - go.opentelemetry.io/otel/trace.TracerProvider
+//   default: sdktrace.NewTracerProvider with each of the sdktrace.TracerProviderOption
+// - go.opentelemetry.io/otel/ppropagation.TextMapPropagator
+//   default: propagation.TraceContext{}
+// - []go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/ogelgrpc.Option
+//   default: just otelgrpc.WithTracerProvider
+func ServiceTracingModule(serviceName string) fx.Option {
+	if !strings.HasPrefix(serviceName, "io.temporal.") {
+		serviceName = fmt.Sprintf("io.temporal.%s", serviceName)
+	}
+	return fx.Options(
+		fx.Supply([]sdktrace.BatchSpanProcessorOption{}),
+		fx.Provide(func(exps []sdktrace.SpanExporter, opts []sdktrace.BatchSpanProcessorOption) []sdktrace.SpanProcessor {
+			sps := make([]sdktrace.SpanProcessor, 0, len(exps))
+			for _, exp := range exps {
+				sps = append(sps, sdktrace.NewBatchSpanProcessor(exp, opts...))
+			}
+			return sps
+		}),
+		fx.Provide(func() (*otelresource.Resource, error) {
+			return otelresource.Merge(
+				otelresource.Default(),
+				otelresource.NewSchemaless(
+					semconv.ServiceNameKey.String(serviceName),
+					// todo: semconv.ServiceInstanceIDKey.String("?"),
+				))
+		}),
+		fx.Provide(func(r *otelresource.Resource, sps []sdktrace.SpanProcessor) []sdktrace.TracerProviderOption {
+			opts := make([]sdktrace.TracerProviderOption, 0, len(sps)+1)
+			opts = append(opts, sdktrace.WithResource(r))
+			for _, sp := range sps {
+				opts = append(opts, sdktrace.WithSpanProcessor(sp))
+			}
+			return opts
+		}),
+		fx.Provide(func(lc fx.Lifecycle, opts []sdktrace.TracerProviderOption) trace.TracerProvider {
+			tp := sdktrace.NewTracerProvider(opts...)
+			lc.Append(fx.Hook{OnStop: tp.Shutdown})
+			return tp
+		}),
+		// Haven't had use for baggage propagation yet
+		fx.Provide(func() propagation.TextMapPropagator { return propagation.TraceContext{} }),
+		fx.Provide(func(tp trace.TracerProvider, tmp propagation.TextMapPropagator) []otelgrpc.Option {
+			return []otelgrpc.Option{
+				otelgrpc.WithTracerProvider(tp),
+				otelgrpc.WithPropagators(tmp),
+			}
+		}),
+	)
 }
