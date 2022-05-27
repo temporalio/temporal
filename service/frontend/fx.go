@@ -28,6 +28,7 @@ import (
 	"context"
 	"net"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/health"
@@ -140,6 +141,7 @@ func GrpcServerOptionsProvider(
 	audienceGetter authorization.JWTAudienceMapper,
 	customInterceptors []grpc.UnaryServerInterceptor,
 	metricsClient metrics.Client,
+	otelGrpcOpts []otelgrpc.Option,
 ) []grpc.ServerOption {
 	kep := keepalive.EnforcementPolicy{
 		MinTime:             serviceConfig.KeepAliveMinTime(),
@@ -159,6 +161,7 @@ func GrpcServerOptionsProvider(
 	interceptors := []grpc.UnaryServerInterceptor{
 		namespaceLogInterceptor.Intercept,
 		rpc.ServiceErrorInterceptor,
+		otelgrpc.UnaryServerInterceptor(otelGrpcOpts...),
 		metrics.NewServerMetricsContextInjectorInterceptor(),
 		telemetryInterceptor.Intercept,
 		namespaceValidatorInterceptor.Intercept,
