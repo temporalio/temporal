@@ -863,6 +863,11 @@ func (e *MutableStateImpl) GetCompletionEvent(
 	return event, nil
 }
 
+// GetWorkflowCloseTime returns workflow closed time, returns nil for open workflow
+func (e *MutableStateImpl) GetWorkflowCloseTime() *time.Time {
+	return e.executionInfo.CloseTime
+}
+
 // GetStartEvent retrieves the workflow start event from mutable state
 func (e *MutableStateImpl) GetStartEvent(
 	ctx context.Context,
@@ -2410,6 +2415,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionCompletedEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionCompletedEventAttributes().GetNewExecutionRunId()
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2454,6 +2460,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionFailedEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionFailedEventAttributes().GetNewExecutionRunId()
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2497,6 +2504,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionTimedoutEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = event.GetWorkflowExecutionTimedOutEventAttributes().GetNewExecutionRunId()
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -2576,6 +2584,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionCanceledEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = ""
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -3099,6 +3108,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionTerminatedEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = ""
+	e.executionInfo.CloseTime = event.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(event)
 	return nil
@@ -3253,6 +3263,7 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionContinuedAsNewEvent(
 	}
 	e.executionInfo.CompletionEventBatchId = firstEventID // Used when completion event needs to be loaded from database
 	e.executionInfo.NewExecutionRunId = continueAsNewEvent.GetWorkflowExecutionContinuedAsNewEventAttributes().GetNewExecutionRunId()
+	e.executionInfo.CloseTime = continueAsNewEvent.GetEventTime()
 	e.ClearStickyness()
 	e.writeEventToCache(continueAsNewEvent)
 	return nil
