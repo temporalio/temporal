@@ -150,6 +150,7 @@ func NewReplicationTaskProcessor(
 			replicationTaskFetcher.GetRateLimiter(),
 		}),
 		taskRetryPolicy:      taskRetryPolicy,
+		dlqRetryPolicy:       dlqRetryPolicy,
 		requestChan:          replicationTaskFetcher.GetRequestChan(),
 		syncShardChan:        make(chan *replicationspb.SyncShardStatus, 1),
 		shutdownChan:         make(chan struct{}),
