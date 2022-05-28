@@ -232,6 +232,8 @@ func (s *integrationSuite) TestChildWorkflowExecution() {
 	s.NotNil(completedEvent)
 	completedAttributes := completedEvent.GetChildWorkflowExecutionCompletedEventAttributes()
 	s.Equal(s.namespace, completedAttributes.Namespace)
+	// TODO: change to s.Equal(s.namespaceID) once it is available.
+	s.NotEmpty(completedAttributes.NamespaceId)
 	s.Equal(childID, completedAttributes.WorkflowExecution.WorkflowId)
 	s.Equal(wtChild, completedAttributes.WorkflowType.Name)
 	s.Equal("Child Done", s.decodePayloadsString(completedAttributes.GetResult()))

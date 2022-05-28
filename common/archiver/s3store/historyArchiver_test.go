@@ -43,7 +43,6 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	enumspb "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	"go.temporal.io/api/serviceerror"
@@ -71,9 +70,7 @@ const (
 	testBucketURI            = "s3://test-bucket"
 )
 
-var (
-	testBranchToken = []byte{1, 2, 3}
-)
+var testBranchToken = []byte{1, 2, 3}
 
 type historyArchiverSuite struct {
 	*require.Assertions
@@ -101,13 +98,10 @@ func (s *historyArchiverSuite) TearDownSuite() {
 }
 
 func (s *historyArchiverSuite) SetupTest() {
-	scope := tally.NewTestScope("test", nil)
 	s.Assertions = require.New(s.T())
-	metricsClient, err := metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.History)
-	s.Require().NoError(err, "metrics.NewClient")
 	s.container = &archiver.HistoryBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metricsClient,
+		MetricsClient: metrics.NoopClient,
 	}
 
 	s.controller = gomock.NewController(s.T())

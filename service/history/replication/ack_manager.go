@@ -250,16 +250,12 @@ func (p *ackMgrImpl) getTasks(
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
 	for {
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-			ShardID:      p.shard.GetShardID(),
-			TaskCategory: tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.Key{
-				TaskID: minTaskID + 1,
-			},
-			ExclusiveMaxTaskKey: tasks.Key{
-				TaskID: maxTaskID + 1,
-			},
-			BatchSize:     batchSize,
-			NextPageToken: token,
+			ShardID:             p.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
+			BatchSize:           batchSize,
+			NextPageToken:       token,
 		})
 		if err != nil {
 			return nil, 0, err
@@ -476,8 +472,8 @@ func (p *ackMgrImpl) generateHistoryReplicationTask(
 			replicationTask := &replicationspb.ReplicationTask{
 				TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
 				SourceTaskId: taskID,
-				Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-					HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+				Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+					HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 						NamespaceId:         namespaceID.String(),
 						WorkflowId:          workflowID,
 						RunId:               runID,

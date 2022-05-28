@@ -92,18 +92,18 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 				// No progress were made. Something bad happened on task processor side or new executions were created during deletion.
 				// Return non-retryable error and workflow will try to delete executions again.
 				a.logger.Warn("No progress were made.", tag.WorkflowNamespace(nsName.String()), tag.Attempt(activityInfo.Attempt), tag.Counter(int(count)))
-				return errors.ErrNoProgress
+				return errors.NewNoProgressError(int(count))
 			}
 		}
 
 		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(int(count)))
 		activity.RecordHeartbeat(ctx, count)
-		return errors.ErrExecutionsStillExist
+		return errors.NewExecutionsStillExistError(int(count))
 	}
 
 	if notDeletedCount > 0 {
 		a.logger.Warn("Some workflow executions were not deleted and still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(notDeletedCount))
-		return errors.ErrNotDeletedExecutionsStillExist
+		return errors.NewNotDeletedExecutionsStillExistError(notDeletedCount)
 	}
 
 	return nil
@@ -129,7 +129,7 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 
 	if len(resp.Executions) > 0 {
 		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()))
-		return errors.ErrExecutionsStillExist
+		return errors.NewSomeExecutionsStillExistError()
 	}
 	return nil
 }

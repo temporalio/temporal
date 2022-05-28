@@ -161,8 +161,8 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 	remoteTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -179,8 +179,8 @@ func (s *dlqHandlerSuite) TestReadMessages_OK() {
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.Key{TaskID: persistence.EmptyQueueMessageID + 1},
-			ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			BatchSize:           pageSize,
 			NextPageToken:       pageToken,
 		},
@@ -207,8 +207,8 @@ func (s *dlqHandlerSuite) TestPurgeMessages() {
 			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 				ShardID:             s.mockShard.GetShardID(),
 				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: tasks.Key{TaskID: persistence.EmptyQueueMessageID + 1},
-				ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+				InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
+				ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			},
 			SourceClusterName: s.sourceCluster,
 		}).Return(nil)
@@ -250,8 +250,8 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 	remoteTask := &replicationspb.ReplicationTask{
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_TASK,
 		SourceTaskId: taskID,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -268,8 +268,8 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.Key{TaskID: persistence.EmptyQueueMessageID + 1},
-			ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			BatchSize:           pageSize,
 			NextPageToken:       pageToken,
 		},
@@ -286,8 +286,8 @@ func (s *dlqHandlerSuite) TestMergeMessages() {
 		RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 			ShardID:             s.mockShard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.Key{TaskID: persistence.EmptyQueueMessageID + 1},
-			ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			InclusiveMinTaskKey: tasks.NewImmediateKey(persistence.EmptyQueueMessageID + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 		},
 		SourceClusterName: s.sourceCluster,
 	}).Return(nil)

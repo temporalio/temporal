@@ -226,8 +226,8 @@ func (s *taskProcessorSuite) TestHandleReplicationTask_History() {
 
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -337,8 +337,8 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 
 	task := &replicationspb.ReplicationTask{
 		TaskType: enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -372,7 +372,7 @@ func (s *taskProcessorSuite) TestConvertTaskToDLQTask_History() {
 func (s *taskProcessorSuite) TestCleanupReplicationTask_Noop() {
 	ackedTaskID := int64(12345)
 	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.Key{TaskID: ackedTaskID})
+	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.NewImmediateKey(ackedTaskID))
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID
@@ -383,18 +383,16 @@ func (s *taskProcessorSuite) TestCleanupReplicationTask_Noop() {
 func (s *taskProcessorSuite) TestCleanupReplicationTask_Cleanup() {
 	ackedTaskID := int64(12345)
 	s.mockResource.ShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.Key{TaskID: ackedTaskID})
+	err := s.mockShard.UpdateQueueClusterAckLevel(tasks.CategoryReplication, cluster.TestAlternativeClusterName, tasks.NewImmediateKey(ackedTaskID))
 	s.NoError(err)
 
 	s.replicationTaskProcessor.minTxAckedTaskID = ackedTaskID - 1
 	s.mockExecutionManager.EXPECT().RangeCompleteHistoryTasks(
 		gomock.Any(),
 		&persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:      s.shardID,
-			TaskCategory: tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: tasks.Key{
-				TaskID: ackedTaskID + 1,
-			},
+			ShardID:             s.shardID,
+			TaskCategory:        tasks.CategoryReplication,
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(ackedTaskID + 1),
 		},
 	).Return(nil)
 	err = s.replicationTaskProcessor.cleanupReplicationTasks()
@@ -425,8 +423,8 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_More() {
 	task := &replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,
@@ -498,8 +496,8 @@ func (s *taskProcessorSuite) TestPaginationFn_Success_NoMore() {
 	task := &replicationspb.ReplicationTask{
 		SourceTaskId: taskID,
 		TaskType:     enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK,
-		Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{
-			HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
+		Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+			HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
 				NamespaceId: namespaceID,
 				WorkflowId:  workflowID,
 				RunId:       runID,

@@ -327,14 +327,10 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:      t.shard.GetShardID(),
-			TaskCategory: tasks.CategoryTransfer,
-			InclusiveMinTaskKey: tasks.Key{
-				TaskID: lowerAckLevel + 1,
-			},
-			ExclusiveMaxTaskKey: tasks.Key{
-				TaskID: upperAckLevel + 1,
-			},
+			ShardID:             t.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryTransfer,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(upperAckLevel + 1),
 		})
 		if err != nil {
 			return err
@@ -343,7 +339,7 @@ func (t *transferQueueProcessorImpl) completeTransfer() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateQueueAckLevel(tasks.CategoryTransfer, tasks.Key{TaskID: upperAckLevel})
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryTransfer, tasks.NewImmediateKey(upperAckLevel))
 }
 
 func (t *transferQueueProcessorImpl) listenToClusterMetadataChange() {

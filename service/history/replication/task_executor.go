@@ -196,7 +196,7 @@ func (e *taskExecutorImpl) handleHistoryReplicationTask(
 	forceApply bool,
 ) error {
 
-	attr := task.GetHistoryTaskV2Attributes()
+	attr := task.GetHistoryTaskAttributes()
 	doContinue, err := e.filterTask(namespace.ID(attr.GetNamespaceId()), forceApply)
 	if err != nil || !doContinue {
 		return err

@@ -31,15 +31,22 @@ import (
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
+)
+
+const (
+	defaultMonitorTickerDuration = time.Minute
+	defaultMonitorTickerJitter   = 0.15
 )
 
 type (
 	// ParallelProcessorOptions is the configs for ParallelProcessor
 	ParallelProcessorOptions struct {
 		QueueSize   int
-		WorkerCount int
+		WorkerCount dynamicconfig.IntPropertyFn
 	}
 
 	ParallelProcessor struct {
@@ -49,9 +56,10 @@ type (
 		metricsScope metrics.Scope
 		logger       log.Logger
 
-		tasksChan    chan Task
-		shutdownChan chan struct{}
-		workerWG     sync.WaitGroup
+		tasksChan        chan Task
+		shutdownChan     chan struct{}
+		shutdownWG       sync.WaitGroup
+		workerShutdownCh []chan struct{}
 	}
 )
 
@@ -82,10 +90,10 @@ func (p *ParallelProcessor) Start() {
 		return
 	}
 
-	p.workerWG.Add(p.options.WorkerCount)
-	for i := 0; i < p.options.WorkerCount; i++ {
-		go p.processTask()
-	}
+	p.startWorkers(p.options.WorkerCount())
+
+	p.shutdownWG.Add(1)
+	go p.workerMonitor()
 
 	p.logger.Info("Parallel task processor started")
 }
@@ -104,7 +112,7 @@ func (p *ParallelProcessor) Stop() {
 	p.drainTasks()
 
 	go func() {
-		if success := common.AwaitWaitGroup(&p.workerWG, time.Minute); !success {
+		if success := common.AwaitWaitGroup(&p.shutdownWG, time.Minute); !success {
 			p.logger.Warn("parallel processor timed out waiting for workers")
 		}
 	}()
@@ -119,8 +127,64 @@ func (p *ParallelProcessor) Submit(task Task) {
 	}
 }
 
-func (p *ParallelProcessor) processTask() {
-	defer p.workerWG.Done()
+func (p *ParallelProcessor) workerMonitor() {
+	defer p.shutdownWG.Done()
+
+	timer := time.NewTimer(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
+	defer timer.Stop()
+
+	for {
+		select {
+		case <-p.shutdownChan:
+			p.stopWorkers(len(p.workerShutdownCh))
+			return
+		case <-timer.C:
+			timer.Reset(backoff.JitDuration(defaultMonitorTickerDuration, defaultMonitorTickerJitter))
+
+			targetWorkerNum := p.options.WorkerCount()
+			currentWorkerNum := len(p.workerShutdownCh)
+
+			if targetWorkerNum == currentWorkerNum {
+				continue
+			}
+
+			if targetWorkerNum > currentWorkerNum {
+				p.startWorkers(targetWorkerNum - currentWorkerNum)
+			} else {
+				p.stopWorkers(currentWorkerNum - targetWorkerNum)
+			}
+			p.logger.Info("Update worker pool size", tag.Key("worker-pool-size"), tag.Value(targetWorkerNum))
+		}
+	}
+}
+
+func (p *ParallelProcessor) startWorkers(
+	count int,
+) {
+	for i := 0; i < count; i++ {
+		shutdownCh := make(chan struct{})
+		p.workerShutdownCh = append(p.workerShutdownCh, shutdownCh)
+
+		p.shutdownWG.Add(1)
+		go p.processTask(shutdownCh)
+	}
+}
+
+func (p *ParallelProcessor) stopWorkers(
+	count int,
+) {
+	shutdownChToClose := p.workerShutdownCh[:count]
+	p.workerShutdownCh = p.workerShutdownCh[count:]
+
+	for _, shutdownCh := range shutdownChToClose {
+		close(shutdownCh)
+	}
+}
+
+func (p *ParallelProcessor) processTask(
+	shutdownCh chan struct{},
+) {
+	defer p.shutdownWG.Done()
 
 	for {
 		if p.isStopped() {
@@ -131,7 +195,7 @@ func (p *ParallelProcessor) processTask() {
 		case task := <-p.tasksChan:
 			p.executeTask(task)
 
-		case <-p.shutdownChan:
+		case <-shutdownCh:
 			return
 		}
 	}

@@ -395,7 +395,7 @@ func (p *taskProcessorImpl) convertTaskToDLQTask(
 		}, nil
 
 	case enumsspb.REPLICATION_TASK_TYPE_HISTORY_V2_TASK:
-		taskAttributes := replicationTask.GetHistoryTaskV2Attributes()
+		taskAttributes := replicationTask.GetHistoryTaskAttributes()
 
 		events, err := p.historySerializer.DeserializeEvents(taskAttributes.GetEvents())
 		if err != nil {
@@ -505,11 +505,9 @@ func (p *taskProcessorImpl) cleanupReplicationTasks() error {
 	err := p.shard.GetExecutionManager().RangeCompleteHistoryTasks(
 		context.TODO(),
 		&persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:      p.shard.GetShardID(),
-			TaskCategory: tasks.CategoryReplication,
-			ExclusiveMaxTaskKey: tasks.Key{
-				TaskID: *minAckedTaskID + 1,
-			},
+			ShardID:             p.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(*minAckedTaskID + 1),
 		},
 	)
 	if err == nil {

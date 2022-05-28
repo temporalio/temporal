@@ -270,7 +270,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessUserTimerTimeout_Pending
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name().String(),
+		Namespace:   s.namespaceEntry.Name().String(),
+		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.WorkflowID,
 			RunId:      timerTask.RunID,
@@ -500,7 +501,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityTimeout_Pending(
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name().String(),
+		Namespace:   s.namespaceEntry.Name().String(),
+		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.WorkflowID,
 			RunId:      timerTask.RunID,
@@ -845,7 +847,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTaskTimeout_Pend
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name().String(),
+		Namespace:   s.namespaceEntry.Name().String(),
+		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.WorkflowID,
 			RunId:      timerTask.RunID,
@@ -1001,7 +1004,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowBackoffTimer_Pen
 
 	s.mockShard.SetCurrentTime(s.clusterName, time.Now().UTC().Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name().String(),
+		Namespace:   s.namespaceEntry.Name().String(),
+		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.WorkflowID,
 			RunId:      timerTask.RunID,
@@ -1127,7 +1131,8 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessWorkflowTimeout_Pending(
 
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name().String(),
+		Namespace:   s.namespaceEntry.Name().String(),
+		NamespaceId: s.namespaceEntry.ID().String(),
 		Execution: &commonpb.WorkflowExecution{
 			WorkflowId: timerTask.WorkflowID,
 			RunId:      timerTask.RunID,
@@ -1486,8 +1491,9 @@ func (s *timerQueueStandbyTaskExecutorSuite) TestProcessActivityRetryTimer_Pendi
 	// resend history post action
 	s.mockShard.SetCurrentTime(s.clusterName, s.now.Add(s.fetchHistoryDuration))
 	s.mockAdminClient.EXPECT().RefreshWorkflowTasks(gomock.Any(), &adminservice.RefreshWorkflowTasksRequest{
-		Namespace: s.namespaceEntry.Name().String(),
-		Execution: &execution,
+		NamespaceId: s.namespaceEntry.ID().String(),
+		Namespace:   s.namespaceEntry.Name().String(),
+		Execution:   &execution,
 	}).Return(&adminservice.RefreshWorkflowTasksResponse{}, nil)
 	s.mockNDCHistoryResender.EXPECT().SendSingleWorkflowHistory(
 		s.clusterName,

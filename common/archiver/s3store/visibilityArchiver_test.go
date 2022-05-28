@@ -52,7 +52,6 @@ import (
 	"go.temporal.io/server/common/payload"
 	"go.temporal.io/server/common/primitives/timestamp"
 
-	"github.com/uber-go/tally/v4"
 	commonpb "go.temporal.io/api/common/v1"
 	workflowpb "go.temporal.io/api/workflow/v1"
 )
@@ -133,20 +132,16 @@ const (
 
 func (s *visibilityArchiverSuite) SetupSuite() {
 	var err error
-	scope := tally.NewTestScope("test", nil)
 
 	s.testArchivalURI, err = archiver.NewURI(testBucketURI)
 	s.Require().NoError(err)
-	metricsClient, err := metrics.NewClient(&metrics.ClientConfig{}, scope, metrics.History)
-	s.Require().NoError(err, "metrics.NewClient")
 	s.container = &archiver.VisibilityBootstrapContainer{
 		Logger:        log.NewNoopLogger(),
-		MetricsClient: metricsClient,
+		MetricsClient: metrics.NoopClient,
 	}
 }
 
 func (s *visibilityArchiverSuite) TearDownSuite() {
-
 }
 
 func (s *visibilityArchiverSuite) SetupTest() {
@@ -161,6 +156,7 @@ func (s *visibilityArchiverSuite) SetupTest() {
 func (s *visibilityArchiverSuite) TearDownTest() {
 	s.controller.Finish()
 }
+
 func (s *visibilityArchiverSuite) TestArchive_Fail_InvalidURI() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI("wrongscheme://")
@@ -273,6 +269,7 @@ func (s *visibilityArchiverSuite) TestQuery_Fail_InvalidQuery() {
 	s.Error(err)
 	s.Nil(response)
 }
+
 func (s *visibilityArchiverSuite) TestQuery_Success_DirectoryNotExist() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	mockParser := NewMockQueryParser(s.controller)
@@ -520,6 +517,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQueryPrecisions() {
 		s.Len(response.Executions, 2, "Iteration ", i)
 	}
 }
+
 func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 	visibilityArchiver := s.newTestVisibilityArchiver()
 	URI, err := archiver.NewURI(testBucketURI + "/archive-and-query")
@@ -540,7 +538,7 @@ func (s *visibilityArchiverSuite) TestArchiveAndQuery() {
 		Query:       "parsed by mockParser",
 	}
 	executions := []*workflowpb.WorkflowExecutionInfo{}
-	var first = true
+	first := true
 	for first || request.NextPageToken != nil {
 		response, err := visibilityArchiver.Query(context.Background(), URI, request, searchattribute.TestNameTypeMap)
 		s.NoError(err)

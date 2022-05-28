@@ -45,10 +45,7 @@ type (
 )
 
 func (t *UpsertExecutionVisibilityTask) GetKey() Key {
-	return Key{
-		FireTime: time.Unix(0, 0),
-		TaskID:   t.TaskID,
-	}
+	return NewImmediateKey(t.TaskID)
 }
 
 func (t *UpsertExecutionVisibilityTask) GetVersion() int64 {

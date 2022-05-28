@@ -43,7 +43,7 @@ import (
 type (
 	// Config contains the config items for metrics subsystem
 	Config struct {
-		ClientConfig `yaml:"clientConfig,inline""`
+		ClientConfig `yaml:"clientConfig,inline"`
 
 		// M3 is the configuration for m3 metrics reporter
 		M3 *m3.Configuration `yaml:"m3"`
@@ -95,7 +95,7 @@ type (
 	// PrometheusConfig is a new format for config for prometheus metrics.
 	PrometheusConfig struct {
 		// Metric framework: Tally/OpenTelemetry
-		Framework string `yaml:framework`
+		Framework string `yaml:"framework"`
 		// Address for prometheus to serve metrics from.
 		ListenAddress string `yaml:"listenAddress"`
 		// DefaultHistogramBoundaries defines the default histogram bucket
@@ -293,9 +293,6 @@ func InitReporterFromPrometheusConfig(logger log.Logger, config *PrometheusConfi
 // Current priority order is:
 // m3 > statsd > prometheus
 func NewScope(logger log.Logger, c *Config) tally.Scope {
-	if c.M3 != nil {
-		return newM3Scope(logger, c)
-	}
 	if c.Statsd != nil {
 		return newStatsdScope(logger, c)
 	}
@@ -361,22 +358,6 @@ func setDefaultPerUnitHistogramBoundaries(clientConfig *ClientConfig) {
 	}
 }
 
-// newM3Scope returns a new m3 scope with
-// a default reporting interval of a second
-func newM3Scope(logger log.Logger, c *Config) tally.Scope {
-	reporter, err := c.M3.NewReporter()
-	if err != nil {
-		logger.Fatal("error creating m3 reporter", tag.Error(err))
-	}
-	scopeOpts := tally.ScopeOptions{
-		Tags:           c.Tags,
-		CachedReporter: reporter,
-		Prefix:         c.Prefix,
-	}
-	scope, _ := tally.NewRootScope(scopeOpts, time.Second)
-	return scope
-}
-
 // newM3Scope returns a new statsd scope with
 // a default reporting interval of a second
 func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
@@ -388,7 +369,7 @@ func newStatsdScope(logger log.Logger, c *Config) tally.Scope {
 	if err != nil {
 		logger.Fatal("error creating statsd client", tag.Error(err))
 	}
-	//NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
+	// NOTE: according to ( https://github.com/uber-go/tally )Tally's statsd implementation doesn't support tagging.
 	// Therefore, we implement Tally interface to have a statsd reporter that can support tagging
 	reporter := statsdreporter.NewReporter(statter, tallystatsdreporter.Options{})
 	scopeOpts := tally.ScopeOptions{

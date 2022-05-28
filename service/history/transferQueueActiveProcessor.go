@@ -96,7 +96,7 @@ func newTransferQueueActiveProcessor(
 		return shard.UpdateQueueClusterAckLevel(
 			tasks.CategoryTransfer,
 			currentClusterName,
-			tasks.Key{TaskID: ackLevel},
+			tasks.NewImmediateKey(ackLevel),
 		)
 	}
 
@@ -273,9 +273,9 @@ func newTransferQueueFailoverProcessor(
 			failoverUUID,
 			persistence.FailoverLevel{
 				StartTime:    failoverStartTime,
-				MinLevel:     tasks.Key{TaskID: minLevel},
-				CurrentLevel: tasks.Key{TaskID: ackLevel},
-				MaxLevel:     tasks.Key{TaskID: maxLevel},
+				MinLevel:     tasks.NewImmediateKey(minLevel),
+				CurrentLevel: tasks.NewImmediateKey(ackLevel),
+				MaxLevel:     tasks.NewImmediateKey(maxLevel),
 				NamespaceIDs: namespaceIDs,
 			},
 		)

@@ -95,7 +95,7 @@ func newTransferQueueStandbyProcessor(
 		return shard.GetQueueMaxReadLevel(tasks.CategoryTransfer, clusterName).TaskID
 	}
 	updateClusterAckLevel := func(ackLevel int64) error {
-		return shard.UpdateQueueClusterAckLevel(tasks.CategoryTransfer, clusterName, tasks.Key{TaskID: ackLevel})
+		return shard.UpdateQueueClusterAckLevel(tasks.CategoryTransfer, clusterName, tasks.NewImmediateKey(ackLevel))
 	}
 	transferQueueShutdown := func() error {
 		return nil

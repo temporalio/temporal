@@ -33,6 +33,7 @@ import (
 	"testing"
 	"time"
 
+	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 
 	enumspb "go.temporal.io/api/enums/v1"
@@ -80,8 +81,8 @@ type (
 		serializer serialization.Serializer
 		logger     log.Logger
 
-		namespace                   string
-		namespaceID                 string
+		namespace                   namespace.Name
+		namespaceID                 namespace.ID
 		version                     int64
 		versionIncrement            int64
 		mockAdminClient             map[string]adminservice.AdminServiceClient
@@ -148,7 +149,7 @@ func (s *nDCIntegrationTestSuite) SetupSuite() {
 
 	s.version = clusterConfigs[1].ClusterMetadata.ClusterInformation[clusterConfigs[1].ClusterMetadata.CurrentClusterName].InitialFailoverVersion
 	s.versionIncrement = clusterConfigs[0].ClusterMetadata.FailoverVersionIncrement
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, s.version)
 }
 
 func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
@@ -187,7 +188,7 @@ func (s *nDCIntegrationTestSuite) GetReplicationMessagesMock(
 func (s *nDCIntegrationTestSuite) SetupTest() {
 	// Have to define our overridden assertions in the test setup. If we did it earlier, s.T() will return nil
 	s.Assertions = require.New(s.T())
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, s.version)
 }
 
 func (s *nDCIntegrationTestSuite) TearDownSuite() {
@@ -212,7 +213,7 @@ func (s *nDCIntegrationTestSuite) TestSingleBranch() {
 	for _, version := range versions {
 		runID := uuid.New()
 		var historyBatch []*historypb.History
-		s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
+		s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 
 		for s.generator.HasNextVertex() {
 			events := s.generator.GetNextVertices()
@@ -249,7 +250,7 @@ func (s *nDCIntegrationTestSuite) verifyEventHistory(
 	replicatedHistory, err := passiveClient.GetWorkflowExecutionHistory(
 		host.NewContext(),
 		&workflowservice.GetWorkflowExecutionHistoryRequest{
-			Namespace: s.namespace,
+			Namespace: s.namespace.String(),
 			Execution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -302,7 +303,7 @@ func (s *nDCIntegrationTestSuite) TestMultipleBranches() {
 		runID := uuid.New()
 
 		var baseBranch []*historypb.History
-		baseGenerator := test.InitializeHistoryEventGenerator(s.namespace, version)
+		baseGenerator := test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 		baseGenerator.SetVersion(version)
 
 		for i := 0; i < 10 && baseGenerator.HasNextVertex(); i++ {
@@ -385,7 +386,7 @@ func (s *nDCIntegrationTestSuite) TestEmptyVersionAndNonEmptyVersion() {
 
 	version := common.EmptyVersion
 	var baseBranch []*historypb.History
-	baseGenerator := test.InitializeHistoryEventGenerator(s.namespace, version)
+	baseGenerator := test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 	baseGenerator.SetVersion(version)
 
 	for i := 0; i < 10 && baseGenerator.HasNextVertex(); i++ {
@@ -1066,7 +1067,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	version := int64(102)
 	runID := uuid.New()
 	historyBatch := []*historypb.History{}
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 
 	for s.generator.HasNextVertex() {
 		events := s.generator.GetNextVertices()
@@ -1091,7 +1092,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_ZombieWorkflow() {
 	version = int64(2)
 	runID = uuid.New()
 	historyBatch = []*historypb.History{}
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 
 	// verify two batches of zombie workflow are call reapply API
 	reapplyCount := 0
@@ -1142,7 +1143,7 @@ func (s *nDCIntegrationTestSuite) TestEventsReapply_UpdateNonCurrentBranch() {
 
 	historyClient := s.active.GetHistoryClient()
 
-	s.generator = test.InitializeHistoryEventGenerator(s.namespace, version)
+	s.generator = test.InitializeHistoryEventGenerator(s.namespace, s.namespaceID, version)
 	baseBranch := []*historypb.History{}
 	var taskID int64
 	for i := 0; i < 4 && s.generator.HasNextVertex(); i++ {
@@ -1252,7 +1253,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	historyClient := s.active.GetHistoryClient()
 	adminClient := s.active.GetAdminClient()
 	getHistory := func(
-		namespace string,
+		nsName namespace.Name,
+		nsID namespace.ID,
 		workflowID string,
 		runID string,
 		startEventID int64,
@@ -1268,7 +1270,8 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 			RunId:      runID,
 		}
 		return adminClient.GetWorkflowExecutionRawHistoryV2(host.NewContext(), &adminservice.GetWorkflowExecutionRawHistoryV2Request{
-			Namespace:         namespace,
+			Namespace:         nsName.String(),
+			NamespaceId:       nsID.String(),
 			Execution:         execution,
 			StartEventId:      startEventID,
 			StartEventVersion: startEventVersion,
@@ -1651,6 +1654,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
 			s.namespace,
+			s.namespaceID,
 			workflowID,
 			runID,
 			14,
@@ -1673,6 +1677,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
 			s.namespace,
+			s.namespaceID,
 			workflowID,
 			runID,
 			17,
@@ -1695,6 +1700,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
 			s.namespace,
+			s.namespaceID,
 			workflowID,
 			runID,
 			14,
@@ -1717,6 +1723,7 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 	for continuePaging := true; continuePaging; continuePaging = len(token) != 0 {
 		resp, err := getHistory(
 			s.namespace,
+			s.namespaceID,
 			workflowID,
 			runID,
 			common.EmptyEventID,
@@ -1735,10 +1742,10 @@ func (s *nDCIntegrationTestSuite) TestAdminGetWorkflowExecutionRawHistoryV2() {
 }
 
 func (s *nDCIntegrationTestSuite) registerNamespace() {
-	s.namespace = "test-simple-workflow-ndc-" + common.GenerateRandomString(5)
+	s.namespace = namespace.Name("test-simple-workflow-ndc-" + common.GenerateRandomString(5))
 	client1 := s.active.GetFrontendClient() // active
 	_, err := client1.RegisterNamespace(host.NewContext(), &workflowservice.RegisterNamespaceRequest{
-		Namespace:         s.namespace,
+		Namespace:         s.namespace.String(),
 		IsGlobalNamespace: true,
 		Clusters:          clusterReplicationConfig,
 		// make the active cluster `standby` and replicate to `active` cluster
@@ -1750,19 +1757,20 @@ func (s *nDCIntegrationTestSuite) registerNamespace() {
 	time.Sleep(2 * host.NamespaceCacheRefreshInterval)
 
 	descReq := &workflowservice.DescribeNamespaceRequest{
-		Namespace: s.namespace,
+		Namespace: s.namespace.String(),
 	}
 	resp, err := client1.DescribeNamespace(host.NewContext(), descReq)
 	s.Require().NoError(err)
 	s.Require().NotNil(resp)
-	s.namespaceID = resp.GetNamespaceInfo().GetId()
+	s.namespaceID = namespace.ID(resp.GetNamespaceInfo().GetId())
 
-	s.logger.Info("Registered namespace", tag.WorkflowNamespace(s.namespace), tag.WorkflowNamespaceID(s.namespaceID))
+	s.logger.Info("Registered namespace", tag.WorkflowNamespace(s.namespace.String()), tag.WorkflowNamespaceID(s.namespaceID.String()))
 }
 
 func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 	event *historypb.HistoryEvent,
-	namespace string,
+	nsName namespace.Name,
+	nsID namespace.ID,
 	workflowID string,
 	runID string,
 	version int64,
@@ -1786,8 +1794,9 @@ func (s *nDCIntegrationTestSuite) generateNewRunHistory(
 		Version:   version,
 		TaskId:    1,
 		Attributes: &historypb.HistoryEvent_WorkflowExecutionStartedEventAttributes{WorkflowExecutionStartedEventAttributes: &historypb.WorkflowExecutionStartedEventAttributes{
-			WorkflowType:            &commonpb.WorkflowType{Name: workflowType},
-			ParentWorkflowNamespace: namespace,
+			WorkflowType:              &commonpb.WorkflowType{Name: workflowType},
+			ParentWorkflowNamespace:   nsName.String(),
+			ParentWorkflowNamespaceId: nsID.String(),
 			ParentWorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: uuid.New(),
 				RunId:      uuid.New(),
@@ -1826,7 +1835,7 @@ func (s *nDCIntegrationTestSuite) generateEventBlobs(
 	//  we should generate these as part of modeled based testing
 	lastEvent := batch.Events[len(batch.Events)-1]
 	newRunEventBlob := s.generateNewRunHistory(
-		lastEvent, s.namespace, workflowID, runID, lastEvent.GetVersion(), workflowType, taskqueue,
+		lastEvent, s.namespace, s.namespaceID, workflowID, runID, lastEvent.GetVersion(), workflowType, taskqueue,
 	)
 	// must serialize events batch after attempt on continue as new as generateNewRunHistory will
 	// modify the NewExecutionRunId attr
@@ -1847,7 +1856,7 @@ func (s *nDCIntegrationTestSuite) applyEvents(
 	for _, batch := range eventBatches {
 		eventBlob, newRunEventBlob := s.generateEventBlobs(workflowID, runID, workflowType, taskqueue, batch)
 		req := &historyservice.ReplicateEventsV2Request{
-			NamespaceId: s.namespaceID,
+			NamespaceId: s.namespaceID.String(),
 			WorkflowExecution: &commonpb.WorkflowExecution{
 				WorkflowId: workflowID,
 				RunId:      runID,
@@ -1881,14 +1890,15 @@ func (s *nDCIntegrationTestSuite) applyEventsThroughFetcher(
 		replicationTask := &replicationspb.ReplicationTask{
 			TaskType:     taskType,
 			SourceTaskId: 1,
-			Attributes: &replicationspb.ReplicationTask_HistoryTaskV2Attributes{HistoryTaskV2Attributes: &replicationspb.HistoryTaskV2Attributes{
-				NamespaceId:         s.namespaceID,
-				WorkflowId:          workflowID,
-				RunId:               runID,
-				VersionHistoryItems: versionHistory.GetItems(),
-				Events:              eventBlob,
-				NewRunEvents:        newRunEventBlob,
-			}},
+			Attributes: &replicationspb.ReplicationTask_HistoryTaskAttributes{
+				HistoryTaskAttributes: &replicationspb.HistoryTaskAttributes{
+					NamespaceId:         s.namespaceID.String(),
+					WorkflowId:          workflowID,
+					RunId:               runID,
+					VersionHistoryItems: versionHistory.GetItems(),
+					Events:              eventBlob,
+					NewRunEvents:        newRunEventBlob,
+				}},
 		}
 
 		s.standByReplicationTasksChan <- replicationTask

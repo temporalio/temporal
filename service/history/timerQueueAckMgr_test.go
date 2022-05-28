@@ -190,16 +190,12 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_More() {
 	batchSize := 10
 
 	request := &persistence.GetHistoryTasksRequest{
-		ShardID:      s.mockShard.GetShardID(),
-		TaskCategory: tasks.CategoryTimer,
-		InclusiveMinTaskKey: tasks.Key{
-			FireTime: minTimestamp,
-		},
-		ExclusiveMaxTaskKey: tasks.Key{
-			FireTime: maxTimestamp,
-		},
-		BatchSize:     batchSize,
-		NextPageToken: []byte("some random input next page token"),
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryTimer,
+		InclusiveMinTaskKey: tasks.NewKey(minTimestamp, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(maxTimestamp, 0),
+		BatchSize:           batchSize,
+		NextPageToken:       []byte("some random input next page token"),
 	}
 
 	response := &persistence.GetHistoryTasksResponse{
@@ -234,16 +230,12 @@ func (s *timerQueueAckMgrSuite) TestGetTimerTasks_NoMore() {
 	batchSize := 10
 
 	request := &persistence.GetHistoryTasksRequest{
-		ShardID:      s.mockShard.GetShardID(),
-		TaskCategory: tasks.CategoryTimer,
-		InclusiveMinTaskKey: tasks.Key{
-			FireTime: minTimestamp,
-		},
-		ExclusiveMaxTaskKey: tasks.Key{
-			FireTime: maxTimestamp,
-		},
-		BatchSize:     batchSize,
-		NextPageToken: nil,
+		ShardID:             s.mockShard.GetShardID(),
+		TaskCategory:        tasks.CategoryTimer,
+		InclusiveMinTaskKey: tasks.NewKey(minTimestamp, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(maxTimestamp, 0),
+		BatchSize:           batchSize,
+		NextPageToken:       nil,
 	}
 
 	response := &persistence.GetHistoryTasksResponse{
@@ -315,10 +307,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_NoNextPage() {
 	s.Equal(s.timerQueueAckMgr.maxQueryLevel.Add(s.timerQueueAckMgr.config.TimerProcessorMaxPollInterval()), *nextFireTime)
 	s.False(moreTasks)
 
-	timerSequenceID := tasks.Key{
-		FireTime: timer.VisibilityTimestamp,
-		TaskID:   timer.TaskID,
-	}
+	timerSequenceID := tasks.NewKey(timer.VisibilityTimestamp, timer.TaskID)
 	s.Len(s.timerQueueAckMgr.outstandingExecutables, 1)
 	s.Equal(ctasks.TaskStatePending, s.timerQueueAckMgr.outstandingExecutables[timerSequenceID].State())
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
@@ -369,10 +358,7 @@ func (s *timerQueueAckMgrSuite) TestReadTimerTasks_NoLookAhead_HasNextPage() {
 	s.Equal([]tasks.Task{timer}, filteredTasks)
 	s.Nil(nextFireTime)
 	s.True(moreTasks)
-	timerSequenceID := tasks.Key{
-		FireTime: timer.VisibilityTimestamp,
-		TaskID:   timer.TaskID,
-	}
+	timerSequenceID := tasks.NewKey(timer.VisibilityTimestamp, timer.TaskID)
 	s.Len(s.timerQueueAckMgr.outstandingExecutables, 1)
 	s.Equal(ctasks.TaskStatePending, s.timerQueueAckMgr.outstandingExecutables[timerSequenceID].State())
 	s.Equal(ackLevel, s.timerQueueAckMgr.ackLevel)
@@ -537,20 +523,14 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 	// we are not testing shard context
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	timerSequenceID1 := tasks.Key{
-		FireTime: timer1.VisibilityTimestamp,
-		TaskID:   timer1.TaskID,
-	}
+	timerSequenceID1 := tasks.NewKey(timer1.VisibilityTimestamp, timer1.TaskID)
 	filteredExecutables[0].Ack()
 	s.Equal(ctasks.TaskStateAcked, s.timerQueueAckMgr.outstandingExecutables[timerSequenceID1].State())
 	_ = s.timerQueueAckMgr.updateAckLevel()
 	s.Equal(timer1.VisibilityTimestamp.UnixNano(), s.mockShard.GetQueueClusterAckLevel(tasks.CategoryTimer, s.clusterName).FireTime.UnixNano())
 
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	timerSequenceID3 := tasks.Key{
-		FireTime: timer3.VisibilityTimestamp,
-		TaskID:   timer3.TaskID,
-	}
+	timerSequenceID3 := tasks.NewKey(timer3.VisibilityTimestamp, timer3.TaskID)
 	filteredExecutables[2].Ack()
 	s.Equal(ctasks.TaskStateAcked, s.timerQueueAckMgr.outstandingExecutables[timerSequenceID3].State())
 	_ = s.timerQueueAckMgr.updateAckLevel()
@@ -559,10 +539,7 @@ func (s *timerQueueAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 
 	// we are not testing shard context
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
-	timerSequenceID2 := tasks.Key{
-		FireTime: timer2.VisibilityTimestamp,
-		TaskID:   timer2.TaskID,
-	}
+	timerSequenceID2 := tasks.NewKey(timer2.VisibilityTimestamp, timer2.TaskID)
 	filteredExecutables[1].Ack()
 	s.Equal(ctasks.TaskStateAcked, s.timerQueueAckMgr.outstandingExecutables[timerSequenceID2].State())
 	_ = s.timerQueueAckMgr.updateAckLevel()
@@ -812,7 +789,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	from := time.Now().UTC().Add(-10 * time.Second)
 	s.timerQueueFailoverAckMgr.minQueryLevel = from
 	s.timerQueueFailoverAckMgr.maxQueryLevel = from
-	s.timerQueueFailoverAckMgr.ackLevel = tasks.Key{FireTime: from}
+	s.timerQueueFailoverAckMgr.ackLevel = tasks.NewKey(from, 0)
 
 	// create 3 timers, timer1 < timer2 < timer3 < now
 	timer1 := &tasks.ActivityTimeoutTask{
@@ -869,10 +846,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	s.Nil(nextFireTime)
 	s.False(moreTasks)
 
-	timerSequenceID2 := tasks.Key{
-		FireTime: timer2.VisibilityTimestamp,
-		TaskID:   timer2.TaskID,
-	}
+	timerSequenceID2 := tasks.NewKey(timer2.VisibilityTimestamp, timer2.TaskID)
 	filteredExecutables[1].Ack()
 	s.Equal(ctasks.TaskStateAcked, s.timerQueueFailoverAckMgr.outstandingExecutables[timerSequenceID2].State())
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
@@ -883,10 +857,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID3 := tasks.Key{
-		FireTime: timer3.VisibilityTimestamp,
-		TaskID:   timer3.TaskID,
-	}
+	timerSequenceID3 := tasks.NewKey(timer3.VisibilityTimestamp, timer3.TaskID)
 	filteredExecutables[2].Ack()
 	s.Equal(ctasks.TaskStateAcked, s.timerQueueFailoverAckMgr.outstandingExecutables[timerSequenceID3].State())
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)
@@ -897,10 +868,7 @@ func (s *timerQueueFailoverAckMgrSuite) TestReadCompleteUpdateTimerTasks() {
 	default:
 	}
 
-	timerSequenceID1 := tasks.Key{
-		FireTime: timer1.VisibilityTimestamp,
-		TaskID:   timer1.TaskID,
-	}
+	timerSequenceID1 := tasks.NewKey(timer1.VisibilityTimestamp, timer1.TaskID)
 	filteredExecutables[0].Ack()
 	s.Equal(ctasks.TaskStateAcked, s.timerQueueFailoverAckMgr.outstandingExecutables[timerSequenceID1].State())
 	s.mockShardMgr.EXPECT().UpdateShard(gomock.Any(), gomock.Any()).Return(nil)

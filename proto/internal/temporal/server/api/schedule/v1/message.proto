@@ -1,0 +1,133 @@
+// Copyright (c) 2020 Temporal Technologies, Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+syntax = "proto3";
+
+package temporal.server.api.schedule.v1;
+
+option go_package = "go.temporal.io/server/api/schedule/v1;schedule";
+
+import "temporal/api/common/v1/message.proto";
+import "temporal/api/failure/v1/message.proto";
+import "temporal/api/enums/v1/schedule.proto";
+import "temporal/api/enums/v1/workflow.proto";
+import "temporal/api/schedule/v1/message.proto";
+import "temporal/api/workflowservice/v1/request_response.proto";
+
+import "google/protobuf/timestamp.proto";
+
+import "dependencies/gogoproto/gogo.proto";
+
+message BufferedStart {
+    // Nominal (pre-jitter) and Actual (post-jitter) time of action
+    google.protobuf.Timestamp nominal_time = 1 [(gogoproto.stdtime) = true];
+    google.protobuf.Timestamp actual_time = 2 [(gogoproto.stdtime) = true];
+    // Overridden overlap policy
+    temporal.api.enums.v1.ScheduleOverlapPolicy overlap_policy = 3;
+    // Trigger-immediately or backfill
+    bool manual = 4;
+}
+
+message InternalState {
+    string namespace = 1;
+    string namespace_id = 2;
+    // this is just the workflow id of the scheduler, but accessing that from the workflow is
+    // currently not available during replay, so we just pass it in here.
+    string schedule_id = 8;
+
+    google.protobuf.Timestamp last_processed_time = 3 [(gogoproto.stdtime) = true];
+    repeated BufferedStart buffered_starts = 4;
+
+    // last completion/failure
+    temporal.api.common.v1.Payloads last_completion_result = 5;
+    temporal.api.failure.v1.Failure continued_failure = 6;
+
+    // conflict token is implemented as simple sequence number
+    int64 conflict_token = 7;
+}
+
+message StartScheduleArgs {
+    temporal.api.schedule.v1.Schedule schedule = 1;
+    temporal.api.schedule.v1.ScheduleInfo info = 2;
+    temporal.api.schedule.v1.SchedulePatch initial_patch = 3;
+    InternalState state = 4;
+}
+
+message FullUpdateRequest {
+    temporal.api.schedule.v1.Schedule schedule = 1;
+    int64 conflict_token = 2;
+}
+
+message DescribeResponse {
+    temporal.api.schedule.v1.Schedule schedule = 1;
+    temporal.api.schedule.v1.ScheduleInfo info = 2;
+    int64 conflict_token = 3;
+}
+
+message WatchWorkflowRequest {
+    string namespace = 1;
+    string namespace_id = 2;
+    // Note: this will be sent to the activity with empty execution.run_id, and
+    // the run id that we started in first_execution_run_id.
+    temporal.api.common.v1.WorkflowExecution execution = 3;
+    string first_execution_run_id = 4;
+    bool long_poll = 5;
+}
+
+message WatchWorkflowResponse {
+    temporal.api.enums.v1.WorkflowExecutionStatus status = 1;
+    oneof result_failure {
+        temporal.api.common.v1.Payloads result = 2;
+        temporal.api.failure.v1.Failure failure = 3;
+    }
+}
+
+message StartWorkflowRequest {
+    string namespace_id = 1;
+    temporal.api.workflowservice.v1.StartWorkflowExecutionRequest request = 2;
+    google.protobuf.Timestamp start_time = 3 [(gogoproto.stdtime) = true];
+    temporal.api.common.v1.Payloads last_completion_result = 4;
+    temporal.api.failure.v1.Failure continued_failure = 5;
+}
+
+message StartWorkflowResponse {
+    string run_id = 1;
+    google.protobuf.Timestamp real_start_time = 2 [(gogoproto.stdtime) = true];
+}
+
+message CancelWorkflowRequest {
+    string namespace = 1;
+    string namespace_id = 2;
+    string request_id = 3;
+    string identity = 4;
+    // Note: run id in execution is first execution run id
+    temporal.api.common.v1.WorkflowExecution execution = 5;
+    string reason = 6;
+}
+
+message TerminateWorkflowRequest {
+    string namespace = 1;
+    string namespace_id = 2;
+    string request_id = 3;
+    string identity = 4;
+    // Note: run id in execution is first execution run id
+    temporal.api.common.v1.WorkflowExecution execution = 5;
+    string reason = 6;
+}

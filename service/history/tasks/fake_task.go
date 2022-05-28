@@ -57,10 +57,7 @@ func NewFakeTask(
 }
 
 func (f *fakeTask) GetKey() Key {
-	return Key{
-		FireTime: f.VisibilityTimestamp,
-		TaskID:   f.TaskID,
-	}
+	return NewKey(f.VisibilityTimestamp, f.TaskID)
 }
 
 func (f *fakeTask) GetVersion() int64 {

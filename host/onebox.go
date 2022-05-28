@@ -388,13 +388,13 @@ func (c *temporalImpl) startFrontend(hosts map[string][]string, startWG *sync.Wa
 
 	rpcFactory := newRPCFactoryImpl(serviceName, c.FrontendGRPCAddress(), c.FrontendRingpopAddress(), c.logger)
 
-	metricsClient, err := metrics.NewClient(
+	metricsClient, err := metrics.NewTallyClient(
 		&metrics.ClientConfig{},
 		tally.NewTestScope(serviceName, make(map[string]string)),
 		metrics.GetMetricsServiceIdx(serviceName, c.logger),
 	)
 	if err != nil {
-		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+		c.logger.Fatal("metrics.NewTallyClient", tag.Error(err))
 	}
 
 	sdkClientFactory := sdk.NewClientFactory(
@@ -496,13 +496,13 @@ func (c *temporalImpl) startHistory(
 
 		rpcFactory := newRPCFactoryImpl(serviceName, grpcPort, membershipPorts[i], c.logger)
 
-		metricsClient, err := metrics.NewClient(
+		metricsClient, err := metrics.NewTallyClient(
 			&metrics.ClientConfig{},
 			tally.NewTestScope(serviceName, make(map[string]string)),
 			metrics.GetMetricsServiceIdx(serviceName, c.logger),
 		)
 		if err != nil {
-			c.logger.Fatal("metrics.NewClient", tag.Error(err))
+			c.logger.Fatal("metrics.NewTallyClient", tag.Error(err))
 		}
 
 		sdkClientFactory := sdk.NewClientFactory(
@@ -661,13 +661,13 @@ func (c *temporalImpl) startWorker(hosts map[string][]string, startWG *sync.Wait
 
 	rpcFactory := newRPCFactoryImpl(serviceName, c.WorkerGRPCServiceAddress(), c.WorkerServiceRingpopAddress(), c.logger)
 
-	metricsClient, err := metrics.NewClient(
+	metricsClient, err := metrics.NewTallyClient(
 		&metrics.ClientConfig{},
 		tally.NewTestScope(serviceName, make(map[string]string)),
 		metrics.GetMetricsServiceIdx(serviceName, c.logger),
 	)
 	if err != nil {
-		c.logger.Fatal("metrics.NewClient", tag.Error(err))
+		c.logger.Fatal("metrics.NewTallyClient", tag.Error(err))
 	}
 
 	sdkClientFactory := sdk.NewClientFactory(

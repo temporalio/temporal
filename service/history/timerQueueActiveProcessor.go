@@ -220,9 +220,9 @@ func newTimerQueueFailoverProcessor(
 			failoverUUID,
 			persistence.FailoverLevel{
 				StartTime:    failoverStartTime,
-				MinLevel:     tasks.Key{FireTime: minLevel},
+				MinLevel:     tasks.NewKey(minLevel, 0),
 				CurrentLevel: ackLevel,
-				MaxLevel:     tasks.Key{FireTime: maxLevel},
+				MaxLevel:     tasks.NewKey(maxLevel, 0),
 				NamespaceIDs: namespaceIDs,
 			},
 		)
