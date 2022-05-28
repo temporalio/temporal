@@ -137,4 +137,4 @@ require (
 	modernc.org/token v1.0.0 // indirect
 )
 
-replace golang.org/x/exp/event => github.com/jbreiding/exp/event v0.0.0-20220520231955-19dbdf2a3ad6
+replace golang.org/x/exp/event => github.com/temporalio/exp/event v0.0.0-20220528000931-d461cfabbedf
