@@ -53,6 +53,10 @@ import (
 	"go.temporal.io/server/service/history/workflow"
 )
 
+const (
+	ResetterIdentity = "resetter"
+)
+
 type (
 	workflowResetReapplyEventsFn func(ctx context.Context, resetMutableState workflow.MutableState) error
 
@@ -583,7 +587,7 @@ func (r *workflowResetterImpl) terminateWorkflow(
 		eventBatchFirstEventID,
 		terminateReason,
 		nil,
-		"resetter",
+		ResetterIdentity,
 		false,
 	)
 }
@@ -769,4 +773,11 @@ func (r *workflowResetterImpl) getPaginationFn(
 		}
 		return resp.History, resp.NextPageToken, nil
 	}
+}
+
+func IsResetting(event *historypb.HistoryEvent) bool {
+	if attributes := event.GetWorkflowExecutionTerminatedEventAttributes(); attributes != nil && attributes.Identity == ResetterIdentity {
+		return true
+	}
+	return false
 }
