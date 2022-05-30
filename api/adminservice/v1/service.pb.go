@@ -148,10 +148,13 @@ type AdminServiceClient interface {
 	// ReapplyEvents applies stale events to the current workflow and current run.
 	ReapplyEvents(ctx context.Context, in *ReapplyEventsRequest, opts ...grpc.CallOption) (*ReapplyEventsResponse, error)
 	// AddSearchAttributes add custom search attributes and returns comprehensive information about them.
+	// Deprecated. Use operatorservice instead.
 	AddSearchAttributes(ctx context.Context, in *AddSearchAttributesRequest, opts ...grpc.CallOption) (*AddSearchAttributesResponse, error)
 	// RemoveSearchAttributes removes custom search attributes and returns comprehensive information about them.
+	// Deprecated. Use operatorservice instead.
 	RemoveSearchAttributes(ctx context.Context, in *RemoveSearchAttributesRequest, opts ...grpc.CallOption) (*RemoveSearchAttributesResponse, error)
 	// GetSearchAttributes returns comprehensive information about search attributes.
+	// Deprecated. Use operatorservice instead.
 	GetSearchAttributes(ctx context.Context, in *GetSearchAttributesRequest, opts ...grpc.CallOption) (*GetSearchAttributesResponse, error)
 	// DescribeCluster returns information about Temporal cluster.
 	DescribeCluster(ctx context.Context, in *DescribeClusterRequest, opts ...grpc.CallOption) (*DescribeClusterResponse, error)
@@ -459,10 +462,13 @@ type AdminServiceServer interface {
 	// ReapplyEvents applies stale events to the current workflow and current run.
 	ReapplyEvents(context.Context, *ReapplyEventsRequest) (*ReapplyEventsResponse, error)
 	// AddSearchAttributes add custom search attributes and returns comprehensive information about them.
+	// Deprecated. Use operatorservice instead.
 	AddSearchAttributes(context.Context, *AddSearchAttributesRequest) (*AddSearchAttributesResponse, error)
 	// RemoveSearchAttributes removes custom search attributes and returns comprehensive information about them.
+	// Deprecated. Use operatorservice instead.
 	RemoveSearchAttributes(context.Context, *RemoveSearchAttributesRequest) (*RemoveSearchAttributesResponse, error)
 	// GetSearchAttributes returns comprehensive information about search attributes.
+	// Deprecated. Use operatorservice instead.
 	GetSearchAttributes(context.Context, *GetSearchAttributesRequest) (*GetSearchAttributesResponse, error)
 	// DescribeCluster returns information about Temporal cluster.
 	DescribeCluster(context.Context, *DescribeClusterRequest) (*DescribeClusterResponse, error)

@@ -26,7 +26,7 @@ require (
 	github.com/olivere/elastic v6.2.37+incompatible
 	github.com/olivere/elastic/v7 v7.0.32
 	github.com/pborman/uuid v1.2.1
-	github.com/prometheus/client_golang v1.12.1
+	github.com/prometheus/client_golang v1.12.2
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/stretchr/testify v1.7.1
 	github.com/temporalio/ringpop-go v0.0.0-20211012191444-6f91b5915e95
@@ -35,11 +35,11 @@ require (
 	github.com/urfave/cli v1.22.5
 	github.com/urfave/cli/v2 v2.4.0
 	github.com/xwb1989/sqlparser v0.0.0-20180606152119-120387863bf2
-	go.opentelemetry.io/otel v1.6.3
-	go.opentelemetry.io/otel/exporters/prometheus v0.29.0
-	go.opentelemetry.io/otel/metric v0.29.0
-	go.opentelemetry.io/otel/sdk v1.6.3
-	go.opentelemetry.io/otel/sdk/metric v0.29.0
+	go.opentelemetry.io/otel v1.7.0
+	go.opentelemetry.io/otel/exporters/prometheus v0.30.0
+	go.opentelemetry.io/otel/metric v0.30.0
+	go.opentelemetry.io/otel/sdk v1.7.0
+	go.opentelemetry.io/otel/sdk/metric v0.30.0
 	go.temporal.io/api v1.7.1-0.20220527042911-3de1acf95864
 	go.temporal.io/sdk v1.14.1-0.20220513214234-7ccfda678fed
 	go.temporal.io/version v0.3.0
@@ -48,6 +48,7 @@ require (
 	go.uber.org/multierr v1.8.0
 	go.uber.org/zap v1.21.0
 	golang.org/x/exp v0.0.0-20220428152302-39d4317da171
+	golang.org/x/exp/event v0.0.0-20220428152302-39d4317da171
 	golang.org/x/oauth2 v0.0.0-20220524215830-622c5d57e401
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306
 	google.golang.org/api v0.81.0
@@ -86,7 +87,7 @@ require (
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da // indirect
 	github.com/golang/protobuf v1.5.2 // indirect
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/google/go-cmp v0.5.8 // indirect
+	github.com/google/go-cmp v0.5.8
 	github.com/googleapis/gax-go/v2 v2.4.0 // indirect
 	github.com/googleapis/go-type-adapters v1.0.0 // indirect
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0 // indirect
@@ -101,7 +102,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.2.0 // indirect
-	github.com/prometheus/common v0.33.0 // indirect
+	github.com/prometheus/common v0.34.0 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20200410134404-eec4a21b6bb0 // indirect
@@ -112,7 +113,7 @@ require (
 	github.com/twmb/murmur3 v1.1.6 // indirect
 	github.com/uber-common/bark v1.3.0 // indirect
 	go.opencensus.io v0.23.0 // indirect
-	go.opentelemetry.io/otel/trace v1.6.3 // indirect
+	go.opentelemetry.io/otel/trace v1.7.0 // indirect
 	go.uber.org/dig v1.14.1 // indirect
 	golang.org/x/crypto v0.0.0-20220411220226-7b82a4e95df4 // indirect
 	golang.org/x/mod v0.6.0-dev.0.20220106191415-9b9b3d81d5e3 // indirect
@@ -135,3 +136,5 @@ require (
 	modernc.org/strutil v1.1.1 // indirect
 	modernc.org/token v1.0.0 // indirect
 )
+
+replace golang.org/x/exp/event => github.com/temporalio/exp/event v0.0.0-20220528000931-d461cfabbedf

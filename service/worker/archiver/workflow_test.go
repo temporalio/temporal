@@ -30,7 +30,6 @@ import (
 
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/worker"
@@ -160,9 +159,6 @@ func (s *workflowSuite) TestArchivalWorkflow_Success() {
 func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 	logger := log.NewTestLogger()
 	globalLogger = workflowTestLogger
-	var err error
-	globalMetricsClient, err = metrics.NewClient(&metrics.ClientConfig{}, tally.NewTestScope("replay", nil), metrics.Worker)
-	s.NoError(err)
 
 	globalConfig = &Config{
 		ArchiverConcurrency:           dynamicconfig.GetIntPropertyFn(50),
@@ -172,7 +168,7 @@ func (s *workflowSuite) TestReplayArchiveHistoryWorkflow() {
 
 	replayer := worker.NewWorkflowReplayer()
 	s.registerWorkflowsForReplayer(replayer)
-	err = replayer.ReplayWorkflowHistoryFromJSONFile(log.NewSdkLogger(logger), "testdata/archival_workflow_history_v1.json")
+	err := replayer.ReplayWorkflowHistoryFromJSONFile(log.NewSdkLogger(logger), "testdata/archival_workflow_history_v1.json")
 	s.NoError(err)
 }
 

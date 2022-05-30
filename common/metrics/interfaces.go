@@ -38,6 +38,7 @@ type (
 	// Stopwatch is an interface tracking of elapsed time, use the
 	// Stop() method to report time elapsed since its created back to the
 	// timer or histogram.
+	// Deprecated
 	Stopwatch interface {
 		// Stop records time elapsed from time of creation.
 		Stop()
@@ -46,6 +47,7 @@ type (
 	}
 
 	// Client is the interface used to report metrics tally.
+	// Deprecated
 	Client interface {
 		// IncCounter increments a counter metric
 		IncCounter(scope int, counter int)
@@ -71,6 +73,7 @@ type (
 	}
 
 	// Scope is an interface for metric.
+	// Deprecated
 	Scope interface {
 		// IncCounter increments a counter metric
 		IncCounter(counter int)
@@ -92,6 +95,7 @@ type (
 	}
 
 	// UserScope is an interface for reporting metrics by user code
+	// Deprecated
 	UserScope interface {
 		// IncCounter increments a counter metric
 		IncCounter(counter string)
@@ -113,6 +117,7 @@ type (
 	}
 
 	// Reporter is an interface for base constructor for metrics client.
+	// Deprecated
 	Reporter interface {
 		NewClient(logger log.Logger, serviceIdx ServiceIdx) (Client, error)
 		Stop(logger log.Logger)

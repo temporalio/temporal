@@ -110,7 +110,7 @@ func newTransferTaskScheduler(
 		queues.NewNoopPriorityAssigner(),
 		queues.SchedulerOptions{
 			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.TransferTaskWorkerCount(),
+				WorkerCount: config.TransferTaskWorkerCount,
 				QueueSize:   config.TransferTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{
