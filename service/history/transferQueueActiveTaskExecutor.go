@@ -449,6 +449,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			task,
 			weContext,
 			namespace.Name(task.TargetNamespaceID), // Use ID as namespace name because namespace is already deleted and name is used only for history.
+			namespace.ID(task.TargetNamespaceID),
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_NAMESPACE_NOT_FOUND)
@@ -464,6 +465,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			task,
 			weContext,
 			targetNamespaceName,
+			namespace.ID(task.TargetNamespaceID),
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			enumspb.CANCEL_EXTERNAL_WORKFLOW_EXECUTION_FAILED_CAUSE_EXTERNAL_WORKFLOW_EXECUTION_NOT_FOUND)
@@ -500,6 +502,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 			task,
 			weContext,
 			targetNamespaceName,
+			namespace.ID(task.TargetNamespaceID),
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			failedCause,
@@ -512,6 +515,7 @@ func (t *transferQueueActiveTaskExecutor) processCancelExecution(
 		task,
 		weContext,
 		targetNamespaceName,
+		namespace.ID(task.TargetNamespaceID),
 		task.TargetWorkflowID,
 		task.TargetRunID,
 	)
@@ -568,6 +572,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			task,
 			weContext,
 			namespace.Name(task.TargetNamespaceID), // Use ID as namespace name because namespace is already deleted and name is used only for history.
+			namespace.ID(task.TargetNamespaceID),
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			attributes.Control,
@@ -584,6 +589,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			task,
 			weContext,
 			targetNamespaceName,
+			namespace.ID(task.TargetNamespaceID),
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			attributes.Control,
@@ -621,6 +627,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 			task,
 			weContext,
 			targetNamespaceName,
+			namespace.ID(task.TargetNamespaceID),
 			task.TargetWorkflowID,
 			task.TargetRunID,
 			attributes.Control,
@@ -633,6 +640,7 @@ func (t *transferQueueActiveTaskExecutor) processSignalExecution(
 		task,
 		weContext,
 		targetNamespaceName,
+		namespace.ID(task.TargetNamespaceID),
 		task.TargetWorkflowID,
 		task.TargetRunID,
 		attributes.Control,
@@ -965,14 +973,12 @@ func (t *transferQueueActiveTaskExecutor) recordChildExecutionStarted(
 				return serviceerror.NewNotFound("Workflow execution already completed.")
 			}
 
-			namespace := namespace.Name(initiatedAttributes.Namespace)
 			ci, ok := mutableState.GetChildExecutionInfo(task.InitiatedID)
 			if !ok || ci.StartedId != common.EmptyEventID {
 				return serviceerror.NewNotFound("Pending child execution not found.")
 			}
 
 			_, err := mutableState.AddChildWorkflowExecutionStartedEvent(
-				namespace,
 				&commonpb.WorkflowExecution{
 					WorkflowId: task.TargetWorkflowID,
 					RunId:      runID,
@@ -1039,6 +1045,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 	task *tasks.CancelExecutionTask,
 	context workflow.Context,
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	targetWorkflowID string,
 	targetRunID string,
 ) error {
@@ -1057,6 +1064,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionComplete
 			_, err := mutableState.AddExternalWorkflowExecutionCancelRequested(
 				task.InitiatedID,
 				targetNamespace,
+				targetNamespaceID,
 				targetWorkflowID,
 				targetRunID,
 			)
@@ -1071,6 +1079,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 	task *tasks.SignalExecutionTask,
 	context workflow.Context,
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	targetWorkflowID string,
 	targetRunID string,
 	control string,
@@ -1090,6 +1099,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionCompleted(
 			_, err := mutableState.AddExternalWorkflowExecutionSignaled(
 				task.InitiatedID,
 				targetNamespace,
+				targetNamespaceID,
 				targetWorkflowID,
 				targetRunID,
 				control,
@@ -1104,6 +1114,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 	task *tasks.CancelExecutionTask,
 	context workflow.Context,
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	targetWorkflowID string,
 	targetRunID string,
 	failedCause enumspb.CancelExternalWorkflowExecutionFailedCause,
@@ -1123,6 +1134,7 @@ func (t *transferQueueActiveTaskExecutor) requestCancelExternalExecutionFailed(
 			_, err := mutableState.AddRequestCancelExternalWorkflowExecutionFailedEvent(
 				task.InitiatedID,
 				targetNamespace,
+				targetNamespaceID,
 				targetWorkflowID,
 				targetRunID,
 				failedCause,
@@ -1138,6 +1150,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 	task *tasks.SignalExecutionTask,
 	context workflow.Context,
 	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	targetWorkflowID string,
 	targetRunID string,
 	control string,
@@ -1158,6 +1171,7 @@ func (t *transferQueueActiveTaskExecutor) signalExternalExecutionFailed(
 			_, err := mutableState.AddSignalExternalWorkflowExecutionFailedEvent(
 				task.InitiatedID,
 				targetNamespace,
+				targetNamespaceID,
 				targetWorkflowID,
 				targetRunID,
 				control,
@@ -1441,19 +1455,25 @@ func (t *transferQueueActiveTaskExecutor) processParentClosePolicy(
 				continue
 			}
 
-			childNamespaceId, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-			switch err.(type) {
-			case nil:
-			case *serviceerror.NamespaceNotFound:
-				// If child namespace is deleted there is nothing to close.
-				continue
-			default:
-				return err
+			childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
+			if childNamespaceID.IsEmpty() {
+				// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
+				// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
+				var err error
+				childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
+				switch err.(type) {
+				case nil:
+				case *serviceerror.NamespaceNotFound:
+					// If child namespace is deleted there is nothing to close.
+					continue
+				default:
+					return err
+				}
 			}
 
 			executions = append(executions, parentclosepolicy.RequestDetail{
 				Namespace:   childInfo.Namespace,
-				NamespaceID: childNamespaceId.String(),
+				NamespaceID: childNamespaceID.String(),
 				WorkflowID:  childInfo.StartedWorkflowId,
 				RunID:       childInfo.StartedRunId,
 				Policy:      childInfo.ParentClosePolicy,
@@ -1501,12 +1521,17 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return nil
 
 	case enumspb.PARENT_CLOSE_POLICY_TERMINATE:
-		childNamespaceID, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-		if err != nil {
-			return err
+		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
+		if childNamespaceID.IsEmpty() {
+			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
+			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
+			var err error
+			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
+			if err != nil {
+				return err
+			}
 		}
-
-		_, err = t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
+		_, err := t.historyClient.TerminateWorkflowExecution(ctx, &historyservice.TerminateWorkflowExecutionRequest{
 			NamespaceId: childNamespaceID.String(),
 			TerminateRequest: &workflowservice.TerminateWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),
@@ -1525,12 +1550,18 @@ func (t *transferQueueActiveTaskExecutor) applyParentClosePolicy(
 		return err
 
 	case enumspb.PARENT_CLOSE_POLICY_REQUEST_CANCEL:
-		childNamespaceID, err := t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
-		if err != nil {
-			return err
+		childNamespaceID := namespace.ID(childInfo.GetNamespaceId())
+		if childNamespaceID.IsEmpty() {
+			// TODO (alex): Remove after childInfo.NamespaceId is back filled. Backward compatibility: old childInfo doesn't have NamespaceId set.
+			// TODO (alex): consider reverse lookup of namespace name from ID but namespace name is not actually used.
+			var err error
+			childNamespaceID, err = t.registry.GetNamespaceID(namespace.Name(childInfo.GetNamespace()))
+			if err != nil {
+				return err
+			}
 		}
 
-		_, err = t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
+		_, err := t.historyClient.RequestCancelWorkflowExecution(ctx, &historyservice.RequestCancelWorkflowExecutionRequest{
 			NamespaceId: childNamespaceID.String(),
 			CancelRequest: &workflowservice.RequestCancelWorkflowExecutionRequest{
 				Namespace: childInfo.GetNamespace(),

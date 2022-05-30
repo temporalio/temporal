@@ -295,6 +295,7 @@ message ChildExecutionInfo {
     temporal.api.enums.v1.ParentClosePolicy parent_close_policy = 11;
     int64 initiated_id = 12;
     temporal.server.api.clock.v1.VectorClock clock = 13;
+    string namespace_id = 14;
 }
 
 // request_cancel_map column

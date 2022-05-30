@@ -42,7 +42,6 @@ import (
 	workflowspb "go.temporal.io/server/api/workflow/v1"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
-	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/primitives/timestamp"
 )
 
@@ -270,7 +269,6 @@ func SetupNewWorkflowForRetryOrCron(
 	event, err := newMutableState.AddWorkflowExecutionStartedEventWithOptions(
 		newExecution,
 		req,
-		namespace.ID(parentInfo.GetNamespaceId()),
 		previousExecutionInfo.AutoResetPoints,
 		previousMutableState.GetExecutionState().GetRunId(),
 		firstRunID,

@@ -1477,7 +1477,6 @@ func (e *MutableStateImpl) addWorkflowExecutionStartedEventForContinueAsNew(
 	event, err := e.AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		req,
-		namespace.ID(parentExecutionInfo.GetNamespaceId()),
 		previousExecutionInfo.AutoResetPoints,
 		previousExecutionState.GetExecutionState().GetRunId(),
 		firstRunID,
@@ -1500,7 +1499,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 	return e.AddWorkflowExecutionStartedEventWithOptions(
 		execution,
 		startRequest,
-		namespace.ID(startRequest.ParentExecutionInfo.GetNamespaceId()),
 		nil, // resetPoints
 		"",  // prevRunID
 		execution.GetRunId(),
@@ -1510,7 +1508,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEvent(
 func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 	execution commonpb.WorkflowExecution,
 	startRequest *historyservice.StartWorkflowExecutionRequest,
-	parentNamespaceID namespace.ID,
 	resetPoints *workflowpb.ResetPoints,
 	prevRunID string,
 	firstRunID string,
@@ -1538,7 +1535,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 		execution.GetRunId(),
 	)
 	if err := e.ReplicateWorkflowExecutionStartedEvent(
-		parentNamespaceID,
 		startRequest.GetParentExecutionInfo().GetClock(),
 		execution,
 		startRequest.StartRequest.GetRequestId(),
@@ -1564,7 +1560,6 @@ func (e *MutableStateImpl) AddWorkflowExecutionStartedEventWithOptions(
 }
 
 func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
-	parentNamespaceID namespace.ID,
 	parentClock *clockspb.VectorClock,
 	execution commonpb.WorkflowExecution,
 	requestID string,
@@ -1599,9 +1594,9 @@ func (e *MutableStateImpl) ReplicateWorkflowExecutionStartedEvent(
 	e.executionInfo.WorkflowTaskTimeout = timestamp.DurationFromSeconds(0)
 
 	e.executionInfo.CronSchedule = event.GetCronSchedule()
-	e.executionInfo.ParentNamespaceId = parentNamespaceID.String()
 
 	if event.ParentWorkflowExecution != nil {
+		e.executionInfo.ParentNamespaceId = event.GetParentWorkflowNamespaceId()
 		e.executionInfo.ParentWorkflowId = event.ParentWorkflowExecution.GetWorkflowId()
 		e.executionInfo.ParentRunId = event.ParentWorkflowExecution.GetRunId()
 		e.executionInfo.ParentClock = parentClock
@@ -2585,6 +2580,7 @@ func (e *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionInitiatedEve
 	workflowTaskCompletedEventID int64,
 	cancelRequestID string,
 	command *commandpb.RequestCancelExternalWorkflowExecutionCommandAttributes,
+	targetNamespaceID namespace.ID,
 ) (*historypb.HistoryEvent, *persistencespb.RequestCancelInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowCancelInitiated
@@ -2592,7 +2588,7 @@ func (e *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionInitiatedEve
 		return nil, nil, err
 	}
 
-	event := e.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command)
+	event := e.hBuilder.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
 	rci, err := e.ReplicateRequestCancelExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, cancelRequestID)
 	if err != nil {
 		return nil, nil, err
@@ -2631,7 +2627,8 @@ func (e *MutableStateImpl) ReplicateRequestCancelExternalWorkflowExecutionInitia
 
 func (e *MutableStateImpl) AddExternalWorkflowExecutionCancelRequested(
 	initiatedID int64,
-	namespace namespace.Name,
+	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	workflowID string,
 	runID string,
 ) (*historypb.HistoryEvent, error) {
@@ -2652,7 +2649,8 @@ func (e *MutableStateImpl) AddExternalWorkflowExecutionCancelRequested(
 
 	event := e.hBuilder.AddExternalWorkflowExecutionCancelRequested(
 		initiatedID,
-		namespace,
+		targetNamespace,
+		targetNamespaceID,
 		workflowID,
 		runID,
 	)
@@ -2673,7 +2671,8 @@ func (e *MutableStateImpl) ReplicateExternalWorkflowExecutionCancelRequested(
 
 func (e *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionFailedEvent(
 	initiatedID int64,
-	namespace namespace.Name,
+	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	cause enumspb.CancelExternalWorkflowExecutionFailedCause,
@@ -2696,7 +2695,8 @@ func (e *MutableStateImpl) AddRequestCancelExternalWorkflowExecutionFailedEvent(
 	event := e.hBuilder.AddRequestCancelExternalWorkflowExecutionFailedEvent(
 		common.EmptyEventID, // TODO this field is not used at all
 		initiatedID,
-		namespace,
+		targetNamespace,
+		targetNamespaceID,
 		workflowID,
 		runID,
 		cause,
@@ -2720,6 +2720,7 @@ func (e *MutableStateImpl) AddSignalExternalWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	signalRequestID string,
 	command *commandpb.SignalExternalWorkflowExecutionCommandAttributes,
+	targetNamespaceID namespace.ID,
 ) (*historypb.HistoryEvent, *persistencespb.SignalInfo, error) {
 
 	opTag := tag.WorkflowActionExternalWorkflowSignalInitiated
@@ -2727,7 +2728,7 @@ func (e *MutableStateImpl) AddSignalExternalWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := e.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command)
+	event := e.hBuilder.AddSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
 	si, err := e.ReplicateSignalExternalWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, signalRequestID)
 	if err != nil {
 		return nil, nil, err
@@ -2811,7 +2812,8 @@ func mergeMapOfPayload(
 
 func (e *MutableStateImpl) AddExternalWorkflowExecutionSignaled(
 	initiatedID int64,
-	namespace namespace.Name,
+	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	control string, // TODO this field is probably deprecated
@@ -2833,7 +2835,8 @@ func (e *MutableStateImpl) AddExternalWorkflowExecutionSignaled(
 
 	event := e.hBuilder.AddExternalWorkflowExecutionSignaled(
 		initiatedID,
-		namespace,
+		targetNamespace,
+		targetNamespaceID,
 		workflowID,
 		runID,
 		control, // TODO this field is probably deprecated
@@ -2855,7 +2858,8 @@ func (e *MutableStateImpl) ReplicateExternalWorkflowExecutionSignaled(
 
 func (e *MutableStateImpl) AddSignalExternalWorkflowExecutionFailedEvent(
 	initiatedID int64,
-	namespace namespace.Name,
+	targetNamespace namespace.Name,
+	targetNamespaceID namespace.ID,
 	workflowID string,
 	runID string,
 	control string, // TODO this field is probably deprecated
@@ -2879,7 +2883,8 @@ func (e *MutableStateImpl) AddSignalExternalWorkflowExecutionFailedEvent(
 	event := e.hBuilder.AddSignalExternalWorkflowExecutionFailedEvent(
 		common.EmptyEventID, // TODO this field is not used at all
 		initiatedID,
-		namespace,
+		targetNamespace,
+		targetNamespaceID,
 		workflowID,
 		runID,
 		control, // TODO this field is probably deprecated
@@ -3262,6 +3267,7 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 	workflowTaskCompletedEventID int64,
 	createRequestID string,
 	command *commandpb.StartChildWorkflowExecutionCommandAttributes,
+	targetNamespaceID namespace.ID,
 ) (*historypb.HistoryEvent, *persistencespb.ChildExecutionInfo, error) {
 
 	opTag := tag.WorkflowActionChildWorkflowInitiated
@@ -3269,7 +3275,7 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionInitiatedEvent(
 		return nil, nil, err
 	}
 
-	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command)
+	event := e.hBuilder.AddStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, command, targetNamespaceID)
 	ci, err := e.ReplicateStartChildWorkflowExecutionInitiatedEvent(workflowTaskCompletedEventID, event, createRequestID)
 	if err != nil {
 		return nil, nil, err
@@ -3300,6 +3306,7 @@ func (e *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 		StartedWorkflowId:     attributes.GetWorkflowId(),
 		CreateRequestId:       createRequestID,
 		Namespace:             attributes.GetNamespace(),
+		NamespaceId:           attributes.GetNamespaceId(),
 		WorkflowTypeName:      attributes.GetWorkflowType().GetName(),
 		ParentClosePolicy:     attributes.GetParentClosePolicy(),
 	}
@@ -3312,7 +3319,6 @@ func (e *MutableStateImpl) ReplicateStartChildWorkflowExecutionInitiatedEvent(
 }
 
 func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
-	namespace namespace.Name,
 	execution *commonpb.WorkflowExecution,
 	workflowType *commonpb.WorkflowType,
 	initiatedID int64,
@@ -3337,7 +3343,8 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionStartedEvent(
 
 	event := e.hBuilder.AddChildWorkflowExecutionStartedEvent(
 		initiatedID,
-		namespace,
+		namespace.Name(ci.GetNamespace()),
+		namespace.ID(ci.GetNamespaceId()),
 		execution,
 		workflowType,
 		header,
@@ -3398,7 +3405,8 @@ func (e *MutableStateImpl) AddStartChildWorkflowExecutionFailedEvent(
 		common.EmptyEventID, // TODO this field is not used at all
 		initiatedID,
 		cause,
-		namespace.Name(initiatedEventAttributes.Namespace),
+		namespace.Name(ci.Namespace),
+		namespace.ID(ci.NamespaceId),
 		initiatedEventAttributes.WorkflowId,
 		initiatedEventAttributes.WorkflowType,
 		initiatedEventAttributes.Control, // TODO this field is probably deprecated
@@ -3448,6 +3456,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCompletedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
 		namespace.Name(ci.Namespace),
+		namespace.ID(ci.NamespaceId),
 		childExecution,
 		workflowType,
 		attributes.Result,
@@ -3497,6 +3506,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionFailedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
 		namespace.Name(ci.Namespace),
+		namespace.ID(ci.NamespaceId),
 		childExecution,
 		workflowType,
 		attributes.Failure,
@@ -3547,6 +3557,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionCanceledEvent(
 		ci.InitiatedId,
 		ci.StartedId,
 		namespace.Name(ci.Namespace),
+		namespace.ID(ci.NamespaceId),
 		childExecution,
 		workflowType,
 		attributes.Details,
@@ -3596,6 +3607,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTerminatedEvent(
 		ci.InitiatedId,
 		ci.StartedId,
 		namespace.Name(ci.Namespace),
+		namespace.ID(ci.NamespaceId),
 		childExecution,
 		workflowType,
 	)
@@ -3644,6 +3656,7 @@ func (e *MutableStateImpl) AddChildWorkflowExecutionTimedOutEvent(
 		ci.InitiatedId,
 		ci.StartedId,
 		namespace.Name(ci.Namespace),
+		namespace.ID(ci.NamespaceId),
 		childExecution,
 		workflowType,
 		attributes.RetryState,
