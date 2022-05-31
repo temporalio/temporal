@@ -38,6 +38,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
@@ -60,6 +61,7 @@ func newTimerQueueActiveProcessor(
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
+	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
 	singleProcessor bool,
 ) *timerQueueActiveProcessorImpl {
@@ -184,7 +186,7 @@ func newTimerQueueActiveProcessor(
 		timer.NewLocalGate(shard.GetTimeSource()),
 		scheduler,
 		rescheduler,
-		config.TimerProcessorMaxPollRPS,
+		rateLimiter,
 		logger,
 		metricsClient.Scope(metrics.TimerActiveQueueProcessorScope),
 	)
@@ -203,6 +205,7 @@ func newTimerQueueFailoverProcessor(
 	maxLevel time.Time,
 	matchingClient matchingservice.MatchingServiceClient,
 	taskAllocator taskAllocator,
+	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
 ) (func(ackLevel tasks.Key) error, *timerQueueActiveProcessorImpl) {
 
@@ -296,7 +299,7 @@ func newTimerQueueFailoverProcessor(
 		timer.NewLocalGate(shard.GetTimeSource()),
 		scheduler,
 		rescheduler,
-		shard.GetConfig().TimerProcessorFailoverMaxPollRPS,
+		rateLimiter,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TimerActiveQueueProcessorScope),
 	)

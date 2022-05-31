@@ -53,6 +53,7 @@ import (
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/versionhistory"
 	"go.temporal.io/server/common/primitives/timestamp"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/events"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -188,6 +189,9 @@ func (s *timerQueueActiveTaskExecutorSuite) SetupTest() {
 			s.mockMatchingClient,
 			newTaskAllocator(s.mockShard),
 			s.mockShard.Resource.ClientBean,
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 { return float64(config.TimerProcessorMaxPollRPS()) },
+			),
 			s.logger,
 			false,
 		),

@@ -96,6 +96,7 @@ type Config struct {
 	TimerProcessorCompleteTimerInterval               dynamicconfig.DurationPropertyFn
 	TimerProcessorFailoverMaxPollRPS                  dynamicconfig.IntPropertyFn
 	TimerProcessorMaxPollRPS                          dynamicconfig.IntPropertyFn
+	TimerProcessorMaxPollHostRPS                      dynamicconfig.IntPropertyFn
 	TimerProcessorMaxPollInterval                     dynamicconfig.DurationPropertyFn
 	TimerProcessorMaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 	TimerProcessorRescheduleInterval                  dynamicconfig.DurationPropertyFn
@@ -119,6 +120,7 @@ type Config struct {
 	TransferProcessorCompleteTransferFailureRetryCount   dynamicconfig.IntPropertyFn
 	TransferProcessorFailoverMaxPollRPS                  dynamicconfig.IntPropertyFn
 	TransferProcessorMaxPollRPS                          dynamicconfig.IntPropertyFn
+	TransferProcessorMaxPollHostRPS                      dynamicconfig.IntPropertyFn
 	TransferProcessorMaxPollInterval                     dynamicconfig.DurationPropertyFn
 	TransferProcessorMaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 	TransferProcessorUpdateAckInterval                   dynamicconfig.DurationPropertyFn
@@ -245,6 +247,7 @@ type Config struct {
 	VisibilityProcessorCompleteTaskFailureRetryCount       dynamicconfig.IntPropertyFn
 	VisibilityProcessorFailoverMaxPollRPS                  dynamicconfig.IntPropertyFn
 	VisibilityProcessorMaxPollRPS                          dynamicconfig.IntPropertyFn
+	VisibilityProcessorMaxPollHostRPS                      dynamicconfig.IntPropertyFn
 	VisibilityProcessorMaxPollInterval                     dynamicconfig.DurationPropertyFn
 	VisibilityProcessorMaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 	VisibilityProcessorUpdateAckInterval                   dynamicconfig.DurationPropertyFn
@@ -325,6 +328,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TimerProcessorCompleteTimerInterval:               dc.GetDurationProperty(dynamicconfig.TimerProcessorCompleteTimerInterval, 60*time.Second),
 		TimerProcessorFailoverMaxPollRPS:                  dc.GetIntProperty(dynamicconfig.TimerProcessorFailoverMaxPollRPS, 1),
 		TimerProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.TimerProcessorMaxPollRPS, 20),
+		TimerProcessorMaxPollHostRPS:                      dc.GetIntProperty(dynamicconfig.TimerProcessorMaxPollHostRPS, 0),
 		TimerProcessorMaxPollInterval:                     dc.GetDurationProperty(dynamicconfig.TimerProcessorMaxPollInterval, 5*time.Minute),
 		TimerProcessorMaxPollIntervalJitterCoefficient:    dc.GetFloat64Property(dynamicconfig.TimerProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		TimerProcessorRescheduleInterval:                  dc.GetDurationProperty(dynamicconfig.TimerProcessorRescheduleInterval, 5*time.Second),
@@ -347,6 +351,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		TransferProcessorCompleteTransferFailureRetryCount:   dc.GetIntProperty(dynamicconfig.TransferProcessorCompleteTransferFailureRetryCount, 10),
 		TransferProcessorFailoverMaxPollRPS:                  dc.GetIntProperty(dynamicconfig.TransferProcessorFailoverMaxPollRPS, 1),
 		TransferProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.TransferProcessorMaxPollRPS, 20),
+		TransferProcessorMaxPollHostRPS:                      dc.GetIntProperty(dynamicconfig.TransferProcessorMaxPollHostRPS, 0),
 		TransferProcessorMaxPollInterval:                     dc.GetDurationProperty(dynamicconfig.TransferProcessorMaxPollInterval, 1*time.Minute),
 		TransferProcessorMaxPollIntervalJitterCoefficient:    dc.GetFloat64Property(dynamicconfig.TransferProcessorMaxPollIntervalJitterCoefficient, 0.15),
 		TransferProcessorUpdateAckInterval:                   dc.GetDurationProperty(dynamicconfig.TransferProcessorUpdateAckInterval, 30*time.Second),
@@ -438,6 +443,7 @@ func NewConfig(dc *dynamicconfig.Collection, numberOfShards int32, isAdvancedVis
 		VisibilityTaskBatchSize:                                dc.GetIntProperty(dynamicconfig.VisibilityTaskBatchSize, 100),
 		VisibilityProcessorFailoverMaxPollRPS:                  dc.GetIntProperty(dynamicconfig.VisibilityProcessorFailoverMaxPollRPS, 1),
 		VisibilityProcessorMaxPollRPS:                          dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollRPS, 20),
+		VisibilityProcessorMaxPollHostRPS:                      dc.GetIntProperty(dynamicconfig.VisibilityProcessorMaxPollHostRPS, 0),
 		VisibilityTaskWorkerCount:                              dc.GetIntProperty(dynamicconfig.VisibilityTaskWorkerCount, 10),
 		VisibilityTaskMaxRetryCount:                            dc.GetIntProperty(dynamicconfig.VisibilityTaskMaxRetryCount, 100),
 		VisibilityProcessorEnablePriorityTaskScheduler:         dc.GetBoolProperty(dynamicconfig.VisibilityProcessorEnablePriorityTaskScheduler, false),

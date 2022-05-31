@@ -41,7 +41,6 @@ import (
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
 	"go.temporal.io/server/common/clock"
-	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
@@ -94,7 +93,7 @@ func newTimerQueueProcessorBase(
 	timerGate timer.Gate,
 	executableScheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
-	maxPollRPS dynamicconfig.IntPropertyFn,
+	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
 	metricsScope metrics.Scope,
 ) *timerQueueProcessorBase {
@@ -121,10 +120,8 @@ func newTimerQueueProcessorBase(
 		lastPollTime:        time.Time{},
 		executableScheduler: executableScheduler,
 		rescheduler:         rescheduler,
-		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(maxPollRPS()) },
-		),
-		retryPolicy: common.CreatePersistenceRetryPolicy(),
+		rateLimiter:         rateLimiter,
+		retryPolicy:         common.CreatePersistenceRetryPolicy(),
 	}
 
 	return base

@@ -37,10 +37,12 @@ import (
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
@@ -68,6 +70,7 @@ type (
 		scheduler                  queues.Scheduler
 		workflowDeleteManager      workflow.DeleteManager
 		ackLevel                   tasks.Key
+		hostRateLimiter            quotas.RateLimiter
 		logger                     log.Logger
 		clientBean                 client.Bean
 		matchingClient             matchingservice.MatchingServiceClient
@@ -87,6 +90,7 @@ func newTimerQueueProcessor(
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
+	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
@@ -115,6 +119,7 @@ func newTimerQueueProcessor(
 		scheduler:             scheduler,
 		workflowDeleteManager: workflowDeleteManager,
 		ackLevel:              shard.GetQueueAckLevel(tasks.CategoryTimer),
+		hostRateLimiter:       hostRateLimiter,
 		logger:                logger,
 		clientBean:            clientBean,
 		matchingClient:        matchingClient,
@@ -128,11 +133,16 @@ func newTimerQueueProcessor(
 			matchingClient,
 			taskAllocator,
 			clientBean,
+			newQueueProcessorRateLimiter(
+				hostRateLimiter,
+				config.TimerProcessorMaxPollRPS,
+			),
 			logger,
 			singleProcessor,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
 	}
+
 }
 
 func (t *timerQueueProcessorImpl) Start() {
@@ -234,6 +244,10 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 		maxLevel,
 		t.matchingClient,
 		t.taskAllocator,
+		newQueueProcessorRateLimiter(
+			t.hostRateLimiter,
+			t.config.TimerProcessorFailoverMaxPollRPS,
+		),
 		t.logger,
 	)
 
@@ -380,10 +394,30 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 				clusterName,
 				t.taskAllocator,
 				t.clientBean,
+				newQueueProcessorRateLimiter(
+					t.hostRateLimiter,
+					t.config.TimerProcessorMaxPollRPS,
+				),
 				t.logger,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor
 		}
 	}
+}
+
+func newQueueProcessorRateLimiter(
+	hostRateLimiter quotas.RateLimiter,
+	shardMaxPollRPS dynamicconfig.IntPropertyFn,
+) quotas.RateLimiter {
+	return quotas.NewMultiRateLimiter(
+		[]quotas.RateLimiter{
+			quotas.NewDefaultOutgoingRateLimiter(
+				func() float64 {
+					return float64(shardMaxPollRPS())
+				},
+			),
+			hostRateLimiter,
+		},
+	)
 }

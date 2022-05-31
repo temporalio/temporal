@@ -25,15 +25,19 @@
 package history
 
 import (
+	"fmt"
+
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
 	"go.temporal.io/server/client"
 	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/resource"
 	"go.temporal.io/server/common/sdk"
 	ctasks "go.temporal.io/server/common/tasks"
@@ -120,19 +124,22 @@ type (
 	transferQueueProcessorFactory struct {
 		transferQueueProcessorFactoryParams
 
-		scheduler queues.Scheduler
+		scheduler       queues.Scheduler
+		hostRateLimiter quotas.RateLimiter
 	}
 
 	timerQueueProcessorFactory struct {
 		timerQueueProcessorFactoryParams
 
-		scheduler queues.Scheduler
+		scheduler       queues.Scheduler
+		hostRateLimiter quotas.RateLimiter
 	}
 
 	visibilityQueueProcessorFactory struct {
 		visibilityQueueProcessorFactoryParams
 
-		scheduler queues.Scheduler
+		scheduler       queues.Scheduler
+		hostRateLimiter quotas.RateLimiter
 	}
 
 	replicationQueueProcessorFactory struct {
@@ -143,6 +150,7 @@ type (
 func NewTransferQueueProcessorFactory(
 	params transferQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
+	fmt.Println("NewTransferQueueProcessorFactory")
 	var scheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
 		scheduler = queues.NewScheduler(
@@ -171,6 +179,10 @@ func NewTransferQueueProcessorFactory(
 	return &transferQueueProcessorFactory{
 		transferQueueProcessorFactoryParams: params,
 		scheduler:                           scheduler,
+		hostRateLimiter: newQueueProcessorHostRateLimiter(
+			params.Config.TransferProcessorMaxPollHostRPS,
+			params.Config.PersistenceMaxQPS,
+		),
 	}
 }
 
@@ -188,6 +200,7 @@ func (f *transferQueueProcessorFactory) CreateProcessor(
 		f.SdkClientFactory,
 		f.MatchingClient,
 		f.HistoryClient,
+		f.hostRateLimiter,
 	)
 }
 
@@ -222,6 +235,10 @@ func NewTimerQueueProcessorFactory(
 	return &timerQueueProcessorFactory{
 		timerQueueProcessorFactoryParams: params,
 		scheduler:                        scheduler,
+		hostRateLimiter: newQueueProcessorHostRateLimiter(
+			params.Config.TimerProcessorMaxPollHostRPS,
+			params.Config.PersistenceMaxQPS,
+		),
 	}
 }
 
@@ -237,6 +254,7 @@ func (f *timerQueueProcessorFactory) CreateProcessor(
 		f.ClientBean,
 		f.ArchivalClient,
 		f.MatchingClient,
+		f.hostRateLimiter,
 	)
 }
 
@@ -271,6 +289,10 @@ func NewVisibilityQueueProcessorFactory(
 	return &visibilityQueueProcessorFactory{
 		visibilityQueueProcessorFactoryParams: params,
 		scheduler:                             scheduler,
+		hostRateLimiter: newQueueProcessorHostRateLimiter(
+			params.Config.VisibilityProcessorMaxPollHostRPS,
+			params.Config.PersistenceMaxQPS,
+		),
 	}
 }
 
@@ -284,6 +306,7 @@ func (f *visibilityQueueProcessorFactory) CreateProcessor(
 		workflowCache,
 		f.scheduler,
 		f.VisibilityMgr,
+		f.hostRateLimiter,
 	)
 }
 
@@ -310,5 +333,20 @@ func (f *replicationQueueProcessorFactory) CreateProcessor(
 		f.TaskFetcherFactory,
 		workflowCache,
 		f.ClientBean,
+	)
+}
+
+func newQueueProcessorHostRateLimiter(
+	hostRPS dynamicconfig.IntPropertyFn,
+	fallBackRPS dynamicconfig.IntPropertyFn,
+) quotas.RateLimiter {
+	return quotas.NewDefaultOutgoingRateLimiter(
+		func() float64 {
+			if maxPollHostRps := hostRPS(); maxPollHostRps > 0 {
+				return float64(maxPollHostRps)
+			}
+
+			return float64(fallBackRPS())
+		},
 	)
 }
