@@ -25,8 +25,6 @@
 package history
 
 import (
-	"fmt"
-
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/api/historyservice/v1"
@@ -150,7 +148,6 @@ type (
 func NewTransferQueueProcessorFactory(
 	params transferQueueProcessorFactoryParams,
 ) queues.ProcessorFactory {
-	fmt.Println("NewTransferQueueProcessorFactory")
 	var scheduler queues.Scheduler
 	if params.Config.TransferProcessorEnablePriorityTaskScheduler() {
 		scheduler = queues.NewScheduler(
