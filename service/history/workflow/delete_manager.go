@@ -219,11 +219,10 @@ func (m *DeleteManagerImpl) deleteWorkflowExecutionInternal(
 	if forceDeleteFromOpenVisibility || ms.GetExecutionState().State != enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		startTime = ms.GetExecutionInfo().GetStartTime()
 	} else {
-		completionEvent, err := ms.GetCompletionEvent(ctx)
+		closeTime, err = ms.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return err
 		}
-		closeTime = completionEvent.GetEventTime()
 	}
 
 	if err := m.shard.DeleteWorkflowExecution(

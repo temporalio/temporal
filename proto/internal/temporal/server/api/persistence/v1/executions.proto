@@ -143,6 +143,7 @@ message WorkflowExecutionInfo {
     int64 close_transfer_task_id = 64;
     // Used to check if visibility close task is processed before deleting the workflow execution.
     int64 close_visibility_task_id = 65;
+    google.protobuf.Timestamp close_time = 66 [(gogoproto.stdtime) = true];
 }
 
 message ExecutionStats {

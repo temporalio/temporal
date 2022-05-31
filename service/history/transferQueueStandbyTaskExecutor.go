@@ -230,16 +230,13 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			return nil, nil
 		}
 
-		completionEvent, err := mutableState.GetCompletionEvent(ctx)
+		wfCloseTime, err := mutableState.GetWorkflowCloseTime(ctx)
 		if err != nil {
 			return nil, err
 		}
-		wfCloseTime := timestamp.TimeValue(completionEvent.GetEventTime())
-
 		executionInfo := mutableState.GetExecutionInfo()
 		executionState := mutableState.GetExecutionState()
 		workflowTypeName := executionInfo.WorkflowTypeName
-		workflowCloseTime := wfCloseTime
 		workflowStatus := executionState.Status
 		workflowHistoryLength := mutableState.GetNextEventID() - 1
 		workflowStartTime := timestamp.TimeValue(mutableState.GetExecutionInfo().GetStartTime())
@@ -264,7 +261,7 @@ func (t *transferQueueStandbyTaskExecutor) processCloseExecution(
 			workflowTypeName,
 			workflowStartTime,
 			workflowExecutionTime,
-			workflowCloseTime,
+			timestamp.TimeValue(wfCloseTime),
 			workflowStatus,
 			workflowHistoryLength,
 			visibilityMemo,
