@@ -381,7 +381,7 @@ func (r *nDCHistoryReplicatorImpl) applyEvents(
 			return r.applyNonStartEventsResetWorkflow(ctx, context, mutableState, task)
 
 		default:
-			// unable to get mutable state, return err so we can retry the task later
+			// unable to get mutable state, return err, so we can retry the task later
 			return err
 		}
 	}
@@ -392,7 +392,7 @@ func (r *nDCHistoryReplicatorImpl) applyStartEvents(
 	context workflow.Context,
 	releaseFn workflow.ReleaseCacheFunc,
 	task nDCReplicationTask,
-) (retError error) {
+) error {
 
 	namespaceEntry, err := r.namespaceRegistry.GetNamespaceByID(task.getNamespaceID())
 	if err != nil {
