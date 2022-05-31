@@ -34,12 +34,13 @@ import (
 
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	otelresource "go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
-	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 
@@ -849,12 +850,19 @@ var ServiceTracingModule = fx.Options(
 				if !strings.HasPrefix(serviceName, "io.temporal.") {
 					serviceName = fmt.Sprintf("io.temporal.%s", serviceName)
 				}
-				return otelresource.Merge(
-					otelresource.Default(),
-					otelresource.NewSchemaless(
-						semconv.ServiceNameKey.String(serviceName),
-						semconv.ServiceInstanceIDKey.String(string(rsi)),
-					))
+				attrs := []attribute.KeyValue{
+					semconv.ServiceNameKey.String(serviceName),
+				}
+				if rsi != "" {
+					attrs = append(attrs, semconv.ServiceInstanceIDKey.String(string(rsi)))
+				}
+				return otelresource.New(context.Background(),
+					otelresource.WithProcess(),
+					otelresource.WithOS(),
+					otelresource.WithHost(),
+					otelresource.WithContainer(),
+					otelresource.WithAttributes(attrs...),
+				)
 			},
 			fx.ParamTags(``, `optional:"true"`),
 		),
