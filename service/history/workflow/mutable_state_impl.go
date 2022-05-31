@@ -866,7 +866,8 @@ func (e *MutableStateImpl) GetCompletionEvent(
 // GetWorkflowCloseTime returns workflow closed time, returns nil for open workflow
 func (e *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (*time.Time, error) {
 	if e.executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && e.executionInfo.CloseTime == nil {
-		// This is for backward compatible. (Added by 05/21/2022)
+		// This is for backward compatible. Prior to v1.16 does not have close time in mutable state (Added by 05/21/2022).
+		// TODO: remove this logic when all mutable state contains close time.
 		completionEvent, err := e.GetCompletionEvent(ctx)
 		if err != nil {
 			return nil, err
