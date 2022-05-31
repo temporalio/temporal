@@ -44,7 +44,7 @@ func TestSpec(t *testing.T) {
 
 func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := newCompiledSpec(spec, 1*time.Second)
+	cs, err := newCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		next := cs.rawNextTime(start)
@@ -55,7 +55,7 @@ func (s *specSuite) checkSequenceRaw(spec *schedpb.ScheduleSpec, start time.Time
 
 func (s *specSuite) checkSequenceFull(spec *schedpb.ScheduleSpec, start time.Time, seq ...time.Time) {
 	s.T().Helper()
-	cs, err := newCompiledSpec(spec, 1*time.Second)
+	cs, err := newCompiledSpec(spec)
 	s.NoError(err)
 	for _, exp := range seq {
 		_, next, has := cs.getNextTime(start)
@@ -198,6 +198,7 @@ func (s *specSuite) TestSpecExclude() {
 					Second: "*",
 				},
 			},
+			Jitter: timestamp.DurationPtr(1 * time.Second),
 		},
 		time.Date(2022, 3, 23, 8, 00, 0, 0, time.UTC),
 		time.Date(2022, 3, 23, 9, 00, 0, 235000000, time.UTC),
@@ -214,6 +215,7 @@ func (s *specSuite) TestSpecStartTime() {
 				{Interval: timestamp.DurationPtr(90 * time.Minute)},
 			},
 			StartTime: timestamp.TimePtr(time.Date(2022, 3, 23, 12, 0, 0, 0, time.UTC)),
+			Jitter:    timestamp.DurationPtr(1 * time.Second),
 		},
 		time.Date(2022, 3, 23, 8, 00, 0, 0, time.UTC),
 		time.Date(2022, 3, 23, 12, 00, 0, 162000000, time.UTC),
@@ -229,6 +231,7 @@ func (s *specSuite) TestSpecEndTime() {
 				{Interval: timestamp.DurationPtr(90 * time.Minute)},
 			},
 			EndTime: timestamp.TimePtr(time.Date(2022, 3, 23, 14, 0, 0, 0, time.UTC)),
+			Jitter:  timestamp.DurationPtr(1 * time.Second),
 		},
 		time.Date(2022, 3, 23, 11, 00, 0, 0, time.UTC),
 		time.Date(2022, 3, 23, 12, 00, 0, 162000000, time.UTC),

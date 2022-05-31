@@ -92,7 +92,6 @@ type (
 	tweakablePolicies struct {
 		DefaultCatchupWindow              time.Duration // Default for catchup window
 		MinCatchupWindow                  time.Duration // Minimum for catchup window
-		DefaultJitter                     time.Duration // Default for jitter
 		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
 		AlwaysAppendTimestamp             bool          // Whether to append timestamp for non-overlapping workflows too
 		FutureActionCount                 int           // The number of future action times to include in Describe.
@@ -120,7 +119,6 @@ var (
 	currentTweakablePolicies = tweakablePolicies{
 		DefaultCatchupWindow:              60 * time.Second,
 		MinCatchupWindow:                  10 * time.Second,
-		DefaultJitter:                     1 * time.Second,
 		CanceledTerminatedCountAsFailures: false,
 		AlwaysAppendTimestamp:             true,
 		FutureActionCount:                 10,
@@ -224,7 +222,7 @@ func (s *scheduler) ensureFields() {
 }
 
 func (s *scheduler) compileSpec() {
-	cspec, err := newCompiledSpec(s.Schedule.Spec, s.tweakables.DefaultJitter)
+	cspec, err := newCompiledSpec(s.Schedule.Spec)
 	if err != nil {
 		s.logger.Error("Invalid schedule", "error", err)
 		s.Info.InvalidScheduleError = err.Error()

@@ -36,26 +36,24 @@ import (
 
 type (
 	compiledSpec struct {
-		spec          *schedpb.ScheduleSpec
-		tz            *time.Location
-		calendar      []*compiledCalendar
-		excludes      []*compiledCalendar
-		defaultJitter time.Duration
+		spec     *schedpb.ScheduleSpec
+		tz       *time.Location
+		calendar []*compiledCalendar
+		excludes []*compiledCalendar
 	}
 )
 
-func newCompiledSpec(spec *schedpb.ScheduleSpec, defaultJitter time.Duration) (*compiledSpec, error) {
+func newCompiledSpec(spec *schedpb.ScheduleSpec) (*compiledSpec, error) {
 	tz, err := loadTimezone(spec)
 	if err != nil {
 		return nil, err
 	}
 
 	cspec := &compiledSpec{
-		spec:          spec,
-		tz:            tz,
-		calendar:      make([]*compiledCalendar, len(spec.Calendar)),
-		excludes:      make([]*compiledCalendar, len(spec.ExcludeCalendar)),
-		defaultJitter: defaultJitter,
+		spec:     spec,
+		tz:       tz,
+		calendar: make([]*compiledCalendar, len(spec.Calendar)),
+		excludes: make([]*compiledCalendar, len(spec.ExcludeCalendar)),
 	}
 
 	for i, cal := range spec.Calendar {
@@ -164,12 +162,11 @@ func (cs *compiledSpec) excluded(nominal time.Time) bool {
 }
 
 // Adds jitter to a nominal time, deterministically (by hashing the given time). The range
-// of jitter is the min of the schedule spec's jitter (default 1s if missing) and the
-// given limit value.
+// of the jitter is zero to the min of the schedule spec's jitter and the given limit value.
 func (cs *compiledSpec) addJitter(nominal time.Time, limit time.Duration) time.Time {
 	maxJitter := timestamp.DurationValue(cs.spec.Jitter)
-	if maxJitter == 0 {
-		maxJitter = cs.defaultJitter
+	if maxJitter < 0 {
+		maxJitter = 0
 	}
 	if maxJitter > limit {
 		maxJitter = limit
