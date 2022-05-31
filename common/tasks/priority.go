@@ -1,4 +1,3 @@
-// The MIT License
 //
 // Copyright (c) 2020 Temporal Technologies Inc.  All rights reserved.
 //
@@ -22,23 +21,60 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
 // THE SOFTWARE.
 
-package queues
+package tasks
 
-import (
-	"go.temporal.io/server/common/tasks"
-)
+import "strconv"
 
 type (
-	noopPriorityAssignerImpl struct{}
+	Priority int
 )
 
-var noopPriorityAssigner = &noopPriorityAssignerImpl{}
+const (
+	numBitsPerLevel = 3
+)
 
-func NewNoopPriorityAssigner() PriorityAssigner {
-	return noopPriorityAssigner
+const (
+	highPriorityClass Priority = iota << numBitsPerLevel
+	mediumPriorityClass
+	lowPriorityClass
+)
+
+const (
+	highPrioritySubclass Priority = iota
+	mediumPrioritySubclass
+	lowPrioritySubclass
+)
+
+var (
+	PriorityHigh   = getPriority(highPriorityClass, mediumPrioritySubclass)
+	PriorityMedium = getPriority(mediumPriorityClass, mediumPrioritySubclass)
+	PriorityLow    = getPriority(lowPriorityClass, mediumPrioritySubclass)
+)
+
+var (
+	PriorityName = map[Priority]string{
+		PriorityHigh:   "high",
+		PriorityMedium: "medium",
+		PriorityLow:    "low",
+	}
+
+	PriorityValue = map[string]Priority{
+		"high":   PriorityHigh,
+		"medium": PriorityMedium,
+		"low":    PriorityLow,
+	}
+)
+
+func (p Priority) String() string {
+	s, ok := PriorityName[p]
+	if ok {
+		return s
+	}
+	return strconv.Itoa(int(p))
 }
 
-func (a *noopPriorityAssignerImpl) Assign(execuable Executable) error {
-	execuable.SetPriority(tasks.PriorityHigh)
-	return nil
+func getPriority(
+	class, subClass Priority,
+) Priority {
+	return class | subClass
 }

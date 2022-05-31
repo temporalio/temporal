@@ -66,7 +66,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) SetupTest() {
 	s.controller = gomock.NewController(s.T())
 	s.mockProcessor = NewMockProcessor(s.controller)
 
-	priorityToWeight := map[int]int{
+	priorityToWeight := map[Priority]int{
 		0: 5,
 		1: 3,
 		2: 2,
@@ -98,7 +98,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Success
 	testWaitGroup.Add(1)
 
 	mockTask := NewMockPriorityTask(s.controller)
-	mockTask.EXPECT().GetPriority().Return(0).AnyTimes()
+	mockTask.EXPECT().GetPriority().Return(Priority(0)).AnyTimes()
 	s.mockProcessor.EXPECT().Submit(mockTask).Do(func(task Task) {
 		testWaitGroup.Done()
 	})
@@ -118,7 +118,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestSubmitSchedule_Fail() 
 	testWaitGroup.Add(1)
 
 	mockTask := NewMockPriorityTask(s.controller)
-	mockTask.EXPECT().GetPriority().Return(0).AnyTimes()
+	mockTask.EXPECT().GetPriority().Return(Priority(0)).AnyTimes()
 	// either drain immediately
 	mockTask.EXPECT().Reschedule().Do(func() {
 		testWaitGroup.Done()
@@ -138,7 +138,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 
 	channelWeights = nil
 	mockTask0 := NewMockPriorityTask(s.controller)
-	mockTask0.EXPECT().GetPriority().Return(0).AnyTimes()
+	mockTask0.EXPECT().GetPriority().Return(Priority(0)).AnyTimes()
 	s.scheduler.Submit(mockTask0)
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
@@ -147,7 +147,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 
 	channelWeights = nil
 	mockTask1 := NewMockPriorityTask(s.controller)
-	mockTask1.EXPECT().GetPriority().Return(1).AnyTimes()
+	mockTask1.EXPECT().GetPriority().Return(Priority(1)).AnyTimes()
 	s.scheduler.Submit(mockTask1)
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
@@ -156,7 +156,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 
 	channelWeights = nil
 	mockTask2 := NewMockPriorityTask(s.controller)
-	mockTask2.EXPECT().GetPriority().Return(2).AnyTimes()
+	mockTask2.EXPECT().GetPriority().Return(Priority(2)).AnyTimes()
 	s.scheduler.Submit(mockTask2)
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
@@ -165,7 +165,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestChannels() {
 
 	channelWeights = nil
 	mockTask3 := NewMockPriorityTask(s.controller)
-	mockTask3.EXPECT().GetPriority().Return(3).AnyTimes()
+	mockTask3.EXPECT().GetPriority().Return(Priority(3)).AnyTimes()
 	s.scheduler.Submit(mockTask3)
 	for _, channel := range s.scheduler.channels() {
 		channelWeights = append(channelWeights, channel.Weight())
@@ -203,7 +203,7 @@ func (s *interleavedWeightedRoundRobinSchedulerSuite) TestParallelSubmitSchedule
 		channel := make(chan PriorityTask, numTasks)
 		for j := 0; j < numTasks; j++ {
 			mockTask := NewMockPriorityTask(s.controller)
-			mockTask.EXPECT().GetPriority().Return(rand.Intn(4)).AnyTimes()
+			mockTask.EXPECT().GetPriority().Return(Priority(rand.Intn(4))).AnyTimes()
 			s.mockProcessor.EXPECT().Submit(mockTask).Do(func(task Task) {
 				testWaitGroup.Done()
 			}).Times(1)

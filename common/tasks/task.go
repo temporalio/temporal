@@ -66,8 +66,8 @@ type (
 	PriorityTask interface {
 		Task
 		// GetPriority returns the priority of the task
-		GetPriority() int
+		GetPriority() Priority
 		// SetPriority sets the priority of the task
-		SetPriority(int)
+		SetPriority(Priority)
 	}
 )

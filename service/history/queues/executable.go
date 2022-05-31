@@ -88,9 +88,10 @@ type (
 		tasks.Task
 
 		sync.Mutex
-		state    ctasks.State
-		priority int
-		attempt  int
+		state          ctasks.State
+		priority       ctasks.Priority // priority for the current attempt
+		lowestPriority ctasks.Priority // priority for emitting metrics across multiple attempts
+		attempt        int
 
 		executor    Executor
 		scheduler   Scheduler
@@ -164,7 +165,7 @@ func (e *executableImpl) Execute() error {
 	}
 	e.userLatency += userLatency
 
-	e.scope.IncCounter(metrics.TaskRequests)
+	e.scope.Tagged(metrics.TaskPriorityTag(e.priority.String())).IncCounter(metrics.TaskRequests)
 	e.scope.RecordTimer(metrics.TaskProcessingLatency, time.Since(startTime))
 	e.scope.RecordTimer(metrics.TaskNoUserProcessingLatency, time.Since(startTime)-userLatency)
 	return err
@@ -259,11 +260,13 @@ func (e *executableImpl) Ack() {
 
 	if e.shouldProcess {
 		e.scope.RecordDistribution(metrics.TaskAttemptTimer, e.attempt)
-		e.scope.RecordTimer(metrics.TaskLatency, time.Since(e.loadTime))
-		e.scope.RecordTimer(metrics.TaskQueueLatency, time.Since(e.GetVisibilityTime()))
-		e.scope.RecordTimer(metrics.TaskUserLatency, e.userLatency)
-		e.scope.RecordTimer(metrics.TaskNoUserLatency, time.Since(e.loadTime)-e.userLatency)
-		e.scope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(e.GetVisibilityTime())-e.userLatency)
+
+		priorityTaggedScope := e.scope.Tagged(metrics.TaskPriorityTag(e.lowestPriority.String()))
+		priorityTaggedScope.RecordTimer(metrics.TaskLatency, time.Since(e.loadTime))
+		priorityTaggedScope.RecordTimer(metrics.TaskQueueLatency, time.Since(e.GetVisibilityTime()))
+		priorityTaggedScope.RecordTimer(metrics.TaskUserLatency, e.userLatency)
+		priorityTaggedScope.RecordTimer(metrics.TaskNoUserLatency, time.Since(e.loadTime)-e.userLatency)
+		priorityTaggedScope.RecordTimer(metrics.TaskNoUserQueueLatency, time.Since(e.GetVisibilityTime())-e.userLatency)
 	}
 }
 
@@ -293,18 +296,21 @@ func (e *executableImpl) State() ctasks.State {
 	return e.state
 }
 
-func (e *executableImpl) GetPriority() int {
+func (e *executableImpl) GetPriority() ctasks.Priority {
 	e.Lock()
 	defer e.Unlock()
 
 	return e.priority
 }
 
-func (e *executableImpl) SetPriority(priority int) {
+func (e *executableImpl) SetPriority(priority ctasks.Priority) {
 	e.Lock()
 	defer e.Unlock()
 
 	e.priority = priority
+	if e.priority > e.lowestPriority {
+		e.lowestPriority = e.priority
+	}
 }
 
 func (e *executableImpl) Attempt() int {

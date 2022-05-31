@@ -214,10 +214,10 @@ func (mr *MockPriorityTaskMockRecorder) Execute() *gomock.Call {
 }
 
 // GetPriority mocks base method.
-func (m *MockPriorityTask) GetPriority() int {
+func (m *MockPriorityTask) GetPriority() Priority {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPriority")
-	ret0, _ := ret[0].(int)
+	ret0, _ := ret[0].(Priority)
 	return ret0
 }
 
@@ -294,7 +294,7 @@ func (mr *MockPriorityTaskMockRecorder) RetryPolicy() *gomock.Call {
 }
 
 // SetPriority mocks base method.
-func (m *MockPriorityTask) SetPriority(arg0 int) {
+func (m *MockPriorityTask) SetPriority(arg0 Priority) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetPriority", arg0)
 }
