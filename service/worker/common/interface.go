@@ -53,11 +53,13 @@ type (
 		// Register registers Workflow and Activity types provided by this worker component.
 		// The namespace that this worker is running in is also provided.
 		Register(sdkworker.Worker, *namespace.Namespace)
-		// DedicatedWorkerOptions returns a DedicatedWorkerOptions for this worker component.
-		DedicatedWorkerOptions() *PerNSDedicatedWorkerOptions
+		// DedicatedWorkerOptions returns a PerNSDedicatedWorkerOptions for this worker component.
+		DedicatedWorkerOptions(*namespace.Namespace) *PerNSDedicatedWorkerOptions
 	}
 
 	PerNSDedicatedWorkerOptions struct {
+		// Set this to false to disable a worker for this namespace
+		Enabled bool
 		// TaskQueue is required
 		TaskQueue string
 		// How many worker nodes should run a worker per namespace

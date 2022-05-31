@@ -31,6 +31,7 @@ import (
 	sdkworker "go.temporal.io/sdk/worker"
 	"go.temporal.io/sdk/workflow"
 	"go.temporal.io/server/api/historyservice/v1"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
@@ -44,7 +45,9 @@ const (
 
 type (
 	workerComponent struct {
-		activityDeps
+		activityDeps activityDeps
+		enabledForNs dynamicconfig.BoolPropertyFnWithNamespaceFilter
+		numWorkers   dynamicconfig.IntPropertyFnWithNamespaceFilter
 	}
 
 	activityDeps struct {
@@ -65,19 +68,26 @@ var Module = fx.Options(
 	fx.Provide(NewResult),
 )
 
-func NewResult(params activityDeps) fxResult {
+func NewResult(
+	dcCollection *dynamicconfig.Collection,
+	params activityDeps,
+) fxResult {
 	return fxResult{
 		Component: &workerComponent{
 			activityDeps: params,
+			enabledForNs: dcCollection.GetBoolPropertyFnWithNamespaceFilter(
+				dynamicconfig.WorkerEnableScheduler, false),
+			numWorkers: dcCollection.GetIntPropertyFilteredByNamespace(
+				dynamicconfig.WorkerSchedulerNumWorkers, 1),
 		},
 	}
 }
 
-func (s *workerComponent) DedicatedWorkerOptions() *workercommon.PerNSDedicatedWorkerOptions {
+func (s *workerComponent) DedicatedWorkerOptions(ns *namespace.Namespace) *workercommon.PerNSDedicatedWorkerOptions {
 	return &workercommon.PerNSDedicatedWorkerOptions{
-		TaskQueue: TaskQueueName,
-		// TODO: maybe make dynamic config
-		NumWorkers: 1,
+		Enabled:    s.enabledForNs(ns.Name().String()),
+		TaskQueue:  TaskQueueName,
+		NumWorkers: s.numWorkers(ns.Name().String()),
 	}
 }
 

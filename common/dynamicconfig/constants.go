@@ -629,6 +629,10 @@ const (
 	WorkerParentCloseMaxConcurrentActivityTaskPollers = "worker.ParentCloseMaxConcurrentActivityTaskPollers"
 	// WorkerParentCloseMaxConcurrentWorkflowTaskPollers indicates worker parent close worker max concurrent workflow pollers
 	WorkerParentCloseMaxConcurrentWorkflowTaskPollers = "worker.ParentCloseMaxConcurrentWorkflowTaskPollers"
+	// WorkerEnableScheduler controls whether to start the worker for scheduled workflows
+	WorkerEnableScheduler = "worker.enableScheduler"
+	// WorkerSchedulerNumWorkers controls number of scheduler workers to run per namespace
+	WorkerSchedulerNumWorkers = "worker.schedulerNumWorkers"
 )
 
 // Filter represents a filter on the dynamic config key
