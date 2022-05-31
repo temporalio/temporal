@@ -274,6 +274,7 @@ func (d *HandlerImpl) RegisterNamespace(
 		namespaceRequest.Namespace.Info,
 		namespaceRequest.Namespace.Config,
 		namespaceRequest.Namespace.ReplicationConfig,
+		true,
 		namespaceRequest.Namespace.ConfigVersion,
 		namespaceRequest.Namespace.FailoverVersion,
 		namespaceRequest.IsGlobalNamespace,
@@ -429,6 +430,8 @@ func (d *HandlerImpl) UpdateNamespace(
 	activeClusterChanged := false
 	// whether anything other than active cluster is changed
 	configurationChanged := false
+	// whether replication cluster list is changed
+	clusterListChanged := false
 
 	if updateRequest.UpdateInfo != nil {
 		updatedInfo := updateRequest.UpdateInfo
@@ -498,6 +501,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		updateReplicationConfig := updateRequest.ReplicationConfig
 		if len(updateReplicationConfig.Clusters) != 0 {
 			configurationChanged = true
+			clusterListChanged = true
 			var clustersNew []string
 			for _, clusterConfig := range updateReplicationConfig.Clusters {
 				clustersNew = append(clustersNew, clusterConfig.GetClusterName())
@@ -579,6 +583,7 @@ func (d *HandlerImpl) UpdateNamespace(
 		info,
 		config,
 		replicationConfig,
+		clusterListChanged,
 		configVersion,
 		failoverVersion,
 		isGlobalNamespace,
