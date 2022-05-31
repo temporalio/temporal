@@ -179,7 +179,7 @@ func NewAdminHandler(
 			namespace.NewNamespaceReplicator(args.ReplicatorNamespaceReplicationQueue, args.Logger),
 			args.ArchivalMetadata,
 			args.ArchiverProvider,
-			args.Config.EnableScheduleRPCs,
+			args.Config.EnableSchedules,
 		),
 		namespaceDLQHandler: namespace.NewDLQMessageHandler(
 			namespaceReplicationTaskExecutor,
