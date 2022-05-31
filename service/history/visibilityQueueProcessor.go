@@ -105,7 +105,7 @@ func newVisibilityQueueProcessor(
 		).TaskID
 	}
 	updateVisibilityAckLevel := func(ackLevel int64) error {
-		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: ackLevel})
+		return shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.NewImmediateKey(ackLevel))
 	}
 
 	visibilityQueueShutdown := func() error {
@@ -282,14 +282,10 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 
 	if lowerAckLevel < upperAckLevel {
 		err := t.shard.GetExecutionManager().RangeCompleteHistoryTasks(context.TODO(), &persistence.RangeCompleteHistoryTasksRequest{
-			ShardID:      t.shard.GetShardID(),
-			TaskCategory: tasks.CategoryVisibility,
-			InclusiveMinTaskKey: tasks.Key{
-				TaskID: lowerAckLevel + 1,
-			},
-			ExclusiveMaxTaskKey: tasks.Key{
-				TaskID: upperAckLevel + 1,
-			},
+			ShardID:             t.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryVisibility,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(lowerAckLevel + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(upperAckLevel + 1),
 		})
 		if err != nil {
 			return err
@@ -298,7 +294,7 @@ func (t *visibilityQueueProcessorImpl) completeTask() error {
 
 	t.ackLevel = upperAckLevel
 
-	return t.shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.Key{TaskID: upperAckLevel})
+	return t.shard.UpdateQueueAckLevel(tasks.CategoryVisibility, tasks.NewImmediateKey(upperAckLevel))
 }
 
 // queueProcessor interface
@@ -312,15 +308,11 @@ func (t *visibilityQueueProcessorImpl) readTasks(
 ) ([]tasks.Task, bool, error) {
 
 	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
-		ShardID:      t.shard.GetShardID(),
-		TaskCategory: tasks.CategoryVisibility,
-		InclusiveMinTaskKey: tasks.Key{
-			TaskID: readLevel + 1,
-		},
-		ExclusiveMaxTaskKey: tasks.Key{
-			TaskID: t.maxReadAckLevel() + 1,
-		},
-		BatchSize: t.options.BatchSize(),
+		ShardID:             t.shard.GetShardID(),
+		TaskCategory:        tasks.CategoryVisibility,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadAckLevel() + 1),
+		BatchSize:           t.options.BatchSize(),
 	})
 
 	if err != nil {
@@ -350,7 +342,7 @@ func newVisibilityTaskScheduler(
 		queues.NewNoopPriorityAssigner(),
 		queues.SchedulerOptions{
 			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.VisibilityTaskWorkerCount(),
+				WorkerCount: config.VisibilityTaskWorkerCount,
 				QueueSize:   config.VisibilityTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{

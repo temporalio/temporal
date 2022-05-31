@@ -33,9 +33,9 @@ import (
 	"github.com/golang/mock/gomock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
-	"github.com/uber-go/tally/v4"
 
 	"go.temporal.io/server/common/backoff"
+	"go.temporal.io/server/common/dynamicconfig"
 	"go.temporal.io/server/common/log"
 	"go.temporal.io/server/common/metrics"
 )
@@ -62,20 +62,8 @@ func (s *parallelProcessorSuite) SetupTest() {
 
 	s.controller = gomock.NewController(s.T())
 
-	metricsClient, err := metrics.NewClient(&metrics.ClientConfig{}, tally.NoopScope, metrics.History)
-	if err != nil {
-		s.NoError(err, "metrics.NewClient")
-	}
-
-	s.processor = NewParallelProcessor(
-		&ParallelProcessorOptions{
-			QueueSize:   1,
-			WorkerCount: 1,
-		},
-		metricsClient,
-		log.NewNoopLogger(),
-	)
 	s.retryPolicy = backoff.NewExponentialRetryPolicy(time.Millisecond)
+	s.processor = s.newTestProcessor()
 	s.processor.Start()
 }
 
@@ -203,4 +191,33 @@ func (s *parallelProcessorSuite) TestParallelSubmitProcess() {
 	endWaitGroup.Wait()
 
 	testWaitGroup.Wait()
+}
+
+func (s *parallelProcessorSuite) TestStartStopWorkers() {
+	processor := s.newTestProcessor()
+	// don't start the processor,
+	// manually add/remove workers here to test the start/stop logic
+
+	numWorkers := 10
+	processor.startWorkers(numWorkers)
+	s.Len(processor.workerShutdownCh, numWorkers)
+
+	processor.stopWorkers(numWorkers / 2)
+	s.Len(processor.workerShutdownCh, numWorkers/2)
+
+	processor.stopWorkers(len(processor.workerShutdownCh))
+	s.Empty(processor.workerShutdownCh)
+
+	processor.shutdownWG.Wait()
+}
+
+func (s *parallelProcessorSuite) newTestProcessor() *ParallelProcessor {
+	return NewParallelProcessor(
+		&ParallelProcessorOptions{
+			QueueSize:   1,
+			WorkerCount: dynamicconfig.GetIntPropertyFn(1),
+		},
+		metrics.NoopClient,
+		log.NewNoopLogger(),
+	)
 }

@@ -104,7 +104,7 @@ func newTimerQueueAckMgr(
 	clusterName string,
 	executableInitializer taskExecutableInitializer,
 ) *timerQueueAckMgrImpl {
-	ackLevel := tasks.Key{FireTime: minLevel}
+	ackLevel := tasks.NewKey(minLevel, 0)
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
 		scope:                  scope,
@@ -143,7 +143,7 @@ func newTimerQueueFailoverAckMgr(
 	executableInitializer taskExecutableInitializer,
 ) *timerQueueAckMgrImpl {
 	// failover ack manager will start from the standby cluster's ack level to active cluster's ack level
-	ackLevel := tasks.Key{FireTime: minLevel}
+	ackLevel := tasks.NewKey(minLevel, 0)
 
 	timerQueueAckMgrImpl := &timerQueueAckMgrImpl{
 		scope:                  metrics.TimerActiveQueueProcessorScope,
@@ -210,8 +210,8 @@ func (t *timerQueueAckMgrImpl) readTimerTasks() ([]queues.Executable, *time.Time
 
 TaskFilterLoop:
 	for _, task := range timerTasks {
-		timerKey := &tasks.Key{FireTime: task.GetVisibilityTime(), TaskID: task.GetTaskID()}
-		_, isLoaded := t.outstandingExecutables[*timerKey]
+		timerKey := tasks.NewKey(task.GetVisibilityTime(), task.GetTaskID())
+		_, isLoaded := t.outstandingExecutables[timerKey]
 		if isLoaded {
 			// timer already loaded
 			continue TaskFilterLoop
@@ -224,10 +224,10 @@ TaskFilterLoop:
 		}
 
 		t.logger.Debug("Moving timer read level", tag.Task(timerKey))
-		t.readLevel = *timerKey
+		t.readLevel = timerKey
 
 		taskExecutable := t.executableInitializer(task)
-		t.outstandingExecutables[*timerKey] = taskExecutable
+		t.outstandingExecutables[timerKey] = taskExecutable
 		filteredExecutables = append(filteredExecutables, taskExecutable)
 	}
 
@@ -353,16 +353,12 @@ MoveAckLevelLoop:
 // all timer tasks are in this queue and filter will be applied.
 func (t *timerQueueAckMgrImpl) getTimerTasks(minTimestamp time.Time, maxTimestamp time.Time, batchSize int, pageToken []byte) ([]tasks.Task, []byte, error) {
 	request := &persistence.GetHistoryTasksRequest{
-		ShardID:      t.shard.GetShardID(),
-		TaskCategory: tasks.CategoryTimer,
-		InclusiveMinTaskKey: tasks.Key{
-			FireTime: minTimestamp,
-		},
-		ExclusiveMaxTaskKey: tasks.Key{
-			FireTime: maxTimestamp,
-		},
-		BatchSize:     batchSize,
-		NextPageToken: pageToken,
+		ShardID:             t.shard.GetShardID(),
+		TaskCategory:        tasks.CategoryTimer,
+		InclusiveMinTaskKey: tasks.NewKey(minTimestamp, 0),
+		ExclusiveMaxTaskKey: tasks.NewKey(maxTimestamp, 0),
+		BatchSize:           batchSize,
+		NextPageToken:       pageToken,
 	}
 	response, err := t.executionMgr.GetHistoryTasks(context.TODO(), request)
 	if err != nil {

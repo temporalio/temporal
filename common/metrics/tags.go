@@ -193,7 +193,6 @@ func TaskTypeTag(value string) Tag {
 		value = unknownValue
 	}
 	return &tagImpl{key: TaskTypeTagName, value: value}
-
 }
 
 func QueueTypeTag(value string) Tag {
@@ -214,8 +213,10 @@ func ServiceErrorTypeTag(err error) Tag {
 	return &tagImpl{key: ErrorTypeTagName, value: strings.TrimPrefix(fmt.Sprintf(getType, err), errorPrefix)}
 }
 
-var standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)
-var advancedVisibilityTypeTag = VisibilityTypeTag(advancedVisibilityTagValue)
+var (
+	standardVisibilityTypeTag = VisibilityTypeTag(standardVisibilityTagValue)
+	advancedVisibilityTypeTag = VisibilityTypeTag(advancedVisibilityTagValue)
+)
 
 func StandardVisibilityTypeTag() Tag {
 	return standardVisibilityTypeTag
@@ -240,4 +241,12 @@ func ServiceTypeTag(value string) Tag {
 
 func ActionType(value string) Tag {
 	return &tagImpl{key: actionType, value: value}
+}
+
+func OperationTag(value string) Tag {
+	return &tagImpl{key: OperationTagName, value: value}
+}
+
+func StringTag(key string, value string) Tag {
+	return &tagImpl{key: key, value: value}
 }

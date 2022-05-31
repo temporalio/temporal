@@ -73,7 +73,6 @@ import (
 	esclient "go.temporal.io/server/common/persistence/visibility/store/elasticsearch/client"
 	"go.temporal.io/server/common/persistence/visibility/store/standard/cassandra"
 	"go.temporal.io/server/common/primitives/timestamp"
-	"go.temporal.io/server/common/rpc/interceptor"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/searchattribute"
 	"go.temporal.io/server/common/xdc"
@@ -568,12 +567,26 @@ func (adh *AdminHandler) ListHistoryTasks(
 
 	var minTaskKey, maxTaskKey tasks.Key
 	if taskRange.InclusiveMinTaskKey != nil {
-		minTaskKey.FireTime = timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime)
-		minTaskKey.TaskID = taskRange.InclusiveMinTaskKey.TaskId
+		minTaskKey = tasks.NewKey(
+			timestamp.TimeValue(taskRange.InclusiveMinTaskKey.FireTime),
+			taskRange.InclusiveMinTaskKey.TaskId,
+		)
+		if err := tasks.ValidateKey(minTaskKey); err != nil {
+			return nil, adh.error(&serviceerror.InvalidArgument{
+				Message: fmt.Sprintf("invalid minTaskKey: %v", err.Error()),
+			}, scope)
+		}
 	}
 	if taskRange.ExclusiveMaxTaskKey != nil {
-		maxTaskKey.FireTime = timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime)
-		maxTaskKey.TaskID = taskRange.ExclusiveMaxTaskKey.TaskId
+		maxTaskKey = tasks.NewKey(
+			timestamp.TimeValue(taskRange.ExclusiveMaxTaskKey.FireTime),
+			taskRange.ExclusiveMaxTaskKey.TaskId,
+		)
+		if err := tasks.ValidateKey(maxTaskKey); err != nil {
+			return nil, adh.error(&serviceerror.InvalidArgument{
+				Message: fmt.Sprintf("invalid maxTaskKey: %v", err.Error()),
+			}, scope)
+		}
 	}
 	resp, err := adh.persistenceExecutionManager.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
 		ShardID:             request.ShardId,
@@ -679,18 +692,19 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	); err != nil {
 		return nil, adh.error(err, scope)
 	}
-	namespaceID, err := adh.namespaceRegistry.GetNamespaceID(namespace.Name(request.GetNamespace()))
+
+	ns, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
-	scope = scope.Tagged(metrics.NamespaceTag(request.GetNamespace()))
+	scope = scope.Tagged(metrics.NamespaceTag(ns.Name().String()))
 
 	execution := request.Execution
 	var pageToken *tokenspb.RawHistoryContinuation
 	var targetVersionHistory *historyspb.VersionHistory
 	if request.NextPageToken == nil {
 		response, err := adh.historyClient.GetMutableState(ctx, &historyservice.GetMutableStateRequest{
-			NamespaceId: namespaceID.String(),
+			NamespaceId: ns.ID().String(),
 			Execution:   execution,
 		})
 		if err != nil {
@@ -741,7 +755,7 @@ func (adh *AdminHandler) GetWorkflowExecutionRawHistoryV2(ctx context.Context, r
 	}
 	pageSize := int(request.GetMaximumPageSize())
 	shardID := common.WorkflowIDToHistoryShard(
-		namespaceID.String(),
+		ns.ID().String(),
 		execution.GetWorkflowId(),
 		adh.numberOfHistoryShards,
 	)
@@ -1156,9 +1170,6 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request == nil {
 		return nil, adh.error(errRequestNotSet, scope)
 	}
-	if request.GetNamespace() == "" {
-		return nil, adh.error(interceptor.ErrNamespaceNotSet, scope)
-	}
 	if request.WorkflowExecution == nil {
 		return nil, adh.error(errExecutionNotSet, scope)
 	}
@@ -1168,7 +1179,7 @@ func (adh *AdminHandler) ReapplyEvents(ctx context.Context, request *adminservic
 	if request.GetEvents() == nil {
 		return nil, adh.error(errWorkflowIDNotSet, scope)
 	}
-	namespaceEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -1392,7 +1403,7 @@ func (adh *AdminHandler) RefreshWorkflowTasks(
 	if err := validateExecution(request.Execution); err != nil {
 		return nil, adh.error(err, scope)
 	}
-	namespaceEntry, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	namespaceEntry, err := adh.getNamespaceFromRequest(request)
 	if err != nil {
 		return nil, adh.error(err, scope)
 	}
@@ -1830,4 +1841,25 @@ func (adh *AdminHandler) error(err error, scope metrics.Scope) error {
 	scope.IncCounter(metrics.ServiceFailures)
 
 	return err
+}
+
+// TODO (alex): remove this func in 1.18+ together with `namespace` field in corresponding protos and namespace_validator.go.
+func (adh *AdminHandler) getNamespaceFromRequest(request interface {
+	GetNamespace() string
+	GetNamespaceId() string
+}) (*namespace.Namespace, error) {
+
+	if request.GetNamespaceId() != "" {
+		ns, err := adh.namespaceRegistry.GetNamespaceByID(namespace.ID(request.GetNamespaceId()))
+		if err != nil {
+			return nil, err
+		}
+		return ns, nil
+	}
+
+	ns, err := adh.namespaceRegistry.GetNamespace(namespace.Name(request.GetNamespace()))
+	if err != nil {
+		return nil, err
+	}
+	return ns, nil
 }

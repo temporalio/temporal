@@ -659,7 +659,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandRequestCancelExternalWorkfl
 
 	cancelRequestID := uuid.New()
 	_, _, err := handler.mutableState.AddRequestCancelExternalWorkflowExecutionInitiatedEvent(
-		handler.workflowTaskCompletedID, cancelRequestID, attr,
+		handler.workflowTaskCompletedID, cancelRequestID, attr, targetNamespaceID,
 	)
 
 	return err
@@ -886,7 +886,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandStartChildWorkflow(
 
 	requestID := uuid.New()
 	_, _, err = handler.mutableState.AddStartChildWorkflowExecutionInitiatedEvent(
-		handler.workflowTaskCompletedID, requestID, attr,
+		handler.workflowTaskCompletedID, requestID, attr, targetNamespaceID,
 	)
 	if err == nil {
 		// Keep track of all child initiated commands in this workflow task to validate request cancel commands
@@ -940,7 +940,7 @@ func (handler *workflowTaskHandlerImpl) handleCommandSignalExternalWorkflow(
 
 	signalRequestID := uuid.New() // for deduplicate
 	_, _, err = handler.mutableState.AddSignalExternalWorkflowExecutionInitiatedEvent(
-		handler.workflowTaskCompletedID, signalRequestID, attr,
+		handler.workflowTaskCompletedID, signalRequestID, attr, targetNamespaceID,
 	)
 	return err
 }

@@ -250,16 +250,12 @@ func (p *ackMgrImpl) getTasks(
 	replicationTasks := make([]*replicationspb.ReplicationTask, 0, batchSize)
 	for {
 		response, err := p.executionMgr.GetHistoryTasks(ctx, &persistence.GetHistoryTasksRequest{
-			ShardID:      p.shard.GetShardID(),
-			TaskCategory: tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.Key{
-				TaskID: minTaskID + 1,
-			},
-			ExclusiveMaxTaskKey: tasks.Key{
-				TaskID: maxTaskID + 1,
-			},
-			BatchSize:     batchSize,
-			NextPageToken: token,
+			ShardID:             p.shard.GetShardID(),
+			TaskCategory:        tasks.CategoryReplication,
+			InclusiveMinTaskKey: tasks.NewImmediateKey(minTaskID + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(maxTaskID + 1),
+			BatchSize:           batchSize,
+			NextPageToken:       token,
 		})
 		if err != nil {
 			return nil, 0, err

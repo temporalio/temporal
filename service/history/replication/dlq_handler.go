@@ -167,8 +167,8 @@ func (r *dlqHandlerImpl) PurgeMessages(
 			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 				ShardID:             r.shard.GetShardID(),
 				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: tasks.Key{TaskID: ackLevel + 1},
-				ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+				InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
+				ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			},
 			SourceClusterName: sourceCluster,
 		},
@@ -226,8 +226,8 @@ func (r *dlqHandlerImpl) MergeMessages(
 			RangeCompleteHistoryTasksRequest: persistence.RangeCompleteHistoryTasksRequest{
 				ShardID:             r.shard.GetShardID(),
 				TaskCategory:        tasks.CategoryReplication,
-				InclusiveMinTaskKey: tasks.Key{TaskID: ackLevel + 1},
-				ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+				InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
+				ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			},
 			SourceClusterName: sourceCluster,
 		},
@@ -259,8 +259,8 @@ func (r *dlqHandlerImpl) readMessagesWithAckLevel(
 		GetHistoryTasksRequest: persistence.GetHistoryTasksRequest{
 			ShardID:             r.shard.GetShardID(),
 			TaskCategory:        tasks.CategoryReplication,
-			InclusiveMinTaskKey: tasks.Key{TaskID: ackLevel + 1},
-			ExclusiveMaxTaskKey: tasks.Key{TaskID: lastMessageID + 1},
+			InclusiveMinTaskKey: tasks.NewImmediateKey(ackLevel + 1),
+			ExclusiveMaxTaskKey: tasks.NewImmediateKey(lastMessageID + 1),
 			BatchSize:           pageSize,
 			NextPageToken:       pageToken,
 		},

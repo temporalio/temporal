@@ -218,6 +218,8 @@ const (
 	// KeepAliveTimeout After having pinged for keepalive check, the server waits for a duration
 	// of Timeout and if no activity is seen even after that the connection is closed.
 	KeepAliveTimeout = "frontend.keepAliveTimeout"
+	// FrontendEnableSchedules enables schedule-related RPCs in the frontend
+	FrontendEnableSchedules = "frontend.enableSchedules"
 
 	// DeleteNamespaceDeleteActivityRPS is RPS per every parallel delete executions activity.
 	// Total RPS is equal to DeleteNamespaceDeleteActivityRPS * DeleteNamespaceConcurrentDeleteExecutionsActivities.

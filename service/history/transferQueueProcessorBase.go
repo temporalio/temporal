@@ -78,15 +78,11 @@ func (t *transferQueueProcessorBase) readTasks(
 ) ([]tasks.Task, bool, error) {
 
 	response, err := t.executionManager.GetHistoryTasks(context.TODO(), &persistence.GetHistoryTasksRequest{
-		ShardID:      t.shard.GetShardID(),
-		TaskCategory: tasks.CategoryTransfer,
-		InclusiveMinTaskKey: tasks.Key{
-			TaskID: readLevel + 1,
-		},
-		ExclusiveMaxTaskKey: tasks.Key{
-			TaskID: t.maxReadAckLevel() + 1,
-		},
-		BatchSize: t.options.BatchSize(),
+		ShardID:             t.shard.GetShardID(),
+		TaskCategory:        tasks.CategoryTransfer,
+		InclusiveMinTaskKey: tasks.NewImmediateKey(readLevel + 1),
+		ExclusiveMaxTaskKey: tasks.NewImmediateKey(t.maxReadAckLevel() + 1),
+		BatchSize:           t.options.BatchSize(),
 	})
 	if err != nil {
 		return nil, false, err
@@ -114,7 +110,7 @@ func newTransferTaskScheduler(
 		queues.NewNoopPriorityAssigner(),
 		queues.SchedulerOptions{
 			ParallelProcessorOptions: ctasks.ParallelProcessorOptions{
-				WorkerCount: config.TransferTaskWorkerCount(),
+				WorkerCount: config.TransferTaskWorkerCount,
 				QueueSize:   config.TransferTaskBatchSize(),
 			},
 			InterleavedWeightedRoundRobinSchedulerOptions: ctasks.InterleavedWeightedRoundRobinSchedulerOptions{

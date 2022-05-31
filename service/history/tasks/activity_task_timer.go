@@ -48,10 +48,7 @@ type (
 )
 
 func (a *ActivityTimeoutTask) GetKey() Key {
-	return Key{
-		FireTime: a.VisibilityTimestamp,
-		TaskID:   a.TaskID,
-	}
+	return NewKey(a.VisibilityTimestamp, a.TaskID)
 }
 
 func (a *ActivityTimeoutTask) GetVersion() int64 {

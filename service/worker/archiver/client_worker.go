@@ -93,6 +93,7 @@ const (
 )
 
 // these globals exist as a work around because no primitive exists to pass such objects to workflow code
+// TODO: remove these and move to Fx
 var (
 	globalLogger        log.Logger
 	globalMetricsClient metrics.Client
