@@ -119,7 +119,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution() {
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime().Return(&closeTime)
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -158,7 +158,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteDeletedWorkflowExecution_Error() 
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime().Return(&closeTime)
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
 
 	s.mockShardContext.EXPECT().DeleteWorkflowExecution(
 		gomock.Any(),
@@ -374,7 +374,7 @@ func (s *deleteManagerWorkflowSuite) TestDeleteWorkflowExecutionRetention_Archiv
 	mockMutableState.EXPECT().GetCurrentBranchToken().Return([]byte{22, 8, 78}, nil)
 	mockMutableState.EXPECT().GetExecutionState().Return(&persistencespb.WorkflowExecutionState{State: enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED})
 	closeTime := time.Date(1978, 8, 22, 1, 2, 3, 4, time.UTC)
-	mockMutableState.EXPECT().GetWorkflowCloseTime().Return(&closeTime)
+	mockMutableState.EXPECT().GetWorkflowCloseTime(gomock.Any()).Return(&closeTime, nil)
 
 	// ====================== Archival mocks =======================================
 	mockMutableState.EXPECT().GetNamespaceEntry().Return(namespace.NewLocalNamespaceForTest(

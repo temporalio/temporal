@@ -1112,7 +1112,10 @@ func (e *historyEngineImpl) DescribeWorkflowExecution(
 	if executionState.State == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED {
 		// for closed workflow
 		result.WorkflowExecutionInfo.Status = executionState.Status
-		closeTime := mutableState.GetWorkflowCloseTime()
+		closeTime, err := mutableState.GetWorkflowCloseTime(ctx)
+		if err != nil {
+			return nil, err
+		}
 		result.WorkflowExecutionInfo.CloseTime = closeTime
 	}
 

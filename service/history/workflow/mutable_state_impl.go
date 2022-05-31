@@ -864,8 +864,17 @@ func (e *MutableStateImpl) GetCompletionEvent(
 }
 
 // GetWorkflowCloseTime returns workflow closed time, returns nil for open workflow
-func (e *MutableStateImpl) GetWorkflowCloseTime() *time.Time {
-	return e.executionInfo.CloseTime
+func (e *MutableStateImpl) GetWorkflowCloseTime(ctx context.Context) (*time.Time, error) {
+	if e.executionState.GetState() == enumsspb.WORKFLOW_EXECUTION_STATE_COMPLETED && e.executionInfo.CloseTime == nil {
+		// This is for backward compatible. (Added by 05/21/2022)
+		completionEvent, err := e.GetCompletionEvent(ctx)
+		if err != nil {
+			return nil, err
+		}
+		return completionEvent.GetEventTime(), nil
+	}
+
+	return e.executionInfo.CloseTime, nil
 }
 
 // GetStartEvent retrieves the workflow start event from mutable state
