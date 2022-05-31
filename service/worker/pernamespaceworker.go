@@ -98,6 +98,7 @@ func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *p
 		logger:              params.Logger,
 		sdkClientFactory:    params.SdkClientFactory,
 		namespaceRegistry:   params.NamespaceRegistry,
+		hostName:            params.HostName,
 		components:          params.Components,
 		membershipChangedCh: make(chan *membership.ChangedEvent),
 		workerSets:          make(map[namespace.ID]*workerSet),
