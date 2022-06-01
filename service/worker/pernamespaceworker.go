@@ -31,10 +31,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"go.uber.org/fx"
+
 	enumspb "go.temporal.io/api/enums/v1"
 	sdkclient "go.temporal.io/sdk/client"
 	sdkworker "go.temporal.io/sdk/worker"
-	"go.uber.org/fx"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -83,10 +84,10 @@ type (
 	}
 
 	workerSet struct {
-		ns *namespace.Namespace
 		wm *perNamespaceWorkerManager
 
-		lock    sync.Mutex
+		lock    sync.Mutex // protects below fields
+		ns      *namespace.Namespace
 		workers map[workercommon.PerNSWorkerComponent]*worker
 	}
 
@@ -161,20 +162,20 @@ func (wm *perNamespaceWorkerManager) Stop() {
 	for _, ws := range wm.workerSets {
 		// this will see that the perNamespaceWorkerManager is not running
 		// anymore and stop all workers
-		ws.refresh()
+		ws.refresh(nil)
 	}
 
 	wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStopped)
 }
 
 func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace) {
-	go wm.getWorkerSet(ns).refresh()
+	go wm.getWorkerSet(ns).refresh(ns)
 }
 
 func (wm *perNamespaceWorkerManager) membershipChangedListener() {
 	for range wm.membershipChangedCh {
 		for _, ws := range wm.workerSets {
-			go ws.refresh()
+			go ws.refresh(nil)
 		}
 	}
 }
@@ -188,8 +189,8 @@ func (wm *perNamespaceWorkerManager) getWorkerSet(ns *namespace.Namespace) *work
 	}
 
 	ws := &workerSet{
-		ns:      ns,
 		wm:      wm,
+		ns:      ns,
 		workers: make(map[workercommon.PerNSWorkerComponent]*worker),
 	}
 
@@ -218,31 +219,36 @@ func (wm *perNamespaceWorkerManager) responsibleForNamespace(ns *namespace.Names
 
 // called after change to this namespace state _or_ any membership change in the
 // server worker ring
-func (ws *workerSet) refresh() {
-	nsExists := ws.ns.State() != enumspb.NAMESPACE_STATE_DELETED
+func (ws *workerSet) refresh(newNs *namespace.Namespace) {
+	ws.lock.Lock()
+	if newNs != nil {
+		ws.ns = newNs
+	}
+	ns := ws.ns
+	ws.lock.Unlock()
 
 	for _, wc := range ws.wm.components {
-		ws.refreshComponent(wc, nsExists)
+		ws.refreshComponent(wc, ns)
 	}
 }
 
 func (ws *workerSet) refreshComponent(
 	cmp workercommon.PerNSWorkerComponent,
-	nsExists bool,
+	ns *namespace.Namespace,
 ) {
 	op := func() error {
 		// we should run only if all four are true:
 		// 1. perNamespaceWorkerManager is running
-		// 2. this namespace exists
+		// 2. this namespace is not deleted
 		// 3. the component says we should be (can filter by namespace)
 		// 4. we are responsible for this namespace
 		multiplicity := 0
 		var options *workercommon.PerNSDedicatedWorkerOptions
-		if ws.wm.Running() && nsExists {
-			options = cmp.DedicatedWorkerOptions(ws.ns)
+		if ws.wm.Running() && ns.State() != enumspb.NAMESPACE_STATE_DELETED {
+			options = cmp.DedicatedWorkerOptions(ns)
 			if options.Enabled {
 				var err error
-				multiplicity, err = ws.wm.responsibleForNamespace(ws.ns, options.TaskQueue, options.NumWorkers)
+				multiplicity, err = ws.wm.responsibleForNamespace(ns, options.TaskQueue, options.NumWorkers)
 				if err != nil {
 					return err
 				}
@@ -259,7 +265,7 @@ func (ws *workerSet) refreshComponent(
 			}
 			ws.lock.Unlock()
 
-			worker, err := ws.startWorker(cmp, options, multiplicity)
+			worker, err := ws.startWorker(cmp, ns, options, multiplicity)
 			if err != nil {
 				return err
 			}
@@ -274,7 +280,7 @@ func (ws *workerSet) refreshComponent(
 			}
 
 			ws.workers[cmp] = worker
-			ws.wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStarted, tag.WorkflowNamespace(ws.ns.Name().String()), tag.WorkerComponent(cmp))
+			ws.wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStarted, tag.WorkflowNamespace(ns.Name().String()), tag.WorkerComponent(cmp))
 
 			return nil
 		} else {
@@ -284,7 +290,7 @@ func (ws *workerSet) refreshComponent(
 			if worker, ok := ws.workers[cmp]; ok {
 				worker.stop()
 				delete(ws.workers, cmp)
-				ws.wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStopped, tag.WorkflowNamespace(ws.ns.Name().String()), tag.WorkerComponent(cmp))
+				ws.wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStopped, tag.WorkflowNamespace(ns.Name().String()), tag.WorkerComponent(cmp))
 			}
 
 			return nil
@@ -296,10 +302,11 @@ func (ws *workerSet) refreshComponent(
 
 func (ws *workerSet) startWorker(
 	wc workercommon.PerNSWorkerComponent,
+	ns *namespace.Namespace,
 	options *workercommon.PerNSDedicatedWorkerOptions,
 	multiplicity int,
 ) (*worker, error) {
-	nsName := ws.ns.Name().String()
+	nsName := ns.Name().String()
 	client, err := ws.wm.sdkClientFactory.NewClient(nsName, ws.wm.logger)
 	if err != nil {
 		return nil, err
@@ -313,7 +320,7 @@ func (ws *workerSet) startWorker(
 	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
 
 	sdkworker := ws.wm.sdkWorkerFactory.New(client, options.TaskQueue, sdkoptions)
-	wc.Register(sdkworker, ws.ns)
+	wc.Register(sdkworker, ns)
 	// TODO: use Run() and handle post-startup errors by recreating worker
 	// (after sdk supports returning post-startup errors from Run)
 	err = sdkworker.Start()
