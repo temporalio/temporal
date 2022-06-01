@@ -365,7 +365,7 @@ func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
 	cli1.EXPECT().Close()
 }
 
-func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
+func (s *perNsWorkerManagerSuite) TestNewClientError() {
 	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
 
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
@@ -395,6 +395,46 @@ func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
 	// shutdown
 	wkr1.EXPECT().Stop()
 	cli1.EXPECT().Close()
+}
+
+func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
+	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+		Enabled:    true,
+		TaskQueue:  "tq1",
+		NumWorkers: 1,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+		Enabled: false,
+	}).AnyTimes()
+
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil).AnyTimes()
+
+	cli1 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient("ns1", gomock.Any()).Return(cli1, nil)
+	wkr1 := mocksdk.NewMockWorker(s.controller)
+	s.wfactory.EXPECT().New(cli1, "tq1", gomock.Any()).Return(wkr1)
+	s.cmp1.EXPECT().Register(wkr1, ns)
+
+	// first try fails to start
+	wkr1.EXPECT().Start().Return(errors.New("start worker error"))
+	cli1.EXPECT().Close()
+
+	// second try
+	cli2 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient("ns1", gomock.Any()).Return(cli2, nil)
+	wkr2 := mocksdk.NewMockWorker(s.controller)
+	s.wfactory.EXPECT().New(cli1, "tq1", gomock.Any()).Return(wkr2)
+	s.cmp1.EXPECT().Register(wkr2, ns)
+	wkr2.EXPECT().Start()
+
+	s.manager.namespaceCallback(ns)
+	time.Sleep(50 * time.Millisecond)
+
+	// shutdown
+	wkr2.EXPECT().Stop()
+	cli2.EXPECT().Close()
 }
 
 func testns(name string, state enumspb.NamespaceState) *namespace.Namespace {
