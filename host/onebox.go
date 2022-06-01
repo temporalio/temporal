@@ -28,14 +28,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/replication"
 	"net"
 	"sync"
 	"time"
 
 	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
 	"go.uber.org/fx"
 	"google.golang.org/grpc"
 
@@ -547,6 +548,7 @@ func (c *temporalImpl) startHistory(
 			fx.Provide(workflow.NewTaskGeneratorProvider),
 			history.QueueProcessorModule,
 			history.Module,
+			replication.Module,
 			fx.Populate(&historyService, &clientBean, &namespaceRegistry),
 			fx.NopLogger)
 		err = app.Err()
