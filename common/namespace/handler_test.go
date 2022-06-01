@@ -26,6 +26,7 @@ package namespace
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -113,6 +114,7 @@ func (s *namespaceHandlerCommonSuite) SetupTest() {
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
+		func(s string) bool { return strings.HasSuffix(s, "sched") },
 	)
 }
 
@@ -281,7 +283,7 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 	s.NoError(err)
 	s.Equal(&workflowservice.RegisterNamespaceResponse{}, registerResp)
 
-	namespace2 := s.getRandomNamespace()
+	namespace2 := s.getRandomNamespace() + "sched"
 	description2 := "some random description 2"
 	email2 := "some random email 2"
 	retention2 := 2 * time.Hour * 24
@@ -356,12 +358,13 @@ func (s *namespaceHandlerCommonSuite) TestListNamespace() {
 		},
 		namespace2: &workflowservice.DescribeNamespaceResponse{
 			NamespaceInfo: &namespacepb.NamespaceInfo{
-				Name:        namespace2,
-				State:       enumspb.NAMESPACE_STATE_REGISTERED,
-				Description: description2,
-				OwnerEmail:  email2,
-				Data:        data2,
-				Id:          "",
+				Name:              namespace2,
+				State:             enumspb.NAMESPACE_STATE_REGISTERED,
+				Description:       description2,
+				OwnerEmail:        email2,
+				Data:              data2,
+				Id:                "",
+				SupportsSchedules: true,
 			},
 			Config: &namespacepb.NamespaceConfig{
 				WorkflowExecutionRetentionTtl: &retention2,
