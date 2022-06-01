@@ -65,6 +65,7 @@ func newTransferQueueStandbyTaskExecutor(
 	archivalClient archiver.Client,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	clusterName string,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -74,6 +75,7 @@ func newTransferQueueStandbyTaskExecutor(
 			workflowCache,
 			archivalClient,
 			logger,
+			metricProvider,
 			matchingClient,
 		),
 		clusterName:        clusterName,
@@ -84,35 +86,37 @@ func newTransferQueueStandbyTaskExecutor(
 func (t *transferQueueStandbyTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.Scope, error) {
+) (metrics.MetricProvider, error) {
 
 	task := executable.GetTask()
-	scope := t.metricsClient.Scope(
-		tasks.GetStandbyTransferTaskMetricsScope(task),
-		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	taskType := queues.GetStandbyTransferTaskTypeTagValue(task)
+	metricsProvider := t.metricProvider.WithTags(
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
 	)
 
 	switch task := task.(type) {
 	case *tasks.ActivityTask:
-		return scope, t.processActivityTask(ctx, task)
+		return metricsProvider, t.processActivityTask(ctx, task)
 	case *tasks.WorkflowTask:
-		return scope, t.processWorkflowTask(ctx, task)
+		return metricsProvider, t.processWorkflowTask(ctx, task)
 	case *tasks.CancelExecutionTask:
-		return scope, t.processCancelExecution(ctx, task)
+		return metricsProvider, t.processCancelExecution(ctx, task)
 	case *tasks.SignalExecutionTask:
-		return scope, t.processSignalExecution(ctx, task)
+		return metricsProvider, t.processSignalExecution(ctx, task)
 	case *tasks.StartChildExecutionTask:
-		return scope, t.processStartChildExecution(ctx, task)
+		return metricsProvider, t.processStartChildExecution(ctx, task)
 	case *tasks.ResetWorkflowTask:
 		// no reset needed for standby
 		// TODO: add error logs
-		return scope, nil
+		return metricsProvider, nil
 	case *tasks.CloseExecutionTask:
-		return scope, t.processCloseExecution(ctx, task)
+		return metricsProvider, t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionTask:
-		return scope, t.processDeleteExecutionTask(ctx, task)
+		return metricsProvider, t.processDeleteExecutionTask(ctx, task)
 	default:
-		return scope, errUnknownTransferTask
+		return metricsProvider, errUnknownTransferTask
 	}
 }
 

@@ -65,6 +65,7 @@ func newTransferQueueStandbyProcessor(
 	clientBean client.Bean,
 	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	matchingClient matchingservice.MatchingServiceClient,
 ) *transferQueueStandbyProcessorImpl {
 
@@ -135,6 +136,7 @@ func newTransferQueueStandbyProcessor(
 			logger,
 		),
 		logger,
+		metricProvider,
 		clusterName,
 		matchingClient,
 	)
@@ -147,7 +149,7 @@ func newTransferQueueStandbyProcessor(
 	rescheduler := queues.NewRescheduler(
 		scheduler,
 		shard.GetTimeSource(),
-		shard.GetMetricsClient().Scope(metrics.TransferStandbyQueueProcessorScope),
+		metricProvider.WithTags(metrics.OperationTag(queues.OperationTransferStandbyQueueProcessor)),
 	)
 
 	queueAckMgr := newQueueAckMgr(

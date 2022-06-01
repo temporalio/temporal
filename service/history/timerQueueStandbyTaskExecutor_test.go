@@ -191,6 +191,7 @@ func (s *timerQueueStandbyTaskExecutorSuite) SetupTest() {
 		s.mockNDCHistoryResender,
 		s.mockMatchingClient,
 		s.logger,
+		metrics.NoopMetricProvider,
 		s.clusterName,
 		config,
 	).(*timerQueueStandbyTaskExecutor)

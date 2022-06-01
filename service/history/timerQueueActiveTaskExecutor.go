@@ -70,6 +70,7 @@ func newTimerQueueActiveTaskExecutor(
 	workflowDeleteManager workflow.DeleteManager,
 	queueProcessor *timerQueueActiveProcessorImpl,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	config *configs.Config,
 	matchingClient matchingservice.MatchingServiceClient,
 ) queues.Executor {
@@ -80,6 +81,7 @@ func newTimerQueueActiveTaskExecutor(
 			workflowDeleteManager,
 			matchingClient,
 			logger,
+			metricProvider,
 			config,
 		),
 		queueProcessor: queueProcessor,
@@ -89,31 +91,33 @@ func newTimerQueueActiveTaskExecutor(
 func (t *timerQueueActiveTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.Scope, error) {
+) (metrics.MetricProvider, error) {
 
 	task := executable.GetTask()
-	scope := t.metricsClient.Scope(
-		tasks.GetActiveTimerTaskMetricScope(task),
-		getNamespaceTagByID(t.registry, task.GetNamespaceID()),
+	taskType := queues.GetActiveTimerTaskTypeTagValue(task)
+	metricsProvider := t.metricProvider.WithTags(
+		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
 	)
 
 	switch task := task.(type) {
 	case *tasks.UserTimerTask:
-		return scope, t.executeUserTimerTimeoutTask(ctx, task)
+		return metricsProvider, t.executeUserTimerTimeoutTask(ctx, task)
 	case *tasks.ActivityTimeoutTask:
-		return scope, t.executeActivityTimeoutTask(ctx, task)
+		return metricsProvider, t.executeActivityTimeoutTask(ctx, task)
 	case *tasks.WorkflowTaskTimeoutTask:
-		return scope, t.executeWorkflowTaskTimeoutTask(ctx, task)
+		return metricsProvider, t.executeWorkflowTaskTimeoutTask(ctx, task)
 	case *tasks.WorkflowTimeoutTask:
-		return scope, t.executeWorkflowTimeoutTask(ctx, task)
+		return metricsProvider, t.executeWorkflowTimeoutTask(ctx, task)
 	case *tasks.ActivityRetryTimerTask:
-		return scope, t.executeActivityRetryTimerTask(ctx, task)
+		return metricsProvider, t.executeActivityRetryTimerTask(ctx, task)
 	case *tasks.WorkflowBackoffTimerTask:
-		return scope, t.executeWorkflowBackoffTimerTask(ctx, task)
+		return metricsProvider, t.executeWorkflowBackoffTimerTask(ctx, task)
 	case *tasks.DeleteHistoryEventTask:
-		return scope, t.executeDeleteHistoryEventTask(ctx, task)
+		return metricsProvider, t.executeDeleteHistoryEventTask(ctx, task)
 	default:
-		return scope, errUnknownTimerTask
+		return metricsProvider, errUnknownTimerTask
 	}
 }
 

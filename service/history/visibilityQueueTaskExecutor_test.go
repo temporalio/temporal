@@ -163,6 +163,7 @@ func (s *visibilityQueueTaskExecutorSuite) SetupTest() {
 		s.workflowCache,
 		s.mockVisibilityMgr,
 		s.logger,
+		metrics.NoopMetricProvider,
 	)
 }
 

@@ -46,10 +46,11 @@ import (
 
 type (
 	visibilityQueueTaskExecutor struct {
-		shard         shard.Context
-		cache         workflow.Cache
-		logger        log.Logger
-		visibilityMgr manager.VisibilityManager
+		shard          shard.Context
+		cache          workflow.Cache
+		logger         log.Logger
+		metricProvider metrics.MetricProvider
+		visibilityMgr  manager.VisibilityManager
 	}
 )
 
@@ -62,37 +63,41 @@ func newVisibilityQueueTaskExecutor(
 	workflowCache workflow.Cache,
 	visibilityMgr manager.VisibilityManager,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 ) *visibilityQueueTaskExecutor {
 	return &visibilityQueueTaskExecutor{
-		shard:         shard,
-		cache:         workflowCache,
-		logger:        logger,
-		visibilityMgr: visibilityMgr,
+		shard:          shard,
+		cache:          workflowCache,
+		logger:         logger,
+		metricProvider: metricProvider,
+		visibilityMgr:  visibilityMgr,
 	}
 }
 
 func (t *visibilityQueueTaskExecutor) Execute(
 	ctx context.Context,
 	executable queues.Executable,
-) (metrics.Scope, error) {
+) (metrics.MetricProvider, error) {
 
 	task := executable.GetTask()
-	scope := t.shard.GetMetricsClient().Scope(
-		tasks.GetVisibilityTaskMetricsScope(task),
+	taskType := queues.GetVisibilityTaskTypeTagValue(task)
+	metricsProvider := t.metricProvider.WithTags(
 		getNamespaceTagByID(t.shard.GetNamespaceRegistry(), task.GetNamespaceID()),
+		metrics.TaskTypeTag(taskType),
+		metrics.OperationTag(taskType), // for backward compatibility
 	)
 
 	switch task := task.(type) {
 	case *tasks.StartExecutionVisibilityTask:
-		return scope, t.processStartExecution(ctx, task)
+		return metricsProvider, t.processStartExecution(ctx, task)
 	case *tasks.UpsertExecutionVisibilityTask:
-		return scope, t.processUpsertExecution(ctx, task)
+		return metricsProvider, t.processUpsertExecution(ctx, task)
 	case *tasks.CloseExecutionVisibilityTask:
-		return scope, t.processCloseExecution(ctx, task)
+		return metricsProvider, t.processCloseExecution(ctx, task)
 	case *tasks.DeleteExecutionVisibilityTask:
-		return scope, t.processDeleteExecution(ctx, task)
+		return metricsProvider, t.processDeleteExecution(ctx, task)
 	default:
-		return scope, errUnknownVisibilityTask
+		return metricsProvider, errUnknownVisibilityTask
 	}
 }
 

@@ -65,6 +65,7 @@ type (
 		shard                      shard.Context
 		taskAllocator              taskAllocator
 		config                     *configs.Config
+		metricProvider             metrics.MetricProvider
 		metricsClient              metrics.Client
 		workflowCache              workflow.Cache
 		scheduler                  queues.Scheduler
@@ -90,6 +91,7 @@ func newTimerQueueProcessor(
 	clientBean client.Bean,
 	archivalClient archiver.Client,
 	matchingClient matchingservice.MatchingServiceClient,
+	metricProvider metrics.MetricProvider,
 	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
 
@@ -114,6 +116,7 @@ func newTimerQueueProcessor(
 		shard:                 shard,
 		taskAllocator:         taskAllocator,
 		config:                config,
+		metricProvider:        metricProvider,
 		metricsClient:         shard.GetMetricsClient(),
 		workflowCache:         workflowCache,
 		scheduler:             scheduler,
@@ -138,6 +141,7 @@ func newTimerQueueProcessor(
 				config.TimerProcessorMaxPollRPS,
 			),
 			logger,
+			metricProvider,
 			singleProcessor,
 		),
 		standbyTimerProcessors: make(map[string]*timerQueueStandbyProcessorImpl),
@@ -249,6 +253,7 @@ func (t *timerQueueProcessorImpl) FailoverNamespace(
 			t.config.TimerProcessorFailoverMaxPollRPS,
 		),
 		t.logger,
+		t.metricProvider,
 	)
 
 	// NOTE: READ REF BEFORE MODIFICATION
@@ -399,6 +404,7 @@ func (t *timerQueueProcessorImpl) handleClusterMetadataUpdate(
 					t.config.TimerProcessorMaxPollRPS,
 				),
 				t.logger,
+				t.metricProvider,
 			)
 			processor.Start()
 			t.standbyTimerProcessors[clusterName] = processor

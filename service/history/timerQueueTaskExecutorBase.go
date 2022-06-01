@@ -55,6 +55,7 @@ type (
 		cache              workflow.Cache
 		logger             log.Logger
 		matchingClient     matchingservice.MatchingServiceClient
+		metricProvider     metrics.MetricProvider
 		metricsClient      metrics.Client
 		config             *configs.Config
 	}
@@ -66,6 +67,7 @@ func newTimerQueueTaskExecutorBase(
 	deleteManager workflow.DeleteManager,
 	matchingClient matchingservice.MatchingServiceClient,
 	logger log.Logger,
+	metricProvider metrics.MetricProvider,
 	config *configs.Config,
 ) *timerQueueTaskExecutorBase {
 	return &timerQueueTaskExecutorBase{
@@ -76,6 +78,7 @@ func newTimerQueueTaskExecutorBase(
 		deleteManager:      deleteManager,
 		logger:             logger,
 		matchingClient:     matchingClient,
+		metricProvider:     metricProvider,
 		metricsClient:      shard.GetMetricsClient(),
 		config:             config,
 	}
