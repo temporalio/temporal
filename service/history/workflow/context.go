@@ -144,6 +144,7 @@ type (
 		SetWorkflowExecution(
 			ctx context.Context,
 			now time.Time,
+			mutableState MutableState,
 		) error
 	}
 )
@@ -669,14 +670,14 @@ func (c *ContextImpl) UpdateWorkflowExecutionWithNew(
 	return nil
 }
 
-func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (retError error) {
+func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time, mutableState MutableState) (retError error) {
 	defer func() {
 		if retError != nil {
 			c.Clear()
 		}
 	}()
 
-	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := c.MutableState.CloseTransactionAsSnapshot(
+	resetWorkflowSnapshot, resetWorkflowEventsSeq, err := mutableState.CloseTransactionAsSnapshot(
 		now,
 		TransactionPolicyPassive,
 	)
@@ -694,7 +695,7 @@ func (c *ContextImpl) SetWorkflowExecution(ctx context.Context, now time.Time) (
 	return c.transaction.SetWorkflowExecution(
 		ctx,
 		resetWorkflowSnapshot,
-		c.MutableState.GetNamespaceEntry().ActiveClusterName(),
+		mutableState.GetNamespaceEntry().ActiveClusterName(),
 	)
 }
 

@@ -25,6 +25,7 @@
 package history
 
 import (
+	"go.temporal.io/server/service/history/replication"
 	"go.uber.org/fx"
 
 	"go.temporal.io/server/client"
@@ -43,16 +44,18 @@ type (
 	HistoryEngineFactoryParams struct {
 		fx.In
 
-		ClientBean              client.Bean
-		MatchingClient          resource.MatchingClient
-		SdkClientFactory        sdk.ClientFactory
-		EventNotifier           events.Notifier
-		Config                  *configs.Config
-		RawMatchingClient       resource.MatchingRawClient
-		NewCacheFn              workflow.NewCacheFn
-		ArchivalClient          archiver.Client
-		EventSerializer         serialization.Serializer
-		QueueProcessorFactories []queues.ProcessorFactory `group:"queueProcessorFactory"`
+		ClientBean                      client.Bean
+		MatchingClient                  resource.MatchingClient
+		SdkClientFactory                sdk.ClientFactory
+		EventNotifier                   events.Notifier
+		Config                          *configs.Config
+		RawMatchingClient               resource.MatchingRawClient
+		NewCacheFn                      workflow.NewCacheFn
+		ArchivalClient                  archiver.Client
+		EventSerializer                 serialization.Serializer
+		QueueProcessorFactories         []queues.ProcessorFactory `group:"queueProcessorFactory"`
+		ReplicationTaskFetcherFactory   replication.TaskFetcherFactory
+		ReplicationTaskExecutorProvider replication.TaskExecutorProvider
 	}
 
 	historyEngineFactory struct {
@@ -75,5 +78,7 @@ func (f *historyEngineFactory) CreateEngine(
 		f.ArchivalClient,
 		f.EventSerializer,
 		f.QueueProcessorFactories,
+		f.ReplicationTaskFetcherFactory,
+		f.ReplicationTaskExecutorProvider,
 	)
 }

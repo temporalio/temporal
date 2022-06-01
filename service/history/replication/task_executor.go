@@ -49,6 +49,17 @@ type (
 		Execute(replicationTask *replicationspb.ReplicationTask, forceApply bool) (int, error)
 	}
 
+	TaskExecutorParams struct {
+		RemoteCluster   string
+		Shard           shard.Context
+		HistoryResender xdc.NDCHistoryResender
+		HistoryEngine   shard.Engine
+		DeleteManager   workflow.DeleteManager
+		WorkflowCache   workflow.Cache
+	}
+
+	TaskExecutorProvider func(params TaskExecutorParams) TaskExecutor
+
 	taskExecutorImpl struct {
 		currentCluster     string
 		remoteCluster      string
@@ -68,25 +79,22 @@ type (
 func NewTaskExecutor(
 	remoteCluster string,
 	shard shard.Context,
-	namespaceRegistry namespace.Registry,
 	nDCHistoryResender xdc.NDCHistoryResender,
 	historyEngine shard.Engine,
 	deleteManager workflow.DeleteManager,
 	workflowCache workflow.Cache,
-	metricsClient metrics.Client,
-	logger log.Logger,
 ) TaskExecutor {
 	return &taskExecutorImpl{
 		currentCluster:     shard.GetClusterMetadata().GetCurrentClusterName(),
 		remoteCluster:      remoteCluster,
 		shard:              shard,
-		namespaceRegistry:  namespaceRegistry,
+		namespaceRegistry:  shard.GetNamespaceRegistry(),
 		nDCHistoryResender: nDCHistoryResender,
 		historyEngine:      historyEngine,
 		deleteManager:      deleteManager,
 		workflowCache:      workflowCache,
-		metricsClient:      metricsClient,
-		logger:             logger,
+		metricsClient:      shard.GetMetricsClient(),
+		logger:             shard.GetLogger(),
 	}
 }
 

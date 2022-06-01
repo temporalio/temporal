@@ -72,13 +72,14 @@ type (
 	}
 
 	dlqHandlerImpl struct {
-		taskExecutorsLock sync.Mutex
-		taskExecutors     map[string]TaskExecutor
-		shard             shard.Context
-		deleteManager     workflow.DeleteManager
-		workflowCache     workflow.Cache
-		resender          xdc.NDCHistoryResender
-		logger            log.Logger
+		taskExecutorsLock    sync.Mutex
+		taskExecutors        map[string]TaskExecutor
+		shard                shard.Context
+		deleteManager        workflow.DeleteManager
+		workflowCache        workflow.Cache
+		resender             xdc.NDCHistoryResender
+		taskExecutorProvider TaskExecutorProvider
+		logger               log.Logger
 	}
 )
 
@@ -87,6 +88,7 @@ func NewLazyDLQHandler(
 	deleteManager workflow.DeleteManager,
 	workflowCache workflow.Cache,
 	clientBean client.Bean,
+	taskExecutorProvider TaskExecutorProvider,
 ) DLQHandler {
 	return newDLQHandler(
 		shard,
@@ -94,6 +96,7 @@ func NewLazyDLQHandler(
 		workflowCache,
 		clientBean,
 		make(map[string]TaskExecutor),
+		taskExecutorProvider,
 	)
 }
 
@@ -103,6 +106,7 @@ func newDLQHandler(
 	workflowCache workflow.Cache,
 	clientBean client.Bean,
 	taskExecutors map[string]TaskExecutor,
+	taskExecutorProvider TaskExecutorProvider,
 ) *dlqHandlerImpl {
 
 	if taskExecutors == nil {
@@ -131,8 +135,9 @@ func newDLQHandler(
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 			shard.GetLogger(),
 		),
-		taskExecutors: taskExecutors,
-		logger:        shard.GetLogger(),
+		taskExecutors:        taskExecutors,
+		taskExecutorProvider: taskExecutorProvider,
+		logger:               shard.GetLogger(),
 	}
 }
 
@@ -334,17 +339,14 @@ func (r *dlqHandlerImpl) getOrCreateTaskExecutor(clusterName string) (TaskExecut
 	if err != nil {
 		return nil, err
 	}
-	taskExecutor := NewTaskExecutor(
-		clusterName,
-		r.shard,
-		r.shard.GetNamespaceRegistry(),
-		r.resender,
-		engine,
-		r.deleteManager,
-		r.workflowCache,
-		r.shard.GetMetricsClient(),
-		r.shard.GetLogger(),
-	)
+	taskExecutor := r.taskExecutorProvider(TaskExecutorParams{
+		RemoteCluster:   clusterName,
+		Shard:           r.shard,
+		HistoryResender: r.resender,
+		HistoryEngine:   engine,
+		DeleteManager:   r.deleteManager,
+		WorkflowCache:   r.workflowCache,
+	})
 	r.taskExecutors[clusterName] = taskExecutor
 	return taskExecutor, nil
 }

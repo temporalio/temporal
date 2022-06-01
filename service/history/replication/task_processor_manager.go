@@ -37,11 +37,8 @@ import (
 	"go.temporal.io/server/common/persistence/serialization"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/configs"
-	"go.temporal.io/server/service/history/queues"
 	"go.temporal.io/server/service/history/shard"
-	"go.temporal.io/server/service/history/tasks"
 	"go.temporal.io/server/service/history/workflow"
-	"go.temporal.io/server/service/worker/archiver"
 )
 
 type (
@@ -56,29 +53,26 @@ type (
 		replicationTaskFetcherFactory TaskFetcherFactory
 		workflowCache                 workflow.Cache
 		resender                      xdc.NDCHistoryResender
+		taskExecutorProvider          TaskExecutorProvider
 
 		taskProcessorLock sync.RWMutex
 		taskProcessors    map[string]TaskProcessor
 	}
 )
 
-func NewTaskProcessorFactory(
-	archivalClient archiver.Client,
+var _ common.Daemon = (*taskProcessorFactoryImpl)(nil)
+
+func NewTaskProcessorManager(
 	config *configs.Config,
-	engine shard.Engine,
-	eventSerializer serialization.Serializer,
 	shard shard.Context,
-	replicationTaskFetcherFactory TaskFetcherFactory,
+	engine shard.Engine,
 	workflowCache workflow.Cache,
+	workflowDeleteManager workflow.DeleteManager,
 	clientBean client.Bean,
-) queues.Processor {
-	workflowDeleteManager := workflow.NewDeleteManager(
-		shard,
-		workflowCache,
-		config,
-		archivalClient,
-		shard.GetTimeSource(),
-	)
+	eventSerializer serialization.Serializer,
+	replicationTaskFetcherFactory TaskFetcherFactory,
+	taskExecutorProvider TaskExecutorProvider,
+) *taskProcessorFactoryImpl {
 
 	// Intentionally use the raw client to create its own retry policy
 	historyClient := shard.GetHistoryClient()
@@ -108,7 +102,8 @@ func NewTaskProcessorFactory(
 			shard.GetConfig().StandbyTaskReReplicationContextTimeout,
 			shard.GetLogger(),
 		),
-		taskProcessors: make(map[string]TaskProcessor),
+		taskProcessors:       make(map[string]TaskProcessor),
+		taskExecutorProvider: taskExecutorProvider,
 	}
 }
 
@@ -140,26 +135,6 @@ func (r *taskProcessorFactoryImpl) Stop() {
 		replicationTaskProcessor.Stop()
 	}
 	r.taskProcessorLock.Unlock()
-}
-
-func (r *taskProcessorFactoryImpl) Category() tasks.Category {
-	return tasks.CategoryReplication
-}
-
-func (r *taskProcessorFactoryImpl) NotifyNewTasks(_ string, _ []tasks.Task) {
-	//no-op
-}
-
-func (r *taskProcessorFactoryImpl) FailoverNamespace(_ map[string]struct{}) {
-	//no-op
-}
-
-func (r *taskProcessorFactoryImpl) LockTaskProcessing() {
-	//no-op
-}
-
-func (r *taskProcessorFactoryImpl) UnlockTaskProcessing() {
-	//no-op
 }
 
 func (r *taskProcessorFactoryImpl) listenToClusterMetadataChange() {
@@ -194,24 +169,20 @@ func (r *taskProcessorFactoryImpl) handleClusterMetadataUpdate(
 		if clusterInfo := newClusterMetadata[clusterName]; clusterInfo != nil && clusterInfo.Enabled {
 			// Case 2 and Case 3
 			fetcher := r.replicationTaskFetcherFactory.GetOrCreateFetcher(clusterName)
-			replicationTaskExecutor := NewTaskExecutor(
-				clusterName,
-				r.shard,
-				r.shard.GetNamespaceRegistry(),
-				r.resender,
-				r.engine,
-				r.deleteMgr,
-				r.workflowCache,
-				r.shard.GetMetricsClient(),
-				r.shard.GetLogger(),
-			)
 			replicationTaskProcessor := NewTaskProcessor(
 				r.shard,
 				r.engine,
 				r.config,
 				r.shard.GetMetricsClient(),
 				fetcher,
-				replicationTaskExecutor,
+				r.taskExecutorProvider(TaskExecutorParams{
+					RemoteCluster:   clusterName,
+					Shard:           r.shard,
+					HistoryResender: r.resender,
+					HistoryEngine:   r.engine,
+					DeleteManager:   r.deleteMgr,
+					WorkflowCache:   r.workflowCache,
+				}),
 				r.eventSerializer,
 			)
 			replicationTaskProcessor.Start()

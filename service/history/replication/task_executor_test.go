@@ -117,7 +117,6 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.replicationTaskExecutor = NewTaskExecutor(
 		s.remoteCluster,
 		s.mockShard,
-		s.mockNamespaceCache,
 		s.nDCHistoryResender,
 		s.mockEngine,
 		workflow.NewMockDeleteManager(s.controller),
