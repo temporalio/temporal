@@ -74,6 +74,7 @@ type (
 		hostName          resource.HostName
 		serviceResolver   membership.ServiceResolver
 		components        []workercommon.PerNSWorkerComponent
+		initialRetry      time.Duration
 
 		membershipChangedCh chan *membership.ChangedEvent
 
@@ -103,6 +104,7 @@ func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *p
 		namespaceRegistry:   params.NamespaceRegistry,
 		hostName:            params.HostName,
 		components:          params.Components,
+		initialRetry:        1 * time.Second,
 		membershipChangedCh: make(chan *membership.ChangedEvent),
 		workerSets:          make(map[namespace.ID]*workerSet),
 	}
@@ -288,7 +290,7 @@ func (ws *workerSet) refreshComponent(
 			return nil
 		}
 	}
-	policy := backoff.NewExponentialRetryPolicy(1 * time.Second)
+	policy := backoff.NewExponentialRetryPolicy(ws.wm.initialRetry)
 	backoff.Retry(op, policy, nil)
 }
 

@@ -25,6 +25,7 @@
 package worker
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -84,6 +85,7 @@ func (s *perNsWorkerManagerSuite) SetupTest() {
 		HostName:          "self",
 		Components:        []common.PerNSWorkerComponent{s.cmp1, s.cmp2},
 	})
+	s.manager.initialRetry = 1 * time.Millisecond
 
 	s.registry.EXPECT().RegisterStateChangeCallback(gomock.Any(), gomock.Any())
 	s.serviceResolver.EXPECT().AddListener(gomock.Any(), gomock.Any())
@@ -101,10 +103,10 @@ func (s *perNsWorkerManagerSuite) TearDownTest() {
 func (s *perNsWorkerManagerSuite) TestDisabled() {
 	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled: false,
-	})
+	}).AnyTimes()
 	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled: false,
-	})
+	}).AnyTimes()
 
 	s.manager.namespaceCallback(namespace.NewLocalNamespaceForTest(
 		&persistencespb.NamespaceInfo{
@@ -123,10 +125,10 @@ func (s *perNsWorkerManagerSuite) TestEnabledButResolvedToOther() {
 		Enabled:    true,
 		TaskQueue:  "tq1",
 		NumWorkers: 2,
-	})
+	}).AnyTimes()
 	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled: false,
-	})
+	}).AnyTimes()
 
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("other1", nil), nil)
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/1").Return(membership.NewHostInfo("other2", nil), nil)
@@ -143,10 +145,10 @@ func (s *perNsWorkerManagerSuite) TestEnabled() {
 		Enabled:    true,
 		TaskQueue:  "tq1",
 		NumWorkers: 1,
-	})
+	}).AnyTimes()
 	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled: false,
-	})
+	}).AnyTimes()
 
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil)
 	cli1 := mocksdk.NewMockClient(s.controller)
@@ -171,10 +173,10 @@ func (s *perNsWorkerManagerSuite) TestMultiplicity() {
 		Enabled:    true,
 		TaskQueue:  "tq1",
 		NumWorkers: 3,
-	})
+	}).AnyTimes()
 	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled: false,
-	})
+	}).AnyTimes()
 
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil)
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/1").Return(membership.NewHostInfo("other", nil), nil)
@@ -204,12 +206,12 @@ func (s *perNsWorkerManagerSuite) TestTwoNamespacesTwoComponents() {
 		Enabled:    true,
 		TaskQueue:  "tq1",
 		NumWorkers: 1,
-	}).Times(2)
+	}).AnyTimes()
 	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled:    true,
 		TaskQueue:  "tq2",
 		NumWorkers: 1,
-	}).Times(2)
+	}).AnyTimes()
 
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil)
 	s.serviceResolver.EXPECT().Lookup("ns1/tq2/0").Return(membership.NewHostInfo("self", nil), nil)
@@ -269,10 +271,10 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 		Enabled:    true,
 		TaskQueue:  "tq1",
 		NumWorkers: 1,
-	})
+	}).AnyTimes()
 	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
 		Enabled: false,
-	})
+	}).AnyTimes()
 
 	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil)
 	cli1 := mocksdk.NewMockClient(s.controller)
@@ -333,11 +335,66 @@ func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
 }
 
 func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
-	// TODO
+	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+		Enabled:    true,
+		TaskQueue:  "tq1",
+		NumWorkers: 1,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+		Enabled: false,
+	}).AnyTimes()
+
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(nil, errors.New("resolver error"))
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(nil, errors.New("resolver error again"))
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil)
+
+	cli1 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient("ns1", gomock.Any()).Return(cli1, nil)
+	wkr1 := mocksdk.NewMockWorker(s.controller)
+	s.wfactory.EXPECT().New(cli1, "tq1", gomock.Any()).Return(wkr1)
+	s.cmp1.EXPECT().Register(wkr1, ns)
+	wkr1.EXPECT().Start()
+
+	s.manager.namespaceCallback(ns)
+	time.Sleep(50 * time.Millisecond)
+
+	// shutdown
+	wkr1.EXPECT().Stop()
+	cli1.EXPECT().Close()
 }
 
 func (s *perNsWorkerManagerSuite) TestStartWorkerError() {
-	// TODO
+	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+		Enabled:    true,
+		TaskQueue:  "tq1",
+		NumWorkers: 1,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+		Enabled: false,
+	}).AnyTimes()
+
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil).AnyTimes()
+
+	cli1 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient("ns1", gomock.Any()).Return(nil, errors.New("new client error"))
+	s.cfactory.EXPECT().NewClient("ns1", gomock.Any()).Return(nil, errors.New("new client error again"))
+	s.cfactory.EXPECT().NewClient("ns1", gomock.Any()).Return(cli1, nil)
+
+	wkr1 := mocksdk.NewMockWorker(s.controller)
+	s.wfactory.EXPECT().New(cli1, "tq1", gomock.Any()).Return(wkr1)
+	s.cmp1.EXPECT().Register(wkr1, ns)
+	wkr1.EXPECT().Start()
+
+	s.manager.namespaceCallback(ns)
+	time.Sleep(50 * time.Millisecond)
+
+	// shutdown
+	wkr1.EXPECT().Stop()
+	cli1.EXPECT().Close()
 }
 
 func testns(name string, state enumspb.NamespaceState) *namespace.Namespace {
