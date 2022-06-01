@@ -61,16 +61,9 @@ const (
 
 	InitialConflictToken = 1
 
-	// The number of future action times to include in Describe.
-	futureActionCount = 10
-	// The number of recent actual action results to include in Describe.
-	recentActionCount = 10
-
-	// Maximum number of times to list per ListMatchingTimes query.
+	// Maximum number of times to list per ListMatchingTimes query. (This is used only in a
+	// query so it can be changed without breaking history.)
 	maxListMatchingTimesCount = 1000
-
-	// TODO: replace with event count or hint from server
-	iterationsBeforeContinueAsNew = 500
 
 	searchAttrStartTime    = "TemporalScheduledStartTime"
 	searchAttrScheduleById = "TemporalScheduledById"
@@ -86,6 +79,8 @@ type (
 
 		cspec *compiledSpec
 
+		tweakables tweakablePolicies
+
 		// We might have zero or one long-poll watcher activity running. If so, these are set:
 		watchingWorkflowId string
 		watchingFuture     workflow.Future
@@ -94,8 +89,14 @@ type (
 		needRefresh bool
 	}
 
-	catchupWindowParams struct {
-		Default, Min time.Duration
+	tweakablePolicies struct {
+		DefaultCatchupWindow              time.Duration // Default for catchup window
+		MinCatchupWindow                  time.Duration // Minimum for catchup window
+		CanceledTerminatedCountAsFailures bool          // Whether cancelled+terminated count for pause-on-failure
+		AlwaysAppendTimestamp             bool          // Whether to append timestamp for non-overlapping workflows too
+		FutureActionCount                 int           // The number of future action times to include in Describe.
+		RecentActionCount                 int           // The number of recent actual action results to include in Describe.
+		IterationsBeforeContinueAsNew     int
 	}
 )
 
@@ -112,9 +113,17 @@ var (
 		},
 	}
 
-	defaultCatchupWindowParams = catchupWindowParams{
-		Default: 60 * time.Second,
-		Min:     10 * time.Second,
+	// We put a handful of options in a static value and use it as a MutableSideEffect within
+	// the workflow so that we can change them without breaking existing executions or having
+	// to use versioning.
+	currentTweakablePolicies = tweakablePolicies{
+		DefaultCatchupWindow:              60 * time.Second,
+		MinCatchupWindow:                  10 * time.Second,
+		CanceledTerminatedCountAsFailures: false,
+		AlwaysAppendTimestamp:             true,
+		FutureActionCount:                 10,
+		RecentActionCount:                 10,
+		IterationsBeforeContinueAsNew:     500,
 	}
 
 	errUpdateConflict = errors.New("conflicting concurrent update")
@@ -134,6 +143,7 @@ func (s *scheduler) run() error {
 	s.logger.Info("Schedule starting", "schedule", s.Schedule)
 
 	s.ensureFields()
+	s.updateTweakables()
 	s.compileSpec()
 
 	if err := workflow.SetQueryHandler(s.ctx, QueryNameDescribe, s.handleDescribeQuery); err != nil {
@@ -156,7 +166,7 @@ func (s *scheduler) run() error {
 	s.processPatch(s.InitialPatch)
 	s.InitialPatch = nil
 
-	for iters := iterationsBeforeContinueAsNew; iters >= 0; iters-- {
+	for iters := s.tweakables.IterationsBeforeContinueAsNew; iters >= 0; iters-- {
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
 		t2 := s.now()
 		if t2.Before(t1) {
@@ -178,6 +188,7 @@ func (s *scheduler) run() error {
 		// 2. we got a signal (update, request, refresh)
 		// 3. a workflow that we were watching finished
 		s.sleep(nextSleep, hasNext)
+		s.updateTweakables()
 	}
 
 	// Any watcher activities will get cancelled automatically if running.
@@ -395,7 +406,10 @@ func (s *scheduler) processWatcherResult(id string, f workflow.Future) {
 	}
 
 	// handle pause-on-failure
-	failedStatus := res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED || res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT
+	failedStatus := res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED ||
+		res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TIMED_OUT ||
+		(s.tweakables.CanceledTerminatedCountAsFailures &&
+			(res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_CANCELED || res.Status == enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED))
 	pauseOnFailure := s.Schedule.Policies.PauseOnFailure && failedStatus && !s.Schedule.State.Paused
 	if pauseOnFailure {
 		s.Schedule.State.Paused = true
@@ -462,9 +476,9 @@ func (s *scheduler) handleRefreshSignal(ch workflow.ReceiveChannel, _ bool) {
 func (s *scheduler) handleDescribeQuery() (*schedspb.DescribeResponse, error) {
 	// update future actions
 	if s.cspec != nil {
-		s.Info.FutureActionTimes = make([]*time.Time, 0, futureActionCount)
+		s.Info.FutureActionTimes = make([]*time.Time, 0, s.tweakables.FutureActionCount)
 		t1 := timestamp.TimeValue(s.State.LastProcessedTime)
-		for len(s.Info.FutureActionTimes) < futureActionCount {
+		for len(s.Info.FutureActionTimes) < s.tweakables.FutureActionCount {
 			var has bool
 			_, t1, has = s.cspec.getNextTime(t1)
 			if !has {
@@ -514,21 +528,21 @@ func (s *scheduler) checkConflict(token int64) error {
 	return errUpdateConflict
 }
 
+func (s *scheduler) updateTweakables() {
+	// Use MutableSideEffect so that we can change the defaults without breaking determinism.
+	get := func(ctx workflow.Context) interface{} { return currentTweakablePolicies }
+	eq := func(a, b interface{}) bool { return a.(tweakablePolicies) == b.(tweakablePolicies) }
+	if err := workflow.MutableSideEffect(s.ctx, "tweakables", get, eq).Get(&s.tweakables); err != nil {
+		panic("can't decode tweakablePolicies:" + err.Error())
+	}
+}
+
 func (s *scheduler) getCatchupWindow() time.Duration {
-	// TODO: re-enable this after it works?
-	// // Use MutableSideEffect so that we can change the defaults without breaking determinism.
-	// get := func(ctx workflow.Context) interface{} { return defaultCatchupWindowParams }
-	// eq := func(a, b interface{}) bool { return a.(catchupWindowParams) == b.(catchupWindowParams) }
-	// var params catchupWindowParams
-	// if err := workflow.MutableSideEffect(s.ctx, "defaultCatchupWindowParams", get, eq).Get(&params); err != nil {
-	// 	panic("can't decode catchupWindowParams:" + err.Error())
-	// }
-	params := defaultCatchupWindowParams
 	cw := s.Schedule.Policies.CatchupWindow
 	if cw == nil {
-		return params.Default
-	} else if *cw < params.Min {
-		return params.Min
+		return s.tweakables.DefaultCatchupWindow
+	} else if *cw < s.tweakables.MinCatchupWindow {
+		return s.tweakables.MinCatchupWindow
 	} else {
 		return *cw
 	}
@@ -636,7 +650,7 @@ func (s *scheduler) processBuffer() bool {
 func (s *scheduler) recordAction(result *schedpb.ScheduleActionResult) {
 	s.Info.ActionCount++
 	s.Info.RecentActions = append(s.Info.RecentActions, result)
-	extra := len(s.Info.RecentActions) - 10
+	extra := len(s.Info.RecentActions) - s.tweakables.RecentActionCount
 	if extra > 0 {
 		s.Info.RecentActions = s.Info.RecentActions[extra:]
 	}
@@ -649,9 +663,12 @@ func (s *scheduler) startWorkflow(
 	start *schedspb.BufferedStart,
 	newWorkflow *workflowpb.NewWorkflowExecutionInfo,
 ) (*schedpb.ScheduleActionResult, error) {
-	// must match AppendedTimestampForValidation
 	nominalTimeSec := start.NominalTime.UTC().Truncate(time.Second)
-	workflowID := newWorkflow.WorkflowId + "-" + nominalTimeSec.Format(time.RFC3339)
+	workflowID := newWorkflow.WorkflowId
+	if start.OverlapPolicy == enumspb.SCHEDULE_OVERLAP_POLICY_ALLOW_ALL || s.tweakables.AlwaysAppendTimestamp {
+		// must match AppendedTimestampForValidation
+		workflowID += "-" + nominalTimeSec.Format(time.RFC3339)
+	}
 
 	// Set scheduleToCloseTimeout based on catchup window, which is the latest time that it's
 	// acceptable to start this workflow. For manual starts (trigger immediately or backfill),
