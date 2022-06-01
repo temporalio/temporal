@@ -49,9 +49,9 @@ type (
 	}
 
 	ReclaimResourcesResult struct {
-		SuccessCount     int
-		ErrorCount       int
-		NamespaceDeleted bool
+		DeleteSuccessCount int
+		DeleteErrorCount   int
+		NamespaceDeleted   bool
 	}
 )
 
@@ -160,8 +160,8 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		logger.Error("Unable to execute child workflow.", tag.WorkflowType(deleteexecutions.WorkflowName), tag.Error(err))
 		return result, fmt.Errorf("%w: %s: %v", errors.ErrUnableToExecuteChildWorkflow, deleteexecutions.WorkflowName, err)
 	}
-	result.SuccessCount = der.SuccessCount
-	result.ErrorCount = der.ErrorCount
+	result.DeleteSuccessCount = der.SuccessCount
+	result.DeleteErrorCount = der.ErrorCount
 
 	if isAdvancedVisibility {
 		ctx3 := workflow.WithActivityOptions(ctx, ensureNoExecutionsAdvVisibilityActivityOptions)
@@ -175,13 +175,19 @@ func deleteWorkflowExecutions(ctx workflow.Context, params ReclaimResourcesParam
 		if stderrors.As(err, &appErr) {
 			switch appErr.Type() {
 			case errors.ExecutionsStillExistErrType, errors.NoProgressErrType, errors.NotDeletedExecutionsStillExistErrType:
-				logger.Info("Unable to delete workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), tag.Counter(der.ErrorCount))
-				return result, err
+				var counterTag tag.ZapTag
+				if appErr.HasDetails() {
+					var notDeletedCount int
+					_ = appErr.Details(&notDeletedCount)
+					counterTag = tag.Counter(notDeletedCount)
+				}
+				logger.Info("Unable to delete workflow executions.", tag.WorkflowNamespace(params.Namespace.String()), counterTag)
+				// appErr is not retryable. Convert it to retryable for the server to retry.
+				return result, temporal.NewApplicationError(appErr.Message(), appErr.Type(), appErr.Details())
 			}
 		}
 		return result, fmt.Errorf("%w: EnsureNoExecutionsActivity: %v", errors.ErrUnableToExecuteActivity, err)
 	}
 
-	logger.Info("All workflow executions has been deleted successfully.", tag.WorkflowNamespace(params.Namespace.String()), tag.DeletedExecutionsCount(result.SuccessCount), tag.DeletedExecutionsErrorCount(result.ErrorCount))
 	return result, nil
 }

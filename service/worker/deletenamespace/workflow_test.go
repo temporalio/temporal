@@ -64,10 +64,8 @@ func Test_DeleteNamespaceWorkflow_ByName(t *testing.T) {
 		},
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
-	}}).Return(reclaimresources.ReclaimResourcesResult{
-		SuccessCount: 10,
-		ErrorCount:   0,
-	}, nil).Once()
+	}}).Return(reclaimresources.ReclaimResourcesResult{}, nil).
+		Once()
 
 	// Delete by name.
 	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{
@@ -110,10 +108,8 @@ func Test_DeleteNamespaceWorkflow_ByID(t *testing.T) {
 		},
 		PreviousSuccessCount: 0,
 		PreviousErrorCount:   0,
-	}}).Return(reclaimresources.ReclaimResourcesResult{
-		SuccessCount: 10,
-		ErrorCount:   0,
-	}, nil).Once()
+	}}).Return(reclaimresources.ReclaimResourcesResult{}, nil).
+		Once()
 
 	// Delete by name.
 	env.ExecuteWorkflow(DeleteNamespaceWorkflow, DeleteNamespaceWorkflowParams{

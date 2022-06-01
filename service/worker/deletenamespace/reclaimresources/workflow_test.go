@@ -86,8 +86,9 @@ func Test_ReclaimResourcesWorkflow_Success(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 	var result ReclaimResourcesResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	require.Equal(t, 0, result.ErrorCount)
-	require.Equal(t, 10, result.SuccessCount)
+	require.Equal(t, 0, result.DeleteErrorCount)
+	require.Equal(t, 10, result.DeleteSuccessCount)
+	require.Equal(t, true, result.NamespaceDeleted)
 }
 
 func Test_ReclaimResourcesWorkflow_EnsureNoExecutionsActivity_Error(t *testing.T) {
@@ -252,8 +253,9 @@ func Test_ReclaimResourcesWorkflow_NoActivityMocks_Success(t *testing.T) {
 	require.NoError(t, env.GetWorkflowError())
 	var result ReclaimResourcesResult
 	require.NoError(t, env.GetWorkflowResult(&result))
-	require.Equal(t, 0, result.ErrorCount)
-	require.Equal(t, 10, result.SuccessCount)
+	require.Equal(t, 0, result.DeleteErrorCount)
+	require.Equal(t, 10, result.DeleteSuccessCount)
+	require.Equal(t, true, result.NamespaceDeleted)
 }
 
 func Test_ReclaimResourcesWorkflow_NoActivityMocks_NoProgressMade(t *testing.T) {

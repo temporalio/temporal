@@ -77,12 +77,12 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 		return err
 	}
 
-	count := resp.Count
-	if count > int64(notDeletedCount) {
+	count := int(resp.Count)
+	if count > notDeletedCount {
 		activityInfo := activity.GetInfo(ctx)
 		// Starting from 8th attempt (after ~127s), workflow executions deletion must show some progress.
 		if activity.HasHeartbeatDetails(ctx) && activityInfo.Attempt > 7 {
-			var previousAttemptCount int64
+			var previousAttemptCount int
 			if err := activity.GetHeartbeatDetails(ctx, &previousAttemptCount); err != nil {
 				a.metricsClient.IncCounter(metrics.ReclaimResourcesWorkflowScope, metrics.ListExecutionsFailuresCount)
 				a.logger.Error("Unable to get previous heartbeat details.", tag.WorkflowNamespace(nsName.String()), tag.Error(err))
@@ -91,14 +91,14 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 			if count == previousAttemptCount {
 				// No progress were made. Something bad happened on task processor side or new executions were created during deletion.
 				// Return non-retryable error and workflow will try to delete executions again.
-				a.logger.Warn("No progress were made.", tag.WorkflowNamespace(nsName.String()), tag.Attempt(activityInfo.Attempt), tag.Counter(int(count)))
-				return errors.NewNoProgressError(int(count))
+				a.logger.Warn("No progress were made.", tag.WorkflowNamespace(nsName.String()), tag.Attempt(activityInfo.Attempt), tag.Counter(count))
+				return errors.NewNoProgressError(count)
 			}
 		}
 
-		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(int(count)))
+		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()), tag.Counter(count))
 		activity.RecordHeartbeat(ctx, count)
-		return errors.NewExecutionsStillExistError(int(count))
+		return errors.NewExecutionsStillExistError(count)
 	}
 
 	if notDeletedCount > 0 {
@@ -106,6 +106,7 @@ func (a *Activities) EnsureNoExecutionsAdvVisibilityActivity(ctx context.Context
 		return errors.NewNotDeletedExecutionsStillExistError(notDeletedCount)
 	}
 
+	a.logger.Info("All workflow executions are deleted successfully.", tag.WorkflowNamespace(nsName.String()))
 	return nil
 }
 
@@ -131,6 +132,8 @@ func (a *Activities) EnsureNoExecutionsStdVisibilityActivity(ctx context.Context
 		a.logger.Warn("Some workflow executions still exist.", tag.WorkflowNamespace(nsName.String()))
 		return errors.NewSomeExecutionsStillExistError()
 	}
+
+	a.logger.Info("All workflow executions are deleted successfully.", tag.WorkflowNamespace(nsName.String()))
 	return nil
 }
 
