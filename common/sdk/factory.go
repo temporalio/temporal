@@ -32,6 +32,7 @@ import (
 	"sync"
 
 	sdkclient "go.temporal.io/sdk/client"
+	sdkworker "go.temporal.io/sdk/worker"
 
 	"go.temporal.io/server/common"
 	"go.temporal.io/server/common/backoff"
@@ -45,6 +46,10 @@ type (
 		GetSystemClient(logger log.Logger) sdkclient.Client
 	}
 
+	WorkerFactory interface {
+		New(client sdkclient.Client, taskQueue string, options sdkworker.Options) sdkworker.Worker
+	}
+
 	clientFactory struct {
 		hostPort        string
 		tlsConfig       *tls.Config
@@ -52,9 +57,13 @@ type (
 		systemSdkClient sdkclient.Client
 		once            *sync.Once
 	}
+
+	workerFactory struct {
+	}
 )
 
 var _ ClientFactory = (*clientFactory)(nil)
+var _ WorkerFactory = (*workerFactory)(nil)
 
 func NewClientFactory(hostPort string, tlsConfig *tls.Config, metricsHandler *MetricsHandler) *clientFactory {
 	return &clientFactory{
@@ -104,4 +113,16 @@ func (f *clientFactory) GetSystemClient(logger log.Logger) sdkclient.Client {
 		f.systemSdkClient = client
 	})
 	return f.systemSdkClient
+}
+
+func NewWorkerFactory() *workerFactory {
+	return &workerFactory{}
+}
+
+func (f *workerFactory) New(
+	client sdkclient.Client,
+	taskQueue string,
+	options sdkworker.Options,
+) sdkworker.Worker {
+	return sdkworker.New(client, taskQueue, options)
 }
