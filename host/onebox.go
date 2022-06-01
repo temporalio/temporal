@@ -28,12 +28,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"go.temporal.io/api/operatorservice/v1"
-	"go.temporal.io/api/workflowservice/v1"
-	"go.temporal.io/server/service/history/replication"
 	"net"
 	"sync"
 	"time"
+
+	"go.temporal.io/api/operatorservice/v1"
+	"go.temporal.io/api/workflowservice/v1"
+	"go.temporal.io/server/service/history/replication"
 
 	"github.com/uber-go/tally/v4"
 	"github.com/uber/tchannel-go"
