@@ -26,7 +26,6 @@ package persistencetests
 
 import (
 	"context"
-	"math/rand"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -77,7 +76,7 @@ func (s *ShardPersistenceSuite) TearDownSuite() {
 
 // TestGetOrCreateShard tests GetOrCreateShard
 func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
-	shardID := 1 + rand.Int31n(maxShards)
+	shardID := int32(1)
 	owner := "test_get_shard"
 	rangeID := int64(131)
 
@@ -100,7 +99,7 @@ func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
 
 // TestUpdateShard test
 func (s *ShardPersistenceSuite) TestUpdateShard() {
-	shardID := 1 + rand.Int31n(maxShards)
+	shardID := int32(2)
 	owner := "test_update_shard"
 	rangeID := int64(141)
 
