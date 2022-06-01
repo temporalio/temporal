@@ -41,6 +41,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/service/history/configs"
 	"go.temporal.io/server/service/history/queues"
@@ -71,6 +72,7 @@ type (
 		matchingClient            matchingservice.MatchingServiceClient
 		historyClient             historyservice.HistoryServiceClient
 		ackLevel                  int64
+		hostRateLimiter           quotas.RateLimiter
 		logger                    log.Logger
 		isStarted                 int32
 		isStopped                 int32
@@ -91,6 +93,7 @@ func newTransferQueueProcessor(
 	sdkClientFactory sdk.ClientFactory,
 	matchingClient matchingservice.MatchingServiceClient,
 	historyClient historyservice.HistoryServiceClient,
+	hostRateLimiter quotas.RateLimiter,
 ) queues.Processor {
 
 	singleProcessor := !shard.GetClusterMetadata().IsGlobalNamespaceEnabled() ||
@@ -115,6 +118,7 @@ func newTransferQueueProcessor(
 		matchingClient:     matchingClient,
 		historyClient:      historyClient,
 		ackLevel:           shard.GetQueueAckLevel(tasks.CategoryTransfer).TaskID,
+		hostRateLimiter:    hostRateLimiter,
 		logger:             logger,
 		shutdownChan:       make(chan struct{}),
 		scheduler:          scheduler,
@@ -128,6 +132,10 @@ func newTransferQueueProcessor(
 			historyClient,
 			taskAllocator,
 			clientBean,
+			newQueueProcessorRateLimiter(
+				hostRateLimiter,
+				config.TransferProcessorMaxPollRPS,
+			),
 			logger,
 			singleProcessor,
 		),
@@ -230,6 +238,10 @@ func (t *transferQueueProcessorImpl) FailoverNamespace(
 		minLevel,
 		maxLevel,
 		t.taskAllocator,
+		newQueueProcessorRateLimiter(
+			t.hostRateLimiter,
+			t.config.TransferProcessorFailoverMaxPollRPS,
+		),
 		t.logger,
 	)
 
@@ -377,6 +389,10 @@ func (t *transferQueueProcessorImpl) handleClusterMetadataUpdate(
 				t.archivalClient,
 				t.taskAllocator,
 				t.clientBean,
+				newQueueProcessorRateLimiter(
+					t.hostRateLimiter,
+					t.config.TransferProcessorMaxPollRPS,
+				),
 				t.logger,
 				t.matchingClient,
 			)

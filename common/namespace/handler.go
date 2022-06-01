@@ -87,6 +87,7 @@ type (
 		namespaceAttrValidator *AttrValidatorImpl
 		archivalMetadata       archiver.ArchivalMetadata
 		archiverProvider       provider.ArchiverProvider
+		supportsSchedules      dynamicconfig.BoolPropertyFnWithNamespaceFilter
 	}
 )
 
@@ -102,6 +103,7 @@ func NewHandler(
 	namespaceReplicator Replicator,
 	archivalMetadata archiver.ArchivalMetadata,
 	archiverProvider provider.ArchiverProvider,
+	supportsSchedules dynamicconfig.BoolPropertyFnWithNamespaceFilter,
 ) *HandlerImpl {
 	return &HandlerImpl{
 		maxBadBinaryCount:      maxBadBinaryCount,
@@ -112,6 +114,7 @@ func NewHandler(
 		namespaceAttrValidator: newAttrValidator(clusterMetadata),
 		archivalMetadata:       archivalMetadata,
 		archiverProvider:       archiverProvider,
+		supportsSchedules:      supportsSchedules,
 	}
 }
 
@@ -662,6 +665,8 @@ func (d *HandlerImpl) createResponse(
 		OwnerEmail:  info.Owner,
 		Data:        info.Data,
 		Id:          info.Id,
+
+		SupportsSchedules: d.supportsSchedules(info.Name),
 	}
 
 	configResult := &namespacepb.NamespaceConfig{

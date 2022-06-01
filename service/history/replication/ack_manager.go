@@ -590,7 +590,7 @@ func (p *ackMgrImpl) processReplication(
 			return nil, nil
 		}
 		return action(msBuilder)
-	case *serviceerror.NotFound:
+	case *serviceerror.NotFound, *serviceerror.NamespaceNotFound:
 		return nil, nil
 	default:
 		return nil, err

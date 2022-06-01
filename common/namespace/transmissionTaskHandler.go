@@ -27,6 +27,7 @@ package namespace
 import (
 	"context"
 
+	enumspb "go.temporal.io/api/enums/v1"
 	namespacepb "go.temporal.io/api/namespace/v1"
 	replicationpb "go.temporal.io/api/replication/v1"
 
@@ -87,6 +88,10 @@ func (namespaceReplicator *namespaceReplicatorImpl) HandleTransmissionTask(
 		return nil
 	}
 	if len(replicationConfig.Clusters) <= 1 {
+		return nil
+	}
+	if info.State == enumspb.NAMESPACE_STATE_DELETED {
+		// Don't replicate deleted namespace changes.
 		return nil
 	}
 

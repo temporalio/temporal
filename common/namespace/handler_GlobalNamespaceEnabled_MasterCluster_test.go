@@ -108,6 +108,7 @@ func (s *namespaceHandlerGlobalNamespaceEnabledMasterClusterSuite) SetupTest() {
 		s.mockNamespaceReplicator,
 		s.archivalMetadata,
 		s.mockArchiverProvider,
+		dc.GetBoolPropertyFnFilteredByNamespace(false),
 	)
 }
 

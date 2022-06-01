@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/sdk"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
@@ -64,6 +65,7 @@ func newTransferQueueActiveProcessor(
 	historyClient historyservice.HistoryServiceClient,
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
+	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
 	singleProcessor bool,
 ) *transferQueueActiveProcessorImpl {
@@ -71,7 +73,6 @@ func newTransferQueueActiveProcessor(
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.TransferTaskBatchSize,
-		MaxPollRPS:                          config.TransferProcessorMaxPollRPS,
 		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
 		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
@@ -212,6 +213,7 @@ func newTransferQueueActiveProcessor(
 		workflowCache,
 		scheduler,
 		rescheduler,
+		rateLimiter,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)
@@ -234,13 +236,13 @@ func newTransferQueueFailoverProcessor(
 	minLevel int64,
 	maxLevel int64,
 	taskAllocator taskAllocator,
+	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
 ) (func(ackLevel int64) error, *transferQueueActiveProcessorImpl) {
 
 	config := shard.GetConfig()
 	options := &QueueProcessorOptions{
 		BatchSize:                           config.TransferTaskBatchSize,
-		MaxPollRPS:                          config.TransferProcessorFailoverMaxPollRPS,
 		MaxPollInterval:                     config.TransferProcessorMaxPollInterval,
 		MaxPollIntervalJitterCoefficient:    config.TransferProcessorMaxPollIntervalJitterCoefficient,
 		UpdateAckInterval:                   config.TransferProcessorUpdateAckInterval,
@@ -346,6 +348,7 @@ func newTransferQueueFailoverProcessor(
 		workflowCache,
 		scheduler,
 		rescheduler,
+		rateLimiter,
 		logger,
 		shard.GetMetricsClient().Scope(metrics.TransferActiveQueueProcessorScope),
 	)

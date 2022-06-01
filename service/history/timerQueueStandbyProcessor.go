@@ -37,6 +37,7 @@ import (
 	"go.temporal.io/server/common/log/tag"
 	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/quotas"
 	"go.temporal.io/server/common/timer"
 	"go.temporal.io/server/common/xdc"
 	"go.temporal.io/server/service/history/queues"
@@ -61,6 +62,7 @@ func newTimerQueueStandbyProcessor(
 	clusterName string,
 	taskAllocator taskAllocator,
 	clientBean client.Bean,
+	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
 ) *timerQueueStandbyProcessorImpl {
 
@@ -161,7 +163,7 @@ func newTimerQueueStandbyProcessor(
 		timerGate,
 		scheduler,
 		rescheduler,
-		config.TimerProcessorMaxPollRPS,
+		rateLimiter,
 		logger,
 		metricsClient.Scope(metrics.TimerStandbyQueueProcessorScope),
 	)
