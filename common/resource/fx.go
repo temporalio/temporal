@@ -116,7 +116,9 @@ var Module = fx.Options(
 	membership.HostInfoProviderModule,
 	fx.Invoke(RegisterBootstrapContainer),
 	fx.Provide(PersistenceConfigProvider),
-	fx.Provide(metrics.NewEventMetricProvider),
+	fx.Provide(func(h) metrics.MetricProvider {
+		return metrics.NewEventMetricProvider(h)
+	}),
 )
 
 var DefaultOptions = fx.Options(

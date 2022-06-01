@@ -58,7 +58,7 @@ type (
 	}
 
 	Executor interface {
-		Execute(context.Context, Executable) (metrics.Scope, error)
+		Execute(context.Context, Executable) (metrics.MetricProvider, error)
 	}
 
 	// TaskFilter determines if the given task should be executed

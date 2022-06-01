@@ -40,7 +40,6 @@ import (
 	persistencespb "go.temporal.io/server/api/persistence/v1"
 	replicationspb "go.temporal.io/server/api/replication/v1"
 	"go.temporal.io/server/common/cluster"
-	"go.temporal.io/server/common/metrics"
 	"go.temporal.io/server/common/namespace"
 	"go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/resource"
@@ -111,7 +110,6 @@ func (s *taskExecutorSuite) SetupTest() {
 	s.nDCHistoryResender = xdc.NewMockNDCHistoryResender(s.controller)
 
 	s.historyClient = historyservicemock.NewMockHistoryServiceClient(s.controller)
-	metricsClient := metrics.NoopClient
 	s.clusterMetadata.EXPECT().GetCurrentClusterName().Return(cluster.TestCurrentClusterName).AnyTimes()
 	s.workflowCache = workflow.NewMockCache(s.controller)
 	s.replicationTaskExecutor = NewTaskExecutor(
@@ -121,8 +119,6 @@ func (s *taskExecutorSuite) SetupTest() {
 		s.mockEngine,
 		workflow.NewMockDeleteManager(s.controller),
 		s.workflowCache,
-		metricsClient,
-		s.mockShard.GetLogger(),
 	).(*taskExecutorImpl)
 }
 
