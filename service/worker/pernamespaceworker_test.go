@@ -294,7 +294,42 @@ func (s *perNsWorkerManagerSuite) TestDeleteNs() {
 }
 
 func (s *perNsWorkerManagerSuite) TestMembershipChanged() {
-	// TODO
+	ns := testns("ns1", enumspb.NAMESPACE_STATE_REGISTERED)
+
+	s.cmp1.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+		Enabled:    true,
+		TaskQueue:  "tq1",
+		NumWorkers: 1,
+	}).AnyTimes()
+	s.cmp2.EXPECT().DedicatedWorkerOptions(gomock.Any()).Return(&common.PerNSDedicatedWorkerOptions{
+		Enabled: false,
+	}).AnyTimes()
+
+	// we don't own it at first
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("other", nil), nil)
+
+	s.manager.namespaceCallback(ns)
+	time.Sleep(50 * time.Millisecond)
+
+	// now we own it
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("self", nil), nil)
+	cli1 := mocksdk.NewMockClient(s.controller)
+	s.cfactory.EXPECT().NewClient("ns1", gomock.Any()).Return(cli1, nil)
+	wkr1 := mocksdk.NewMockWorker(s.controller)
+	s.wfactory.EXPECT().New(cli1, "tq1", gomock.Any()).Return(wkr1)
+	s.cmp1.EXPECT().Register(wkr1, ns)
+	wkr1.EXPECT().Start()
+
+	s.manager.membershipChangedCh <- nil
+	time.Sleep(50 * time.Millisecond)
+
+	// now we don't own it anymore
+	s.serviceResolver.EXPECT().Lookup("ns1/tq1/0").Return(membership.NewHostInfo("other", nil), nil)
+	wkr1.EXPECT().Stop()
+	cli1.EXPECT().Close()
+
+	s.manager.membershipChangedCh <- nil
+	time.Sleep(50 * time.Millisecond)
 }
 
 func (s *perNsWorkerManagerSuite) TestServiceResolverError() {
