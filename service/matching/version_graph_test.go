@@ -1,6 +1,7 @@
 package matching
 
 import (
+	"fmt"
 	"github.com/stretchr/testify/assert"
 	"go.temporal.io/api/workflowservice/v1"
 	"testing"
@@ -289,4 +290,29 @@ func TestCompatibleTargetsNotFound(t *testing.T) {
 	err := UpdateVersionsGraph(data, req)
 	assert.Error(t, err)
 	assert.IsType(t, &versionNotFoundError{}, err)
+}
+
+func FuzzVersionGraphEnsureNoSameTypeDefaults(f *testing.F) {
+	f.Fuzz(func(t *testing.T, numUpdates, willPickCompatMod, compatModTarget uint8) {
+		addedNodes := make([]*workflowpb.VersionId, 0, numUpdates)
+		data := &persistencepb.VersioningData{}
+
+		for i := uint8(0); i < numUpdates; i++ {
+			id := mkVerId(fmt.Sprintf("%d", i))
+			req := &workflowservice.UpdateWorkerBuildIdOrderingRequest{
+				VersionId:     id,
+				BecomeDefault: true,
+			}
+			if willPickCompatMod > 0 && compatModTarget > 0 &&
+				numUpdates%willPickCompatMod == 0 &&
+				uint8(len(addedNodes)) > numUpdates%compatModTarget {
+				compatTarget := addedNodes[numUpdates%compatModTarget]
+				req.PreviousCompatible = compatTarget
+			}
+			addedNodes = append(addedNodes, id)
+			err := UpdateVersionsGraph(data, req)
+			assert.NoError(t, err)
+			assert.Equal(t, 1, len(data.CurrentDefaults))
+		}
+	})
 }
