@@ -25,267 +25,113 @@
 package tests
 
 import (
-	"fmt"
-	"net"
-	"path/filepath"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
 
-	"go.temporal.io/server/common/config"
-	"go.temporal.io/server/common/log"
-	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/persistence/serialization"
-	"go.temporal.io/server/common/persistence/sql"
-	"go.temporal.io/server/common/persistence/sql/sqlplugin"
 	_ "go.temporal.io/server/common/persistence/sql/sqlplugin/postgresql"
-	"go.temporal.io/server/common/resolver"
-	"go.temporal.io/server/common/shuffle"
-	"go.temporal.io/server/environment"
 )
 
-// TODO merge the initialization with existing persistence setup
-const (
-	testPostgreSQLClusterName = "temporal_postgresql_cluster"
+func TestPostgreSQLShardStoreSuite(t *testing.T) {
+	testData, tearDown := setUpPostgreSQLTest(t)
+	defer tearDown()
 
-	testPostgreSQLUser               = "temporal"
-	testPostgreSQLPassword           = "temporal"
-	testPostgreSQLConnectionProtocol = "tcp"
-	testPostgreSQLDatabaseNamePrefix = "test_"
-	testPostgreSQLDatabaseNameSuffix = "temporal_persistence"
+	shardStore, err := testData.Factory.NewShardStore()
+	if err != nil {
+		t.Fatalf("unable to create PostgreSQL DB: %v", err)
+	}
 
-	// TODO hard code this dir for now
-	//  need to merge persistence test config / initialization in one place
-	testPostgreSQLExecutionSchema  = "../../../schema/postgresql/v96/temporal/schema.sql"
-	testPostgreSQLVisibilitySchema = "../../../schema/postgresql/v96/visibility/schema.sql"
-)
+	s := NewShardSuite(
+		t,
+		shardStore,
+		serialization.NewSerializer(),
+		testData.Logger,
+	)
+	suite.Run(t, s)
+}
 
 func TestPostgreSQLExecutionMutableStateStoreSuite(t *testing.T) {
-	cfg := NewPostgreSQLConfig()
-	SetupPostgreSQLDatabase(cfg)
-	SetupPostgreSQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testPostgreSQLClusterName,
-		logger,
-	)
-	shardStore, err := factory.NewShardStore()
+	testData, tearDown := setUpPostgreSQLTest(t)
+	defer tearDown()
+
+	shardStore, err := testData.Factory.NewShardStore()
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
-	executionStore, err := factory.NewExecutionStore()
+	executionStore, err := testData.Factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownPostgreSQLDatabase(cfg)
-	}()
 
 	s := NewExecutionMutableStateSuite(
 		t,
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		logger,
+		testData.Logger,
 	)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLExecutionMutableStateTaskStoreSuite(t *testing.T) {
-	cfg := NewPostgreSQLConfig()
-	SetupPostgreSQLDatabase(cfg)
-	SetupPostgreSQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testPostgreSQLClusterName,
-		logger,
-	)
-	shardStore, err := factory.NewShardStore()
+	testData, tearDown := setUpPostgreSQLTest(t)
+	defer tearDown()
+
+	shardStore, err := testData.Factory.NewShardStore()
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
-	executionStore, err := factory.NewExecutionStore()
+	executionStore, err := testData.Factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownPostgreSQLDatabase(cfg)
-	}()
 
 	s := NewExecutionMutableStateTaskSuite(
 		t,
 		shardStore,
 		executionStore,
 		serialization.NewSerializer(),
-		logger,
+		testData.Logger,
 	)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLHistoryStoreSuite(t *testing.T) {
-	cfg := NewPostgreSQLConfig()
-	SetupPostgreSQLDatabase(cfg)
-	SetupPostgreSQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testPostgreSQLClusterName,
-		logger,
-	)
-	store, err := factory.NewExecutionStore()
+	testData, tearDown := setUpPostgreSQLTest(t)
+	defer tearDown()
+
+	store, err := testData.Factory.NewExecutionStore()
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownPostgreSQLDatabase(cfg)
-	}()
 
-	s := NewHistoryEventsSuite(t, store, logger)
+	s := NewHistoryEventsSuite(t, store, testData.Logger)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLTaskQueueSuite(t *testing.T) {
-	cfg := NewPostgreSQLConfig()
-	SetupPostgreSQLDatabase(cfg)
-	SetupPostgreSQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testPostgreSQLClusterName,
-		logger,
-	)
-	taskQueueStore, err := factory.NewTaskStore()
+	testData, tearDown := setUpPostgreSQLTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownPostgreSQLDatabase(cfg)
-	}()
 
-	s := NewTaskQueueSuite(t, taskQueueStore, logger)
+	s := NewTaskQueueSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
 }
 
 func TestPostgreSQLTaskQueueTaskSuite(t *testing.T) {
-	cfg := NewPostgreSQLConfig()
-	SetupPostgreSQLDatabase(cfg)
-	SetupPostgreSQLSchema(cfg)
-	logger := log.NewNoopLogger()
-	factory := sql.NewFactory(
-		*cfg,
-		resolver.NewNoopResolver(),
-		testPostgreSQLClusterName,
-		logger,
-	)
-	taskQueueStore, err := factory.NewTaskStore()
+	testData, tearDown := setUpPostgreSQLTest(t)
+	defer tearDown()
+
+	taskQueueStore, err := testData.Factory.NewTaskStore()
 	if err != nil {
 		t.Fatalf("unable to create PostgreSQL DB: %v", err)
 	}
-	defer func() {
-		factory.Close()
-		TearDownPostgreSQLDatabase(cfg)
-	}()
 
-	s := NewTaskQueueTaskSuite(t, taskQueueStore, logger)
+	s := NewTaskQueueTaskSuite(t, taskQueueStore, testData.Logger)
 	suite.Run(t, s)
-}
-
-// NewPostgreSQLConfig returns a new MySQL config for test
-func NewPostgreSQLConfig() *config.SQL {
-	return &config.SQL{
-		User:     testPostgreSQLUser,
-		Password: testPostgreSQLPassword,
-		ConnectAddr: net.JoinHostPort(
-			environment.GetPostgreSQLAddress(),
-			strconv.Itoa(environment.GetPostgreSQLPort()),
-		),
-		ConnectProtocol: testPostgreSQLConnectionProtocol,
-		PluginName:      "postgres",
-		DatabaseName:    testPostgreSQLDatabaseNamePrefix + shuffle.String(testPostgreSQLDatabaseNameSuffix),
-	}
-}
-
-func SetupPostgreSQLDatabase(cfg *config.SQL) {
-	adminCfg := *cfg
-	// NOTE need to connect with empty name to create new database
-	adminCfg.DatabaseName = ""
-
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
-	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
-	}
-	defer func() { _ = db.Close() }()
-
-	err = db.CreateDatabase(cfg.DatabaseName)
-	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL database: %v", err))
-	}
-}
-
-func SetupPostgreSQLSchema(cfg *config.SQL) {
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, cfg, resolver.NewNoopResolver())
-	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
-	}
-	defer func() { _ = db.Close() }()
-
-	schemaPath, err := filepath.Abs(testPostgreSQLExecutionSchema)
-	if err != nil {
-		panic(err)
-	}
-
-	statements, err := p.LoadAndSplitQuery([]string{schemaPath})
-	if err != nil {
-		panic(err)
-	}
-
-	for _, stmt := range statements {
-		if err = db.Exec(stmt); err != nil {
-			panic(err)
-		}
-	}
-
-	schemaPath, err = filepath.Abs(testPostgreSQLVisibilitySchema)
-	if err != nil {
-		panic(err)
-	}
-
-	statements, err = p.LoadAndSplitQuery([]string{schemaPath})
-	if err != nil {
-		panic(err)
-	}
-
-	for _, stmt := range statements {
-		if err = db.Exec(stmt); err != nil {
-			panic(err)
-		}
-	}
-}
-
-func TearDownPostgreSQLDatabase(cfg *config.SQL) {
-	adminCfg := *cfg
-	// NOTE need to connect with empty name to create new database
-	adminCfg.DatabaseName = ""
-
-	db, err := sql.NewSQLAdminDB(sqlplugin.DbKindUnknown, &adminCfg, resolver.NewNoopResolver())
-	if err != nil {
-		panic(fmt.Sprintf("unable to create PostgreSQL admin DB: %v", err))
-	}
-	defer func() { _ = db.Close() }()
-
-	err = db.DropDatabase(cfg.DatabaseName)
-	if err != nil {
-		panic(fmt.Sprintf("unable to drop PostgreSQL database: %v", err))
-	}
 }

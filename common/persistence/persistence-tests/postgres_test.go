@@ -44,13 +44,6 @@ func TestPostgreSQLMetadataPersistenceSuiteV2(t *testing.T) {
 	suite.Run(t, s)
 }
 
-func TestPostgreSQLShardPersistenceSuite(t *testing.T) {
-	s := new(ShardPersistenceSuite)
-	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
-	s.TestBase.Setup(nil)
-	suite.Run(t, s)
-}
-
 func TestPostgreSQLClusterMetadataPersistence(t *testing.T) {
 	s := new(ClusterMetadataManagerSuite)
 	s.TestBase = NewTestBaseWithSQL(GetPostgreSQLTestClusterOption())
