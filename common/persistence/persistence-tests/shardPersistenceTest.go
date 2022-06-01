@@ -26,6 +26,7 @@ package persistencetests
 
 import (
 	"context"
+	"math/rand"
 	"time"
 
 	"github.com/stretchr/testify/require"
@@ -34,6 +35,10 @@ import (
 	p "go.temporal.io/server/common/persistence"
 	"go.temporal.io/server/common/primitives/timestamp"
 	"go.temporal.io/server/service/history/tasks"
+)
+
+const (
+	maxShards = 16
 )
 
 type (
@@ -72,7 +77,7 @@ func (s *ShardPersistenceSuite) TearDownSuite() {
 
 // TestGetOrCreateShard tests GetOrCreateShard
 func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
-	shardID := int32(20)
+	shardID := 1 + rand.Int31n(maxShards)
 	owner := "test_get_shard"
 	rangeID := int64(131)
 
@@ -95,7 +100,7 @@ func (s *ShardPersistenceSuite) TestGetOrCreateShard() {
 
 // TestUpdateShard test
 func (s *ShardPersistenceSuite) TestUpdateShard() {
-	shardID := int32(30)
+	shardID := 1 + rand.Int31n(maxShards)
 	owner := "test_update_shard"
 	rangeID := int64(141)
 
