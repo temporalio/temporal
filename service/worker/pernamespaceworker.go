@@ -88,6 +88,7 @@ type (
 
 		lock    sync.Mutex // protects below fields
 		ns      *namespace.Namespace
+		deleted bool
 		workers map[workercommon.PerNSWorkerComponent]*worker
 	}
 
@@ -162,21 +163,23 @@ func (wm *perNamespaceWorkerManager) Stop() {
 	for _, ws := range wm.workerSets {
 		// this will see that the perNamespaceWorkerManager is not running
 		// anymore and stop all workers
-		ws.refresh(nil)
+		ws.refresh(nil, false)
 	}
 
 	wm.logger.Info("", tag.ComponentPerNSWorkerManager, tag.LifeCycleStopped)
 }
 
-func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace) {
-	go wm.getWorkerSet(ns).refresh(ns)
+func (wm *perNamespaceWorkerManager) namespaceCallback(ns *namespace.Namespace, deleted bool) {
+	go wm.getWorkerSet(ns).refresh(ns, deleted)
 }
 
 func (wm *perNamespaceWorkerManager) membershipChangedListener() {
 	for range wm.membershipChangedCh {
+		wm.lock.Lock()
 		for _, ws := range wm.workerSets {
-			go ws.refresh(nil)
+			go ws.refresh(nil, false)
 		}
+		wm.lock.Unlock()
 	}
 }
 
@@ -196,6 +199,12 @@ func (wm *perNamespaceWorkerManager) getWorkerSet(ns *namespace.Namespace) *work
 
 	wm.workerSets[ns.ID()] = ws
 	return ws
+}
+
+func (wm *perNamespaceWorkerManager) removeWorkerSet(ns *namespace.Namespace) {
+	wm.lock.Lock()
+	defer wm.lock.Unlock()
+	delete(wm.workerSets, ns.ID())
 }
 
 func (wm *perNamespaceWorkerManager) responsibleForNamespace(ns *namespace.Namespace, queueName string, num int) (int, error) {
@@ -219,22 +228,29 @@ func (wm *perNamespaceWorkerManager) responsibleForNamespace(ns *namespace.Names
 
 // called after change to this namespace state _or_ any membership change in the
 // server worker ring
-func (ws *workerSet) refresh(newNs *namespace.Namespace) {
+func (ws *workerSet) refresh(newNs *namespace.Namespace, newDeleted bool) {
 	ws.lock.Lock()
 	if newNs != nil {
 		ws.ns = newNs
+		ws.deleted = newDeleted
 	}
-	ns := ws.ns
+	ns, deleted := ws.ns, ws.deleted
 	ws.lock.Unlock()
 
 	for _, wc := range ws.wm.components {
-		ws.refreshComponent(wc, ns)
+		ws.refreshComponent(wc, ns, deleted)
+	}
+
+	if deleted {
+		// if fully deleted from db, we can remove from our map also
+		ws.wm.removeWorkerSet(ns)
 	}
 }
 
 func (ws *workerSet) refreshComponent(
 	cmp workercommon.PerNSWorkerComponent,
 	ns *namespace.Namespace,
+	deleted bool,
 ) {
 	op := func() error {
 		// we should run only if all four are true:
@@ -244,7 +260,7 @@ func (ws *workerSet) refreshComponent(
 		// 4. we are responsible for this namespace
 		multiplicity := 0
 		var options *workercommon.PerNSDedicatedWorkerOptions
-		if ws.wm.Running() && ns.State() != enumspb.NAMESPACE_STATE_DELETED {
+		if ws.wm.Running() && ns.State() != enumspb.NAMESPACE_STATE_DELETED && !deleted {
 			options = cmp.DedicatedWorkerOptions(ns)
 			if options.Enabled {
 				var err error

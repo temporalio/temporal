@@ -33,7 +33,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 
 	"go.temporal.io/server/common"
@@ -121,10 +120,10 @@ type (
 	// it is guaranteed that PrepareCallbackFn and CallbackFn pair will be both called or non will be called
 	CallbackFn func(oldNamespaces []*Namespace, newNamespaces []*Namespace)
 
-	// StateChangeCallbackFn can be registered to be called on any namespace state change,
-	// plus once for all namespaces after registration. There is no guarantee about when
-	// these are called.
-	StateChangeCallbackFn func(*Namespace)
+	// StateChangeCallbackFn can be registered to be called on any namespace state change or
+	// addition/removal from database, plus once for all namespaces after registration. There
+	// is no guarantee about when these are called.
+	StateChangeCallbackFn func(ns *Namespace, deletedFromDb bool)
 
 	// Registry provides access to Namespace objects by name or by ID.
 	Registry interface {
@@ -314,7 +313,7 @@ func (r *registry) RegisterStateChangeCallback(key any, cb StateChangeCallbackFn
 
 	// call once for each namespace already in the registry
 	for _, ns := range allNamespaces {
-		cb(ns)
+		cb(ns, false)
 	}
 }
 
@@ -455,15 +454,10 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 	// Make a copy of the existing namespace cache (excluding deleted), so we can calculate diff and do "compare and swap".
 	newCacheNameToID := cache.New(cacheMaxSize, &cacheOpts)
 	newCacheByID := cache.New(cacheMaxSize, &cacheOpts)
-	var stateChanged []*Namespace
+	var deletedEntries []*Namespace
 	for _, namespace := range r.getAllNamespace() {
 		if _, namespaceExistsDb := namespaceIDsDb[namespace.ID()]; !namespaceExistsDb {
-			if namespace.State() != enumspb.NAMESPACE_STATE_DELETED {
-				// a namespace in state other than DELETED is being removed. we should send a state change callback.
-				nsForCallback := namespace.Clone()
-				nsForCallback.info.State = enumspb.NAMESPACE_STATE_DELETED
-				stateChanged = append(stateChanged, nsForCallback)
-			}
+			deletedEntries = append(deletedEntries, namespace)
 			continue
 		}
 		newCacheNameToID.Put(Name(namespace.info.Name), ID(namespace.info.Id))
@@ -472,6 +466,7 @@ func (r *registry) refreshNamespaces(ctx context.Context) error {
 
 	var oldEntries []*Namespace
 	var newEntries []*Namespace
+	var stateChanged []*Namespace
 UpdateLoop:
 	for _, namespace := range namespacesDb {
 		if namespace.notificationVersion >= namespaceNotificationVersion {
@@ -510,8 +505,11 @@ UpdateLoop:
 
 	// call state change callbacks
 	for _, cb := range stateChangeCallbacks {
+		for _, ns := range deletedEntries {
+			cb(ns, true)
+		}
 		for _, ns := range stateChanged {
-			cb(ns)
+			cb(ns, false)
 		}
 	}
 
