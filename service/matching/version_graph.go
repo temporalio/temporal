@@ -31,7 +31,10 @@ func (e *versionNotFoundError) Error() string {
 }
 
 func ToBuildIdOrderingResponse(g *persistence.VersioningData) *workflowservice.GetWorkerBuildIdOrderingResponse {
-	return &workflowservice.GetWorkerBuildIdOrderingResponse{}
+	return &workflowservice.GetWorkerBuildIdOrderingResponse{
+		CurrentDefaults:  g.GetCurrentDefaults(),
+		CompatibleLeaves: g.GetCompatibleLeaves(),
+	}
 }
 
 func UpdateVersionsGraph(

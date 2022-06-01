@@ -45,6 +45,10 @@ func TestNewDefaultGraphUpdate(t *testing.T) {
 	assert.Equal(t, "1", data.CurrentDefaults[0].PreviousIncompatible.Version.GetWorkerBuildId())
 	assert.Equal(t, n0, data.CurrentDefaults[0].PreviousIncompatible.PreviousIncompatible)
 	assert.Equal(t, "0", data.CurrentDefaults[0].PreviousIncompatible.PreviousIncompatible.Version.GetWorkerBuildId())
+
+	asResp := ToBuildIdOrderingResponse(data)
+	assert.Equal(t, 1, len(asResp.GetCurrentDefaults()))
+	assert.Equal(t, 0, len(asResp.GetCompatibleLeaves()))
 }
 
 func TestNewDefaultGraphUpdateOfEmptyGraph(t *testing.T) {
@@ -114,6 +118,11 @@ func TestNewCompatibleWithNodeDeepInIncompatChain(t *testing.T) {
 	assert.True(t, data.CompatibleLeaves[0].Version.Equal(req.VersionId))
 	assert.Equal(t, "0.1", data.CompatibleLeaves[0].Version.GetWorkerBuildId())
 	assert.Equal(t, "0", data.CompatibleLeaves[0].PreviousCompatible.Version.GetWorkerBuildId())
+
+	asResp := ToBuildIdOrderingResponse(data)
+	assert.Equal(t, 1, len(asResp.GetCurrentDefaults()))
+	assert.Equal(t, 1, len(asResp.GetCompatibleLeaves()))
+	assert.Equal(t, "0.1", asResp.CompatibleLeaves[0].Version.GetWorkerBuildId())
 }
 
 func TestNewCompatibleWithNonDefaultGraphUpdate(t *testing.T) {
@@ -313,6 +322,7 @@ func FuzzVersionGraphEnsureNoSameTypeDefaults(f *testing.F) {
 			err := UpdateVersionsGraph(data, req)
 			assert.NoError(t, err)
 			assert.Equal(t, 1, len(data.CurrentDefaults))
+			assert.NotNil(t, ToBuildIdOrderingResponse(data))
 		}
 	})
 }
