@@ -320,7 +320,19 @@ func (s *ContextImpl) UpdateQueueAckLevel(
 			ClusterAckLevel: make(map[string]int64),
 		}
 	}
-	s.shardInfo.QueueAckLevels[category.ID()].AckLevel = convertTaskKeyToAckLevel(category.Type(), ackLevel)
+	persistenceAckLevel := convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
+	s.shardInfo.QueueAckLevels[category.ID()].AckLevel = persistenceAckLevel
+
+	// if cluster ack level is less than the overall ack level, update cluster ack level
+	// as well to prevent loading too many tombstones if the cluster ack level is used later
+	// this may happen when adding back a removed cluster or rolling back the change for using
+	// single queue in timer/transfer queue processor
+	clusterAckLevel := s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel
+	for clusterName, persistenceClusterAckLevel := range clusterAckLevel {
+		if persistenceClusterAckLevel < persistenceAckLevel {
+			clusterAckLevel[clusterName] = persistenceAckLevel
+		}
+	}
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -407,7 +419,7 @@ func (s *ContextImpl) UpdateQueueClusterAckLevel(
 			ClusterAckLevel: make(map[string]int64),
 		}
 	}
-	s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel[cluster] = convertTaskKeyToAckLevel(category.Type(), ackLevel)
+	s.shardInfo.QueueAckLevels[category.ID()].ClusterAckLevel[cluster] = convertTaskKeyToPersistenceAckLevel(category.Type(), ackLevel)
 
 	s.shardInfo.StolenSinceRenew = 0
 	return s.updateShardInfoLocked()
@@ -1979,7 +1991,7 @@ func convertAckLevelToTaskKey(
 	return tasks.Key{FireTime: timestamp.UnixOrZeroTime(ackLevel)}
 }
 
-func convertTaskKeyToAckLevel(
+func convertTaskKeyToPersistenceAckLevel(
 	categoryType tasks.CategoryType,
 	taskKey tasks.Key,
 ) int64 {
