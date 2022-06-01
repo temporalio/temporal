@@ -47,7 +47,6 @@ type (
 	// QueueProcessorOptions is options passed to queue processor implementation
 	QueueProcessorOptions struct {
 		BatchSize                           dynamicconfig.IntPropertyFn
-		MaxPollRPS                          dynamicconfig.IntPropertyFn
 		MaxPollInterval                     dynamicconfig.DurationPropertyFn
 		MaxPollIntervalJitterCoefficient    dynamicconfig.FloatPropertyFn
 		UpdateAckInterval                   dynamicconfig.DurationPropertyFn
@@ -95,19 +94,18 @@ func newQueueProcessorBase(
 	historyCache workflow.Cache,
 	executableScheduler queues.Scheduler,
 	rescheduler queues.Rescheduler,
+	rateLimiter quotas.RateLimiter,
 	logger log.Logger,
 	metricsScope metrics.Scope,
 ) *queueProcessorBase {
 
 	p := &queueProcessorBase{
-		clusterName: clusterName,
-		shard:       shard,
-		timeSource:  shard.GetTimeSource(),
-		options:     options,
-		processor:   processor,
-		rateLimiter: quotas.NewDefaultOutgoingRateLimiter(
-			func() float64 { return float64(options.MaxPollRPS()) },
-		),
+		clusterName:         clusterName,
+		shard:               shard,
+		timeSource:          shard.GetTimeSource(),
+		options:             options,
+		processor:           processor,
+		rateLimiter:         rateLimiter,
 		status:              common.DaemonStatusInitialized,
 		notifyCh:            make(chan struct{}, 1),
 		shutdownCh:          make(chan struct{}),
