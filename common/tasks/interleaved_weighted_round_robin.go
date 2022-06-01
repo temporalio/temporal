@@ -40,7 +40,7 @@ type (
 	// InterleavedWeightedRoundRobinSchedulerOptions is the config for
 	// interleaved weighted round robin scheduler
 	InterleavedWeightedRoundRobinSchedulerOptions struct {
-		PriorityToWeight map[int]int
+		PriorityToWeight map[Priority]int
 	}
 
 	// InterleavedWeightedRoundRobinScheduler is a round robin scheduler implementation
@@ -56,11 +56,11 @@ type (
 		shutdownChan chan struct{}
 
 		sync.RWMutex
-		priorityToWeight     map[int]int
+		priorityToWeight     map[Priority]int
 		weightToTaskChannels map[int]*WeightedChannel
 		// precalculated / flattened task chan according to weight
 		// e.g. if
-		// priorityToWeight := map[int]int{
+		// priorityToWeight := map[Priority]int{
 		//		0: 5,
 		//		1: 3,
 		//		2: 2,

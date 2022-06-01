@@ -99,6 +99,7 @@ const (
 	FailureTagName        = "failure"
 	TaskCategoryTagName   = "task_category"
 	TaskTypeTagName       = "task_type"
+	TaskPriorityTagName   = "task_priority"
 	QueueTypeTagName      = "queue_type"
 	visibilityTypeTagName = "visibility_type"
 	ErrorTypeTagName      = "error_type"

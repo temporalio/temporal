@@ -148,10 +148,10 @@ func (mr *MockExecutableMockRecorder) GetNamespaceID() *gomock.Call {
 }
 
 // GetPriority mocks base method.
-func (m *MockExecutable) GetPriority() int {
+func (m *MockExecutable) GetPriority() tasks.Priority {
 	m.ctrl.T.Helper()
 	ret := m.ctrl.Call(m, "GetPriority")
-	ret0, _ := ret[0].(int)
+	ret0, _ := ret[0].(tasks.Priority)
 	return ret0
 }
 
@@ -354,7 +354,7 @@ func (mr *MockExecutableMockRecorder) RetryPolicy() *gomock.Call {
 }
 
 // SetPriority mocks base method.
-func (m *MockExecutable) SetPriority(arg0 int) {
+func (m *MockExecutable) SetPriority(arg0 tasks.Priority) {
 	m.ctrl.T.Helper()
 	m.ctrl.Call(m, "SetPriority", arg0)
 }
