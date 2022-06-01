@@ -316,6 +316,7 @@ func (ws *workerSet) startWorker(
 	// (after sdk supports returning post-startup errors from Run)
 	err = sdkworker.Start()
 	if err != nil {
+		client.Close()
 		return nil, err
 	}
 
