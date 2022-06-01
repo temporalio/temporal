@@ -56,6 +56,7 @@ type (
 		fx.In
 		Logger            log.Logger
 		SdkClientFactory  sdk.ClientFactory
+		SdkWorkerFactory  sdk.WorkerFactory
 		NamespaceRegistry namespace.Registry
 		HostName          resource.HostName
 		Components        []workercommon.PerNSWorkerComponent `group:"perNamespaceWorkerComponent"`
@@ -67,6 +68,7 @@ type (
 		// from init params or Start
 		logger            log.Logger
 		sdkClientFactory  sdk.ClientFactory
+		sdkWorkerFactory  sdk.WorkerFactory
 		namespaceRegistry namespace.Registry
 		self              *membership.HostInfo
 		hostName          resource.HostName
@@ -97,6 +99,7 @@ func NewPerNamespaceWorkerManager(params perNamespaceWorkerManagerInitParams) *p
 	return &perNamespaceWorkerManager{
 		logger:              params.Logger,
 		sdkClientFactory:    params.SdkClientFactory,
+		sdkWorkerFactory:    params.SdkWorkerFactory,
 		namespaceRegistry:   params.NamespaceRegistry,
 		hostName:            params.HostName,
 		components:          params.Components,
@@ -307,7 +310,7 @@ func (ws *workerSet) startWorker(
 	sdkoptions.MaxConcurrentWorkflowTaskPollers = 2 * multiplicity
 	sdkoptions.MaxConcurrentActivityTaskPollers = 2 * multiplicity
 
-	sdkworker := sdkworker.New(client, options.TaskQueue, sdkoptions)
+	sdkworker := ws.wm.sdkWorkerFactory.New(client, options.TaskQueue, sdkoptions)
 	wc.Register(sdkworker, ws.ns)
 	// TODO: use Run() and handle post-startup errors by recreating worker
 	// (after sdk supports returning post-startup errors from Run)
